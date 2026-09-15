@@ -1,3 +1,8 @@
+#[cfg(all(unix, feature = "test-python-managed"))]
+use std::{path::Path, process::Command};
+
+#[cfg(all(unix, feature = "test-python-managed"))]
+use anyhow::Context;
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::{FileTouch, PathChild};
@@ -5,9 +10,120 @@ use assert_fs::{fixture::FileWriteStr, prelude::PathCreateDir};
 use indoc::indoc;
 
 use uv_platform::{Arch, Os};
+#[cfg(all(unix, feature = "test-python-managed"))]
+use uv_python::{
+    PythonRequest,
+    downloads::{ManagedPythonDownloadList, PythonDownloadRequest},
+};
 use uv_static::EnvVars;
 
+#[cfg(feature = "test-python-managed")]
+use uv_test::TestContext;
 use uv_test::{uv_snapshot, venv_bin_path};
+
+/// Populate a private managed installation for discovery, and create its minor-version aliases and
+/// executable entries through the usual install command inside this test context.
+#[cfg(feature = "test-python-managed")]
+fn install_python_fixture(context: &TestContext, version: &str, options: &[&str]) -> Result<()> {
+    #[cfg(unix)]
+    prepare_managed_python(context, version)?;
+
+    context
+        .python_install()
+        .arg(version)
+        .args(options)
+        .assert()
+        .success();
+    Ok(())
+}
+
+/// Prepare one shared, relocatable source per requested version; each test gets an independent
+/// copy. Keep the cache bounded by replacing the source when the embedded download changes.
+#[cfg(all(unix, feature = "test-python-managed"))]
+fn prepare_managed_python(context: &TestContext, version: &str) -> Result<()> {
+    let request = PythonRequest::parse(version);
+    let download_request = PythonDownloadRequest::from_request(&request)
+        .with_context(|| format!("invalid managed Python fixture version: {version}"))?
+        .fill()?;
+    let downloads = ManagedPythonDownloadList::new_only_embedded()?;
+    let download = downloads.find(&download_request)?;
+    let key = download.key();
+    let identity = format!("{key}\n{}", download.build().unwrap_or_default());
+
+    let cache = TestContext::test_bucket_dir()
+        .join("managed-python-find-fixtures-v1")
+        .join(format!("{}-{}-{}", key.os(), key.arch(), key.libc()));
+    fs_err::create_dir_all(&cache)?;
+
+    let slot = cache.join(version);
+    let lock = fs_err::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(cache.join(format!("{version}.lock")))?;
+    lock.file().lock()?;
+
+    let cached_identity = fs_err::read_to_string(slot.join("identity")).ok();
+    if cached_identity.as_deref() != Some(&identity) {
+        let staging = tempfile::tempdir_in(&cache)?;
+        let installations = staging.path().join("managed");
+        context
+            .python_install()
+            .arg(key.to_string())
+            .args(["--no-bin", "--no-registry"])
+            .env(EnvVars::UV_PYTHON_INSTALL_DIR, &installations)
+            .assert()
+            .success();
+
+        let installed = installations.join(key.to_string());
+        // When absent from a distribution, uv creates `bin/python` as an absolute link. Each
+        // private install recreates it so the alias can never point back to the fixture source.
+        fs_err::remove_file(installed.join("bin/python"))?;
+        fs_err::rename(&installed, staging.path().join("fixture"))?;
+        fs_err::remove_dir_all(&installations)?;
+        fs_err::write(staging.path().join("identity"), &identity)?;
+
+        if slot.try_exists()? {
+            fs_err::remove_dir_all(&slot)?;
+        }
+        fs_err::rename(staging.path(), &slot)?;
+    }
+
+    let managed = context.temp_dir.child("managed");
+    managed.create_dir_all()?;
+    let destination = managed.join(key.to_string());
+    if !destination.try_exists()? {
+        copy_managed_python_fixture(&slot.join("fixture"), &destination)?;
+    }
+    Ok(())
+}
+
+/// Preserve symlinks and file permissions while copying, preferring independent reflinks.
+#[cfg(all(unix, feature = "test-python-managed"))]
+fn copy_managed_python_fixture(source: &Path, destination: &Path) -> Result<()> {
+    let mut command = Command::new("cp");
+    command.args(["-R", "-p", "-P"]);
+    #[cfg(target_os = "macos")]
+    command.arg("-c");
+    #[cfg(target_os = "linux")]
+    command.arg("--reflink=auto");
+    let output = command.arg(source).arg(destination).output()?;
+    if output.status.success() {
+        return Ok(());
+    }
+
+    // macOS requires the source and destination to share a filesystem for `-c`.
+    if destination.try_exists()? {
+        fs_err::remove_dir_all(destination)?;
+    }
+    Command::new("cp")
+        .args(["-R", "-p", "-P"])
+        .arg(source)
+        .arg(destination)
+        .assert()
+        .success();
+    Ok(())
+}
 
 /// Workspace discovery warnings should retain the parse diagnostic, unless warnings are disabled.
 #[test]
@@ -1119,7 +1235,7 @@ fn python_find_path() {
 
 #[test]
 #[cfg(feature = "test-python-managed")]
-fn python_find_freethreaded_313() {
+fn python_find_freethreaded_313() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_python_sources()
@@ -1128,12 +1244,7 @@ fn python_find_freethreaded_313() {
         .with_filtered_python_names()
         .with_filtered_exe_suffix();
 
-    context
-        .python_install()
-        .arg("--preview")
-        .arg("3.13t")
-        .assert()
-        .success();
+    install_python_fixture(&context, "3.13t", &["--preview"])?;
 
     // Request Python 3.13 (without opt-in)
     uv_snapshot!(context.filters(), context.python_find().arg("3.13"), @"
@@ -1148,11 +1259,13 @@ fn python_find_freethreaded_313() {
     ----- stdout -----
     [TEMP_DIR]/managed/cpython-3.13+freethreaded-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
     ");
+
+    Ok(())
 }
 
 #[test]
 #[cfg(feature = "test-python-managed")]
-fn python_find_freethreaded_314() {
+fn python_find_freethreaded_314() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_python_sources()
@@ -1161,12 +1274,7 @@ fn python_find_freethreaded_314() {
         .with_filtered_python_names()
         .with_filtered_exe_suffix();
 
-    context
-        .python_install()
-        .arg("--preview")
-        .arg("3.14t")
-        .assert()
-        .success();
+    install_python_fixture(&context, "3.14t", &["--preview"])?;
 
     // Request Python 3.14 (without opt-in)
     uv_snapshot!(context.filters(), context.python_find().arg("3.14"), @"
@@ -1190,12 +1298,7 @@ fn python_find_freethreaded_314() {
     ");
 
     // Install the non-freethreaded version
-    context
-        .python_install()
-        .arg("--preview")
-        .arg("3.14")
-        .assert()
-        .success();
+    install_python_fixture(&context, "3.14", &["--preview"])?;
 
     // Request Python 3.14
     uv_snapshot!(context.filters(), context.python_find().arg("3.14"), @"
@@ -1210,12 +1313,14 @@ fn python_find_freethreaded_314() {
     ----- stdout -----
     [TEMP_DIR]/managed/cpython-3.14-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
     ");
+
+    Ok(())
 }
 
 #[test]
 #[cfg(feature = "test-python-managed")]
 #[cfg(unix)]
-fn python_find_version_range_installation_key_order() {
+fn python_find_version_range_installation_key_order() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_latest_python_versions()
@@ -1224,8 +1329,17 @@ fn python_find_version_range_installation_key_order() {
         .with_filtered_python_install_bin()
         .with_filtered_exe_suffix();
 
-    context.python_install().arg("3.15t").assert().success();
-    context.python_install().arg("3.15").assert().success();
+    install_python_fixture(&context, "3.15t", &[])?;
+    install_python_fixture(&context, "3.15", &[])?;
+
+    // Executables and their canonical alias must belong to this private installation.
+    let python = fs_err::canonicalize(context.bin_dir.join("python3.15"))?;
+    assert!(python.starts_with(context.temp_dir.path()));
+    assert_eq!(
+        fs_err::canonicalize(python.with_file_name("python"))?,
+        python
+    );
+    assert_eq!(uv_fs::hardlink_count(&python)?, 1);
 
     // Managed installations have their own deterministic ordering.
     uv_snapshot!(context.filters(), context.python_find().arg("==3.15.*"), @"
@@ -1283,7 +1397,7 @@ fn python_find_version_range_installation_key_order() {
     [TEMP_DIR]/misleading-names/python3.15t
     ");
 
-    context.python_install().arg("3.14").assert().success();
+    install_python_fixture(&context, "3.14", &[])?;
 
     // Preferred executable names must remain ahead of newer minor-version fallback candidates.
     let preferred_names = context.temp_dir.child("preferred-names");
@@ -1343,11 +1457,13 @@ fn python_find_version_range_installation_key_order() {
     ----- stdout -----
     [TEMP_DIR]/first/python3.15t
     ");
+
+    Ok(())
 }
 
 #[test]
 #[cfg(feature = "test-python-managed")]
-fn python_find_prerelease_version_specifiers() {
+fn python_find_prerelease_version_specifiers() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_python_sources()
@@ -1356,8 +1472,8 @@ fn python_find_prerelease_version_specifiers() {
         .with_filtered_python_names()
         .with_filtered_exe_suffix();
 
-    context.python_install().arg("3.14.0rc2").assert().success();
-    context.python_install().arg("3.14.0rc3").assert().success();
+    install_python_fixture(&context, "3.14.0rc2", &[])?;
+    install_python_fixture(&context, "3.14.0rc3", &[])?;
 
     // `>=3.14` should allow pre-release versions
     uv_snapshot!(context.filters(), context.python_find().arg(">=3.14").arg("--resolve-links"), @"
@@ -1405,7 +1521,7 @@ fn python_find_prerelease_version_specifiers() {
     ");
 
     // Install the stable version
-    context.python_install().arg("3.14.0").assert().success();
+    install_python_fixture(&context, "3.14.0", &[])?;
 
     // `>=3.14` should prefer stable
     uv_snapshot!(context.filters(), context.python_find().arg(">=3.14").arg("--resolve-links"), @"
@@ -1420,11 +1536,13 @@ fn python_find_prerelease_version_specifiers() {
     ----- stdout -----
     [TEMP_DIR]/managed/cpython-3.14.0-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
     ");
+
+    Ok(())
 }
 
 #[test]
 #[cfg(feature = "test-python-managed")]
-fn python_find_prerelease_with_patch_request() {
+fn python_find_prerelease_with_patch_request() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_python_sources()
@@ -1434,7 +1552,7 @@ fn python_find_prerelease_with_patch_request() {
         .with_filtered_exe_suffix();
 
     // Install 3.14.0rc3
-    context.python_install().arg("3.14.0rc3").assert().success();
+    install_python_fixture(&context, "3.14.0rc3", &[])?;
 
     // When no `.0` patch version is included, we'll allow selection of a pre-release
     uv_snapshot!(context.filters(), context.python_find().arg("3.14"), @"
@@ -1454,13 +1572,15 @@ fn python_find_prerelease_with_patch_request() {
     ");
 
     // Install 3.14.0 stable
-    context.python_install().arg("3.14.0").assert().success();
+    install_python_fixture(&context, "3.14.0", &[])?;
 
     uv_snapshot!(context.filters(), context.python_find().arg("3.14.0"), @"
     exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/managed/cpython-3.14.0-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
     ");
+
+    Ok(())
 }
 
 #[test]
