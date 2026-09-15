@@ -4,6 +4,7 @@ use same_file::is_same_file;
 use tracing::debug;
 
 use uv_cache_key::CanonicalUrl;
+use uv_distribution_types::RequirementSource;
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
 use uv_pep508::VerbatimUrl;
@@ -42,12 +43,40 @@ impl Urls {
         let mut regular: FxHashMap<PackageName, Vec<VerbatimParsedUrl>> = FxHashMap::default();
         let mut overrides = ForkMap::default();
 
-        // Add all direct regular requirements and constraints URL.
-        for requirement in manifest.requirements_no_overrides(env, dependencies) {
-            let Some(url) = requirement.source.to_verbatim_parsed_url() else {
+        // Merge requirement and constraint URLs in their original order. Then replay requirements
+        // which aren't forced-relative (user-provided) to allow the URL spelling to take precedence.
+        // Partitioning (instead of appending) would impact unrelated merging semantics.
+        for (requirement, force_relative) in manifest
+            .requirements_no_overrides(env, dependencies)
+            .map(|requirement| (requirement, true))
+            .chain(
+                manifest
+                    .requirements_no_overrides(env, dependencies)
+                    .filter(|requirement| {
+                        matches!(
+                            &requirement.source,
+                            RequirementSource::Path { url, .. }
+                                | RequirementSource::Directory { url, .. }
+                                if !url.force_relative()
+                        )
+                    })
+                    .map(|requirement| (requirement, false)),
+            )
+        {
+            let Some(mut url) = requirement.source.to_verbatim_parsed_url() else {
                 // Registry requirement
                 continue;
             };
+            if force_relative
+                && matches!(
+                    &url.parsed_url,
+                    ParsedUrl::Path(_) | ParsedUrl::Directory(_)
+                )
+            {
+                // Force relative paths for the initial merge so replayed user-provided requirements
+                // determine the final path preference.
+                url.verbatim = url.verbatim.with_force_relative(true);
+            }
 
             let package_urls = regular.entry(requirement.name.clone()).or_default();
             if let Some(package_url) = package_urls
@@ -56,6 +85,7 @@ impl Urls {
             {
                 // Allow editables to override non-editables.
                 let previous_editable = package_url.is_editable();
+                // The last specified URL spelling wins.
                 *package_url = url;
                 if previous_editable {
                     if let VerbatimParsedUrl {

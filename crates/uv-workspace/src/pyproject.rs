@@ -1778,7 +1778,7 @@ impl Source {
                 editable: None,
                 package: None,
                 path: PortablePathBuf::from(
-                    try_relative_to_if(&install_path, root, !url.was_given_absolute())
+                    try_relative_to_if(&install_path, root, url.prefers_relative())
                         .map_err(SourceError::Absolute)?
                         .into_boxed_path(),
                 ),
@@ -1795,7 +1795,7 @@ impl Source {
                 editable: editable.or(is_editable),
                 package: None,
                 path: PortablePathBuf::from(
-                    try_relative_to_if(&install_path, root, !url.was_given_absolute())
+                    try_relative_to_if(&install_path, root, url.prefers_relative())
                         .map_err(SourceError::Absolute)?
                         .into_boxed_path(),
                 ),
