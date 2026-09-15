@@ -118,10 +118,10 @@ impl Overrides {
         let mut global: FxHashMap<PackageName, Vec<Requirement>> =
             FxHashMap::with_capacity_and_hasher(requirements.len(), FxBuildHasher);
         for requirement in requirements {
-            global
-                .entry(requirement.name.clone())
-                .or_default()
-                .push(requirement);
+            let entries = global.entry(requirement.name.clone()).or_default();
+            if !entries.contains(&requirement) {
+                entries.push(requirement);
+            }
         }
         Self {
             global,
