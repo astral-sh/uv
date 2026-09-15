@@ -201,7 +201,7 @@ jobs:
         if: matrix.rocky-version == '8'
         run: |
           for i in {1..5}; do
-            dnf install python39 python39-pip which -y && break || { echo "Attempt $i failed, retrying in 10 seconds..."; sleep 10; }
+            dnf install python39 python39-pip python39-devel which -y && break || { echo "Attempt $i failed, retrying in 10 seconds..."; sleep 10; }
             if [ $i -eq 5 ]; then
               echo "Failed to install Python after 5 attempts"
               exit 1
@@ -212,7 +212,7 @@ jobs:
         if: matrix.rocky-version == '9'
         run: |
           for i in {1..5}; do
-            dnf install python3.9 python3.9-pip which -y && break || { echo "Attempt $i failed, retrying in 10 seconds..."; sleep 10; }
+            dnf install python3.9 python3.9-pip python3-devel which -y && break || { echo "Attempt $i failed, retrying in 10 seconds..."; sleep 10; }
             if [ $i -eq 5 ]; then
               echo "Failed to install Python after 5 attempts"
               exit 1
@@ -222,7 +222,7 @@ jobs:
       - name: "Install Python"
         if: matrix.rocky-version == '10'
         run: |
-          dnf install python3 python3-pip which -y
+          dnf install python3 python3-pip python3-devel which -y
 
       - name: "Download binary"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -235,7 +235,7 @@ jobs:
       - name: "Print Python path"
         run: echo $(which python3)
 
-      # Needed for building Pydantic
+      # Needed for building native extensions.
       - name: "Install build tools"
         run: dnf install -y gcc
 
@@ -779,7 +779,7 @@ jobs:
         with:
           persist-credentials: false
       - name: "Install Python"
-        run: yum install python3 python3-pip -y
+        run: yum install python3 python3-pip python3-devel -y
 
       - name: "Download binary"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
