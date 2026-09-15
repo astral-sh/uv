@@ -25205,10 +25205,10 @@
     "minor": 14,
     "patch": 2,
     "prerelease": "",
-    "url": "https://github.com/pyodide/pyodide/releases/download/314.0.6/xbuildenv-314.0.6.tar.gz",
+    "url": "https://github.com/pyodide/pyodide/releases/download/314.0.7/xbuildenv-314.0.7.tar.gz",
     "sha256": null,
     "variant": null,
-    "build": "314.0.6"
+    "build": "314.0.7"
   },
   "cpython-3.14.2-linux-aarch64-gnu": {
     "name": "cpython",
