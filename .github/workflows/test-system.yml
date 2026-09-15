@@ -732,6 +732,7 @@ jobs:
       - uses: conda-incubator/setup-miniconda@8ee1f361103df19b6f8c8655fd3967a8ecb162d5 # v4.0.1
         with:
           miniconda-version: "latest"
+          channels: defaults
           activate-environment: uv
           python-version: ${{ matrix.python-version }}
 
