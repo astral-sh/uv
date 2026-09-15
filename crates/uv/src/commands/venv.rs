@@ -48,8 +48,6 @@ use crate::commands::project::{
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
 
-use super::project::default_dependency_groups;
-
 #[derive(Error, Debug)]
 enum VenvError {
     #[error("Failed to create virtual environment")]
@@ -145,7 +143,7 @@ pub(crate) async fn venv(
     // If the default dependency-groups demand a higher requires-python
     // we should bias an empty venv to that to avoid churn.
     let default_groups = match &project {
-        Some(project) => default_dependency_groups(project.pyproject_toml())?,
+        Some(project) => project.default_groups()?,
         None => DefaultGroups::default(),
     };
     let groups = DependencyGroups::default().with_defaults(default_groups);

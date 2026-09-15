@@ -27,7 +27,7 @@ use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     ProjectEnvironmentPolicy, ProjectInterpreter, ScriptInterpreter, UniversalState,
-    WorkspacePython, default_dependency_groups,
+    WorkspacePython,
 };
 use crate::commands::reporters::LatestVersionReporter;
 use crate::commands::{ExitStatus, UvError};
@@ -92,7 +92,7 @@ pub(crate) async fn tree(
 
     // Determine the groups to include.
     let default_groups = match target {
-        LockTarget::Workspace(workspace) => default_dependency_groups(workspace.pyproject_toml())?,
+        LockTarget::Workspace(workspace) => workspace.default_groups()?,
         LockTarget::Script(_) => DefaultGroups::default(),
     };
     let groups = groups.with_defaults(default_groups);
