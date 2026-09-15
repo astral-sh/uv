@@ -106,6 +106,10 @@ pub struct PackageMetadata {
     #[serde(default)]
     pub extras: BTreeMap<ExtraName, Vec<Requirement>>,
 
+    /// Console script names that invoke the package's generated stub.
+    #[serde(default)]
+    pub entry_points: Vec<String>,
+
     /// Whether to produce a source distribution, and optionally its metadata.
     #[serde(
         default = "default_artifact",
