@@ -176,6 +176,34 @@ impl ResolverEnvironment {
         }
     }
 
+    /// Return whether a marker overlaps the resolution's environments and Python requirements.
+    ///
+    /// Package-local extras must be evaluated before checking the supported environments.
+    pub fn supports_marker(
+        &self,
+        marker: MarkerTree,
+        python_requirement: &PythonRequirement,
+    ) -> bool {
+        let marker = marker
+            .without_extras()
+            .and(python_requirement.to_marker_tree());
+        match &self.kind {
+            Kind::Specific { marker_env } => marker.evaluate(marker_env, &[]),
+            Kind::Universal {
+                initial_forks,
+                markers,
+                include: _,
+                exclude: _,
+            } => {
+                !marker.is_disjoint(markers.without_extras())
+                    && (initial_forks.is_empty()
+                        || initial_forks
+                            .iter()
+                            .any(|fork| !marker.is_disjoint(fork.without_extras())))
+            }
+        }
+    }
+
     /// Returns `false` only when this environment is a fork and it is disjoint
     /// with the given marker.
     pub(crate) fn included_by_marker(&self, marker: MarkerTree) -> bool {

@@ -17557,6 +17557,88 @@ fn lock_mixed_extras() -> Result<()> {
     Ok(())
 }
 
+/// Lookahead ignores URLs whose selected extra is outside the project's Python range.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_lookahead_requires_python() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["provider[feature]"]
+
+        [tool.uv.sources]
+        provider = { path = "provider" }
+    "#})?;
+    context.temp_dir.child("provider/pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "provider"
+        version = "0.1.0"
+        requires-python = ">=3.8"
+        dependencies = [
+            "leaf @ https://example.com/leaf-1.0.0-py3-none-any.whl ; (extra == 'feature' and python_version < '3.12') or (extra == 'unused' and python_version >= '3.12')",
+        ]
+
+        [project.optional-dependencies]
+        feature = []
+        unused = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline").arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Lookahead ignores source trees outside the project's supported environments.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_lookahead_supported_environments() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["provider ; sys_platform == 'darwin'"]
+
+        [tool.uv]
+        environments = ["sys_platform == 'linux'"]
+
+        [tool.uv.sources]
+        provider = { path = "provider" }
+    "#})?;
+    context
+        .temp_dir
+        .child("provider/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "provider"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["leaf @ https://example.com/leaf-1.0.0-py3-none-any.whl"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline").arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Lock a project in which a given dependency is requested from two different members, once as
 /// editable, and once as non-editable.
 #[cfg(feature = "test-universal")]

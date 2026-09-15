@@ -340,7 +340,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 ),
             )
             .with_reporter(Arc::new(ResolverReporter::from(printer)))
-            .resolve(&resolver_env)
+            .resolve(&resolver_env, &python_requirement)
             .await?;
             hasher = updated_hasher;
             lookaheads

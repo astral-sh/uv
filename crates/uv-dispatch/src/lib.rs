@@ -345,7 +345,7 @@ impl BuildContext for BuildDispatch<'_> {
             )
             .with_build_stack(build_stack),
         )
-        .resolve(&resolver_env)
+        .resolve(&resolver_env, &python_requirement)
         .await?;
 
         let manifest = Manifest::simple(requirements.to_vec())

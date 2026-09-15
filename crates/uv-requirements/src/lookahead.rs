@@ -8,7 +8,7 @@ use tracing::trace;
 use uv_configuration::{Constraints, Excludes, Overrides};
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_distribution_types::{DependencyMetadata, Dist, Identifier, Requirement, RequirementSource};
-use uv_resolver::{InMemoryIndex, MetadataResponse, ResolverEnvironment};
+use uv_resolver::{InMemoryIndex, MetadataResponse, PythonRequirement, ResolverEnvironment};
 use uv_types::{BuildContext, HashStrategy, HashVerification, RequestedRequirements};
 
 use crate::{Error, required_dist};
@@ -83,13 +83,13 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
 
     /// Resolve the requirements from the provided source trees.
     ///
-    /// When the environment is not given, this treats all marker expressions
-    /// that reference the environment as true. In other words, it does
-    /// environment independent expression evaluation. (Which in turn devolves
-    /// to "only evaluate marker expressions that reference an extra name.")
+    /// Evaluate requested extras and skip requirements outside the resolution's Python range or
+    /// supported environments. Each requirement's marker is checked independently: the main
+    /// resolver may process packages whose ancestor markers make them unreachable in the final graph.
     pub async fn resolve(
         self,
         env: &ResolverEnvironment,
+        python_requirement: &PythonRequirement,
     ) -> Result<(Vec<RequestedRequirements>, HashStrategy), Error> {
         let mut results = Vec::new();
         let mut futures = FuturesUnordered::new();
@@ -102,6 +102,12 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             .apply(self.overrides.apply(self.requirements))
             .filter(|requirement| !self.excludes.contains(&requirement.name))
             .filter(|requirement| requirement.evaluate_markers(env.marker_environment(), &[]))
+            .filter(|requirement| {
+                env.supports_marker(
+                    requirement.marker.simplify_not_extras_with(|_| true),
+                    python_requirement,
+                )
+            })
             .map(|requirement| (*requirement).clone())
             .collect();
 
@@ -158,6 +164,15 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                             &requirement.name,
                         ) && requirement
                             .evaluate_markers(env.marker_environment(), lookahead.extras())
+                            && env.supports_marker(
+                                requirement
+                                    .marker
+                                    .simplify_extras(lookahead.extras())
+                                    .simplify_not_extras_with(|extra| {
+                                        !lookahead.extras().contains(extra)
+                                    }),
+                                python_requirement,
+                            )
                         {
                             queue.push_back((*requirement).clone());
                         }
