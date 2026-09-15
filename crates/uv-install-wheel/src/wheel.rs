@@ -1,8 +1,9 @@
+use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Display;
 use std::io;
 use std::io::{BufReader, Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use data_encoding::BASE64URL_NOPAD;
 use fs_err as fs;
@@ -15,8 +16,8 @@ use tracing::{debug, instrument, trace, warn};
 use walkdir::WalkDir;
 
 use uv_fs::{
-    PortablePath, Simplified, copy_atomic_sync, normalize_path_under, persist_with_retry_sync,
-    relative_to,
+    PortablePath, Simplified, copy_atomic_sync, normalize_path, normalize_path_under,
+    persist_with_retry_sync, relative_to,
 };
 use uv_normalize::PackageName;
 use uv_pypi_types::DirectUrl;
@@ -193,6 +194,20 @@ pub fn reserved_script_name(name: &str) -> Option<&str> {
 /// An installation destination that has been checked against a wheel subtree.
 pub(crate) struct ValidatedWheelDestination(PathBuf);
 
+/// Normalize a wheel-relative path without changing the filesystem meaning of its root.
+fn normalize_wheel_relative_path(path: &Path) -> Option<Cow<'_, Path>> {
+    let path = normalize_path(path);
+    path.components()
+        .all(|component| match component {
+            Component::Normal(_) => true,
+            Component::Prefix(_)
+            | Component::RootDir
+            | Component::CurDir
+            | Component::ParentDir => false,
+        })
+        .then_some(path)
+}
+
 impl ValidatedWheelDestination {
     /// Validate a wheel subtree that maps directly onto a trusted installation root.
     fn at_root(source: &Path, root: &Path) -> Result<Self, Error> {
@@ -206,19 +221,22 @@ impl ValidatedWheelDestination {
 
     /// Check that merging a wheel subtree cannot follow a directory symlink outside its root.
     fn new(source: &Path, root: &Path, relative: Option<&Path>) -> Result<Self, Error> {
-        // An absolute root also gives `.` a non-empty representation for containment checks.
+        // Keep the root's filesystem meaning: lexically removing `..` can change its
+        // destination when an earlier component is a directory symlink.
         let root = std::path::absolute(root)?;
         let root = root.as_path();
         let (destination, min_depth) = match relative {
             None => (root.to_path_buf(), 1),
             Some(relative) => {
-                let Some(destination) = normalize_path_under(root.join(relative), root) else {
+                let Some(relative) = normalize_wheel_relative_path(relative)
+                    .filter(|relative| !relative.as_os_str().is_empty())
+                else {
                     return Err(Error::InvalidWheel(format!(
                         "Wheel destination escapes its installation root: {}",
                         relative.simplified_display()
                     )));
                 };
-                (destination, 0)
+                (root.join(relative.as_ref()), 0)
             }
         };
 
@@ -234,12 +252,26 @@ impl ValidatedWheelDestination {
                     continue;
                 }
 
-                let relative = relative_to(entry.path(), source)?;
-                let Some(target) = normalize_path_under(destination.join(&relative), root) else {
+                let Ok(relative) = entry.path().strip_prefix(source) else {
+                    return Err(Error::InvalidWheel(format!(
+                        "Wheel directory entry escapes its source: {}",
+                        entry.path().simplified_display()
+                    )));
+                };
+                let Some(relative) = normalize_wheel_relative_path(relative)
+                    .filter(|relative| !relative.as_os_str().is_empty() || entry.depth() == 0)
+                else {
                     return Err(Error::InvalidWheel(format!(
                         "Wheel directory entry escapes its destination: {}",
                         relative.simplified_display()
                     )));
+                };
+                // Joining an empty path adds a trailing separator, which can make
+                // `symlink_metadata` follow a directory symlink instead of inspecting it.
+                let target = if relative.as_os_str().is_empty() {
+                    destination.clone()
+                } else {
+                    destination.join(relative.as_ref())
                 };
                 match fs::symlink_metadata(&target) {
                     Ok(metadata) if metadata.file_type().is_symlink() => {

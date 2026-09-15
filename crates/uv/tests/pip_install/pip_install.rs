@@ -28,6 +28,8 @@ use wiremock::{
 
 use uv_extract::dirhash::{DirectoryDigest, dirhash_path};
 use uv_fs::{PortablePath, Simplified};
+#[cfg(unix)]
+use uv_install_wheel::read_record;
 use uv_install_wheel::validate_and_heal_record;
 use uv_static::EnvVars;
 use uv_test::archive::write_tar_gz;
@@ -498,6 +500,125 @@ fn install_target_current_directory() -> Result<()> {
             .temp_dir
             .child(path)
             .assert(predicate::path::missing());
+    }
+
+    Ok(())
+}
+
+/// Preserve filesystem resolution of `..` after a symlink in `--target`.
+#[cfg(unix)]
+#[test]
+fn install_target_with_symlink_and_parent_directory() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix();
+
+    let physical = context.temp_dir.child("physical");
+    physical.child("child").create_dir_all()?;
+    symlink("physical/child", context.temp_dir.join("alias"))?;
+    let target = physical.child("target");
+
+    let wheel = context.temp_dir.join("foo-0.1.0-py3-none-any.whl");
+    let mut writer = ZipFileWriter::new(Vec::new());
+    let mut record = String::new();
+    for (name, contents) in [
+        (
+            "foo-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.1\nName: foo\nVersion: 0.1.0\n",
+        ),
+        (
+            "foo-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        ),
+        (
+            "foo-0.1.0.dist-info/entry_points.txt",
+            "[console_scripts]\nfoo-entrypoint = foo:main\n",
+        ),
+        (
+            "foo-0.1.0.data/purelib/foo.py",
+            "def main():\n    print('foo entrypoint')\n",
+        ),
+        ("foo-0.1.0.data/platlib/bar.py", "PLAT = True\n"),
+        ("foo-0.1.0.data/headers/foo.h", "/* header */\n"),
+        ("foo-0.1.0.data/data/share/foo.txt", "data\n"),
+        ("foo-0.1.0.data/scripts/foo", "#!python\nprint('foo')\n"),
+    ] {
+        let entry = ZipEntryBuilder::new(name.into(), Compression::Stored);
+        block_on(writer.write_entry_whole(entry, contents.as_bytes()))?;
+        writeln!(record, "{name},,")?;
+    }
+    writeln!(record, "foo-0.1.0.dist-info/RECORD,,")?;
+    let entry = ZipEntryBuilder::new("foo-0.1.0.dist-info/RECORD".into(), Compression::Stored);
+    block_on(writer.write_entry_whole(entry, record.as_bytes()))?;
+    fs::write(&wheel, block_on(writer.close())?)?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(&wheel)
+        .arg("--link-mode")
+        .arg("copy")
+        .arg("--target")
+        .arg("alias/../target"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl)
+    ");
+
+    let installed_paths = [
+        "foo.py",
+        "bar.py",
+        "include/foo/foo.h",
+        "share/foo.txt",
+        "bin/foo",
+        "bin/foo-entrypoint",
+    ];
+    for path in installed_paths {
+        target.child(path).assert(predicate::path::is_file());
+    }
+    context
+        .temp_dir
+        .child("target")
+        .assert(predicate::path::missing());
+
+    // Relocated payload paths must be relative to the same physical target.
+    let record = read_record(File::open(target.join("foo-0.1.0.dist-info/RECORD"))?)?;
+    let mut record_paths = record
+        .into_iter()
+        .map(|entry| entry.path)
+        .filter(|path| !Path::new(path).starts_with("foo-0.1.0.dist-info"))
+        .collect::<Vec<_>>();
+    record_paths.sort_unstable();
+    assert_snapshot!(record_paths.join("\n"), @"
+    bar.py
+    bin/foo
+    bin/foo-entrypoint
+    foo.py
+    include/foo/foo.h
+    share/foo.txt
+    ");
+
+    Command::new(target.join("bin/foo-entrypoint"))
+        .env("PYTHONPATH", target.path())
+        .assert()
+        .success()
+        .stdout("foo entrypoint\n");
+
+    uv_snapshot!(context.filters(), context.pip_uninstall()
+        .arg("foo")
+        .arg("--target")
+        .arg(target.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl)
+    ");
+
+    for path in installed_paths {
+        target.child(path).assert(predicate::path::missing());
     }
 
     Ok(())
@@ -14433,6 +14554,60 @@ fn reject_symlinked_wheel_package_directory() -> Result<()> {
         .assert(predicate::path::is_file());
     external
         .child("__init__.py")
+        .assert(predicate::path::missing());
+
+    Ok(())
+}
+
+/// Validate package destinations under the filesystem-resolved `--target` root.
+#[cfg(unix)]
+#[test]
+fn reject_symlinked_wheel_package_directory_in_resolved_target() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix();
+
+    context.init().arg("--lib").arg("foo").assert().success();
+    context.build().arg("--wheel").arg("foo").assert().success();
+    let wheel = context.temp_dir.join("foo/dist/foo-0.1.0-py3-none-any.whl");
+
+    let physical = context.temp_dir.child("physical");
+    physical.child("child").create_dir_all()?;
+    let target = physical.child("target");
+    target.create_dir_all()?;
+    symlink("physical/child", context.temp_dir.join("alias"))?;
+
+    let external = context.temp_dir.child("external");
+    external.create_dir_all()?;
+    external.child("sentinel.txt").write_str("keep me")?;
+    symlink(external.path(), target.join("foo"))?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--link-mode")
+        .arg("copy")
+        .arg(&wheel)
+        .arg("--target")
+        .arg("alias/../target"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    error: Failed to install: foo-0.1.0-py3-none-any.whl (foo==0.1.0 (from file://[TEMP_DIR]/foo/dist/foo-0.1.0-py3-none-any.whl))
+      cause: The wheel is invalid: Cannot install into symlinked directory: [TEMP_DIR]/alias/../target/foo
+    ");
+
+    external.child("sentinel.txt").assert("keep me");
+    external
+        .child("__init__.py")
+        .assert(predicate::path::missing());
+    target
+        .child("foo-0.1.0.dist-info")
+        .assert(predicate::path::missing());
+    context
+        .temp_dir
+        .child("target")
         .assert(predicate::path::missing());
 
     Ok(())
