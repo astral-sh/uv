@@ -73,8 +73,8 @@ use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     EnvironmentSpecification, LinkErrorReporting, PreferenceLocation, ProjectEnvironment,
     ProjectError, ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
-    default_dependency_groups, script_extra_build_requires, script_specification,
-    update_environment, validate_project_requires_python,
+    script_extra_build_requires, script_specification, update_environment,
+    validate_project_requires_python,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, UvError, project, read_env_files};
@@ -628,7 +628,7 @@ pub(crate) async fn run(
                 );
             }
             // Determine the groups and extras to include.
-            let default_groups = default_dependency_groups(project.pyproject_toml())?;
+            let default_groups = project.default_groups()?;
             let default_extras = DefaultExtras::default();
             let groups = groups.with_defaults(default_groups);
             let extras = extras.with_defaults(default_extras);

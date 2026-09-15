@@ -19,7 +19,7 @@ use uv_cache::Cache;
 use uv_configuration::{ActiveEnvironment, DependencyGroupsWithDefaults, ExcludeDependency};
 use uv_distribution_types::{Index, Requirement, RequirementSource};
 use uv_fs::{CWD, Simplified, normalize_path};
-use uv_normalize::{DEV_DEPENDENCIES, GroupName, PackageName};
+use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, GroupName, PackageName};
 use uv_once_map::OnceMap;
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerTree, VerbatimUrl};
@@ -243,6 +243,17 @@ pub enum WorkspaceErrorKind {
     // fail.
     #[error("Failed to normalize workspace member path")]
     Normalize(#[source] std::io::Error),
+}
+
+/// An error selecting the default dependency groups for a project.
+#[derive(Debug, thiserror::Error)]
+pub enum DefaultGroupsError {
+    #[error("Package `{0}` not found in workspace")]
+    MissingPackage(PackageName),
+    #[error(
+        "Default group `{0}` (from `tool.uv.default-groups`) is not defined in the project's `dependency-groups` table"
+    )]
+    MissingGroup(GroupName),
 }
 
 #[derive(Debug, Default, Clone, Hash, PartialEq, Eq)]
@@ -998,6 +1009,11 @@ impl Workspace {
     /// The `pyproject.toml` of the workspace.
     pub fn pyproject_toml(&self) -> &PyProjectToml {
         &self.pyproject_toml
+    }
+
+    /// Return the default dependency groups for the workspace root.
+    pub fn default_groups(&self) -> Result<DefaultGroups, DefaultGroupsError> {
+        default_dependency_groups(self.pyproject_toml())
     }
 
     /// Returns `true` if the path is excluded by the workspace.
@@ -2288,6 +2304,36 @@ impl VirtualProject {
         }
     }
 
+    /// Return the default dependency groups for the current project.
+    pub fn default_groups(&self) -> Result<DefaultGroups, DefaultGroupsError> {
+        default_dependency_groups(self.pyproject_toml())
+    }
+
+    /// Return the default dependency groups for a package selection.
+    ///
+    /// A single selected package uses that member's defaults. With zero or multiple packages,
+    /// use the current project's defaults. Every selected package must belong to the workspace.
+    pub fn default_groups_for_packages(
+        &self,
+        packages: &[PackageName],
+    ) -> Result<DefaultGroups, DefaultGroupsError> {
+        let pyproject = if let [name] = packages {
+            self.workspace()
+                .packages()
+                .get(name)
+                .ok_or_else(|| DefaultGroupsError::MissingPackage(name.clone()))?
+                .pyproject_toml()
+        } else {
+            for name in packages {
+                if !self.workspace().packages().contains_key(name) {
+                    return Err(DefaultGroupsError::MissingPackage(name.clone()));
+                }
+            }
+            self.pyproject_toml()
+        };
+        default_dependency_groups(pyproject)
+    }
+
     /// Return the [`Workspace`] of the project.
     pub fn workspace(&self) -> &Workspace {
         match self {
@@ -2307,6 +2353,32 @@ impl VirtualProject {
     /// Returns `true` if the project is a virtual workspace root.
     pub fn is_non_project(&self) -> bool {
         matches!(self, Self::NonProject(_))
+    }
+}
+
+/// Returns the default dependency groups from the [`PyProjectToml`].
+fn default_dependency_groups(
+    pyproject_toml: &PyProjectToml,
+) -> Result<DefaultGroups, DefaultGroupsError> {
+    if let Some(defaults) = pyproject_toml
+        .tool
+        .as_ref()
+        .and_then(|tool| tool.uv.as_ref().and_then(|uv| uv.default_groups.as_ref()))
+    {
+        if let DefaultGroups::List(defaults) = defaults {
+            for group in defaults {
+                if !pyproject_toml
+                    .dependency_groups
+                    .as_ref()
+                    .is_some_and(|groups| groups.contains_key(group))
+                {
+                    return Err(DefaultGroupsError::MissingGroup(group.clone()));
+                }
+            }
+        }
+        Ok(defaults.clone())
+    } else {
+        Ok(DefaultGroups::List(vec![DEV_DEPENDENCIES.clone()]))
     }
 }
 

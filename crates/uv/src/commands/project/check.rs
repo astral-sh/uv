@@ -32,7 +32,7 @@ use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectInterpreter,
     ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
-    default_dependency_groups, validate_project_requires_python,
+    validate_project_requires_python,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, UvError, project};
@@ -282,7 +282,7 @@ pub(crate) async fn check(
     };
 
     let groups = if let Some(project) = &project {
-        groups.with_defaults(default_dependency_groups(project.pyproject_toml())?)
+        groups.with_defaults(project.default_groups()?)
     } else {
         DependencyGroupsWithDefaults::none()
     };

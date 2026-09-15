@@ -60,7 +60,7 @@ use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     LinkErrorReporting, PlatformState, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectError,
     ProjectInterpreter, ScriptInterpreter, UniversalState, WorkspacePython,
-    default_dependency_groups, init_script_python_requirement,
+    init_script_python_requirement,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{ExitStatus, ScriptPath, UvError, project};
@@ -303,8 +303,7 @@ pub(crate) async fn add(
         }
 
         // Enable the default groups of the project
-        defaulted_groups =
-            groups.with_defaults(default_dependency_groups(project.pyproject_toml())?);
+        defaulted_groups = groups.with_defaults(project.default_groups()?);
 
         if frozen.is_some() || no_sync {
             // Discover the interpreter.

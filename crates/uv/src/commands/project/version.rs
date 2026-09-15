@@ -37,7 +37,7 @@ use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectError,
-    ProjectInterpreter, UniversalState, WorkspacePython, default_dependency_groups,
+    ProjectInterpreter, UniversalState, WorkspacePython,
 };
 use crate::commands::{ExitStatus, UvError, project};
 use crate::printer::Printer;
@@ -556,7 +556,7 @@ async fn lock_and_sync(
     }
 
     // Determine the groups and extras that should be enabled.
-    let default_groups = default_dependency_groups(project.pyproject_toml())?;
+    let default_groups = project.default_groups()?;
     let default_extras = DefaultExtras::default();
     let groups = DependencyGroups::default().with_defaults(default_groups);
     let extras = ExtrasSpecification::default().with_defaults(default_extras);

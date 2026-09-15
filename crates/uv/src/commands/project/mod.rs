@@ -28,7 +28,7 @@ use uv_distribution_types::{
 use uv_fs::{CWD, LockedFile, LockedFileError, LockedFileMode, Simplified, verbatim_path};
 use uv_git::ResolvedRepositoryReference;
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
-use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, ExtraName, GroupName, PackageName};
+use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{TildeVersionSpecifier, Version, VersionSpecifiers};
 use uv_pep508::MarkerTreeContents;
 use uv_preview::{Preview, PreviewFeature};
@@ -55,7 +55,7 @@ use uv_torch::TorchStrategy;
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
-use uv_workspace::pyproject::{ExtraBuildDependency, PyProjectToml};
+use uv_workspace::pyproject::ExtraBuildDependency;
 use uv_workspace::{ProjectEnvironmentSelection, RequiresPythonSources, Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
@@ -210,11 +210,6 @@ pub(crate) enum ProjectError {
     #[error("PEP 723 scripts do not support dependency groups, but group `{0}` was specified")]
     MissingGroupScript(GroupName),
 
-    #[error(
-        "Default group `{0}` (from `tool.uv.default-groups`) is not defined in the project's `dependency-groups` table"
-    )]
-    MissingDefaultGroup(GroupName),
-
     #[error("Extra `{0}` is not defined in the `optional-dependencies` table for `{1}`")]
     MissingExtraProject(ExtraName, PackageName),
 
@@ -332,6 +327,9 @@ pub(crate) enum ProjectError {
 
     #[error(transparent)]
     Workspace(#[from] uv_workspace::WorkspaceError),
+
+    #[error(transparent)]
+    DefaultGroups(#[from] uv_workspace::DefaultGroupsError),
 
     #[error(transparent)]
     PyprojectMut(#[from] uv_workspace::pyproject_mut::Error),
@@ -3210,32 +3208,6 @@ pub(crate) async fn init_script_python_requirement(
     Ok(RequiresPython::greater_than_equal_version(
         &interpreter.python_minor_version(),
     ))
-}
-
-/// Returns the default dependency groups from the [`PyProjectToml`].
-pub(crate) fn default_dependency_groups(
-    pyproject_toml: &PyProjectToml,
-) -> Result<DefaultGroups, ProjectError> {
-    if let Some(defaults) = pyproject_toml
-        .tool
-        .as_ref()
-        .and_then(|tool| tool.uv.as_ref().and_then(|uv| uv.default_groups.as_ref()))
-    {
-        if let DefaultGroups::List(defaults) = defaults {
-            for group in defaults {
-                if !pyproject_toml
-                    .dependency_groups
-                    .as_ref()
-                    .is_some_and(|groups| groups.contains_key(group))
-                {
-                    return Err(ProjectError::MissingDefaultGroup(group.clone()));
-                }
-            }
-        }
-        Ok(defaults.clone())
-    } else {
-        Ok(DefaultGroups::List(vec![DEV_DEPENDENCIES.clone()]))
-    }
 }
 
 /// Validate that we aren't trying to install extras or groups that

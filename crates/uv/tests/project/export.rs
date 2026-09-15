@@ -10553,6 +10553,57 @@ fn export_batch_invalid_selection() -> Result<()> {
 }
 
 #[test]
+fn export_batch_missing_package() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+        "#})?;
+
+    context.lock().assert().success();
+
+    let manifest = context.temp_dir.child("batch.toml");
+    manifest.write_str(indoc! {r#"
+        [[export]]
+        output-file = "requirements.txt"
+        package = ["missing"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--batch").arg("batch.toml")
+        .arg("--preview-features").arg("batch-export"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Package `missing` not found in workspace
+    ");
+
+    // Multiple selections must also validate every package name.
+    manifest.write_str(indoc! {r#"
+        [[export]]
+        output-file = "requirements.txt"
+        package = ["project", "missing"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--batch").arg("batch.toml")
+        .arg("--preview-features").arg("batch-export"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Package `missing` not found in workspace
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn export_batch_manifest_validation() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
