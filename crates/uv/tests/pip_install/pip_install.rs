@@ -14792,6 +14792,64 @@ fn install_in_prefix_symlinked_wheel_data_directory() -> Result<()> {
     Ok(())
 }
 
+/// Wheel data can follow a symlink that resolves to the scheme root itself.
+#[cfg(unix)]
+#[test]
+fn install_wheel_data_through_scheme_root_alias() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheel = context.temp_dir.join("foo-0.1.0-py3-none-any.whl");
+    let data_path = "foo-0.1.0.data/data/alias/payload.txt";
+    let nested_data_path = "foo-0.1.0.data/data/alias/nested/payload.txt";
+    let record = formatdoc! {"
+        foo-0.1.0.dist-info/METADATA,,
+        foo-0.1.0.dist-info/WHEEL,,
+        foo-0.1.0.dist-info/RECORD,,
+        {data_path},,
+        {nested_data_path},,
+    "};
+
+    let mut writer = ZipFileWriter::new(Vec::new());
+    for (name, contents) in [
+        (
+            "foo-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.1\nName: foo\nVersion: 0.1.0\n",
+        ),
+        (
+            "foo-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        ),
+        ("foo-0.1.0.dist-info/RECORD", record.as_str()),
+        (data_path, "root payload\n"),
+        (nested_data_path, "nested payload\n"),
+    ] {
+        let entry = ZipEntryBuilder::new(name.into(), Compression::Stored);
+        block_on(writer.write_entry_whole(entry, contents.as_bytes()))?;
+    }
+    fs_err::write(&wheel, block_on(writer.close())?)?;
+
+    symlink(".", context.venv.join("alias"))?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--link-mode")
+        .arg("copy")
+        .arg(&wheel), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl)
+    ");
+
+    context.venv.child("payload.txt").assert("root payload\n");
+    context
+        .venv
+        .child("nested/payload.txt")
+        .assert("nested payload\n");
+
+    Ok(())
+}
+
 /// Wheel headers must not be installed through a symlinked package destination.
 #[cfg(unix)]
 #[test]

@@ -281,7 +281,7 @@ impl ValidatedWheelDestination {
                         } else {
                             resolved_root.insert(fs::canonicalize(root)?)
                         };
-                        if normalize_path_under(&resolved, resolved_root).is_none() {
+                        if !resolved.starts_with(resolved_root) {
                             return Err(Error::InvalidWheel(format!(
                                 "Cannot install into symlinked directory: {}",
                                 target.simplified_display()
