@@ -1113,7 +1113,7 @@ impl<'a> LockedDependencyBuilder<'a> {
                 // Requesting an extra selects its base too, but a separate base edge is needed
                 // only when the locked extra edges do not already cover its environment.
                 if !extras.is_empty()
-                    && !self.base_covered_by_requested_extras(
+                    && !self.base_covered_by_extra_edges(
                         expected,
                         context,
                         &dependency.id,
@@ -1330,7 +1330,7 @@ impl<'a> LockedDependencyBuilder<'a> {
     }
 
     /// Return whether locked extra edges already select their dependency's full base environment.
-    fn base_covered_by_requested_extras(
+    fn base_covered_by_extra_edges(
         &self,
         expected: &ExpectedPackageDependencies<'_>,
         context: DependencyContext<'_>,
@@ -1338,9 +1338,11 @@ impl<'a> LockedDependencyBuilder<'a> {
         extras: &BTreeSet<ExtraName>,
         base_marker: UniversalMarker,
     ) -> bool {
-        if !matches!(context, DependencyContext::Extra(_)) {
-            return false;
-        }
+        let is_group = match context {
+            DependencyContext::Production => return false,
+            DependencyContext::Extra(_) => false,
+            DependencyContext::Group(_) => true,
+        };
         let is_root_package = expected
             .lock
             .root()
@@ -1350,7 +1352,7 @@ impl<'a> LockedDependencyBuilder<'a> {
             .conflicts
             .contains(&package_id.name, ConflictKindRef::Project)
             || expected.has_local_conflicting_extra(&package_id.name, extras);
-        if is_root_package && has_conflicting_selection {
+        if !is_group && is_root_package && has_conflicting_selection {
             return false;
         }
 
@@ -1365,15 +1367,23 @@ impl<'a> LockedDependencyBuilder<'a> {
         let mut covered = UniversalMarker::FALSE;
         for dependency in existing.iter().filter(|dependency| {
             dependency.package_id == *package_id
-                && dependency.extra.iter().any(|extra| extras.contains(extra))
+                && if is_group {
+                    !dependency.extra.is_empty()
+                } else {
+                    dependency.extra.iter().any(|extra| extras.contains(extra))
+                }
         }) {
             let mut marker = dependency.complexified_marker;
-            for extra in &dependency.extra {
-                if expected.lock.conflicts.contains(&package_id.name, extra) {
-                    marker.assume_conflict_item(&ConflictItem::from((
-                        package_id.name.clone(),
-                        extra.clone(),
-                    )));
+            // A group can select its base through any extra, including one from an included
+            // group. Retain the extra predicates when proving that those edges cover the base.
+            if !is_group {
+                for extra in &dependency.extra {
+                    if expected.lock.conflicts.contains(&package_id.name, extra) {
+                        marker.assume_conflict_item(&ConflictItem::from((
+                            package_id.name.clone(),
+                            extra.clone(),
+                        )));
+                    }
                 }
             }
             covered.or(marker);
