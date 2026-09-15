@@ -78,7 +78,7 @@ jobs:
         with:
           # Install a version that supports `imagetools create --metadata-file`
           # (https://github.com/docker/buildx/issues/2407).
-          version: v0.33.0
+          version: v0.36.1
           cache-binary: false
 
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
