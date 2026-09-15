@@ -22645,6 +22645,85 @@ fn lock_metadata_free_shared_disjoint_marker_direct_sources() -> Result<()> {
     Ok(())
 }
 
+/// A conditional provider shares its production and activated-extra sources across environments.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_metadata_free_shared_conditional_provider_sources() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["provider[direct] ; sys_platform == 'darwin'", "leaf", "extra-leaf"]
+
+        [tool.uv.sources]
+        provider = { path = "provider" }
+        "#})?;
+    context
+        .temp_dir
+        .child("provider/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "provider"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["leaf ; sys_platform != 'darwin'"]
+
+        [project.optional-dependencies]
+        direct = ["extra-leaf ; sys_platform != 'darwin'"]
+
+        [tool.uv.sources]
+        leaf = { path = "../leaf" }
+        extra-leaf = { path = "../extra-leaf" }
+        "#})?;
+    context
+        .temp_dir
+        .child("leaf/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "leaf"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#})?;
+    context
+        .temp_dir
+        .child("extra-leaf/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "extra-leaf"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--offline")
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Direct sources selected by a non-workspace local dependency are shared across the resolution.
 #[cfg(feature = "test-universal")]
 #[test]

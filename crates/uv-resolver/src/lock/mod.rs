@@ -4786,6 +4786,9 @@ impl Lock {
         let Some(package_marker) = package_markers.get(&(&package.id, None)).copied() else {
             return Ok(());
         };
+        // A reachable provider shares its sources across environments. Only its conflict
+        // selections constrain where those sources can apply.
+        let package_marker = package_marker.only_extras();
         let package_context = package_version.map(|version| (&package.id.name, version));
         // Apply policies before recursive self-requirements can activate another extra.
         let requirements = dependency_overrides
@@ -4832,7 +4835,8 @@ impl Lock {
                     };
                     let marker =
                         DependencyContext::Extra(extra).requirement_marker(requirement.marker);
-                    requirement_marker = requirement_marker.or(extra_marker.and(marker));
+                    requirement_marker =
+                        requirement_marker.or(extra_marker.only_extras().and(marker));
                 }
                 requirement_marker
             };
