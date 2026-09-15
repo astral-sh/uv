@@ -7302,6 +7302,7 @@ version = "0.0.82"
 dependencies = [
  "arcstr",
  "astral-pubgrub",
+ "blake3",
  "clap",
  "cyclonedx-bom",
  "either",

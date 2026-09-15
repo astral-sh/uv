@@ -1,15 +1,16 @@
-use std::{collections::VecDeque, sync::Arc};
+use std::sync::Arc;
 
 use futures::StreamExt;
 use futures::stream::FuturesUnordered;
-use rustc_hash::FxHashSet;
 use tracing::trace;
 
 use uv_configuration::{Constraints, Excludes, Overrides};
-use uv_distribution::{DistributionDatabase, Reporter};
-use uv_distribution_types::{DependencyMetadata, Dist, Identifier, Requirement, RequirementSource};
-use uv_resolver::{InMemoryIndex, MetadataResponse, ResolverEnvironment};
-use uv_types::{BuildContext, HashStrategy, HashVerification, RequestedRequirements};
+use uv_distribution::{DistributionDatabase, Metadata, Reporter};
+use uv_distribution_types::{DependencyMetadata, Identifier, Requirement};
+use uv_resolver::{
+    InMemoryIndex, MetadataResponse, ResolverEnvironment, SourceDiscovery, SourceInput,
+};
+use uv_types::{BuildContext, HashStrategy, RequestedRequirements};
 
 use crate::{Error, required_dist};
 
@@ -25,10 +26,10 @@ use crate::{Error, required_dist};
 ///
 /// This strategy relies on the assumption that direct URLs are only introduced by other direct
 /// URLs, and not by PyPI dependencies. (If a direct URL _is_ introduced by a PyPI dependency, then
-/// the resolver will (correctly) reject it later on with a conflict error.) Further, it's only
-/// possible because a direct URL points to a _specific_ version of a package, and so we know that
-/// any correct resolution will _have_ to include it (unlike with PyPI dependencies, which may
-/// require a range of versions and backtracking).
+/// the resolver will (correctly) reject it later on with a conflict error.) A direct URL identifies
+/// a specific version whose metadata can be inspected before solving. Conditional dependencies can
+/// still exclude that package from the solution, so the inspected metadata is retained separately
+/// from the selected dependency graph.
 pub struct LookaheadResolver<'a, Context: BuildContext> {
     /// The direct requirements for the project.
     requirements: &'a [Requirement],
@@ -90,105 +91,49 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
     pub async fn resolve(
         self,
         env: &ResolverEnvironment,
-    ) -> Result<(Vec<RequestedRequirements>, HashStrategy), Error> {
+    ) -> Result<(Vec<RequestedRequirements>, Vec<SourceInput>, HashStrategy), Error> {
         let mut results = Vec::new();
         let mut futures = FuturesUnordered::new();
-        let mut seen = FxHashSet::default();
-        let mut hasher = self.hasher.clone();
+        let mut discovery = SourceDiscovery::new(
+            self.requirements,
+            self.constraints,
+            self.overrides,
+            self.excludes,
+            self.dependency_metadata,
+            self.hasher,
+            env,
+        );
 
-        // Queue up the initial requirements.
-        let mut queue: VecDeque<_> = self
-            .constraints
-            .apply(self.overrides.apply(self.requirements))
-            .filter(|requirement| !self.excludes.contains(&requirement.name))
-            .filter(|requirement| requirement.evaluate_markers(env.marker_environment(), &[]))
-            .map(|requirement| (*requirement).clone())
-            .collect();
-
-        while !queue.is_empty() || !futures.is_empty() {
-            while let Some(requirement) = queue.pop_front() {
-                if !matches!(requirement.source, RequirementSource::Registry { .. }) {
-                    if seen.insert(requirement.clone()) {
-                        futures.push(self.lookahead(requirement, hasher.clone()));
-                    }
-                }
+        loop {
+            while let Some(requirement) = discovery.next_requirement() {
+                futures.push(self.lookahead(requirement, discovery.hasher().clone()));
             }
-
+            if futures.is_empty() {
+                break;
+            }
             while let Some(result) = futures.next().await {
-                if let Some(lookahead) = result? {
-                    // User-provided metadata can authorize dependencies even under required hashes.
-                    // An override may only match after the source's version has been discovered.
-                    // Read its hashes directly; the lookahead requirements may come from the archive.
-                    let trusted_requirements =
-                        if matches!(hasher.verification(), HashVerification::Required(_)) {
-                            self.dependency_metadata
-                                .get(lookahead.package(), Some(lookahead.version()))
-                                .map(|metadata| {
-                                    Box::into_iter(metadata.requires_dist)
-                                        .map(Requirement::from)
-                                        .collect::<Vec<_>>()
-                                })
-                        } else {
-                            None
-                        };
-                    let requirements = trusted_requirements
-                        .as_deref()
-                        .unwrap_or_else(|| lookahead.requirements())
-                        .iter()
-                        .filter(|requirement| {
-                            !self.excludes.contains_for(
-                                lookahead.package(),
-                                lookahead.version(),
-                                &requirement.name,
-                            )
-                        });
-                    hasher = if trusted_requirements.is_some() {
-                        hasher.augment_with_requirements(requirements)?
-                    } else {
-                        hasher.augment_with_metadata_requirements(requirements)?
-                    };
-                    for requirement in self.constraints.apply(self.overrides.apply_for(
-                        lookahead.package(),
-                        lookahead.version(),
-                        lookahead.requirements(),
-                    )) {
-                        if !self.excludes.contains_for(
-                            lookahead.package(),
-                            lookahead.version(),
-                            &requirement.name,
-                        ) && requirement
-                            .evaluate_markers(env.marker_environment(), lookahead.extras())
-                        {
-                            queue.push_back((*requirement).clone());
-                        }
-                    }
-                    results.push(lookahead);
+                if let Some((requirement, metadata)) = result? {
+                    results.push(discovery.visit(requirement, metadata)?);
                 }
             }
         }
 
-        Ok((results, hasher))
+        let (inputs, hasher) = discovery.into_parts();
+        Ok((results, inputs, hasher))
     }
 
-    /// Infer the package name for a given "unnamed" requirement.
+    /// Load the metadata for a direct source requirement.
     async fn lookahead(
         &self,
         requirement: Requirement,
         hasher: HashStrategy,
-    ) -> Result<Option<RequestedRequirements>, Error> {
+    ) -> Result<Option<(Requirement, Metadata)>, Error> {
         trace!("Performing lookahead for {requirement}");
 
         // Determine whether the requirement represents a local distribution and convert to a
         // buildable distribution.
         let Some(dist) = required_dist(&requirement)? else {
             return Ok(None);
-        };
-
-        // Consider the dependencies to be "direct" if the requirement is a local source tree.
-        let direct = if let Dist::Source(source_dist) = &dist {
-            source_dist.as_path().is_some_and(std::path::Path::is_dir)
-        } else {
-            false
         };
 
         // Fetch the metadata for the distribution.
@@ -218,42 +163,6 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             }
         };
 
-        // Respect recursive extras by propagating the source extras to the dependencies.
-        let package = metadata.name.clone();
-        let version = metadata.version.clone();
-        let requires_dist = Box::into_iter(metadata.requires_dist)
-            .chain(
-                metadata
-                    .dependency_groups
-                    .into_iter()
-                    .filter_map(|(group, dependencies)| {
-                        if requirement.groups.contains(&group) {
-                            Some(dependencies)
-                        } else {
-                            None
-                        }
-                    })
-                    .flatten(),
-            )
-            .map(|dependency| {
-                if dependency.name == requirement.name {
-                    Requirement {
-                        source: requirement.source.clone(),
-                        ..dependency
-                    }
-                } else {
-                    dependency
-                }
-            })
-            .collect();
-
-        // Return the requirements from the metadata.
-        Ok(Some(RequestedRequirements::new(
-            package,
-            version,
-            requirement.extras,
-            requires_dist,
-            direct,
-        )))
+        Ok(Some((requirement, metadata)))
     }
 }

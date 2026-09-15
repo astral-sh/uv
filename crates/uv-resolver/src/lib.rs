@@ -28,6 +28,7 @@ pub use resolver::{
     Reporter as ResolverReporter, Resolver, ResolverEnvironment, ResolverProvider,
     VersionsResponse, WheelMetadataResult,
 };
+pub use source_discovery::{SourceDiscovery, SourceInput};
 pub(crate) use universal_marker::ConflictMarker;
 pub use universal_marker::UniversalMarker;
 pub use upgrade::UpgradePackages;
@@ -68,6 +69,7 @@ mod redirect;
 mod resolution;
 mod resolution_mode;
 mod resolver;
+mod source_discovery;
 mod universal_marker;
 mod upgrade;
 mod version_map;

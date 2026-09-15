@@ -323,9 +323,9 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     let preferences = Preferences::from_iter(preferences, &resolver_env);
 
     // Determine any lookahead requirements.
-    let lookaheads = match options.dependency_mode {
+    let (lookaheads, source_inputs) = match options.dependency_mode {
         DependencyMode::Transitive => {
-            let (lookaheads, updated_hasher) = LookaheadResolver::new(
+            let (lookaheads, source_inputs, updated_hasher) = LookaheadResolver::new(
                 &requirements,
                 &constraints,
                 &overrides,
@@ -343,9 +343,9 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             .resolve(&resolver_env)
             .await?;
             hasher = updated_hasher;
-            lookaheads
+            (lookaheads, source_inputs)
         }
-        DependencyMode::Direct => Vec::new(),
+        DependencyMode::Direct => (Vec::new(), Vec::new()),
     };
 
     // TODO(zanieb): Consider consuming these instead of cloning
@@ -362,7 +362,8 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         workspace_members,
         exclusions,
         lookaheads,
-    );
+    )
+    .with_source_inputs(source_inputs);
 
     // Resolve the dependencies.
     let resolution = {

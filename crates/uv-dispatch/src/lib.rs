@@ -330,7 +330,7 @@ impl BuildContext for BuildDispatch<'_> {
             .map_err(uv_requirements::Error::from)?;
         let overrides = Overrides::default();
         let excludes = Excludes::default();
-        let (lookaheads, hasher) = LookaheadResolver::new(
+        let (lookaheads, _source_inputs, hasher) = LookaheadResolver::new(
             requirements,
             self.constraints,
             &overrides,

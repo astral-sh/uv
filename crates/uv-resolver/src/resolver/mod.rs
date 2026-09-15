@@ -79,7 +79,9 @@ use crate::resolver::system::SystemDependency;
 pub(crate) use crate::resolver::urls::Urls;
 use crate::universal_marker::UniversalMarker;
 use crate::yanks::AllowedYanks;
-use crate::{DependencyMode, Exclusions, FlatIndex, Options, ResolutionMode, VersionMap, marker};
+use crate::{
+    DependencyMode, Exclusions, FlatIndex, Options, ResolutionMode, SourceInput, VersionMap, marker,
+};
 pub(crate) use provider::MetadataUnavailable;
 pub(crate) use resolution::{Resolution, ResolutionDependencyEdge, ResolutionPackage};
 
@@ -109,6 +111,7 @@ pub struct Resolver<Provider: ResolverProvider, InstalledPackages: InstalledPack
 struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     project: Option<PackageName>,
     requirements: Vec<Requirement>,
+    source_inputs: Vec<SourceInput>,
     constraints: Constraints,
     overrides: Overrides,
     excludes: Excludes,
@@ -241,6 +244,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             project: manifest.project,
             workspace_members: manifest.workspace_members,
             requirements: manifest.requirements,
+            source_inputs: manifest.source_inputs,
             constraints: manifest.constraints,
             overrides: manifest.overrides,
             excludes: manifest.excludes,
@@ -858,6 +862,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             self.project.as_ref(),
             &self.workspace_members,
             self.requirements.clone(),
+            self.source_inputs.clone(),
             self.constraints.clone(),
             self.overrides.clone(),
             &self.preferences,

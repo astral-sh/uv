@@ -31,7 +31,9 @@ use crate::resolution::AnnotatedDist;
 use crate::resolution_mode::ResolutionStrategy;
 use crate::resolver::{Resolution, ResolutionDependencyEdge, ResolutionPackage};
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
-use crate::{InMemoryIndex, MetadataResponse, Options, ResolveError, VersionsResponse};
+use crate::{
+    InMemoryIndex, MetadataResponse, Options, ResolveError, SourceInput, VersionsResponse,
+};
 
 /// The output of a successful resolution.
 ///
@@ -50,6 +52,8 @@ pub struct ResolverOutput {
     pub(crate) diagnostics: Vec<ResolutionDiagnostic>,
     /// The requirements that were used to build the graph.
     pub(crate) requirements: Vec<Requirement>,
+    /// The source declarations and metadata inspected before resolving the graph.
+    pub(crate) source_inputs: Vec<SourceInput>,
     /// The constraints that were used to build the graph.
     pub(crate) constraints: Constraints,
     /// The overrides that were used to build the graph.
@@ -127,6 +131,7 @@ impl ResolverOutput {
         project: Option<&PackageName>,
         workspace_members: &BTreeSet<PackageName>,
         requirements: Vec<Requirement>,
+        source_inputs: Vec<SourceInput>,
         constraints: Constraints,
         overrides: Overrides,
         preferences: &Preferences,
@@ -236,6 +241,7 @@ impl ResolverOutput {
             fork_markers,
             diagnostics,
             requirements,
+            source_inputs,
             constraints,
             overrides,
             options,

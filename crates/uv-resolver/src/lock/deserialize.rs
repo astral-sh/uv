@@ -342,6 +342,9 @@ enum MapKind {
     Manifest,
     ManifestDependencyGroups,
     ManifestDependencyMetadata,
+    SourceInputs,
+    SourceInputPackage,
+    SourceInputDependencyGroups,
     Package,
     PackageOptionalDependencies,
     PackageDevDependencies,
@@ -353,6 +356,7 @@ enum MapKind {
 enum SequenceKind {
     Packages,
     ManifestDependencyMetadata,
+    SourceInputPackages,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -466,6 +470,21 @@ impl<'de> DocumentMapAccess<'_, 'de> {
             (MapKind::Root, "[manifest]") => {
                 Some(("manifest", Pending::Map(MapKind::Manifest), "[manifest]"))
             }
+            (MapKind::Root, "[source-inputs]") => Some((
+                "source-inputs",
+                Pending::Map(MapKind::SourceInputs),
+                "[source-inputs]",
+            )),
+            (MapKind::SourceInputs, "[[source-inputs.package]]") => Some((
+                "package",
+                Pending::Sequence(SequenceKind::SourceInputPackages),
+                "[[source-inputs.package]]",
+            )),
+            (MapKind::SourceInputPackage, "[source-inputs.package.dependency-groups]") => Some((
+                "dependency-groups",
+                Pending::Map(MapKind::SourceInputDependencyGroups),
+                "[source-inputs.package.dependency-groups]",
+            )),
             (MapKind::Root, "[[package]]") => Some((
                 "package",
                 Pending::Sequence(SequenceKind::Packages),
@@ -542,9 +561,13 @@ impl<'de> de::Deserializer<'de> for SectionDeserializer<'_, 'de> {
         })
     }
 
+    fn deserialize_option<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
+        visitor.visit_some(self)
+    }
+
     forward_to_deserialize_any! {
         bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string bytes
-        byte_buf option unit unit_struct newtype_struct seq tuple tuple_struct map
+        byte_buf unit unit_struct newtype_struct seq tuple tuple_struct map
         struct enum identifier ignored_any
     }
 }
@@ -594,6 +617,7 @@ impl<'de> SeqAccess<'de> for SectionSequenceAccess<'_, 'de> {
             let expected = match self.kind {
                 SequenceKind::Packages => "[[package]]",
                 SequenceKind::ManifestDependencyMetadata => "[[manifest.dependency-metadata]]",
+                SequenceKind::SourceInputPackages => "[[source-inputs.package]]",
             };
             if self.cursor.header()? != expected {
                 return Ok(None);
@@ -605,6 +629,7 @@ impl<'de> SeqAccess<'de> for SectionSequenceAccess<'_, 'de> {
         let kind = match self.kind {
             SequenceKind::Packages => MapKind::Package,
             SequenceKind::ManifestDependencyMetadata => MapKind::ManifestDependencyMetadata,
+            SequenceKind::SourceInputPackages => MapKind::SourceInputPackage,
         };
         seed.deserialize(SectionDeserializer {
             cursor: self.cursor,
@@ -963,6 +988,88 @@ dev = [{ name = "dependency", specifier = ">=1" }]
         let actual = from_str(input).expect("valid nested canonical lock");
 
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn source_inputs_match_toml() {
+        let input = r#"version = 1
+revision = 4
+requires-python = ">=3.12"
+
+[source-inputs]
+
+[[source-inputs.package]]
+requirement = { name = "local-provider", directory = "provider" }
+version = "1.0.0"
+kind = "local"
+fingerprint = "9487512b589d8238291eb3188b7ee43e9a1470725ca521c4849ce113578e86af"
+
+[[source-inputs.package]]
+requirement = { name = "provider", url = "https://example.com/provider-1.0.0-py3-none-any.whl" }
+version = "1.0.0"
+kind = "remote"
+requires-python = ">=3.10"
+requires-dist = [{ name = "leaf", url = "https://example.com/leaf-1.0.0-py3-none-any.whl", marker = "extra == 'feature'" }]
+provides-extras = ["feature"]
+dynamic = true
+
+[source-inputs.package.dependency-groups]
+dev = [{ name = "tool", directory = "tool" }]
+empty = []
+
+[[source-inputs.package]]
+requirement = { name = "leaf", url = "https://example.com/leaf-1.0.0-py3-none-any.whl" }
+version = "1.0.0"
+kind = "package"
+package = { name = "leaf", version = "1.0.0", source = { url = "https://example.com/leaf-1.0.0-py3-none-any.whl" } }
+requires-python = ">=3.9"
+dynamic = true
+
+[[source-inputs.package]]
+requirement = { name = "project", virtual = "." }
+version = "0.1.0"
+kind = "local"
+
+[[package]]
+name = "leaf"
+version = "1.0.0"
+source = { url = "https://example.com/leaf-1.0.0-py3-none-any.whl" }
+
+[[package]]
+name = "project"
+version = "0.1.0"
+source = { virtual = "." }
+"#;
+        let expected: Lock = toml::from_str(input).expect("valid source inputs TOML lock");
+        let actual = from_str(input).expect("valid source inputs canonical lock");
+        assert_eq!(actual, expected);
+
+        let serialized = actual.to_toml().expect("source inputs serialize");
+        let restored =
+            from_str(&serialized).expect("serialized source inputs use canonical syntax");
+        assert_eq!(restored, actual);
+    }
+
+    #[test]
+    fn empty_source_inputs_differ_from_missing() {
+        let input = r#"version = 1
+revision = 4
+requires-python = ">=3.12"
+
+[source-inputs]
+package = []
+"#;
+        let expected: Lock = toml::from_str(input).expect("valid empty source inputs TOML lock");
+        let actual = from_str(input).expect("valid empty source inputs canonical lock");
+        assert_eq!(actual, expected);
+        assert_eq!(
+            actual.to_toml().expect("empty source inputs serialize"),
+            input
+        );
+
+        let missing = from_str("version = 1\nrevision = 4\nrequires-python = \">=3.12\"\n")
+            .expect("valid legacy lock");
+        assert_ne!(actual, missing);
     }
 
     #[test]

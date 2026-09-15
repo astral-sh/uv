@@ -9,7 +9,7 @@ use uv_normalize::PackageName;
 use uv_types::RequestedRequirements;
 
 use crate::preferences::Preferences;
-use crate::{DependencyMode, Exclusions, ResolverEnvironment};
+use crate::{DependencyMode, Exclusions, ResolverEnvironment, SourceInput};
 
 /// A manifest of requirements, constraints, and preferences.
 #[derive(Clone, Debug)]
@@ -51,6 +51,9 @@ pub struct Manifest {
     /// determinations around "allowed" versions (for example, "allowed" URLs or "allowed"
     /// pre-release versions).
     pub(super) lookaheads: Vec<RequestedRequirements>,
+
+    /// The source declarations and metadata inspected during lookahead.
+    pub(super) source_inputs: Vec<SourceInput>,
 }
 
 impl Manifest {
@@ -75,6 +78,7 @@ impl Manifest {
             workspace_members,
             exclusions,
             lookaheads: Vec::new(),
+            source_inputs: Vec::new(),
         }
         .with_lookaheads(lookaheads)
     }
@@ -90,6 +94,7 @@ impl Manifest {
             exclusions: Exclusions::default(),
             workspace_members: BTreeSet::new(),
             lookaheads: Vec::new(),
+            source_inputs: Vec::new(),
         }
     }
 
@@ -113,6 +118,13 @@ impl Manifest {
             }
         }
         self.lookaheads = lookaheads;
+        self
+    }
+
+    /// Record the source inputs inspected while discovering lookahead requirements.
+    #[must_use]
+    pub fn with_source_inputs(mut self, source_inputs: Vec<SourceInput>) -> Self {
+        self.source_inputs = source_inputs;
         self
     }
 
