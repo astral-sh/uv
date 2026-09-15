@@ -55,6 +55,7 @@ use uv_preview::PreviewFeature;
 use uv_pypi_types::{
     ConflictItem, ConflictKindRef, ConflictSet, Conflicts, HashAlgorithm, HashDigest, HashDigests,
     Hashes, ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml,
+    ResolutionMetadata,
 };
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_small_str::SmallString;
@@ -1524,6 +1525,14 @@ impl<'lock> PackageMarkers<'lock> {
         *existing = marker;
         Some(marker)
     }
+}
+
+/// The active contexts in which a provider can declare dependency sources.
+struct DependencySourceProvider<'a> {
+    name: &'a PackageName,
+    version: Option<&'a Version>,
+    marker: MarkerTree,
+    extras: Vec<(&'a ExtraName, MarkerTree)>,
 }
 
 /// Package and extra contexts reached while authorizing dependency sources.
@@ -4481,7 +4490,7 @@ impl Lock {
                     }) = Self::source_tree_requires_dist_cached(
                         source_tree,
                         root,
-                        package,
+                        &package.id,
                         database,
                         &mut source_tree_metadata,
                     )
@@ -4621,7 +4630,7 @@ impl Lock {
                     Self::source_tree_requires_dist_cached(
                         source_tree,
                         root,
-                        package,
+                        &package.id,
                         database,
                         &mut source_tree_metadata,
                     )
@@ -4868,26 +4877,21 @@ impl Lock {
     /// Collect direct declarations from reachable source-bearing packages.
     fn add_source_requirements(
         &self,
-        package: &Package,
-        package_version: Option<&Version>,
+        provider: &DependencySourceProvider<'_>,
         requirements: &[Requirement],
         group: Option<&GroupName>,
-        package_markers: &PackageMarkers<'_>,
         dependency_overrides: &Overrides,
         dependency_excludes: &Excludes,
         root: &Path,
         source_requirements: &mut BTreeSet<Requirement>,
         pending_sources: &mut Vec<Requirement>,
     ) -> Result<(), LockError> {
-        let Some(package_marker) = package_markers.get(&package.id) else {
-            return Ok(());
-        };
         // A reachable provider shares its sources across environments. Only its conflict
         // selections constrain where those sources can apply.
-        let package_marker = package_marker.only_extras();
+        let package_marker = provider.marker.only_extras();
         let requirements = Self::preprocess_requirements(
-            &package.id.name,
-            package_version,
+            provider.name,
+            provider.version,
             requirements,
             group
                 .map(DependencyContext::Group)
@@ -4900,7 +4904,7 @@ impl Lock {
             let requirement_marker = if let Some(group) = group {
                 let context = DependencyContext::Group(group);
                 package_marker
-                    .and(context.conflict_marker(&package.id.name, &self.conflicts))
+                    .and(context.conflict_marker(provider.name, &self.conflicts))
                     .and(context.requirement_marker(requirement.marker))
             } else {
                 let production_marker =
@@ -4908,13 +4912,10 @@ impl Lock {
                 let mut requirement_marker = package_marker
                     .and(
                         DependencyContext::Production
-                            .conflict_marker(&package.id.name, &self.conflicts),
+                            .conflict_marker(provider.name, &self.conflicts),
                     )
                     .and(production_marker);
-                for extra in package.optional_dependencies.keys() {
-                    let Some(extra_marker) = package_markers.get_extra(&package.id, extra) else {
-                        continue;
-                    };
+                for &(extra, extra_marker) in &provider.extras {
                     let marker =
                         DependencyContext::Extra(extra).requirement_marker(requirement.marker);
                     requirement_marker =
@@ -4982,7 +4983,7 @@ impl Lock {
                 let metadata = Self::source_tree_requires_dist_cached(
                     source_tree,
                     root,
-                    package,
+                    &package.id,
                     database,
                     source_tree_metadata,
                 )
@@ -5435,12 +5436,14 @@ impl Lock {
             .filter(|package| self.is_workspace_package(package))
             .collect::<Vec<_>>();
         let mut visited_packages = FxHashSet::default();
+        let mut visited_sources = FxHashSet::default();
 
         loop {
             let Some(package) = pending_packages.pop() else {
                 let Some(requirement) = pending_sources.pop() else {
                     break;
                 };
+                let mut locked_package = None;
                 for package in self.packages_for_name(&requirement.name) {
                     if !package
                         .id
@@ -5449,6 +5452,8 @@ impl Lock {
                     {
                         continue;
                     }
+
+                    locked_package = Some(package);
 
                     let deferred_marker = reachability
                         .deferred_package_markers
@@ -5489,6 +5494,69 @@ impl Lock {
                             .push_back((package, Some(extra), marker));
                     }
                     pending_packages.push(package);
+                }
+
+                // Lookahead follows explicit sources even when their environment intersection
+                // leaves the provider or its requested extras out of the resolved graph. Read
+                // current declarations without adding them to locked-package reachability.
+                if visited_sources.insert(requirement.clone())
+                    && let Some(metadata) = Self::source_requirement_metadata(
+                        &requirement,
+                        locked_package,
+                        dependency_metadata,
+                        dependency_overrides,
+                        dependency_excludes,
+                        root,
+                        hasher,
+                        index,
+                        database,
+                        source_tree_metadata,
+                    )
+                    .await?
+                {
+                    let provider = DependencySourceProvider {
+                        name: &metadata.metadata.name,
+                        version: metadata.version.as_ref(),
+                        marker: requirement.marker,
+                        extras: requirement
+                            .extras
+                            .iter()
+                            .map(|extra| {
+                                let marker = requirement.marker.and(
+                                    DependencyContext::Extra(extra)
+                                        .conflict_marker(&requirement.name, &self.conflicts),
+                                );
+                                (extra, marker)
+                            })
+                            .collect(),
+                    };
+                    let pending_sources_start = pending_sources.len();
+                    self.add_source_requirements(
+                        &provider,
+                        &metadata.metadata.requires_dist,
+                        None,
+                        dependency_overrides,
+                        dependency_excludes,
+                        root,
+                        &mut source_requirements,
+                        &mut pending_sources,
+                    )?;
+                    for (group, requirements) in &metadata.metadata.dependency_groups {
+                        if requirement.groups.contains(group) {
+                            self.add_source_requirements(
+                                &provider,
+                                requirements,
+                                Some(group),
+                                dependency_overrides,
+                                dependency_excludes,
+                                root,
+                                &mut source_requirements,
+                                &mut pending_sources,
+                            )?;
+                        }
+                    }
+                    source_candidates
+                        .extend(pending_sources[pending_sources_start..].iter().cloned());
                 }
 
                 let changes = self
@@ -5582,7 +5650,7 @@ impl Lock {
                 }) = Self::source_tree_requires_dist_cached(
                     source_tree,
                     root,
-                    package,
+                    &package.id,
                     database,
                     source_tree_metadata,
                 )
@@ -5618,13 +5686,29 @@ impl Lock {
                 continue;
             };
 
+            let Some(marker) = reachability.package_markers.get(&package.id) else {
+                continue;
+            };
+            let provider = DependencySourceProvider {
+                name: &package.id.name,
+                version: package_version.as_ref(),
+                marker,
+                extras: package
+                    .optional_dependencies
+                    .keys()
+                    .filter_map(|extra| {
+                        reachability
+                            .package_markers
+                            .get_extra(&package.id, extra)
+                            .map(|marker| (extra, marker))
+                    })
+                    .collect(),
+            };
             let pending_sources_start = pending_sources.len();
             self.add_source_requirements(
-                package,
-                package_version.as_ref(),
+                &provider,
                 &direct_requirements,
                 None,
-                &reachability.package_markers,
                 dependency_overrides,
                 dependency_excludes,
                 root,
@@ -5635,11 +5719,9 @@ impl Lock {
                 self.is_workspace_package(package) || package.dependency_groups.contains_key(group)
             }) {
                 self.add_source_requirements(
-                    package,
-                    package_version.as_ref(),
+                    &provider,
                     &requirements,
                     Some(&group),
-                    &reachability.package_markers,
                     dependency_overrides,
                     dependency_excludes,
                     root,
@@ -5654,6 +5736,143 @@ impl Lock {
             requirements: Constraints::from_requirements(source_requirements.into_iter()),
             package_markers: reachability.package_markers,
         })
+    }
+
+    /// Read a current source declaration independently of its locked selections.
+    async fn source_requirement_metadata<Context: BuildContext>(
+        requirement: &Requirement,
+        locked_package: Option<&Package>,
+        dependency_metadata: &DependencyMetadata,
+        dependency_overrides: &Overrides,
+        dependency_excludes: &Excludes,
+        root: &Path,
+        hasher: &HashStrategy,
+        index: &InMemoryIndex,
+        database: &DistributionDatabase<'_, Context>,
+        source_tree_metadata: &mut FxHashMap<PackageId, Option<SourceTreeRequiresDist>>,
+    ) -> Result<Option<SourceTreeRequiresDist>, LockError> {
+        let configured_metadata = dependency_metadata.get(
+            &requirement.name,
+            locked_package.and_then(|package| package.id.version.as_ref()),
+        );
+        let dist = match &requirement.source {
+            RequirementSource::Directory {
+                install_path,
+                editable,
+                r#virtual,
+                url,
+            } => Dist::from_directory_url(
+                requirement.name.clone(),
+                url.clone(),
+                &root.join(install_path),
+                *editable,
+                *r#virtual,
+            ),
+            RequirementSource::Path {
+                install_path,
+                ext,
+                url,
+            } => Dist::from_file_url(
+                requirement.name.clone(),
+                url.clone(),
+                &root.join(install_path),
+                *ext,
+            ),
+            RequirementSource::Url { .. }
+            | RequirementSource::GitDirectory { .. }
+            | RequirementSource::GitPath { .. } => {
+                if let Some(metadata) = configured_metadata {
+                    return Ok(Some(metadata.into()));
+                }
+                // Reuse retained declarations even when a requested extra has no locked edges.
+                // An absent remote provider has no metadata to inspect offline.
+                return Ok(locked_package.map(|package| SourceTreeRequiresDist {
+                    version: package.id.version.clone(),
+                    requires_python: None,
+                    metadata: RequiresDist {
+                        name: package.id.name.clone(),
+                        requires_dist: package.metadata.requires_dist.iter().cloned().collect(),
+                        provides_extra: package.metadata.provides_extra.clone(),
+                        dependency_groups: package
+                            .metadata
+                            .dependency_groups
+                            .iter()
+                            .map(|(group, requirements)| {
+                                (group.clone(), requirements.iter().cloned().collect())
+                            })
+                            .collect(),
+                        dynamic: false,
+                    },
+                }));
+            }
+            RequirementSource::Registry { .. } => return Ok(None),
+        }
+        .map_err(LockErrorKind::InvalidSourceRequirement)?;
+        if let Some(metadata) = configured_metadata {
+            return Ok(Some(metadata.into()));
+        }
+        let package_id = if let Some(package) = locked_package {
+            package.id.clone()
+        } else {
+            PackageId {
+                name: requirement.name.clone(),
+                version: None,
+                source: Source::from_dist(&dist, root)?,
+            }
+        };
+        if let Some(source_tree) = package_id.source.as_source_tree()
+            && let Some(metadata) = Self::source_tree_requires_dist_cached(
+                source_tree,
+                root,
+                &package_id,
+                database,
+                source_tree_metadata,
+            )
+            .await?
+            && metadata.metadata.name == requirement.name
+            && (metadata.version.is_some()
+                || !(dependency_overrides.has_scoped_package(&requirement.name)
+                    || dependency_excludes.has_scoped_package(&requirement.name)))
+        {
+            return Ok(Some(
+                dependency_metadata
+                    .get(&requirement.name, metadata.version.as_ref())
+                    .map_or(metadata, SourceTreeRequiresDist::from),
+            ));
+        }
+
+        let id = dist.distribution_id();
+        let metadata = if let Some(response) = index.distributions().get(&id)
+            && let MetadataResponse::Found(archive) = &*response
+        {
+            archive.metadata.clone()
+        } else {
+            let archive = database
+                .get_or_build_wheel_metadata(&dist, hasher.metadata_policy(&dist))
+                .await
+                .map_err(|err| LockErrorKind::Resolution {
+                    id: package_id,
+                    err,
+                })?;
+            let metadata = archive.metadata.clone();
+            index
+                .distributions()
+                .done(id, Arc::new(MetadataResponse::Found(archive)));
+            metadata
+        };
+        Ok(Some(
+            if let Some(configured) =
+                dependency_metadata.get(&requirement.name, Some(&metadata.version))
+            {
+                configured.into()
+            } else {
+                SourceTreeRequiresDist {
+                    version: Some(metadata.version.clone()),
+                    requires_python: metadata.requires_python.clone(),
+                    metadata: metadata.into(),
+                }
+            },
+        ))
     }
 
     /// Read the current metadata for a locked package, reusing the resolver's in-memory cache.
@@ -5727,7 +5946,7 @@ impl Lock {
     async fn source_tree_requires_dist<Context: BuildContext>(
         source_tree: &Path,
         root: &Path,
-        package: &Package,
+        package_id: &PackageId,
         database: &DistributionDatabase<'_, Context>,
     ) -> Result<Option<SourceTreeRequiresDist>, LockError> {
         let parent = root.join(source_tree);
@@ -5761,7 +5980,7 @@ impl Lock {
                     .requires_dist(&parent, &pyproject_toml)
                     .await
                     .map_err(|err| LockErrorKind::Resolution {
-                        id: package.id.clone(),
+                        id: package_id.clone(),
                         err,
                     })?;
                 Ok(metadata.map(|metadata| SourceTreeRequiresDist {
@@ -5779,17 +5998,17 @@ impl Lock {
     async fn source_tree_requires_dist_cached<Context: BuildContext>(
         source_tree: &Path,
         root: &Path,
-        package: &Package,
+        package_id: &PackageId,
         database: &DistributionDatabase<'_, Context>,
         cache: &mut FxHashMap<PackageId, Option<SourceTreeRequiresDist>>,
     ) -> Result<Option<SourceTreeRequiresDist>, LockError> {
-        if let Some(metadata) = cache.get(&package.id) {
+        if let Some(metadata) = cache.get(package_id) {
             return Ok(metadata.clone());
         }
 
         let metadata =
-            Self::source_tree_requires_dist(source_tree, root, package, database).await?;
-        cache.insert(package.id.clone(), metadata.clone());
+            Self::source_tree_requires_dist(source_tree, root, package_id, database).await?;
+        cache.insert(package_id.clone(), metadata.clone());
         Ok(metadata)
     }
 }
@@ -5812,6 +6031,24 @@ struct SourceTreeRequiresDist {
     version: Option<Version>,
     requires_python: Option<VersionSpecifiers>,
     metadata: RequiresDist,
+}
+
+impl From<ResolutionMetadata> for SourceTreeRequiresDist {
+    fn from(metadata: ResolutionMetadata) -> Self {
+        Self {
+            version: Some(metadata.version),
+            requires_python: metadata.requires_python,
+            metadata: RequiresDist {
+                name: metadata.name,
+                requires_dist: Box::into_iter(metadata.requires_dist)
+                    .map(Requirement::from)
+                    .collect(),
+                provides_extra: metadata.provides_extra,
+                dependency_groups: BTreeMap::new(),
+                dynamic: metadata.dynamic,
+            },
+        }
+    }
 }
 
 impl<'lock> Auditable<'lock> {
@@ -9739,6 +9976,9 @@ impl std::fmt::Display for WheelTagHint {
 /// is with the caller somewhere in such cases.
 #[derive(Debug, thiserror::Error)]
 enum LockErrorKind {
+    /// A current source requirement could not be converted to a distribution.
+    #[error(transparent)]
+    InvalidSourceRequirement(#[from] uv_distribution_types::Error),
     /// An error that occurs when the overrides for validating a
     /// metadata-free lockfile cannot be scoped to their packages.
     #[error(transparent)]
