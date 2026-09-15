@@ -25,8 +25,8 @@ use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, Identifier, IncompatibleDist,
     IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations, IndexMetadata,
-    IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement, ResolvedDist,
-    ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
+    IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement,
+    RequirementSource, ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -109,6 +109,7 @@ pub struct Resolver<Provider: ResolverProvider, InstalledPackages: InstalledPack
 struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     project: Option<PackageName>,
     requirements: Vec<Requirement>,
+    remote_source_providers: Vec<(PackageName, RequirementSource)>,
     constraints: Constraints,
     overrides: Overrides,
     excludes: Excludes,
@@ -238,6 +239,20 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             dependency_mode: options.dependency_mode,
             urls: Urls::from_manifest(&manifest, &env, git, options.dependency_mode),
             indexes: Indexes::from_manifest(&manifest, &env, options.dependency_mode),
+            remote_source_providers: manifest
+                .lookaheads
+                .iter()
+                .filter_map(|lookahead| match lookahead.source() {
+                    RequirementSource::Url { .. }
+                    | RequirementSource::GitDirectory { .. }
+                    | RequirementSource::GitPath { .. } => {
+                        Some((lookahead.package().clone(), lookahead.source().clone()))
+                    }
+                    RequirementSource::Registry { .. }
+                    | RequirementSource::Path { .. }
+                    | RequirementSource::Directory { .. } => None,
+                })
+                .collect(),
             project: manifest.project,
             workspace_members: manifest.workspace_members,
             requirements: manifest.requirements,
@@ -858,6 +873,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             self.project.as_ref(),
             &self.workspace_members,
             self.requirements.clone(),
+            self.remote_source_providers.clone(),
             self.constraints.clone(),
             self.overrides.clone(),
             &self.preferences,

@@ -14,7 +14,8 @@ use uv_configuration::{BuildOptions, Constraints, Overrides};
 use uv_distribution::Metadata;
 use uv_distribution_types::{
     BuiltDist, Dist, DistributionId, Edge, HashCollection, Identifier, IndexUrl, Name, Node,
-    Requirement, RequiresPython, ResolutionDiagnostic, ResolvedDist, SourceDist, parse_url_hashes,
+    Requirement, RequirementSource, RequiresPython, ResolutionDiagnostic, ResolvedDist, SourceDist,
+    parse_url_hashes,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -50,6 +51,8 @@ pub struct ResolverOutput {
     pub(crate) diagnostics: Vec<ResolutionDiagnostic>,
     /// The requirements that were used to build the graph.
     pub(crate) requirements: Vec<Requirement>,
+    /// Remote providers inspected during lookahead, including those absent from the graph.
+    pub(crate) remote_source_providers: Vec<(PackageName, RequirementSource)>,
     /// The constraints that were used to build the graph.
     pub(crate) constraints: Constraints,
     /// The overrides that were used to build the graph.
@@ -127,6 +130,7 @@ impl ResolverOutput {
         project: Option<&PackageName>,
         workspace_members: &BTreeSet<PackageName>,
         requirements: Vec<Requirement>,
+        remote_source_providers: Vec<(PackageName, RequirementSource)>,
         constraints: Constraints,
         overrides: Overrides,
         preferences: &Preferences,
@@ -236,6 +240,7 @@ impl ResolverOutput {
             fork_markers,
             diagnostics,
             requirements,
+            remote_source_providers,
             constraints,
             overrides,
             options,

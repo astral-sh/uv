@@ -1,4 +1,4 @@
-use uv_distribution_types::{Requirement, Resolution};
+use uv_distribution_types::{Requirement, RequirementSource, Resolution};
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::Version;
 
@@ -41,6 +41,8 @@ pub struct RequestedRequirements {
     package: PackageName,
     /// The version of the package that requested the requirements.
     version: Version,
+    /// The source selected by the originating requirement.
+    source: RequirementSource,
     /// The set of extras included on the originating requirement.
     extras: Box<[ExtraName]>,
     /// The set of requirements that were requested by the originating requirement.
@@ -54,6 +56,7 @@ impl RequestedRequirements {
     pub fn new(
         package: PackageName,
         version: Version,
+        source: RequirementSource,
         extras: Box<[ExtraName]>,
         requirements: Box<[Requirement]>,
         direct: bool,
@@ -61,6 +64,7 @@ impl RequestedRequirements {
         Self {
             package,
             version,
+            source,
             extras,
             requirements,
             direct,
@@ -75,6 +79,11 @@ impl RequestedRequirements {
     /// Return the package version that requested the requirements.
     pub fn version(&self) -> &Version {
         &self.version
+    }
+
+    /// Return the source selected by the originating requirement.
+    pub fn source(&self) -> &RequirementSource {
+        &self.source
     }
 
     /// Return the extras that were included on the originating requirement.

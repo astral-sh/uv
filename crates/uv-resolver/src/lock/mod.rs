@@ -2434,7 +2434,8 @@ impl Lock {
     ///
     /// Set `metadata_free` to return the metadata-free lock format. Selected registry extras
     /// retain their incoming edges even if they resolve to no dependencies, and Git packages
-    /// retain their declaration metadata for offline source discovery.
+    /// retain their declaration metadata for offline source discovery. If a remote source
+    /// provider is absent from the graph, full metadata is retained for offline validation.
     ///
     /// Returns an error if an artifact does not advertise its index's required algorithm.
     pub fn from_resolution(
@@ -2445,6 +2446,28 @@ impl Lock {
         index_locations: &IndexLocations,
         metadata_free: bool,
     ) -> Result<Self, LockError> {
+        // A remote provider outside the graph has no package entry in which to retain its
+        // declarations. Full metadata lets offline checks validate the resolved packages
+        // without reconstructing source authorization through that unavailable provider.
+        let mut metadata_free = metadata_free;
+        if metadata_free {
+            'providers: for (name, source) in &resolution.remote_source_providers {
+                for (_, dist) in resolution
+                    .base_dists()
+                    .filter(|(_, dist)| dist.name() == name)
+                {
+                    if Source::from_resolved_dist(&dist.dist, root)?
+                        .satisfies_requirement_source(source, root)?
+                    {
+                        continue 'providers;
+                    }
+                }
+                debug!("Retaining package metadata for source-only remote provider `{name}`");
+                metadata_free = false;
+                break;
+            }
+        }
+
         let mut packages = BTreeMap::new();
         let requires_python = resolution.requires_python.clone();
         let supported_environments = supported_environments
