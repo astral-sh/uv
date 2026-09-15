@@ -70,9 +70,13 @@ impl<'a> BuiltWheelIndex<'a> {
             return Ok(None);
         };
 
-        // Enforce hash-checking by omitting any wheels that don't satisfy the required hashes.
+        // Omit wheels whose source archive does not satisfy the required hashes and size.
         let revision = pointer.into_revision();
-        if !revision.satisfies(self.hasher.archive_policy(source_dist)) {
+        if !revision.satisfies(self.hasher.archive_policy(source_dist))
+            || source_dist
+                .size
+                .is_some_and(|expected| revision.size() != Some(expected))
+        {
             return Ok(None);
         }
 
