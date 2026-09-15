@@ -4024,7 +4024,7 @@ impl Package {
                             filename,
                             location: Box::new(url.clone()),
                             url: VerbatimUrl::from_url(url),
-                            size: None,
+                            size: self.wheels[best_wheel_index].size,
                         };
                         let built_dist = BuiltDist::DirectUrl(direct_dist);
                         Dist::Built(built_dist)
@@ -4331,7 +4331,7 @@ impl Package {
                     subdirectory: direct.subdirectory.clone(),
                     ext,
                     url: VerbatimUrl::from_url(url),
-                    size: None,
+                    size: self.sdist.as_ref().and_then(SourceDist::size),
                 };
                 uv_distribution_types::SourceDist::DirectUrl(direct_dist)
             }
@@ -4386,7 +4386,7 @@ impl Package {
                     ext,
                     index,
                     wheels: vec![],
-                    size_is_authoritative: false,
+                    size_is_authoritative: true,
                 };
                 uv_distribution_types::SourceDist::Registry(reg_dist)
             }
@@ -4462,7 +4462,7 @@ impl Package {
                     ext,
                     index,
                     wheels: vec![],
-                    size_is_authoritative: false,
+                    size_is_authoritative: true,
                 };
                 uv_distribution_types::SourceDist::Registry(reg_dist)
             }
@@ -6233,7 +6233,7 @@ impl Wheel {
                     filename,
                     file,
                     index,
-                    size_is_authoritative: false,
+                    size_is_authoritative: true,
                 })
             }
             RegistrySource::Path(index_path) => {
@@ -6277,7 +6277,7 @@ impl Wheel {
                     filename,
                     file,
                     index,
-                    size_is_authoritative: false,
+                    size_is_authoritative: true,
                 })
             }
         }

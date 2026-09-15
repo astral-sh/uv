@@ -309,6 +309,424 @@ fn sync_relocatable_envs_default() -> Result<()> {
     Ok(())
 }
 
+/// Enforce the locked registry wheel size when reusing a cached archive.
+#[test]
+fn sync_locked_registry_wheel_size() -> Result<()> {
+    let server = PackseServer::new("simple/single-package.toml");
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a==1.0.0"]
+    "#})?;
+    context
+        .lock()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+    // The fixture index omits sizes, so record them in the lockfile.
+    let lock = context
+        .read("uv.lock")
+        .replace(".whl\", hash", ".whl\", size = 921, hash");
+    context.temp_dir.child("uv.lock").write_str(&lock)?;
+
+    context
+        .sync()
+        .arg("--frozen")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+
+    context.reset_venv();
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&lock.replace("size = 921", "size = 1"))?;
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen")
+        .arg("--index-url").arg(server.index_url()).arg("--offline"), @r#"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to download `a==1.0.0`
+      cause: Size mismatch for `a==1.0.0`: expected 1 bytes, but downloaded 921 bytes
+
+    hint: `a` (v1.0.0) was included because `project` (v0.1.0) depends on `a`
+    "#);
+
+    // A fresh download must satisfy the same size after validating the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--locked")
+        .arg("--index-url").arg(server.index_url()).arg("--no-cache"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: Failed to download `a==1.0.0`
+      cause: Size mismatch for `a==1.0.0`: expected 1 bytes, but downloaded 921 bytes
+
+    hint: `a` (v1.0.0) was included because `project` (v0.1.0) depends on `a`
+    ");
+
+    // Lockfiles without sizes can still reuse cached archives.
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&lock.replace(", size = 921", ""))?;
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen")
+        .arg("--index-url").arg(server.index_url()).arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Installed 1 package in [TIME]
+     + a==1.0.0
+    ");
+
+    Ok(())
+}
+
+/// Enforce the locked registry sdist size when reusing a cached archive.
+#[test]
+fn sync_locked_registry_sdist_size() -> Result<()> {
+    let server = PackseServer::new("simple/single-package.toml");
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a==1.0.0"]
+    "#})?;
+    context
+        .lock()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+    // The fixture index omits sizes, so record them in the lockfile.
+    let lock = context
+        .read("uv.lock")
+        .replace(".tar.gz\", hash", ".tar.gz\", size = 607, hash");
+    context.temp_dir.child("uv.lock").write_str(&lock)?;
+
+    context
+        .sync()
+        .arg("--frozen")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--no-binary-package")
+        .arg("a")
+        .assert()
+        .success();
+
+    context.reset_venv();
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&lock.replace("size = 607", "size = 1"))?;
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen")
+        .arg("--index-url").arg(server.index_url()).arg("--offline")
+        .arg("--no-binary-package").arg("a"), @r#"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to download and build `a==1.0.0`
+      cause: Size mismatch for `a==1.0.0`: expected 1 bytes, but downloaded 607 bytes
+
+    hint: `a` (v1.0.0) was included because `project` (v0.1.0) depends on `a`
+    "#);
+
+    Ok(())
+}
+
+/// Enforce the locked direct URL wheel size when reusing a cached archive.
+#[test]
+fn sync_locked_url_wheel_size() -> Result<()> {
+    let server = PackseServer::new("simple/single-package.toml");
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a==1.0.0"]
+
+        [tool.uv.sources]
+        a = {{ url = "{archive_url}" }}
+    "#, archive_url = server.file_url("a-1.0.0-py3-none-any.whl")})?;
+    context
+        .lock()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+    let lock = context
+        .read("uv.lock")
+        .replace("hash =", "size = 921, hash =");
+    context.temp_dir.child("uv.lock").write_str(&lock)?;
+
+    context
+        .sync()
+        .arg("--frozen")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+
+    context.reset_venv();
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&lock.replace("size = 921", "size = 1"))?;
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen")
+        .arg("--index-url").arg(server.index_url()).arg("--offline"), @r#"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to download `a @ http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`
+      cause: Size mismatch for `a @ http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`: expected 1 bytes, but downloaded 921 bytes
+
+    hint: `a` (v1.0.0) was included because `project` (v0.1.0) depends on `a`
+    "#);
+
+    Ok(())
+}
+
+/// Enforce the locked direct URL sdist size when reusing a cached archive.
+#[test]
+fn sync_locked_url_sdist_size() -> Result<()> {
+    let server = PackseServer::new("simple/single-package.toml");
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a==1.0.0"]
+
+        [tool.uv.sources]
+        a = {{ url = "{archive_url}" }}
+    "#, archive_url = server.file_url("a-1.0.0.tar.gz")})?;
+    context
+        .lock()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+    let lock = context
+        .read("uv.lock")
+        .replace("hash =", "size = 607, hash =");
+    context.temp_dir.child("uv.lock").write_str(&lock)?;
+
+    context
+        .sync()
+        .arg("--frozen")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+
+    context.reset_venv();
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&lock.replace("size = 607", "size = 1"))?;
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen")
+        .arg("--index-url").arg(server.index_url()).arg("--offline"), @r#"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to download and build `a @ http://[LOCALHOST]/files/a-1.0.0.tar.gz`
+      cause: Size mismatch for `a @ http://[LOCALHOST]/files/a-1.0.0.tar.gz`: expected 1 bytes, but downloaded 607 bytes
+
+    hint: `a` was included because `project` (v0.1.0) depends on `a`
+    "#);
+
+    Ok(())
+}
+
+/// Validate a locked local wheel before preparing it and when reusing its cache.
+#[test]
+fn sync_locked_local_wheel_size() -> Result<()> {
+    let server = PackseServer::new("simple/single-package.toml");
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("links").create_dir_all()?;
+    download_to_disk(
+        &server.file_url("a-1.0.0-py3-none-any.whl"),
+        &context.temp_dir.child("links/a-1.0.0-py3-none-any.whl"),
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a==1.0.0"]
+
+        [tool.uv]
+        find-links = ["links"]
+    "#})?;
+    let lock = indoc! {r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "links" }
+        wheels = [{ path = "a-1.0.0-py3-none-any.whl", size = 921 }]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [{ name = "a" }]
+    "#};
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&lock.replace("size = 921", "size = 1"))?;
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen")
+        .arg("--index-url").arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to download `a==1.0.0`
+      cause: Size mismatch for `a==1.0.0`: expected 1 bytes, but downloaded 921 bytes
+
+    hint: `a` (v1.0.0) was included because `project` (v0.1.0) depends on `a`
+    ");
+
+    context.temp_dir.child("uv.lock").write_str(lock)?;
+    context
+        .sync()
+        .arg("--frozen")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+    context.reset_venv();
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Installed 1 package in [TIME]
+     + a==1.0.0
+    ");
+
+    context.reset_venv();
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&lock.replace("size = 921", "size = 1"))?;
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to download `a==1.0.0`
+      cause: Size mismatch for `a==1.0.0`: expected 1 bytes, but downloaded 921 bytes
+
+    hint: `a` (v1.0.0) was included because `project` (v0.1.0) depends on `a`
+    ");
+
+    Ok(())
+}
+
+/// Validate a locked local sdist before preparing it and when reusing its cache.
+#[test]
+fn sync_locked_local_sdist_size() -> Result<()> {
+    let server = PackseServer::new("simple/single-package.toml");
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("links").create_dir_all()?;
+    download_to_disk(
+        &server.file_url("a-1.0.0.tar.gz"),
+        &context.temp_dir.child("links/a-1.0.0.tar.gz"),
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a==1.0.0"]
+
+        [tool.uv]
+        find-links = ["links"]
+    "#})?;
+    let lock = indoc! {r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "links" }
+        sdist = { path = "a-1.0.0.tar.gz", size = 607 }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [{ name = "a" }]
+    "#};
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&lock.replace("size = 607", "size = 1"))?;
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen")
+        .arg("--index-url").arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to download and build `a==1.0.0`
+      cause: Size mismatch for `a==1.0.0`: expected 1 bytes, but downloaded 607 bytes
+
+    hint: `a` (v1.0.0) was included because `project` (v0.1.0) depends on `a`
+    ");
+
+    context.temp_dir.child("uv.lock").write_str(lock)?;
+    context
+        .sync()
+        .arg("--frozen")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+    context.reset_venv();
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Installed 1 package in [TIME]
+     + a==1.0.0
+    ");
+
+    context.reset_venv();
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&lock.replace("size = 607", "size = 1"))?;
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to download and build `a==1.0.0`
+      cause: Size mismatch for `a==1.0.0`: expected 1 bytes, but downloaded 607 bytes
+
+    hint: `a` (v1.0.0) was included because `project` (v0.1.0) depends on `a`
+    ");
+
+    Ok(())
+}
+
 /// Ensure that `uv sync` reuses remote wheels cached by `uv pip install`.
 #[test]
 fn sync_reuses_pip_install_wheel_cache() -> Result<()> {
