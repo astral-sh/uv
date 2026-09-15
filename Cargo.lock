@@ -7239,7 +7239,6 @@ dependencies = [
  "futures",
  "rustc-hash",
  "thiserror",
- "toml",
  "tracing",
  "url",
  "uv-cache-key",
