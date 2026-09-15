@@ -50,6 +50,7 @@ uv-warnings = { workspace = true }
 uv-workspace = { workspace = true }
 
 arcstr = { workspace = true }
+blake3 = { workspace = true }
 clap = { workspace = true, features = ["derive"], optional = true }
 cyclonedx-bom = { workspace = true }
 papaya = { workspace = true }

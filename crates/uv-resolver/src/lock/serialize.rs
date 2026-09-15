@@ -11,6 +11,7 @@ use uv_normalize::PackageName;
 use uv_pep508::MarkerTree;
 use uv_pypi_types::ConflictKind;
 
+use super::source_inputs::{SourceInputMetadata, SourceInputs};
 use super::{
     Dependency, DirectSource, ExcludeNewerOverride, ExcludeNewerValue, ForkStrategy, Lock, Package,
     PackageId, PrereleaseMode, RegistrySource, ResolutionMode, ResolverManifest, ResolverOptions,
@@ -110,6 +111,9 @@ fn write_lock(writer: &mut LockWriter, lock: &Lock) -> Result<(), WriteError> {
 
     write_options(writer, &lock.options)?;
     write_manifest(writer, &lock.manifest)?;
+    if let Some(source_inputs) = &lock.source_inputs {
+        write_source_inputs(writer, source_inputs)?;
+    }
 
     // Count the number of packages for each package name. When there's only one package for a
     // particular package name (the overwhelmingly common case), we can omit some data (like
@@ -266,6 +270,71 @@ fn write_manifest(writer: &mut LockWriter, manifest: &ResolverManifest) -> Resul
         }
     }
 
+    Ok(())
+}
+
+/// Write source-discovery inputs separately from packages selected for installation.
+fn write_source_inputs(writer: &mut LockWriter, inputs: &SourceInputs) -> Result<(), WriteError> {
+    writer.table(&["source-inputs"])?;
+    if inputs.packages.is_empty() {
+        writer.key_start("package")?;
+        writer.raw("[]\n");
+        return Ok(());
+    }
+
+    for input in &inputs.packages {
+        writer.array_of_tables(&["source-inputs", "package"])?;
+        writer.key_value("requirement", serialize_value(&input.requirement)?)?;
+        writer.key_value("version", input.version.to_string())?;
+        match &input.metadata {
+            SourceInputMetadata::Local { fingerprint } => {
+                writer.key_value("kind", "local")?;
+                if let Some(fingerprint) = fingerprint {
+                    writer.key_value("fingerprint", fingerprint.as_str())?;
+                }
+            }
+            SourceInputMetadata::Remote(metadata) => {
+                writer.key_value("kind", "remote")?;
+                if let Some(requires_python) = &metadata.requires_python {
+                    writer.key_value("requires-python", requires_python.to_string())?;
+                }
+                write_serialized_non_empty_array(writer, "requires-dist", &metadata.requires_dist)?;
+                write_serialized_non_empty_array(
+                    writer,
+                    "provides-extras",
+                    &metadata.provides_extra,
+                )?;
+                if metadata.dynamic {
+                    writer.key_value("dynamic", true)?;
+                }
+                if !metadata.dependency_groups.is_empty() {
+                    writer.table(&["source-inputs", "package", "dependency-groups"])?;
+                    for (group, requirements) in &metadata.dependency_groups {
+                        write_serialized_array(writer, group.as_ref(), requirements)?;
+                    }
+                }
+            }
+            SourceInputMetadata::Package {
+                package,
+                requires_python,
+                dynamic,
+            } => {
+                writer.key_value("kind", "package")?;
+                writer.key_start("package")?;
+                writer.start_inline_table();
+                let mut first = true;
+                write_package_id(writer, package, None, PackageIdLocation::Inline(&mut first))?;
+                writer.finish_inline_table(first);
+                writer.raw("\n");
+                if let Some(requires_python) = requires_python {
+                    writer.key_value("requires-python", requires_python.to_string())?;
+                }
+                if *dynamic {
+                    writer.key_value("dynamic", true)?;
+                }
+            }
+        }
+    }
     Ok(())
 }
 

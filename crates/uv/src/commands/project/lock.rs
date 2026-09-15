@@ -921,6 +921,10 @@ async fn do_lock(
             packages,
             &members,
             required_members,
+            &target
+                .members_requirements()
+                .chain(target.group_requirements())
+                .collect::<Vec<_>>(),
             &requirements,
             &dependency_groups,
             &constraints,
@@ -1167,6 +1171,7 @@ impl ValidatedLock {
         packages: &BTreeMap<PackageName, WorkspaceMember>,
         members: &[PackageName],
         required_members: &BTreeMap<PackageName, Editability>,
+        source_roots: &[Requirement],
         requirements: &[Requirement],
         dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
         constraints: &[Requirement],
@@ -1395,6 +1400,7 @@ impl ValidatedLock {
                 packages,
                 members,
                 required_members,
+                source_roots,
                 requirements,
                 constraints,
                 overrides,
@@ -1413,6 +1419,12 @@ impl ValidatedLock {
             )
             .await?
         {
+            SatisfiesResult::MismatchedSourceInputs => {
+                debug!(
+                    "Resolving despite existing lockfile due to changed source discovery inputs"
+                );
+                Ok(Self::Preferable(lock))
+            }
             SatisfiesResult::Satisfied => {
                 debug!("Existing `uv.lock` satisfies workspace requirements");
                 Ok(Self::Satisfies(lock))

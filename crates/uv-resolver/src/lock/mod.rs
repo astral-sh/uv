@@ -85,6 +85,10 @@ pub(crate) mod export;
 mod installable;
 mod map;
 mod serialize;
+mod source_inputs;
+mod source_inputs_validation;
+
+use source_inputs::SourceInputs;
 mod tree;
 
 /// The current version of the lockfile format.
@@ -336,6 +340,8 @@ pub struct Lock {
     by_id: FxHashMap<PackageId, PackageIndex>,
     /// The input requirements to the resolution.
     manifest: ResolverManifest,
+    /// The metadata inspected during first-party source discovery.
+    source_inputs: Option<SourceInputs>,
 }
 
 /// Return the marker domain covered by the supported environments and `requires-python`.
@@ -1695,11 +1701,14 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
         requirement: &Requirement,
         requirement_environment: MarkerTree,
     ) -> Result<Option<MarkerTree>, LockError> {
-        let mut source_marker = if package
+        let exact_source = package
             .id
             .source
-            .satisfies_requirement_source(&requirement.source, self.workspace_root)?
-        {
+            .satisfies_requirement_source(&requirement.source, self.workspace_root)?;
+        let requires_authorization = self.lock.source_inputs.is_some()
+            && !matches!(package.id.source, Source::Registry(..))
+            && !self.lock.is_workspace_package(package);
+        let mut source_marker = if exact_source && !requires_authorization {
             MarkerTree::TRUE
         } else {
             MarkerTree::FALSE
@@ -1709,10 +1718,10 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
         // Preserve its full environment when the consumer overlaps only part of the source
         // marker; disjoint consumers may share the source but retain conflict predicates.
         if source_marker.is_false()
-            && matches!(
+            && (matches!(
                 requirement.source,
                 RequirementSource::Registry { index: None, .. }
-            )
+            ) || exact_source && requires_authorization)
             && let Some(source_requirements) =
                 self.source_requirements.requirements.get(&requirement.name)
         {
@@ -1723,7 +1732,9 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
                     .satisfies_requirement_source(&source_requirement.source, self.workspace_root)?
                 {
                     let source_environment = source_requirement.marker.without_extras();
-                    let marker = if !requirement_environment.is_disjoint(source_environment)
+                    let marker = if exact_source {
+                        MarkerTree::TRUE
+                    } else if !requirement_environment.is_disjoint(source_environment)
                         && !requirement_environment
                             .implies(source_environment)
                             .is_true()
@@ -2591,7 +2602,7 @@ impl Lock {
         // that canonical form rather than the raw resolver output.
         let fork_markers =
             canonicalize_universal_markers(&resolution.fork_markers, &requires_python);
-        let lock = Self::new(
+        let mut lock = Self::new(
             VERSION,
             REVISION,
             packages,
@@ -2603,11 +2614,15 @@ impl Lock {
             vec![],
             fork_markers,
         )?;
-        Ok(if metadata_free {
-            lock.without_package_metadata()
-        } else {
-            lock
-        })
+        if metadata_free {
+            lock = lock.without_package_metadata();
+        }
+        lock.source_inputs = Some(SourceInputs::from_inputs(
+            &resolution.source_inputs,
+            &lock,
+            root,
+        )?);
+        Ok(lock)
     }
 
     /// Initialize a [`Lock`] from a list of [`Package`] entries.
@@ -2755,6 +2770,7 @@ impl Lock {
             packages,
             by_id,
             manifest,
+            source_inputs: None,
         };
         Ok(lock)
     }
@@ -3995,6 +4011,7 @@ impl Lock {
         packages: &BTreeMap<PackageName, WorkspaceMember>,
         members: &[PackageName],
         required_members: &BTreeMap<PackageName, Editability>,
+        source_roots: &[Requirement],
         requirements: &[Requirement],
         constraints: &[Requirement],
         overrides: &[Override<Requirement>],
@@ -4086,7 +4103,7 @@ impl Lock {
         }
 
         // Validate that the lockfile was generated with the same constraints.
-        let normalized_constraints = {
+        let mut normalized_constraints = {
             let expected: BTreeSet<_> = constraints
                 .iter()
                 .cloned()
@@ -4106,7 +4123,7 @@ impl Lock {
         };
 
         // Validate that the lockfile was generated with the same overrides.
-        let normalized_overrides = {
+        {
             let normalize = |entry: Override<Requirement>| -> Result<_, LockError> {
                 match entry {
                     Override::Requirement(requirement) => Ok(Override::Requirement(
@@ -4141,8 +4158,7 @@ impl Lock {
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedOverrides(expected, actual));
             }
-            expected
-        };
+        }
 
         // Validate that the lockfile was generated with the same excludes.
         {
@@ -4241,17 +4257,65 @@ impl Lock {
             }
         }
 
-        let dependency_overrides = if allow_missing_package_metadata {
-            Overrides::from_entries(normalized_overrides.into_iter().collect())
-                .map_err(LockErrorKind::InvalidScopedOverride)?
-        } else {
-            Overrides::default()
-        };
-        let dependency_excludes = if allow_missing_package_metadata {
-            Excludes::from_entries(excludes.iter().cloned())
-        } else {
-            Excludes::default()
-        };
+        let dependency_overrides = Overrides::from_entries(overrides.to_vec())
+            .map_err(LockErrorKind::InvalidScopedOverride)?;
+        let dependency_excludes = Excludes::from_entries(excludes.iter().cloned());
+        let mut source_lookaheads = Vec::new();
+        if self.source_inputs.is_some() {
+            let roots = source_roots
+                .iter()
+                .chain(requirements)
+                .chain(dependency_groups.values().flatten())
+                .cloned()
+                .collect::<Vec<_>>();
+            let Some((lookaheads, inputs)) = self
+                .validate_source_inputs(
+                    root,
+                    &roots,
+                    packages,
+                    &Constraints::from_requirements(constraints.iter().cloned()),
+                    &dependency_overrides,
+                    &dependency_excludes,
+                    dependency_metadata,
+                    tags,
+                    markers,
+                    build_options,
+                    hasher,
+                    index,
+                    database,
+                    allow_missing_package_metadata,
+                )
+                .await?
+            else {
+                return Ok(SatisfiesResult::MismatchedSourceInputs);
+            };
+            source_lookaheads = lookaheads;
+            normalized_constraints.extend(self.source_input_requirements(
+                &inputs,
+                &dependency_overrides,
+                &dependency_excludes,
+                root,
+            )?);
+            for input in &inputs {
+                for package in self.packages_for_name(&input.requirement.name) {
+                    if package.id.source.is_source_tree()
+                        && package
+                            .id
+                            .source
+                            .satisfies_requirement_source(&input.requirement.source, root)?
+                    {
+                        source_tree_metadata.insert(
+                            package.id.clone(),
+                            Some(SourceTreeRequiresDist {
+                                version: Some(input.metadata.version.clone()),
+                                requires_python: input.metadata.requires_python.clone(),
+                                metadata: RequiresDist::from(input.metadata.clone()),
+                            }),
+                        );
+                    }
+                }
+            }
+        }
         // Projectless workspace groups and scripts are root declarations, so apply only
         // global overrides and exclusions before using them for sources or validation.
         let root_requirements = dependency_overrides
@@ -4316,6 +4380,31 @@ impl Lock {
                 })
                 .collect::<BTreeSet<_>>()
         });
+
+        // Only declarations selected by source discovery can make indexes available.
+        for lookahead in &source_lookaheads {
+            for requirement in dependency_overrides
+                .apply_for(
+                    lookahead.package(),
+                    lookahead.version(),
+                    lookahead.requirements(),
+                )
+                .filter(|requirement| {
+                    !dependency_excludes.contains_for(
+                        lookahead.package(),
+                        lookahead.version(),
+                        &requirement.name,
+                    ) && requirement.evaluate_markers(None, lookahead.extras())
+                })
+            {
+                if let RequirementSource::Registry {
+                    index: Some(index), ..
+                } = &requirement.source
+                {
+                    Self::record_index(index, &mut remotes, &mut locals, root);
+                }
+            }
+        }
 
         // Add the workspace packages to the queue.
         for root_name in packages.keys() {
@@ -4765,6 +4854,69 @@ impl Lock {
         Ok(SatisfiesResult::Satisfied)
     }
 
+    /// Collect sources from refreshed discovery inputs independently of selected packages.
+    fn source_input_requirements(
+        &self,
+        inputs: &[crate::SourceInput],
+        overrides: &Overrides,
+        excludes: &Excludes,
+        root: &Path,
+    ) -> Result<BTreeSet<Requirement>, LockError> {
+        let mut sources = BTreeSet::new();
+        for input in inputs {
+            let package = &input.metadata.name;
+            let provider_marker = MarkerTree::TRUE;
+            for (group, requirements) in iter::once((None, input.metadata.requires_dist.as_ref()))
+                .chain(
+                    input
+                        .metadata
+                        .dependency_groups
+                        .iter()
+                        .filter(|(group, _)| input.requirement.groups.contains(group))
+                        .map(|(group, requirements)| (Some(group), requirements.as_ref())),
+                )
+            {
+                let context = group
+                    .map(DependencyContext::Group)
+                    .unwrap_or(DependencyContext::Production);
+                let requirements = Self::preprocess_requirements(
+                    package,
+                    Some(&input.metadata.version),
+                    requirements,
+                    context,
+                    overrides,
+                    excludes,
+                );
+                for mut requirement in requirements {
+                    if matches!(requirement.source, RequirementSource::Registry { .. }) {
+                        continue;
+                    }
+                    let mut marker = provider_marker
+                        .and(context.conflict_marker(package, &self.conflicts))
+                        .and(context.requirement_marker(requirement.marker));
+                    if group.is_none() {
+                        for extra in &input.requirement.extras {
+                            let context = DependencyContext::Extra(extra);
+                            marker = marker.or(provider_marker
+                                .and(context.conflict_marker(package, &self.conflicts))
+                                .and(context.requirement_marker(requirement.marker)));
+                        }
+                    }
+                    if marker.is_false() {
+                        continue;
+                    }
+                    requirement.marker = marker.only_extras();
+                    sources.insert(normalize_requirement(
+                        requirement,
+                        root,
+                        &self.requires_python,
+                    )?);
+                }
+            }
+        }
+        Ok(sources)
+    }
+
     /// Return whether an authorized direct source selects this package in the active context.
     fn constraint_selects_source(
         package: &Package,
@@ -4958,6 +5110,18 @@ impl Lock {
     ) -> Result<DependencySourceChanges<'lock>, LockError> {
         let mut changes = DependencySourceChanges::default();
         while let Some((package, extra, marker)) = reachability.package_queue.pop_front() {
+            if self.source_inputs.is_some()
+                && !self.is_workspace_package(package)
+                && !matches!(package.id.source, Source::Registry(..))
+                && !Self::constraint_selects_source(
+                    package,
+                    MarkerTree::TRUE,
+                    source_requirements,
+                    root,
+                )?
+            {
+                continue;
+            }
             let Some(marker) = reachability
                 .package_markers
                 .merge(&package.id, extra, marker)
@@ -5226,7 +5390,8 @@ impl Lock {
                         let registry_external_source =
                             matches!(package.id.source, Source::Registry(..))
                                 && !matches!(dependency_package.id.source, Source::Registry(..));
-                        let constrained_source = registry_external_source
+                        let constrained_source = (registry_external_source
+                            || self.source_inputs.is_some())
                             && Self::constraint_selects_source(
                                 dependency_package,
                                 marker,
@@ -5301,6 +5466,20 @@ impl Lock {
                         .all(|override_requirement| override_requirement.name != requirement.name)
             });
             source_requirements.extend(global_source_overrides);
+        }
+
+        if self.source_inputs.is_some() {
+            for requirement in root_requirements {
+                if !matches!(requirement.source, RequirementSource::Registry { .. }) {
+                    let mut requirement = normalize_requirement(
+                        requirement.clone().into_owned(),
+                        root,
+                        &self.requires_python,
+                    )?;
+                    requirement.marker = requirement.marker.only_extras();
+                    source_requirements.insert(requirement);
+                }
+            }
         }
 
         // Keep inactive constraints as candidates: a newly authorized source tree may
@@ -5394,7 +5573,9 @@ impl Lock {
             .iter()
             .filter(|constraint| !matches!(constraint.source, RequirementSource::Registry { .. }))
         {
-            if self.source_is_reachable(constraint, &reachability.package_markers, root)? {
+            if self.source_inputs.is_some()
+                || self.source_is_reachable(constraint, &reachability.package_markers, root)?
+            {
                 pending_sources.push(constraint.clone());
             } else {
                 inactive_constraints.push(constraint.clone());
@@ -5432,7 +5613,7 @@ impl Lock {
         let mut pending_packages = self
             .packages
             .iter()
-            .filter(|package| self.is_workspace_package(package))
+            .filter(|package| self.source_inputs.is_none() && self.is_workspace_package(package))
             .collect::<Vec<_>>();
         let mut visited_packages = FxHashSet::default();
 
@@ -5488,7 +5669,9 @@ impl Lock {
                             .package_queue
                             .push_back((package, Some(extra), marker));
                     }
-                    pending_packages.push(package);
+                    if self.source_inputs.is_none() {
+                        pending_packages.push(package);
+                    }
                 }
 
                 let changes = self
@@ -5872,6 +6055,8 @@ impl<'tags> TagPolicy<'tags> {
 pub enum SatisfiesResult<'lock> {
     /// The lockfile satisfies the requirements.
     Satisfied,
+    /// Metadata inspected during source discovery has changed.
+    MismatchedSourceInputs,
     /// The lockfile uses a different set of workspace members.
     MismatchedMembers(BTreeSet<PackageName>, &'lock BTreeSet<PackageName>),
     /// A workspace member switched from virtual to non-virtual or vice versa.
@@ -6178,6 +6363,8 @@ struct LockWire {
     options: ResolverOptionsWire,
     #[serde(default)]
     manifest: ResolverManifest,
+    #[serde(default)]
+    source_inputs: Option<SourceInputs>,
     #[serde(rename = "package", alias = "distribution", default)]
     packages: Vec<PackageWire>,
 }
@@ -6249,7 +6436,7 @@ impl TryFrom<LockWire> for Lock {
             fork_strategy: options_wire.fork_strategy,
             exclude_newer: options_wire.exclude_newer.into(),
         };
-        let lock = Self::new(
+        let mut lock = Self::new(
             wire.version,
             wire.revision.unwrap_or(0),
             packages,
@@ -6262,6 +6449,7 @@ impl TryFrom<LockWire> for Lock {
             fork_markers,
         )?;
 
+        lock.source_inputs = wire.source_inputs;
         Ok(lock)
     }
 }
@@ -9739,6 +9927,12 @@ impl std::fmt::Display for WheelTagHint {
 /// is with the caller somewhere in such cases.
 #[derive(Debug, thiserror::Error)]
 enum LockErrorKind {
+    #[error(transparent)]
+    InvalidSourceRequirement(uv_distribution_types::Error),
+    #[error(transparent)]
+    SourceInputHash(uv_types::HashStrategyError),
+    #[error(transparent)]
+    SourceInputSerialization(serde_json::Error),
     /// An error that occurs when the overrides for validating a
     /// metadata-free lockfile cannot be scoped to their packages.
     #[error(transparent)]
