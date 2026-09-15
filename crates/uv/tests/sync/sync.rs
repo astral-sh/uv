@@ -19305,7 +19305,8 @@ async fn project_build_hashes_static_md5() -> Result<()> {
         .finish()
         .await?;
     let [hasher] = hashers;
-    let digest = HashDigest::from(hasher).digest;
+    let digest = HashDigest::from(hasher);
+    let digest = digest.digest();
     let url = Url::from_file_path(wheel.path()).map_err(|()| anyhow!("absolute wheel path"))?;
     context
         .temp_dir
