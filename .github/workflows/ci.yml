@@ -299,15 +299,28 @@ jobs:
       - check-docs
       - check-generated-files
       - test
+      - test-system
       - build-dev-binaries
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
     steps:
       - name: "Check required jobs passed"
         run: |
-          failing=$(echo "$NEEDS_JSON" | jq -r 'to_entries[] | select(.value.result != "success" and .value.result != "skipped") | "\(.key): \(.value.result)"')
+          failing=$(
+            echo "$NEEDS_JSON" | jq -r --argjson conditional_jobs "$CONDITIONAL_JOBS" '
+              to_entries[]
+              | select($conditional_jobs[.key] != false)
+              | select(.value.result != "success" and .value.result != "skipped")
+              | "\(.key): \(.value.result)"
+            '
+          )
           if [ -n "$failing" ]; then
             echo "$failing"
             exit 1
           fi
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
+          # Jobs not listed here are always required.
+          CONDITIONAL_JOBS: >-
+            {
+              "test-system": ${{ contains(github.event.pull_request.labels.*.name, 'test:system') }}
+            }
