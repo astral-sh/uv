@@ -9,7 +9,7 @@ use tracing::{Level, debug, enabled, warn};
 use uv_errors::{Hinted, Hints};
 
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, Constraints, DryRun, EditableMode,
     ExcludeDependency, ExtrasSpecification, HashCheckingMode, IndexStrategy, NoSources, Override,
@@ -456,13 +456,7 @@ pub(crate) async fn pip_install(
     let build_options = build_options.combine(no_binary, no_build);
 
     // Resolve the flat indexes from `--find-links`.
-    let flat_index = {
-        let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), &cache);
-        let entries = client
-            .fetch_all(index_locations.flat_indexes().map(Index::url))
-            .await?;
-        FlatIndex::from_entries(entries)
-    };
+    let flat_index = FlatIndex::load(&client, &cache, &index_locations).await?;
 
     // Determine whether to enable build isolation.
     let types_build_isolation = match build_isolation {

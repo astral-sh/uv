@@ -14,7 +14,7 @@ use tracing::{debug, warn};
 
 use uv_cache::Cache;
 use uv_cache_key::RepositoryUrl;
-use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults,
     DevMode, DryRun, EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults,
@@ -442,20 +442,8 @@ pub(crate) async fn add(
             };
 
             // Resolve the flat indexes from `--find-links`.
-            let flat_index = {
-                let client =
-                    FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
-                let entries = client
-                    .fetch_all(
-                        settings
-                            .resolver
-                            .index_locations
-                            .flat_indexes()
-                            .map(Index::url),
-                    )
-                    .await?;
-                FlatIndex::from_entries(entries)
-            };
+            let flat_index =
+                FlatIndex::load(&client, cache, &settings.resolver.index_locations).await?;
 
             // Lower the extra build dependencies, if any.
             let extra_build_requires = if let AddTarget::Project(project, _) = &target {
