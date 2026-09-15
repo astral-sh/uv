@@ -13,6 +13,7 @@ use uv_configuration::{
 };
 use uv_distribution::{ArchiveMetadata, Metadata};
 use uv_distribution_types::{Identifier, RequiresPython};
+use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{MarkerTree, Pep508ErrorSource, Requirement, VerbatimUrl, VersionOrUrl};
@@ -336,7 +337,7 @@ pub(crate) async fn upgrade(
     let pyproject = pyproject.to_string();
     let pyproject = PyProjectToml::from_toml(
         &pyproject,
-        project.project_root().join("pyproject.toml").display(),
+        project.project_root().join("pyproject.toml").user_display(),
     )?;
     if pyproject
         .project

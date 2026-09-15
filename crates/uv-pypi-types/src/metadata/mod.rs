@@ -5,14 +5,17 @@ mod metadata_resolver;
 mod pyproject_toml;
 mod requires_dist;
 
+use std::error::Error as StdError;
 use std::str::Utf8Error;
 
 use mailparse::{MailHeaderMap, MailParseError};
 use thiserror::Error;
 
+use uv_errors::{Diagnostic, SourceFile};
 use uv_normalize::InvalidNameError;
 use uv_pep440::{VersionParseError, VersionSpecifiersParseError};
 use uv_pep508::Pep508Error;
+use uv_toml::{ParseError, diagnostic_for_span};
 
 use crate::VerbatimParsedUrl;
 
@@ -31,9 +34,13 @@ pub enum MetadataError {
     #[error(transparent)]
     MailParse(#[from] MailParseError),
     #[error("Invalid `pyproject.toml`")]
-    InvalidPyprojectTomlSyntax(#[source] toml_edit::TomlError),
+    InvalidPyprojectTomlSyntax {
+        #[source]
+        source: toml_edit::TomlError,
+        document: SourceFile,
+    },
     #[error(transparent)]
-    InvalidPyprojectTomlSchema(toml_edit::de::Error),
+    InvalidPyprojectTomlSchema(ParseError<toml_edit::de::Error>),
     #[error(
         "`pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set"
     )]
@@ -64,6 +71,25 @@ pub enum MetadataError {
     RequiresTxtContents(#[from] std::io::Error),
     #[error("The description is not valid utf-8")]
     DescriptionEncoding(#[source] Utf8Error),
+}
+
+/// Resolve retained `pyproject.toml` source context without replacing parser causes.
+pub fn diagnostic_for_error<'a>(error: &'a (dyn StdError + 'static)) -> Option<Diagnostic<'a>> {
+    let error = error
+        .downcast_ref::<MetadataError>()
+        .or_else(|| error.downcast_ref::<Box<MetadataError>>().map(Box::as_ref))?;
+    match error {
+        MetadataError::InvalidPyprojectTomlSyntax { source, document } => {
+            diagnostic_for_span(source.message(), source.span(), document)
+                .map(|source| Diagnostic::default().with_source(source))
+        }
+        MetadataError::InvalidPyprojectTomlSchema(error) => diagnostic_for_span(
+            error.original().message(),
+            error.original().span(),
+            error.document()?,
+        ),
+        _ => None,
+    }
 }
 
 impl From<Pep508Error<VerbatimParsedUrl>> for MetadataError {

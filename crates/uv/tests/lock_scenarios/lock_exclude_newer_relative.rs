@@ -1304,13 +1304,12 @@ fn lock_exclude_newer_relative_values_pyproject() -> Result<()> {
         .lock(), @r#"
     exit_code: 0 (success)
     ----- stderr -----
-    warning: Failed to parse `pyproject.toml` during settings discovery:
-      TOML parse error at line 9, column 25
+    warning: Failed to parse `pyproject.toml` during settings discovery
+      cause: `invalid span` could not be parsed as a valid exclude-newer value (expected a date like `2024-01-01`, a timestamp like `2024-01-01T00:00:00Z`, or a duration like `3 days` or `P3D`)
+       --> pyproject.toml:9:25
         |
       9 |         exclude-newer = "invalid span"
         |                         ^^^^^^^^^^^^^^
-      `invalid span` could not be parsed as a valid exclude-newer value (expected a date like `2024-01-01`, a timestamp like `2024-01-01T00:00:00Z`, or a duration like `3 days` or `P3D`)
-
     Resolved 2 packages in [TIME]
     "#);
 
@@ -1331,13 +1330,12 @@ fn lock_exclude_newer_relative_values_pyproject() -> Result<()> {
         .lock(), @r#"
     exit_code: 0 (success)
     ----- stderr -----
-    warning: Failed to parse `pyproject.toml` during settings discovery:
-      TOML parse error at line 9, column 25
+    warning: Failed to parse `pyproject.toml` during settings discovery
+      cause: `2 foos` could not be parsed as a duration: failed to parse input in the "friendly" duration format: expected to find unit designator suffix (e.g., `years` or `secs`) after parsing integer
+       --> pyproject.toml:9:25
         |
       9 |         exclude-newer = "2 foos"
         |                         ^^^^^^^^
-      `2 foos` could not be parsed as a duration: failed to parse input in the "friendly" duration format: expected to find unit designator suffix (e.g., `years` or `secs`) after parsing integer
-
     Resolved 2 packages in [TIME]
     "#);
 
@@ -1358,13 +1356,12 @@ fn lock_exclude_newer_relative_values_pyproject() -> Result<()> {
         .lock(), @r#"
     exit_code: 0 (success)
     ----- stderr -----
-    warning: Failed to parse `pyproject.toml` during settings discovery:
-      TOML parse error at line 9, column 25
+    warning: Failed to parse `pyproject.toml` during settings discovery
+      cause: `P4Z` could not be parsed as an ISO 8601 duration: expected to find date unit designator suffix (`Y`, `M`, `W` or `D`), but found `Z` instead
+       --> pyproject.toml:9:25
         |
       9 |         exclude-newer = "P4Z"
         |                         ^^^^^
-      `P4Z` could not be parsed as an ISO 8601 duration: expected to find date unit designator suffix (`Y`, `M`, `W` or `D`), but found `Z` instead
-
     Resolved 2 packages in [TIME]
     "#);
 
@@ -1385,13 +1382,12 @@ fn lock_exclude_newer_relative_values_pyproject() -> Result<()> {
         .lock(), @r#"
     exit_code: 0 (success)
     ----- stderr -----
-    warning: Failed to parse `pyproject.toml` during settings discovery:
-      TOML parse error at line 9, column 25
+    warning: Failed to parse `pyproject.toml` during settings discovery
+      cause: `10` could not be parsed as a valid exclude-newer value (expected a date like `2024-01-01`, a timestamp like `2024-01-01T00:00:00Z`, or a duration like `3 days` or `P3D`)
+       --> pyproject.toml:9:25
         |
       9 |         exclude-newer = "10"
         |                         ^^^^
-      `10` could not be parsed as a valid exclude-newer value (expected a date like `2024-01-01`, a timestamp like `2024-01-01T00:00:00Z`, or a duration like `3 days` or `P3D`)
-
     Resolved 2 packages in [TIME]
     "#);
 

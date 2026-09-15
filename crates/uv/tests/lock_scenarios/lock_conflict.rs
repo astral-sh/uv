@@ -10625,11 +10625,11 @@ fn conflict_item_unknown_field() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
-      cause: TOML parse error at line 10, column 17
-                |
-             10 |               { name = "foo", extra = "extra1" },
-                |                 ^^^^
-             unknown field `name`, expected one of `package`, `extra`, `group`
+      cause: unknown field `name`, expected one of `package`, `extra`, `group`
+        --> pyproject.toml:10:17
+         |
+      10 |               { name = "foo", extra = "extra1" },
+         |                 ^^^^
     "#);
 
     Ok(())

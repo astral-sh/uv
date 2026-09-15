@@ -30,11 +30,11 @@ fn python_find_warning_chain() -> Result<()> {
 
     ----- stderr -----
     warning: Failed to parse: `pyproject.toml`
-      cause: TOML parse error at line 2, column 8
-               |
-             2 | name = 42
-               |        ^^
-             invalid type: integer `42`, expected a string
+      cause: invalid type: integer `42`, expected a string
+       --> pyproject.toml:2:8
+        |
+      2 | name = 42
+        |        ^^
     ");
     uv_snapshot!(context.filters(), context.python_find().arg("--no-config").arg("--quiet"), @"exit_code: 0 (success)");
     Ok(())

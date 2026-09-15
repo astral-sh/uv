@@ -4080,11 +4080,11 @@ fn run_invalid_project_table() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
-      cause: TOML parse error at line 1, column 2
-               |
-             1 | [project.urls]
-               |  ^^^^^^^
-             `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set
+      cause: `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set
+       --> pyproject.toml:1:2
+        |
+      1 | [project.urls]
+        |  ^^^^^^^
     ");
 
     Ok(())

@@ -17,3 +17,8 @@ workspace = true
 
 [dependencies]
 serde = { workspace = true }
+uv-errors = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }
+toml = { workspace = true }

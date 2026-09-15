@@ -27,27 +27,33 @@ pub fn disable() {
 }
 
 /// Format a warning chain to standard error.
-pub fn write_warning_chain(err: &dyn Error, hints: &Hints<'_>) -> fmt::Result {
+pub fn write_warning_chain(err: &(dyn Error + 'static), hints: &Hints<'_>) -> fmt::Result {
     write_warning_chain_with_options(err, hints, ErrorOptions::default())
 }
 
 /// Format a warning chain to standard error once, deduplicating the complete rendered chain and hints.
-pub fn write_warning_chain_once(err: &dyn Error, hints: &Hints<'_>) -> fmt::Result {
-    write_warning_chain_once_with_writer(err, hints, &WARNINGS, Stderr)
+pub fn write_warning_chain_once(err: &(dyn Error + 'static), hints: &Hints<'_>) -> fmt::Result {
+    write_warning_chain_once_with_options(err, hints, ErrorOptions::default())
 }
 
-fn write_warning_chain_once_with_writer(
-    err: &dyn Error,
+/// Format a warning chain once using custom presentation options.
+pub fn write_warning_chain_once_with_options<C>(
+    err: &(dyn Error + 'static),
+    hints: &Hints<'_>,
+    options: ErrorOptions<'_, C>,
+) -> fmt::Result {
+    write_warning_chain_once_with_writer(err, hints, &WARNINGS, options, Stderr)
+}
+
+fn write_warning_chain_once_with_writer<C>(
+    err: &(dyn Error + 'static),
     hints: &Hints<'_>,
     warnings: &Mutex<FxHashSet<String>>,
+    options: ErrorOptions<'_, C>,
     mut writer: impl fmt::Write,
 ) -> fmt::Result {
     let mut message = String::new();
-    write_warning_chain_with_options(
-        err,
-        hints,
-        ErrorOptions::default().with_stream(&mut message),
-    )?;
+    write_warning_chain_with_options(err, hints, options.with_stream(&mut message))?;
     if let Ok(mut warnings) = warnings.lock()
         && warnings.insert(message.clone())
     {
@@ -56,8 +62,9 @@ fn write_warning_chain_once_with_writer(
     Ok(())
 }
 
-fn write_warning_chain_with_options<C, W: fmt::Write>(
-    err: &dyn Error,
+/// Format a warning chain using custom presentation and output options.
+pub fn write_warning_chain_with_options<C, W: fmt::Write>(
+    err: &(dyn Error + 'static),
     hints: &Hints<'_>,
     options: ErrorOptions<'_, C, W>,
 ) -> fmt::Result {
@@ -88,8 +95,9 @@ macro_rules! warn_user {
 /// Warn a user with an error and its cause chain, if warnings are enabled.
 ///
 /// The error must be passed as a reference to a type implementing [`Error`], or as a
-/// `&dyn Error`. Optional [`Hints`] are rendered after the cause chain. Arguments are
-/// only evaluated when warnings are enabled.
+/// `&(dyn Error + 'static)`. Optional [`Hints`] are rendered after the cause chain. A third
+/// [`ErrorOptions`] argument can customize presentation. Arguments are only evaluated when
+/// warnings are enabled.
 ///
 /// Attach context to the error to include a warning-specific message without losing its causes:
 ///
@@ -109,6 +117,12 @@ macro_rules! warn_user_with_chain {
     ($err:expr, $hints:expr $(,)?) => {{
         if $crate::ENABLED.load(std::sync::atomic::Ordering::Relaxed) {
             $crate::write_warning_chain($err, &$hints).expect("writing to stderr should not fail");
+        }
+    }};
+    ($err:expr, $hints:expr, $options:expr $(,)?) => {{
+        if $crate::ENABLED.load(std::sync::atomic::Ordering::Relaxed) {
+            $crate::write_warning_chain_with_options($err, &$hints, $options)
+                .expect("writing to stderr should not fail");
         }
     }};
 }
@@ -146,6 +160,12 @@ macro_rules! warn_user_once_with_chain {
     ($err:expr, $hints:expr $(,)?) => {{
         if $crate::ENABLED.load(std::sync::atomic::Ordering::Relaxed) {
             $crate::write_warning_chain_once($err, &$hints)
+                .expect("writing to stderr should not fail");
+        }
+    }};
+    ($err:expr, $hints:expr, $options:expr $(,)?) => {{
+        if $crate::ENABLED.load(std::sync::atomic::Ordering::Relaxed) {
+            $crate::write_warning_chain_once_with_options($err, &$hints, $options)
                 .expect("writing to stderr should not fail");
         }
     }};
@@ -218,6 +238,7 @@ mod tests {
                 error.as_ref(),
                 &Hints::from(hint),
                 &warnings,
+                ErrorOptions::default(),
                 &mut output,
             )?;
         }
@@ -259,6 +280,20 @@ mod tests {
                 Hints::none()
             },
         );
+        warn_user_with_chain!(
+            {
+                evaluations += 1;
+                error.as_ref()
+            },
+            {
+                evaluations += 1;
+                Hints::none()
+            },
+            {
+                evaluations += 1;
+                ErrorOptions::default()
+            },
+        );
         warn_user_once_with_chain!({
             evaluations += 1;
             error.as_ref()
@@ -271,6 +306,20 @@ mod tests {
             {
                 evaluations += 1;
                 Hints::none()
+            },
+        );
+        warn_user_once_with_chain!(
+            {
+                evaluations += 1;
+                error.as_ref()
+            },
+            {
+                evaluations += 1;
+                Hints::none()
+            },
+            {
+                evaluations += 1;
+                ErrorOptions::default()
             },
         );
 

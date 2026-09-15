@@ -22,6 +22,7 @@ uv-client = { workspace = true }
 uv-configuration = { workspace = true, features = ["clap"] }
 uv-dirs = { workspace = true }
 uv-distribution-types = { workspace = true }
+uv-errors = { workspace = true }
 uv-flags = { workspace = true }
 uv-fs = { workspace = true }
 uv-install-wheel = { workspace = true, features = ["clap"] }
@@ -36,6 +37,7 @@ uv-python = { workspace = true, features = ["clap"] }
 uv-redacted = { workspace = true }
 uv-resolver = { workspace = true, features = ["clap"] }
 uv-static = { workspace = true }
+uv-toml = { workspace = true }
 uv-torch = { workspace = true, features = ["clap"] }
 uv-version = { workspace = true }
 uv-warnings = { workspace = true }
@@ -46,7 +48,6 @@ fs-err = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true }
 serde-untagged = { workspace = true }
-textwrap = { workspace = true }
 thiserror = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }

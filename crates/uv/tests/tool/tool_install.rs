@@ -6017,18 +6017,18 @@ fn tool_install_lock_refreshes_local_directory_constraint() -> Result<()> {
     ----- stderr -----
     warning: Failed to validate existing tool lock
       cause: Failed to parse `[TEMP_DIR]/simple-launcher/pyproject.toml`
-      cause: TOML parse error at line 3, column 11
-               |
-             3 | version = 42
-               |           ^^
-             invalid type: integer `42`, expected a string
+      cause: invalid type: integer `42`, expected a string
+       --> simple-launcher/pyproject.toml:3:11
+        |
+      3 | version = 42
+        |           ^^
     error: Failed to build `simple-launcher @ file://[TEMP_DIR]/simple-launcher`
       cause: Failed to parse metadata from built wheel
-      cause: TOML parse error at line 3, column 11
-               |
-             3 | version = 42
-               |           ^^
-             invalid type: integer `42`, expected a string
+      cause: invalid type: integer `42`, expected a string
+       --> simple-launcher/pyproject.toml:3:11
+        |
+      3 | version = 42
+        |           ^^
     ");
 
     Ok(())

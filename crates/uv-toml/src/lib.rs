@@ -2,6 +2,10 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Deserializer};
 
+pub use diagnostic::{ParseError, diagnostic_for_span};
+
+mod diagnostic;
+
 /// Deserialize a map while ensuring all keys are unique.
 pub fn deserialize_unique_map<'de, D, K, V, F>(
     deserializer: D,

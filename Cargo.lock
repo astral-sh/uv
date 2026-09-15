@@ -6658,6 +6658,7 @@ dependencies = [
  "terminal_size",
  "textwrap",
  "thiserror",
+ "unicode-width 0.2.2",
  "uv-static",
 ]
 
@@ -7145,12 +7146,14 @@ dependencies = [
  "url",
  "uv-cache-key",
  "uv-distribution-filename",
+ "uv-errors",
  "uv-git-types",
  "uv-normalize",
  "uv-pep440",
  "uv-pep508",
  "uv-redacted",
  "uv-small-str",
+ "uv-toml",
 ]
 
 [[package]]
@@ -7404,7 +7407,6 @@ dependencies = [
  "schemars",
  "serde",
  "serde-untagged",
- "textwrap",
  "thiserror",
  "toml",
  "tracing",
@@ -7414,6 +7416,7 @@ dependencies = [
  "uv-configuration",
  "uv-dirs",
  "uv-distribution-types",
+ "uv-errors",
  "uv-flags",
  "uv-fs",
  "uv-install-wheel",
@@ -7428,6 +7431,7 @@ dependencies = [
  "uv-redacted",
  "uv-resolver",
  "uv-static",
+ "uv-toml",
  "uv-torch",
  "uv-version",
  "uv-warnings",
@@ -7528,7 +7532,10 @@ dependencies = [
 name = "uv-toml"
 version = "0.0.81"
 dependencies = [
+ "insta",
  "serde",
+ "toml",
+ "uv-errors",
 ]
 
 [[package]]

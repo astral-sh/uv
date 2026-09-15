@@ -1020,11 +1020,11 @@ build-backend = "poetry.core.masonry.api"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
-      cause: TOML parse error at line 13, column 1
-                |
-             13 | [project.dependencies]
-                | ^^^^^^^^^^^^^^^^^^^^^^
-             invalid type: map, expected a sequence
+      cause: invalid type: map, expected a sequence
+        --> pyproject.toml:13:1
+         |
+      13 | [project.dependencies]
+         | ^^^^^^^^^^^^^^^^^^^^^^
     "
     );
 
@@ -1222,11 +1222,11 @@ dependencies = [
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
-      cause: TOML parse error at line 6, column 8
-               |
-             6 | name = "!project"
-               |        ^^^^^^^^^^
-             Not a valid package or extra name: "!project". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
+      cause: Not a valid package or extra name: "!project". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
+       --> pyproject.toml:6:8
+        |
+      6 | name = "!project"
+        |        ^^^^^^^^^^
     "#
     );
 
@@ -4420,23 +4420,22 @@ fn override_dependency_from_workspace_invalid_syntax() -> Result<()> {
             .arg("pyproject.toml"), @r#"
     exit_code: 2 (failure)
     ----- stderr -----
-    warning: Failed to parse `pyproject.toml` during settings discovery:
-      TOML parse error at line 10, column 7
+    warning: Failed to parse `pyproject.toml` during settings discovery
+      cause: no such comparison operator "=", must be one of ~= == != <= >= < > ===
+             werkzeug=2.3.0
+                     ^^^^^^
+        --> pyproject.toml:10:7
          |
       10 |       "werkzeug=2.3.0"
          |       ^^^^^^^^^^^^^^^^
-      no such comparison operator "=", must be one of ~= == != <= >= < > ===
-      werkzeug=2.3.0
-              ^^^^^^
-
     error: Failed to parse: `pyproject.toml`
-      cause: TOML parse error at line 10, column 7
-                |
-             10 |       "werkzeug=2.3.0"
-                |       ^^^^^^^^^^^^^^^^
-             no such comparison operator "=", must be one of ~= == != <= >= < > ===
+      cause: no such comparison operator "=", must be one of ~= == != <= >= < > ===
              werkzeug=2.3.0
                      ^^^^^^
+        --> pyproject.toml:10:7
+         |
+      10 |       "werkzeug=2.3.0"
+         |       ^^^^^^^^^^^^^^^^
     "#
     );
 

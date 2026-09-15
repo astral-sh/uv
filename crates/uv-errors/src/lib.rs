@@ -1,4 +1,6 @@
+mod diagnostic;
 mod line_wrap;
+mod source;
 
 use std::borrow::Cow;
 use std::error::Error;
@@ -7,7 +9,13 @@ use std::iter;
 
 use owo_colors::{AnsiColors, DynColor, OwoColorize};
 
+#[cfg(test)]
+use diagnostic::Info;
+use diagnostic::write_info;
+pub use diagnostic::{Diagnostic, DiagnosticFn};
 use line_wrap::{get_wrap_width, wrap_text};
+use source::write_snippets;
+pub use source::{SourceFile, SourceSnippet};
 
 /// An error that may carry user-facing hints.
 ///
@@ -257,6 +265,7 @@ pub struct ErrorOptions<'a, C = AnsiColors, W = Stderr> {
     color: C,
     width_override: Option<usize>,
     stream: W,
+    diagnostic: Option<DiagnosticFn>,
 }
 
 /// A standard-error writer for formatted error chains.
@@ -277,6 +286,7 @@ impl Default for ErrorOptions<'_, AnsiColors, Stderr> {
             color: AnsiColors::Red,
             width_override: None,
             stream: Stderr,
+            diagnostic: None,
         }
     }
 }
@@ -295,6 +305,7 @@ impl<'a, C, W> ErrorOptions<'a, C, W> {
             color,
             width_override: self.width_override,
             stream: self.stream,
+            diagnostic: self.diagnostic,
         }
     }
 
@@ -314,13 +325,20 @@ impl<'a, C, W> ErrorOptions<'a, C, W> {
             color: self.color,
             width_override: self.width_override,
             stream,
+            diagnostic: self.diagnostic,
         }
+    }
+
+    /// Resolve presentation data for each error in the chain.
+    pub fn with_diagnostic(mut self, diagnostic: DiagnosticFn) -> Self {
+        self.diagnostic = Some(diagnostic);
+        self
     }
 }
 
 /// Format an error chain and explicitly supplied hints to standard error using the default level
 /// and color.
-pub fn write_error_chain(err: &dyn Error, hints: &Hints<'_>) -> fmt::Result {
+pub fn write_error_chain(err: &(dyn Error + 'static), hints: &Hints<'_>) -> fmt::Result {
     write_error_chain_with_options(err, hints, ErrorOptions::default())
 }
 
@@ -347,7 +365,7 @@ impl fmt::Display for DebugErrorChain<'_> {
 ///
 /// Each hint is rendered on its own line, prefixed with the styled `hint:` label.
 pub fn write_error_chain_with_options<C: DynColor + Copy, W: fmt::Write>(
-    err: &dyn Error,
+    err: &(dyn Error + 'static),
     hints: &Hints<'_>,
     options: ErrorOptions<'_, C, W>,
 ) -> fmt::Result {
@@ -356,10 +374,15 @@ pub fn write_error_chain_with_options<C: DynColor + Copy, W: fmt::Write>(
         color,
         width_override,
         mut stream,
+        diagnostic,
     } = options;
     let width = get_wrap_width(width_override);
 
-    let main_msg = err.to_string();
+    let main_diagnostic = diagnostic.and_then(|diagnostic| diagnostic(err));
+    let main_msg = main_diagnostic
+        .as_ref()
+        .and_then(|diagnostic| diagnostic.message.as_deref())
+        .map_or_else(|| Cow::Owned(err.to_string()), Cow::Borrowed);
     let main_padding = " ".repeat(level.len() + 2);
     let wrapped_main = wrap_text(&main_msg, width, &main_padding, &main_padding, "");
     writeln!(
@@ -369,9 +392,21 @@ pub fn write_error_chain_with_options<C: DynColor + Copy, W: fmt::Write>(
         ":".bold(),
         wrapped_main.trim()
     )?;
+    if let Some(diagnostic) = &main_diagnostic {
+        write_snippets(&mut stream, &diagnostic.snippets, color)?;
+        write_info(&mut stream, &diagnostic.info, width)?;
+    }
 
+    let mut source_override = main_diagnostic.and_then(|diagnostic| diagnostic.source);
     for source in iter::successors(err.source(), |&err| err.source()) {
-        let msg = source.to_string();
+        let source_diagnostic = source_override
+            .take()
+            .map(|diagnostic| *diagnostic)
+            .or_else(|| diagnostic.and_then(|diagnostic| diagnostic(source)));
+        let msg = source_diagnostic
+            .as_ref()
+            .and_then(|diagnostic| diagnostic.message.as_deref())
+            .map_or_else(|| Cow::Owned(source.to_string()), Cow::Borrowed);
         // Reserve the display width of the prefix before wrapping the message. Authored lines
         // retain their own indentation beneath it.
         let wrapped = wrap_text(&msg, width.map(|width| width.saturating_sub(9)), "", "", "");
@@ -393,6 +428,11 @@ pub fn write_error_chain_with_options<C: DynColor + Copy, W: fmt::Write>(
                 }
             }
         }
+        if let Some(diagnostic) = &source_diagnostic {
+            write_snippets(&mut stream, &diagnostic.snippets, color)?;
+            write_info(&mut stream, &diagnostic.info, width)?;
+        }
+        source_override = source_diagnostic.and_then(|diagnostic| diagnostic.source);
     }
 
     for hint in hints {
@@ -404,14 +444,16 @@ pub fn write_error_chain_with_options<C: DynColor + Copy, W: fmt::Write>(
 
 #[cfg(test)]
 mod tests {
+    use std::error::Error;
+
     use anyhow::anyhow;
     use indoc::indoc;
     use insta::{assert_debug_snapshot, assert_snapshot};
     use owo_colors::AnsiColors;
 
     use super::{
-        ErrorOptions, ErrorWithHints, Hint, HintOrdering, Hints, debug_error_chain,
-        write_error_chain_with_options,
+        Diagnostic, ErrorOptions, ErrorWithHints, Hint, HintOrdering, Hints, Info, SourceFile,
+        SourceSnippet, debug_error_chain, write_error_chain_with_options,
     };
 
     #[test]
@@ -851,6 +893,205 @@ mod tests {
 
                  For downloads, please refer to https://example.com/download/python3.13.tar.zst
           cause: Caused By: HTTP Error 400
+        ");
+    }
+
+    #[derive(Debug, thiserror::Error)]
+    #[error("HTTP error 400 Bad Request")]
+    struct HttpError;
+
+    #[derive(Debug, thiserror::Error)]
+    #[error("Failed to fetch {url}. Server says: {body}")]
+    struct FetchError {
+        url: String,
+        body: String,
+        #[source]
+        source: HttpError,
+    }
+
+    fn fetch_diagnostic<'a>(error: &'a (dyn Error + 'static)) -> Option<Diagnostic<'a>> {
+        let error = error.downcast_ref::<FetchError>()?;
+        Some(
+            Diagnostic::new(format!("Failed to fetch {}", error.url)).with_info(
+                Info::new("The server included the following context:")
+                    .with_details(error.body.as_str()),
+            ),
+        )
+    }
+
+    #[test]
+    fn format_info_between_causes() {
+        let error = anyhow!(FetchError {
+            url: "https://example.com/python.tar.zst".to_string(),
+            body: "This endpoint accepts POST requests only.\n\nUse /download/ instead."
+                .to_string(),
+            source: HttpError,
+        })
+        .context("Failed to download Python 3.13");
+        let mut output = String::new();
+        write_error_chain_with_options(
+            error.as_ref(),
+            &Hints::from("Check the download URL"),
+            ErrorOptions::default()
+                .with_diagnostic(fetch_diagnostic)
+                .with_stream(&mut output),
+        )
+        .unwrap();
+        assert_snapshot!(anstream::adapter::strip_str(&output), @"
+        error: Failed to download Python 3.13
+          cause: Failed to fetch https://example.com/python.tar.zst
+          info: The server included the following context:
+            |
+            | This endpoint accepts POST requests only.
+            |
+            | Use /download/ instead.
+            |
+          cause: HTTP error 400 Bad Request
+
+        hint: Check the download URL
+        ");
+    }
+
+    #[test]
+    fn format_info_on_root() {
+        let mut output = String::new();
+        write_error_chain_with_options(
+            &HttpError,
+            &Hints::none(),
+            ErrorOptions::default()
+                .with_diagnostic(|error| {
+                    error.downcast_ref::<HttpError>().map(|_| {
+                        Diagnostic::default()
+                            .with_info(Info::new("First detail"))
+                            .with_info(Info::new("Second detail").with_details(""))
+                    })
+                })
+                .with_stream(&mut output),
+        )
+        .unwrap();
+        assert_snapshot!(anstream::adapter::strip_str(&output), @"
+        error: HTTP error 400 Bad Request
+          info: First detail
+          info: Second detail
+        ");
+    }
+
+    #[test]
+    fn format_info_wrapping() {
+        let error = FetchError {
+            url: "https://example.com".to_string(),
+            body: "First paragraph has several words.\n\n  Indented second paragraph.".to_string(),
+            source: HttpError,
+        };
+        let mut output = String::new();
+        write_error_chain_with_options(
+            &error,
+            &Hints::none(),
+            ErrorOptions::default()
+                .with_level("warning")
+                .with_color(AnsiColors::Yellow)
+                .with_width_override(30)
+                .with_diagnostic(fetch_diagnostic)
+                .with_stream(&mut output),
+        )
+        .unwrap();
+        assert_snapshot!(anstream::adapter::strip_str(&output), @"
+        warning: Failed to fetch
+                 https://example.com
+          info: The server included
+                the following context:
+            |
+            | First paragraph has
+            | several words.
+            |
+            |   Indented second
+            | paragraph.
+            |
+          cause: HTTP error 400 Bad
+                 Request
+        ");
+    }
+
+    #[test]
+    fn format_untrusted_info_details() {
+        let mut output = String::new();
+        write_error_chain_with_options(
+            &HttpError,
+            &Hints::none(),
+            ErrorOptions::default()
+                .with_diagnostic(|_| {
+                    Some(Diagnostic::default().with_info(Info::new("Server response:").with_details(
+                        "café 👩‍💻\r\n\tindented\n\u{1b}[31mred\u{1b}[0m\n\u{1b}]8;;https://example.com\u{7}link\u{85}\u{202e}text\u{2029}\rrewritten",
+                    )))
+                })
+                .with_stream(&mut output),
+        )
+        .unwrap();
+        assert_snapshot!(anstream::adapter::strip_str(&output), @r"
+        error: HTTP error 400 Bad Request
+          info: Server response:
+            |
+            | café 👩‍💻
+            |     indented
+            | \u{1b}[31mred\u{1b}[0m
+            | \u{1b}]8;;https://example.com\u{7}link\u{85}\u{202e}text\u{2029}\rrewritten
+            |
+        ");
+    }
+
+    #[test]
+    fn source_presentation_keeps_the_real_chain_and_trailing_hints() {
+        #[derive(Debug, thiserror::Error)]
+        #[error("Failed to parse `pyproject.toml`")]
+        struct Outer(#[source] Inner);
+
+        #[derive(Debug, thiserror::Error)]
+        #[error("Original parser display")]
+        struct Inner(#[source] Last);
+
+        #[derive(Debug, thiserror::Error)]
+        #[error("Additional cause")]
+        struct Last;
+
+        let error = Outer(Inner(Last));
+        let mut output = String::new();
+        write_error_chain_with_options(
+            &error,
+            &Hints::from("Update the version."),
+            ErrorOptions::default()
+                .with_diagnostic(|error| {
+                    error.is::<Outer>().then(|| {
+                        Diagnostic::default().with_source(
+                            Diagnostic::new("invalid type: integer `42`, expected a string")
+                                .with_snippet(
+                                    SourceSnippet::new(
+                                        SourceFile::new("pyproject.toml", "version = 42"),
+                                        10..12,
+                                    )
+                                    .expect("valid source span in test input"),
+                                ),
+                        )
+                    })
+                })
+                .with_stream(&mut output),
+        )
+        .expect("writing to a string should not fail");
+        assert!(
+            error
+                .source()
+                .expect("original parser source remains present")
+                .is::<Inner>()
+        );
+        assert_snapshot!(anstream::adapter::strip_str(&output), @"
+        error: Failed to parse `pyproject.toml`
+          cause: invalid type: integer `42`, expected a string
+           --> pyproject.toml:1:11
+            |
+          1 | version = 42
+            |           ^^
+          cause: Additional cause
+
+        hint: Update the version.
         ");
     }
 }

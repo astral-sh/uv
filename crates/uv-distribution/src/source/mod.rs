@@ -2661,7 +2661,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let pyproject_toml = match PyProjectToml::from_toml(&content, source) {
             Ok(metadata) => metadata,
             Err(
-                uv_pypi_types::MetadataError::InvalidPyprojectTomlSyntax(..)
+                uv_pypi_types::MetadataError::InvalidPyprojectTomlSyntax { .. }
                 | uv_pypi_types::MetadataError::InvalidPyprojectTomlSchema(..),
             ) => {
                 debug!("Failed to read `pyproject.toml` from GitHub API for: {url}");
@@ -3626,7 +3626,7 @@ async fn read_pyproject_toml(
         Err(err) => return Err(Error::CacheRead(err)),
     };
 
-    let pyproject_toml = PyProjectToml::from_toml(&content, pyproject_toml.simplified_display())?;
+    let pyproject_toml = PyProjectToml::from_toml(&content, pyproject_toml.user_display())?;
 
     Ok(pyproject_toml)
 }
