@@ -14,7 +14,8 @@ use uv_configuration::{BuildOptions, Constraints, Overrides};
 use uv_distribution::Metadata;
 use uv_distribution_types::{
     BuiltDist, Dist, DistributionId, Edge, HashCollection, Identifier, IndexUrl, Name, Node,
-    Requirement, RequiresPython, ResolutionDiagnostic, ResolvedDist, SourceDist, parse_url_hashes,
+    Requirement, RequirementSource, RequiresPython, ResolutionDiagnostic, ResolvedDist, SourceDist,
+    parse_url_hashes,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -33,6 +34,15 @@ use crate::resolver::{Resolution, ResolutionDependencyEdge, ResolutionPackage};
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::{InMemoryIndex, MetadataResponse, Options, ResolveError, VersionsResponse};
 
+/// A remote package whose metadata was inspected during lookahead.
+///
+/// It can declare dependency sources even when it is absent from the selected dependency graph.
+#[derive(Debug, Clone)]
+pub(crate) struct LookaheadProvider {
+    pub(crate) name: PackageName,
+    pub(crate) source: RequirementSource,
+}
+
 /// The output of a successful resolution.
 ///
 /// Includes a complete resolution graph in which every node represents a pinned package and every
@@ -50,6 +60,8 @@ pub struct ResolverOutput {
     pub(crate) diagnostics: Vec<ResolutionDiagnostic>,
     /// The requirements that were used to build the graph.
     pub(crate) requirements: Vec<Requirement>,
+    /// Remote providers inspected during lookahead, including those absent from the graph.
+    pub(crate) lookahead_providers: Vec<LookaheadProvider>,
     /// The constraints that were used to build the graph.
     pub(crate) constraints: Constraints,
     /// The overrides that were used to build the graph.
@@ -127,6 +139,7 @@ impl ResolverOutput {
         project: Option<&PackageName>,
         workspace_members: &BTreeSet<PackageName>,
         requirements: Vec<Requirement>,
+        lookahead_providers: Vec<LookaheadProvider>,
         constraints: Constraints,
         overrides: Overrides,
         preferences: &Preferences,
@@ -236,6 +249,7 @@ impl ResolverOutput {
             fork_markers,
             diagnostics,
             requirements,
+            lookahead_providers,
             constraints,
             overrides,
             options,

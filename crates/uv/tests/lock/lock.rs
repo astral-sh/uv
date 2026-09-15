@@ -22846,6 +22846,376 @@ fn lock_metadata_free_shared_conditional_provider_sources() -> Result<()> {
     Ok(())
 }
 
+/// A local provider can share its sources without appearing in the resolved package graph.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_metadata_free_shared_source_only_provider() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("extras/lock-without-metadata.toml");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["provider ; sys_platform == 'darwin'", "httpx"]
+
+        [tool.uv.sources]
+        provider = { path = "provider" }
+        "#})?;
+    context
+        .temp_dir
+        .child("provider/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "provider"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["leaf ; sys_platform != 'darwin'"]
+
+        [tool.uv.sources]
+        leaf = { path = "../leaf" }
+        "#})?;
+    context
+        .temp_dir
+        .child("leaf/pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "leaf"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["httpx @ {httpx_url}"]
+        "#,
+            httpx_url = server.file_url("httpx-1.0.0-py3-none-any.whl"),
+        })?;
+
+    // Leaf contributes a source declaration, but only project, provider, and httpx are locked.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    context.temp_dir.child("script.py").write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = ["provider ; sys_platform == 'darwin'", "httpx"]
+        #
+        # [tool.uv.sources]
+        # provider = { path = "provider" }
+        # ///
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // A removed declaration cannot authorize the HTTP source retained in the lockfile.
+    context
+        .temp_dir
+        .child("leaf/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "leaf"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["httpx"]
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because httpx was not found in the provided package locations and your project depends on httpx, we can conclude that your project's requirements are unsatisfiable.
+
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+    ");
+
+    // A source-selected extra can contribute declarations even when only the base is locked.
+    context.temp_dir.child("pyproject.toml").write_str(
+        &context
+            .read("pyproject.toml")
+            .replace("\"httpx\"]", "\"httpx\", \"leaf\"]"),
+    )?;
+    context
+        .temp_dir
+        .child("provider/pyproject.toml")
+        .write_str(
+            &context
+                .read("provider/pyproject.toml")
+                .replace("leaf ;", "leaf[feature] ;"),
+        )?;
+    context
+        .temp_dir
+        .child("leaf/pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "leaf"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        feature = ["httpx @ {httpx_url}"]
+        "#,
+            httpx_url = server.file_url("httpx-1.0.0-py3-none-any.whl"),
+        })?;
+    fs_err::remove_file(context.temp_dir.child("uv.lock"))?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    context
+        .temp_dir
+        .child("provider/pyproject.toml")
+        .write_str(
+            &context
+                .read("provider/pyproject.toml")
+                .replace("leaf[feature] ;", "leaf ;"),
+        )?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because httpx was not found in the provided package locations and your project depends on httpx, we can conclude that your project's requirements are unsatisfiable.
+
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+    ");
+
+    Ok(())
+}
+
+/// Remote providers omitted from the graph require full metadata for offline lock checks.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_metadata_free_source_only_remote_provider() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("extras/lock-without-metadata.toml");
+    let scenario = toml::from_str::<Scenario>(&formatdoc! {r#"
+        name = "source-only-remote-provider"
+
+        [root]
+        requires = []
+
+        [expected]
+        satisfiable = true
+
+        [packages.leaf.versions."1.0.0".extras]
+        feature = ["httpx @ {httpx_url}"]
+    "#,
+        httpx_url = server.file_url("httpx-1.0.0-py3-none-any.whl"),
+    })?;
+    let leaf_server = PackseServer::from_scenario(&scenario);
+
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["provider ; sys_platform == 'darwin'", "httpx"]
+
+        [tool.uv.sources]
+        provider = { path = "provider" }
+    "#})?;
+    let provider = context.temp_dir.child("provider/pyproject.toml");
+    provider.write_str(&formatdoc! {r#"
+        [project]
+        name = "provider"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["leaf[feature] @ {leaf_url} ; sys_platform != 'darwin'"]
+    "#,
+        leaf_url = leaf_server.file_url("leaf-1.0.0-py3-none-any.whl"),
+    })?;
+
+    // Leaf contributes httpx's source, but only project, provider, and httpx are locked.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "httpx"
+        version = "1.0.0"
+        source = { url = "http://[LOCALHOST]/files/httpx-1.0.0-py3-none-any.whl" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/httpx-1.0.0-py3-none-any.whl", hash = "sha256:4154c3c1f739176378d6865841d67718bc624c0f2f0ccf87364c8141a0c93603" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "h2", marker = "extra == 'http2'" }]
+        provides-extras = ["http2"]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "httpx" },
+            { name = "provider", marker = "sys_platform == 'darwin'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "httpx" },
+            { name = "provider", marker = "sys_platform == 'darwin'", directory = "provider" },
+        ]
+
+        [[package]]
+        name = "provider"
+        version = "0.1.0"
+        source = { directory = "provider" }
+
+        [package.metadata]
+        requires-dist = [{ name = "leaf", extras = ["feature"], marker = "sys_platform != 'darwin'", url = "http://[LOCALHOST]/files/leaf-1.0.0-py3-none-any.whl" }]
+        "#);
+    });
+
+    // Full metadata must still reject a change to the provider's source declaration.
+    let provider_contents = fs_err::read_to_string(provider.path())?;
+    provider.write_str(&provider_contents.replace("leaf[feature]", "leaf"))?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to download `leaf @ http://[LOCALHOST]/files/leaf-1.0.0-py3-none-any.whl`
+      cause: Network connectivity is disabled, but the requested data wasn't found in the cache for: `http://[LOCALHOST]/files/leaf-1.0.0-py3-none-any.whl`
+    ");
+
+    // Once Leaf is represented in the graph, its retained metadata supports the smaller format.
+    provider.write_str(&provider_contents)?;
+    pyproject.write_str(
+        &fs_err::read_to_string(pyproject.path())?
+            .replace(", \"httpx\"]", ", \"httpx\", \"leaf\"]"),
+    )?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Added leaf v1.0.0
+    ");
+    let metadata_free = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+    assert_eq!(metadata_free["revision"].as_integer(), Some(4));
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Immutable Git packages can select repository-internal archives for first-party dependencies.
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]

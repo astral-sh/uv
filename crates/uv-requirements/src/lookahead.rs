@@ -251,6 +251,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         Ok(Some(RequestedRequirements::new(
             package,
             version,
+            requirement.source,
             requirement.extras,
             requires_dist,
             direct,

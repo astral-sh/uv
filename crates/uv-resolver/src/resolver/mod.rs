@@ -25,8 +25,8 @@ use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, Identifier, IncompatibleDist,
     IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations, IndexMetadata,
-    IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement, ResolvedDist,
-    ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
+    IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement,
+    RequirementSource, ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -55,7 +55,7 @@ use crate::pubgrub::{
     PubGrubPython, Range,
 };
 use crate::python_requirement::PythonRequirement;
-use crate::resolution::ResolverOutput;
+use crate::resolution::{LookaheadProvider, ResolverOutput};
 use crate::resolution_mode::ResolutionStrategy;
 pub(crate) use crate::resolver::availability::{
     ResolverVersion, UnavailableErrorChain, UnavailablePackage, UnavailableReason,
@@ -109,6 +109,7 @@ pub struct Resolver<Provider: ResolverProvider, InstalledPackages: InstalledPack
 struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     project: Option<PackageName>,
     requirements: Vec<Requirement>,
+    lookahead_providers: Vec<LookaheadProvider>,
     constraints: Constraints,
     overrides: Overrides,
     excludes: Excludes,
@@ -238,6 +239,21 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             dependency_mode: options.dependency_mode,
             urls: Urls::from_manifest(&manifest, &env, git, options.dependency_mode),
             indexes: Indexes::from_manifest(&manifest, &env, options.dependency_mode),
+            lookahead_providers: manifest
+                .lookaheads
+                .iter()
+                .filter_map(|lookahead| match lookahead.source() {
+                    RequirementSource::Url { .. }
+                    | RequirementSource::GitDirectory { .. }
+                    | RequirementSource::GitPath { .. } => Some(LookaheadProvider {
+                        name: lookahead.package().clone(),
+                        source: lookahead.source().clone(),
+                    }),
+                    RequirementSource::Registry { .. }
+                    | RequirementSource::Path { .. }
+                    | RequirementSource::Directory { .. } => None,
+                })
+                .collect(),
             project: manifest.project,
             workspace_members: manifest.workspace_members,
             requirements: manifest.requirements,
@@ -858,6 +874,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             self.project.as_ref(),
             &self.workspace_members,
             self.requirements.clone(),
+            self.lookahead_providers.clone(),
             self.constraints.clone(),
             self.overrides.clone(),
             &self.preferences,
