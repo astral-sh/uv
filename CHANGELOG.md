@@ -7,39 +7,36 @@
 
 Released on 2026-09-15.
 
+Package-operation errors now use uv's standard diagnostics, with consistent hints and compact, labeled cause chains. ([#17110](https://github.com/astral-sh/uv/pull/17110), [#21599](https://github.com/astral-sh/uv/pull/21599), [#21603](https://github.com/astral-sh/uv/pull/21603))
+
+Package-operation exit codes now reflect the underlying cause: expected failures return 1, while recognized operational and internal failures return 2. ([#17110](https://github.com/astral-sh/uv/pull/17110))
+
 ### Enhancements
 
-- Add support for batched exports from a shared lockfile ([#21618](https://github.com/astral-sh/uv/pull/21618))
-- Consistently format error chains (by removing the miette path) ([#17110](https://github.com/astral-sh/uv/pull/17110))
-- Preserve hints in tool upgrade failures ([#21566](https://github.com/astral-sh/uv/pull/21566))
-- Render error sources with cause labels ([#21603](https://github.com/astral-sh/uv/pull/21603))
-- Render source chains with compact tree connectors ([#21599](https://github.com/astral-sh/uv/pull/21599))
-- Show source chains in user warnings ([#21565](https://github.com/astral-sh/uv/pull/21565))
+- Resume interrupted downloads with HTTP Range requests when supported ([#21570](https://github.com/astral-sh/uv/pull/21570))
+- Show underlying causes and hints in user warnings ([#21565](https://github.com/astral-sh/uv/pull/21565))
+- Show resolver hints for failed `uv tool upgrade` operations ([#21566](https://github.com/astral-sh/uv/pull/21566))
+
+### Preview features
+
+- Export multiple dependency selections from a shared lockfile in one `uv export --batch` invocation with the `batch-export` preview feature ([#21618](https://github.com/astral-sh/uv/pull/21618))
 
 ### Performance
 
-- Decode fresh HTTP cache entries in the read task ([#21621](https://github.com/astral-sh/uv/pull/21621))
-- Offload large Simple API responses to bounded parsing workers ([#21593](https://github.com/astral-sh/uv/pull/21593))
+- Speed up dependency resolution from local wheelhouses by reading wheel metadata in a single blocking task ([#21619](https://github.com/astral-sh/uv/pull/21619))
+- Speed up cold resolution against large package indexes by parsing Simple API responses in bounded background workers ([#21593](https://github.com/astral-sh/uv/pull/21593))
+- Speed up warm-cache resolution by decoding fresh HTTP cache entries in the cache-read task ([#21621](https://github.com/astral-sh/uv/pull/21621))
 
 ### Bug fixes
 
-- Fix atomic copies to long Windows paths ([#21625](https://github.com/astral-sh/uv/pull/21625))
-- Prefer `python` over `python3` in Unix environments ([#21559](https://github.com/astral-sh/uv/pull/21559))
-- Preserve retries on cache revalidation errors ([#21640](https://github.com/astral-sh/uv/pull/21640))
-- Redact URLs in missing-path-segment errors ([#21616](https://github.com/astral-sh/uv/pull/21616))
-- Resolve unmanaged Python links from their own directory ([#21639](https://github.com/astral-sh/uv/pull/21639))
-- Scope required-environment checks to the current fork ([#21672](https://github.com/astral-sh/uv/pull/21672))
-
-### Other changes
-
-- Allow more time for walltime benchmarks ([#21636](https://github.com/astral-sh/uv/pull/21636))
-- Classify download length mismatch errors ([#21613](https://github.com/astral-sh/uv/pull/21613))
-- Include the Docker image name in publish jobs ([#21598](https://github.com/astral-sh/uv/pull/21598))
-- Pin PR security reviews to gpt-5.6-sol ([#21606](https://github.com/astral-sh/uv/pull/21606))
-- Read local wheel metadata in a blocking task ([#21619](https://github.com/astral-sh/uv/pull/21619))
-- Refresh range download error snapshots ([#21614](https://github.com/astral-sh/uv/pull/21614))
-- Retry failed partial downloads with HTTP Range header when supported ([#21570](https://github.com/astral-sh/uv/pull/21570))
-- Share Python download cache by default in integration tests ([#21632](https://github.com/astral-sh/uv/pull/21632))
+- Select releases that satisfy `required-environments` within each resolver fork instead of combining incompatible wheel coverage across forks ([#21672](https://github.com/astral-sh/uv/pull/21672))
+- Install packages with paths longer than `MAX_PATH` on Windows systems without long-path support enabled ([#21625](https://github.com/astral-sh/uv/pull/21625))
+- Prevent `uv python install` from overwriting valid unmanaged Python symlinks with relative targets on Unix ([#21639](https://github.com/astral-sh/uv/pull/21639))
+- Redact credentials and signatures from missing-path-segment URL errors ([#21616](https://github.com/astral-sh/uv/pull/21616))
+- Avoid exceeding the configured retry budget when cached HTTP responses fail revalidation ([#21640](https://github.com/astral-sh/uv/pull/21640))
+- Prefer `bin/python` over `bin/python3` when discovering interpreters in Unix environments ([#21559](https://github.com/astral-sh/uv/pull/21559))
+- Suppress managed-Python fallback warnings under `--quiet` ([#21565](https://github.com/astral-sh/uv/pull/21565))
+- Keep failed `uv tool upgrade` errors visible with `-q` while suppressing them with `-qq` ([#21566](https://github.com/astral-sh/uv/pull/21566))
 
 ## 0.12.13
 
