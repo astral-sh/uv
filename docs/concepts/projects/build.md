@@ -72,10 +72,11 @@ build-constraint-dependencies = [
 ]
 ```
 
-An entry without hashes can be written as a string, as shown with `wheel<1` above. uv records the
-supplied hashes in `uv.lock` and checks them when it downloads pinned build dependencies during
-project resolution or installation, including builds in `uv run --with` environments. The hashes do
-not apply to packages installed in the project environment.
+An entry without hashes can be written as a string, as shown with `wheel<1` above. uv checks the
+supplied hashes when it downloads pinned build dependencies during project resolution or
+installation, including builds in `uv run --with` environments. These hashes apply to build
+dependencies. Packages installed in the project environment are verified against their own lockfile
+hashes.
 
 ## Preventing publish to PyPI
 
