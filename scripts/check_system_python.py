@@ -313,9 +313,9 @@ if __name__ == "__main__":
         if sys.version_info < (3, 13) and sys.implementation.name != "graalpy":
             install_native_extension(uv=uv)
 
-        # Install data files through the system's man-page directory, which may
-        # be a symlink (e.g., `/usr/local/man` on Debian).
-        if sys.version_info >= (3, 8):
+        # Linux system installations may have symlinked man-page directories,
+        # such as `/usr/local/man` on Debian.
+        if sys.platform == "linux" and sys.version_info >= (3, 8):
             install_man_pages(uv=uv)
 
         # Attempt to install `pydantic_core`.
