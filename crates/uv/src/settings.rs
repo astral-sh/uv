@@ -1131,6 +1131,7 @@ pub(crate) struct ToolInstallSettings {
     pub(crate) constraints: Vec<PathBuf>,
     pub(crate) overrides: Vec<PathBuf>,
     pub(crate) excludes: Vec<PathBuf>,
+    pub(crate) exclude_packages: Vec<PackageName>,
     pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) lfs: GitLfsSetting,
     pub(crate) python: Option<String>,
@@ -1161,6 +1162,7 @@ impl ToolInstallSettings {
             constraints,
             overrides,
             excludes,
+            exclude_packages,
             build_constraints,
             lfs,
             installer,
@@ -1233,6 +1235,7 @@ impl ToolInstallSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            exclude_packages,
             build_constraints: build_constraints
                 .into_iter()
                 .filter_map(Maybe::into_option)
@@ -3471,6 +3474,7 @@ pub(crate) struct PipCompileSettings {
     pub(crate) constraints: Vec<PathBuf>,
     pub(crate) overrides: Vec<PathBuf>,
     pub(crate) excludes: Vec<PathBuf>,
+    pub(crate) exclude_packages: Vec<PackageName>,
     pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
     pub(crate) overrides_from_workspace: Vec<Override<Requirement>>,
@@ -3494,6 +3498,7 @@ impl PipCompileSettings {
             constraints,
             overrides,
             excludes,
+            exclude_packages,
             extra,
             all_extras,
             no_all_extras,
@@ -3616,6 +3621,7 @@ impl PipCompileSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            exclude_packages,
             constraints_from_workspace,
             overrides_from_workspace,
             excludes_from_workspace,
@@ -3789,6 +3795,7 @@ pub(crate) struct PipInstallSettings {
     pub(crate) constraints: Vec<PathBuf>,
     pub(crate) overrides: Vec<PathBuf>,
     pub(crate) excludes: Vec<PathBuf>,
+    pub(crate) exclude_packages: Vec<PackageName>,
     pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) dry_run: DryRun,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
@@ -3816,6 +3823,7 @@ impl PipInstallSettings {
             constraints,
             overrides,
             excludes,
+            exclude_packages,
             build_constraints,
             extra,
             all_extras,
@@ -3909,6 +3917,7 @@ impl PipInstallSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            exclude_packages,
             build_constraints: build_constraints
                 .into_iter()
                 .filter_map(Maybe::into_option)
