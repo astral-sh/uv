@@ -1336,9 +1336,6 @@ fn build_sha() -> Result<()> {
         [build-system]
         requires = ["hatchling"]
         build-backend = "hatchling.build"
-
-        [tool.uv]
-        build-constraint-dependencies = ["packaging"]
         "#,
     )?;
 
