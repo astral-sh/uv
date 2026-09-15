@@ -1017,6 +1017,26 @@ impl ManagedPythonDownloadList {
         Err(Error::NoDownloadFound(request.clone()))
     }
 
+    /// If `request` pins an exact patch version that has no matching download, return the newest
+    /// available download for the same minor version (any patch). Used to hint at a supported
+    /// release when an unbuilt patch such as `3.11.0` is requested.
+    ///
+    /// See <https://github.com/astral-sh/uv/issues/16869>.
+    pub(crate) fn newer_patch(
+        &self,
+        request: &PythonDownloadRequest,
+    ) -> Option<&ManagedPythonDownload> {
+        let version = request.version.as_ref()?;
+        // Only meaningful when an exact patch was requested.
+        version.patch()?;
+        let minor_request = request
+            .clone()
+            .with_version(version.clone().without_patch())
+            .fill()
+            .ok()?;
+        self.find(&minor_request).ok()
+    }
+
     /// Load available Python distributions from a provided source or the compiled-in list.
     ///
     /// Returns an error if the provided list could not be opened, if the JSON is invalid, or if it
@@ -1868,6 +1888,19 @@ mod tests {
     use uv_platform::{Arch, Libc, Os, Platform};
 
     use super::*;
+
+    #[test]
+    fn newer_patch_suggested_for_unbuilt_exact_version() {
+        let downloads =
+            ManagedPythonDownloadList::new_only_embedded().expect("embedded downloads load");
+        // python-build-standalone never built cpython-3.11.0, but newer 3.11.x releases exist.
+        let request = PythonDownloadRequest::from_str("cpython-3.11.0-linux-x86_64-gnu")
+            .expect("request should parse");
+        let hinted = downloads
+            .newer_patch(&request)
+            .expect("a newer 3.11 patch should be suggested");
+        assert_eq!(hinted.key().minor(), 11);
+    }
 
     /// Parse a request with all of its fields.
     #[test]
