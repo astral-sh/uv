@@ -391,7 +391,7 @@ jobs:
           WINDOWS_TARGETS: ${{ needs.prepare.outputs.windows }}
         run: |
           uv run scripts/assemble-release-artifacts.py . signed-wheels signed-github-archives release-artifacts
-          uv run --no-project scripts/check_uv_wheel_contents.py release-artifacts/wheels/uv/*.whl release-artifacts/wheels/uv_build/*.whl
+          uv run scripts/check_uv_wheel_contents.py release-artifacts/wheels/uv/*.whl release-artifacts/wheels/uv_build/*.whl
 
       - name: "Upload signed macOS wheels"
         id: macos-wheels
