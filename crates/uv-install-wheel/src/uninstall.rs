@@ -47,7 +47,8 @@ pub fn uninstall_wheel(
     // Uninstall the files, keeping track of any directories that are left empty.
     let mut visited = BTreeSet::new();
     for entry in &record {
-        let path = site_packages.join(&entry.path);
+        // Normalize `..` lexically instead of letting the system resolve to avoid traversing symlinks.
+        let path = normalize_path(&site_packages.join(&entry.path));
 
         if !is_path_in_scheme(&entry.path, site_packages, &distribution, layout) {
             continue;
