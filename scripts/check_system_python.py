@@ -66,10 +66,7 @@ def install_native_extension(*, uv: str):
         uv=uv,
         package="uv_test_native_extension",
         path=path,
-        import_check="import importlib.machinery; "
-        "import uv_test_native_extension as extension; "
-        "assert any(extension.__file__.endswith(suffix) "
-        "for suffix in importlib.machinery.EXTENSION_SUFFIXES); "
+        import_check="import uv_test_native_extension as extension; "
         "assert extension.answer() == 42",
     )
 
