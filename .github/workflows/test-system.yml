@@ -15,16 +15,24 @@ env:
 jobs:
   system-test-debian:
     timeout-minutes: 10
-    name: "python on debian"
+    name: "python on ${{ matrix.image-name }}"
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
-    container: debian:13@sha256:34cd9e9fd437c0a095ec39cb2e73422c9f30821b0d0848ed74fd0d43bae4d958
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image-name: debian:12
+            image: debian:12@sha256:6ebd97fa83deb272194a2cf015b3d26a4d538e9ad3a7a79d544c8af5b0a01443
+          - image-name: debian:13
+            image: debian:13@sha256:34cd9e9fd437c0a095ec39cb2e73422c9f30821b0d0848ed74fd0d43bae4d958
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: "Install Python"
-        run: apt-get update && apt-get install -y python3 python3-pip python3-venv python3-debian
+        run: apt-get update && apt-get install -y python3 python3-pip python3-venv python3-debian python3-dev build-essential
 
       - name: "Download binary"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -98,6 +106,38 @@ jobs:
 
       - name: "Validate global Python install"
         run: python scripts/check_system_python.py --uv ./uv
+
+  system-test-python:
+    timeout-minutes: 10
+    name: "python on ${{ matrix.image-name }}"
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image-name: python:3.14-bookworm
+            image: python:3.14-bookworm@sha256:ecac9e212daacda8a702eae372fceebc0ee36f5805abe087880367e8d061fa5b
+          - image-name: python:3.14-trixie
+            image: python:3.14-trixie@sha256:3df083612dec28cf1456da4f38064469561fc2e55da4ebf47e9f0110c62f80e2
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: "Download binary"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: uv-linux-musl-${{ inputs.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Print Python path"
+        run: command -v python3
+
+      - name: "Validate global Python install"
+        run: python3 scripts/check_system_python.py --uv ./uv
 
   system-test-python-36:
     timeout-minutes: 10
