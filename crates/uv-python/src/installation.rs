@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::cmp::Ordering;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
@@ -890,16 +891,26 @@ impl FromStr for PythonInstallationKey {
 }
 
 impl PartialOrd for PythonInstallationKey {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
 impl Ord for PythonInstallationKey {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+    fn cmp(&self, other: &Self) -> Ordering {
         self.implementation
             .cmp(&other.implementation)
-            .then_with(|| self.version().cmp(&other.version()))
+            .then_with(|| self.major.cmp(&other.major))
+            .then_with(|| self.minor.cmp(&other.minor))
+            .then_with(|| self.patch.cmp(&other.patch))
+            // Compare the parsed version components without allocating or parsing a version string.
+            // Final releases sort after prereleases of the same release version.
+            .then_with(|| match (self.prerelease, other.prerelease) {
+                (Some(left), Some(right)) => left.cmp(&right),
+                (Some(_), None) => Ordering::Less,
+                (None, Some(_)) => Ordering::Greater,
+                (None, None) => Ordering::Equal,
+            })
             // Platforms are sorted in preferred order for the target
             .then_with(|| self.platform.cmp(&other.platform).reverse())
             // Python variants are sorted in preferred order, with `Default` first
@@ -1018,6 +1029,50 @@ impl From<PythonInstallationKey> for PythonInstallationMinorVersionKey {
 mod tests {
     use super::*;
     use uv_platform::ArchVariant;
+
+    #[test]
+    fn test_python_installation_key_version_order() -> Result<(), PythonInstallationKeyError> {
+        let mut keys = [
+            "3.13.0",
+            "3.13.0rc10",
+            "3.12.10",
+            "3.13.0b2",
+            "3.13.0a10",
+            "3.13.0rc2",
+            "3.13.1",
+            "3.13.0b10",
+            "3.13.0a2",
+            "3.9.20",
+            "4.0.0a1",
+            "3.10.0",
+        ]
+        .into_iter()
+        .map(|version| {
+            PythonInstallationKey::from_str(&format!("cpython-{version}-linux-x86_64-gnu"))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+        keys.sort();
+
+        insta::assert_debug_snapshot!(
+            keys.iter().map(|key| key.version().to_string()).collect::<Vec<_>>(),
+            @r#"
+        [
+            "3.9.20",
+            "3.10.0",
+            "3.12.10",
+            "3.13.0a2",
+            "3.13.0a10",
+            "3.13.0b2",
+            "3.13.0b10",
+            "3.13.0rc2",
+            "3.13.0rc10",
+            "3.13.0",
+            "3.13.1",
+            "4.0.0a1",
+        ]
+        "#);
+        Ok(())
+    }
 
     #[cfg(windows)]
     #[test]

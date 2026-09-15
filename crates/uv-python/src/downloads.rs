@@ -4,6 +4,7 @@ use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::str::FromStr;
+use std::sync::OnceLock;
 use std::task::{Context, Poll};
 use std::time::{Duration, Instant, SystemTimeError};
 use std::{env, io};
@@ -980,8 +981,10 @@ impl FromStr for PythonDownloadRequest {
 const BUILTIN_PYTHON_DOWNLOADS_JSON: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/download-metadata-minified.json"));
 
+static BUILTIN_PYTHON_DOWNLOADS: OnceLock<Vec<ManagedPythonDownload>> = OnceLock::new();
+
 pub struct ManagedPythonDownloadList {
-    downloads: Vec<ManagedPythonDownload>,
+    downloads: Cow<'static, [ManagedPythonDownload]>,
 }
 
 // Cached downloads use positional MessagePack records. Keep fields through `build` in order,
@@ -1213,7 +1216,7 @@ impl ManagedPythonDownloadList {
         );
         match fetch_downloads_from_url(&client, cache, &url, None).await {
             Ok(downloads) => Ok(Some(Self {
-                downloads: parse_json_downloads(downloads),
+                downloads: Cow::Owned(parse_json_downloads(downloads)),
             })),
             Err(error) => {
                 debug!("No usable cached Python catalog for {url}: {error}");
@@ -1270,10 +1273,7 @@ impl ManagedPythonDownloadList {
         };
 
         let json_downloads = match json_source {
-            Source::BuiltIn => parse_downloads_json(
-                BUILTIN_PYTHON_DOWNLOADS_JSON,
-                "EMBEDDED IN THE BINARY".to_owned(),
-            )?,
+            Source::BuiltIn => return Self::from_embedded(),
             Source::Path(ref path) => parse_downloads_json(
                 &fs_err::read(path.as_ref())?,
                 path.to_string_lossy().to_string(),
@@ -1315,18 +1315,31 @@ impl ManagedPythonDownloadList {
         };
 
         let downloads = parse_json_downloads(json_downloads);
-        Ok(Self { downloads })
+        Ok(Self {
+            downloads: Cow::Owned(downloads),
+        })
+    }
+
+    /// Reuse the immutable bundled catalog across interpreter discovery and environment checks.
+    fn from_embedded() -> Result<Self, Error> {
+        let downloads = if let Some(downloads) = BUILTIN_PYTHON_DOWNLOADS.get() {
+            downloads
+        } else {
+            let json_downloads = parse_downloads_json(
+                BUILTIN_PYTHON_DOWNLOADS_JSON,
+                "EMBEDDED IN THE BINARY".to_owned(),
+            )?;
+            BUILTIN_PYTHON_DOWNLOADS.get_or_init(|| parse_json_downloads(json_downloads))
+        };
+        Ok(Self {
+            downloads: Cow::Borrowed(downloads),
+        })
     }
 
     /// Load available Python distributions from the compiled-in list only.
     /// for testing purposes.
     pub fn new_only_embedded() -> Result<Self, Error> {
-        let json_downloads: HashMap<String, JsonPythonDownload> =
-            serde_json::from_slice(BUILTIN_PYTHON_DOWNLOADS_JSON).map_err(|e| {
-                Error::InvalidPythonDownloadsJSON("EMBEDDED IN THE BINARY".to_owned(), e)
-            })?;
-        let result = parse_json_downloads(json_downloads);
-        Ok(Self { downloads: result })
+        Self::from_embedded()
     }
 }
 
@@ -2281,7 +2294,9 @@ mod tests {
 
         let request = PythonDownloadRequest::default()
             .with_version(VersionRequest::from_str("3.13").unwrap());
-        let downloads = ManagedPythonDownloadList { downloads };
+        let downloads = ManagedPythonDownloadList {
+            downloads: Cow::Owned(downloads),
+        };
         assert_eq!(
             downloads.find(&request).unwrap().key().build_variant(),
             Some(&LenientPythonBuildVariant::Known(
@@ -2302,7 +2317,7 @@ mod tests {
         freethreaded.variant = Some("freethreaded".to_string());
         for custom_default in [false, true] {
             let downloads = ManagedPythonDownloadList {
-                downloads: parse_json_downloads(HashMap::from([
+                downloads: Cow::Owned(parse_json_downloads(HashMap::from([
                     ("optimized".to_string(), entry("pgo+lto", !custom_default)),
                     ("unoptimized".to_string(), entry("noopt", false)),
                     (
@@ -2312,7 +2327,7 @@ mod tests {
                     ("other".to_string(), entry("other+pgo+lto", false)),
                     ("newer".to_string(), newer.clone()),
                     ("freethreaded".to_string(), freethreaded.clone()),
-                ])),
+                ]))),
             };
             let default = if custom_default {
                 "custom+pgo+lto"
