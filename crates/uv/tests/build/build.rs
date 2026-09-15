@@ -2173,6 +2173,7 @@ fn build_fast_path_require_hashes() -> Result<()> {
         &BTreeMap::new(),
         None,
         "py3-none-any",
+        &[],
     );
     context
         .temp_dir
@@ -2211,9 +2212,9 @@ fn build_fast_path_require_hashes() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     error: Failed to build `[WORKSPACE]/test/packages/built-by-uv`
-      Caused by: Failed to resolve requirements from `build-system.requires`
-      Caused by: No solution found when resolving: `uv-build>=0.8.0, <0.13`
-      Caused by: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `uv-build`
+      cause: Failed to resolve requirements from `build-system.requires`
+      cause: No solution found when resolving: `uv-build>=0.8.0, <0.13`
+      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `uv-build`
     ");
 
     Ok(())
@@ -3384,9 +3385,9 @@ fn build_workspace_constraint_hashes() -> Result<()> {
     ----- stderr -----
     Building wheel...
     error: Failed to build `[TEMP_DIR]/`
-      Caused by: Failed to resolve requirements from `build-system.requires`
-      Caused by: No solution found when resolving: `build-dependency==1.0.0`, `dynamic-dependency @ file://[TEMP_DIR]/wheels/dynamic_dependency-1.0.0-py3-none-any.whl#sha256=[DYNAMIC_HASH]`
-      Caused by: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `dynamic-dependency`
+      cause: Failed to resolve requirements from `build-system.requires`
+      cause: No solution found when resolving: `build-dependency==1.0.0`, `dynamic-dependency @ file://[TEMP_DIR]/wheels/dynamic_dependency-1.0.0-py3-none-any.whl#sha256=[DYNAMIC_HASH]`
+      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `dynamic-dependency`
     ");
     Ok(())
 }

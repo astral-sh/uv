@@ -6245,10 +6245,10 @@ fn tool_install_with_build_hashes() -> Result<()> {
             exit_code: 1 (failure)
             ----- stderr -----
             warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
-              × Failed to build `hash-tool @ file://[TEMP_DIR]/project`
-              ├─▶ Failed to resolve requirements from `build-system.requires`
-              ├─▶ No solution found when resolving: `build-dependency==1.0.0`
-              ╰─▶ In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `build-dependency`
+            error: Failed to build `hash-tool @ file://[TEMP_DIR]/project`
+              cause: Failed to resolve requirements from `build-system.requires`
+              cause: No solution found when resolving: `build-dependency==1.0.0`
+              cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `build-dependency`
             ");
             project
                 .child("backend-executed")
