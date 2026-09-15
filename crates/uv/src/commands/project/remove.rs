@@ -371,6 +371,7 @@ pub(crate) async fn remove(
         InstallOptions::default(),
         Modifications::Exact,
         None,
+        None,
         (&settings).into(),
         &client_builder,
         &state,

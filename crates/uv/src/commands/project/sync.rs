@@ -1,12 +1,13 @@
 use std::fmt::Write;
 use std::ops::Deref;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{Context, Result, bail};
+use clap::ValueEnum;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashSet;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tracing::{trace, warn};
 use uv_audit::Dependency;
 use uv_audit::osv::{self, Filter};
@@ -14,23 +15,27 @@ use uv_cache::Cache;
 use uv_cli::SyncFormat;
 use uv_client::{BaseClientBuilder, CachedClient, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    ActiveEnvironment, Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults,
-    DryRun, EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, HashCheckingMode,
-    InstallOptions, TargetTriple, Upgrade,
+    ActiveEnvironment, BuildOptions, Concurrency, Constraints, DependencyGroups,
+    DependencyGroupsWithDefaults, DryRun, EditableMode, ExtrasSpecification,
+    ExtrasSpecificationWithDefaults, HashCheckingMode, InstallOptions, TargetTriple, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    Dist, Index, IndexUrl, Name, Requirement, Resolution, ResolvedDist, SourceDist,
+    BuiltDist, Dist, Index, IndexUrl, Name, Requirement, Resolution, ResolvedDist, SourceDist,
 };
 use uv_fs::{PortablePathBuf, Simplified};
 use uv_installer::{InstallationStrategy, SitePackages};
-use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
+use uv_normalize::{DefaultExtras, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
+use uv_platform_tags::Tags;
 use uv_preview::{Preview, PreviewFeature};
-use uv_pypi_types::{ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, ParsedUrl};
+use uv_pypi_types::{
+    ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, ParsedUrl, ResolverMarkerEnvironment,
+};
 use uv_python::{
-    ConfigDiscovery, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest,
+    ConfigDiscovery, EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
+    PythonPreference, PythonRequest, PythonVersion,
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{
@@ -63,12 +68,68 @@ use crate::settings::{
     ResolverSettings,
 };
 
+/// Dependency selections and Python/platform targets for frozen batch sync checks.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SyncBatch {
+    target: Vec<BatchSyncTarget>,
+    selection: Vec<BatchSync>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+struct BatchSyncTarget {
+    python_version: PythonVersion,
+    python_platform: TargetTriple,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
+struct BatchSync {
+    package: Vec<PackageName>,
+    extra: Vec<ExtraName>,
+    no_extra: Vec<ExtraName>,
+    all_extras: bool,
+    group: Vec<GroupName>,
+    no_group: Vec<GroupName>,
+    only_group: Vec<GroupName>,
+    all_groups: bool,
+    no_default_groups: bool,
+    no_install_project: bool,
+    no_install_workspace: bool,
+}
+
+impl SyncBatch {
+    /// Read and validate the selections and targets before discovering the workspace.
+    async fn read(path: &Path) -> Result<Self> {
+        let contents = fs_err::tokio::read_to_string(path).await?;
+        let batch: Self = toml::from_str(&contents)
+            .with_context(|| format!("Failed to parse sync manifest `{}`", path.display()))?;
+        if batch.target.is_empty() || batch.selection.is_empty() {
+            bail!("Sync manifest must contain at least one `[[target]]` and `[[selection]]");
+        }
+        for entry in &batch.selection {
+            if entry.all_extras && !entry.extra.is_empty() {
+                bail!("`all-extras` cannot be combined with `extra`");
+            }
+            if !entry.only_group.is_empty() && (!entry.extra.is_empty() || entry.all_extras) {
+                bail!("`only-group` cannot be combined with `extra` or `all-extras`");
+            }
+            if !entry.only_group.is_empty() && (!entry.group.is_empty() || entry.all_groups) {
+                bail!("`only-group` cannot be combined with `group` or `all-groups`");
+            }
+        }
+        Ok(batch)
+    }
+}
+
 /// Sync the project environment.
 pub(crate) async fn sync(
     project_dir: &Path,
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,
     dry_run: DryRun,
+    batch: Option<PathBuf>,
     active: ActiveEnvironment,
     all_packages: bool,
     package: Vec<PackageName>,
@@ -78,6 +139,7 @@ pub(crate) async fn sync(
     install_options: InstallOptions,
     modifications: Modifications,
     python: Option<String>,
+    python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
     install_mirrors: PythonInstallMirrors,
     python_preference: PythonPreference,
@@ -95,12 +157,33 @@ pub(crate) async fn sync(
     output_format: SyncFormat,
     malware_settings: MalwareCheckSettings,
 ) -> Result<ExitStatus> {
+    if python_version.is_some() && !preview.is_enabled(PreviewFeature::BatchSync) {
+        warn_user!(
+            "The `--python-version` option for `uv sync` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeature::BatchSync
+        );
+    }
     if preview.is_enabled(PreviewFeature::JsonOutput) && matches!(output_format, SyncFormat::Json) {
         warn_user!(
             "The `--output-format json` option is experimental and the schema may change without warning. Pass `--preview-features {}` to disable this warning.",
             PreviewFeature::JsonOutput
         );
     }
+
+    let batch = if let Some(path) = batch {
+        if !preview.is_enabled(PreviewFeature::BatchSync) {
+            warn_user!(
+                "`uv sync --batch` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+                PreviewFeature::BatchSync
+            );
+        }
+        let Some(frozen_source) = frozen else {
+            bail!("`--batch` requires `--frozen`");
+        };
+        Some((SyncBatch::read(&path).await?, frozen_source))
+    } else {
+        None
+    };
 
     // Identify the target.
     let target = if let Some(script) = script {
@@ -111,7 +194,13 @@ pub(crate) async fn sync(
             VirtualProject::discover(
                 project_dir,
                 &DiscoveryOptions {
-                    members: MemberDiscovery::Existing,
+                    members: if batch.as_ref().is_some_and(|(batch, _)| {
+                        batch.selection.iter().all(|entry| entry.package.is_empty())
+                    }) {
+                        MemberDiscovery::None
+                    } else {
+                        MemberDiscovery::Existing
+                    },
                     ..DiscoveryOptions::default()
                 },
                 cache,
@@ -148,8 +237,129 @@ pub(crate) async fn sync(
         SyncTarget::Project(project)
     };
 
+    if let Some((batch, frozen_source)) = &batch {
+        let SyncTarget::Project(project) = &target else {
+            bail!("`--batch` does not support scripts");
+        };
+        let lock = LockTarget::from(project.workspace())
+            .read_frozen((*frozen_source).into())
+            .await
+            .map_err(UvError::from)?;
+        // A reference interpreter supplies implementation and ABI information for every target.
+        let installation = PythonInstallation::find_existing(
+            &python
+                .as_deref()
+                .map(PythonRequest::parse)
+                .unwrap_or_default(),
+            EnvironmentPreference::Any,
+            python_preference,
+            cache,
+        )?;
+        let interpreter = installation.interpreter();
+        if !lock
+            .requires_python()
+            .contains(interpreter.python_version())
+        {
+            bail!(
+                "The reference interpreter resolved to Python {}, which is incompatible with the lockfile's Python requirement: `{}`",
+                interpreter.python_version(),
+                lock.requires_python()
+            );
+        }
+
+        let targets = batch
+            .target
+            .iter()
+            .map(|target| {
+                let platform = target
+                    .python_platform
+                    .to_possible_value()
+                    .context("Target platform has no command-line name")?;
+                let markers = resolution_markers(
+                    Some(&target.python_version),
+                    Some(&target.python_platform),
+                    interpreter,
+                );
+                let tags = resolution_tags(
+                    Some(&target.python_version),
+                    Some(&target.python_platform),
+                    interpreter,
+                )?;
+                Ok((target, markers, tags, platform))
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        for (selection_index, selection) in batch.selection.iter().enumerate() {
+            let defaults = default_dependency_groups_for_selection(project, &selection.package)
+                .with_context(|| format!("Invalid selection {}", selection_index + 1))?;
+            let target =
+                identify_project_installation_target(project, &lock, false, &selection.package);
+            let extras = ExtrasSpecification::from_args(
+                selection.extra.clone(),
+                selection.no_extra.clone(),
+                false,
+                Vec::new(),
+                selection.all_extras,
+            )
+            .with_defaults(DefaultExtras::default());
+            let groups = DependencyGroups::from_args(
+                None,
+                selection.group.clone(),
+                selection.no_group.clone(),
+                selection.no_default_groups,
+                selection.only_group.clone(),
+                selection.all_groups,
+            )
+            .with_defaults(defaults);
+            let install_options = InstallOptions::new(
+                selection.no_install_project,
+                false,
+                selection.no_install_workspace,
+                false,
+                false,
+                false,
+                Vec::new(),
+                Vec::new(),
+            );
+
+            for (target_spec, markers, tags, platform) in &targets {
+                let context = || {
+                    format!(
+                        "Selection {} is not installable for Python {} on {}",
+                        selection_index + 1,
+                        target_spec.python_version,
+                        platform.get_name()
+                    )
+                };
+                let resolution = resolve_lockfile(
+                    &target,
+                    markers,
+                    tags,
+                    &extras,
+                    &groups,
+                    &settings.resolver.build_options,
+                    &install_options,
+                )
+                .with_context(context)?;
+                validate_local_artifacts(&resolution, &settings.resolver.build_options)
+                    .with_context(context)?;
+            }
+        }
+
+        writeln!(
+            printer.stderr(),
+            "Checked {} selections across {} targets",
+            batch.selection.len(),
+            batch.target.len()
+        )?;
+        return Ok(ExitStatus::Success);
+    }
+
     // Determine the groups and extras to include.
     let default_groups = match &target {
+        SyncTarget::Project(project) if python_version.is_some() => {
+            default_dependency_groups_for_selection(project, &package)?
+        }
         SyncTarget::Project(project) => default_dependency_groups(project.pyproject_toml())?,
         SyncTarget::Script(..) => DefaultGroups::default(),
     };
@@ -423,6 +633,7 @@ pub(crate) async fn sync(
         editable,
         install_options,
         modifications,
+        python_version.as_ref(),
         python_platform.as_ref(),
         (&settings).into(),
         &client_builder,
@@ -630,6 +841,7 @@ pub(crate) async fn do_sync<'a>(
     editable: Option<EditableMode>,
     install_options: InstallOptions,
     modifications: Modifications,
+    python_version: Option<&PythonVersion>,
     python_platform: Option<&TargetTriple>,
     settings: InstallerSettingsRef<'_>,
     client_builder: &BaseClientBuilder<'_>,
@@ -735,45 +947,15 @@ pub(crate) async fn do_sync<'a>(
         ));
     }
 
-    // Validate that the set of requested extras and development groups are compatible.
-    detect_conflicts(&target, extras, groups)?;
-
-    // Validate that the set of requested extras and development groups are defined in the lockfile.
-    target.validate_extras(extras)?;
-    target.validate_groups(groups)?;
-
     // Determine the markers to use for resolution.
-    let marker_env = resolution_markers(None, python_platform, venv.interpreter());
-
-    // Validate that the platform is supported by the lockfile.
-    let environments = target.lock().supported_environments();
-    if !environments.is_empty() {
-        if !environments
-            .iter()
-            .any(|env| env.evaluate(&marker_env, &[]))
-        {
-            return Err(ProjectError::LockedPlatformIncompatibility(
-                // For error reporting, we use the "simplified"
-                // supported environments, because these correspond to
-                // what the end user actually wrote. The non-simplified
-                // environments, by contrast, are explicitly
-                // constrained by `requires-python`.
-                target
-                    .lock()
-                    .simplified_supported_environments()
-                    .into_iter()
-                    .filter_map(MarkerTree::contents)
-                    .map(|env| format!("`{env}`"))
-                    .join(", "),
-            ));
-        }
-    }
+    let marker_env = resolution_markers(python_version, python_platform, venv.interpreter());
 
     // Determine the tags to use for the resolution.
-    let tags = resolution_tags(None, python_platform, venv.interpreter())?;
+    let tags = resolution_tags(python_version, python_platform, venv.interpreter())?;
 
     // Read the lockfile.
-    let resolution = target.to_resolution(
+    let resolution = resolve_lockfile(
+        &target,
         &marker_env,
         &tags,
         extras,
@@ -781,6 +963,9 @@ pub(crate) async fn do_sync<'a>(
         build_options,
         &install_options,
     )?;
+    if python_version.is_some() {
+        validate_local_artifacts(&resolution, build_options)?;
+    }
 
     // Always skip virtual projects, which shouldn't be built or installed.
     let resolution = apply_no_virtual_project(resolution);
@@ -936,6 +1121,117 @@ pub(crate) async fn do_sync<'a>(
         .await?;
 
     Ok(changelog)
+}
+
+/// Use the selected member's default groups, or the current project's when selecting zero or
+/// multiple packages.
+///
+/// Reject packages missing from the discovered workspace, whose defaults cannot be determined.
+fn default_dependency_groups_for_selection(
+    project: &VirtualProject,
+    package: &[PackageName],
+) -> Result<DefaultGroups> {
+    for name in package {
+        if !project.workspace().packages().contains_key(name) {
+            bail!("Package `{name}` not found in workspace");
+        }
+    }
+    let pyproject = if let [name] = package {
+        project.workspace().packages()[name].pyproject_toml()
+    } else {
+        project.pyproject_toml()
+    };
+    Ok(default_dependency_groups(pyproject)?)
+}
+
+/// Resolve a locked selection for the target markers and wheel tags, ignoring installed packages.
+///
+/// Validate extras and groups before evaluating markers, so inactive dependencies cannot hide
+/// an invalid selection. Source distributions remain eligible when builds are allowed.
+fn resolve_lockfile(
+    target: &InstallTarget<'_>,
+    marker_env: &ResolverMarkerEnvironment,
+    tags: &Tags,
+    extras: &ExtrasSpecificationWithDefaults,
+    groups: &DependencyGroupsWithDefaults,
+    build_options: &BuildOptions,
+    install_options: &InstallOptions,
+) -> Result<Resolution, ProjectError> {
+    let python_version = &marker_env.python_full_version().version;
+    if !target.lock().requires_python().contains(python_version) {
+        return Err(ProjectError::LockedPythonIncompatibility(
+            python_version.clone(),
+            target.lock().requires_python().clone(),
+        ));
+    }
+
+    // Validate selections before evaluating their dependency markers.
+    detect_conflicts(target, extras, groups)?;
+    target.validate_extras(extras)?;
+    target.validate_groups(groups)?;
+
+    let environments = target.lock().supported_environments();
+    if !environments.is_empty() && !environments.iter().any(|env| env.evaluate(marker_env, &[])) {
+        return Err(ProjectError::LockedPlatformIncompatibility(
+            // The simplified markers reflect the user-facing environment constraints rather than
+            // their internal intersection with `requires-python`.
+            target
+                .lock()
+                .simplified_supported_environments()
+                .into_iter()
+                .filter_map(MarkerTree::contents)
+                .map(|env| format!("`{env}`"))
+                .join(", "),
+        ));
+    }
+
+    Ok(target.to_resolution(
+        marker_env,
+        tags,
+        extras,
+        groups,
+        build_options,
+        install_options,
+    )?)
+}
+
+/// Check local artifact paths and source build policies without consulting installed packages.
+fn validate_local_artifacts(resolution: &Resolution, build_options: &BuildOptions) -> Result<()> {
+    for distribution in resolution.distributions() {
+        let ResolvedDist::Installable { dist, .. } = distribution else {
+            continue;
+        };
+        let path = match dist.as_ref() {
+            Dist::Built(BuiltDist::Path(wheel)) => Some(wheel.install_path.as_ref()),
+            Dist::Source(SourceDist::Path(sdist)) => Some(sdist.install_path.as_ref()),
+            Dist::Source(SourceDist::Directory(sdist)) => {
+                if sdist.r#virtual == Some(true) {
+                    continue;
+                }
+                // Cross-target checks cannot rely on building local workspace packages for the
+                // host. Apply the same build policy as a frozen export of those packages.
+                if build_options.no_build_package(&sdist.name) {
+                    bail!("Building `{}` is disabled by `--no-build`", sdist.name);
+                }
+                Some(sdist.install_path.as_ref())
+            }
+            Dist::Built(
+                BuiltDist::Registry(_) | BuiltDist::DirectUrl(_) | BuiltDist::GitPath(_),
+            )
+            | Dist::Source(
+                SourceDist::Registry(_)
+                | SourceDist::DirectUrl(_)
+                | SourceDist::GitDirectory(_)
+                | SourceDist::GitPath(_),
+            ) => None,
+        };
+        if let Some(path) = path
+            && !path.exists()
+        {
+            bail!("Distribution not found at: {}", path.display());
+        }
+    }
+    Ok(())
 }
 
 /// Carries dependencies checked during a locked-tool preflight into a following project sync.
