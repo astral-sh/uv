@@ -3667,21 +3667,21 @@ impl Lock {
         // Special-case: if the version is dynamic, compare the flattened requirements.
         let flattened = if package.is_dynamic() || missing_metadata {
             let requirements = if missing_metadata {
-                let package_context = package_version.map(|version| (&package.id.name, version));
-                // The resolver applies overrides and exclusions before flattening recursive
-                // self-requirements.
-                overrides
-                    .apply_for_package(package_context, requires_dist.iter())
-                    .filter(|requirement| {
-                        !excludes.contains_for_package(package_context, &requirement.name)
-                    })
-                    .map(Cow::into_owned)
-                    .collect()
+                Self::preprocess_requirements(
+                    &package.id.name,
+                    package_version,
+                    &requires_dist,
+                    DependencyContext::Production,
+                    overrides,
+                    excludes,
+                )
             } else {
-                requires_dist.clone()
+                FlatRequiresDist::from_requirements(requires_dist.clone(), &package.id.name)
+                    .into_iter()
+                    .collect()
             };
             Some(
-                FlatRequiresDist::from_requirements(requirements, &package.id.name)
+                requirements
                     .into_iter()
                     .map(|requirement| {
                         normalize_requirement(requirement, root, &self.requires_python)
@@ -4769,6 +4769,41 @@ impl Lock {
         Ok(source_matches && version_matches)
     }
 
+    /// Apply dependency policies before flattening recursive self-requirements.
+    ///
+    /// Groups use only global overrides and are not flattened, but exclusions still use the
+    /// owning package's resolved version.
+    fn preprocess_requirements(
+        package_name: &PackageName,
+        package_version: Option<&Version>,
+        requirements: &[Requirement],
+        context: DependencyContext<'_>,
+        overrides: &Overrides,
+        excludes: &Excludes,
+    ) -> Vec<Requirement> {
+        let package_context = package_version.map(|version| (package_name, version));
+        let override_context = match context {
+            DependencyContext::Group(_) => None,
+            DependencyContext::Production | DependencyContext::Extra(_) => package_context,
+        };
+        let requirements = overrides
+            .apply_for_package(override_context, requirements)
+            .filter(|requirement| {
+                !excludes.contains_for_package(package_context, &requirement.name)
+            })
+            .map(Cow::into_owned)
+            .collect::<Box<[_]>>();
+
+        match context {
+            DependencyContext::Group(_) => requirements.into_vec(),
+            DependencyContext::Production | DependencyContext::Extra(_) => {
+                FlatRequiresDist::from_requirements(requirements, package_name)
+                    .into_iter()
+                    .collect()
+            }
+        }
+    }
+
     /// Collect direct declarations from reachable source-bearing packages.
     fn add_source_requirements(
         &self,
@@ -4789,29 +4824,16 @@ impl Lock {
         // A reachable provider shares its sources across environments. Only its conflict
         // selections constrain where those sources can apply.
         let package_marker = package_marker.only_extras();
-        let package_context = package_version.map(|version| (&package.id.name, version));
-        // Apply policies before recursive self-requirements can activate another extra.
-        let requirements = dependency_overrides
-            .apply_for_package(
-                if group.is_some() {
-                    None
-                } else {
-                    package_context
-                },
-                requirements,
-            )
-            .filter(|requirement| {
-                !dependency_excludes.contains_for_package(package_context, &requirement.name)
-            })
-            .map(Cow::into_owned)
-            .collect::<Vec<_>>();
-        let requirements = if group.is_some() {
-            requirements
-        } else {
-            FlatRequiresDist::from_requirements(requirements.into_boxed_slice(), &package.id.name)
-                .into_iter()
-                .collect::<Vec<_>>()
-        };
+        let requirements = Self::preprocess_requirements(
+            &package.id.name,
+            package_version,
+            requirements,
+            group
+                .map(DependencyContext::Group)
+                .unwrap_or(DependencyContext::Production),
+            dependency_overrides,
+            dependency_excludes,
+        );
 
         for requirement in requirements {
             let requirement_marker = if let Some(group) = group {
@@ -4990,7 +5012,6 @@ impl Lock {
             let refreshed_dependencies = if let Some((version, requirements, dependency_groups)) =
                 refreshed_declarations
             {
-                let package_context = version.as_ref().map(|version| (&package.id.name, version));
                 let mut refreshed_dependencies = FxHashMap::default();
                 for (group, requirements) in iter::once((None, requirements)).chain(
                     dependency_groups
@@ -5004,34 +5025,18 @@ impl Lock {
                             (Some(group), <[Requirement]>::into_vec(requirements))
                         }),
                 ) {
-                    let override_context = if group.is_some() {
-                        None
-                    } else {
-                        package_context
-                    };
                     let requirement_context = group
                         .as_ref()
                         .map(DependencyContext::Group)
                         .unwrap_or(context);
-                    // Apply policies before recursive self-requirements can activate another extra.
-                    let requirements = dependency_overrides
-                        .apply_for_package(override_context, &requirements)
-                        .filter(|requirement| {
-                            !dependency_excludes
-                                .contains_for_package(package_context, &requirement.name)
-                        })
-                        .map(Cow::into_owned)
-                        .collect::<Vec<_>>();
-                    let requirements = if group.is_some() {
-                        requirements
-                    } else {
-                        FlatRequiresDist::from_requirements(
-                            requirements.into_boxed_slice(),
-                            &package.id.name,
-                        )
-                        .into_iter()
-                        .collect::<Vec<_>>()
-                    };
+                    let requirements = Self::preprocess_requirements(
+                        &package.id.name,
+                        version.as_ref(),
+                        &requirements,
+                        requirement_context,
+                        dependency_overrides,
+                        dependency_excludes,
+                    );
                     for requirement in requirements {
                         let requirement_marker =
                             requirement_context.requirement_marker(requirement.marker);
