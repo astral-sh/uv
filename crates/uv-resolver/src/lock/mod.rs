@@ -1491,11 +1491,46 @@ impl<'a> LockedDependencyBuilder<'a> {
     }
 }
 
+/// Reachability markers for locked packages and their activated extras.
+#[derive(Default)]
+struct PackageMarkers<'lock> {
+    markers: FxHashMap<(&'lock PackageId, Option<&'lock ExtraName>), MarkerTree>,
+}
+
+impl<'lock> PackageMarkers<'lock> {
+    fn get(&self, package: &PackageId) -> Option<MarkerTree> {
+        self.markers.get(&(package, None)).copied()
+    }
+
+    fn get_extra(&self, package: &PackageId, extra: &ExtraName) -> Option<MarkerTree> {
+        self.markers.get(&(package, Some(extra))).copied()
+    }
+
+    /// Merge a reachable environment, returning the combined marker only when it grows.
+    fn merge(
+        &mut self,
+        package: &'lock PackageId,
+        extra: Option<&'lock ExtraName>,
+        marker: MarkerTree,
+    ) -> Option<MarkerTree> {
+        let existing = self
+            .markers
+            .entry((package, extra))
+            .or_insert(MarkerTree::FALSE);
+        let marker = existing.or(marker);
+        if marker == *existing {
+            return None;
+        }
+        *existing = marker;
+        Some(marker)
+    }
+}
+
 /// Package and extra contexts reached while authorizing dependency sources.
 #[derive(Default)]
 struct DependencySourceReachability<'lock> {
-    package_markers: FxHashMap<(&'lock PackageId, Option<&'lock ExtraName>), MarkerTree>,
-    deferred_package_markers: FxHashMap<(&'lock PackageId, Option<&'lock ExtraName>), MarkerTree>,
+    package_markers: PackageMarkers<'lock>,
+    deferred_package_markers: PackageMarkers<'lock>,
     package_queue: VecDeque<(&'lock Package, Option<&'lock ExtraName>, MarkerTree)>,
 }
 
@@ -1508,10 +1543,9 @@ struct DependencySourceChanges<'lock> {
 
 /// Refreshed direct sources and the environments where locked selections remain reachable.
 #[derive(Default)]
-struct DependencySources {
+struct DependencySources<'lock> {
     requirements: Constraints,
-    package_markers: FxHashMap<PackageId, MarkerTree>,
-    extra_markers: FxHashMap<PackageId, FxHashMap<ExtraName, MarkerTree>>,
+    package_markers: PackageMarkers<'lock>,
 }
 
 /// Marker environments compared for each locked dependency identity.
@@ -1528,7 +1562,7 @@ struct ExpectedPackageDependencies<'lock> {
     declarations: BTreeSet<Requirement>,
     provides_extra: &'lock [ExtraName],
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
-    source_requirements: &'lock DependencySources,
+    source_requirements: &'lock DependencySources<'lock>,
     /// Marker environments and conflict contexts in which each requested extra is active.
     activated_extras: BTreeMap<ExtraName, UniversalMarker>,
     /// Environments where the package itself can be selected.
@@ -1547,7 +1581,7 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
         declarations: &BTreeSet<Requirement>,
         provides_extra: &'lock [ExtraName],
         dependency_groups: &BTreeMap<GroupName, BTreeSet<Requirement>>,
-        source_requirements: &'lock DependencySources,
+        source_requirements: &'lock DependencySources<'lock>,
         overrides: &Overrides,
         excludes: &Excludes,
         package_requires_python: Option<&VersionSpecifiers>,
@@ -1595,7 +1629,7 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
         }
         let mut package_marker = unforked_package_marker;
         if let Some(marker) = source_requirements.package_markers.get(&package.id) {
-            package_marker.and(UniversalMarker::from_combined(*marker));
+            package_marker.and(UniversalMarker::from_combined(marker));
         }
         if !package.fork_markers.is_empty() {
             let fork_marker = package
@@ -1781,9 +1815,8 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             && !self.lock.is_workspace_package(self.package)
             && let Some(marker) = self
                 .source_requirements
-                .extra_markers
-                .get(&self.package.id)
-                .and_then(|extras| extras.get(extra))
+                .package_markers
+                .get_extra(&self.package.id, extra)
         {
             package_marker.and(UniversalMarker::from_combined(marker.without_extras()));
         }
@@ -3624,7 +3657,7 @@ impl Lock {
         requires_dist: Box<[Requirement]>,
         provides_extra: &[ExtraName],
         dependency_groups: BTreeMap<GroupName, Box<[Requirement]>>,
-        source_requirements: &DependencySources,
+        source_requirements: &DependencySources<'_>,
         overrides: &Overrides,
         excludes: &Excludes,
         package_requires_python: Option<&VersionSpecifiers>,
@@ -4714,12 +4747,12 @@ impl Lock {
     fn source_is_reachable(
         &self,
         requirement: &Requirement,
-        package_markers: &FxHashMap<(&PackageId, Option<&ExtraName>), MarkerTree>,
+        package_markers: &PackageMarkers<'_>,
         root: &Path,
     ) -> Result<bool, LockError> {
         for package in self.packages_for_name(&requirement.name) {
             if package_markers
-                .get(&(&package.id, None))
+                .get(&package.id)
                 .is_some_and(|marker| !marker.and(requirement.marker).is_false())
                 && package
                     .id
@@ -4795,14 +4828,14 @@ impl Lock {
         package_version: Option<&Version>,
         requirements: &[Requirement],
         group: Option<&GroupName>,
-        package_markers: &FxHashMap<(&PackageId, Option<&ExtraName>), MarkerTree>,
+        package_markers: &PackageMarkers<'_>,
         dependency_overrides: &Overrides,
         dependency_excludes: &Excludes,
         root: &Path,
         source_requirements: &mut BTreeSet<Requirement>,
         pending_sources: &mut Vec<Requirement>,
     ) -> Result<(), LockError> {
-        let Some(package_marker) = package_markers.get(&(&package.id, None)).copied() else {
+        let Some(package_marker) = package_markers.get(&package.id) else {
             return Ok(());
         };
         // A reachable provider shares its sources across environments. Only its conflict
@@ -4835,8 +4868,7 @@ impl Lock {
                     )
                     .and(production_marker);
                 for extra in package.optional_dependencies.keys() {
-                    let Some(extra_marker) = package_markers.get(&(&package.id, Some(extra)))
-                    else {
+                    let Some(extra_marker) = package_markers.get_extra(&package.id, extra) else {
                         continue;
                     };
                     let marker =
@@ -4882,15 +4914,12 @@ impl Lock {
     ) -> Result<DependencySourceChanges<'lock>, LockError> {
         let mut changes = DependencySourceChanges::default();
         while let Some((package, extra, marker)) = reachability.package_queue.pop_front() {
-            let existing = reachability
+            let Some(marker) = reachability
                 .package_markers
-                .entry((&package.id, extra))
-                .or_insert(MarkerTree::FALSE);
-            let marker = existing.or(marker);
-            if marker == *existing {
+                .merge(&package.id, extra, marker)
+            else {
                 continue;
-            }
-            *existing = marker;
+            };
             changes.reachable.insert(&package.id);
             if extra.is_some() {
                 reachability
@@ -5163,13 +5192,11 @@ impl Lock {
                             // Opaque providers cannot authorize inspecting an inherited
                             // local edge. Preserve its candidate contexts so a refreshed,
                             // exact path may activate them in the second phase.
-                            let existing = reachability
+                            if reachability
                                 .deferred_package_markers
-                                .entry((&dependency_package.id, dependency_extra))
-                                .or_insert(MarkerTree::FALSE);
-                            let marker = existing.or(marker);
-                            if marker != *existing {
-                                *existing = marker;
+                                .merge(&dependency_package.id, dependency_extra, marker)
+                                .is_some()
+                            {
                                 changes.deferred.insert(&dependency_package.id);
                             }
                             continue;
@@ -5203,7 +5230,7 @@ impl Lock {
         index: &InMemoryIndex,
         database: &DistributionDatabase<'_, Context>,
         source_tree_metadata: &mut FxHashMap<PackageId, Option<SourceTreeRequiresDist>>,
-    ) -> Result<DependencySources, LockError> {
+    ) -> Result<DependencySources<'_>, LockError> {
         // Global URL overrides authorize sources and replace competing URL constraints.
         // Scoped overrides cannot grant this privilege, and excluded packages stay inactive.
         let global_source_overrides = dependency_overrides
@@ -5372,14 +5399,12 @@ impl Lock {
 
                     let deferred_marker = reachability
                         .deferred_package_markers
-                        .get(&(&package.id, None))
-                        .copied()
+                        .get(&package.id)
                         .unwrap_or(MarkerTree::FALSE)
                         .and(requirement.marker);
                     let package_marker = reachability
                         .package_markers
-                        .get(&(&package.id, None))
-                        .copied()
+                        .get(&package.id)
                         .unwrap_or(MarkerTree::FALSE)
                         .or(deferred_marker);
                     if package_marker.and(requirement.marker).is_false() {
@@ -5400,7 +5425,7 @@ impl Lock {
                         };
                         let Some(marker) = reachability
                             .deferred_package_markers
-                            .get(&(&package.id, Some(extra)))
+                            .get_extra(&package.id, extra)
                             .map(|marker| marker.and(requirement.marker))
                             .filter(|marker| !marker.is_false())
                         else {
@@ -5572,24 +5597,9 @@ impl Lock {
             source_candidates.extend(pending_sources[pending_sources_start..].iter().cloned());
         }
 
-        let mut reachable_packages = FxHashMap::default();
-        let mut extra_markers: FxHashMap<PackageId, FxHashMap<ExtraName, MarkerTree>> =
-            FxHashMap::default();
-        for ((package, extra), marker) in reachability.package_markers {
-            if let Some(extra) = extra {
-                extra_markers
-                    .entry(package.clone())
-                    .or_default()
-                    .insert(extra.clone(), marker);
-            } else {
-                reachable_packages.insert(package.clone(), marker);
-            }
-        }
-
         Ok(DependencySources {
             requirements: Constraints::from_requirements(source_requirements.into_iter()),
-            package_markers: reachable_packages,
-            extra_markers,
+            package_markers: reachability.package_markers,
         })
     }
 
