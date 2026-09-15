@@ -8571,7 +8571,7 @@ fn require_hashes_build_dependencies() -> Result<()> {
 
     // Build constraints retain their hashes while ignoring extras during resolution.
     let constraints_txt = context.temp_dir.child("build_constraints.txt");
-    constraints_txt.write_str("hatchling[foo]==1.20.0 --hash=sha256:incorrect")?;
+    constraints_txt.write_str("hatchling[foo]==1.20.0 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000")?;
 
     uv_snapshot!(context.pip_install()
         .arg("--index-url").arg(server.index_url())
@@ -8590,7 +8590,7 @@ fn require_hashes_build_dependencies() -> Result<()> {
       cause: Hash mismatch for `hatchling==1.20.0`
 
              Expected:
-               sha256:incorrect
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
 
              Computed:
                sha256:872c63aa7e8aca85e8dba07b05c6a9b28d5a149fe00638f1a47e36930197248f
