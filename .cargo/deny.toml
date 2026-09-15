@@ -1,6 +1,18 @@
 [bans]
+# NOTE: Rust as a whole simply has too many split resolutions
+# for us to enforce a single version per crate. Maybe
+# in the distant future.
 multiple-versions = "allow"
-external-default-features = "deny"
+
+# NOTE: `cargo deny` doesn't distinguish between default features that
+# are enabled on a first-party basis (in our workspace) and those that
+# are enabled transitively. As a result we can't blanket deny all
+# default features here.
+# See: https://github.com/EmbarkStudios/cargo-deny/issues/699
+#
+# For now, we work around this with our own `check-cargo-default-features.py`
+# script.
+external-default-features = "allow"
 
 [bans.build]
 allow-build-scripts = [
