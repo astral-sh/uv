@@ -9199,7 +9199,18 @@ fn sync_invalid_environment() -> Result<()> {
     // Let's make sure some extraneous content isn't removed
     fs_err::write(context.temp_dir.join(".venv").join("file"), b"")?;
 
-    // We should never delete it
+    // We should never delete it. Windows launchers cannot run without `pyvenv.cfg`.
+    #[cfg(windows)]
+    uv_snapshot!(context.filters(), context.sync(), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Querying Python at `[VENV]/[BIN]/[PYTHON]` failed with exit status exit status: 106
+
+    [stderr]
+    No pyvenv.cfg file
+    ");
+
+    #[cfg(unix)]
     uv_snapshot!(context.filters(), context.sync(), @"
     exit_code: 2 (failure)
     ----- stderr -----

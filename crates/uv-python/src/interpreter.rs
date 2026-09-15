@@ -1142,6 +1142,11 @@ impl InterpreterInfo {
     fn cache_entry(absolute: &Path, canonical: &Path, cache: &Cache) -> CacheEntry {
         let python_executable = env::var_os(EnvVars::PYTHONEXECUTABLE).map(PathBuf::from);
         let pyvenv_launcher = env::var_os(EnvVars::PYVENV_LAUNCHER).map(PathBuf::from);
+        // A virtual environment can change its Python home without changing its executable.
+        // In particular, copied Windows launchers retain their source timestamp when an
+        // environment is recreated. Include the home from `pyvenv.cfg` in the cache key to avoid
+        // reusing the previous base prefix.
+        let python_home = python_home(absolute);
 
         cache.entry(
             CacheBucket::Interpreter,
@@ -1168,16 +1173,21 @@ impl InterpreterInfo {
             // without changing either executable path.
             format!(
                 "{}.msgpack",
-                cache_digest(&(absolute, canonical, &python_executable, &pyvenv_launcher))
+                cache_digest(&(
+                    absolute,
+                    canonical,
+                    &python_executable,
+                    &pyvenv_launcher,
+                    &python_home,
+                ))
             ),
         )
     }
 
     /// A wrapper around [`markers::query_interpreter_info`] to cache the computed markers.
     ///
-    /// Running a Python script is (relatively) expensive, and the markers won't change
-    /// unless the Python executable changes, so we use the executable's last modified
-    /// time as a cache key.
+    /// Running a Python script is (relatively) expensive, so we cache the result using the
+    /// executable's timestamp and the virtual environment's Python home, if present.
     fn query_cached(executable: &Path, cache: &Cache) -> Result<Self, Error> {
         let absolute = std::path::absolute(executable)?;
 
@@ -1366,6 +1376,7 @@ fn python_home(interpreter: &Path) -> Option<PathBuf> {
 #[cfg(unix)]
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
     use std::str::FromStr;
 
     use anyhow::Result;
@@ -1506,6 +1517,64 @@ mod tests {
             fs::read_to_string(&query_log).unwrap(),
             "queried\nqueried\n"
         );
+    }
+
+    #[tokio::test]
+    async fn test_cache_invalidation_with_changed_python_home() -> Result<()> {
+        let mock_dir = tempdir()?;
+        let scripts = mock_dir.path().join("bin");
+        fs::create_dir(&scripts)?;
+        let mocked_interpreter = scripts.join("python");
+        let response_file = mock_dir.path().join("response.json");
+        let query_count = mock_dir.path().join("queries");
+        let pyvenv_cfg = mock_dir.path().join("pyvenv.cfg");
+        let original_home = Path::new("/home/ferris/.pyenv/versions/3.12.0");
+        let updated_home = Path::new("/home/ferris/.pyenv/versions/3.12.0+custom");
+
+        let mut response = serde_json::from_str::<Value>(mocked_interpreter_response())?;
+        response["sys_executable"] = serde_json::to_value(&mocked_interpreter)?;
+        fs::write(&response_file, serde_json::to_vec(&response)?)?;
+        fs::write(&pyvenv_cfg, format!("home = {}\n", original_home.display()))?;
+        fs::write(
+            &mocked_interpreter,
+            formatdoc! {r#"
+                #!/bin/sh
+                printf '.' >> "{}"
+                # Discovery tests may temporarily replace PATH, so use shell built-ins.
+                IFS= read -r response < "{}"
+                printf '%s' "$response"
+            "#, query_count.display(), response_file.display()},
+        )?;
+        fs::set_permissions(
+            &mocked_interpreter,
+            std::os::unix::fs::PermissionsExt::from_mode(0o770),
+        )?;
+
+        let cache = Cache::temp()?.init().await?;
+        let timestamp = Timestamp::from_path(&mocked_interpreter)?;
+        assert_eq!(
+            Interpreter::query(&mocked_interpreter, &cache)?.sys_base_prefix(),
+            original_home
+        );
+
+        // The launcher can report a different base installation without changing itself.
+        response["sys_base_prefix"] = serde_json::to_value(updated_home)?;
+        fs::write(&response_file, serde_json::to_vec(&response)?)?;
+        fs::write(&pyvenv_cfg, format!("home = {}\n", updated_home.display()))?;
+        assert_eq!(Timestamp::from_path(&mocked_interpreter)?, timestamp);
+        assert_eq!(
+            Interpreter::query(&mocked_interpreter, &cache)?.sys_base_prefix(),
+            updated_home
+        );
+
+        // Repeated queries with the same home still use the cached metadata.
+        assert_eq!(
+            Interpreter::query(&mocked_interpreter, &cache)?.sys_base_prefix(),
+            updated_home
+        );
+        assert_eq!(fs::read_to_string(&query_count)?, "..");
+
+        Ok(())
     }
 
     #[tokio::test]
