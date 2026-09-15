@@ -25,7 +25,7 @@ use uv_distribution_types::{Index, IndexName, NameRequirementSpecification, Requ
 use uv_fs::{PortablePathBuf, try_relative_to_if};
 use uv_git_types::GitReference;
 use uv_macros::OptionsMetadata;
-use uv_normalize::{DefaultGroups, ExtraName, GroupName, PackageName};
+use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_options_metadata::{OptionSet, OptionsMetadata, Visit};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerTree;
@@ -35,6 +35,8 @@ use uv_pypi_types::{
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_toml::deserialize_unique_map;
+
+use crate::DefaultGroupsError;
 
 #[derive(Error, Debug)]
 pub enum PyprojectTomlError {
@@ -90,6 +92,30 @@ pub struct PyProjectToml {
 }
 
 impl PyProjectToml {
+    /// Return the default dependency groups, validating explicitly configured group names.
+    pub(crate) fn default_groups(&self) -> Result<DefaultGroups, DefaultGroupsError> {
+        if let Some(defaults) = self
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref().and_then(|uv| uv.default_groups.as_ref()))
+        {
+            if let DefaultGroups::List(defaults) = defaults {
+                for group in defaults {
+                    if !self
+                        .dependency_groups
+                        .as_ref()
+                        .is_some_and(|groups| groups.contains_key(group))
+                    {
+                        return Err(DefaultGroupsError::MissingGroup(group.clone()));
+                    }
+                }
+            }
+            Ok(defaults.clone())
+        } else {
+            Ok(DefaultGroups::List(vec![DEV_DEPENDENCIES.clone()]))
+        }
+    }
+
     /// Parse a `PyProjectToml` from a raw TOML string.
     #[instrument("toml::from_str workspace", skip_all, fields(path = %_path.as_ref().display()))]
     pub fn from_string(raw: String, _path: impl AsRef<Path>) -> Result<Self, PyprojectTomlError> {
@@ -434,7 +460,7 @@ pub struct ToolUv {
             default-groups = ["docs"]
         "#
     )]
-    pub default_groups: Option<DefaultGroups>,
+    default_groups: Option<DefaultGroups>,
 
     /// Additional settings for `dependency-groups`.
     ///

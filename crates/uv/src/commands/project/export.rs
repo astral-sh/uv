@@ -33,7 +33,7 @@ use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     ProjectEnvironmentPolicy, ProjectInterpreter, ScriptInterpreter, UniversalState,
-    WorkspacePython, default_dependency_groups, detect_conflicts,
+    WorkspacePython, detect_conflicts,
 };
 use crate::commands::{ExitStatus, OutputWriter, UvError};
 use crate::printer::Printer;
@@ -260,7 +260,7 @@ pub(crate) async fn export(
                 let interpreter_groups = if batch.is_some() {
                     DependencyGroupsWithDefaults::none()
                 } else {
-                    groups.with_defaults(default_dependency_groups(project.pyproject_toml())?)
+                    groups.with_defaults(project.default_groups()?)
                 };
                 let workspace_python = WorkspacePython::from_request(
                     python.as_deref().map(PythonRequest::parse),
@@ -334,21 +334,7 @@ pub(crate) async fn export(
         };
         let mut writers = Vec::with_capacity(batch.export.len());
         for entry in &batch.export {
-            let pyproject = if let [name] = entry.package.as_slice() {
-                project
-                    .workspace()
-                    .packages()
-                    .get(name)
-                    .ok_or_else(|| anyhow!("Package `{name}` not found in workspace"))?
-                    .pyproject_toml()
-            } else {
-                for name in &entry.package {
-                    if !project.workspace().packages().contains_key(name) {
-                        bail!("Package `{name}` not found in workspace");
-                    }
-                }
-                project.pyproject_toml()
-            };
+            let default_groups = project.default_groups_for_packages(&entry.package)?;
             let groups = DependencyGroups::from_args(
                 None,
                 entry.group.clone(),
@@ -357,7 +343,7 @@ pub(crate) async fn export(
                 entry.only_group.clone(),
                 entry.all_groups,
             )
-            .with_defaults(default_dependency_groups(pyproject)?);
+            .with_defaults(default_groups);
             let extras = ExtrasSpecification::from_args(
                 entry.extra.clone(),
                 entry.no_extra.clone(),
@@ -403,7 +389,7 @@ pub(crate) async fn export(
     }
 
     let default_groups = match &target {
-        ExportTarget::Project(project) => default_dependency_groups(project.pyproject_toml())?,
+        ExportTarget::Project(project) => project.default_groups()?,
         ExportTarget::Script(_) => DefaultGroups::default(),
     };
     let groups = groups.with_defaults(default_groups);
