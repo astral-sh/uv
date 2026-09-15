@@ -3,6 +3,18 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.12.15
+
+Released on 2026-09-15.
+
+### Performance
+
+- Batch HTTP cache writes in blocking tasks ([#21675](https://github.com/astral-sh/uv/pull/21675))
+
+### Bug fixes
+
+- Revert "Reject symlinked wheel installation destinations" ([#21699](https://github.com/astral-sh/uv/pull/21699))
+
 ## 0.12.14
 
 Released on 2026-09-15.
