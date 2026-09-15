@@ -1,7 +1,7 @@
-#[cfg(all(unix, feature = "test-python-managed"))]
-use std::{path::Path, process::Command};
+#[cfg(all(target_os = "macos", feature = "test-python-managed"))]
+use std::path::Path;
 
-#[cfg(all(unix, feature = "test-python-managed"))]
+#[cfg(all(target_os = "macos", feature = "test-python-managed"))]
 use anyhow::Context;
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
@@ -10,7 +10,7 @@ use assert_fs::{fixture::FileWriteStr, prelude::PathCreateDir};
 use indoc::indoc;
 
 use uv_platform::{Arch, Os};
-#[cfg(all(unix, feature = "test-python-managed"))]
+#[cfg(all(target_os = "macos", feature = "test-python-managed"))]
 use uv_python::{
     PythonRequest,
     downloads::{ManagedPythonDownloadList, PythonDownloadRequest},
@@ -25,8 +25,10 @@ use uv_test::{uv_snapshot, venv_bin_path};
 /// executable entries through the usual install command inside this test context.
 #[cfg(feature = "test-python-managed")]
 fn install_python_fixture(context: &TestContext, version: &str, options: &[&str]) -> Result<()> {
-    #[cfg(unix)]
-    prepare_managed_python(context, version)?;
+    #[cfg(target_os = "macos")]
+    if prepare_managed_python(context, version, options)? {
+        return Ok(());
+    }
 
     context
         .python_install()
@@ -39,8 +41,9 @@ fn install_python_fixture(context: &TestContext, version: &str, options: &[&str]
 
 /// Prepare one shared, relocatable source per requested version; each test gets an independent
 /// copy. Keep the cache bounded by replacing the source when the embedded download changes.
-#[cfg(all(unix, feature = "test-python-managed"))]
-fn prepare_managed_python(context: &TestContext, version: &str) -> Result<()> {
+/// Return whether this caller completed its installation while populating the cache.
+#[cfg(all(target_os = "macos", feature = "test-python-managed"))]
+fn prepare_managed_python(context: &TestContext, version: &str, options: &[&str]) -> Result<bool> {
     let request = PythonRequest::parse(version);
     let download_request = PythonDownloadRequest::from_request(&request)
         .with_context(|| format!("invalid managed Python fixture version: {version}"))?
@@ -51,9 +54,12 @@ fn prepare_managed_python(context: &TestContext, version: &str) -> Result<()> {
     let identity = format!("{key}\n{}", download.build().unwrap_or_default());
 
     let cache = TestContext::test_bucket_dir()
-        .join("managed-python-find-fixtures-v1")
+        .join("managed-python-find-fixtures-v2")
         .join(format!("{}-{}-{}", key.os(), key.arch(), key.libc()));
     fs_err::create_dir_all(&cache)?;
+    let managed = context.temp_dir.child("managed");
+    managed.create_dir_all()?;
+    let destination = managed.join(key.to_string());
 
     let slot = cache.join(version);
     let lock = fs_err::OpenOptions::new()
@@ -65,64 +71,49 @@ fn prepare_managed_python(context: &TestContext, version: &str) -> Result<()> {
 
     let cached_identity = fs_err::read_to_string(slot.join("identity")).ok();
     if cached_identity.as_deref() != Some(&identity) {
-        let staging = tempfile::tempdir_in(&cache)?;
-        let installations = staging.path().join("managed");
+        // The first caller keeps its original installation, and publishes an independent clone
+        // for later callers. Unsupported filesystems simply run the usual installation each time.
         context
             .python_install()
-            .arg(key.to_string())
-            .args(["--no-bin", "--no-registry"])
-            .env(EnvVars::UV_PYTHON_INSTALL_DIR, &installations)
+            .arg(version)
+            .args(options)
             .assert()
             .success();
 
-        let installed = installations.join(key.to_string());
+        let staging = tempfile::tempdir_in(&cache)?;
+        let source = staging.path().join("fixture");
+        if !clone_python_fixture(&destination, &source)? {
+            return Ok(true);
+        }
         // When absent from a distribution, uv creates `bin/python` as an absolute link. Each
         // private install recreates it so the alias can never point back to the fixture source.
-        fs_err::remove_file(installed.join("bin/python"))?;
-        fs_err::rename(&installed, staging.path().join("fixture"))?;
-        fs_err::remove_dir_all(&installations)?;
+        fs_err::remove_file(source.join("bin/python"))?;
         fs_err::write(staging.path().join("identity"), &identity)?;
 
         if slot.try_exists()? {
             fs_err::remove_dir_all(&slot)?;
         }
         fs_err::rename(staging.path(), &slot)?;
+        return Ok(true);
     }
 
-    let managed = context.temp_dir.child("managed");
-    managed.create_dir_all()?;
-    let destination = managed.join(key.to_string());
     if !destination.try_exists()? {
-        copy_managed_python_fixture(&slot.join("fixture"), &destination)?;
+        clone_python_fixture(&slot.join("fixture"), &destination)?;
     }
-    Ok(())
+    Ok(false)
 }
 
-/// Preserve symlinks and file permissions while copying, preferring independent reflinks.
-#[cfg(all(unix, feature = "test-python-managed"))]
-fn copy_managed_python_fixture(source: &Path, destination: &Path) -> Result<()> {
-    let mut command = Command::new("cp");
-    command.args(["-R", "-p", "-P"]);
-    #[cfg(target_os = "macos")]
-    command.arg("-c");
-    #[cfg(target_os = "linux")]
-    command.arg("--reflink=auto");
-    let output = command.arg(source).arg(destination).output()?;
-    if output.status.success() {
-        return Ok(());
+/// Clone a whole directory with independent files; remove any failed clone before falling back to
+/// the usual managed installation.
+#[cfg(all(target_os = "macos", feature = "test-python-managed"))]
+fn clone_python_fixture(source: &Path, destination: &Path) -> Result<bool> {
+    if reflink_copy::reflink(source, destination).is_ok() {
+        return Ok(true);
     }
-
-    // macOS requires the source and destination to share a filesystem for `-c`.
     if destination.try_exists()? {
         fs_err::remove_dir_all(destination)?;
     }
-    Command::new("cp")
-        .args(["-R", "-p", "-P"])
-        .arg(source)
-        .arg(destination)
-        .assert()
-        .success();
-    Ok(())
+    Ok(false)
 }
 
 /// Workspace discovery warnings should retain the parse diagnostic, unless warnings are disabled.
@@ -1235,7 +1226,7 @@ fn python_find_path() {
 
 #[test]
 #[cfg(feature = "test-python-managed")]
-fn python_find_freethreaded_313() -> Result<()> {
+fn python_find_freethreaded_313() {
     let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_python_sources()
@@ -1244,7 +1235,12 @@ fn python_find_freethreaded_313() -> Result<()> {
         .with_filtered_python_names()
         .with_filtered_exe_suffix();
 
-    install_python_fixture(&context, "3.13t", &["--preview"])?;
+    context
+        .python_install()
+        .arg("--preview")
+        .arg("3.13t")
+        .assert()
+        .success();
 
     // Request Python 3.13 (without opt-in)
     uv_snapshot!(context.filters(), context.python_find().arg("3.13"), @"
@@ -1259,8 +1255,6 @@ fn python_find_freethreaded_313() -> Result<()> {
     ----- stdout -----
     [TEMP_DIR]/managed/cpython-3.13+freethreaded-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
     ");
-
-    Ok(())
 }
 
 #[test]
@@ -1274,7 +1268,12 @@ fn python_find_freethreaded_314() -> Result<()> {
         .with_filtered_python_names()
         .with_filtered_exe_suffix();
 
-    install_python_fixture(&context, "3.14t", &["--preview"])?;
+    context
+        .python_install()
+        .arg("--preview")
+        .arg("3.14t")
+        .assert()
+        .success();
 
     // Request Python 3.14 (without opt-in)
     uv_snapshot!(context.filters(), context.python_find().arg("3.14"), @"
@@ -1329,8 +1328,11 @@ fn python_find_version_range_installation_key_order() -> Result<()> {
         .with_filtered_python_install_bin()
         .with_filtered_exe_suffix();
 
-    install_python_fixture(&context, "3.15t", &[])?;
-    install_python_fixture(&context, "3.15", &[])?;
+    context
+        .python_install()
+        .args(["3.15t", "3.15"])
+        .assert()
+        .success();
 
     // Executables and their canonical alias must belong to this private installation.
     let python = fs_err::canonicalize(context.bin_dir.join("python3.15"))?;
@@ -1472,7 +1474,7 @@ fn python_find_prerelease_version_specifiers() -> Result<()> {
         .with_filtered_python_names()
         .with_filtered_exe_suffix();
 
-    install_python_fixture(&context, "3.14.0rc2", &[])?;
+    context.python_install().arg("3.14.0rc2").assert().success();
     install_python_fixture(&context, "3.14.0rc3", &[])?;
 
     // `>=3.14` should allow pre-release versions

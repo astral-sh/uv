@@ -5900,6 +5900,7 @@ dependencies = [
  "owo-colors",
  "petgraph",
  "predicates",
+ "reflink-copy",
  "regex",
  "reqwest",
  "rkyv",
