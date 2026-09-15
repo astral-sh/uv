@@ -67,14 +67,13 @@ fn write_lock(writer: &mut LockWriter, lock: &Lock) -> Result<(), WriteError> {
     }
 
     if !lock.required_environments.is_empty() {
-        let markers = lock
+        let environments = lock
             .required_environments
             .iter()
             .copied()
-            .map(|marker| SimplifiedMarkerTree::new(&lock.requires_python, marker))
-            .filter_map(SimplifiedMarkerTree::try_to_string);
-        writer.key_multiline_array("required-markers", markers, |writer, marker| {
-            writer.value(&marker)
+            .filter_map(|environment| lock.simplify_required_environment(environment));
+        writer.key_multiline_array("required-markers", environments, |writer, environment| {
+            writer.value(serialize_value(&environment)?)
         })?;
     }
 
@@ -155,7 +154,6 @@ fn write_options(writer: &mut LockWriter, options: &ResolverOptions) -> Result<(
     if options.fork_strategy != ForkStrategy::default() {
         writer.key_value("fork-strategy", options.fork_strategy.to_string())?;
     }
-
     let exclude_newer = &options.exclude_newer;
     if let Some(global) = &exclude_newer.global {
         if let Some(span) = global.span() {

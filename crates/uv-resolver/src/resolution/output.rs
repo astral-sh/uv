@@ -168,6 +168,7 @@ impl ResolverOutput {
                     package,
                     version,
                     project == Some(&package.name) || workspace_members.contains(&package.name),
+                    &options,
                 )?;
             }
         }
@@ -338,6 +339,7 @@ impl ResolverOutput {
         package: &'a ResolutionPackage,
         version: &'a Version,
         is_workspace_member: bool,
+        options: &Options,
     ) -> Result<(), ResolveError> {
         let ResolutionPackage {
             name,
@@ -358,6 +360,7 @@ impl ResolverOutput {
             hasher,
             in_memory,
             git,
+            options,
         )?;
 
         // We normally write dependency paths relative to the lockfile. For the current project and
@@ -428,11 +431,18 @@ impl ResolverOutput {
         hasher: &HashStrategy,
         in_memory: &InMemoryIndex,
         git: &GitResolver,
+        options: &Options,
     ) -> Result<(ResolvedDist, HashDigests, Option<Metadata>), ResolveError> {
         Ok(if let Some(url) = url {
             // Create the locked distribution and recover the metadata using the original URL that
             // was requested during resolution.
-            let dist = Dist::from_url(name.clone(), url_to_precise(url.clone(), git))?;
+            let dist = ResolvedDist::Installable {
+                dist: Arc::new(Dist::from_url(
+                    name.clone(),
+                    url_to_precise(url.clone(), git),
+                )?),
+                version: Some(version.clone()),
+            };
             let metadata_id = Dist::from_url(name.clone(), url.clone())?.distribution_id();
 
             // Extract the hashes.
@@ -463,14 +473,7 @@ impl ResolverOutput {
                 archive.metadata.clone()
             };
 
-            (
-                ResolvedDist::Installable {
-                    dist: Arc::new(dist),
-                    version: Some(version.clone()),
-                },
-                hashes,
-                Some(metadata),
-            )
+            (dist, hashes, Some(metadata))
         } else {
             let (dist, metadata_id) = pins
                 .dist_and_id(name, version)
@@ -506,6 +509,7 @@ impl ResolverOutput {
                 hasher,
                 in_memory,
             );
+            let hashes = Self::filter_hashes(&dist, hashes, in_memory, options);
 
             // Extract the metadata.
             let metadata = {
@@ -525,8 +529,7 @@ impl ResolverOutput {
         })
     }
 
-    /// Identify the hashes for a concrete distribution, preserving any hashes that were provided
-    /// by the lockfile.
+    /// Select hashes for a distribution, preferring hashes from the lockfile.
     fn get_hashes(
         name: &PackageName,
         index: Option<&IndexUrl>,
@@ -558,7 +561,7 @@ impl ResolverOutput {
 
         // 3. Look for hashes computed for the specific wheel or source distribution.
         if let Some(metadata_response) = in_memory.distributions().get(metadata_id) {
-            if let MetadataResponse::Found(ref archive) = *metadata_response {
+            if let MetadataResponse::Found(archive) = &*metadata_response {
                 let mut digests = archive.hashes.clone();
                 digests.sort_unstable();
                 if !digests.is_empty() {
@@ -616,6 +619,62 @@ impl ResolverOutput {
         }
 
         HashDigests::empty()
+    }
+
+    /// Restrict registry hashes to artifacts allowed by the libc policy and build options.
+    /// If none remain, use the hashes of the allowed artifacts.
+    fn filter_hashes(
+        dist: &ResolvedDist,
+        hashes: HashDigests,
+        in_memory: &InMemoryIndex,
+        options: &Options,
+    ) -> HashDigests {
+        if !options.artifact_environments.has_libc_constraints() {
+            return hashes;
+        }
+        let ResolvedDist::Installable { dist, .. } = dist else {
+            return hashes;
+        };
+        let (wheels, sdist) = match dist.as_ref() {
+            Dist::Built(BuiltDist::Registry(dist)) => (&dist.wheels, dist.sdist.as_ref()),
+            Dist::Source(SourceDist::Registry(dist)) => (&dist.wheels, Some(dist)),
+            Dist::Built(BuiltDist::DirectUrl(_) | BuiltDist::Path(_) | BuiltDist::GitPath(_))
+            | Dist::Source(
+                SourceDist::DirectUrl(_)
+                | SourceDist::GitDirectory(_)
+                | SourceDist::GitPath(_)
+                | SourceDist::Path(_)
+                | SourceDist::Directory(_),
+            ) => return hashes,
+        };
+        let mut allowed_hashes = wheels
+            .iter()
+            .filter(|_| !options.build_options.no_binary_package(dist.name()))
+            .flat_map(|wheel| wheel.file.hashes.iter())
+            .chain(
+                sdist
+                    .filter(|_| !options.build_options.no_build_package(dist.name()))
+                    .into_iter()
+                    .flat_map(|source| source.file.hashes.iter()),
+            )
+            .collect::<FxHashSet<_>>();
+        // Flat indexes may omit hashes. Reuse hashes computed for the installation artifact,
+        // not a different wheel used only to read metadata.
+        let metadata_response = in_memory.distributions().get(&dist.distribution_id());
+        if let Some(response) = &metadata_response
+            && let MetadataResponse::Found(archive) = &**response
+        {
+            allowed_hashes.extend(archive.hashes.iter());
+        }
+        let mut hashes = hashes
+            .into_iter()
+            .filter(|hash| allowed_hashes.contains(hash))
+            .collect::<Vec<_>>();
+        if hashes.is_empty() {
+            hashes.extend(allowed_hashes.into_iter().cloned());
+            hashes.sort_unstable();
+        }
+        HashDigests::from(hashes)
     }
 
     /// Returns an iterator over the distinct packages in the graph.
