@@ -47,7 +47,7 @@ impl FlatIndex {
 
     /// Collect all files from a `--find-links` target into a [`FlatIndex`].
     #[instrument(skip_all)]
-    pub fn from_entries(entries: FlatIndexEntries) -> Self {
+    pub(crate) fn from_entries(entries: FlatIndexEntries) -> Self {
         let mut index = FxHashMap::<PackageName, Vec<FlatIndexEntry>>::default();
         let (entries, offline) = entries.into_parts();
 
