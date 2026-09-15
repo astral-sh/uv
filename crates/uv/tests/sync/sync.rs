@@ -19382,8 +19382,8 @@ fn project_build_hashes_add() -> Result<()> {
     ----- stderr -----
     warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
     error: Failed to resolve requirements from `build-system.requires`
-      Caused by: No solution found when resolving: `build-dependency==1.0.0`
-      Caused by: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `build-dependency`
+      cause: No solution found when resolving: `build-dependency==1.0.0`
+      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `build-dependency`
     ");
     child
         .temp_dir
@@ -19421,10 +19421,10 @@ fn project_build_hashes_missing() -> Result<()> {
     ----- stderr -----
     warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
     Resolved 1 package in [TIME]
-      × Failed to build `project @ file://[TEMP_DIR]/`
-      ├─▶ Failed to resolve requirements from `build-system.requires`
-      ├─▶ No solution found when resolving: `build-dependency==1.0.0`
-      ╰─▶ In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `build-dependency`
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Failed to resolve requirements from `build-system.requires`
+      cause: No solution found when resolving: `build-dependency==1.0.0`
+      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `build-dependency`
     ");
     Ok(())
 }
@@ -19449,10 +19449,10 @@ fn project_build_hashes_lock_dynamic_metadata() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
-      × Failed to build `project @ file://[TEMP_DIR]/`
-      ├─▶ Failed to resolve requirements from `build-system.requires`
-      ├─▶ No solution found when resolving: `build-dependency==1.0.0`
-      ╰─▶ In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `build-dependency`
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Failed to resolve requirements from `build-system.requires`
+      cause: No solution found when resolving: `build-dependency==1.0.0`
+      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `build-dependency`
     ");
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 0 (success)
@@ -19465,9 +19465,9 @@ fn project_build_hashes_lock_dynamic_metadata() -> Result<()> {
     ----- stderr -----
     warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
     error: Failed to generate package metadata for `project @ editable+.`
-      Caused by: Failed to resolve requirements from `build-system.requires`
-      Caused by: No solution found when resolving: `build-dependency==1.0.0`
-      Caused by: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `build-dependency`
+      cause: Failed to resolve requirements from `build-system.requires`
+      cause: No solution found when resolving: `build-dependency==1.0.0`
+      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `build-dependency`
     ");
     context
         .temp_dir
@@ -19615,10 +19615,10 @@ fn project_build_hashes_run_with() -> Result<()> {
     Resolved 1 package in [TIME]
     Checked in [TIME]
     Resolved 1 package in [TIME]
-      × Failed to build `project @ file://[TEMP_DIR]/package`
-      ├─▶ Failed to resolve requirements from `build-system.requires`
-      ├─▶ No solution found when resolving: `build-dependency==1.0.0`
-      ╰─▶ In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `build-dependency`
+    error: Failed to build `project @ file://[TEMP_DIR]/package`
+      cause: Failed to resolve requirements from `build-system.requires`
+      cause: No solution found when resolving: `build-dependency==1.0.0`
+      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `build-dependency`
     ");
 
     pyproject.write_str(&formatdoc! {r#"
@@ -19662,10 +19662,10 @@ fn project_build_hashes_workspace_root_policy() -> Result<()> {
     ----- stderr -----
     warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
     Resolved 2 packages in [TIME]
-      × Failed to build `project @ file://[TEMP_DIR]/`
-      ├─▶ Failed to resolve requirements from `build-system.requires`
-      ├─▶ No solution found when resolving: `build-dependency==1.0.0`
-      ╰─▶ In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `build-dependency`
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Failed to resolve requirements from `build-system.requires`
+      cause: No solution found when resolving: `build-dependency==1.0.0`
+      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `build-dependency`
     ");
     Ok(())
 }
@@ -19687,6 +19687,7 @@ fn project_build_hashes_untrusted_metadata() -> Result<()> {
         &BTreeMap::new(),
         None,
         "py3-none-any",
+        &[],
     );
     let hash = hex::encode(Sha256::digest(&wheel));
     context
@@ -19712,11 +19713,11 @@ fn project_build_hashes_untrusted_metadata() -> Result<()> {
     ----- stderr -----
     warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
     Resolved 1 package in [TIME]
-      × Failed to build `project @ file://[TEMP_DIR]/`
-      ├─▶ Failed to resolve requirements from `build-system.requires`
-      ├─▶ No solution found when resolving: `build-dependency @ file://[TEMP_DIR]/wheels/build_dependency-1.0.0-py3-none-any.whl#sha256=[PARENT_HASH]`
-      ├─▶ Failed to resolve dependencies for package `build-dependency==1.0.0`
-      ╰─▶ In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `dynamic-dependency`
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Failed to resolve requirements from `build-system.requires`
+      cause: No solution found when resolving: `build-dependency @ file://[TEMP_DIR]/wheels/build_dependency-1.0.0-py3-none-any.whl#sha256=[PARENT_HASH]`
+      cause: Failed to resolve dependencies for package `build-dependency==1.0.0`
+      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `dynamic-dependency`
     ");
     uv_snapshot!(context.filters(), context.sync().arg("--no-editable"), @"
     exit_code: 0 (success)
@@ -19754,16 +19755,16 @@ fn project_build_hashes_script() -> Result<()> {
     ----- stderr -----
     warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
     Resolved 1 package in [TIME]
-      × Failed to build `project @ file://[TEMP_DIR]/`
-      ├─▶ Failed to install requirements from `build-system.requires`
-      ├─▶ Failed to download `build-dependency==1.0.0`
-      ╰─▶ Hash mismatch for `build-dependency==1.0.0`
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Failed to install requirements from `build-system.requires`
+      cause: Failed to download `build-dependency==1.0.0`
+      cause: Hash mismatch for `build-dependency==1.0.0`
 
-          Expected:
-            sha256:0000000000000000000000000000000000000000000000000000000000000000
+             Expected:
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
 
-          Computed:
-            sha256:[BUILD_HASH]
+             Computed:
+               sha256:[BUILD_HASH]
     ");
 
     script.write_str(&context.read("script.py").replace(&"0".repeat(64), &hash))?;
