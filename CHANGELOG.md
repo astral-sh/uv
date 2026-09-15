@@ -9,11 +9,12 @@ Released on 2026-09-15.
 
 ### Performance
 
-- Batch HTTP cache writes in blocking tasks ([#21675](https://github.com/astral-sh/uv/pull/21675))
+- Speed up cold-cache resolution and HTTP cache revalidation by batching cache writes ([#21675](https://github.com/astral-sh/uv/pull/21675))
 
 ### Bug fixes
 
-- Revert "Reject symlinked wheel installation destinations" ([#21699](https://github.com/astral-sh/uv/pull/21699))
+- Allow wheel data files to be installed into symlinked destination directories, including man pages in official Python Docker images ([#21699](https://github.com/astral-sh/uv/pull/21699))
+- Allow `uv pip install --target=.` to install packages into the current directory ([#21699](https://github.com/astral-sh/uv/pull/21699))
 
 ## 0.12.14
 
