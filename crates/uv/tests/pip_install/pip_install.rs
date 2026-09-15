@@ -441,6 +441,7 @@ fn install_target_current_directory() {
      + iniconfig==2.0.0
     ");
 }
+
 #[test]
 fn missing_pyproject_toml() {
     let context = uv_test::test_context!("3.12");
