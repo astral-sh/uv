@@ -22564,6 +22564,116 @@ fn lock_metadata_free_shared_dynamic_direct_source() -> Result<()> {
     Ok(())
 }
 
+/// A version-scoped exclusion must not authorize a dynamic package's direct source.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_metadata_free_dynamic_version_excluded_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    let original_pyproject = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["provider", "leaf"]
+
+        [tool.uv]
+        exclude-dependencies = [
+            { package = { name = "provider", version = "1.0.0" }, dependencies = ["leaf"] },
+        ]
+
+        [tool.uv.sources]
+        provider = { path = "provider" }
+        leaf = { path = "leaf" }
+        "#};
+    pyproject_toml.write_str(original_pyproject)?;
+    context
+        .temp_dir
+        .child("provider/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "provider"
+        requires-python = ">=3.12"
+        dependencies = ["leaf"]
+        dynamic = ["version"]
+
+        [tool.uv.sources]
+        leaf = { path = "../leaf" }
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "backend"
+        "#})?;
+    context
+        .temp_dir
+        .child("provider/backend.py")
+        .write_str(indoc! {r#"
+        import pathlib
+
+        def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
+            dist_info = pathlib.Path(metadata_directory, "provider-1.0.0.dist-info")
+            dist_info.mkdir()
+            dist_info.joinpath("METADATA").write_text(
+                "Metadata-Version: 2.1\n"
+                "Name: provider\n"
+                "Version: 1.0.0\n"
+                "Requires-Python: >=3.12\n"
+                "Requires-Dist: leaf\n"
+            )
+            return dist_info.name
+        "#})?;
+    context
+        .temp_dir
+        .child("leaf/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "leaf"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--offline")
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    pyproject_toml.write_str(&original_pyproject.replace("leaf = { path = \"leaf\" }\n", ""))?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because leaf was not found in the provided package locations and your project depends on leaf, we can conclude that your project's requirements are unsatisfiable.
+
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+    ");
+
+    Ok(())
+}
+
 /// An overridden self-reference cannot authorize sources from its unrequested extra.
 #[cfg(feature = "test-universal")]
 #[test]

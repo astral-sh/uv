@@ -4763,6 +4763,7 @@ impl Lock {
     fn add_source_requirements(
         &self,
         package: &Package,
+        package_version: Option<&Version>,
         requirements: &[Requirement],
         group: Option<&GroupName>,
         package_markers: &FxHashMap<(&PackageId, Option<&ExtraName>), MarkerTree>,
@@ -4775,11 +4776,7 @@ impl Lock {
         let Some(package_marker) = package_markers.get(&(&package.id, None)).copied() else {
             return Ok(());
         };
-        let package_context = package
-            .id
-            .version
-            .as_ref()
-            .map(|version| (&package.id.name, version));
+        let package_context = package_version.map(|version| (&package.id.name, version));
         // Apply policies before recursive self-requirements can activate another extra.
         let requirements = dependency_overrides
             .apply_for_package(
@@ -4855,6 +4852,11 @@ impl Lock {
         dependency_overrides: &Overrides,
         dependency_excludes: &Excludes,
         root: &Path,
+        tags: &Tags,
+        markers: &MarkerEnvironment,
+        build_options: &BuildOptions,
+        hasher: &HashStrategy,
+        index: &InMemoryIndex,
         database: &DistributionDatabase<'_, Context>,
         source_tree_metadata: &mut FxHashMap<PackageId, Option<SourceTreeRequiresDist>>,
     ) -> Result<DependencySourceChanges<'lock>, LockError> {
@@ -4878,20 +4880,51 @@ impl Lock {
 
             let configured_metadata =
                 dependency_metadata.get(&package.id.name, package.id.version.as_ref());
-            // Refresh source trees only after their exact path becomes reachable. Archives,
-            // backend-only trees, and remote providers remain opaque until a refreshed
-            // declaration selects their exact source in the second phase.
+            // Refresh source trees only after their exact path becomes reachable. Scoped rules
+            // may also require their built version. Other backend-only trees, archives, and remote
+            // providers wait for a refreshed declaration to select their source in the second phase.
             let refreshed_source_tree = if let Some(source_tree) =
                 package.id.source.as_source_tree()
             {
-                Self::source_tree_requires_dist_cached(
+                let metadata = Self::source_tree_requires_dist_cached(
                     source_tree,
                     root,
                     package,
                     database,
                     source_tree_metadata,
                 )
-                .await?
+                .await?;
+                if configured_metadata.is_none()
+                    && package.id.version.is_none()
+                    && metadata
+                        .as_ref()
+                        .is_none_or(|metadata| metadata.version.is_none())
+                    && (dependency_overrides.has_scoped_package(&package.id.name)
+                        || dependency_excludes.has_scoped_package(&package.id.name))
+                {
+                    // Scoped rules need the resolved version before this authorized tree can
+                    // expose any dependency sources.
+                    let metadata = Self::package_metadata(
+                        package,
+                        root,
+                        tags,
+                        markers,
+                        build_options,
+                        hasher,
+                        index,
+                        database,
+                    )
+                    .await?;
+                    let metadata = SourceTreeRequiresDist {
+                        version: Some(metadata.version.clone()),
+                        requires_python: metadata.requires_python.clone(),
+                        metadata: metadata.into(),
+                    };
+                    source_tree_metadata.insert(package.id.clone(), Some(metadata.clone()));
+                    Some(metadata)
+                } else {
+                    metadata
+                }
             } else {
                 let is_opaque_source = matches!(
                     package.id.source,
@@ -5260,6 +5293,11 @@ impl Lock {
             dependency_overrides,
             dependency_excludes,
             root,
+            tags,
+            markers,
+            build_options,
+            hasher,
+            index,
             database,
             source_tree_metadata,
         )
@@ -5380,6 +5418,11 @@ impl Lock {
                         dependency_overrides,
                         dependency_excludes,
                         root,
+                        tags,
+                        markers,
+                        build_options,
+                        hasher,
+                        index,
                         database,
                         source_tree_metadata,
                     )
@@ -5426,10 +5469,11 @@ impl Lock {
             if !visited_packages.insert(&package.id) {
                 continue;
             }
-            let (direct_requirements, dependency_groups) = if let Some(metadata) =
+            let (package_version, direct_requirements, dependency_groups) = if let Some(metadata) =
                 dependency_metadata.get(&package.id.name, package.id.version.as_ref())
             {
                 (
+                    Some(metadata.version),
                     Box::into_iter(metadata.requires_dist)
                         .map(Requirement::from)
                         .collect(),
@@ -5439,6 +5483,7 @@ impl Lock {
                 // Remote artifacts and Git checkouts may be unavailable during an offline,
                 // cache-free check. Their declaration metadata is retained in the lock.
                 (
+                    package.id.version.clone(),
                     package.metadata.requires_dist.iter().cloned().collect(),
                     package
                         .metadata
@@ -5451,17 +5496,22 @@ impl Lock {
                         .collect(),
                 )
             } else if let Some(source_tree) = package.id.source.as_source_tree()
-                && let Some(SourceTreeRequiresDist { metadata, .. }) =
-                    Self::source_tree_requires_dist_cached(
-                        source_tree,
-                        root,
-                        package,
-                        database,
-                        source_tree_metadata,
-                    )
-                    .await?
+                && let Some(SourceTreeRequiresDist {
+                    version, metadata, ..
+                }) = Self::source_tree_requires_dist_cached(
+                    source_tree,
+                    root,
+                    package,
+                    database,
+                    source_tree_metadata,
+                )
+                .await?
             {
-                (metadata.requires_dist, metadata.dependency_groups)
+                (
+                    version.or_else(|| package.id.version.clone()),
+                    metadata.requires_dist,
+                    metadata.dependency_groups,
+                )
             } else if matches!(package.id.source, Source::Path(..))
                 || package.id.source.is_source_tree()
             {
@@ -5478,7 +5528,11 @@ impl Lock {
                     database,
                 )
                 .await?;
-                (metadata.requires_dist, metadata.dependency_groups)
+                (
+                    Some(metadata.version),
+                    metadata.requires_dist,
+                    metadata.dependency_groups,
+                )
             } else {
                 continue;
             };
@@ -5486,6 +5540,7 @@ impl Lock {
             let pending_sources_start = pending_sources.len();
             self.add_source_requirements(
                 package,
+                package_version.as_ref(),
                 &direct_requirements,
                 None,
                 &reachability.package_markers,
@@ -5500,6 +5555,7 @@ impl Lock {
             }) {
                 self.add_source_requirements(
                     package,
+                    package_version.as_ref(),
                     &requirements,
                     Some(&group),
                     &reachability.package_markers,
