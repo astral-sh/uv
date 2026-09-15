@@ -419,6 +419,29 @@ fn compile_bytecode_for_relative_install_root() {
     assert_eq!(compiled, 5);
 }
 
+/// Install into the current directory via `--target`.
+#[test]
+fn install_target_current_directory() {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix();
+
+    // A target of `.` installs into the current directory. See astral-sh/uv#21694.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("iniconfig==2.0.0")
+        .arg("--target")
+        .arg("."), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+}
+
 #[test]
 fn missing_pyproject_toml() {
     let context = uv_test::test_context!("3.12");
@@ -14443,10 +14466,10 @@ fn reject_symlinked_wheel_data_package_directory() -> Result<()> {
     Ok(())
 }
 
-/// Wheel data installation currently rejects a symlink that remains within the scheme root.
+/// Wheel data can follow a symlink that remains within the scheme root.
 #[cfg(unix)]
 #[test]
-fn reject_in_prefix_symlinked_wheel_data_directory() -> Result<()> {
+fn install_in_prefix_symlinked_wheel_data_directory() -> Result<()> {
     let context = uv_test::test_context!("3.11");
     let wheel = context.temp_dir.join("foo-0.1.0-py3-none-any.whl");
     let data_path = "foo-0.1.0.data/data/man/man1/foo.1";
@@ -14478,24 +14501,23 @@ fn reject_in_prefix_symlinked_wheel_data_directory() -> Result<()> {
     fs_err::create_dir_all(context.venv.join("share/man"))?;
     symlink("share/man", context.venv.join("man"))?;
 
-    // This link remains within the installation prefix, so rejecting the wheel is undesirable.
-    // See astral-sh/uv#21692.
+    // Official Python images use an in-prefix symlink for man pages. See astral-sh/uv#21692.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--link-mode")
         .arg("copy")
         .arg(&wheel), @"
-    exit_code: 2 (failure)
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
-    error: Failed to install: foo-0.1.0-py3-none-any.whl (foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl))
-      cause: The wheel is invalid: Cannot install into symlinked directory: [VENV]/man
+    Installed 1 package in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl)
     ");
 
     context
         .venv
         .child("share/man/man1/foo.1")
-        .assert(predicate::path::missing());
+        .assert("foo manual\n");
 
     Ok(())
 }

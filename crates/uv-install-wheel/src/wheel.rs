@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::fmt::Display;
 use std::io;
 use std::io::{BufReader, Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::{Path, PathBuf, absolute};
 
 use data_encoding::BASE64URL_NOPAD;
 use fs_err as fs;
@@ -204,8 +204,11 @@ impl ValidatedWheelDestination {
         Self::new(source, root, Some(relative))
     }
 
-    /// Check that merging a wheel subtree into its destination cannot follow a directory symlink.
+    /// Check that merging a wheel subtree cannot follow a directory symlink outside its root.
     fn new(source: &Path, root: &Path, relative: Option<&Path>) -> Result<Self, Error> {
+        // A relative root such as `.` must have a non-empty base for containment checks.
+        let root = absolute(root)?;
+        let root = root.as_path();
         let (destination, min_depth) = match relative {
             None => (root.to_path_buf(), 1),
             Some(relative) => {
@@ -220,9 +223,8 @@ impl ValidatedWheelDestination {
         };
 
         if source.is_dir() {
-            // Merging through a pre-existing directory symlink would write wheel files outside the
-            // environment. The installation root is trusted, but any mapped directory beneath it
-            // must be checked before linking or moving any files.
+            // Directory symlinks are allowed when they resolve within the trusted installation
+            // root. Check mapped directories before linking or moving any files.
             let mut entries = WalkDir::new(source).min_depth(min_depth).into_iter();
             while let Some(entry) = entries.next() {
                 let entry = entry?;
@@ -239,10 +241,12 @@ impl ValidatedWheelDestination {
                 };
                 match fs::symlink_metadata(&target) {
                     Ok(metadata) if metadata.file_type().is_symlink() => {
-                        return Err(Error::InvalidWheel(format!(
-                            "Cannot install into symlinked directory: {}",
-                            target.simplified_display()
-                        )));
+                        if !fs::canonicalize(&target)?.starts_with(fs::canonicalize(root)?) {
+                            return Err(Error::InvalidWheel(format!(
+                                "Cannot install into symlinked directory: {}",
+                                target.simplified_display()
+                            )));
+                        }
                     }
                     Ok(_) => {}
                     Err(err) if err.kind() == io::ErrorKind::NotFound => {
