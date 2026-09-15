@@ -1,7 +1,8 @@
 use itertools::Itertools as _;
 use owo_colors::OwoColorize;
+use std::collections::BTreeSet;
 use std::fmt::Write as _;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::commands::ExitStatus;
 use crate::commands::UvError;
@@ -14,11 +15,12 @@ use crate::commands::project::{
     ProjectEnvironmentPolicy, ProjectInterpreter, ScriptInterpreter, UniversalState,
     WorkspacePython,
 };
+use crate::commands::pylock::read_pylock_toml;
 use crate::commands::reporters::AuditReporter;
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use rustc_hash::FxHashSet;
 use tracing::trace;
 use uv_audit::{
@@ -30,15 +32,17 @@ use uv_cli::AuditOutputFormat;
 use uv_client::{BaseClientBuilder, CachedClient, RegistryClientBuilder};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroups, DependencyGroupsWithDefaults,
-    ExtrasSpecification, ExtrasSpecificationWithDefaults, TargetTriple,
+    ExtrasSpecification, ExtrasSpecificationWithDefaults, KeyringProviderType, TargetTriple,
 };
-use uv_distribution_types::{IndexCapabilities, IndexUrl};
-use uv_fs::{CWD, find_git_repository_root, relative_to};
-use uv_normalize::{DefaultExtras, DefaultGroups};
+use uv_distribution_types::{IndexCapabilities, IndexLocations, IndexUrl};
+use uv_fs::{CWD, Simplified, find_git_repository_root, relative_to};
+use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
+use uv_pep508::VerbatimUrl;
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{ConfigDiscovery, PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
-use uv_resolver::Lock;
+use uv_requirements::RequirementsSource;
+use uv_resolver::{Lock, PylockToml};
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user;
@@ -49,6 +53,7 @@ pub(crate) mod sarif;
 
 pub(crate) async fn audit(
     project_dir: &Path,
+    requirements: Option<PathBuf>,
     extras: ExtrasSpecification,
     groups: DependencyGroups,
     lock_check: LockCheck,
@@ -89,6 +94,104 @@ pub(crate) async fn audit(
         );
     }
 
+    let (dependencies, artifact_uri) = if let Some(requirements) = requirements {
+        let RequirementsSource::PylockToml(pylock) =
+            RequirementsSource::from_requirements_file(requirements.clone())?
+        else {
+            bail!(
+                "Only `pylock.toml` files are supported by `uv audit --requirements` (found: `{}`)",
+                requirements.user_display()
+            );
+        };
+
+        if !preview.is_enabled(PreviewFeature::Pylock) {
+            warn_user!(
+                "Auditing `pylock.toml` files is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+                PreviewFeature::Pylock
+            );
+        }
+
+        let (_, lock) = read_pylock_toml(&pylock, &client_builder).await?;
+        let artifact_uri = if pylock.starts_with("http://") || pylock.starts_with("https://") {
+            DisplaySafeUrl::parse(&pylock.to_string_lossy())?.to_string()
+        } else {
+            artifact_uri(&std::path::absolute(pylock)?)
+        };
+        (AuditDependencies::from_pylock(&lock), artifact_uri)
+    } else {
+        project_dependencies(
+            project_dir,
+            extras,
+            groups,
+            lock_check,
+            frozen,
+            script,
+            python_version,
+            python_platform,
+            install_mirrors,
+            &settings,
+            &client_builder,
+            python_preference,
+            python_downloads,
+            &concurrency,
+            config_discovery,
+            &cache,
+            workspace_cache,
+            printer,
+            preview,
+        )
+        .await?
+    };
+
+    let outcome = audit_dependencies(
+        &dependencies,
+        &settings.index_locations,
+        settings.keyring_provider,
+        client_builder,
+        concurrency,
+        &cache,
+        printer,
+        service,
+        service_url,
+        &ignore,
+        &ignore_until_fixed,
+    )
+    .await?;
+
+    warn_unmatched_ignores(&ignore, &ignore_until_fixed, &outcome.matched_ignores);
+
+    let display = AuditResults {
+        printer,
+        n_packages: outcome.n_packages,
+        output_format,
+        findings: outcome.findings,
+        artifact_uri,
+    };
+    display.render()
+}
+
+/// Resolve the dependencies and artifact location of a project or PEP 723 script.
+async fn project_dependencies(
+    project_dir: &Path,
+    extras: ExtrasSpecification,
+    groups: DependencyGroups,
+    lock_check: LockCheck,
+    frozen: Option<FrozenSource>,
+    script: Option<Pep723Script>,
+    python_version: Option<PythonVersion>,
+    python_platform: Option<TargetTriple>,
+    install_mirrors: PythonInstallMirrors,
+    settings: &ResolverSettings,
+    client_builder: &BaseClientBuilder<'_>,
+    python_preference: PythonPreference,
+    python_downloads: PythonDownloads,
+    concurrency: &Concurrency,
+    config_discovery: ConfigDiscovery,
+    cache: &Cache,
+    workspace_cache: &WorkspaceCache,
+    printer: Printer,
+    preview: Preview,
+) -> Result<(AuditDependencies, String)> {
     let workspace;
     let target = if let Some(script) = script.as_ref() {
         LockTarget::Script(script)
@@ -96,7 +199,7 @@ pub(crate) async fn audit(
         workspace = Workspace::discover(
             project_dir,
             &DiscoveryOptions::default(),
-            &cache,
+            cache,
             workspace_cache,
         )
         .await?;
@@ -128,14 +231,14 @@ pub(crate) async fn audit(
             LockTarget::Script(script) => ScriptInterpreter::discover(
                 script.into(),
                 None,
-                &client_builder,
+                client_builder,
                 python_preference,
                 python_downloads,
                 &install_mirrors,
                 false,
                 config_discovery,
                 ActiveEnvironment::Ignore,
-                &cache,
+                cache,
                 printer,
             )
             .await?
@@ -153,13 +256,13 @@ pub(crate) async fn audit(
                     workspace,
                     &groups,
                     workspace_python,
-                    &client_builder,
+                    client_builder,
                     python_preference,
                     python_downloads,
                     &install_mirrors,
                     ProjectEnvironmentPolicy::Optional,
                     ActiveEnvironment::Ignore,
-                    &cache,
+                    cache,
                     printer,
                 )
                 .await?
@@ -187,12 +290,12 @@ pub(crate) async fn audit(
     let lock = match Box::pin(
         LockOperation::new(
             mode,
-            &settings,
-            &client_builder,
+            settings,
+            client_builder,
             &state,
             Box::new(DefaultResolveLogger),
-            &concurrency,
-            &cache,
+            concurrency,
+            cache,
             workspace_cache,
             printer,
             preview,
@@ -214,50 +317,72 @@ pub(crate) async fn audit(
         )
     });
 
-    let outcome = audit_lock(
-        &lock,
-        target.install_path(),
-        &extras,
-        &groups,
-        &settings,
-        client_builder,
-        concurrency,
-        &cache,
-        printer,
-        service,
-        service_url,
-        &ignore,
-        &ignore_until_fixed,
-    )
-    .await?;
-
-    warn_unmatched_ignores(
-        &ignore,
-        &ignore_until_fixed,
-        &outcome.matched_ignores,
-        "the project",
-    );
-
-    let display = AuditResults {
-        printer,
-        n_packages: outcome.n_packages,
-        output_format,
-        findings: outcome.findings,
-        artifact_uri: {
-            let lock_path = target.lock_path();
-            // If we've run `uv audit --script`, we might only have an in-memory lockfile.
-            // In that case, use the script's own path as the artifact path.
-            let artifact_path = if let LockTarget::Script(script) = target
-                && !lock_path.is_file()
-            {
-                script.path.as_path()
-            } else {
-                lock_path.as_path()
-            };
-            artifact_uri(artifact_path)
-        },
+    let lock_path = target.lock_path();
+    // If we've run `uv audit --script`, we might only have an in-memory lockfile.
+    // In that case, use the script's own path as the artifact path.
+    let artifact_path = if let LockTarget::Script(script) = target
+        && !lock_path.is_file()
+    {
+        script.path.as_path()
+    } else {
+        lock_path.as_path()
     };
-    display.render()
+    Ok((
+        AuditDependencies::from_lock(&lock, target.install_path(), &extras, &groups)?,
+        artifact_uri(artifact_path),
+    ))
+}
+
+/// Resolved packages and registry projects to query, independent of the lockfile format.
+struct AuditDependencies {
+    packages: Vec<Dependency>,
+    projects: Vec<(PackageName, IndexUrl)>,
+}
+
+impl AuditDependencies {
+    fn from_lock(
+        lock: &Lock,
+        root: &Path,
+        extras: &ExtrasSpecificationWithDefaults,
+        groups: &DependencyGroupsWithDefaults,
+    ) -> Result<Self> {
+        let auditable = lock.auditable(extras, groups, |_| true);
+        let projects = auditable
+            .projects(root)?
+            .into_iter()
+            .map(|(name, index)| (name.clone(), index))
+            .collect();
+        let packages = auditable
+            .packages()
+            .map(|(name, version)| Dependency::new(name.clone(), version.clone()))
+            .collect();
+        Ok(Self { packages, projects })
+    }
+
+    fn from_pylock(lock: &PylockToml) -> Self {
+        let mut packages = BTreeSet::new();
+        let mut projects = BTreeSet::new();
+        for package in &lock.packages {
+            let Some(version) = package.version.as_ref() else {
+                trace!("Skipping unversioned package `{}`", package.name);
+                continue;
+            };
+            packages.insert((&package.name, version));
+            if let Some(index) = package.index.as_ref() {
+                projects.insert((
+                    package.name.clone(),
+                    IndexUrl::from(VerbatimUrl::from_url(index.clone())),
+                ));
+            }
+        }
+        Self {
+            packages: packages
+                .into_iter()
+                .map(|(name, version)| Dependency::new(name.clone(), version.clone()))
+                .collect(),
+            projects: projects.into_iter().collect(),
+        }
+    }
 }
 
 /// Audit findings and ignore-rule matches for one lockfile.
@@ -273,7 +398,8 @@ pub(crate) async fn audit_lock(
     root: &Path,
     extras: &ExtrasSpecificationWithDefaults,
     groups: &DependencyGroupsWithDefaults,
-    settings: &ResolverSettings,
+    index_locations: &IndexLocations,
+    keyring_provider: KeyringProviderType,
     client_builder: BaseClientBuilder<'_>,
     concurrency: Concurrency,
     cache: &Cache,
@@ -283,26 +409,56 @@ pub(crate) async fn audit_lock(
     ignore: &[VulnerabilityID],
     ignore_until_fixed: &[VulnerabilityID],
 ) -> Result<AuditOutcome> {
-    let auditable = lock.auditable(extras, groups, |_| true);
-    let mut projects = auditable.projects(root)?;
+    let dependencies = AuditDependencies::from_lock(lock, root, extras, groups)?;
+
+    audit_dependencies(
+        &dependencies,
+        index_locations,
+        keyring_provider,
+        client_builder,
+        concurrency,
+        cache,
+        printer,
+        service,
+        service_url,
+        ignore,
+        ignore_until_fixed,
+    )
+    .await
+}
+
+/// Audit resolved dependencies and their known registry projects.
+async fn audit_dependencies(
+    dependencies: &AuditDependencies,
+    index_locations: &IndexLocations,
+    keyring_provider: KeyringProviderType,
+    client_builder: BaseClientBuilder<'_>,
+    concurrency: Concurrency,
+    cache: &Cache,
+    printer: Printer,
+    service: VulnerabilityServiceFormat,
+    service_url: Option<DisplaySafeUrl>,
+    ignore: &[VulnerabilityID],
+    ignore_until_fixed: &[VulnerabilityID],
+) -> Result<AuditOutcome> {
+    let AuditDependencies { packages, projects } = dependencies;
+    let mut projects = projects
+        .iter()
+        .map(|(name, index)| (name, index.clone()))
+        .collect::<Vec<_>>();
 
     // Flat indexes cannot provide PEP 792 project-status metadata.
-    let flat_index_urls: FxHashSet<&IndexUrl> = settings
-        .index_locations
+    let flat_index_urls: FxHashSet<&IndexUrl> = index_locations
         .flat_indexes()
         .map(|index| &index.url)
         .collect();
     projects.retain(|(_, url)| !flat_index_urls.contains(url));
 
     let reporter = AuditReporter::from(printer);
-    let dependencies: Vec<Dependency> = auditable
-        .packages()
-        .map(|(name, version)| Dependency::new(name.clone(), version.clone()))
-        .collect();
     let base_client = client_builder.clone().build()?;
     let registry_client = RegistryClientBuilder::new(client_builder, cache.clone())
-        .index_locations(settings.index_locations.clone())
-        .keyring(settings.keyring_provider)
+        .index_locations(index_locations.clone())
+        .keyring(keyring_provider)
         .build()?;
     let capabilities = IndexCapabilities::default();
     let status_audit =
@@ -313,8 +469,8 @@ pub(crate) async fn audit_lock(
             VulnerabilityServiceFormat::Osv => {
                 let client = CachedClient::new(base_client);
                 let service = osv::Osv::new(client, service_url, concurrency, cache.clone());
-                trace!("Auditing {n} dependencies against OSV", n = auditable.len());
-                service.query_batch(&dependencies, osv::Filter::All).await
+                trace!("Auditing {n} dependencies against OSV", n = packages.len());
+                service.query_batch(packages, osv::Filter::All).await
             }
         }
     };
@@ -355,7 +511,7 @@ pub(crate) async fn audit_lock(
         .collect();
 
     Ok(AuditOutcome {
-        n_packages: auditable.len(),
+        n_packages: packages.len(),
         findings,
         matched_ignores,
     })
@@ -366,12 +522,11 @@ pub(crate) fn warn_unmatched_ignores(
     ignore: &[VulnerabilityID],
     ignore_until_fixed: &[VulnerabilityID],
     matched_ignores: &FxHashSet<VulnerabilityID>,
-    scope: &str,
 ) {
     for id in ignore.iter().chain(ignore_until_fixed.iter()) {
         if !matched_ignores.contains(id) {
             warn_user!(
-                "Ignored vulnerability `{}` does not match any vulnerability in {scope}",
+                "Ignored vulnerability `{}` does not match any vulnerability",
                 id.as_str()
             );
         }
