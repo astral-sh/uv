@@ -34,6 +34,15 @@ use crate::resolver::{Resolution, ResolutionDependencyEdge, ResolutionPackage};
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::{InMemoryIndex, MetadataResponse, Options, ResolveError, VersionsResponse};
 
+/// A remote package whose metadata was inspected during lookahead.
+///
+/// It can declare dependency sources even when it is absent from the selected dependency graph.
+#[derive(Debug, Clone)]
+pub(crate) struct LookaheadProvider {
+    pub(crate) name: PackageName,
+    pub(crate) source: RequirementSource,
+}
+
 /// The output of a successful resolution.
 ///
 /// Includes a complete resolution graph in which every node represents a pinned package and every
@@ -52,7 +61,7 @@ pub struct ResolverOutput {
     /// The requirements that were used to build the graph.
     pub(crate) requirements: Vec<Requirement>,
     /// Remote providers inspected during lookahead, including those absent from the graph.
-    pub(crate) remote_source_providers: Vec<(PackageName, RequirementSource)>,
+    pub(crate) lookahead_providers: Vec<LookaheadProvider>,
     /// The constraints that were used to build the graph.
     pub(crate) constraints: Constraints,
     /// The overrides that were used to build the graph.
@@ -130,7 +139,7 @@ impl ResolverOutput {
         project: Option<&PackageName>,
         workspace_members: &BTreeSet<PackageName>,
         requirements: Vec<Requirement>,
-        remote_source_providers: Vec<(PackageName, RequirementSource)>,
+        lookahead_providers: Vec<LookaheadProvider>,
         constraints: Constraints,
         overrides: Overrides,
         preferences: &Preferences,
@@ -240,7 +249,7 @@ impl ResolverOutput {
             fork_markers,
             diagnostics,
             requirements,
-            remote_source_providers,
+            lookahead_providers,
             constraints,
             overrides,
             options,

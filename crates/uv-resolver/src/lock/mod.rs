@@ -2658,18 +2658,21 @@ impl Lock {
         resolution: &ResolverOutput,
         root: &Path,
     ) -> Result<bool, LockError> {
-        'providers: for (name, source) in &resolution.remote_source_providers {
+        'providers: for provider in &resolution.lookahead_providers {
             for (_, dist) in resolution
                 .base_dists()
-                .filter(|(_, dist)| dist.name() == name)
+                .filter(|(_, dist)| dist.name() == &provider.name)
             {
                 if Source::from_resolved_dist(&dist.dist, root)?
-                    .satisfies_requirement_source(source, root)?
+                    .satisfies_requirement_source(&provider.source, root)?
                 {
                     continue 'providers;
                 }
             }
-            debug!("Retaining package metadata for source-only remote provider `{name}`");
+            debug!(
+                "Retaining package metadata for source-only remote provider `{}`",
+                provider.name
+            );
             return Ok(false);
         }
         Ok(true)

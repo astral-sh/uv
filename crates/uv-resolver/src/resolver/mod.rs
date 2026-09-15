@@ -55,7 +55,7 @@ use crate::pubgrub::{
     PubGrubPython, Range,
 };
 use crate::python_requirement::PythonRequirement;
-use crate::resolution::ResolverOutput;
+use crate::resolution::{LookaheadProvider, ResolverOutput};
 use crate::resolution_mode::ResolutionStrategy;
 pub(crate) use crate::resolver::availability::{
     ResolverVersion, UnavailableErrorChain, UnavailablePackage, UnavailableReason,
@@ -109,7 +109,7 @@ pub struct Resolver<Provider: ResolverProvider, InstalledPackages: InstalledPack
 struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     project: Option<PackageName>,
     requirements: Vec<Requirement>,
-    remote_source_providers: Vec<(PackageName, RequirementSource)>,
+    lookahead_providers: Vec<LookaheadProvider>,
     constraints: Constraints,
     overrides: Overrides,
     excludes: Excludes,
@@ -239,15 +239,16 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             dependency_mode: options.dependency_mode,
             urls: Urls::from_manifest(&manifest, &env, git, options.dependency_mode),
             indexes: Indexes::from_manifest(&manifest, &env, options.dependency_mode),
-            remote_source_providers: manifest
+            lookahead_providers: manifest
                 .lookaheads
                 .iter()
                 .filter_map(|lookahead| match lookahead.source() {
                     RequirementSource::Url { .. }
                     | RequirementSource::GitDirectory { .. }
-                    | RequirementSource::GitPath { .. } => {
-                        Some((lookahead.package().clone(), lookahead.source().clone()))
-                    }
+                    | RequirementSource::GitPath { .. } => Some(LookaheadProvider {
+                        name: lookahead.package().clone(),
+                        source: lookahead.source().clone(),
+                    }),
                     RequirementSource::Registry { .. }
                     | RequirementSource::Path { .. }
                     | RequirementSource::Directory { .. } => None,
@@ -873,7 +874,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             self.project.as_ref(),
             &self.workspace_members,
             self.requirements.clone(),
-            self.remote_source_providers.clone(),
+            self.lookahead_providers.clone(),
             self.constraints.clone(),
             self.overrides.clone(),
             &self.preferences,
