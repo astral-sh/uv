@@ -873,12 +873,16 @@ mod tests {
         assert!(!strategy.allows_url(&url));
         assert!(!strategy.allows_package(&name, &version));
 
-        let digest = HashDigest::from_str("sha256:0123456789abcdef")?;
+        let digest = HashDigest::from_str(
+            "sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+        )?;
         let constraints = HashStrategy::verify(Arc::new(FxHashMap::from_iter([
             (VersionId::from_url(&url), vec![digest.clone()]),
             (
                 VersionId::from_registry(name.clone(), version.clone()),
-                vec![HashDigest::from_str("md5:0123456789abcdef")?],
+                vec![HashDigest::from_str(
+                    "md5:420d85e19168705cdf0223621b18831a",
+                )?],
             ),
         ])));
         for strategy in [
@@ -903,9 +907,15 @@ mod tests {
         let name: PackageName = "anyio".parse()?;
         let version: Version = "4.0.0".parse()?;
         let local_version: Version = "4.0.0+local".parse()?;
-        let digest = HashDigest::from_str("sha256:0123456789abcdef")?;
-        let other = HashDigest::from_str("sha256:fedcba9876543210")?;
-        let sha512 = HashDigest::from_str("sha512:0123456789abcdef")?;
+        let digest = HashDigest::from_str(
+            "sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+        )?;
+        let other = HashDigest::from_str(
+            "sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a",
+        )?;
+        let sha512 = HashDigest::from_str(
+            "sha512:f30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2",
+        )?;
         let registry = VersionId::from_registry(name.clone(), version);
         let local_registry = VersionId::from_registry(name, local_version);
         let archive = VersionId::from_url(&"https://example.com/anyio-4.0.0.tar.gz".parse()?);
