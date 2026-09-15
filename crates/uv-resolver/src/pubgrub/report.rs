@@ -407,7 +407,7 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                 let mut result = String::new();
                 let str_terms: Vec<_> = slice
                     .iter()
-                    .map(|(p, t)| format!("{}", PackageTerm::new(p, t, self)))
+                    .map(|(package, term)| display_package_term(package, term, self).to_string())
                     .collect();
                 for (index, term) in str_terms.iter().enumerate() {
                     result.push_str(term);
@@ -2388,50 +2388,27 @@ impl std::fmt::Display for PubGrubHint {
 }
 
 /// A [`Term`] and [`PubGrubPackage`] combination for display.
-struct PackageTerm<'a> {
+fn display_package_term<'a>(
     package: &'a PubGrubPackage,
     term: &'a Term<Range<Version>>,
     formatter: &'a PubGrubReportFormatter<'a>,
-}
-
-impl std::fmt::Display for PackageTerm<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.term {
-            Term::Positive(set) => {
-                write!(f, "{}", self.formatter.compatible_range(self.package, set))
-            }
-            Term::Negative(set) => {
-                if let Some(version) = set.as_singleton() {
-                    // Note we do not handle the "root" package here but we should never
-                    // be displaying that the root package is inequal to some version
-                    let package = self.package;
-                    write!(f, "{package}!={version}")
-                } else {
-                    write!(
-                        f,
-                        "{}",
-                        self.formatter
-                            .compatible_range(self.package, &set.complement())
-                    )
-                }
+) -> impl std::fmt::Display + 'a {
+    std::fmt::from_fn(move |f| match term {
+        Term::Positive(set) => write!(f, "{}", formatter.compatible_range(package, set)),
+        Term::Negative(set) => {
+            if let Some(version) = set.as_singleton() {
+                // Note we do not handle the "root" package here but we should never
+                // be displaying that the root package is inequal to some version
+                write!(f, "{package}!={version}")
+            } else {
+                write!(
+                    f,
+                    "{}",
+                    formatter.compatible_range(package, &set.complement())
+                )
             }
         }
-    }
-}
-
-impl PackageTerm<'_> {
-    /// Create a new [`PackageTerm`] from a [`PubGrubPackage`] and a [`Term`].
-    fn new<'a>(
-        package: &'a PubGrubPackage,
-        term: &'a Term<Range<Version>>,
-        formatter: &'a PubGrubReportFormatter<'a>,
-    ) -> PackageTerm<'a> {
-        PackageTerm {
-            package,
-            term,
-            formatter,
-        }
-    }
+    })
 }
 
 /// The kind of version ranges being displayed in [`PackageRange`]
@@ -2842,6 +2819,33 @@ mod tests {
                 tags: None,
             }
         }
+    }
+
+    #[test]
+    fn formats_mixed_package_terms() {
+        let fixture = FormatterFixture::new();
+        let formatter = fixture.formatter();
+        let package = |name: &str| PubGrubPackage::base(name.parse().expect("valid package name"));
+
+        let terms = Map::from_iter([
+            (
+                package("a"),
+                Term::Positive(Range::singleton(Version::new([1]))),
+            ),
+            (
+                package("b"),
+                Term::Negative(Range::singleton(Version::new([2]))),
+            ),
+            (
+                package("c"),
+                Term::Negative(Range::strictly_lower_than(Version::new([3]))),
+            ),
+        ]);
+
+        insta::assert_snapshot!(
+            formatter.format_terms(&terms),
+            @"a==1, b!=2, c>=3 are incompatible"
+        );
     }
 
     #[test]
