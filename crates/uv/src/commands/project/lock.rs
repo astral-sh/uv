@@ -1116,7 +1116,7 @@ async fn do_lock(
             };
 
             let lock = if preview.is_enabled(PreviewFeature::LockWithoutMetadata) {
-                lock.without_package_metadata(&resolution, target.install_path())?
+                lock.without_package_metadata()
             } else {
                 lock
             };

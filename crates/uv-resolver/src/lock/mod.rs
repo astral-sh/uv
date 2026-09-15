@@ -2360,8 +2360,9 @@ impl Lock {
     /// Initialize a [`Lock`] from a [`ResolverOutput`] and [`ResolverManifest`], applying any
     /// index-specific hash requirements to registry artifacts.
     ///
-    /// Set `retain_empty_extras` when omitting package metadata, so selected registry extras
-    /// retain their incoming edges even if they resolve to no dependencies.
+    /// Set `metadata_free` when omitting package metadata, so selected registry extras
+    /// retain their incoming edges even if they resolve to no dependencies and Git packages
+    /// retain their declaration metadata for offline source discovery.
     ///
     /// Returns an error if an artifact does not advertise its index's required algorithm.
     pub fn from_resolution(
@@ -2370,7 +2371,7 @@ impl Lock {
         root: &Path,
         supported_environments: Vec<MarkerTree>,
         index_locations: &IndexLocations,
-        retain_empty_extras: bool,
+        metadata_free: bool,
     ) -> Result<Self, LockError> {
         let mut packages = BTreeMap::new();
         let requires_python = resolution.requires_python.clone();
@@ -2422,6 +2423,13 @@ impl Lock {
 
             let mut package =
                 Package::from_annotated_dist(dist, fork_markers, root, index_locations)?;
+            // Git declarations can introduce direct sources needed by offline freshness checks.
+            if metadata_free
+                && matches!(package.id.source, Source::Git(..))
+                && let Some(metadata) = dist.metadata.as_ref()
+            {
+                package.metadata = PackageMetadata::from_distribution(metadata, root)?;
+            }
             let mut wheel_marker = dist.marker;
             if let Some(supported_environments_marker) = supported_environments_marker {
                 wheel_marker.and(supported_environments_marker);
@@ -2468,7 +2476,7 @@ impl Lock {
                     }
                     .into());
                 };
-                if retain_empty_extras && matches!(package.id.source, Source::Registry(_)) {
+                if metadata_free && matches!(package.id.source, Source::Registry(_)) {
                     // A metadata-free lock must distinguish an extra that resolved to no
                     // dependencies (including nonexistent extras) from one never requested.
                     // Keeping the section also preserves its incoming, marker-bearing edge.
@@ -2701,16 +2709,12 @@ impl Lock {
         self
     }
 
-    /// Omit package metadata except for remote URL dependencies.
+    /// Omit package metadata except for remote URL and Git dependencies.
     ///
-    /// Local declarations can be reread from disk. Remote URL declarations remain in the lockfile
-    /// so freshness checks can determine offline whether a URL is requested or the URL dependency
-    /// is stale.
-    pub fn without_package_metadata(
-        mut self,
-        resolution: &ResolverOutput,
-        root: &Path,
-    ) -> Result<Self, LockError> {
+    /// Local declarations can be reread from disk. Remote URL and Git declarations remain in the
+    /// lockfile so freshness checks can determine offline whether a source is requested or stale.
+    #[must_use]
+    pub fn without_package_metadata(mut self) -> Self {
         self.revision = METADATA_FREE_REVISION;
         let workspace_root = self.root().map(|package| package.id.clone());
         for package in &mut self.packages {
@@ -2733,27 +2737,7 @@ impl Lock {
             package.metadata = PackageMetadata::default();
         }
 
-        // Git packages normally omit declaration metadata because their revisions are immutable.
-        // Recover it from the resolution before its direct sources become unavailable offline.
-        for (_, distribution) in resolution.base_dists() {
-            if distribution.index().is_some() {
-                continue;
-            }
-
-            let package_id = PackageId::from_annotated_dist(distribution, root)?;
-            if !matches!(package_id.source, Source::Git(..)) {
-                continue;
-            }
-
-            if let Some(metadata) = distribution.metadata.as_ref()
-                && let Some(index) = self.by_id.get(&package_id)
-                && let Some(package) = self.packages.get_mut(index.0)
-            {
-                package.metadata = PackageMetadata::from_distribution(metadata, root)?;
-            }
-        }
-
-        Ok(self)
+        self
     }
 
     /// Omit package-specific settings for packages outside the resolution.
