@@ -2387,14 +2387,9 @@ pub(crate) async fn resolve_names(
         Some(&interpreter.to_resolver_marker_environment()),
         HashCheckingMode::Verify,
     )?;
-    let flat_index = {
-        let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
-        let entries = client
-            .fetch_all(index_locations.flat_indexes().map(Index::url))
-            .await
-            .map_err(Box::new)?;
-        FlatIndex::from_entries(entries)
-    };
+    let flat_index = FlatIndex::load(&client, cache, index_locations)
+        .await
+        .map_err(Box::new)?;
 
     // Lower the extra build dependencies, if any.
     let extra_build_requires =

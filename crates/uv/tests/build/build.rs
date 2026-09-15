@@ -3090,6 +3090,7 @@ fn build_workspace_constraint_hashes() -> Result<()> {
             &BTreeMap::new(),
             None,
             "py3-none-any",
+            &[],
         );
         if name == "build-dependency" {
             build_hash = hex::encode(Sha256::digest(&wheel));
@@ -3147,15 +3148,15 @@ fn build_workspace_constraint_hashes() -> Result<()> {
     ----- stderr -----
     Building wheel...
     error: Failed to build `[TEMP_DIR]/`
-      Caused by: Failed to install requirements from `build-system.requires`
-      Caused by: Failed to download `build-dependency==1.0.0`
-      Caused by: Hash mismatch for `build-dependency==1.0.0`
+      cause: Failed to install requirements from `build-system.requires`
+      cause: Failed to download `build-dependency==1.0.0`
+      cause: Hash mismatch for `build-dependency==1.0.0`
 
-        Expected:
-          sha256:0000000000000000000000000000000000000000000000000000000000000000
+             Expected:
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
 
-        Computed:
-          sha256:[BUILD_HASH]
+             Computed:
+               sha256:[BUILD_HASH]
     ");
     context
         .temp_dir
@@ -3171,15 +3172,15 @@ fn build_workspace_constraint_hashes() -> Result<()> {
     ----- stderr -----
     Building wheel...
     error: Failed to build `[TEMP_DIR]/`
-      Caused by: Failed to install requirements from `build-system.requires`
-      Caused by: Failed to download `build-dependency==1.0.0`
-      Caused by: Hash mismatch for `build-dependency==1.0.0`
+      cause: Failed to install requirements from `build-system.requires`
+      cause: Failed to download `build-dependency==1.0.0`
+      cause: Hash mismatch for `build-dependency==1.0.0`
 
-        Expected:
-          sha256:0000000000000000000000000000000000000000000000000000000000000000
+             Expected:
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
 
-        Computed:
-          sha256:[BUILD_HASH]
+             Computed:
+               sha256:[BUILD_HASH]
     ");
     context
         .temp_dir
@@ -3218,15 +3219,15 @@ fn build_workspace_constraint_hashes() -> Result<()> {
     ----- stderr -----
     Building wheel...
     error: Failed to build `[TEMP_DIR]/`
-      Caused by: Failed to install requirements from `build-system.requires`
-      Caused by: Failed to read `build-dependency @ file://[TEMP_DIR]/wheels/build_dependency-1.0.0-py3-none-any.whl`
-      Caused by: Hash mismatch for `build-dependency @ file://[TEMP_DIR]/wheels/build_dependency-1.0.0-py3-none-any.whl`
+      cause: Failed to install requirements from `build-system.requires`
+      cause: Failed to read `build-dependency @ file://[TEMP_DIR]/wheels/build_dependency-1.0.0-py3-none-any.whl`
+      cause: Hash mismatch for `build-dependency @ file://[TEMP_DIR]/wheels/build_dependency-1.0.0-py3-none-any.whl`
 
-        Expected:
-          sha256:0000000000000000000000000000000000000000000000000000000000000000
+             Expected:
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
 
-        Computed:
-          sha256:[BUILD_HASH]
+             Computed:
+               sha256:[BUILD_HASH]
     ");
     context
         .temp_dir

@@ -22,7 +22,9 @@ use uv_fs::Simplified;
 use uv_fs::copy_dir_all;
 use uv_static::EnvVars;
 
-use uv_test::packse::{PackseServer, generate_wheel, generate_wheel_with_files, scenario::Scenario};
+use uv_test::packse::{
+    PackseServer, generate_wheel, generate_wheel_with_files, scenario::Scenario,
+};
 use uv_test::uv_snapshot;
 
 #[cfg(feature = "test-git")]
@@ -6143,6 +6145,7 @@ fn tool_install_with_build_hashes() -> Result<()> {
             &BTreeMap::new(),
             None,
             "py3-none-any",
+            &[],
         );
         let hash = hex::encode(Sha256::digest(&wheel));
         context
@@ -6243,16 +6246,16 @@ fn tool_install_with_build_hashes() -> Result<()> {
             uv_snapshot!(context.filters(), install().arg("--reinstall"), @"
             exit_code: 1 (failure)
             ----- stderr -----
-              × Failed to build `hash-tool @ file://[TEMP_DIR]/project`
-              ├─▶ Failed to install requirements from `build-system.requires`
-              ├─▶ Failed to download `build-dependency==1.0.0`
-              ╰─▶ Hash mismatch for `build-dependency==1.0.0`
+            error: Failed to build `hash-tool @ file://[TEMP_DIR]/project`
+              cause: Failed to install requirements from `build-system.requires`
+              cause: Failed to download `build-dependency==1.0.0`
+              cause: Hash mismatch for `build-dependency==1.0.0`
 
-                  Expected:
-                    sha256:0000000000000000000000000000000000000000000000000000000000000000
+                     Expected:
+                       sha256:0000000000000000000000000000000000000000000000000000000000000000
 
-                  Computed:
-                    sha256:[BUILD_HASH]
+                     Computed:
+                       sha256:[BUILD_HASH]
             ");
         }
         project
@@ -6270,14 +6273,14 @@ fn tool_install_with_build_hashes() -> Result<()> {
             exit_code: 2 (failure)
             ----- stderr -----
             error: Failed to install requirements from `build-system.requires`
-              Caused by: Failed to download `build-dependency==1.0.0`
-              Caused by: Hash mismatch for `build-dependency==1.0.0`
+              cause: Failed to download `build-dependency==1.0.0`
+              cause: Hash mismatch for `build-dependency==1.0.0`
 
-                Expected:
-                  sha256:0000000000000000000000000000000000000000000000000000000000000000
+                     Expected:
+                       sha256:0000000000000000000000000000000000000000000000000000000000000000
 
-                Computed:
-                  sha256:[BUILD_HASH]
+                     Computed:
+                       sha256:[BUILD_HASH]
             ");
         }
         project
@@ -6294,15 +6297,15 @@ fn tool_install_with_build_hashes() -> Result<()> {
             exit_code: 1 (failure)
             ----- stderr -----
             error: Failed to resolve `--with` requirement
-              Caused by: Failed to install requirements from `build-system.requires`
-              Caused by: Failed to download `build-dependency==1.0.0`
-              Caused by: Hash mismatch for `build-dependency==1.0.0`
+              cause: Failed to install requirements from `build-system.requires`
+              cause: Failed to download `build-dependency==1.0.0`
+              cause: Hash mismatch for `build-dependency==1.0.0`
 
-                Expected:
-                  sha256:0000000000000000000000000000000000000000000000000000000000000000
+                     Expected:
+                       sha256:0000000000000000000000000000000000000000000000000000000000000000
 
-                Computed:
-                  sha256:[BUILD_HASH]
+                     Computed:
+                       sha256:[BUILD_HASH]
             ");
         }
         project

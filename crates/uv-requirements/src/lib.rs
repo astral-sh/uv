@@ -52,6 +52,7 @@ impl Error {
     pub fn is_user_failure(&self) -> bool {
         match self {
             Self::Dist(_, _, error) | Self::Distribution(error) => error.is_user_failure(),
+            Self::FlatIndex(error) => error.is_user_failure(),
             Self::DistributionTypes(_) | Self::HashStrategy(_) | Self::WheelFilename(_) => true,
             Self::Io(error) => matches!(
                 error.kind(),

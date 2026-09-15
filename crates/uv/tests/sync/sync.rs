@@ -16727,6 +16727,7 @@ fn build_hash_project() -> Result<(TestContext, String)> {
             &BTreeMap::new(),
             None,
             "py3-none-any",
+            &[],
         );
         if name == "build-dependency" {
             build_hash = hex::encode(Sha256::digest(&wheel));
@@ -16865,16 +16866,16 @@ fn project_build_hashes_incorrect() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to build `project @ file://[TEMP_DIR]/`
-      ├─▶ Failed to install requirements from `build-system.requires`
-      ├─▶ Failed to download `build-dependency==1.0.0`
-      ╰─▶ Hash mismatch for `build-dependency==1.0.0`
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Failed to install requirements from `build-system.requires`
+      cause: Failed to download `build-dependency==1.0.0`
+      cause: Hash mismatch for `build-dependency==1.0.0`
 
-          Expected:
-            sha256:0000000000000000000000000000000000000000000000000000000000000000
+             Expected:
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
 
-          Computed:
-            sha256:[BUILD_HASH]
+             Computed:
+               sha256:[BUILD_HASH]
     ");
     Ok(())
 }
@@ -16943,16 +16944,16 @@ fn project_build_hashes_pip() -> Result<()> {
             exit_code: 1 (failure)
             ----- stderr -----
             Resolved 1 package in [TIME]
-              × Failed to build `project @ file://[TEMP_DIR]/`
-              ├─▶ Failed to install requirements from `build-system.requires`
-              ├─▶ Failed to download `build-dependency==1.0.0`
-              ╰─▶ Hash mismatch for `build-dependency==1.0.0`
+            error: Failed to build `project @ file://[TEMP_DIR]/`
+              cause: Failed to install requirements from `build-system.requires`
+              cause: Failed to download `build-dependency==1.0.0`
+              cause: Hash mismatch for `build-dependency==1.0.0`
 
-                  Expected:
-                    sha256:0000000000000000000000000000000000000000000000000000000000000000
+                     Expected:
+                       sha256:0000000000000000000000000000000000000000000000000000000000000000
 
-                  Computed:
-                    sha256:[BUILD_HASH]
+                     Computed:
+                       sha256:[BUILD_HASH]
             ");
         }
         context
@@ -17029,16 +17030,16 @@ fn project_build_hashes_script_run_with() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to build `project @ file://[TEMP_DIR]/`
-      ├─▶ Failed to install requirements from `build-system.requires`
-      ├─▶ Failed to download `build-dependency==1.0.0`
-      ╰─▶ Hash mismatch for `build-dependency==1.0.0`
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Failed to install requirements from `build-system.requires`
+      cause: Failed to download `build-dependency==1.0.0`
+      cause: Hash mismatch for `build-dependency==1.0.0`
 
-          Expected:
-            sha256:0000000000000000000000000000000000000000000000000000000000000000
+             Expected:
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
 
-          Computed:
-            sha256:[BUILD_HASH]
+             Computed:
+               sha256:[BUILD_HASH]
     ");
     context
         .temp_dir
@@ -17095,16 +17096,16 @@ fn project_build_hashes_run_with_stale_lock() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to build `project @ file://[TEMP_DIR]/package`
-      ├─▶ Failed to install requirements from `build-system.requires`
-      ├─▶ Failed to download `build-dependency==1.0.0`
-      ╰─▶ Hash mismatch for `build-dependency==1.0.0`
+    error: Failed to build `project @ file://[TEMP_DIR]/package`
+      cause: Failed to install requirements from `build-system.requires`
+      cause: Failed to download `build-dependency==1.0.0`
+      cause: Hash mismatch for `build-dependency==1.0.0`
 
-          Expected:
-            sha256:0000000000000000000000000000000000000000000000000000000000000000
+             Expected:
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
 
-          Computed:
-            sha256:[BUILD_HASH]
+             Computed:
+               sha256:[BUILD_HASH]
     ");
     package
         .child("backend-executed")
@@ -17189,6 +17190,7 @@ fn project_build_hashes_locked_script_run_with_no_sync() -> Result<()> {
         &BTreeMap::new(),
         None,
         "py3-none-any",
+        &[],
     );
     package
         .child("wheels")
@@ -17206,16 +17208,16 @@ fn project_build_hashes_locked_script_run_with_no_sync() -> Result<()> {
     Checked in [TIME]
     warning: `--no-sync` is a no-op for Python scripts with inline metadata, which always run in isolation
     Resolved 1 package in [TIME]
-      × Failed to build `project @ file://[TEMP_DIR]/package`
-      ├─▶ Failed to install requirements from `build-system.requires`
-      ├─▶ Failed to download `build-dependency==1.0.0`
-      ╰─▶ Hash mismatch for `build-dependency==1.0.0`
+    error: Failed to build `project @ file://[TEMP_DIR]/package`
+      cause: Failed to install requirements from `build-system.requires`
+      cause: Failed to download `build-dependency==1.0.0`
+      cause: Hash mismatch for `build-dependency==1.0.0`
 
-          Expected:
-            sha256:[BUILD_HASH]
+             Expected:
+               sha256:[BUILD_HASH]
 
-          Computed:
-            sha256:[CHANGED_BUILD_HASH]
+             Computed:
+               sha256:[CHANGED_BUILD_HASH]
     ");
     package
         .child("backend-executed")
