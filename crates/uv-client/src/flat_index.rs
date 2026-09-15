@@ -34,7 +34,7 @@ pub enum FlatIndexError {
 
 impl FlatIndexError {
     /// Return whether this is an expected user-facing failure.
-    pub(crate) fn is_user_failure(&self) -> bool {
+    pub fn is_user_failure(&self) -> bool {
         match self {
             Self::NonFileUrl(_) => true,
             Self::FindLinksFile(_, error) | Self::FindLinksUrl(_, error) => error.is_user_failure(),

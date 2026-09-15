@@ -38,6 +38,9 @@ pub enum Error {
     HashStrategy(#[from] uv_types::HashStrategyError),
 
     #[error(transparent)]
+    FlatIndex(#[from] Box<uv_client::FlatIndexError>),
+
+    #[error(transparent)]
     WheelFilename(#[from] uv_distribution_filename::WheelFilenameError),
 
     #[error(transparent)]
@@ -49,6 +52,7 @@ impl Error {
     pub fn is_user_failure(&self) -> bool {
         match self {
             Self::Dist(_, _, error) | Self::Distribution(error) => error.is_user_failure(),
+            Self::FlatIndex(error) => error.is_user_failure(),
             Self::DistributionTypes(_) | Self::HashStrategy(_) | Self::WheelFilename(_) => true,
             Self::Io(error) => matches!(
                 error.kind(),

@@ -29,8 +29,8 @@ use uv_warnings::warn_user_once;
 
 use crate::dependency_groups::{DependencyGroupError, FlatDependencyGroup, FlatDependencyGroups};
 use crate::pyproject::{
-    OverrideDependency, Project, PyProjectToml, PyprojectTomlError, Source, Sources, ToolUvSources,
-    ToolUvWorkspace, WorkspaceReference,
+    BuildConstraintDependency, OverrideDependency, Project, PyProjectToml, PyprojectTomlError,
+    Source, Sources, ToolUvSources, ToolUvWorkspace, WorkspaceReference,
 };
 
 /// The workspace project environment selected by configuration and command-line options.
@@ -873,7 +873,7 @@ impl Workspace {
     }
 
     /// Returns the set of build constraints for the workspace.
-    pub fn build_constraints(&self) -> Vec<uv_pep508::Requirement<VerbatimParsedUrl>> {
+    pub fn build_constraints(&self) -> Vec<BuildConstraintDependency> {
         let Some(build_constraints) = self
             .pyproject_toml
             .tool
