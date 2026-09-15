@@ -31,9 +31,8 @@ impl<'a> Diagnostic<'a> {
     }
 
     /// Attach additional context to this error.
-    #[cfg(test)]
     #[must_use]
-    pub(super) fn with_info(mut self, info: Info<'a>) -> Self {
+    pub fn with_info(mut self, info: Info<'a>) -> Self {
         self.info.push(info);
         self
     }
@@ -56,15 +55,14 @@ impl<'a> Diagnostic<'a> {
 }
 
 /// Additional context, rather than a cause or an actionable hint.
-pub(super) struct Info<'a> {
+pub struct Info<'a> {
     message: Cow<'a, str>,
     details: Option<Cow<'a, str>>,
 }
 
-#[cfg(test)]
 impl<'a> Info<'a> {
     /// Create an informational statement.
-    pub(super) fn new(message: impl Into<Cow<'a, str>>) -> Self {
+    pub fn new(message: impl Into<Cow<'a, str>>) -> Self {
         Self {
             message: message.into(),
             details: None,
@@ -74,7 +72,7 @@ impl<'a> Info<'a> {
     /// Attach a block of text, retaining its authored line breaks and indentation.
     /// Terminal control characters are escaped when the block is rendered.
     #[must_use]
-    pub(super) fn with_details(mut self, details: impl Into<Cow<'a, str>>) -> Self {
+    pub fn with_details(mut self, details: impl Into<Cow<'a, str>>) -> Self {
         self.details = Some(details.into());
         self
     }
