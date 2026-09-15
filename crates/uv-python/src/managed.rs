@@ -15,6 +15,7 @@ use tracing::{debug, warn};
 #[cfg(windows)]
 use windows::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
 
+use uv_fs::link::{LinkError, LinkMode, LinkOptions, OnExistingDirectory, link_dir};
 use uv_fs::{
     LockedFile, LockedFileError, LockedFileMode, Simplified, normalize_absolute_path,
     replace_symlink, symlink_or_copy_file, verbatim_path,
@@ -609,7 +610,7 @@ impl ManagedPythonInstallation {
                         self.key.variant().executable_suffix(),
                         std::env::consts::DLL_SUFFIX
                     ));
-                    macos_dylib::patch_dylib_install_name(dylib_path)?;
+                    macos_dylib::patch_dylib_install_name(&dylib_path, &dylib_path)?;
                 }
             }
         }
@@ -881,6 +882,110 @@ fn executable_path_from_base(
         // On Unix, the executable is in `bin/`
         base.join("bin").join(executable_name)
     }
+}
+
+/// Return whether a linked Python installation file must remain independently writable.
+fn needs_mutable_copy(path: &Path) -> bool {
+    let Some(file_name) = path.file_name().and_then(OsStr::to_str) else {
+        return false;
+    };
+    let extension = path.extension().and_then(OsStr::to_str);
+
+    if file_name.starts_with("_sysconfigdata_")
+        && extension.is_some_and(|extension| extension.eq_ignore_ascii_case("py"))
+    {
+        return true;
+    }
+
+    #[cfg(target_os = "macos")]
+    if file_name.starts_with("libpython")
+        && extension.is_some_and(|extension| extension.eq_ignore_ascii_case("dylib"))
+    {
+        return true;
+    }
+
+    false
+}
+
+/// Link a Python installation into `destination`, copying files that must subsequently be patched.
+///
+/// Omit installed packages and the externally-managed marker so the destination can be used as an
+/// independent environment.
+pub fn link_python_installation(
+    source: &Path,
+    destination: &Path,
+    allow_existing: bool,
+) -> Result<(), LinkError> {
+    let on_existing_directory = if allow_existing {
+        OnExistingDirectory::Merge
+    } else {
+        OnExistingDirectory::Fail
+    };
+    let options = LinkOptions::new(LinkMode::default())
+        .with_mutable_copy_filter(needs_mutable_copy)
+        .with_filter(|path| {
+            let file_name = path.file_name().and_then(OsStr::to_str);
+            if matches!(file_name, Some("site-packages" | "EXTERNALLY-MANAGED")) {
+                return false;
+            }
+
+            let parent = path
+                .parent()
+                .and_then(Path::file_name)
+                .and_then(OsStr::to_str);
+            !(matches!(parent, Some("bin" | "Scripts"))
+                && file_name.is_some_and(|file_name| file_name.starts_with("pip")))
+        })
+        .with_on_existing_directory(on_existing_directory);
+
+    link_dir(source, destination, &options)?;
+    Ok(())
+}
+
+/// Patch embedded paths in a copied Python installation.
+pub fn patch_python_installation(path: &Path, interpreter: &Interpreter) -> Result<(), Error> {
+    if cfg!(unix) && interpreter.implementation_name() == "cpython" {
+        sysconfig::make_sysconfig_relocatable(
+            path,
+            interpreter.python_major(),
+            interpreter.python_minor(),
+            interpreter.variant().lib_suffix(),
+        )?;
+    }
+
+    #[cfg(target_os = "macos")]
+    if interpreter.implementation_name() == "cpython" {
+        let dylib_name = format!(
+            "{}python{}.{}{}{}",
+            std::env::consts::DLL_PREFIX,
+            interpreter.python_major(),
+            interpreter.python_minor(),
+            interpreter.variant().executable_suffix(),
+            std::env::consts::DLL_SUFFIX,
+        );
+        let dylib_path = path.join("lib").join(&dylib_name);
+
+        // An executable-relative install name keeps env/bin executables and extension modules
+        // portable, but cannot support PyO3/Cargo embedders outside env/bin. Ordinary managed
+        // installations use an absolute install name to support those external embedders.
+        let install_name = Path::new("@executable_path/../lib").join(dylib_name);
+        if dylib_path.exists()
+            && let Err(error) = macos_dylib::patch_dylib_install_name(&dylib_path, &install_name)
+        {
+            let detail = if tracing::enabled!(tracing::Level::DEBUG) {
+                format!("\nUnderlying error: {error}")
+            } else {
+                String::new()
+            };
+            uv_warnings::warn_user!(
+                "Failed to patch the install name of the dynamic library for `{}`. \
+                 This may cause issues when building Python native extensions.{detail}",
+                dylib_path.simplified_display(),
+            );
+        }
+    }
+
+    Ok(())
 }
 
 /// A Python executable and its window mode.
