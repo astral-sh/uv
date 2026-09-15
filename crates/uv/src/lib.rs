@@ -2800,6 +2800,7 @@ async fn run_project(
                 args.hashes,
                 args.install_options,
                 args.output_file,
+                args.batch,
                 args.extras,
                 args.groups,
                 args.editable,

@@ -4,7 +4,6 @@ use anyhow::{Ok, Result};
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
-#[cfg(feature = "test-universal")]
 use insta::assert_snapshot;
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 use std::path::Path;
@@ -10253,6 +10252,371 @@ fn requirements_txt_emit_indexes() -> Result<()> {
 
     ----- stderr -----
     warning: `requirements.txt` does not support per-package index pinning; explicit indexes were emitted globally via `--extra-index-url`.
+    ");
+
+    Ok(())
+}
+
+/// Each batch entry applies its own package, extra, and dependency-group selections.
+#[cfg(feature = "test-universal")]
+#[test]
+fn export_batch_selections() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["idna"]
+
+        [dependency-groups]
+        dev = ["sniffio"]
+        root-only = ["idna"]
+
+        [tool.uv.workspace]
+        members = ["child"]
+    "#})?;
+
+    // The child overrides `dev` and defaults to `lint`, while inheriting `root-only`.
+    context
+        .temp_dir
+        .child("child/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [project.optional-dependencies]
+        test = ["iniconfig"]
+
+        [dependency-groups]
+        dev = ["iniconfig"]
+        lint = ["packaging"]
+
+        [tool.uv]
+        default-groups = ["lint"]
+    "#})?;
+
+    context.lock().assert().success();
+
+    // Output paths are relative to the manifest, so they should also be under `exports/`.
+    context
+        .temp_dir
+        .child("exports/batch.toml")
+        .write_str(indoc! {r#"
+        [[export]]
+        output-file = "root.txt"
+
+        [[export]]
+        output-file = "root-no-dev.txt"
+        no-group = ["dev"]
+
+        [[export]]
+        output-file = "child.txt"
+        package = ["child"]
+
+        [[export]]
+        output-file = "child-no-default-groups.txt"
+        package = ["child"]
+        no-default-groups = true
+
+        [[export]]
+        output-file = "child-test.txt"
+        package = ["child"]
+        extra = ["test"]
+        no-default-groups = true
+
+        [[export]]
+        output-file = "child-dev.txt"
+        package = ["child"]
+        only-group = ["dev"]
+
+        [[export]]
+        output-file = "child-root-group.txt"
+        package = ["child"]
+        group = ["root-only"]
+
+        [[export]]
+        output-file = "child-all-groups.txt"
+        package = ["child"]
+        all-groups = true
+        no-group = ["lint"]
+
+        [[export]]
+        output-file = "packages.txt"
+        package = ["root", "child"]
+        no-default-groups = true
+
+        [[export]]
+        output-file = "workspace.txt"
+        all-packages = true
+
+        [[export]]
+        output-file = "child-no-test.txt"
+        package = ["child"]
+        all-extras = true
+        no-extra = ["test"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--no-header")
+        .arg("--no-hashes")
+        .arg("--no-annotate")
+        .arg("--batch").arg("exports/batch.toml"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: `uv export --batch` is experimental and may change without warning. Pass `--preview-features batch-export` to disable this warning.
+    ");
+
+    assert_snapshot!(context.read("exports/root.txt"), @"
+    idna==3.6
+    sniffio==1.3.1
+    ");
+    assert_snapshot!(context.read("exports/root-no-dev.txt"), @"idna==3.6");
+    assert_snapshot!(context.read("exports/child.txt"), @"
+    packaging==24.0
+    typing-extensions==4.10.0
+    ");
+    assert_snapshot!(context.read("exports/child-no-default-groups.txt"), @"typing-extensions==4.10.0");
+    assert_snapshot!(context.read("exports/child-test.txt"), @"
+    iniconfig==2.0.0
+    typing-extensions==4.10.0
+    ");
+    assert_snapshot!(context.read("exports/child-dev.txt"), @"iniconfig==2.0.0");
+    assert_snapshot!(context.read("exports/child-root-group.txt"), @"
+    idna==3.6
+    packaging==24.0
+    typing-extensions==4.10.0
+    ");
+    assert_snapshot!(context.read("exports/child-all-groups.txt"), @"
+    idna==3.6
+    iniconfig==2.0.0
+    typing-extensions==4.10.0
+    ");
+    assert_snapshot!(context.read("exports/packages.txt"), @"
+    idna==3.6
+    typing-extensions==4.10.0
+    ");
+    assert_snapshot!(context.read("exports/workspace.txt"), @"
+    idna==3.6
+    iniconfig==2.0.0
+    sniffio==1.3.1
+    typing-extensions==4.10.0
+    ");
+    assert_snapshot!(context.read("exports/child-no-test.txt"), @"
+    packaging==24.0
+    typing-extensions==4.10.0
+    ");
+
+    Ok(())
+}
+
+/// Batch exports create or check the lock once, independently of per-entry Python requirements.
+#[test]
+fn export_batch_lock_modes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // The groups have disjoint Python requirements, but share a universal lock.
+    let pyproject = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        dev = []
+        legacy = []
+
+        [tool.uv.dependency-groups]
+        dev = { requires-python = ">=3.13" }
+        legacy = { requires-python = "<3.13" }
+    "#};
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject)?;
+    context.temp_dir.child("batch.toml").write_str(indoc! {r#"
+        [[export]]
+        output-file = "dev.txt"
+
+        [[export]]
+        output-file = "legacy.txt"
+        only-group = ["legacy"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--batch").arg("batch.toml").arg("--no-header")
+        .arg("--preview-features").arg("batch-export"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    let lock = context.read("uv.lock");
+    assert_snapshot!(context.read("dev.txt"), @"");
+    assert_snapshot!(context.read("legacy.txt"), @"");
+
+    // Make the lock stale and seed an output to check that `--locked` leaves both untouched.
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject.replace("0.1.0", "0.2.0"))?;
+    context.temp_dir.child("dev.txt").write_str("original")?;
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--locked").arg("--batch").arg("batch.toml")
+        .arg("--preview-features").arg("batch-export"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    assert_eq!(context.read("uv.lock"), lock);
+    assert_snapshot!(context.read("dev.txt"), @"original");
+
+    // `--frozen` exports from the stale lock without updating it.
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen").arg("--batch").arg("batch.toml").arg("--no-header")
+        .arg("--preview-features").arg("batch-export"), @"exit_code: 0 (success)");
+    assert_eq!(context.read("uv.lock"), lock);
+    assert_snapshot!(context.read("dev.txt"), @"");
+
+    // A normal export refreshes the lock, so a subsequent `--locked` export succeeds.
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--batch").arg("batch.toml")
+        .arg("--preview-features").arg("batch-export"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--locked").arg("--batch").arg("batch.toml")
+        .arg("--preview-features").arg("batch-export"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// A later invalid selection must not replace outputs rendered earlier in the batch.
+#[test]
+fn export_batch_invalid_selection() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    context.lock().assert().success();
+
+    // Seed the first output, then make the second entry fail after the first has rendered.
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str("original")?;
+    context.temp_dir.child("batch.toml").write_str(indoc! {r#"
+        [[export]]
+        output-file = "requirements.txt"
+
+        [[export]]
+        output-file = "missing.txt"
+        only-group = ["missing"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen").arg("--batch").arg("batch.toml"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: `uv export --batch` is experimental and may change without warning. Pass `--preview-features batch-export` to disable this warning.
+    error: Failed to export `[TEMP_DIR]/missing.txt`
+      cause: Group `missing` is not defined in the project's `dependency-groups` table
+    ");
+    assert_snapshot!(context.read("requirements.txt"), @"original");
+    assert!(!context.temp_dir.child("missing.txt").exists());
+
+    Ok(())
+}
+
+#[test]
+fn export_batch_manifest_validation() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let manifest = context.temp_dir.child("batch.toml");
+    manifest.write_str("export = []")?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--batch").arg("batch.toml"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: `uv export --batch` is experimental and may change without warning. Pass `--preview-features batch-export` to disable this warning.
+    error: Export manifest must contain at least one `[[export]]` entry
+    ");
+
+    // Selection names use the singular CLI spelling (`extra`, not `extras`).
+    manifest.write_str(indoc! {r#"
+        [[export]]
+        output-file = "requirements.txt"
+        extras = ["test"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--batch").arg("batch.toml"), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: `uv export --batch` is experimental and may change without warning. Pass `--preview-features batch-export` to disable this warning.
+    error: Failed to parse export manifest `batch.toml`
+      cause: TOML parse error at line 3, column 1
+               |
+             3 | extras = ["test"]
+               | ^^^^^^
+             unknown field `extras`, expected one of `output-file`, `package`, `all-packages`, `extra`, `no-extra`, `all-extras`, `group`, `no-group`, `only-group`, `all-groups`, `no-default-groups`
+    "#);
+
+    // These paths refer to the same output after normalization.
+    manifest.write_str(indoc! {r#"
+        [[export]]
+        output-file = "requirements.txt"
+        [[export]]
+        output-file = "./requirements.txt"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--batch").arg("batch.toml"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: `uv export --batch` is experimental and may change without warning. Pass `--preview-features batch-export` to disable this warning.
+    error: Duplicate export output: `[TEMP_DIR]/requirements.txt`
+    ");
+
+    // Group-only exports cannot include project extras.
+    manifest.write_str(indoc! {r#"
+        [[export]]
+        output-file = "requirements.txt"
+        only-group = ["dev"]
+        extra = ["test"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--batch").arg("batch.toml"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: `uv export --batch` is experimental and may change without warning. Pass `--preview-features batch-export` to disable this warning.
+    error: `only-group` cannot be combined with `extra` or `all-extras`
     ");
 
     Ok(())

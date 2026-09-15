@@ -3791,6 +3791,7 @@ fn preview_features() {
     +            ArtifactHashFiltering,
     +            ContentAddressedCache,
     +            MissingExcludeNewerPackageLock,
+    +            BatchExport,
     +        ],
          },
          python_preference: Managed,

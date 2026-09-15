@@ -4846,6 +4846,17 @@ pub struct ExportArgs {
     #[arg(long, short, value_hint = ValueHint::FilePath)]
     pub output_file: Option<PathBuf>,
 
+    /// Export multiple selections from a TOML manifest containing `[[export]]` entries.
+    ///
+    /// Each entry specifies an `output-file` and its own package, extra, and group selections.
+    /// Output paths are relative to the manifest.
+    #[arg(long, hide = true, value_hint = ValueHint::FilePath, conflicts_with_all = [
+        "output_file", "script", "package", "all_packages", "extra", "all_extras", "no_extra",
+        "no_all_extras", "group", "no_group", "only_group", "all_groups", "no_default_groups",
+        "dev", "no_dev", "only_dev",
+    ])]
+    pub batch: Option<PathBuf>,
+
     /// Do not emit the current project.
     ///
     /// By default, the current project is included in the exported requirements file with all of

@@ -23,7 +23,7 @@ use uv_workspace::dependency_groups::{
 use uv_workspace::pyproject::OverrideDependency;
 use uv_workspace::{Editability, Workspace, WorkspaceCache, WorkspaceMember};
 
-use crate::commands::project::{ProjectError, find_requires_python};
+use crate::commands::project::{MissingLockfileSource, ProjectError, find_requires_python};
 
 /// A target that can be resolved into a lockfile.
 #[derive(Debug, Copy, Clone)]
@@ -345,6 +345,31 @@ impl<'lock> LockTarget<'lock> {
             .read_with_contents()
             .await?
             .map(|(lock, _contents)| lock))
+    }
+
+    /// Read an existing lockfile and validate that it contains the discovered workspace members.
+    pub(crate) async fn read_frozen(
+        self,
+        source: MissingLockfileSource,
+    ) -> Result<Lock, ProjectError> {
+        let lock_filename = self.lock_filename();
+        let existing = self
+            .read()
+            .await?
+            .ok_or(ProjectError::MissingLockfile(source, lock_filename))?;
+
+        // Check if the discovered workspace members match the locked workspace members.
+        if let Self::Workspace(workspace) = self {
+            for package_name in workspace.packages().keys() {
+                existing
+                    .find_by_name(package_name)
+                    .map_err(|_| ProjectError::LockWorkspaceMismatch(package_name.clone(), source))?
+                    .ok_or_else(|| {
+                        ProjectError::LockWorkspaceMismatch(package_name.clone(), source)
+                    })?;
+            }
+        }
+        Ok(existing)
     }
 
     /// Read the lockfile and return the exact contents that were parsed.
