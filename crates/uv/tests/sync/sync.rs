@@ -10785,8 +10785,7 @@ fn sync_git_path_archive_missing_lfs() -> Result<()> {
     Ok(())
 }
 
-/// The project itself is marked as an editable dependency, but under the wrong name. The project
-/// is a package.
+/// A project without a build system is marked as its own editable dependency under the wrong name.
 #[test]
 fn mismatched_name_self_editable() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -10804,6 +10803,45 @@ fn mismatched_name_self_editable() -> Result<()> {
         foo = { path = ".", editable = true }
         "#,
     )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: Failed to build `foo @ file://[TEMP_DIR]/`
+      cause: Package metadata name `project` does not match given name `foo`
+
+    hint: `foo` was included because `project` (v0.1.0) depends on `foo`
+    ");
+
+    Ok(())
+}
+
+/// A packaged project is marked as its own editable dependency under the wrong name.
+#[test]
+fn mismatched_name_self_editable_package() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["foo"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+
+        [tool.uv.sources]
+        foo = { path = ".", editable = true }
+    "#})?;
+    let project = context.temp_dir.child("src").child("project");
+    project.create_dir_all()?;
+    project.child("__init__.py").touch()?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
     exit_code: 1 (failure)
