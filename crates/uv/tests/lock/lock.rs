@@ -22564,6 +22564,113 @@ fn lock_metadata_free_shared_dynamic_direct_source() -> Result<()> {
     Ok(())
 }
 
+/// An overridden self-reference cannot authorize sources from its unrequested extra.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_metadata_free_overridden_recursive_extra_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("extras/lock-without-metadata.toml");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    let child_url = Url::from_file_path(context.temp_dir.child("child").path())
+        .map_err(|()| anyhow::anyhow!("child path is not a valid file URL"))?;
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child[recursive] @ {child_url}", "six"]
+
+        [tool.uv]
+        override-dependencies = [
+            {{ package = {{ name = "child", version = "1.0.0" }}, dependencies = ["child==1.0.0"] }},
+        ]
+
+        [tool.uv.sources]
+        six = {{ path = "six" }}
+        "#})?;
+    context
+        .temp_dir
+        .child("child/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        recursive = ["child[direct]", "sentinel"]
+        direct = ["six"]
+
+        [tool.uv.sources]
+        sentinel = { path = "../sentinel" }
+        six = { path = "../six" }
+        "#})?;
+    context
+        .temp_dir
+        .child("six/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "six"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        "#})?;
+    context
+        .temp_dir
+        .child("sentinel/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "sentinel"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    // The inactive child extra cannot replace a removed root source declaration.
+    pyproject_toml.write_str(
+        &context
+            .read("pyproject.toml")
+            .replace("six = { path = \"six\" }\n", ""),
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
 /// Backend-only sources apply scoped overrides before expanding transitive local extras.
 #[cfg(feature = "test-universal")]
 #[test]

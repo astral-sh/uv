@@ -4763,7 +4763,7 @@ impl Lock {
     fn add_source_requirements(
         &self,
         package: &Package,
-        requirements: Vec<Requirement>,
+        requirements: &[Requirement],
         group: Option<&GroupName>,
         package_markers: &FxHashMap<(&PackageId, Option<&ExtraName>), MarkerTree>,
         dependency_overrides: &Overrides,
@@ -4780,6 +4780,21 @@ impl Lock {
             .version
             .as_ref()
             .map(|version| (&package.id.name, version));
+        // Apply policies before recursive self-requirements can activate another extra.
+        let requirements = dependency_overrides
+            .apply_for_package(
+                if group.is_some() {
+                    None
+                } else {
+                    package_context
+                },
+                requirements,
+            )
+            .filter(|requirement| {
+                !dependency_excludes.contains_for_package(package_context, &requirement.name)
+            })
+            .map(Cow::into_owned)
+            .collect::<Vec<_>>();
         let requirements = if group.is_some() {
             requirements
         } else {
@@ -4788,19 +4803,7 @@ impl Lock {
                 .collect::<Vec<_>>()
         };
 
-        for requirement in dependency_overrides
-            .apply_for_package(
-                if group.is_some() {
-                    None
-                } else {
-                    package_context
-                },
-                &requirements,
-            )
-            .filter(|requirement| {
-                !dependency_excludes.contains_for_package(package_context, &requirement.name)
-            })
-        {
+        for requirement in requirements {
             let requirement_marker = if let Some(group) = group {
                 let context = DependencyContext::Group(group);
                 package_marker
@@ -4834,8 +4837,7 @@ impl Lock {
                 continue;
             }
 
-            let mut requirement =
-                normalize_requirement(requirement.into_owned(), root, &self.requires_python)?;
+            let mut requirement = normalize_requirement(requirement, root, &self.requires_python)?;
             requirement.marker = requirement_marker.only_extras();
             pending_sources.push(requirement.clone());
             source_requirements.insert(requirement);
@@ -4942,12 +4944,6 @@ impl Lock {
                 refreshed_declarations
             {
                 let package_context = version.as_ref().map(|version| (&package.id.name, version));
-                let requirements = FlatRequiresDist::from_requirements(
-                    requirements.into_boxed_slice(),
-                    &package.id.name,
-                )
-                .into_iter()
-                .collect::<Vec<_>>();
                 let mut refreshed_dependencies = FxHashMap::default();
                 for (group, requirements) in iter::once((None, requirements)).chain(
                     dependency_groups
@@ -4970,13 +4966,26 @@ impl Lock {
                         .as_ref()
                         .map(DependencyContext::Group)
                         .unwrap_or(context);
-                    for requirement in dependency_overrides
+                    // Apply policies before recursive self-requirements can activate another extra.
+                    let requirements = dependency_overrides
                         .apply_for_package(override_context, &requirements)
                         .filter(|requirement| {
                             !dependency_excludes
                                 .contains_for_package(package_context, &requirement.name)
                         })
-                    {
+                        .map(Cow::into_owned)
+                        .collect::<Vec<_>>();
+                    let requirements = if group.is_some() {
+                        requirements
+                    } else {
+                        FlatRequiresDist::from_requirements(
+                            requirements.into_boxed_slice(),
+                            &package.id.name,
+                        )
+                        .into_iter()
+                        .collect::<Vec<_>>()
+                    };
+                    for requirement in requirements {
                         let requirement_marker =
                             requirement_context.requirement_marker(requirement.marker);
                         for dependency in self.packages_for_name(&requirement.name) {
@@ -5477,7 +5486,7 @@ impl Lock {
             let pending_sources_start = pending_sources.len();
             self.add_source_requirements(
                 package,
-                direct_requirements.into_vec(),
+                &direct_requirements,
                 None,
                 &reachability.package_markers,
                 dependency_overrides,
@@ -5491,7 +5500,7 @@ impl Lock {
             }) {
                 self.add_source_requirements(
                     package,
-                    requirements.into_vec(),
+                    &requirements,
                     Some(&group),
                     &reachability.package_markers,
                     dependency_overrides,
