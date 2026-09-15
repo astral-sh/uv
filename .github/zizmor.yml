@@ -11,3 +11,4 @@ rules:
       deny:
         # Forbidden because we prefer our own astral-dev-toolchain builds.
         - taiki-e/install-action
+        - EmbarkStudios/cargo-deny-action

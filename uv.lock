@@ -16,6 +16,7 @@ exclude-newer-span = "P7D"
 astral-dev-toolchain-cargo-bloat = "2026-09-14T19:10:00Z"
 astral-dev-toolchain-cargo-dist = "2026-08-28T04:00:00Z"
 astral-dev-toolchain-cargo-shear = "2026-08-27T04:00:00Z"
+astral-dev-toolchain-cargo-deny = "2026-09-15T19:10:00Z"
 
 [[package]]
 name = "annotated-doc"
@@ -84,6 +85,19 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/23/11/fb3246e194a1699f2a4493ba9501da8d65d3f49074330cce4244e3ded8c7/astral_dev_toolchain_cargo_codspeed-5.0.1-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:15e1005b0a7e4eb750172f2d3d7c6ccb3e78e9b55fa4bcd62f54350181dca6a1", size = 922701, upload-time = "2026-08-25T22:20:34.902Z" },
     { url = "https://files.pythonhosted.org/packages/c1/d9/bfb2f45e36c1525f0c9810405f605f39d7c8b4dcf250629b141b89eb89e6/astral_dev_toolchain_cargo_codspeed-5.0.1-py3-none-win_amd64.whl", hash = "sha256:ac995814067402b6604c6d8d9ab76700288f015494c53c4e75da09d5bc2ee5f7", size = 824114, upload-time = "2026-08-25T22:20:36.338Z" },
     { url = "https://files.pythonhosted.org/packages/ce/34/cc139216c71c1bcb67c1623420843646a36748b7ab13d3ae502b5fdbb84d/astral_dev_toolchain_cargo_codspeed-5.0.1-py3-none-win_arm64.whl", hash = "sha256:4bb1b696762454f924a85e0949ab8da1e788124683b644d3b997115d61455700", size = 783231, upload-time = "2026-08-25T22:20:37.889Z" },
+]
+
+[[package]]
+name = "astral-dev-toolchain-cargo-deny"
+version = "0.20.2"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5d/3b/a6f62f063d65f5470f8867ed2d701398f3e4f69257403290d9f8a6e8b84e/astral_dev_toolchain_cargo_deny-0.20.2-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:985935f3757bbe9a0267c94b6e0813fc80c9ba13ba55b207525ee86b05618357", size = 4812491, upload-time = "2026-09-15T18:54:16.415Z" },
+    { url = "https://files.pythonhosted.org/packages/7a/51/ec56268418cf3a002822b47351dc3f15b89b7300706f6a70b6c46ffdf50f/astral_dev_toolchain_cargo_deny-0.20.2-py3-none-macosx_11_0_arm64.whl", hash = "sha256:8741971eda68ec4018b891bf4eb97e4e53a16974bf43b7fe9903048919592bb7", size = 4642505, upload-time = "2026-09-15T18:54:18.759Z" },
+    { url = "https://files.pythonhosted.org/packages/d0/2a/79d869d8d22a5812028d90369ce6c4735dd47cfe3e5de321aa869c32fae8/astral_dev_toolchain_cargo_deny-0.20.2-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:0e42259c537b2432f5655b3413940e899906033354c5838e367c6837b467a141", size = 4730326, upload-time = "2026-09-15T18:54:20.853Z" },
+    { url = "https://files.pythonhosted.org/packages/09/40/7f110ab4ca7b05f2ea91bf55a2642353f9dcb780a567e5ccd030a219f55e/astral_dev_toolchain_cargo_deny-0.20.2-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:ae708f458c23ce1eecfd8f169befbb47424bdc21ecf0965e36db3b1d98400fee", size = 4947048, upload-time = "2026-09-15T18:54:23.462Z" },
+    { url = "https://files.pythonhosted.org/packages/c6/d0/68c33ddc7424e43187836b1a924d1895a1f89d3a438a4dd28c2ed92cc40b/astral_dev_toolchain_cargo_deny-0.20.2-py3-none-win_amd64.whl", hash = "sha256:fa38a4783426db539c456db9319911d81418bbe0e5d1c8da757c4965b9fab44e", size = 4948035, upload-time = "2026-09-15T18:54:26.551Z" },
+    { url = "https://files.pythonhosted.org/packages/ae/80/9362dbb0c9b0ab998c0beac2bace6c9463a3de637108fbc466c0cac67738/astral_dev_toolchain_cargo_deny-0.20.2-py3-none-win_arm64.whl", hash = "sha256:8cb16bf1ce1039f1c2cd4693cbba0e716b269270355261195b7b5af4b23f9e04", size = 4726694, upload-time = "2026-09-15T18:54:28.717Z" },
 ]
 
 [[package]]
@@ -1803,6 +1817,7 @@ check = [
 dev = [
     { name = "astral-dev-toolchain-cargo-bloat" },
     { name = "astral-dev-toolchain-cargo-codspeed" },
+    { name = "astral-dev-toolchain-cargo-deny" },
     { name = "astral-dev-toolchain-cargo-dist" },
     { name = "astral-dev-toolchain-cargo-nextest" },
 ]
@@ -1837,6 +1852,7 @@ check = [
 dev = [
     { name = "astral-dev-toolchain-cargo-bloat", specifier = ">=0.12.1" },
     { name = "astral-dev-toolchain-cargo-codspeed", specifier = ">=5.0.1" },
+    { name = "astral-dev-toolchain-cargo-deny", specifier = ">=0.20.2" },
     { name = "astral-dev-toolchain-cargo-dist", specifier = ">=0.32.0" },
     { name = "astral-dev-toolchain-cargo-nextest", specifier = ">=0.9.143" },
 ]
