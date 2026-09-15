@@ -120,8 +120,31 @@
       // binary validation enabled.
       labels: ["internal", "build:skip-docker"],
     },
+    {
+      // The custom manager updates uv versions and archive checksums together.
+      matchManagers: ["github-actions"],
+      matchDepTypes: ["uses-with"],
+      matchPackageNames: ["astral-sh/uv"],
+      enabled: false,
+    },
+    {
+      matchManagers: ["custom.regex"],
+      matchPackageNames: ["astral-sh/uv"],
+      minimumReleaseAge: null,
+    },
   ],
   customManagers: [
+    // Use the current checksum to identify the platform-specific release archive.
+    {
+      customType: "regex",
+      managerFilePatterns: ["/^\\.github/workflows/.+\\.ya?ml$/"],
+      matchStrings: [
+        'uses: astral-sh/setup-uv@[^\\r\\n]+\\r?\\n[ \\t]+with:\\r?\\n[ \\t]+version: "(?<currentValue>\\d+\\.\\d+\\.\\d+)"[^\\r\\n]*(?:\\r?\\n[ \\t]+checksum: "(?<currentDigest>[a-f0-9]{64})")?',
+      ],
+      depNameTemplate: "astral-sh/uv",
+      datasourceTemplate: "github-release-attachments",
+      versioningTemplate: "npm",
+    },
     // Update major GitHub actions references in documentation.
     {
       customType: "regex",
