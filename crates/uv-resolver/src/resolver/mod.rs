@@ -13,7 +13,7 @@ use either::Either;
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
 use papaya::{HashMap, ResizeMode};
-use pubgrub::{Id, IncompId, Incompatibility, Kind, Ranges, State, Term};
+use pubgrub::{ConflictId, Id, Ranges, State};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::oneshot;
@@ -396,7 +396,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 for (affected, incompatibility) in conflicts {
                                     // Conflict tracking: If there was a conflict, track affected and
                                     // culprit for all root cause incompatibilities
-                                    state.record_conflict(affected, None, incompatibility);
+                                    state.record_conflict(affected, None, &incompatibility);
                                 }
                             }
                         }
@@ -524,12 +524,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     // the platform.
                     version
                 } else {
-                    let term_intersection = state
+                    let range = state
                         .pubgrub
                         .partial_solution
                         .term_intersection_for_package(next_id)
-                        .expect("a package was chosen but we don't have a term");
-                    let range = term_intersection.unwrap_positive();
+                        .expect("a package was chosen but we don't have a term")
+                        .unwrap_positive();
 
                     // Within a fixed resolver environment, an implicit registry candidate is
                     // stable for a given range and pre-release policy. Avoid repeating candidate
@@ -572,32 +572,19 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     let Some(version) = decision else {
                         debug!("No compatible version found for: {next_package}");
 
-                        let term_intersection = state
-                            .pubgrub
-                            .partial_solution
-                            .term_intersection_for_package(next_id)
-                            .expect("a package was chosen but we don't have a term");
-
                         if let PubGrubPackageInner::Package { name, .. } = &**next_package {
                             // Check if the decision was due to the package being unavailable
                             if let Some(reason) = self.unavailable_packages.pin().get(name) {
-                                state
-                                    .pubgrub
-                                    .add_incompatibility(Incompatibility::custom_term(
-                                        next_id,
-                                        term_intersection.clone(),
-                                        UnavailableReason::Package(reason.clone()),
-                                    ));
+                                state.pubgrub.add_unavailable(
+                                    next_id,
+                                    range.clone(),
+                                    UnavailableReason::Package(reason.clone()),
+                                );
                                 continue;
                             }
                         }
 
-                        state
-                            .pubgrub
-                            .add_incompatibility(Incompatibility::no_versions(
-                                next_id,
-                                term_intersection.clone(),
-                            ));
+                        state.pubgrub.add_no_versions(next_id, range.clone());
                         continue;
                     };
 
@@ -624,7 +611,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             next_package,
                             index,
                             &version,
-                            term_intersection.unwrap_positive(),
+                            range,
                             state
                                 .pubgrub
                                 .partial_solution
@@ -677,13 +664,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             &self.index,
                             &self.installed_packages,
                         );
-                        state
-                            .pubgrub
-                            .add_incompatibility(Incompatibility::custom_term(
-                                next_id,
-                                Term::Positive(versions),
-                                UnavailableReason::Version(reason),
-                            ));
+                        state.pubgrub.add_unavailable(
+                            next_id,
+                            versions,
+                            UnavailableReason::Version(reason),
+                        );
                     }
                     ForkedDependencies::Unforked(dependencies) => {
                         state
@@ -816,15 +801,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             &self.index,
                             &self.installed_packages,
                         );
-                        state
-                            .pubgrub
-                            .add_incompatibility(Incompatibility::custom_term(
-                                next_id,
-                                Term::Positive(versions),
-                                UnavailableReason::Version(UnavailableVersion::RequiresPython(
-                                    requires_python,
-                                )),
-                            ));
+                        state.pubgrub.add_unavailable(
+                            next_id,
+                            versions,
+                            UnavailableReason::Version(UnavailableVersion::RequiresPython(
+                                requires_python,
+                            )),
+                        );
                     }
                 }
             }
@@ -3266,10 +3249,12 @@ impl ForkState {
 
             let proxy_package = self.pubgrub.package_store.alloc(package.clone());
             let base_package_id = self.pubgrub.package_store.alloc(base_package.clone());
-            self.pubgrub.add_proxy_package_incompatibility(
+            // Constrain the proxy and base to the same version range so conflicts reject the
+            // whole range without enumerating each proxy version.
+            self.pubgrub.add_dependency(
                 proxy_package,
-                base_package_id,
                 version.clone(),
+                (base_package_id, version.clone()),
             );
         }
 
@@ -3294,7 +3279,7 @@ impl ForkState {
         // Conflict tracking: If the version was rejected due to its dependencies, record culprit
         // and affected.
         if let Some(incompatibility) = conflict {
-            self.record_conflict(for_package, Some(for_version), incompatibility);
+            self.record_conflict(for_package, Some(for_version), &incompatibility);
         }
     }
 
@@ -3321,10 +3306,10 @@ impl ForkState {
         &mut self,
         affected: Id<PubGrubPackage>,
         version: Option<&Version>,
-        incompatibility: IncompId<PubGrubPackage, Range<Version>, UnavailableReason>,
+        conflict: &ConflictId<UvDependencyProvider>,
     ) {
         let mut culprit_is_real = false;
-        for (incompatible, _term) in self.pubgrub.incompatibility_store[incompatibility].iter() {
+        for incompatible in self.pubgrub.conflict_packages(conflict) {
             if incompatible == affected {
                 continue;
             }
@@ -3350,9 +3335,10 @@ impl ForkState {
         // marker is "copying" the obligations from the main package through conflicts.
         if culprit_is_real {
             if tracing::enabled!(Level::DEBUG) {
-                let incompatibility = self.pubgrub.incompatibility_store[incompatibility]
-                    .iter()
-                    .map(|(package, _term)| &self.pubgrub.package_store[package])
+                let incompatibility = self
+                    .pubgrub
+                    .conflict_packages(conflict)
+                    .map(|package| &self.pubgrub.package_store[package])
                     .join(", ");
                 if let Some(version) = version {
                     debug!(
@@ -3456,26 +3442,21 @@ impl ForkState {
                     PythonRequirementKind::Target => PubGrubPython::Target,
                 }),
             ));
-            self.pubgrub
-                .add_incompatibility(Incompatibility::from_dependency(
-                    *package,
-                    versions,
-                    (
-                        python,
-                        Range::from_versions(release_specifiers_to_ranges(requires_python)),
-                    ),
-                ));
+            self.pubgrub.add_dependency(
+                *package,
+                versions,
+                (
+                    python,
+                    Range::from_versions(release_specifiers_to_ranges(requires_python)),
+                ),
+            );
             self.pubgrub
                 .partial_solution
                 .add_decision(self.next, version);
             return;
         }
         self.pubgrub
-            .add_incompatibility(Incompatibility::custom_term(
-                self.next,
-                Term::Positive(versions),
-                UnavailableReason::Version(reason),
-            ));
+            .add_unavailable(self.next, versions, UnavailableReason::Version(reason));
     }
 
     /// Subset the current markers with the new markers and update the python requirements fields
@@ -3519,40 +3500,29 @@ impl ForkState {
         let solution: FxHashMap<_, _> = self.pubgrub.partial_solution.extract_solution().collect();
         let edge_count: usize = solution
             .keys()
-            .map(|package| self.pubgrub.incompatibilities[package].len())
+            .filter_map(|package| self.pubgrub.dependencies(*package).size_hint().1)
             .sum();
         let mut edges: Vec<ResolutionDependencyEdge> = Vec::with_capacity(edge_count);
         for (package, self_version) in &solution {
-            for id in &self.pubgrub.incompatibilities[package] {
-                let incompatibility = &self.pubgrub.incompatibility_store[*id];
-                let pubgrub::Kind::FromDependencyOf(self_package, dependency_package) =
-                    &incompatibility.kind
-                else {
-                    continue;
-                };
-                let (self_package, dependency_package) = (*self_package, *dependency_package);
-                let Some((self_range, dependency_range)) =
-                    incompatibility.dependency_version_sets()
-                else {
-                    continue;
-                };
-                let dependency_range =
-                    dependency_range.map_or_else(|| Cow::Owned(Range::empty()), Cow::Borrowed);
-                if *package != self_package {
+            for dependency in self.pubgrub.dependencies(*package) {
+                if *package != dependency.dependent {
                     continue;
                 }
-                if !self_range.contains(self_version) {
+                if !dependency.dependent_versions.contains(self_version) {
                     continue;
                 }
-                let Some(dependency_version) = solution.get(&dependency_package) else {
+                let Some(dependency_range) = dependency.dependency_versions else {
+                    continue;
+                };
+                let Some(dependency_version) = solution.get(&dependency.dependency) else {
                     continue;
                 };
                 if !dependency_range.contains(dependency_version) {
                     continue;
                 }
 
-                let self_package = &self.pubgrub.package_store[self_package];
-                let dependency_package = &self.pubgrub.package_store[dependency_package];
+                let self_package = &self.pubgrub.package_store[dependency.dependent];
+                let dependency_package = &self.pubgrub.package_store[dependency.dependency];
 
                 let (self_name, self_extra, self_group) = match &**self_package {
                     PubGrubPackageInner::Package {
@@ -4433,22 +4403,16 @@ fn find_environments(id: Id<PubGrubPackage>, state: &State<UvDependencyProvider>
     ancestors.insert(id);
 
     while let Some(current) = stack.pop() {
-        let Some(incompatibilities) = state.incompatibilities.get(&current) else {
-            continue;
-        };
-
-        for index in incompatibilities {
-            let incompat = &state.incompatibility_store[*index];
-            if let Kind::FromDependencyOf(parent, child) = &incompat.kind {
-                if current != *child {
-                    continue;
+        for dependency in state.dependencies(current) {
+            let parent = dependency.dependent;
+            if current != dependency.dependency {
+                continue;
+            }
+            if ancestors.insert(parent) {
+                if state.package_store[parent].is_root() {
+                    root = Some(parent);
                 }
-                if ancestors.insert(*parent) {
-                    if state.package_store[*parent].is_root() {
-                        root = Some(*parent);
-                    }
-                    stack.push(*parent);
-                }
+                stack.push(parent);
             }
         }
     }
@@ -4467,28 +4431,22 @@ fn find_environments(id: Id<PubGrubPackage>, state: &State<UvDependencyProvider>
         let Some(current_environment) = environments.get(&current).copied() else {
             continue;
         };
-        let Some(incompatibilities) = state.incompatibilities.get(&current) else {
-            continue;
-        };
-
-        for index in incompatibilities {
-            let incompat = &state.incompatibility_store[*index];
-            let Kind::FromDependencyOf(parent, child) = &incompat.kind else {
-                continue;
-            };
-            if current != *parent || !ancestors.contains(child) {
+        for dependency in state.dependencies(current) {
+            let parent = dependency.dependent;
+            let child = dependency.dependency;
+            if current != parent || !ancestors.contains(&child) {
                 continue;
             }
 
-            let mut next_environment = state.package_store[*child].marker();
+            let mut next_environment = state.package_store[child].marker();
             next_environment = next_environment.and(current_environment);
 
-            let entry = environments.entry(*child).or_insert(MarkerTree::FALSE);
+            let entry = environments.entry(child).or_insert(MarkerTree::FALSE);
             let mut combined = *entry;
             combined = combined.or(next_environment);
             if combined != *entry {
                 *entry = combined;
-                queue.push_back(*child);
+                queue.push_back(child);
             }
         }
     }
