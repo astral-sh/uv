@@ -66,8 +66,10 @@ def install_native_extension(*, uv: str):
         uv=uv,
         package="uv_test_native_extension",
         path=path,
-        import_check="import uv_test_native_extension as extension; "
-        "assert extension.answer() == 42",
+        import_check=(
+            "import uv_test_native_extension as extension; "
+            "assert extension.answer() == 42"
+        ),
     )
 
 
