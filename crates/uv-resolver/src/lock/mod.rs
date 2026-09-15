@@ -1545,23 +1545,21 @@ impl DependencySourceProvider<'_> {
     ) -> MarkerTree {
         // A reachable provider shares its sources across environments. Only its conflict
         // selections constrain where those sources can apply.
-        let package_marker = self.marker.only_extras();
-        if let Some(group) = group {
-            let context = DependencyContext::Group(group);
-            package_marker
-                .and(context.conflict_marker(self.name, conflicts))
-                .and(context.requirement_marker(marker))
-        } else {
-            let production_marker = DependencyContext::Production.requirement_marker(marker);
-            let mut requirement_marker = package_marker
-                .and(DependencyContext::Production.conflict_marker(self.name, conflicts))
-                .and(production_marker);
+        let context = group
+            .map(DependencyContext::Group)
+            .unwrap_or(DependencyContext::Production);
+        let mut requirement_marker = self
+            .marker
+            .only_extras()
+            .and(context.conflict_marker(self.name, conflicts))
+            .and(context.requirement_marker(marker));
+        if group.is_none() {
             for &(extra, extra_marker) in &self.extras {
                 let marker = DependencyContext::Extra(extra).requirement_marker(marker);
                 requirement_marker = requirement_marker.or(extra_marker.only_extras().and(marker));
             }
-            requirement_marker
         }
+        requirement_marker
     }
 }
 
@@ -5545,8 +5543,8 @@ impl Lock {
                         &requirement,
                         locked_package,
                         dependency_metadata,
-                        dependency_overrides,
-                        dependency_excludes,
+                        dependency_overrides.has_scoped_package(&requirement.name)
+                            || dependency_excludes.has_scoped_package(&requirement.name),
                         root,
                         hasher,
                         index,
@@ -5629,10 +5627,10 @@ impl Lock {
                             &reachability.package_markers,
                             root,
                         )?
-                        && source_requirements.insert(candidate.clone())
                     {
-                        pending_sources.push(candidate.clone());
-                    } else if source_requirements.contains(candidate)
+                        source_requirements.insert(candidate.clone());
+                    }
+                    if source_requirements.contains(candidate)
                         && changes
                             .reachable
                             .union(&changes.deferred)
@@ -5747,8 +5745,7 @@ impl Lock {
         requirement: &Requirement,
         locked_package: Option<&Package>,
         dependency_metadata: &DependencyMetadata,
-        dependency_overrides: &Overrides,
-        dependency_excludes: &Excludes,
+        needs_version: bool,
         root: &Path,
         hasher: &HashStrategy,
         index: &InMemoryIndex,
@@ -5817,9 +5814,7 @@ impl Lock {
             )
             .await?
             && metadata.metadata.name == requirement.name
-            && (metadata.version.is_some()
-                || !(dependency_overrides.has_scoped_package(&requirement.name)
-                    || dependency_excludes.has_scoped_package(&requirement.name)))
+            && (metadata.version.is_some() || !needs_version)
         {
             return Ok(Some(
                 dependency_metadata
@@ -5848,13 +5843,9 @@ impl Lock {
             metadata
         };
         Ok(Some(
-            if let Some(configured) =
-                dependency_metadata.get(&requirement.name, Some(&metadata.version))
-            {
-                configured.into()
-            } else {
-                metadata.into()
-            },
+            dependency_metadata
+                .get(&requirement.name, Some(&metadata.version))
+                .map_or_else(|| metadata.into(), SourceMetadata::from),
         ))
     }
 
