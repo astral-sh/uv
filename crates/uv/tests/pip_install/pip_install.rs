@@ -419,17 +419,44 @@ fn compile_bytecode_for_relative_install_root() {
     assert_eq!(compiled, 5);
 }
 
-/// Install into the current directory via `--target`.
+/// Install and uninstall wheel data in the current directory via `--target`.
 #[test]
-fn install_target_current_directory() {
+fn install_target_current_directory() -> Result<()> {
     let context = uv_test::test_context!("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
         .with_filtered_exe_suffix();
 
+    let wheel = context.temp_dir.join("foo-0.1.0-py3-none-any.whl");
+    let mut writer = ZipFileWriter::new(Vec::new());
+    let mut record = String::new();
+    for (name, contents) in [
+        (
+            "foo-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.1\nName: foo\nVersion: 0.1.0\n",
+        ),
+        (
+            "foo-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        ),
+        ("foo-0.1.0.data/purelib/foo.py", "PURE = True\n"),
+        ("foo-0.1.0.data/platlib/bar.py", "PLAT = True\n"),
+        ("foo-0.1.0.data/headers/foo.h", "/* header */\n"),
+        ("foo-0.1.0.data/data/share/foo.txt", "data\n"),
+        ("foo-0.1.0.data/scripts/foo", "#!python\nprint('foo')\n"),
+    ] {
+        let entry = ZipEntryBuilder::new(name.into(), Compression::Stored);
+        block_on(writer.write_entry_whole(entry, contents.as_bytes()))?;
+        writeln!(record, "{name},,")?;
+    }
+    writeln!(record, "foo-0.1.0.dist-info/RECORD,,")?;
+    let entry = ZipEntryBuilder::new("foo-0.1.0.dist-info/RECORD".into(), Compression::Stored);
+    block_on(writer.write_entry_whole(entry, record.as_bytes()))?;
+    fs::write(&wheel, block_on(writer.close())?)?;
+
     // A target of `.` installs into the current directory. See astral-sh/uv#21694.
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("iniconfig==2.0.0")
+        .arg(&wheel)
         .arg("--target")
         .arg("."), @"
     exit_code: 0 (success)
@@ -438,13 +465,42 @@ fn install_target_current_directory() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + iniconfig==2.0.0
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl)
     ");
 
-    context
-        .temp_dir
-        .child("iniconfig/__init__.py")
-        .assert(predicate::path::is_file());
+    let installed_paths = [
+        "foo.py",
+        "bar.py",
+        "include/foo/foo.h",
+        "share/foo.txt",
+        "bin/foo",
+    ];
+    for path in installed_paths {
+        context
+            .temp_dir
+            .child(path)
+            .assert(predicate::path::is_file());
+    }
+
+    // Uninstalling also checks that relocated files have usable paths in RECORD.
+    uv_snapshot!(context.filters(), context.pip_uninstall()
+        .arg("foo")
+        .arg("--target")
+        .arg(context.temp_dir.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl)
+    ");
+
+    for path in installed_paths {
+        context
+            .temp_dir
+            .child(path)
+            .assert(predicate::path::missing());
+    }
+
+    Ok(())
 }
 
 #[test]

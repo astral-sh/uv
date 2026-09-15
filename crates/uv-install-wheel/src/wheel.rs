@@ -362,12 +362,10 @@ impl<'wheel> ValidatedWheel<'wheel> {
 }
 
 fn validate_data_script_destination(target: &Path, scripts: &Path) -> Result<(), Error> {
-    let Some(name) = target
-        .strip_prefix(scripts)
-        .ok()
-        .filter(|relative| relative.components().count() == 1)
-        .and_then(Path::to_str)
-    else {
+    let (Some(parent), Some(name)) = (
+        target.parent(),
+        target.file_name().and_then(|name| name.to_str()),
+    ) else {
         return Ok(());
     };
 
@@ -375,14 +373,32 @@ fn validate_data_script_destination(target: &Path, scripts: &Path) -> Result<(),
     let normalized_name = normalized_name
         .strip_suffix(".exe")
         .unwrap_or(&normalized_name);
-    if let Some(reserved) = reserved_script_name(normalized_name) {
-        return Err(Error::ReservedScriptName {
-            reserved: reserved.to_string(),
-            declared: name.to_string(),
-        });
+    let Some(reserved) = reserved_script_name(normalized_name) else {
+        return Ok(());
+    };
+
+    if parent != scripts {
+        // An in-prefix directory alias can still refer to the scripts directory. Resolve only
+        // the parent: destination file symlinks are replaced rather than followed.
+        let resolved_parent = match fs::canonicalize(parent) {
+            Ok(parent) => parent,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(()),
+            Err(err) => return Err(err.into()),
+        };
+        let resolved_scripts = match fs::canonicalize(scripts) {
+            Ok(scripts) => scripts,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(()),
+            Err(err) => return Err(err.into()),
+        };
+        if resolved_parent != resolved_scripts {
+            return Ok(());
+        }
     }
 
-    Ok(())
+    Err(Error::ReservedScriptName {
+        reserved: reserved.to_string(),
+        declared: name.to_string(),
+    })
 }
 
 /// A form of [`Script`] guaranteed by [`ValidatedScript::try_from_script`] to be constrained to
@@ -1371,12 +1387,32 @@ mod test {
     use assert_fs::prelude::*;
     use indoc::{formatdoc, indoc};
 
-    #[cfg(unix)]
-    use super::RenameOrCopy;
     use super::{
         Error, RecordEntry, Script, WheelFile, format_shebang, get_script_executable,
         parse_email_message_file, parse_scripts, read_record, write_installer_metadata,
     };
+    #[cfg(unix)]
+    use super::{RenameOrCopy, validate_data_script_destination};
+
+    #[cfg(unix)]
+    #[test]
+    fn reserved_script_name_through_directory_alias() -> Result<()> {
+        let temp_dir = assert_fs::TempDir::new()?;
+        let scripts = temp_dir.child("bin");
+        scripts.create_dir_all()?;
+        let alias = temp_dir.child("scripts");
+        fs_err::os::unix::fs::symlink(scripts.path(), alias.path())?;
+
+        assert_matches!(
+            validate_data_script_destination(alias.child("python").path(), scripts.path()),
+            Err(Error::ReservedScriptName { .. })
+        );
+        validate_data_script_destination(alias.child("tool").path(), scripts.path())?;
+        validate_data_script_destination(temp_dir.child("python").path(), scripts.path())?;
+        validate_data_script_destination(temp_dir.child("new/python").path(), scripts.path())?;
+
+        Ok(())
+    }
 
     #[cfg(unix)]
     #[test]
