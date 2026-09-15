@@ -1,4 +1,9 @@
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
+use std::process::Command;
+
 use anyhow::Result;
+#[cfg(feature = "test-universal")]
+use anyhow::anyhow;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 #[cfg(feature = "test-universal")]
@@ -94,6 +99,28 @@ fn lock_without_package_metadata(lock: &str) -> Result<toml_edit::DocumentMut> {
         anyhow::bail!("lockfile did not contain a package array");
     };
     for package in packages.iter_mut() {
+        let extras = package
+            .get("metadata")
+            .and_then(|metadata| metadata.get("provides-extras"))
+            .and_then(toml_edit::Item::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(toml_edit::Value::as_str)
+            .map(ToOwned::to_owned)
+            .collect::<Vec<_>>();
+        if !extras.is_empty() {
+            let optional_dependencies = package
+                .entry("optional-dependencies")
+                .or_insert(toml_edit::table());
+            let Some(optional_dependencies) = optional_dependencies.as_table_like_mut() else {
+                anyhow::bail!("package optional dependencies were not a table");
+            };
+            for extra in extras {
+                optional_dependencies
+                    .entry(&extra)
+                    .or_insert(toml_edit::value(toml_edit::Array::new()));
+            }
+        }
         package.remove("metadata");
     }
     lock["revision"] = toml_edit::value(4);
@@ -3646,6 +3673,26 @@ fn lock_project_with_override_sources() -> Result<()> {
      + sniffio==1.3.1
     ");
 
+    fs_err::remove_file(context.temp_dir.join("uv.lock"))?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
     Ok(())
 }
 
@@ -5078,7 +5125,9 @@ fn lock_conflicting_project_basic1() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
         .arg("package-conflicts,lock-without-metadata")
-        .arg("--locked"), @"
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
@@ -5086,7 +5135,7 @@ fn lock_conflicting_project_basic1() -> Result<()> {
 
     let missing_conflict_marker = lock_without_metadata
         .to_string()
-        .replace(", marker = \"extra == 'project-7-project'\"", "");
+        .replace(r#", marker = "extra == 'project-7-project'""#, "");
     context
         .temp_dir
         .child("uv.lock")
@@ -10944,6 +10993,27 @@ fn lock_constraint_dependency_absolute_path() -> Result<()> {
         );
     });
 
+    #[cfg(feature = "test-universal")]
+    {
+        let preview_lock = lock_without_package_metadata(&lock)?;
+        fs_err::write(
+            context.temp_dir.join("project/uv.lock"),
+            preview_lock.to_string(),
+        )?;
+        uv_snapshot!(context.filters(), context.lock()
+            .current_dir(context.temp_dir.join("project"))
+            .arg("--preview-features")
+            .arg("lock-without-metadata")
+            .arg("--check")
+            .arg("--offline")
+            .arg("--no-cache"), @"
+        exit_code: 0 (success)
+        ----- stderr -----
+        Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+        Resolved 4 packages in [TIME]
+        ");
+    }
+
     Ok(())
 }
 
@@ -11361,6 +11431,8 @@ fn lock_new_extras() -> Result<()> {
     Resolved 6 packages in [TIME]
     ");
 
+    let lock_without_extras = lock_without_package_metadata(&lock)?;
+
     // Enable a new extra.
     pyproject_toml.write_str(
         r#"
@@ -11492,6 +11564,165 @@ fn lock_new_extras() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 7 packages in [TIME]
+    ");
+
+    // The original metadata-free graph must also reject the newly requested extra.
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&lock_without_extras.to_string())?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Added pysocks v1.7.1
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    ");
+
+    // Empty and nonexistent extras are still valid resolved requests. Record enough
+    // information to recognize them without loading registry metadata on the next check.
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["requests[security,nonexistent]==2.31.0"]
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    warning: The package `requests==2.31.0` does not have an extra named `nonexistent`
+    Removed pysocks v1.7.1
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// An extra that resolved to no edges in one environment can add dependencies in another.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_metadata_free_new_extra_marker() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("tag_and_markers/virtual-package-extra-priorities.toml");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    let pyproject = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["psycopg", "psycopg[binary] ; implementation_name == 'pypy'"]
+
+        [dependency-groups]
+        dev = ["psycopg"]
+        "#};
+    pyproject_toml.write_str(pyproject)?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    // The old extra selection is empty only on PyPy. A new incoming edge must not
+    // infer that it is also empty in the group's CPython environment.
+    pyproject_toml.write_str(&pyproject.replace(
+        r#"dev = ["psycopg"]"#,
+        r#"dev = ["psycopg", "psycopg[binary] ; implementation_name == 'cpython'"]"#,
+    ))?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--locked"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Added psycopg-binary v1.0.0
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
     ");
 
     Ok(())
@@ -20545,6 +20776,52 @@ fn lock_writes_without_package_metadata() -> Result<()> {
     name = "project"
     version = "0.1.0"
     source = { virtual = "." }
+
+    [package.optional-dependencies]
+    feature = []
+
+    [package.dev-dependencies]
+    dev = []
+    "#);
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // Re-lock without the preview feature, causing the lockfile to be invalid and be reverted to
+    // 1.3.
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    let standard_lock = context.read("uv.lock");
+    assert_snapshot!(standard_lock, @r#"
+    version = 1
+    revision = 3
+    requires-python = ">=3.12"
+
+    [options]
+    exclude-newer = "2024-03-25T00:00:00Z"
+
+    [[package]]
+    name = "project"
+    version = "0.1.0"
+    source = { virtual = "." }
+
+    [package.metadata]
+    provides-extras = ["feature"]
+
+    [package.metadata.requires-dev]
+    dev = []
     "#);
 
     uv_snapshot!(context.filters(), context.lock()
@@ -20556,69 +20833,81 @@ fn lock_writes_without_package_metadata() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     ");
+    assert_eq!(context.read("uv.lock"), standard_lock);
 
-    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     ");
+    assert_eq!(context.read("uv.lock"), standard_lock);
 
-    let standard_lock = context.read("uv.lock");
-    let standard_document = standard_lock.parse::<toml_edit::DocumentMut>()?;
-    assert_eq!(standard_document["revision"].as_integer(), Some(3));
-    assert!(
-        standard_document["package"]
-            .as_array_of_tables()
-            .unwrap()
-            .iter()
-            .all(|package| package.get("metadata").is_some())
-    );
+    let server = PackseServer::new("extras/lock-without-metadata.toml");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["httpx[http2] @ {httpx_url}"]
+        "#,
+            httpx_url = server.file_url("httpx-1.0.0-py3-none-any.whl"),
+        })?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Added h2 v1.0.0
+    Added httpx v1.0.0
+    ");
 
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
         .arg("lock-without-metadata")
         .arg("--check")
-        .arg("--offline"), @"
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 1 package in [TIME]
+    Resolved 3 packages in [TIME]
     ");
-    assert_eq!(context.read("uv.lock"), standard_lock);
-
-    uv_snapshot!(context.filters(), context.lock()
-        .arg("--preview-features")
-        .arg("lock-without-metadata")
-        .arg("--offline"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    ");
-    assert_eq!(context.read("uv.lock"), standard_lock);
 
     Ok(())
 }
 
-/// Validate a metadata-free lock without expanding independent conflict sets.
+/// Validate an unrelated requested extra without expanding independent conflict sets.
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_metadata_free_many_conflicts() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let extra_declarations = (1..=12)
+    let extra_declarations = (1..=24)
         .map(|conflict_number| format!("a{conflict_number} = []\nb{conflict_number} = []"))
         .collect::<Vec<_>>()
         .join("\n");
-    let project_conflicts = (1..=12)
+    let project_conflicts = (1..=24)
         .map(|conflict_number| {
             format!(
-                "  [{{ extra = \"a{conflict_number}\" }}, {{ extra = \"b{conflict_number}\" }}],"
+                r#"  [{{ extra = "a{conflict_number}" }}, {{ extra = "b{conflict_number}" }}],"#
             )
         })
         .collect::<Vec<_>>()
         .join("\n");
-    let lock_conflicts = (1..=12)
+    let lock_conflicts = (1..=24)
         .map(|conflict_number| {
             format!(
-                "[{{ package = \"project\", extra = \"a{conflict_number}\" }}, {{ package = \"project\", extra = \"b{conflict_number}\" }}]"
+                r#"[{{ package = "project", extra = "a{conflict_number}" }}, {{ package = "project", extra = "b{conflict_number}" }}]"#
             )
         })
         .collect::<Vec<_>>()
@@ -20632,7 +20921,7 @@ fn lock_metadata_free_many_conflicts() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["dep"]
+        dependencies = ["dep[ordinary] ; sys_platform == 'linux'"]
 
         [project.optional-dependencies]
         {extra_declarations}
@@ -20643,7 +20932,7 @@ fn lock_metadata_free_many_conflicts() -> Result<()> {
         ]
 
         [tool.uv.workspace]
-        members = ["dep"]
+        members = ["dep", "leaf"]
 
         [tool.uv.sources]
         dep = {{ workspace = true }}
@@ -20653,6 +20942,20 @@ fn lock_metadata_free_many_conflicts() -> Result<()> {
     dependency.child("pyproject.toml").write_str(indoc! {r#"
         [project]
         name = "dep"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        ordinary = ["leaf"]
+
+        [tool.uv.sources]
+        leaf = { workspace = true }
+        "#})?;
+    let leaf = context.temp_dir.child("leaf");
+    leaf.create_dir_all()?;
+    leaf.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "leaf"
         version = "1.0.0"
         requires-python = ">=3.12"
         "#})?;
@@ -20671,28 +20974,40 @@ fn lock_metadata_free_many_conflicts() -> Result<()> {
         exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
-        members = ["dep", "project"]
+        members = ["dep", "leaf", "project"]
 
         [[package]]
         name = "dep"
         version = "1.0.0"
         source = {{ editable = "dep" }}
 
+        [package.optional-dependencies]
+        ordinary = [{{ name = "leaf" }}]
+
+        [[package]]
+        name = "leaf"
+        version = "1.0.0"
+        source = {{ editable = "leaf" }}
+
         [[package]]
         name = "project"
         version = "0.1.0"
         source = {{ virtual = "." }}
-        dependencies = [{{ name = "dep" }}]
+        dependencies = [{{ name = "dep", extra = ["ordinary"], marker = "sys_platform == 'linux'" }}]
+
+        [package.optional-dependencies]
+        {extra_declarations}
         "#})?;
 
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
         .arg("package-conflicts,lock-without-metadata")
-        .arg("--locked")
-        .arg("--offline"), @"
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 2 packages in [TIME]
+    Resolved 3 packages in [TIME]
     ");
 
     Ok(())
@@ -20714,30 +21029,93 @@ fn lock_metadata_free_frozen_empty_extra() -> Result<()> {
 
         [project.optional-dependencies]
         empty = []
+
+        [dependency-groups]
+        empty = []
+
+        [tool.uv.workspace]
+        members = ["provider"]
+
+        [tool.uv.sources]
+        provider = { workspace = true }
         "#})?;
-
-    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    ");
-
-    let lock = lock_without_package_metadata(&context.read("uv.lock"))?;
     context
         .temp_dir
-        .child("uv.lock")
-        .write_str(&lock.to_string())?;
+        .child("provider/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "provider"
+        version = "1.0.0"
+        requires-python = ">=3.12"
 
-    uv_snapshot!(context.filters(), context.sync()
+        [project.optional-dependencies]
+        empty = []
+
+        [dependency-groups]
+        empty = []
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
         .arg("lock-without-metadata")
-        .arg("--frozen")
-        .arg("--extra")
-        .arg("empty"), @"
+        .arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Checked in [TIME]
+    Resolved 2 packages in [TIME]
     ");
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--package")
+        .arg("provider")
+        .arg("--extra")
+        .arg("empty")
+        .arg("--group")
+        .arg("empty")
+        .arg("--offline")
+        .arg("--no-header"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./provider
+    ");
+
+    let original_lock = context.read("uv.lock");
+    insta::allow_duplicates! {
+        for section in ["optional-dependencies", "dev-dependencies"] {
+            let mut lock = original_lock.parse::<toml_edit::DocumentMut>()?;
+            let Some(packages) = lock["package"].as_array_of_tables_mut() else {
+                anyhow::bail!("lockfile did not contain a package array");
+            };
+            let Some(provider) = packages
+                .iter_mut()
+                .find(|package| package["name"].as_str() == Some("provider"))
+            else {
+                anyhow::bail!("lockfile did not contain the provider");
+            };
+            let Some(selections) = provider[section].as_table_mut() else {
+                anyhow::bail!("provider did not contain {section}");
+            };
+            selections.remove("empty");
+            context
+                .temp_dir
+                .child("uv.lock")
+                .write_str(&lock.to_string())?;
+
+            uv_snapshot!(context.filters(), context.lock()
+                .arg("--preview-features")
+                .arg("lock-without-metadata")
+                .arg("--locked")
+                .arg("--offline"), @"
+            exit_code: 1 (failure)
+            ----- stderr -----
+            Resolved 2 packages in [TIME]
+            error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+            hint: To update the lockfile, run `uv lock`.
+            ");
+        }
+        Ok::<(), anyhow::Error>(())
+    }?;
 
     Ok(())
 }
@@ -20819,42 +21197,510 @@ fn lock_removed_empty_extra() -> Result<()> {
     Ok(())
 }
 
-/// Regenerate production, optional, and development edges when declaration metadata is omitted.
+/// Regenerate registry dependencies and dependency policies when package metadata is omitted.
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_regenerates_dependencies_without_metadata() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let server = PackseServer::new("extras/lock-without-metadata.toml");
-
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! {r#"
+    let original_pyproject = indoc! {r#"
         [project]
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "tqdm<10 ; sys_platform == 'win32'",
-            "tqdm>1 ; sys_platform != 'win32'",
-            "httpx",
             "six>=2",
-            "urllib3",
+            "urllib3==1.0.0",
+            "anyio==4.3.0 ; sys_platform == 'win32'",
+            "anyio==4.4.0 ; sys_platform != 'win32'",
+            "excluded",
+            "scoped-excluded",
         ]
 
         [project.optional-dependencies]
         empty = []
-        test = [
-            "httpx[http2]",
-            "packaging==26.0 ; sys_platform == 'win32'",
-            "packaging==26.1 ; sys_platform != 'win32'",
-        ]
+        feature = ["six<2", "httpx[http2]>=1 ; sys_platform != 'win32'", "excluded", "scoped-excluded"]
 
         [dependency-groups]
         empty = []
-        dev = ["httpx[http2]", "anyio"]
+        dev = ["six>=2", "httpx[http2]==1.0.0 ; sys_platform == 'win32'", "excluded", "scoped-excluded"]
 
         [tool.uv]
-        override-dependencies = ["six==1.0.0"]
-        exclude-dependencies = ["urllib3"]
+        override-dependencies = [
+            "six>=0",
+            { package = { name = "project", version = "0.1.0" }, dependencies = ["six==1.0.0"] },
+        ]
+        exclude-dependencies = [
+            "excluded",
+            { package = { name = "project", version = "0.1.0" }, dependencies = ["scoped-excluded"] },
+        ]
+        "#};
+    pyproject_toml.write_str(original_pyproject)?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 9 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 9 packages in [TIME]
+    ");
+
+    pyproject_toml.write_str(&original_pyproject.replace("six>=2", "six>=3"))?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 9 packages in [TIME]
+    ");
+
+    pyproject_toml.write_str(
+        &original_pyproject.replace("sys_platform != 'win32'", "sys_platform == 'linux'"),
+    )?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 9 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    pyproject_toml.write_str(&original_pyproject.replace("urllib3==1.0.0", "urllib3>=2"))?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies for split (markers: python_full_version >= '3.12' and sys_platform == 'win32')
+      cause: Because only urllib3==1.0.0 is available and your project depends on urllib3>=2, we can conclude that your project's requirements are unsatisfiable.
+             And because your project requires project[empty], we can conclude that your project's requirements are unsatisfiable.
+
+    hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
+    ");
+
+    pyproject_toml.write_str(&original_pyproject.replace(
+        r#"feature = ["six<2", "httpx[http2]>=1 ; sys_platform != 'win32'", "excluded", "scoped-excluded"]"#,
+        "feature = []",
+    ))?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 9 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    pyproject_toml.write_str(&original_pyproject.replace(
+        r#"dev = ["six>=2", "httpx[http2]==1.0.0 ; sys_platform == 'win32'", "excluded", "scoped-excluded"]"#,
+        "dev = []",
+    ))?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 9 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    pyproject_toml.write_str(&original_pyproject.replace(r#""urllib3==1.0.0","#, ""))?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
+/// Root extras do not select a workspace extra that conflicts with its own project node.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_metadata_free_root_extra_project_conflicting_workspace_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        feature = ["provider[one]"]
+
+        [tool.uv]
+        conflicts = [[
+            { package = "provider" },
+            { package = "provider", extra = "one" },
+        ]]
+
+        [tool.uv.workspace]
+        members = ["provider", "leaf"]
+
+        [tool.uv.sources]
+        provider = { workspace = true }
+        leaf = { workspace = true }
+        "#})?;
+    context
+        .temp_dir
+        .child("provider/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "provider"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        one = ["leaf"]
+        "#})?;
+    context
+        .temp_dir
+        .child("leaf/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "leaf"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("package-conflicts,lock-without-metadata")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("package-conflicts,lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .env("RUST_LOG", "uv::commands::project::lock=debug"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    DEBUG Existing `uv.lock` satisfies workspace requirements
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Registry version selection follows conflict-normalized included-group contexts.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_metadata_free_nested_group_conditional_registry_constraint() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "nested-group-conditional-registry-constraint"
+
+        [root]
+        requires = []
+
+        [expected]
+        satisfiable = true
+
+        [packages.ok.versions."1.0.0".extras]
+        first = []
+        second = []
+        third = []
+
+        [packages.ok.versions."2.0.0".extras]
+        first = []
+        second = []
+        third = []
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        dev = ["ok[first]>=1,<3 ; python_full_version < '3.13' or sys_platform != 'win32'"]
+        other = ["ok[second]>=1,<3 ; sys_platform == 'win32'"]
+        nested = [
+            { include-group = "dev" },
+            "ok[third]>=1,<3 ; python_full_version < '3.13' or sys_platform != 'win32'",
+        ]
+
+        [tool.uv]
+        conflicts = [[
+            { package = "ok", extra = "first" },
+            { package = "ok", extra = "second" },
+        ]]
+        constraint-dependencies = ["ok==1.0.0 ; sys_platform == 'win32'"]
+
+        [tool.uv.dependency-groups]
+        dev = { requires-python = ">=3.13" }
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("package-conflicts,lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("package-conflicts,lock-without-metadata")
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .env("RUST_LOG", "uv::commands::project::lock=debug"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    DEBUG Existing `uv.lock` satisfies workspace requirements
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--preview-features")
+        .arg("package-conflicts")
+        .arg("--frozen")
+        .arg("--only-group")
+        .arg("nested")
+        .arg("--python-platform")
+        .arg("windows")
+        .arg("--dry-run"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Checked in [TIME]
+    Would make no changes
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--preview-features")
+        .arg("package-conflicts")
+        .arg("--frozen")
+        .arg("--only-group")
+        .arg("nested")
+        .arg("--python-platform")
+        .arg("x86_64-unknown-linux-gnu")
+        .arg("--dry-run"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Would download 1 package
+    Would install 1 package
+     + ok==2.0.0
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--preview-features")
+        .arg("package-conflicts")
+        .arg("--frozen")
+        .arg("--only-group")
+        .arg("other")
+        .arg("--python-platform")
+        .arg("windows")
+        .arg("--dry-run"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Would download 1 package
+    Would install 1 package
+     + ok==1.0.0
+    ");
+
+    let original_lock = context.read("uv.lock");
+    let mut lock = original_lock.parse::<toml_edit::DocumentMut>()?;
+    let Some(packages) = lock["package"].as_array_of_tables_mut() else {
+        anyhow::bail!("lockfile did not contain a package array");
+    };
+    let Some(project) = packages
+        .iter_mut()
+        .find(|package| package["name"].as_str() == Some("project"))
+    else {
+        anyhow::bail!("lockfile did not contain the project");
+    };
+    let Some(dependencies) = project["dev-dependencies"]["other"].as_array_mut() else {
+        anyhow::bail!("project did not contain its other dependency group");
+    };
+    let Some(dependency) = dependencies.iter_mut().find(|dependency| {
+        dependency
+            .as_inline_table()
+            .and_then(|dependency| dependency.get("marker"))
+            .and_then(toml_edit::Value::as_str)
+            .is_some_and(|marker| marker.starts_with("sys_platform == 'win32' or"))
+    }) else {
+        anyhow::bail!("other dependency group did not contain its base edge");
+    };
+    let Some(dependency) = dependency.as_inline_table_mut() else {
+        anyhow::bail!("other dependency group did not contain an inline edge");
+    };
+    let Some(marker) = dependency.get("marker").and_then(toml_edit::Value::as_str) else {
+        anyhow::bail!("other dependency edge did not contain a marker");
+    };
+    let marker = format!("python_full_version < '3.13' and ({marker})");
+    dependency.insert("marker", toml_edit::Value::from(marker));
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&lock.to_string())?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--preview-features")
+        .arg("package-conflicts")
+        .arg("--frozen")
+        .arg("--only-group")
+        .arg("other")
+        .arg("--python-platform")
+        .arg("windows")
+        .arg("--dry-run"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Would download 1 package
+    Would install 1 package
+     + ok==1.0.0
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("package-conflicts,lock-without-metadata")
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&original_lock)?;
+
+    let pyproject = context
+        .read("pyproject.toml")
+        .replace("ok==1.0.0", "ok==2.0.0");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject)?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("package-conflicts,lock-without-metadata")
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
+/// Keep independently selected dependency extras in their matching Python resolution fork.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_regenerates_conflicting_python_forked_dependency_extras() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("extras/lock-without-metadata.toml");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        high = ["provider[one] ; python_full_version >= '3.13'"]
+        low = ["provider[two] ; python_full_version < '3.13'"]
+
+        [tool.uv]
+        conflicts = [[{ extra = "high" }, { extra = "low" }]]
+
+        [tool.uv.sources]
+        provider = { path = "provider" }
+        "#})?;
+    context
+        .temp_dir
+        .child("provider/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "provider"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        one = ["anyio==4.3.0"]
+        two = ["anyio==4.4.0"]
         "#})?;
 
     uv_snapshot!(context.filters(), context.lock()
@@ -20864,71 +21710,114 @@ fn lock_regenerates_dependencies_without_metadata() -> Result<()> {
         .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 10 packages in [TIME]
-    ");
-
-    let original_pyproject = fs_err::read_to_string(pyproject_toml.path())?;
-    let lockfile = context.temp_dir.child("uv.lock");
-
-    // Ensure the preview feature gets enforced.
-    let mut lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
-    assert_eq!(lock["revision"].as_integer(), Some(4));
-    assert!(
-        lock["package"]
-            .as_array_of_tables()
-            .unwrap()
-            .iter()
-            .all(|package| package.get("metadata").is_none())
-    );
-    lock["revision"] = toml_edit::value(3);
-    lockfile.write_str(&lock.to_string())?;
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
-    exit_code: 1 (failure)
-    ----- stderr -----
-    Resolved 10 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
-
-    hint: To update the lockfile, run `uv lock`.
-    ");
-
-    lock["revision"] = toml_edit::value(4);
-    lockfile.write_str(&lock.to_string())?;
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
-    exit_code: 1 (failure)
-    ----- stderr -----
-    Resolved 10 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
-
-    hint: To update the lockfile, run `uv lock`.
+    Resolved 6 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
         .arg("lock-without-metadata")
-        .arg("--locked")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
         .arg("--index-url")
         .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 10 packages in [TIME]
+    Resolved 6 packages in [TIME]
     ");
 
-    // Compatible declarations generate the same resolved dependency edges.
-    // That is a change from lockfiles with metadata, which would (unnecessarily) error here.
-    pyproject_toml.write_str(&original_pyproject.replace("tqdm>1", "tqdm>0"))?;
+    Ok(())
+}
+
+/// Scoped dependency rules use the resolved version even when a dynamic package omits it.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_regenerates_dynamic_version_scoped_override() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("extras/lock-without-metadata.toml");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["provider"]
+
+        [tool.uv]
+        override-dependencies = [
+            { package = { name = "provider" }, dependencies = ["anyio==4.3.0"] },
+            { package = { name = "provider", version = "1.0.0" }, dependencies = ["anyio==4.4.0"] },
+        ]
+        exclude-dependencies = [
+            { package = { name = "provider", version = "2.0.0.post1" }, dependencies = ["anyio"] },
+        ]
+
+        [tool.uv.sources]
+        provider = { path = "provider" }
+        "#})?;
+    context
+        .temp_dir
+        .child("provider/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "provider"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==4.3.0"]
+        dynamic = ["version"]
+
+        [tool.uv]
+        cache-keys = [{ file = "pyproject.toml" }, { file = "backend.py" }]
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "backend"
+        "#})?;
+    let backend = context.temp_dir.child("provider/backend.py");
+    let backend_contents = indoc! {r#"
+        import pathlib
+
+        def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
+            dist_info = pathlib.Path(metadata_directory, "provider-1.0.0.dist-info")
+            dist_info.mkdir()
+            dist_info.joinpath("METADATA").write_text(
+                "Metadata-Version: 2.1\n"
+                "Name: provider\n"
+                "Version: 1.0.0\n"
+                "Requires-Python: >=3.12\n"
+                "Requires-Dist: anyio==4.3.0\n"
+            )
+            return dist_info.name
+        "#};
+    backend.write_str(backend_contents)?;
+
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
         .arg("lock-without-metadata")
-        .arg("--locked")
         .arg("--index-url")
         .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 10 packages in [TIME]
+    Resolved 5 packages in [TIME]
     ");
 
-    // Removing production requirements must not retain optional or group edges.
-    pyproject_toml.write_str(&original_pyproject.replace("    \"httpx\",\n", ""))?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    // Changing the dynamic version selects the exact exclusion instead of the exact override.
+    backend.write_str(&backend_contents.replace("1.0.0", "2.0.0.post1"))?;
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
         .arg("lock-without-metadata")
@@ -20937,51 +21826,7 @@ fn lock_regenerates_dependencies_without_metadata() -> Result<()> {
         .arg(server.index_url()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    Resolved 10 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
-
-    hint: To update the lockfile, run `uv lock`.
-    ");
-
-    // Incompatible requirements cannot generate the existing locked edge.
-    pyproject_toml.write_str(&original_pyproject.replace("tqdm>1", "tqdm>4"))?;
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--locked").arg("--index-url").arg(server.index_url()), @"
-    exit_code: 1 (failure)
-    ----- stderr -----
-    error: No solution found when resolving dependencies for split (markers: python_full_version >= '3.12' and sys_platform != 'win32')
-      cause: Because only tqdm{sys_platform != 'win32'}==4.0.0 is available and your project depends on tqdm{sys_platform != 'win32'}>4, we can conclude that your project's requirements are unsatisfiable.
-             And because your project requires project[empty], we can conclude that your project's requirements are unsatisfiable.
-    ");
-
-    // Requested target extras are part of their optional dependency edges.
-    pyproject_toml.write_str(&original_pyproject.replace(
-        indoc! {r#"
-            test = [
-                "httpx[http2]",
-            "#},
-        indoc! {r#"
-            test = [
-                "httpx",
-            "#},
-    ))?;
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--locked").arg("--index-url").arg(server.index_url()), @"
-    exit_code: 1 (failure)
-    ----- stderr -----
-    Resolved 10 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
-
-    hint: To update the lockfile, run `uv lock`.
-    ");
-
-    // Development groups use the same canonical dependency builder.
-    pyproject_toml.write_str(&original_pyproject.replace(
-        "dev = [\"httpx[http2]\", \"anyio\"]",
-        "dev = [\"httpx[http2]\"]",
-    ))?;
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-without-metadata").arg("--locked").arg("--index-url").arg(server.index_url()), @"
-    exit_code: 1 (failure)
-    ----- stderr -----
-    Resolved 7 packages in [TIME]
+    Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
 
     hint: To update the lockfile, run `uv lock`.
@@ -21005,17 +21850,14 @@ fn lock_regenerates_incompatible_self_requirement() -> Result<()> {
     pyproject_toml.write_str(original_pyproject)?;
 
     uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
         .arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     ");
-
-    let lock = lock_without_package_metadata(&context.read("uv.lock"))?;
-    context
-        .temp_dir
-        .child("uv.lock")
-        .write_str(&lock.to_string())?;
+    let lock_without_feature = context.read("uv.lock");
 
     pyproject_toml.write_str(&formatdoc! {r#"
         {original_pyproject}
@@ -21024,12 +21866,42 @@ fn lock_regenerates_incompatible_self_requirement() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
         .arg("lock-without-metadata")
-        .arg("--locked")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    pyproject_toml.write_str(&formatdoc! {r#"
+        {original_pyproject}
+
+        [project.optional-dependencies]
+        feature = ["project>=0.1.0"]
+        "#})?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
         .arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     ");
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&lock_without_feature)?;
 
     pyproject_toml.write_str(&formatdoc! {r#"
         {original_pyproject}
@@ -21038,8 +21910,9 @@ fn lock_regenerates_incompatible_self_requirement() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
         .arg("lock-without-metadata")
-        .arg("--locked")
-        .arg("--offline"), @"
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -21144,11 +22017,15 @@ fn lock_regenerates_activated_empty_extra() -> Result<()> {
     ");
 
     let mut lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
-    let packages = lock["package"].as_array_of_tables_mut().unwrap();
-    let dependency = packages
+    let Some(packages) = lock["package"].as_array_of_tables_mut() else {
+        anyhow::bail!("lockfile did not contain a package array");
+    };
+    let Some(dependency) = packages
         .iter_mut()
         .find(|package| package["name"].as_str() == Some("dependency"))
-        .unwrap();
+    else {
+        anyhow::bail!("lockfile did not contain the dependency package");
+    };
     dependency.remove("metadata");
     lock["revision"] = toml_edit::value(4);
     context
@@ -21216,18 +22093,14 @@ fn lock_metadata_free_frozen_filtered_dependency_selections() -> Result<()> {
         "#})?;
 
     uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
         .arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
     warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 1 package in [TIME]
     ");
-
-    let lock = lock_without_package_metadata(&context.read("uv.lock"))?;
-    context
-        .temp_dir
-        .child("uv.lock")
-        .write_str(&lock.to_string())?;
 
     uv_snapshot!(context.filters(), context.sync()
         .arg("--preview-features")
@@ -21272,10 +22145,10 @@ fn lock_metadata_free_frozen_preserves_recorded_selections() -> Result<()> {
         dependencies = ["dependency"]
 
         [project.optional-dependencies]
-        original = ["dependency"]
+        original = []
 
         [dependency-groups]
-        original = ["dependency"]
+        original = []
 
         [tool.uv.sources]
         dependency = { path = "dependency" }
@@ -21322,6 +22195,44 @@ fn lock_metadata_free_frozen_preserves_recorded_selections() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + dependency==1.0.0 (from file://[TEMP_DIR]/dependency)
+    ");
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra").arg("added"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Extra `added` is not defined in the `optional-dependencies` table for `project`
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--frozen")
+        .arg("--group")
+        .arg("original"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checked 1 package in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group").arg("added"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Group `added` is not defined in the project's `dependency-groups` table
+    ");
+
+    // Locks without package metadata must likewise preserve the recorded empty selections.
+    pyproject_toml.write_str(original_pyproject)?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--upgrade")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    pyproject_toml.write_str(&original_pyproject.replace("original =", "added ="))?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra").arg("original"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checked 1 package in [TIME]
     ");
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra").arg("added"), @"
     exit_code: 2 (failure)
@@ -21404,8 +22315,9 @@ fn lock_regenerates_marker_specific_local_extra() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
         .arg("lock-without-metadata")
-        .arg("--locked")
-        .arg("--offline"), @"
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
@@ -21475,20 +22387,12 @@ fn lock_regenerates_scoped_workspace_overrides() -> Result<()> {
     Resolved 8 packages in [TIME]
     ");
 
-    let lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
-    assert_eq!(lock["revision"].as_integer(), Some(4));
-    assert!(
-        lock["package"]
-            .as_array_of_tables()
-            .unwrap()
-            .iter()
-            .all(|package| package.get("metadata").is_none())
-    );
-
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
         .arg("lock-without-metadata")
-        .arg("--locked")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
         .arg("--index-url")
         .arg(server.index_url()), @"
     exit_code: 0 (success)
@@ -21551,7 +22455,7 @@ fn lock_metadata_free_direct_url_constraint() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
         .arg("lock-without-metadata")
-        .arg("--locked")
+        .arg("--check")
         .arg("--offline")
         .arg("--no-cache")
         .arg("--index-url")
@@ -21616,7 +22520,7 @@ fn lock_metadata_free_disjoint_marker_direct_url_constraint() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
         .arg("lock-without-metadata")
-        .arg("--locked")
+        .arg("--check")
         .arg("--offline")
         .arg("--no-cache")
         .arg("--index-url")
@@ -21682,7 +22586,7 @@ fn lock_metadata_free_shared_direct_sources() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
         .arg("lock-without-metadata")
-        .arg("--locked")
+        .arg("--check")
         .arg("--offline")
         .arg("--no-cache")
         .arg("--index-url")
@@ -21711,7 +22615,7 @@ fn lock_metadata_free_shared_disjoint_marker_direct_sources() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "httpx[http2] ; sys_platform == 'win32'",
+            "httpx ; sys_platform == 'win32'",
             "member",
         ]
 
@@ -21741,20 +22645,295 @@ fn lock_metadata_free_shared_disjoint_marker_direct_sources() -> Result<()> {
         .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 4 packages in [TIME]
+    Resolved 3 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
         .arg("lock-without-metadata")
-        .arg("--locked")
+        .arg("--check")
         .arg("--offline")
         .arg("--no-cache")
         .arg("--index-url")
         .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 4 packages in [TIME]
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// A conditional provider shares its production and activated-extra sources across environments.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_metadata_free_shared_conditional_provider_sources() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "provider[direct] ; sys_platform == 'darwin'",
+            "leaf",
+            "twig",
+            "extra-leaf[nested]",
+            "extra-twig",
+        ]
+
+        [tool.uv.sources]
+        provider = { path = "provider" }
+        "#})?;
+    context
+        .temp_dir
+        .child("provider/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "provider"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["leaf ; sys_platform != 'darwin'"]
+
+        [project.optional-dependencies]
+        direct = ["extra-leaf[nested] ; sys_platform != 'darwin'"]
+
+        [tool.uv.sources]
+        leaf = { path = "../leaf" }
+        extra-leaf = { path = "../extra-leaf" }
+        "#})?;
+    context
+        .temp_dir
+        .child("leaf/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "leaf"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["twig"]
+
+        [tool.uv.sources]
+        twig = { path = "../twig" }
+        "#})?;
+    context
+        .temp_dir
+        .child("extra-leaf/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "extra-leaf"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        nested = ["extra-twig"]
+
+        [tool.uv.sources]
+        extra-twig = { path = "../extra-twig" }
+        "#})?;
+
+    context
+        .temp_dir
+        .child("twig/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "twig"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#})?;
+
+    context
+        .temp_dir
+        .child("extra-twig/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "extra-twig"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--offline")
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    ");
+
+    // Script requirements enter source discovery without a workspace package.
+    context.temp_dir.child("script.py").write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = [
+        #     "provider[direct] ; sys_platform == 'darwin'",
+        #     "leaf",
+        #     "twig",
+        #     "extra-leaf[nested]",
+        #     "extra-twig",
+        # ]
+        #
+        # [tool.uv.sources]
+        # provider = { path = "provider" }
+        # ///
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--offline")
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--script")
+        .arg("script.py")
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    // A bare extra request cannot authorize sources omitted by the direct source provider.
+    context
+        .temp_dir
+        .child("provider/pyproject.toml")
+        .write_str(
+            &context
+                .read("provider/pyproject.toml")
+                .replace("extra-leaf[nested] ;", "extra-leaf ;"),
+        )?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to resolve dependencies for package `extra-leaf==0.1.0`
+      cause: Package `extra-twig` was included as a URL dependency. URL dependencies must be expressed as direct requirements or constraints. Consider adding `extra-twig @ file://[TEMP_DIR]/extra-twig` to your dependencies or constraints file.
+
+    hint: `extra-leaf` (v0.1.0) was included because `project` (v0.1.0) depends on `extra-leaf`
+    ");
+
+    Ok(())
+}
+
+/// Immutable Git packages can select repository-internal archives for first-party dependencies.
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
+#[test]
+fn lock_metadata_free_shared_git_direct_source() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+
+    let repository = context.temp_dir.child("repository");
+    repository.child("archives").create_dir_all()?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/basic_package-0.1.0-py3-none-any.whl"),
+        repository
+            .child("archives/basic_package-0.1.0-py3-none-any.whl")
+            .path(),
+    )?;
+    repository.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "provider"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = ["basic-package ; sys_platform == 'darwin'"]
+
+        [tool.uv.sources]
+        basic-package = { path = "archives/basic_package-0.1.0-py3-none-any.whl" }
+        "#})?;
+
+    Command::new("git")
+        .arg("init")
+        .arg(repository.path())
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .arg("add")
+        .arg(".")
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .arg("-c")
+        .arg("user.name=Example")
+        .arg("-c")
+        .arg("user.email=example@example.com")
+        .arg("commit")
+        .arg("-m")
+        .arg("Initial commit")
+        .env("GIT_AUTHOR_DATE", "2000-01-01T00:00:00Z")
+        .env("GIT_COMMITTER_DATE", "2000-01-01T00:00:00Z")
+        .assert()
+        .success();
+
+    let repository_url = Url::from_directory_path(repository.path())
+        .map_err(|()| anyhow!("failed to convert repository path to file URL"))?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = ["basic-package ; sys_platform == 'win32'", "provider"]
+
+        [tool.uv.sources]
+        provider = {{ git = "{repository_url}" }}
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
     ");
 
     Ok(())
@@ -21806,7 +22985,7 @@ fn lock_metadata_free_shared_transitive_direct_source() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
         .arg("lock-without-metadata")
-        .arg("--locked")
+        .arg("--check")
         .arg("--offline")
         .arg("--no-cache")
         .arg("--index-url")
@@ -21891,7 +23070,7 @@ fn lock_metadata_free_shared_dynamic_direct_source() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
         .arg("lock-without-metadata")
-        .arg("--locked")
+        .arg("--check")
         .arg("--offline")
         .arg("--no-cache")
         .arg("--index-url")
@@ -21904,7 +23083,224 @@ fn lock_metadata_free_shared_dynamic_direct_source() -> Result<()> {
     Ok(())
 }
 
-/// Backend-only source trees can select direct sources without declaring PEP 621 dynamic fields.
+/// A version-scoped exclusion must not authorize a dynamic package's direct source.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_metadata_free_dynamic_version_excluded_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    let original_pyproject = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["provider", "leaf"]
+
+        [tool.uv]
+        exclude-dependencies = [
+            { package = { name = "provider", version = "1.0.0" }, dependencies = ["leaf"] },
+        ]
+
+        [tool.uv.sources]
+        provider = { path = "provider" }
+        leaf = { path = "leaf" }
+        "#};
+    pyproject_toml.write_str(original_pyproject)?;
+    context
+        .temp_dir
+        .child("provider/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "provider"
+        requires-python = ">=3.12"
+        dependencies = ["leaf"]
+        dynamic = ["version"]
+
+        [tool.uv.sources]
+        leaf = { path = "../leaf" }
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "backend"
+        "#})?;
+    context
+        .temp_dir
+        .child("provider/backend.py")
+        .write_str(indoc! {r#"
+        import pathlib
+
+        def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
+            dist_info = pathlib.Path(metadata_directory, "provider-1.0.0.dist-info")
+            dist_info.mkdir()
+            dist_info.joinpath("METADATA").write_text(
+                "Metadata-Version: 2.1\n"
+                "Name: provider\n"
+                "Version: 1.0.0\n"
+                "Requires-Python: >=3.12\n"
+                "Requires-Dist: leaf\n"
+            )
+            return dist_info.name
+        "#})?;
+    context
+        .temp_dir
+        .child("leaf/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "leaf"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--offline")
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    pyproject_toml.write_str(&original_pyproject.replace("leaf = { path = \"leaf\" }\n", ""))?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because leaf was not found in the provided package locations and your project depends on leaf, we can conclude that your project's requirements are unsatisfiable.
+
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+    ");
+
+    Ok(())
+}
+
+/// An overridden self-reference cannot authorize sources from its unrequested extra.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_metadata_free_overridden_recursive_extra_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("extras/lock-without-metadata.toml");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    let child_url = Url::from_file_path(context.temp_dir.child("child").path())
+        .map_err(|()| anyhow::anyhow!("child path is not a valid file URL"))?;
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child[recursive] @ {child_url}", "six"]
+
+        [tool.uv]
+        override-dependencies = [
+            {{ package = {{ name = "child", version = "1.0.0" }}, dependencies = ["child==1.0.0"] }},
+        ]
+
+        [tool.uv.sources]
+        six = {{ path = "six" }}
+        "#})?;
+    context
+        .temp_dir
+        .child("child/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        recursive = ["child[direct]", "sentinel"]
+        direct = ["six"]
+
+        [tool.uv.sources]
+        sentinel = { path = "../sentinel" }
+        six = { path = "../six" }
+        "#})?;
+    context
+        .temp_dir
+        .child("six/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "six"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        "#})?;
+    context
+        .temp_dir
+        .child("sentinel/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "sentinel"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    // The inactive child extra cannot replace a removed root source declaration.
+    pyproject_toml.write_str(
+        &context
+            .read("pyproject.toml")
+            .replace("six = { path = \"six\" }\n", ""),
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
+/// Backend-only sources apply scoped overrides before expanding transitive local extras.
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_metadata_free_shared_backend_direct_source() -> Result<()> {
@@ -21921,6 +23317,11 @@ fn lock_metadata_free_shared_backend_direct_source() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["httpx[http2]", "provider"]
 
+        [tool.uv]
+        override-dependencies = [
+            { package = { name = "child", version = "1.0.0" }, dependencies = ["child==1.0.0"] },
+        ]
+
         [tool.uv.sources]
         provider = { path = "provider" }
         "#})?;
@@ -21935,6 +23336,36 @@ fn lock_metadata_free_shared_backend_direct_source() -> Result<()> {
         "#})?;
     context
         .temp_dir
+        .child("child/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        direct = ["grandchild[direct]"]
+        recursive = ["child[direct]"]
+
+        [tool.uv.sources]
+        grandchild = { path = "../grandchild" }
+        "#})?;
+    context
+        .temp_dir
+        .child("grandchild/pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "grandchild"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        direct = ["httpx @ {httpx_url}"]
+        "#,
+            httpx_url = server.file_url("httpx-1.0.0-py3-none-any.whl"),
+        })?;
+    context
+        .temp_dir
         .child("provider/backend.py")
         .write_str(&formatdoc! {r#"
         import pathlib
@@ -21947,11 +23378,12 @@ fn lock_metadata_free_shared_backend_direct_source() -> Result<()> {
                 "Name: provider\n"
                 "Version: 1.0.0\n"
                 "Requires-Python: >=3.12\n"
-                "Requires-Dist: httpx @ {httpx_url}\n"
+                "Requires-Dist: child[direct,recursive] @ {child_url}\n"
             )
             return dist_info.name
         "#,
-            httpx_url = server.file_url("httpx-1.0.0-py3-none-any.whl"),
+            child_url = Url::from_file_path(context.temp_dir.child("child").path())
+                .map_err(|()| anyhow!("failed to construct a file URL for the local child"))?,
         })?;
 
     uv_snapshot!(context.filters(), context.lock()
@@ -21961,20 +23393,20 @@ fn lock_metadata_free_shared_backend_direct_source() -> Result<()> {
         .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 4 packages in [TIME]
+    Resolved 6 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
         .arg("lock-without-metadata")
-        .arg("--locked")
+        .arg("--check")
         .arg("--offline")
         .arg("--no-cache")
         .arg("--index-url")
         .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 4 packages in [TIME]
+    Resolved 6 packages in [TIME]
     ");
 
     Ok(())
@@ -22058,7 +23490,7 @@ fn lock_metadata_free_shared_dynamic_group_direct_sources() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
         .arg("lock-without-metadata")
-        .arg("--locked")
+        .arg("--check")
         .arg("--offline")
         .arg("--no-cache")
         .arg("--index-url")
@@ -22078,26 +23510,31 @@ fn lock_metadata_free_shared_static_metadata_direct_source() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let server = PackseServer::new("extras/lock-without-metadata.toml");
 
-    context
-        .temp_dir
-        .child("pyproject.toml")
-        .write_str(&formatdoc! {r#"
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
         [project]
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["httpx[http2]", "local"]
+        dependencies = ["httpx[http2]", "local", "anyio", "six"]
 
         [tool.uv.sources]
         local = {{ path = "local" }}
+        six = {{ url = "{six_url}" }}
 
         [[tool.uv.dependency-metadata]]
         name = "local"
         version = "0.1.0"
         requires-dist = ["httpx @ {httpx_url}"]
+
+        [[tool.uv.dependency-metadata]]
+        name = "anyio"
+        version = "4.4.0"
+        requires-dist = ["six @ {six_url}"]
         "#,
             httpx_url = server.file_url("httpx-1.0.0-py3-none-any.whl"),
-        })?;
+            six_url = server.file_url("six-1.0.0-py3-none-any.whl"),
+    })?;
     context
         .temp_dir
         .child("local/pyproject.toml")
@@ -22116,20 +23553,43 @@ fn lock_metadata_free_shared_static_metadata_direct_source() -> Result<()> {
         .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 4 packages in [TIME]
+    Resolved 6 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
         .arg("lock-without-metadata")
-        .arg("--locked")
+        .arg("--check")
         .arg("--offline")
         .arg("--no-cache")
         .arg("--index-url")
         .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 4 packages in [TIME]
+    Resolved 6 packages in [TIME]
+    ");
+
+    let pyproject = fs_err::read_to_string(pyproject_toml.path())?;
+    pyproject_toml.write_str(&pyproject.replace(
+        &format!(
+            r#"six = {{ url = "{}" }}
+"#,
+            server.file_url("six-1.0.0-py3-none-any.whl")
+        ),
+        "",
+    ))?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to resolve dependencies for package `anyio==4.4.0`
+      cause: Package `six` was included as a URL dependency. URL dependencies must be expressed as direct requirements or constraints. Consider adding `six @ http://[LOCALHOST]/files/six-1.0.0-py3-none-any.whl` to your dependencies or constraints file.
+
+    hint: `anyio` (v4.4.0) was included because `project` (v0.1.0) depends on `anyio`
     ");
 
     Ok(())
@@ -22178,7 +23638,7 @@ fn lock_metadata_free_shared_root_group_direct_source() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
         .arg("lock-without-metadata")
-        .arg("--locked")
+        .arg("--check")
         .arg("--offline")
         .arg("--no-cache")
         .arg("--index-url")
@@ -22243,7 +23703,7 @@ fn lock_metadata_free_shared_script_direct_source() -> Result<()> {
         .arg("script.py")
         .arg("--preview-features")
         .arg("lock-without-metadata")
-        .arg("--locked")
+        .arg("--check")
         .arg("--offline")
         .arg("--no-cache")
         .arg("--index-url")
@@ -22285,20 +23745,13 @@ fn lock_regenerates_marker_specific_requested_extras() -> Result<()> {
     Resolved 3 packages in [TIME]
     ");
 
-    let mut lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
-    assert_eq!(lock["revision"].as_integer(), Some(4));
-    assert!(
-        lock["package"]
-            .as_array_of_tables()
-            .unwrap()
-            .iter()
-            .all(|package| package.get("metadata").is_none())
-    );
     let lockfile = context.temp_dir.child("uv.lock");
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
         .arg("lock-without-metadata")
-        .arg("--locked")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
         .arg("--index-url")
         .arg(server.index_url()), @"
     exit_code: 0 (success)
@@ -22306,24 +23759,56 @@ fn lock_regenerates_marker_specific_requested_extras() -> Result<()> {
     Resolved 3 packages in [TIME]
     ");
 
-    let packages = lock["package"].as_array_of_tables_mut().unwrap();
-    let project = packages
-        .iter_mut()
-        .find(|package| package["name"].as_str() == Some("project"))
-        .unwrap();
-    let dependencies = project["dependencies"].as_array_mut().unwrap();
-    let dependency = dependencies
-        .iter_mut()
-        .find(|dependency| {
-            dependency
-                .as_inline_table()
-                .and_then(|dependency| dependency.get("extra"))
-                .is_some()
-        })
-        .unwrap();
-    let dependency = dependency.as_inline_table_mut().unwrap();
-    dependency.insert("marker", toml_edit::Value::from("sys_platform == 'linux'"));
-    lockfile.write_str(&lock.to_string())?;
+    lockfile.write_str(&formatdoc! {r#"
+        version = 1
+        revision = 4
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform != 'win32'",
+            "sys_platform == 'win32'",
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "h2"
+        version = "1.0.0"
+        source = {{ registry = "{index_url}" }}
+        sdist = {{ url = "{h2_sdist_url}", hash = "sha256:c9b6a98f440bb83af4268095ee1e253e837c2177ec2eaa46f780cc7c71a75f6d", upload-time = "2024-03-24T00:00:00Z" }}
+        wheels = [
+            {{ url = "{h2_wheel_url}", hash = "sha256:33a63cbe8d76a8ee81d34a146d0140aaa55d29187aef7f00e5e8a922e03c7bde", upload-time = "2024-03-24T00:00:00Z" }},
+        ]
+
+        [[package]]
+        name = "httpx"
+        version = "1.0.0"
+        source = {{ registry = "{index_url}" }}
+        sdist = {{ url = "{httpx_sdist_url}", hash = "sha256:2d661cd788ac8c83adf4ea0638035919251271d5508a63e6650448605dcd4a1b", upload-time = "2024-03-24T00:00:00Z" }}
+        wheels = [
+            {{ url = "{httpx_wheel_url}", hash = "sha256:4154c3c1f739176378d6865841d67718bc624c0f2f0ccf87364c8141a0c93603", upload-time = "2024-03-24T00:00:00Z" }},
+        ]
+
+        [package.optional-dependencies]
+        http2 = [
+            {{ name = "h2" }},
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = {{ virtual = "." }}
+        dependencies = [
+            {{ name = "httpx" }},
+            {{ name = "httpx", extra = ["http2"], marker = "sys_platform == 'linux'" }},
+        ]
+        "#,
+        index_url = server.index_url(),
+        h2_sdist_url = server.file_url("h2-1.0.0.tar.gz"),
+        h2_wheel_url = server.file_url("h2-1.0.0-py3-none-any.whl"),
+        httpx_sdist_url = server.file_url("httpx-1.0.0.tar.gz"),
+        httpx_wheel_url = server.file_url("httpx-1.0.0-py3-none-any.whl"),
+    })?;
 
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
@@ -31982,8 +33467,10 @@ fn lock_dynamic_version_no_build() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
         .arg("lock-without-metadata")
-        .arg("--locked")
-        .arg("--offline"), @"
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-build"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -39779,7 +41266,9 @@ async fn lock_path_dependency_explicit_index() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
         .arg("lock-without-metadata")
-        .arg("--locked")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
         .arg("--default-index")
         .arg("https://example.invalid/simple")
         .current_dir(&pkg_b), @"
