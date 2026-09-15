@@ -111,15 +111,12 @@ if __name__ == "__main__":
     # Pin packages to the last versions that support older Python interpreters.
     if sys.version_info < (3, 7):
         pylint_version = "2.12.2"
-        numpy_version = "1.19.5"
         pydantic_core_version = None
     elif sys.version_info < (3, 8):
         pylint_version = "2.17.7"
-        numpy_version = "1.21.6"
         pydantic_core_version = "2.14.6"
     else:
         pylint_version = None
-        numpy_version = None
         pydantic_core_version = None
 
     pylint_requirement = (
@@ -304,14 +301,9 @@ if __name__ == "__main__":
                 "The package `pylint` is installed in the virtual environment (but shouldn't be)."
             )
 
-        # Ensure that we can successfully install a package with native libraries.
-        #
-        # Pyston would build NumPy from source; use a small native extension instead.
-        # NumPy doesn't distribute wheels for Python 3.13 or GraalPy (at time of writing).
-        if sys.implementation.name == "pyston":
+        # Build and import a native extension on interpreters with build tools in CI.
+        if sys.version_info < (3, 13) and sys.implementation.name != "graalpy":
             install_native_extension(uv=uv)
-        elif sys.version_info < (3, 13) and sys.implementation.name != "graalpy":
-            install_package(uv=uv, package="numpy", version=numpy_version)
 
         # Attempt to install `pydantic_core`.
         # This ensures that we can successfully install and recognize a package that may
