@@ -105,6 +105,7 @@ pub(crate) async fn pip_install(
     link_mode: LinkMode,
     compile: bool,
     hash_checking: Option<HashCheckingMode>,
+    require_build_hashes: bool,
     installer_metadata: bool,
     config_settings: &ConfigSettings,
     config_settings_package: &PackageConfigSettings,
@@ -170,6 +171,13 @@ pub(crate) async fn pip_install(
     override_dependencies.extend(overrides_from_workspace);
 
     let hash_checking = HashCheckingMode::from_requirements_txt(hash_checking, require_hashes);
+
+    if require_build_hashes && !preview.is_enabled(PreviewFeature::BuildDependencyHashes) {
+        warn_user!(
+            "The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeature::BuildDependencyHashes
+        );
+    }
 
     if pylock.is_some() {
         if !preview.is_enabled(PreviewFeature::Pylock) {
@@ -462,13 +470,15 @@ pub(crate) async fn pip_install(
         }
     };
 
-    // Verify supplied build hashes unless hash verification was explicitly disabled.
-    let build_hasher = if hash_checking.is_some() {
-        HashStrategy::from_constraints(
-            &build_constraints,
-            Some(&marker_env),
-            HashCheckingMode::Verify,
-        )?
+    let build_hash_checking = if require_build_hashes {
+        Some(HashCheckingMode::Require)
+    } else if hash_checking.is_some() {
+        Some(HashCheckingMode::Verify)
+    } else {
+        None
+    };
+    let build_hasher = if let Some(build_hash_checking) = build_hash_checking {
+        HashStrategy::from_constraints(&build_constraints, Some(&marker_env), build_hash_checking)?
     } else {
         HashStrategy::default()
     };
