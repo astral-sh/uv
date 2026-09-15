@@ -171,16 +171,16 @@ jobs:
           version: "0.12.13"
           checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
       - name: "Check licenses"
-        run: uv run --only-dev cargo deny check licenses
+        run: uv run --only-dev cargo deny --all-features check licenses
       - name: "Check sources"
-        run: uv run --only-dev cargo deny check sources
+        run: uv run --only-dev cargo deny --all-features check sources
       - name: "Check workspace dependency features"
         run: uv run --no-project scripts/check-cargo-default-features.py
       - name: "Check bans"
-        run: uv run --only-dev cargo deny check bans
+        run: uv run --only-dev cargo deny --all-features check bans
       - name: "Check uv_build dependencies"
         run: |
-          uv run --only-dev cargo deny --manifest-path crates/uv-build/Cargo.toml check bans
+          uv run --only-dev cargo deny --manifest-path crates/uv-build/Cargo.toml --all-features check bans
 
   hawk:
     timeout-minutes: 15
