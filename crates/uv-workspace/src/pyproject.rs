@@ -397,7 +397,7 @@ pub struct ToolUv {
             default-groups = ["docs"]
         "#
     )]
-    pub default_groups: Option<DefaultGroups>,
+    pub(crate) default_groups: Option<DefaultGroups>,
 
     /// Additional settings for `dependency-groups`.
     ///
