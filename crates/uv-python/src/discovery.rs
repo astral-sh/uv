@@ -1490,7 +1490,7 @@ fn find_python_installations_with_strategy<'a>(
                     download_list,
                 )
                 .filter_ok(move |installation| {
-                    request.satisfied_by_interpreter(&installation.interpreter)
+                    request.satisfied_by_discovered_installation(installation)
                 })
                 .map_ok(Ok)
             })
@@ -1544,6 +1544,76 @@ pub(crate) fn find_python_installation(
     cache: &Cache,
 ) -> Result<FindPythonResult, Error> {
     find_python_installation_with_catalog(request, environments, preference, cache, None)
+}
+
+/// A discovery outcome and the catalog used to select managed installations, if needed.
+pub(crate) struct PythonDiscovery {
+    pub(crate) result: Result<PythonInstallation, crate::Error>,
+    pub(crate) download_list: Option<ManagedPythonDownloadList>,
+}
+
+/// Apply catalog selection to the result of discovery without a catalog.
+///
+/// Search with cached metadata before refreshing on a miss. Return the catalog with the result so
+/// downloads and fallback requests use the same metadata.
+pub(crate) async fn find_python_installation_with_cached_catalog(
+    result: Result<PythonInstallation, crate::Error>,
+    request: &PythonRequest,
+    environments: EnvironmentPreference,
+    preference: PythonPreference,
+    client_builder: &BaseClientBuilder<'_>,
+    cache: &Cache,
+    python_downloads_json_url: Option<&str>,
+) -> Result<PythonDiscovery, crate::Error> {
+    match result {
+        Ok(installation)
+            if !installation.is_managed()
+                || PythonDownloadRequest::from_request(request).is_none() =>
+        {
+            return Ok(PythonDiscovery {
+                result: Ok(installation),
+                download_list: None,
+            });
+        }
+        Ok(_) | Err(crate::Error::MissingPython(..)) => {}
+        Err(crate::Error::Discovery(error)) if !error.is_critical() => {}
+        Err(error) => return Err(error),
+    }
+
+    let find =
+        |download_list: &ManagedPythonDownloadList| -> Result<PythonInstallation, crate::Error> {
+            Ok(find_python_installation_with_catalog(
+                request,
+                environments,
+                preference,
+                cache,
+                Some(download_list),
+            )??)
+        };
+    let download_list = if let Some(download_list) =
+        ManagedPythonDownloadList::from_cache(client_builder, cache, python_downloads_json_url)
+            .await?
+    {
+        match find(&download_list) {
+            Ok(installation) => {
+                return Ok(PythonDiscovery {
+                    result: Ok(installation),
+                    download_list: Some(download_list),
+                });
+            }
+            Err(crate::Error::MissingPython(..)) => {}
+            Err(crate::Error::Discovery(error)) if !error.is_critical() => {}
+            Err(error) => return Err(error),
+        }
+        ManagedPythonDownloadList::refresh(client_builder, cache, python_downloads_json_url).await?
+    } else {
+        ManagedPythonDownloadList::new(client_builder, cache, python_downloads_json_url).await?
+    };
+    let result = find(&download_list);
+    Ok(PythonDiscovery {
+        result,
+        download_list: Some(download_list),
+    })
 }
 
 pub(crate) fn find_python_installation_with_catalog(
@@ -1734,20 +1804,7 @@ pub(crate) async fn find_best_python_installation(
 ) -> Result<PythonInstallation, crate::Error> {
     debug!("Starting Python discovery for {request}");
     let original_request = request;
-    match find_python_installation(request, environments, preference, cache) {
-        Ok(Ok(installation))
-            if !installation.is_managed()
-                || PythonDownloadRequest::from_request(request).is_none() =>
-        {
-            warn_on_unsupported_python(installation.interpreter());
-            return Ok(installation);
-        }
-        Err(error) if error.is_critical() => return Err(error.into()),
-        Ok(_) | Err(_) => {}
-    }
-    let download_list =
-        ManagedPythonDownloadList::new(client_builder, cache, python_downloads_json_url).await?;
-
+    let mut download_list = None;
     let mut previous_fetch_failed = false;
     let mut download_state = None;
 
@@ -1778,40 +1835,62 @@ pub(crate) async fn find_best_python_installation(
                 String::new()
             }
         );
-        let result = find_python_installation_with_catalog(
+        let mut result = match find_python_installation_with_catalog(
             request,
             environments,
             preference,
             cache,
-            Some(&download_list),
-        );
+            download_list.as_ref(),
+        ) {
+            Ok(result) => result.map_err(crate::Error::from),
+            Err(error) => Err(error.into()),
+        };
+        // Load the catalog to validate a managed candidate or attempt a download. Otherwise, a
+        // missing interpreter can fall back to another local version without consulting metadata.
+        if download_list.is_none()
+            && preference.allows_managed()
+            && (downloads_enabled || result.as_ref().is_ok_and(PythonInstallation::is_managed))
+        {
+            let discovery = find_python_installation_with_cached_catalog(
+                result,
+                request,
+                environments,
+                preference,
+                client_builder,
+                cache,
+                python_downloads_json_url,
+            )
+            .await?;
+            result = discovery.result;
+            download_list = discovery.download_list;
+        }
         let error = match result {
-            Ok(Ok(installation)) => {
+            Ok(installation) => {
                 warn_on_unsupported_python(installation.interpreter());
                 return Ok(installation);
             }
             // Continue if we can't find a matching Python and ignore non-critical discovery errors
-            Ok(Err(error)) => error.into(),
-            Err(error) if !error.is_critical() => error.into(),
-            Err(error) => return Err(error.into()),
+            Err(error @ crate::Error::MissingPython(..)) => error,
+            Err(crate::Error::Discovery(error)) if !error.is_critical() => error.into(),
+            Err(error) => return Err(error),
         };
 
         // Attempt to download the version if downloads are enabled
         if downloads_enabled
             && !previous_fetch_failed
+            && let Some(download_list) = &download_list
             && let Some(download_request) = PythonDownloadRequest::from_request(request)
         {
-            let (client, retry_policy, download_list) =
-                if let Some(download_state) = &mut download_state {
-                    download_state
-                } else {
-                    let retry_policy = client_builder.retry_policy();
+            let (client, retry_policy) = if let Some(download_state) = &mut download_state {
+                download_state
+            } else {
+                let retry_policy = client_builder.retry_policy();
 
-                    // Python downloads are performing their own retries to catch stream errors, disable
-                    // the default retries to avoid the middleware performing uncontrolled retries.
-                    let client = client_builder.clone().retries(0).build()?;
-                    download_state.insert((client, retry_policy, &download_list))
-                };
+                // Python downloads are performing their own retries to catch stream errors, disable
+                // the default retries to avoid the middleware performing uncontrolled retries.
+                let client = client_builder.clone().retries(0).build()?;
+                download_state.insert((client, retry_policy))
+            };
 
             let download = download_request
                 .clone()
@@ -2367,8 +2446,46 @@ impl PythonRequest {
         }
     }
 
-    /// Check if a given interpreter satisfies the interpreter request.
-    pub fn satisfied(&self, interpreter: &Interpreter, cache: &Cache) -> bool {
+    /// Check if an interpreter satisfies the request and the catalog's build selection policy.
+    pub async fn satisfied_with_catalog(
+        &self,
+        interpreter: &Interpreter,
+        client_builder: &BaseClientBuilder<'_>,
+        cache: &Cache,
+        python_downloads_json_url: Option<&str>,
+    ) -> Result<bool, crate::Error> {
+        if !self.satisfied(interpreter, cache) {
+            return Ok(false);
+        }
+        let Some(request) = PythonDownloadRequest::from_request(self) else {
+            return Ok(true);
+        };
+        let managed_key = ManagedPythonInstallation::key_from_interpreter(interpreter);
+        if let Some(version) = request.version() {
+            let key = managed_key
+                .as_ref()
+                .map_or_else(|| Cow::Owned(interpreter.key()), Cow::Borrowed);
+            if !version.matches_installation_key(&key) {
+                return Ok(false);
+            }
+        }
+        let Some(key) = managed_key else {
+            return Ok(true);
+        };
+        let download_list = ManagedPythonDownloadList::cached_or_new(
+            client_builder,
+            cache,
+            python_downloads_json_url,
+        )
+        .await?;
+        Ok(download_list.allows_installed_build(&request, &key))
+    }
+
+    /// Check the interpreter's reported properties or executable path against this request.
+    ///
+    /// Managed installation identity and catalog selection are checked by
+    /// [`Self::satisfied_with_catalog`].
+    fn satisfied(&self, interpreter: &Interpreter, cache: &Cache) -> bool {
         /// Returns `true` if the two paths refer to the same interpreter executable.
         fn is_same_executable(path1: &Path, path2: &Path) -> bool {
             path1 == path2 || is_same_file(path1, path2).unwrap_or(false)
@@ -2376,9 +2493,7 @@ impl PythonRequest {
 
         match self {
             Self::Default | Self::Any => true,
-            Self::Version(version_request) => {
-                version_request.matches_interpreter_with_key(interpreter)
-            }
+            Self::Version(version_request) => version_request.matches_interpreter(interpreter),
             Self::Directory(directory) => {
                 // `sys.prefix` points to the environment root or `sys.executable` is the same
                 is_same_executable(directory, interpreter.sys_prefix())
@@ -2452,7 +2567,7 @@ impl PythonRequest {
                 .implementation_name()
                 .eq_ignore_ascii_case(implementation.long_name()),
             Self::ImplementationVersion(implementation, version) => {
-                version.matches_interpreter_with_key(interpreter)
+                version.matches_interpreter(interpreter)
                     && interpreter
                         .implementation_name()
                         .eq_ignore_ascii_case(implementation.long_name())
@@ -3322,20 +3437,15 @@ impl VersionRequest {
             && request.matches_interpreter(&installation.interpreter)
     }
 
-    /// Check if an interpreter and its managed installation identity match the request.
-    pub(crate) fn matches_interpreter_with_key(&self, interpreter: &Interpreter) -> bool {
-        let key = ManagedPythonInstallation::key_from_interpreter(interpreter)
-            .unwrap_or_else(|| interpreter.key());
-        self.matches_installation_key(&key) && self.matches_interpreter(interpreter)
-    }
-
     fn matches_build_variant(&self, key: &PythonInstallationKey) -> bool {
         self.variants()
             .is_none_or(|variants| variants.matches_build_variant(key))
     }
 
-    /// Check if a interpreter matches the request.
-    fn matches_interpreter(&self, interpreter: &Interpreter) -> bool {
+    /// Check the interpreter's reported version and runtime variant.
+    ///
+    /// Use [`Self::matches_installation_key`] to validate the installation identity as well.
+    pub(crate) fn matches_interpreter(&self, interpreter: &Interpreter) -> bool {
         match self {
             Self::Any => true,
             // Do not use free-threaded interpreters by default

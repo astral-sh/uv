@@ -834,17 +834,21 @@ impl ScriptInterpreter {
                 requires_python
                     .as_ref()
                     .map(|(requires_python, _)| requires_python),
+                client_builder,
+                install_mirrors.python_downloads_json_url.as_deref(),
                 cache,
-            ) {
-                Ok(()) => return Ok(Self::Environment(environment)),
-                Err(err) if keep_incompatible => {
+            )
+            .await?
+            {
+                None => return Ok(Self::Environment(environment)),
+                Some(err) if keep_incompatible => {
                     warn_user!(
                         "Using incompatible environment (`{}`) due to `--no-sync` ({err})",
                         environment.root().user_display().cyan(),
                     );
                     return Ok(Self::Environment(environment));
                 }
-                Err(err) => {
+                Some(err) => {
                     debug!("{err}");
                 }
             }
@@ -960,31 +964,22 @@ enum EnvironmentIncompatibilityError {
 }
 
 /// Check whether an environment satisfies the requested Python constraints.
-fn check_environment_compatibility(
+async fn check_environment_compatibility(
     environment: &PythonEnvironment,
     kind: EnvironmentKind,
     python_request: Option<&PythonRequest>,
     python_preference: PythonPreference,
     requires_python: Option<&RequiresPython>,
+    client_builder: &BaseClientBuilder<'_>,
+    python_downloads_json_url: Option<&str>,
     cache: &Cache,
-) -> Result<(), EnvironmentIncompatibilityError> {
+) -> Result<Option<EnvironmentIncompatibilityError>, uv_python::Error> {
     if let Some((cfg_version, int_version)) = environment.get_pyvenv_version_conflict() {
-        return Err(EnvironmentIncompatibilityError::PyenvVersionConflict(
+        return Ok(Some(EnvironmentIncompatibilityError::PyenvVersionConflict(
             kind,
             int_version,
             cfg_version,
-        ));
-    }
-
-    if let Some(request) = python_request {
-        if request.satisfied(environment.interpreter(), cache) {
-            debug!("The {kind} environment's Python version satisfies the request: `{request}`");
-        } else {
-            return Err(EnvironmentIncompatibilityError::PythonRequest(
-                kind,
-                request.clone(),
-            ));
-        }
+        )));
     }
 
     if let Some(requires_python) = requires_python {
@@ -993,10 +988,10 @@ fn check_environment_compatibility(
                 "The {kind} environment's Python version meets the Python requirement: `{requires_python}`"
             );
         } else {
-            return Err(EnvironmentIncompatibilityError::RequiresPython(
+            return Ok(Some(EnvironmentIncompatibilityError::RequiresPython(
                 kind,
                 requires_python.clone(),
-            ));
+            )));
         }
     }
 
@@ -1009,13 +1004,32 @@ fn check_environment_compatibility(
             python_preference
         );
     } else {
-        return Err(EnvironmentIncompatibilityError::PythonPreference(
+        return Ok(Some(EnvironmentIncompatibilityError::PythonPreference(
             kind,
             python_preference,
-        ));
+        )));
     }
 
-    Ok(())
+    if let Some(request) = python_request {
+        if request
+            .satisfied_with_catalog(
+                environment.interpreter(),
+                client_builder,
+                cache,
+                python_downloads_json_url,
+            )
+            .await?
+        {
+            debug!("The {kind} environment's Python version satisfies the request: `{request}`");
+        } else {
+            return Ok(Some(EnvironmentIncompatibilityError::PythonRequest(
+                kind,
+                request.clone(),
+            )));
+        }
+    }
+
+    Ok(None)
 }
 
 /// The policy for discovering and initializing a project environment.
@@ -1101,13 +1115,15 @@ fn existing_project_environment(
 }
 
 /// Discover a compatible project environment at `root`.
-fn discover_project_environment(
+async fn discover_project_environment(
     root: &Path,
     python_request: Option<&PythonRequest>,
     python_preference: PythonPreference,
     requires_python: Option<&RequiresPython>,
     policy: ProjectEnvironmentPolicy,
     centralized: bool,
+    client_builder: &BaseClientBuilder<'_>,
+    python_downloads_json_url: Option<&str>,
     cache: &Cache,
 ) -> Result<Option<PythonEnvironment>, ProjectError> {
     let Some(environment) = existing_project_environment(root, centralized, policy, cache)? else {
@@ -1120,14 +1136,17 @@ fn discover_project_environment(
         python_request,
         python_preference,
         requires_python,
+        client_builder,
+        python_downloads_json_url,
         cache,
-    );
+    )
+    .await?;
 
     // Conflicting versions for the same base interpreter indicate its cached metadata may be
     // corrupted. Clear the entry before interpreter discovery can select stale metadata.
     if matches!(
         &compatibility,
-        Err(EnvironmentIncompatibilityError::PyenvVersionConflict(..))
+        Some(EnvironmentIncompatibilityError::PyenvVersionConflict(..))
     ) && let Ok(base_executable) = environment.interpreter().to_base_python()
         && let Ok(base_interpreter) = Interpreter::query(&base_executable, cache)
         && environment.uses(&base_interpreter)
@@ -1143,8 +1162,8 @@ fn discover_project_environment(
     }
 
     match compatibility {
-        Ok(()) => Ok(Some(environment)),
-        Err(err) if matches!(policy, ProjectEnvironmentPolicy::Preserve) => {
+        None => Ok(Some(environment)),
+        Some(err) if matches!(policy, ProjectEnvironmentPolicy::Preserve) => {
             if centralized {
                 let root = environment.root();
                 warn_user!(
@@ -1162,7 +1181,7 @@ fn discover_project_environment(
             }
             Ok(Some(environment))
         }
-        Err(err) => {
+        Some(err) => {
             debug!("{err}");
             Ok(None)
         }
@@ -1459,8 +1478,12 @@ impl ProjectInterpreter {
                     requires_python.as_ref(),
                     policy,
                     centralized,
+                    client_builder,
+                    install_mirrors.python_downloads_json_url.as_deref(),
                     cache,
-                )? {
+                )
+                .await?
+                {
                     return Ok(Self::Environment(environment));
                 }
             }
@@ -1480,8 +1503,11 @@ impl ProjectInterpreter {
                     requires_python.as_ref(),
                     policy,
                     centralized,
+                    client_builder,
+                    install_mirrors.python_downloads_json_url.as_deref(),
                     cache,
-                )?
+                )
+                .await?
             {
                 return Ok(Self::Environment(environment));
             }
@@ -1514,8 +1540,12 @@ impl ProjectInterpreter {
                 requires_python.as_ref(),
                 policy,
                 centralized,
+                client_builder,
+                install_mirrors.python_downloads_json_url.as_deref(),
                 cache,
-            )? {
+            )
+            .await?
+            {
                 return Ok(Self::Environment(environment));
             }
         }

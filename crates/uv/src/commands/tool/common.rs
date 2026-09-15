@@ -716,10 +716,17 @@ pub(crate) async fn refine_interpreter(
 
     // If the user passed a `--python` request, and the refined interpreter is incompatible, we
     // can't use it.
-    if let Some(python_request) = python_request {
-        if !python_request.satisfied(&interpreter, cache) {
-            return Ok(None);
-        }
+    if let Some(python_request) = python_request
+        && !python_request
+            .satisfied_with_catalog(
+                &interpreter,
+                client_builder,
+                cache,
+                install_mirrors.python_downloads_json_url.as_deref(),
+            )
+            .await?
+    {
+        return Ok(None);
     }
 
     Ok(Some(interpreter))
