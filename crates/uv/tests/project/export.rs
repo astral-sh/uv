@@ -10281,6 +10281,7 @@ fn export_batch_selections() -> Result<()> {
         members = ["child"]
     "#})?;
 
+    // The child overrides `dev` and defaults to `lint`, while inheriting `root-only`.
     context
         .temp_dir
         .child("child/pyproject.toml")
@@ -10304,6 +10305,7 @@ fn export_batch_selections() -> Result<()> {
 
     context.lock().assert().success();
 
+    // Output paths are relative to the manifest, so they should also be under `exports/`.
     context
         .temp_dir
         .child("exports/batch.toml")
@@ -10421,6 +10423,7 @@ fn export_batch_selections() -> Result<()> {
 fn export_batch_lock_modes() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
+    // The groups have disjoint Python requirements, but share a universal lock.
     let pyproject = indoc! {r#"
         [project]
         name = "project"
@@ -10459,6 +10462,7 @@ fn export_batch_lock_modes() -> Result<()> {
     assert_snapshot!(context.read("dev.txt"), @"");
     assert_snapshot!(context.read("legacy.txt"), @"");
 
+    // Make the lock stale and seed an output to check that `--locked` leaves both untouched.
     context
         .temp_dir
         .child("pyproject.toml")
@@ -10477,12 +10481,14 @@ fn export_batch_lock_modes() -> Result<()> {
     assert_eq!(context.read("uv.lock"), lock);
     assert_snapshot!(context.read("dev.txt"), @"original");
 
+    // `--frozen` exports from the stale lock without updating it.
     uv_snapshot!(context.filters(), context.export()
         .arg("--frozen").arg("--batch").arg("batch.toml").arg("--no-header")
         .arg("--preview-features").arg("batch-export"), @"exit_code: 0 (success)");
     assert_eq!(context.read("uv.lock"), lock);
     assert_snapshot!(context.read("dev.txt"), @"");
 
+    // A normal export refreshes the lock, so a subsequent `--locked` export succeeds.
     uv_snapshot!(context.filters(), context.export()
         .arg("--batch").arg("batch.toml")
         .arg("--preview-features").arg("batch-export"), @"
@@ -10518,6 +10524,7 @@ fn export_batch_invalid_selection() -> Result<()> {
 
     context.lock().assert().success();
 
+    // Seed the first output, then make the second entry fail after the first has rendered.
     context
         .temp_dir
         .child("requirements.txt")
@@ -10560,6 +10567,7 @@ fn export_batch_manifest_validation() -> Result<()> {
     error: Export manifest must contain at least one `[[export]]` entry
     ");
 
+    // Selection names use the singular CLI spelling (`extra`, not `extras`).
     manifest.write_str(indoc! {r#"
         [[export]]
         output-file = "requirements.txt"
@@ -10579,6 +10587,7 @@ fn export_batch_manifest_validation() -> Result<()> {
              unknown field `extras`, expected one of `output-file`, `package`, `all-packages`, `extra`, `no-extra`, `all-extras`, `group`, `no-group`, `only-group`, `all-groups`, `no-default-groups`
     "#);
 
+    // These paths refer to the same output after normalization.
     manifest.write_str(indoc! {r#"
         [[export]]
         output-file = "requirements.txt"
@@ -10594,6 +10603,7 @@ fn export_batch_manifest_validation() -> Result<()> {
     error: Duplicate export output: `[TEMP_DIR]/requirements.txt`
     ");
 
+    // Group-only exports cannot include project extras.
     manifest.write_str(indoc! {r#"
         [[export]]
         output-file = "requirements.txt"
