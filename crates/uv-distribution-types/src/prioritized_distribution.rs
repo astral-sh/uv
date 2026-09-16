@@ -369,6 +369,7 @@ impl PrioritizedDist {
             ..PrioritizedDistInner::default()
         }))
     }
+
     /// Insert the given built distribution into the [`PrioritizedDist`].
     pub fn insert_built(
         &mut self,

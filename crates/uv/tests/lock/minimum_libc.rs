@@ -191,7 +191,9 @@ fn minimum_libc_filters_locked_wheels() -> Result<()> {
     exit_code: 0 (success)
     ----- stdout -----
     demo==1.0.0 \
-        --hash=sha256:eb2ff51027ef5001a478ca15a93fbd009fdda87e36238238a52f1d4019502428
+        --hash=sha256:c0b5946665f8aebba3d880c4e5658f346e3971ec2cc0013780eab4dafbbfcad6 \
+        --hash=sha256:eb2ff51027ef5001a478ca15a93fbd009fdda87e36238238a52f1d4019502428 \
+        --hash=sha256:ed676c33c75c4e3d56b53b061173a4ec378e289013cef527ae68ce525f30be80
 
     ----- stderr -----
     warning: Setting `libc` in `environments` or `required-environments` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
@@ -287,9 +289,9 @@ fn minimum_libc_filters_existing_hashes() -> Result<()> {
     Ok(())
 }
 
-/// Required coverage does not discard known hashes for unhashed local index entries.
+/// Unhashed local index entries retain every eligible hash when recompiling requirements.
 #[test]
-fn minimum_libc_required_preserves_hashes() -> Result<()> {
+fn minimum_libc_unhashed_index_hashes() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let mut hashes = Vec::new();
     for tag in [
@@ -342,6 +344,37 @@ fn minimum_libc_required_preserves_hashes() -> Result<()> {
         --hash=sha256:[SHA256:demo-1.0.0-cp312-cp312-manylinux_2_17_x86_64.whl] \
         --hash=sha256:[SHA256:demo-1.0.0-cp312-cp312-manylinux_2_34_x86_64.whl] \
         --hash=sha256:[SHA256:demo-1.0.0-cp312-cp312-musllinux_1_2_x86_64.whl]
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    let pyproject = context
+        .read("pyproject.toml")
+        .replace("required-environments", "environments")
+        .replace(r#"glibc = "2.31""#, r#"glibc = "2.31", musl = "1.2""#);
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject)?;
+    // Drop the too-new GNU wheel's hash, but keep both supported libc families.
+    uv_snapshot!(context.filters(), context.pip_compile().args(["pyproject.toml", "--universal", "--generate-hashes", "--offline", "--no-header", "--no-annotate", "--output-file", "requirements.txt", "--preview-features", "minimum-libc-version"]), @r"
+    exit_code: 0 (success)
+    ----- stdout -----
+    demo==1.0.0 ; platform_machine == 'x86_64' and sys_platform == 'linux' \
+        --hash=sha256:[SHA256:demo-1.0.0-cp312-cp312-musllinux_1_2_x86_64.whl] \
+        --hash=sha256:[SHA256:demo-1.0.0-cp312-cp312-manylinux_2_17_x86_64.whl]
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    // A second compile starts with only valid hashes and must retain them both.
+    uv_snapshot!(context.filters(), context.pip_compile().args(["pyproject.toml", "--universal", "--generate-hashes", "--offline", "--no-header", "--no-annotate", "--output-file", "requirements.txt", "--preview-features", "minimum-libc-version"]), @r"
+    exit_code: 0 (success)
+    ----- stdout -----
+    demo==1.0.0 ; platform_machine == 'x86_64' and sys_platform == 'linux' \
+        --hash=sha256:[SHA256:demo-1.0.0-cp312-cp312-musllinux_1_2_x86_64.whl] \
+        --hash=sha256:[SHA256:demo-1.0.0-cp312-cp312-manylinux_2_17_x86_64.whl]
 
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -1081,6 +1114,47 @@ fn minimum_libc_allows_sdist_fallback() -> Result<()> {
     error: No solution found when resolving dependencies for split (markers: platform_machine == 'x86_64' and sys_platform == 'linux')
       cause: Because demo==2.0.0 has no `platform_machine == 'x86_64' and sys_platform == 'linux'`-compatible wheels and only demo==2.0.0 is available, we can conclude that all versions of demo cannot be used.
              And because your project depends on demo, we can conclude that your project's requirements are unsatisfiable.
+    ");
+
+    // With binaries disabled, a permitted wheel can provide metadata, but its hash must not
+    // replace the source archive's hash in the compiled requirements.
+    wheel(
+        &context,
+        "demo",
+        "2.0.0",
+        "cp312-cp312-manylinux_2_17_x86_64",
+    )?;
+    let source_hash = hex::encode(Sha256::digest(fs_err::read(
+        context.temp_dir.child("links/demo-2.0.0.tar.gz"),
+    )?));
+    let wheel_hash = hex::encode(Sha256::digest(fs_err::read(
+        context
+            .temp_dir
+            .child("links/demo-2.0.0-cp312-cp312-manylinux_2_17_x86_64.whl"),
+    )?));
+    let context = context.with_filters([
+        (source_hash.clone(), "[SOURCE_HASH]".to_string()),
+        (wheel_hash.clone(), "[WHEEL_HASH]".to_string()),
+    ]);
+    pyproject_toml.write_str(
+        &context
+            .read("pyproject.toml")
+            .replace("required-environments", "environments"),
+    )?;
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str(&format!(
+            "demo==2.0.0 --hash=sha256:{source_hash} --hash=sha256:{wheel_hash}\n"
+        ))?;
+    uv_snapshot!(context.filters(), context.pip_compile().args(["pyproject.toml", "--universal", "--generate-hashes", "--offline", "--no-binary", ":all:", "--no-header", "--no-annotate", "--output-file", "requirements.txt", "--preview-features", "minimum-libc-version"]), @r"
+    exit_code: 0 (success)
+    ----- stdout -----
+    demo==2.0.0 ; platform_machine == 'x86_64' and sys_platform == 'linux' \
+        --hash=sha256:[SOURCE_HASH]
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
     ");
     Ok(())
 }

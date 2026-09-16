@@ -23,12 +23,12 @@ pub struct Options {
 
 impl Options {
     /// Return the artifact constraints for a universal resolution.
-    pub(crate) fn artifact_policy(&self) -> ArtifactPolicy {
+    pub fn artifact_policy(&self) -> ArtifactPolicy {
         ArtifactPolicy::new(&self.supported_environments, &self.required_environments)
     }
 
     /// Return the supported and required environments that need artifact coverage.
-    pub(crate) fn artifact_environments(&self) -> impl Iterator<Item = &Environment> {
+    pub fn artifact_environments(&self) -> impl Iterator<Item = &Environment> {
         self.supported_environments
             .iter()
             .chain(self.required_environments.iter())

@@ -9,9 +9,8 @@ use uv_configuration::{
     Reinstall, RequiredVersion, ResolutionMode, TargetTriple, TrustedPublishing, Upgrade,
 };
 use uv_distribution_types::{
-    Environments,
-    ConfigSettings, ExcludeNewerOverride, ExcludeNewerValue, ExtraBuildVariables, Index, IndexUrl,
-    PackageConfigSettings, PipExtraIndex, PipFindLinks, PipIndex,
+    ConfigSettings, Environments, ExcludeNewerOverride, ExcludeNewerValue, ExtraBuildVariables,
+    Index, IndexUrl, PackageConfigSettings, PipExtraIndex, PipFindLinks, PipIndex,
 };
 use uv_install_wheel::LinkMode;
 use uv_pypi_types::SchemaConflicts;

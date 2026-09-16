@@ -7318,12 +7318,14 @@ dependencies = [
 name = "uv-resolver-types"
 version = "0.0.82"
 dependencies = [
+ "futures",
  "indexmap",
  "itertools 0.14.0",
  "petgraph",
  "reqwest",
  "rustc-hash",
  "thiserror",
+ "uv-client",
  "uv-configuration",
  "uv-distribution",
  "uv-distribution-types",
