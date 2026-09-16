@@ -1,6 +1,6 @@
 use rustc_hash::FxHashMap;
 
-use uv_distribution_types::{CompatibleDist, DistributionId, Identifier, ResolvedDist};
+use uv_distribution_types::{CompatibleDist, DistributionId, Identifier, PinnedDist, ResolvedDist};
 use uv_normalize::PackageName;
 
 use crate::candidate_selector::Candidate;
@@ -8,7 +8,7 @@ use crate::candidate_selector::Candidate;
 #[derive(Clone, Debug)]
 struct FilePin {
     /// The concrete distribution chosen for installation and locking.
-    dist: ResolvedDist,
+    dist: PinnedDist,
     /// The concrete distribution whose metadata was used during resolution.
     metadata_id: DistributionId,
 }
@@ -32,7 +32,7 @@ impl FilePins {
         self.0
             .entry((candidate.name().clone(), candidate.version().clone()))
             .or_insert_with(|| FilePin {
-                dist: dist.for_installation().to_owned(),
+                dist: PinnedDist::from(dist),
                 metadata_id: dist.for_resolution().distribution_id(),
             });
     }
@@ -45,7 +45,7 @@ impl FilePins {
     ) -> Option<&ResolvedDist> {
         self.0
             .get(&(name.clone(), version.clone()))
-            .map(|pin| &pin.dist)
+            .map(|pin| pin.dist.as_ref())
     }
 
     /// Return the pinned distribution and its metadata id in a single lookup.
@@ -53,7 +53,7 @@ impl FilePins {
         &self,
         name: &PackageName,
         version: &uv_pep440::Version,
-    ) -> Option<(&ResolvedDist, &DistributionId)> {
+    ) -> Option<(&PinnedDist, &DistributionId)> {
         self.0
             .get(&(name.clone(), version.clone()))
             .map(|pin| (&pin.dist, &pin.metadata_id))

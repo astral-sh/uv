@@ -20,7 +20,7 @@ use crate::resolution::AnnotatedDist;
 pub(crate) struct RequirementsTxtDist<'dist> {
     pub(super) dist: &'dist ResolvedDist,
     pub(super) version: &'dist Version,
-    pub(super) hashes: &'dist [HashDigest],
+    pub(super) hashes: Cow<'dist, [HashDigest]>,
     pub(super) markers: MarkerTree,
     pub(super) extras: Vec<ExtraName>,
 }
@@ -167,7 +167,10 @@ impl<'dist> RequirementsTxtDist<'dist> {
         }
     }
 
-    pub(crate) fn from_annotated_dist(annotated: &'dist AnnotatedDist) -> Self {
+    pub(crate) fn from_annotated_dist(
+        annotated: &'dist AnnotatedDist,
+        hashes: Cow<'dist, [HashDigest]>,
+    ) -> Self {
         assert!(
             annotated.marker.conflict().is_true(),
             "found dist {annotated} with non-trivial conflicting marker {marker:?}, \
@@ -177,7 +180,7 @@ impl<'dist> RequirementsTxtDist<'dist> {
         Self {
             dist: &annotated.dist,
             version: &annotated.version,
-            hashes: annotated.hashes.as_slice(),
+            hashes,
             // OK because we've asserted above that this dist
             // does not have a non-trivial conflicting marker
             // that we would otherwise need to care about.

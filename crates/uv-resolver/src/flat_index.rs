@@ -139,12 +139,10 @@ impl FlatDistributions {
                     index,
                     size_is_authoritative: false,
                 };
-                self.0.entry(version).or_default().insert_built(
-                    dist,
-                    vec![],
-                    compatibility,
-                    minimum_libc_version,
-                );
+                self.0
+                    .entry(version)
+                    .or_insert_with(|| PrioritizedDist::new(minimum_libc_version))
+                    .insert_built(dist, vec![], compatibility);
             }
             DistFilename::SourceDistFilename(filename) => {
                 let compatibility = Self::source_dist_compatibility(
@@ -162,11 +160,10 @@ impl FlatDistributions {
                     wheels: vec![],
                     size_is_authoritative: false,
                 };
-                self.0.entry(filename.version).or_default().insert_source(
-                    dist,
-                    vec![],
-                    compatibility,
-                );
+                self.0
+                    .entry(filename.version)
+                    .or_insert_with(|| PrioritizedDist::new(minimum_libc_version))
+                    .insert_source(dist, vec![], compatibility);
             }
         }
     }

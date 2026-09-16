@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 use std::collections::BTreeSet;
-use std::sync::Arc;
 
 use petgraph::{
     Directed, Direction,
@@ -11,8 +10,8 @@ use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::Metadata;
 use uv_distribution_types::{
-    Dist, DistributionId, HashCollection, Identifier, IndexUrl, Name, Requirement, RequiresPython,
-    ResolutionDiagnostic, ResolvedDist, parse_url_hashes,
+    Dist, DistributionId, HashCollection, Identifier, IndexUrl, Name, PinnedDist, Requirement,
+    RequiresPython, ResolutionDiagnostic, parse_url_hashes,
 };
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
@@ -282,7 +281,7 @@ fn add_version<'a>(
         if let Some(extra) = extra {
             if !metadata.provides_extra.contains(extra) {
                 diagnostics.push(ResolutionDiagnostic::MissingExtra {
-                    dist: dist.clone(),
+                    dist: dist.as_ref().clone(),
                     extra: extra.clone(),
                 });
             }
@@ -292,7 +291,7 @@ fn add_version<'a>(
         if let Some(dev) = group {
             if !metadata.dependency_groups.contains_key(dev) {
                 diagnostics.push(ResolutionDiagnostic::MissingGroup {
-                    dist: dist.clone(),
+                    dist: dist.as_ref().clone(),
                     group: dev.clone(),
                 });
             }
@@ -325,11 +324,15 @@ fn parse_dist(
     hasher: &HashStrategy,
     in_memory: &InMemoryIndex,
     git: &GitResolver,
-) -> Result<(ResolvedDist, HashDigests, Option<Metadata>), ResolveError> {
+) -> Result<(PinnedDist, HashDigests, Option<Metadata>), ResolveError> {
     Ok(if let Some(url) = url {
         // Create the locked distribution and recover the metadata using the original URL that
         // was requested during resolution.
-        let dist = Dist::from_url(name.clone(), url_to_precise(url.clone(), git))?;
+        let dist = PinnedDist::from_url(
+            name.clone(),
+            url_to_precise(url.clone(), git),
+            version.clone(),
+        )?;
         let metadata_id = Dist::from_url(name.clone(), url.clone())?.distribution_id();
 
         // Extract the hashes.
@@ -360,14 +363,7 @@ fn parse_dist(
             archive.metadata.clone()
         };
 
-        (
-            ResolvedDist::Installable {
-                dist: Arc::new(dist),
-                version: Some(version.clone()),
-            },
-            hashes,
-            Some(metadata),
-        )
+        (dist, hashes, Some(metadata))
     } else {
         let (dist, metadata_id) = pins
             .dist_and_id(name, version)
@@ -380,13 +376,13 @@ fn parse_dist(
             None | Some(Yanked::Bool(false)) => {}
             Some(Yanked::Bool(true)) => {
                 diagnostics.push(ResolutionDiagnostic::YankedVersion {
-                    dist: dist.clone(),
+                    dist: dist.as_ref().clone(),
                     reason: None,
                 });
             }
             Some(Yanked::Reason(reason)) => {
                 diagnostics.push(ResolutionDiagnostic::YankedVersion {
-                    dist: dist.clone(),
+                    dist: dist.as_ref().clone(),
                     reason: Some(reason.to_string()),
                 });
             }

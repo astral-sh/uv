@@ -22,6 +22,8 @@ pub struct PrioritizedDist(Box<PrioritizedDistInner>);
 /// [`PrioritizedDist`] is boxed because [`Dist`] is large.
 #[derive(Debug, Clone)]
 struct PrioritizedDistInner {
+    /// The cutoff applied to this distribution's retained artifacts.
+    minimum_libc_version: Option<MinimumLibcVersion>,
     /// The highest-priority source distribution. Between compatible source distributions this priority is arbitrary.
     source: Option<(RegistrySourceDist, SourceDistCompatibility)>,
     /// The highest-priority wheel index. When present, it is
@@ -40,6 +42,7 @@ struct PrioritizedDistInner {
 impl Default for PrioritizedDistInner {
     fn default() -> Self {
         Self {
+            minimum_libc_version: None,
             source: None,
             best_wheel_index: None,
             wheels: Vec::new(),
@@ -360,13 +363,24 @@ pub enum HashComparison {
 }
 
 impl PrioritizedDist {
+    pub(crate) fn requires_artifact_hashes(&self) -> bool {
+        self.0.minimum_libc_version.is_some()
+    }
+
+    /// Create an empty distribution set governed by the given libc cutoff.
+    pub fn new(minimum_libc_version: Option<MinimumLibcVersion>) -> Self {
+        Self(Box::new(PrioritizedDistInner {
+            minimum_libc_version,
+            ..PrioritizedDistInner::default()
+        }))
+    }
+
     /// Insert the given built distribution into the [`PrioritizedDist`].
     pub fn insert_built(
         &mut self,
         dist: RegistryBuiltWheel,
         hashes: impl IntoIterator<Item = HashDigest>,
         compatibility: WheelCompatibility,
-        minimum_libc_version: Option<MinimumLibcVersion>,
     ) {
         if compatibility.is_compatible() && !self.0.markers.iter().all(|markers| markers.is_true())
         {
@@ -374,7 +388,7 @@ impl PrioritizedDist {
                 .0
                 .markers
                 .iter_mut()
-                .zip(implied_libc_markers(&dist.filename, minimum_libc_version))
+                .zip(implied_libc_markers(&dist.filename, self.0.minimum_libc_version))
             {
                 *coverage = coverage.or(markers);
             }

@@ -8115,10 +8115,10 @@ impl SourceDist {
         annotated_dist: &AnnotatedDist,
         index_locations: &IndexLocations,
     ) -> Result<Option<Self>, LockError> {
-        match annotated_dist.dist {
+        match annotated_dist.dist.as_ref() {
             // We pass empty installed packages for locking.
             ResolvedDist::Installed { .. } => unreachable!(),
-            ResolvedDist::Installable { ref dist, .. } => Self::from_dist(
+            ResolvedDist::Installable { dist, .. } => Self::from_dist(
                 id,
                 dist,
                 annotated_dist.hashes.as_slice(),
@@ -8447,10 +8447,10 @@ impl Wheel {
         annotated_dist: &AnnotatedDist,
         index_locations: &IndexLocations,
     ) -> Result<Vec<Self>, LockError> {
-        match annotated_dist.dist {
+        match annotated_dist.dist.as_ref() {
             // We pass empty installed packages for locking.
             ResolvedDist::Installed { .. } => unreachable!(),
-            ResolvedDist::Installable { ref dist, .. } => Self::from_dist(
+            ResolvedDist::Installable { dist, .. } => Self::from_dist(
                 dist,
                 annotated_dist.hashes.as_slice(),
                 annotated_dist.index(),

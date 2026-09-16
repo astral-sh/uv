@@ -43,8 +43,8 @@ use uv_requirements::{
 };
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, FlatIndex, ForkStrategy,
-    InMemoryIndex, OptionsBuilder, Prerelease, PythonRequirement, ResolutionMode,
-    ResolverEnvironment,
+    InMemoryIndex, OptionsBuilder, Prerelease, PythonRequirement, RequirementsExport,
+    ResolutionMode, ResolverEnvironment,
 };
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
@@ -609,11 +609,14 @@ pub(crate) async fn pip_compile(
         resolution.retain_allowed_distribution_hashes(&build_options);
     }
 
-    if generate_hashes && matches!(format, PipCompileFormat::RequirementsTxt) {
-        resolution
-            .generate_artifact_hashes(&client, concurrency.downloads, &no_emit_packages)
-            .await?;
-    }
+    let export = RequirementsExport::new(
+        &resolution,
+        &no_emit_packages,
+        generate_hashes && matches!(format, PipCompileFormat::RequirementsTxt),
+        &client,
+        concurrency.downloads,
+    )
+    .await?;
 
     // Write the resolved dependencies to the output channel.
     let mut writer = OutputWriter::new(!quiet || output_file.is_none(), output_file);
@@ -720,10 +723,8 @@ pub(crate) async fn pip_compile(
                 writer,
                 "{}",
                 DisplayResolutionGraph::new(
-                    &resolution,
+                    export,
                     &resolver_env,
-                    &no_emit_packages,
-                    generate_hashes,
                     include_extras,
                     include_markers || universal,
                     include_annotations,

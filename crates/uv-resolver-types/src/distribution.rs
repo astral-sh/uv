@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use uv_distribution::Metadata;
 use uv_distribution_types::{
-    BuiltDist, Dist, DistributionMetadata, IndexUrl, Name, ResolvedDist, SourceDist,
+    BuiltDist, Dist, DistributionMetadata, IndexUrl, Name, PinnedDist, ResolvedDist, SourceDist,
     VersionOrUrlRef,
 };
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -11,16 +11,18 @@ use uv_pypi_types::HashDigests;
 
 use crate::UniversalMarker;
 
-/// A pinned package with its resolved distribution and metadata. The [`ResolvedDist`] refers to a
-/// specific distribution (e.g., a specific wheel), while the [`Metadata23`] refers to the metadata
+/// A pinned package with its resolved distribution and metadata. The [`PinnedDist`] refers to a
+/// specific distribution (e.g., a specific wheel), while the [`Metadata`] refers to the metadata
 /// for the package-version pair.
 #[derive(Debug, Clone)]
 pub struct AnnotatedDist {
-    pub dist: ResolvedDist,
+    pub dist: PinnedDist,
     pub name: PackageName,
     pub version: Version,
     pub extra: Option<ExtraName>,
     pub group: Option<GroupName>,
+    /// Package-level hashes, which may come from an earlier requirements file. Artifact-filtered
+    /// requirements exports derive hashes from the pin's retained files instead.
     pub hashes: HashDigests,
     pub metadata: Option<Metadata>,
     /// The "full" marker for this distribution. It precisely describes all
@@ -40,7 +42,7 @@ impl AnnotatedDist {
 
     /// Returns the [`IndexUrl`] of the distribution, if it is from a registry.
     pub fn index(&self) -> Option<&IndexUrl> {
-        match &self.dist {
+        match self.dist.as_ref() {
             ResolvedDist::Installed { .. } => None,
             ResolvedDist::Installable { dist, .. } => match dist.as_ref() {
                 Dist::Built(dist) => match dist {
@@ -76,6 +78,6 @@ impl DistributionMetadata for AnnotatedDist {
 
 impl Display for AnnotatedDist {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Display::fmt(&self.dist, f)
+        Display::fmt(self.dist.as_ref(), f)
     }
 }

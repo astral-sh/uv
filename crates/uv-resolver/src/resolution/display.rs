@@ -9,6 +9,7 @@ use uv_configuration::AnnotationStyle;
 use uv_distribution_types::{DistributionMetadata, Name, SourceAnnotation, SourceAnnotations};
 use uv_normalize::PackageName;
 use uv_pep508::MarkerTree;
+use uv_resolver_types::RequirementsExport;
 
 use crate::resolution::{RequirementsTxtDist, ResolutionGraphNode};
 use crate::{ResolverEnvironment, ResolverOutput};
@@ -20,10 +21,8 @@ pub struct DisplayResolutionGraph<'a> {
     resolution: &'a ResolverOutput,
     /// The resolver marker environment, used to determine the markers that apply to each package.
     env: &'a ResolverEnvironment,
-    /// The packages to exclude from the output.
-    no_emit_packages: &'a [PackageName],
-    /// Whether to include hashes in the output.
-    show_hashes: bool,
+    /// The packages and hashes prepared for this export.
+    export: RequirementsExport<'a>,
     /// Whether to include extras in the output (e.g., `black[colorama]`).
     include_extras: bool,
     /// Whether to include environment markers in the output (e.g., `black ; sys_platform == "win32"`).
@@ -53,16 +52,15 @@ impl<'a> DisplayResolutionGraph<'a> {
     /// conditional logic cannot be encoded into a `requirements.txt`.
     #[expect(clippy::fn_params_excessive_bools)]
     pub fn new(
-        underlying: &'a ResolverOutput,
+        export: RequirementsExport<'a>,
         env: &'a ResolverEnvironment,
-        no_emit_packages: &'a [PackageName],
-        show_hashes: bool,
         include_extras: bool,
         include_markers: bool,
         include_annotations: bool,
         include_index_annotation: bool,
         annotation_style: AnnotationStyle,
     ) -> Self {
+        let underlying = export.resolution();
         for fork_marker in &underlying.fork_markers {
             assert!(
                 fork_marker.conflict().is_true(),
@@ -73,8 +71,7 @@ impl<'a> DisplayResolutionGraph<'a> {
         Self {
             resolution: underlying,
             env,
-            no_emit_packages,
-            show_hashes,
+            export,
             include_extras,
             include_markers,
             include_annotations,
@@ -172,10 +169,11 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
         // that for each package tells us if it should be installed on the current platform, without
         // looking at which packages depend on it.
         let graph = self.resolution.graph.map(
-            |_index, node| match node {
+            |index, node| match node {
                 ResolutionGraphNode::Root => DisplayResolutionGraphNode::Root,
                 ResolutionGraphNode::Dist(dist) => {
-                    let dist = RequirementsTxtDist::from_annotated_dist(dist);
+                    let dist =
+                        RequirementsTxtDist::from_annotated_dist(dist, self.export.hashes(index));
                     DisplayResolutionGraphNode::Dist(dist)
                 }
             },
@@ -197,7 +195,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             .filter_map(|index| {
                 let dist = &graph[index];
                 let name = dist.name();
-                if self.no_emit_packages.contains(name) {
+                if self.export.omit().contains(name) {
                     return None;
                 }
 
@@ -216,14 +214,11 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                 .to_string();
 
             // Display the distribution hashes, if any.
-            let mut has_hashes = false;
-            if self.show_hashes {
-                for hash in node.hashes {
-                    has_hashes = true;
-                    line.push_str(" \\\n");
-                    line.push_str("    --hash=");
-                    line.push_str(&hash.to_string());
-                }
+            let has_hashes = !node.hashes.is_empty();
+            for hash in node.hashes.iter() {
+                line.push_str(" \\\n");
+                line.push_str("    --hash=");
+                line.push_str(&hash.to_string());
             }
 
             // Determine the annotation comment and separator (between comment and requirement).

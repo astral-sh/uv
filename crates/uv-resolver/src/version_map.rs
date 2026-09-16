@@ -626,7 +626,9 @@ impl VersionMapLazy {
                     .files,
             )
             .expect("archived version files always deserializes");
-            let mut priority_dist = init.cloned().unwrap_or_default();
+            let mut priority_dist = init
+                .cloned()
+                .unwrap_or_else(|| PrioritizedDist::new(self.minimum_libc_version));
             for (filename, file) in files.all(&self.package_name) {
                 // Support resolving as if it were an earlier timestamp, at least as long files have
                 // upload time information.
@@ -689,12 +691,7 @@ impl VersionMapLazy {
                             index: self.index.clone(),
                             size_is_authoritative: false,
                         };
-                        priority_dist.insert_built(
-                            dist,
-                            hashes,
-                            compatibility,
-                            self.minimum_libc_version,
-                        );
+                        priority_dist.insert_built(dist, hashes, compatibility);
                     }
                     DistFilename::SourceDistFilename(filename) => {
                         let compatibility = self.source_dist_compatibility(

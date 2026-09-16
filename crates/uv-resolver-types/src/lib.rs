@@ -5,10 +5,12 @@ pub mod graph_ops;
 mod metadata;
 mod options;
 mod output;
+mod requirements;
 pub mod universal_marker;
 
 pub use distribution::AnnotatedDist;
 pub use metadata::{DistributionMetadataIndex, MetadataResponse, MetadataUnavailable};
 pub use options::{Flexibility, Options, OptionsBuilder};
 pub use output::{ConflictingDistributionError, ResolutionGraphNode, ResolverOutput};
+pub use requirements::RequirementsExport;
 pub use universal_marker::{ConflictMarker, ConflictMarkerError, UniversalMarker};

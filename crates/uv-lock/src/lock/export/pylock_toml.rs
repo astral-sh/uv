@@ -475,7 +475,7 @@ impl<'lock> PylockToml {
         // Convert each node to a `pylock.toml`-style package.
         let mut packages = Vec::with_capacity(resolution.graph.node_count());
         for (node_index, node) in resolution.base_dists() {
-            let ResolvedDist::Installable { dist, version } = &node.dist else {
+            let ResolvedDist::Installable { dist, version } = node.dist.as_ref() else {
                 continue;
             };
             if omit.contains(dist.name()) {
