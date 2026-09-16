@@ -28,7 +28,6 @@ uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true, features = ["clap"] }
 uv-redacted = { workspace = true }
-uv-resolver = { workspace = true, features = ["clap"] }
 uv-settings = { workspace = true }
 uv-static = { workspace = true }
 uv-torch = { workspace = true, features = ["clap"] }

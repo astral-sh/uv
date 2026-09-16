@@ -6304,7 +6304,6 @@ dependencies = [
  "uv-pypi-types",
  "uv-python",
  "uv-redacted",
- "uv-resolver",
  "uv-settings",
  "uv-static",
  "uv-torch",
@@ -6398,6 +6397,7 @@ dependencies = [
  "either",
  "fs-err",
  "insta",
+ "jiff",
  "rayon",
  "reqwest",
  "rustc-hash",
@@ -6419,9 +6419,11 @@ dependencies = [
  "uv-pep440",
  "uv-pep508",
  "uv-platform-tags",
+ "uv-preview",
  "uv-pypi-types",
  "uv-redacted",
  "uv-static",
+ "uv-warnings",
 ]
 
 [[package]]
@@ -7302,7 +7304,6 @@ version = "0.0.82"
 dependencies = [
  "arcstr",
  "astral-pubgrub",
- "clap",
  "cyclonedx-bom",
  "either",
  "fs-err",
@@ -7321,7 +7322,6 @@ dependencies = [
  "rkyv",
  "rustc-hash",
  "same-file",
- "schemars",
  "serde",
  "serde_json",
  "smallvec",
@@ -7426,7 +7426,6 @@ dependencies = [
  "uv-pypi-types",
  "uv-python",
  "uv-redacted",
- "uv-resolver",
  "uv-static",
  "uv-torch",
  "uv-version",

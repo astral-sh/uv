@@ -34,7 +34,6 @@ uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true, features = ["clap"] }
 uv-redacted = { workspace = true }
-uv-resolver = { workspace = true, features = ["clap"] }
 uv-static = { workspace = true }
 uv-torch = { workspace = true, features = ["clap"] }
 uv-version = { workspace = true }
@@ -65,7 +64,6 @@ schemars = [
   "uv-normalize/schemars",
   "uv-preview/schemars",
   "uv-python/schemars",
-  "uv-resolver/schemars",
   "uv-torch/schemars",
   "uv-workspace/schemars",
 ]

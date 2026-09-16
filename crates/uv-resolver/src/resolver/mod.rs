@@ -45,7 +45,6 @@ use crate::candidate_selector::{Candidate, CandidateDist, CandidateSelector};
 use crate::dependency_provider::UvDependencyProvider;
 use crate::error::{NoSolutionError, ResolveError, derivation_tree_packages};
 use crate::fork_indexes::ForkIndexes;
-use crate::fork_strategy::ForkStrategy;
 use crate::fork_urls::ForkUrls;
 use crate::manifest::Manifest;
 use crate::pins::FilePins;
@@ -82,6 +81,7 @@ use crate::yanks::AllowedYanks;
 use crate::{DependencyMode, Exclusions, FlatIndex, Options, ResolutionMode, VersionMap, marker};
 pub(crate) use provider::MetadataUnavailable;
 pub(crate) use resolution::{Resolution, ResolutionDependencyEdge, ResolutionPackage};
+use uv_configuration::ForkStrategy;
 
 mod availability;
 mod batch_prefetch;
