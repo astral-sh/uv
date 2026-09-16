@@ -10,9 +10,9 @@ use uv_client::{
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    ArtifactPolicy, File, HashComparison, IncompatibleSource, IncompatibleWheel, Index,
-    IndexLocations, IndexUrl, PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist,
-    SourceDistCompatibility, WheelCompatibility,
+    File, HashComparison, IncompatibleSource, IncompatibleWheel, Index, IndexLocations, IndexUrl, MinimumLibcVersion,
+    PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility,
+    WheelCompatibility,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -85,7 +85,7 @@ impl FlatDistributions {
         tags: Option<&Tags>,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
-        artifact_policy: ArtifactPolicy,
+        minimum_libc_version: Option<MinimumLibcVersion>,
     ) -> Self {
         let mut distributions = Self::default();
         for entry in entries {
@@ -97,7 +97,7 @@ impl FlatDistributions {
                 hasher,
                 build_options,
                 index,
-                artifact_policy,
+                minimum_libc_version,
             );
         }
         distributions
@@ -117,7 +117,7 @@ impl FlatDistributions {
         hasher: &HashStrategy,
         build_options: &BuildOptions,
         index: IndexUrl,
-        artifact_policy: ArtifactPolicy,
+        minimum_libc_version: Option<MinimumLibcVersion>,
     ) {
         // No `requires-python` here: for source distributions, we don't have that information;
         // for wheels, we read it lazily only when selected.
@@ -131,6 +131,7 @@ impl FlatDistributions {
                     tags,
                     hasher,
                     build_options,
+                    minimum_libc_version,
                 );
                 let dist = RegistryBuiltWheel {
                     filename,
@@ -138,10 +139,12 @@ impl FlatDistributions {
                     index,
                     size_is_authoritative: false,
                 };
-                self.0
-                    .entry(version)
-                    .or_insert_with(|| PrioritizedDist::new(artifact_policy))
-                    .insert_built(dist, vec![], compatibility);
+                self.0.entry(version).or_default().insert_built(
+                    dist,
+                    vec![],
+                    compatibility,
+                    minimum_libc_version,
+                );
             }
             DistFilename::SourceDistFilename(filename) => {
                 let compatibility = Self::source_dist_compatibility(
@@ -159,10 +162,11 @@ impl FlatDistributions {
                     wheels: vec![],
                     size_is_authoritative: false,
                 };
-                self.0
-                    .entry(filename.version)
-                    .or_insert_with(|| PrioritizedDist::new(artifact_policy))
-                    .insert_source(dist, vec![], compatibility);
+                self.0.entry(filename.version).or_default().insert_source(
+                    dist,
+                    vec![],
+                    compatibility,
+                );
             }
         }
     }
@@ -209,7 +213,14 @@ impl FlatDistributions {
         tags: Option<&Tags>,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
+        minimum_libc_version: Option<MinimumLibcVersion>,
     ) -> WheelCompatibility {
+        if let Some(version) = minimum_libc_version
+            && !version.allows_wheel(filename)
+        {
+            return WheelCompatibility::Incompatible(IncompatibleWheel::LibcVersion(version));
+        }
+
         // Check if binaries are allowed for this package.
         if build_options.no_binary_package(&filename.name) {
             return WheelCompatibility::Incompatible(IncompatibleWheel::NoBinary);

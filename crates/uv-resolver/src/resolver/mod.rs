@@ -22,10 +22,10 @@ use tracing::{Level, debug, info, instrument, trace, warn};
 use uv_configuration::{Constraints, Excludes, Overrides};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
-    ArtifactPolicy, BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, Identifier,
-    IncompatibleDist, IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations,
-    IndexMetadata, IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement,
-    ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef,
+    BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, Identifier, IncompatibleDist,
+    IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations, IndexMetadata,
+    IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement, ResolvedDist,
+    ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
 };
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
@@ -196,11 +196,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             build_context.locations(),
             build_context.build_options(),
             build_context.capabilities(),
-            if env.marker_environment().is_none() {
-                options.artifact_policy()
-            } else {
-                ArtifactPolicy::default()
-            },
+            options.minimum_libc_version,
         );
 
         Ok(Self::new_custom_io(
@@ -1221,21 +1217,21 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 BuiltDist::Path(dist) => &dist.filename,
             };
 
-            // Direct wheels must satisfy the same artifact policy as registry wheels.
-            if env.marker_environment().is_none()
-                && let Err(error) = self.options.artifact_policy().check_wheel(filename)
+            // Direct wheels must satisfy the same libc cutoff as registry wheels.
+            if let Some(minimum_libc_version) = self.options.minimum_libc_version
+                && !minimum_libc_version.allows_wheel(filename)
             {
                 return Ok(Some(ResolverVersion::Unavailable(
                     version.clone(),
                     UnavailableVersion::IncompatibleDist(IncompatibleDist::Wheel(
-                        IncompatibleWheel::ArtifactPolicy(error),
+                        IncompatibleWheel::LibcVersion(minimum_libc_version),
                     )),
                 )));
             }
             // If the wheel does not cover a required environment, it is incompatible.
             if env.marker_environment().is_none() && !self.options.artifact_environments.is_empty()
             {
-                let wheel_marker = self.options.artifact_policy().wheel_coverage(filename);
+                let wheel_marker = implied_markers(filename, self.options.minimum_libc_version);
                 // If the caller marked an environment as requiring artifact coverage, ensure it
                 // has coverage.
                 for environment_marker in self.options.artifact_environments.iter().copied() {
@@ -1484,7 +1480,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             return Ok(None);
         }
 
-        let artifact_markers = dist.artifact_coverage();
+        let artifact_markers = dist.implied_markers();
         if artifact_markers.is_true() {
             return Ok(None);
         }
@@ -1571,7 +1567,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         // ...and the non-local version has greater platform support...
         let mut remainder = {
-            let mut remainder = base_dist.artifact_coverage();
+            let mut remainder = base_dist.implied_markers();
             remainder = remainder.and(artifact_markers.negate());
             remainder
         };

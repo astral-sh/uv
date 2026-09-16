@@ -713,10 +713,9 @@ pub struct ToolUv {
     /// `manylinux_2_17` wheels, but not `manylinux_2_34` or `musllinux` wheels. If unset, both
     /// glibc and musl wheels remain eligible.
     ///
-    /// Use `required-environments` to specify the Linux architectures to support. Each required
-    /// environment must have compatible artifacts for every libc implementation in the table.
-    /// Packages with a usable source distribution can still be selected even if no compatible
-    /// wheel is available.
+    /// Use `required-environments` to specify the Linux architectures to support. Listing both
+    /// libc implementations allows wheels for either; it does not require wheels for both.
+    /// Packages with a usable source distribution can still be selected.
     ///
     /// This setting is respected by `uv lock` and `uv pip compile --universal`.
     ///
