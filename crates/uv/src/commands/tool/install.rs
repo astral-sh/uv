@@ -378,13 +378,30 @@ pub(crate) async fn install(
     .await?;
 
     let marker_environment = resolution_markers(None, python_platform.as_ref(), &interpreter);
+    let config_settings_package = spec
+        .config_settings_package
+        .clone()
+        .evaluate(Some(&marker_environment));
+    // Tool upgrades restore their configuration from the receipt, not the requirements file.
+    let options = if config_settings_package.is_empty() {
+        options
+    } else {
+        ResolverInstallerOptions {
+            config_settings_package: Some(
+                options
+                    .config_settings_package
+                    .unwrap_or_default()
+                    .merge(config_settings_package.clone()),
+            ),
+            ..options
+        }
+    };
     let settings = ResolverInstallerSettings {
         resolver: ResolverSettings {
-            config_settings_package: settings.resolver.config_settings_package.merge(
-                spec.config_settings_package
-                    .clone()
-                    .evaluate(Some(&marker_environment)),
-            ),
+            config_settings_package: settings
+                .resolver
+                .config_settings_package
+                .merge(config_settings_package),
             ..settings.resolver
         },
         ..settings

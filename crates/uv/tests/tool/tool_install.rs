@@ -3995,6 +3995,30 @@ fn tool_install_requirements_txt_config_settings() -> Result<()> {
         .join("__editable___setuptools_editable_0_1_0_finder.py");
     assert!(!finder.exists());
 
+    let receipt: toml::Value = toml::from_str(&context.read("tools/black/uv-receipt.toml"))?;
+    assert_snapshot!(
+        toml::to_string(&receipt["tool"]["options"]["config-settings-package"])?,
+        @r#"
+        [setuptools-editable]
+        editable_mode = "compat"
+        "#
+    );
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("black")
+        .arg("--reinstall-package")
+        .arg("setuptools-editable")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Modified black environment
+     ~ setuptools-editable==0.1.0 (from file://[WORKSPACE]/test/packages/setuptools_editable)
+    Nothing to upgrade
+    ");
+    assert!(!finder.exists());
+
     Ok(())
 }
 
