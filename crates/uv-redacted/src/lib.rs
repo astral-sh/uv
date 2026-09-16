@@ -388,6 +388,8 @@ fn display_with_redacted_credentials(
 
 #[cfg(test)]
 mod tests {
+    use insta::assert_debug_snapshot;
+
     use super::*;
 
     #[test]
@@ -587,28 +589,18 @@ mod tests {
 
     #[test]
     fn redact_azure_sas_query_signature() {
-        let log_safe_url = DisplaySafeUrl::parse(
+        let urls = [
             "https://account.blob.core.windows.net/container/dist.whl?sv=2024-11-04&sr=b&sig=signature&sp=r",
-        )
-        .unwrap();
-
-        assert_eq!(
-            log_safe_url.to_string(),
-            "https://account.blob.core.windows.net/container/dist.whl?sv=2024-11-04&sr=b&sig=****&sp=r"
-        );
-    }
-
-    #[test]
-    fn redact_azure_sas_query_signature_case_insensitive() {
-        let log_safe_url = DisplaySafeUrl::parse(
             "https://account.blob.core.windows.net/container/dist.whl?SIG=signature&safe=value",
-        )
-        .unwrap();
+        ]
+        .map(|url| DisplaySafeUrl::parse(url).unwrap().to_string());
 
-        assert_eq!(
-            log_safe_url.to_string(),
-            "https://account.blob.core.windows.net/container/dist.whl?SIG=****&safe=value"
-        );
+        assert_debug_snapshot!(urls, @r#"
+        [
+            "https://account.blob.core.windows.net/container/dist.whl?sv=2024-11-04&sr=b&sig=****&sp=r",
+            "https://account.blob.core.windows.net/container/dist.whl?SIG=****&safe=value",
+        ]
+        "#);
     }
 
     #[test]
