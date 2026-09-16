@@ -26,6 +26,7 @@ uv-distribution-types = { workspace = true }
 uv-errors = { workspace = true }
 uv-fs = { workspace = true, features = ["serde"] }
 uv-git = { workspace = true }
+uv-git-types = { workspace = true }
 uv-normalize = { workspace = true }
 uv-once-map = { workspace = true }
 uv-pep440 = { workspace = true }

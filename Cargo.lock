@@ -7297,6 +7297,7 @@ dependencies = [
  "uv-errors",
  "uv-fs",
  "uv-git",
+ "uv-git-types",
  "uv-normalize",
  "uv-once-map",
  "uv-pep440",

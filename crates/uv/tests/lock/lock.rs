@@ -22955,6 +22955,263 @@ fn lock_excluded_direct_source_provider_keeps_registry() -> Result<()> {
     Ok(())
 }
 
+/// Registry requests can activate an authorized URL package's extra without re-resolving its lock.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_url_from_registry_extra_offline() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["provider", "selector", "consumer", "target"]
+
+        [tool.uv.sources]
+        provider = { path = "provider" }
+    "#})?;
+    context
+        .temp_dir
+        .child("provider/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "provider"
+        version = "1.0.0"
+
+        [project.optional-dependencies]
+        url = ["target"]
+
+        [tool.uv.sources]
+        target = { path = "../target" }
+    "#})?;
+    let target = context.temp_dir.child("target");
+    target.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "target"
+        version = "1.0.0"
+        dependencies = ["url-only"]
+    "#})?;
+    let target = Url::from_directory_path(target.path())
+        .map_err(|()| anyhow!("target directory is not an absolute path"))?;
+    let scenario = toml::from_str::<Scenario>(&formatdoc! {r#"
+        name = "lock-url-from-registry-extra"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.selector.versions."1.0.0"]
+        requires = ["provider[url] ; sys_platform == 'linux'"]
+        [packages.consumer.versions."1.0.0"]
+        requires = [
+            "target @ {target} ; sys_platform == 'linux'",
+            "target ; sys_platform != 'linux'",
+        ]
+        [packages.target.versions."1.0.0"]
+        requires = ["registry-only"]
+        [packages.registry-only.versions."1.0.0"]
+        [packages.url-only.versions."1.0.0"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features").arg("lock-without-metadata")
+        .arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.export().arg("--frozen").arg("--no-header")
+        .arg("--no-hashes").arg("--no-emit-project"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    ./provider
+        # via
+        #   project
+        #   selector
+    ./target ; sys_platform == 'linux'
+        # via
+        #   consumer
+        #   project
+        #   provider
+    consumer==1.0.0
+        # via project
+    registry-only==1.0.0 ; sys_platform != 'linux'
+        # via target
+    selector==1.0.0
+        # via project
+    target==1.0.0 ; sys_platform != 'linux'
+        # via
+        #   consumer
+        #   project
+    url-only==1.0.0 ; sys_platform == 'linux'
+        # via target
+    ");
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features").arg("lock-without-metadata")
+        .arg("--check").arg("--offline").arg("--no-cache")
+        .arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// Standard and metadata-free locks must reject an edge resolved from the wrong explicit index.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_index_from_registry_extra_validates_resolved_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let primary = toml::from_str::<Scenario>(indoc! {r#"
+        name = "lock-registry-extra-primary"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.selector.versions."1.0.0"]
+        requires = ["provider[index] ; sys_platform == 'linux'"]
+        [packages.target.versions."1.0.0"]
+        requires = ["default-only"]
+        [packages.default-only.versions."1.0.0"]
+        [packages.indexed-only.versions."1.0.0"]
+    "#})?;
+    let secondary = toml::from_str::<Scenario>(indoc! {r#"
+        name = "lock-registry-extra-secondary"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.target.versions."2.0.0"]
+        requires = ["indexed-only"]
+    "#})?;
+    let primary = PackseServer::from_scenario(&primary);
+    let secondary = PackseServer::from_scenario(&secondary);
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["provider", "selector", "target"]
+
+        [tool.uv.sources]
+        provider = { path = "provider" }
+    "#})?;
+    context
+        .temp_dir
+        .child("provider/pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "provider"
+        version = "1.0.0"
+
+        [project.optional-dependencies]
+        index = ["target"]
+
+        [tool.uv.sources]
+        target = {{ index = "secondary" }}
+
+        [[tool.uv.index]]
+        name = "secondary"
+        url = "{}"
+        explicit = true
+    "#, secondary.index_url()})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(primary.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.export().arg("--frozen").arg("--no-header")
+        .arg("--no-hashes").arg("--no-emit-project"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    ./provider
+        # via
+        #   project
+        #   selector
+    default-only==1.0.0 ; sys_platform != 'linux'
+        # via target
+    indexed-only==1.0.0 ; sys_platform == 'linux'
+        # via target
+    selector==1.0.0
+        # via project
+    target==1.0.0 ; sys_platform != 'linux'
+        # via project
+    target==2.0.0 ; sys_platform == 'linux'
+        # via
+        #   project
+        #   provider
+    ");
+    let valid = context.read("uv.lock");
+    let mut stale = valid.parse::<toml_edit::DocumentMut>()?;
+    let packages = stale["package"]
+        .as_array_of_tables_mut()
+        .ok_or_else(|| anyhow!("lockfile has no packages"))?;
+    let default_source = packages
+        .iter()
+        .find(|package| {
+            package["name"].as_str() == Some("target")
+                && package["version"].as_str() == Some("1.0.0")
+        })
+        .and_then(|package| package["source"].as_value())
+        .cloned()
+        .ok_or_else(|| anyhow!("lockfile has no default target"))?;
+    let provider = packages
+        .iter_mut()
+        .find(|package| package["name"].as_str() == Some("provider"))
+        .ok_or_else(|| anyhow!("lockfile has no provider"))?;
+    let edge = provider["optional-dependencies"]["index"]
+        .as_array_mut()
+        .and_then(|edges| edges.get_mut(0))
+        .and_then(toml_edit::Value::as_inline_table_mut)
+        .ok_or_else(|| anyhow!("lockfile has no indexed dependency"))?;
+    edge.insert("version", "1.0.0".into());
+    edge.insert("source", default_source);
+    let stale = stale.to_string();
+    let lock = context.temp_dir.child("uv.lock");
+
+    lock.write_str(&stale)?;
+    uv_snapshot!(context.filters(), context.lock().arg("--check")
+        .arg("--index-url").arg(primary.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    lock.write_str(&valid)?;
+    uv_snapshot!(context.filters(), context.lock().arg("--check").arg("--offline").arg("--no-cache")
+        .arg("--index-url").arg(primary.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    ");
+
+    lock.write_str(&lock_without_package_metadata(&stale)?.to_string())?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features").arg("lock-without-metadata").arg("--check")
+        .arg("--index-url").arg(primary.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    lock.write_str(&lock_without_package_metadata(&valid)?.to_string())?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features").arg("lock-without-metadata")
+        .arg("--check").arg("--offline").arg("--no-cache")
+        .arg("--index-url").arg(primary.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    ");
+    Ok(())
+}
+
 /// A URL override replaces a URL constraint only in its own environments, both during resolution
 /// and when validating the resulting lock without cached metadata.
 #[cfg(feature = "test-universal")]

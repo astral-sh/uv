@@ -34,6 +34,7 @@ use uv_extract::dirhash::{DirectoryDigest, HashedFile};
 use uv_extract::hash::Hasher;
 use uv_fs::{LockedFile, write_atomic};
 use uv_git::{GIT_LFS, GitError};
+use uv_git_types::GitUrl;
 use uv_platform_tags::Tags;
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{HashDigest, HashDigests, PyProjectToml};
@@ -106,6 +107,19 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             reporter: Some(reporter),
             ..self
         }
+    }
+
+    /// Resolve a Git reference without checking out package files, submodules, or Git LFS.
+    pub async fn resolve_git_reference(&self, git: &GitUrl) -> Result<(), Error> {
+        self.build_context
+            .git()
+            .resolve_reference(
+                git,
+                self.client.unmanaged.git_http_settings(git.url()),
+                self.build_context.cache().bucket(CacheBucket::Git),
+            )
+            .await?;
+        Ok(())
     }
 
     /// Handle a specific `reqwest` error, and convert it to [`io::Error`].

@@ -4,6 +4,7 @@ use std::sync::Arc;
 use pubgrub::{Id, State, VersionSet};
 use rustc_hash::{FxHashMap, FxHashSet};
 use uv_distribution_types::{DerivationChain, Requirement};
+use uv_git::GitResolver;
 use uv_normalize::PackageName;
 use uv_pep440::{MIN_VERSION, Version};
 use uv_pep508::MarkerTree;
@@ -14,6 +15,8 @@ use crate::dependency_provider::UvDependencyProvider;
 use crate::pubgrub::{
     CandidateSet, IndexId, PubGrubPackage, SolverSource, SolverVersion, SourceId,
 };
+use crate::python_requirement::PythonRequirement;
+use crate::resolver::environment::ResolverEnvironment;
 use crate::resolver::urls::Urls;
 
 /// Optional source-search restrictions. They never introduce packages that the real root did not
@@ -72,6 +75,7 @@ pub(super) struct SourceDependencies {
     order: FxHashMap<(Id<PubGrubPackage>, SolverVersion), usize>,
     chains: FxHashMap<(Id<PubGrubPackage>, SolverVersion), DerivationChain>,
     has_urls: bool,
+    has_contextual_sources: bool,
 }
 
 #[derive(Clone)]
@@ -109,6 +113,10 @@ impl SourceDependencies {
         self.has_urls
     }
 
+    pub(super) fn has_contextual_sources(&self) -> bool {
+        self.has_contextual_sources
+    }
+
     pub(super) fn set_chain(
         &mut self,
         id: Id<PubGrubPackage>,
@@ -131,10 +139,15 @@ impl SourceDependencies {
         package: Id<PubGrubPackage>,
         candidate: SolverVersion,
         dependencies: Vec<SolvedDependency>,
+        contextual: bool,
     ) {
         self.has_urls |= dependencies
             .iter()
             .any(|dependency| dependency.declaration.is_some());
+        self.has_contextual_sources |= contextual
+            && dependencies
+                .iter()
+                .any(|dependency| dependency.declaration.is_some() || dependency.index.is_some());
         let key = (package, candidate);
         let next = self.order.len();
         self.order.entry(key.clone()).or_insert(next);
@@ -256,17 +269,41 @@ impl SourceDependencies {
     ///
     /// Registry packages can activate an extra on a grounded URL package, but only that URL
     /// package's metadata or explicit configuration can authorize a new direct resource.
-    pub(super) fn grounding(&self, state: &State<UvDependencyProvider>) -> Grounding {
+    pub(super) fn grounding(
+        &self,
+        state: &State<UvDependencyProvider>,
+        env: &ResolverEnvironment,
+        python_requirement: &PythonRequirement,
+        urls: &Urls,
+        git: &GitResolver,
+    ) -> Grounding {
         let mut selected: FxHashMap<_, _> = state.partial_solution.extract_solution().collect();
         // The root is mandatory, including while PubGrub is processing its first incompatibilities.
         selected
             .entry(state.root_package)
             .or_insert_with(|| SolverVersion::registry(MIN_VERSION.clone()));
 
+        let in_environment = |marker: MarkerTree| {
+            env.marker_environment().map_or(marker, |environment| {
+                if marker.evaluate(environment, &[]) {
+                    MarkerTree::TRUE
+                } else {
+                    MarkerTree::FALSE
+                }
+            })
+        };
         let mut grounding = Grounding::default();
         grounding.reachable.insert(state.root_package);
+        grounding.contexts.insert(
+            state.root_package,
+            env.fork_markers().map_or(MarkerTree::TRUE, |marker| {
+                marker.and(python_requirement.to_marker_tree())
+            }),
+        );
+        // Reachability and source authorization grow together. Outgoing edges from a concrete
+        // candidate apply only where that exact source was independently authorized.
         loop {
-            let old = (grounding.reachable.len(), grounding.presentations.len());
+            let mut changed = false;
             let mut pending = VecDeque::from([state.root_package]);
             let mut seen = FxHashSet::default();
             while let Some(package) = pending.pop_front() {
@@ -276,11 +313,11 @@ impl SourceDependencies {
                 let Some(candidate) = selected.get(&package) else {
                     continue;
                 };
-                if let SolverSource::Url(source) = candidate.source
-                    && !state.package_store[package]
-                        .name_no_root()
-                        .is_some_and(|name| grounding.contains(name, source))
-                {
+                let mut context = grounding.contexts[&package];
+                if let Some(name) = state.package_store[package].name_no_root() {
+                    context = context.and(grounding.candidate_marker(name, candidate.source));
+                }
+                if context.is_false() {
                     continue;
                 }
                 let Some(dependencies) = self.dependencies.get(&(package, candidate.clone()))
@@ -288,64 +325,57 @@ impl SourceDependencies {
                     continue;
                 };
                 for dependency in dependencies {
+                    let context = context.and(in_environment(
+                        state.package_store[dependency.package].marker(),
+                    ));
+                    if context.is_false() {
+                        continue;
+                    }
                     grounding.reachable.insert(dependency.package);
+                    let previous = grounding
+                        .contexts
+                        .entry(dependency.package)
+                        .or_insert(MarkerTree::FALSE);
+                    let updated = previous.or(context);
+                    if updated != *previous {
+                        *previous = updated;
+                        changed = true;
+                    }
                     pending.push_back(dependency.package);
-                    if let Some(declaration) = &dependency.declaration
-                        && declaration.trusted
-                        && let Some(name) = state.package_store[dependency.package].name_no_root()
-                    {
-                        grounding
-                            .urls
-                            .entry(name.clone())
-                            .or_default()
-                            .insert(declaration.source);
-                        grounding
-                            .presentations
-                            .entry(declaration.source)
-                            .and_modify(|url| merge_presentation(url, &declaration.url))
-                            .or_insert_with(|| declaration.url.clone());
+                    if let Some(name) = state.package_store[dependency.package].name_no_root() {
+                        if let Some(declaration) = &dependency.declaration
+                            && declaration.trusted
+                        {
+                            let previous = grounding
+                                .urls
+                                .entry(name.clone())
+                                .or_default()
+                                .entry(declaration.source)
+                                .or_insert(MarkerTree::FALSE);
+                            let updated = previous.or(context);
+                            if updated != *previous {
+                                *previous = updated;
+                                changed = true;
+                            }
+                        }
+                        if let Some(index) = dependency.index {
+                            let previous = grounding
+                                .indexes
+                                .entry(name.clone())
+                                .or_default()
+                                .entry(index)
+                                .or_insert(MarkerTree::FALSE);
+                            let updated = previous.or(context);
+                            if updated != *previous {
+                                *previous = updated;
+                                changed = true;
+                            }
+                        }
                     }
                 }
             }
-            if old == (grounding.reachable.len(), grounding.presentations.len()) {
+            if !changed {
                 break;
-            }
-        }
-
-        grounding
-            .contexts
-            .insert(state.root_package, MarkerTree::TRUE);
-        let mut pending = VecDeque::from([state.root_package]);
-        while let Some(package) = pending.pop_front() {
-            let Some(candidate) = selected.get(&package) else {
-                continue;
-            };
-            if let SolverSource::Url(source) = candidate.source
-                && !state.package_store[package]
-                    .name_no_root()
-                    .is_some_and(|name| grounding.contains(name, source))
-            {
-                continue;
-            }
-            let Some(dependencies) = self.dependencies.get(&(package, candidate.clone())) else {
-                continue;
-            };
-            let context = grounding.contexts[&package];
-            for dependency in dependencies {
-                let context = context.and(state.package_store[dependency.package].marker());
-                if context.is_false() {
-                    continue;
-                }
-                let previous = grounding
-                    .contexts
-                    .get(&dependency.package)
-                    .copied()
-                    .unwrap_or(MarkerTree::FALSE);
-                let updated = previous.or(context);
-                if updated != previous {
-                    grounding.contexts.insert(dependency.package, updated);
-                    pending.push_back(dependency.package);
-                }
             }
         }
 
@@ -353,36 +383,28 @@ impl SourceDependencies {
             let Some(candidate) = selected.get(package) else {
                 continue;
             };
-            if let SolverSource::Url(source) = candidate.source
-                && !state.package_store[*package]
-                    .name_no_root()
-                    .is_some_and(|name| grounding.contains(name, source))
-            {
+            let mut context = grounding.contexts[package];
+            if let Some(name) = state.package_store[*package].name_no_root() {
+                context = context.and(grounding.candidate_marker(name, candidate.source));
+            }
+            if context.is_false() {
                 continue;
             }
             if let Some(dependencies) = self.dependencies.get(&(*package, candidate.clone())) {
                 for dependency in dependencies {
-                    if let Some(index) = dependency.index
-                        && let Some(name) = state.package_store[dependency.package].name_no_root()
-                    {
-                        grounding
-                            .indexes
-                            .entry(name.clone())
-                            .or_default()
-                            .insert(index);
+                    let edge_context = context.and(in_environment(
+                        state.package_store[dependency.package].marker(),
+                    ));
+                    if edge_context.is_false() {
+                        continue;
                     }
-                    if let Some((requirement, lowest)) = &dependency.policy
-                        && let Some(context) = grounding.contexts.get(package)
-                    {
-                        let marker = requirement.marker.and(*context);
+                    if dependency.declaration.is_some() || dependency.index.is_some() {
+                        grounding.source_contexts.insert(edge_context);
+                    }
+                    if let Some((requirement, lowest)) = &dependency.policy {
+                        let marker = requirement.marker.and(context);
                         if !marker.is_false() {
-                            let requirement = if marker == requirement.marker {
-                                requirement.clone()
-                            } else {
-                                let mut scoped = requirement.as_ref().clone();
-                                scoped.marker = marker;
-                                Arc::new(scoped)
-                            };
+                            let requirement = scope_requirement(requirement, marker);
                             if *lowest {
                                 grounding
                                     .lowest_parents
@@ -393,33 +415,57 @@ impl SourceDependencies {
                             grounding.policies.push((requirement, *lowest));
                         }
                     }
-                    if let Some(declaration) = &dependency.declaration
-                        && let Some(requirement) = &declaration.hash_requirement
-                    {
-                        grounding.hash_declarations.push((
-                            *package,
-                            candidate.clone(),
-                            requirement.clone(),
-                            declaration.trusted_hashes,
-                        ));
-                        if declaration.trusted_hashes {
-                            grounding.hashes.trusted.push(requirement.clone());
-                        } else {
-                            grounding.hashes.metadata.push(requirement.clone());
+                    if let Some(declaration) = &dependency.declaration {
+                        if declaration.trusted {
+                            grounding
+                                .presentations
+                                .entry(declaration.source)
+                                .and_modify(|url| merge_presentation(url, &declaration.url))
+                                .or_insert_with(|| declaration.url.clone());
                         }
-                    }
-                    if let Some(declaration) = &dependency.declaration
-                        && !declaration.trusted
-                        && state.package_store[dependency.package]
-                            .name_no_root()
-                            .is_some_and(|name| !grounding.contains(name, declaration.source))
-                    {
-                        grounding.untrusted.push((
-                            *package,
-                            candidate.clone(),
-                            dependency.package,
-                            declaration.source,
-                        ));
+                        if let Some(requirement) = &declaration.hash_requirement {
+                            let requirement = scope_requirement(
+                                requirement,
+                                requirement.marker.and(edge_context),
+                            );
+                            grounding.hash_declarations.push((
+                                *package,
+                                candidate.clone(),
+                                requirement.clone(),
+                                declaration.trusted_hashes,
+                            ));
+                            if declaration.trusted_hashes {
+                                grounding.hashes.trusted.push(requirement);
+                            } else {
+                                grounding.hashes.metadata.push(requirement);
+                            }
+                        }
+                        if !declaration.trusted
+                            && let Some(name) =
+                                state.package_store[dependency.package].name_no_root()
+                        {
+                            let authorized = urls
+                                .lookup(name, &declaration.url, git)
+                                .into_iter()
+                                .fold(MarkerTree::FALSE, |marker, source| {
+                                    marker
+                                        .or(grounding
+                                            .candidate_marker(name, SolverSource::Url(source)))
+                                });
+                            if !edge_context.is_disjoint(authorized.negate()) {
+                                grounding.untrusted.push((
+                                    *package,
+                                    candidate.clone(),
+                                    dependency.package,
+                                    declaration.source,
+                                ));
+                                grounding
+                                    .untrusted_urls
+                                    .entry(name.clone())
+                                    .or_default()
+                                    .push(declaration.url.clone());
+                            }
+                        }
                     }
                 }
             }
@@ -443,9 +489,10 @@ pub(super) struct Grounding {
     pub(super) reachable: FxHashSet<Id<PubGrubPackage>>,
     pub(super) contexts: FxHashMap<Id<PubGrubPackage>, MarkerTree>,
     lowest_parents: FxHashMap<PackageName, FxHashSet<Id<PubGrubPackage>>>,
-    urls: FxHashMap<PackageName, BTreeSet<SourceId>>,
+    urls: FxHashMap<PackageName, BTreeMap<SourceId, MarkerTree>>,
     presentations: FxHashMap<SourceId, VerbatimParsedUrl>,
-    pub(super) indexes: FxHashMap<PackageName, BTreeSet<IndexId>>,
+    pub(super) indexes: FxHashMap<PackageName, BTreeMap<IndexId, MarkerTree>>,
+    source_contexts: BTreeSet<MarkerTree>,
     pub(super) hashes: ActiveHashes,
     hash_declarations: Vec<(Id<PubGrubPackage>, SolverVersion, Arc<Requirement>, bool)>,
     pub(super) policies: Vec<(Arc<Requirement>, bool)>,
@@ -455,6 +502,7 @@ pub(super) struct Grounding {
         Id<PubGrubPackage>,
         SourceId,
     )>,
+    pub(super) untrusted_urls: FxHashMap<PackageName, Vec<VerbatimParsedUrl>>,
 }
 
 /// Hash declarations from selected paths, separating explicit inputs from distribution metadata.
@@ -478,6 +526,39 @@ impl ActiveHashes {
 }
 
 impl Grounding {
+    /// Environments where this exact source was independently selected by a reachable declaration.
+    fn candidate_marker(&self, name: &PackageName, source: SolverSource) -> MarkerTree {
+        match source {
+            SolverSource::Registry => MarkerTree::TRUE,
+            SolverSource::Index(index) => self
+                .indexes
+                .get(name)
+                .and_then(|indexes| indexes.get(&index))
+                .copied()
+                .unwrap_or(MarkerTree::FALSE),
+            SolverSource::Url(source) => self
+                .urls
+                .get(name)
+                .and_then(|sources| sources.get(&source))
+                .copied()
+                .unwrap_or(MarkerTree::FALSE),
+        }
+    }
+
+    /// Return a declaration that is active in only part of the current supported environment.
+    pub(super) fn conditional_source(
+        &self,
+        env: &ResolverEnvironment,
+        python_requirement: &PythonRequirement,
+    ) -> Option<MarkerTree> {
+        let fork = env.fork_markers()?.and(python_requirement.to_marker_tree());
+        self.source_contexts
+            .iter()
+            .copied()
+            .find(|marker| !fork.is_disjoint(*marker) && !fork.is_disjoint(marker.negate()))
+            .map(|marker| python_requirement.simplify_markers(marker))
+    }
+
     /// Reduce a failed hash policy to selected candidate authors sufficient to reproduce it.
     /// Declaration order and the distinction between trusted inputs and metadata are retained.
     pub(super) fn hash_error_origins(
@@ -523,17 +604,20 @@ impl Grounding {
     pub(super) fn contains(&self, name: &PackageName, source: SourceId) -> bool {
         self.urls
             .get(name)
-            .is_some_and(|sources| sources.contains(&source))
+            .is_some_and(|sources| sources.contains_key(&source))
     }
 
     pub(super) fn sources_for(&self, name: &PackageName) -> impl Iterator<Item = SourceId> + '_ {
-        self.urls.get(name).into_iter().flatten().copied()
+        self.urls
+            .get(name)
+            .into_iter()
+            .flat_map(|sources| sources.keys().copied())
     }
 
     pub(super) fn source(&self, name: &PackageName, candidates: &CandidateSet) -> Option<SourceId> {
         self.urls
             .get(name)?
-            .iter()
+            .keys()
             .find(|source| {
                 *candidates.for_source(SolverSource::Url(**source))
                     != crate::pubgrub::Range::empty()
@@ -548,8 +632,21 @@ impl Grounding {
             .unwrap_or_else(|| urls.get(source).as_ref().clone())
     }
 
-    pub(super) fn iter(&self) -> impl Iterator<Item = (&PackageName, &BTreeSet<SourceId>)> {
+    pub(super) fn iter(
+        &self,
+    ) -> impl Iterator<Item = (&PackageName, &BTreeMap<SourceId, MarkerTree>)> {
         self.urls.iter()
+    }
+}
+
+/// Reuse an authored requirement when its selected path leaves its marker unchanged.
+fn scope_requirement(requirement: &Arc<Requirement>, marker: MarkerTree) -> Arc<Requirement> {
+    if marker == requirement.marker {
+        requirement.clone()
+    } else {
+        let mut scoped = requirement.as_ref().clone();
+        scoped.marker = marker;
+        Arc::new(scoped)
     }
 }
 

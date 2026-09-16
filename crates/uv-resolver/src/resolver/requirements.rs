@@ -166,7 +166,7 @@ impl<'a> RequirementExpander<'a> {
                     .simplify_extras(slice::from_ref(&extra))
                     .simplify_not_extras_with(|candidate| candidate != &extra);
                 if python_marker.is_disjoint(applicable_marker)
-                    || !env.included_by_marker(applicable_marker)
+                    || !env.included_by_marker(applicable_marker.and(python_marker))
                 {
                     continue;
                 }
@@ -308,7 +308,7 @@ impl<'a> RequirementExpander<'a> {
 
         // If we're in a fork in universal mode, ignore any dependency that isn't part of
         // this fork (but will be part of another fork).
-        if !env.included_by_marker(requirement.marker) {
+        if !env.included_by_marker(requirement.marker.and(python_marker)) {
             trace!("Skipping {requirement} because of {env}");
             return false;
         }
@@ -423,7 +423,7 @@ impl<'a> RequirementExpander<'a> {
 
                 // If we're in a fork in universal mode, ignore any dependency that isn't part of
                 // this fork (but will be part of another fork).
-                if !env.included_by_marker(constraint.marker) {
+                if !env.included_by_marker(constraint.marker.and(python_marker)) {
                     trace!("Skipping {constraint} because of {env}");
                     return None;
                 }

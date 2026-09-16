@@ -6,6 +6,7 @@ use same_file::is_same_file;
 use uv_cache_key::CanonicalUrl;
 use uv_distribution_types::Requirement;
 use uv_git::GitResolver;
+use uv_git_types::GitUrl;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::MarkerTree;
@@ -276,5 +277,14 @@ pub(super) fn could_be_same_git_resource(a: &ParsedUrl, b: &ParsedUrl) -> bool {
             }
         }
         ParsedUrl::Archive(_) | ParsedUrl::Path(_) | ParsedUrl::Directory(_) => false,
+    }
+}
+
+/// Return the repository reference of a Git source, without its package path or subdirectory.
+pub(super) fn git_url(url: &ParsedUrl) -> Option<&GitUrl> {
+    match url {
+        ParsedUrl::GitDirectory(url) => Some(&url.url),
+        ParsedUrl::GitPath(url) => Some(&url.url),
+        ParsedUrl::Archive(_) | ParsedUrl::Path(_) | ParsedUrl::Directory(_) => None,
     }
 }

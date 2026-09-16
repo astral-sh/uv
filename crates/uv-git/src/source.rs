@@ -60,88 +60,86 @@ impl GitSource {
         }
     }
 
+    /// Authenticate the Git URL, if credentials were supplied for the repository.
+    fn authenticated_remote(&self) -> Cow<'_, DisplaySafeUrl> {
+        if let Some(credentials) = GIT_STORE.get(self.git.repository()) {
+            Cow::Owned(credentials.apply(self.git.url().clone()))
+        } else {
+            Cow::Borrowed(self.git.url())
+        }
+    }
+
+    /// Fetch the requested revision into the repository database, without checking out its tree.
+    fn database(&self, lfs_requested: bool) -> Result<(GitDatabase, GitOid, Option<usize>)> {
+        let db_path = self
+            .cache
+            .join("db")
+            .join(cache_digest(self.git.repository()));
+        let git_remote = GitRemote::new(self.authenticated_remote().into_owned());
+
+        // A cached, locked revision needs no update. When requested, its LFS artifacts must also
+        // have been fetched and validated.
+        let database = if let Ok(db) = git_remote.db_at(&db_path) {
+            if let Some(revision) = self.git.precise()
+                && db.contains(revision)
+                && (!lfs_requested || db.contains_lfs_artifacts(revision))
+            {
+                debug!("Using existing Git source `{}`", self.git.url());
+                return Ok((
+                    db.with_lfs_ready(lfs_requested.then_some(true)),
+                    revision,
+                    None,
+                ));
+            }
+
+            // Treat an exact commit hash as locked if it is already in the database.
+            if let GitReference::BranchOrTagOrCommit(reference) = self.git.reference()
+                && let Ok(revision) = reference.parse::<GitOid>()
+                && db.contains(revision)
+                && (!lfs_requested || db.contains_lfs_artifacts(revision))
+            {
+                debug!("Using existing Git source `{}`", self.git.url());
+                return Ok((
+                    db.with_lfs_ready(lfs_requested.then_some(true)),
+                    revision,
+                    None,
+                ));
+            }
+
+            Some(db)
+        } else {
+            None
+        };
+        debug!("Updating Git source `{}`", self.git.url());
+
+        let task = self.reporter.as_ref().map(|reporter| {
+            reporter.on_checkout_start(git_remote.url(), self.git.reference().as_rev())
+        });
+        let (database, revision) = git_remote.checkout(
+            &db_path,
+            database,
+            self.git.reference(),
+            self.git.precise(),
+            self.disable_ssl,
+            self.offline,
+            lfs_requested,
+        )?;
+        Ok((database, revision, task))
+    }
+
+    /// Resolve a revision without checking out files or fetching submodules or Git LFS.
+    #[instrument(skip(self), fields(repository = %self.git.url(), rev = ?self.git.precise()))]
+    pub(crate) fn resolve_reference(self) -> Result<GitOid> {
+        let (_, revision, _) = self.database(false)?;
+        self.git.with_precise(revision)?;
+        Ok(revision)
+    }
+
     /// Fetch the underlying Git repository at the given revision.
     #[instrument(skip(self), fields(repository = %self.git.url(), rev = ?self.git.precise()))]
     pub(crate) fn fetch(self) -> Result<Fetch> {
         let lfs_requested = self.git.lfs().enabled();
-
-        // The path to the repo, within the Git database.
-        let ident = cache_digest(self.git.repository());
-        let db_path = self.cache.join("db").join(&ident);
-
-        // Authenticate the URL, if necessary.
-        let remote = if let Some(credentials) = GIT_STORE.get(self.git.repository()) {
-            Cow::Owned(credentials.apply(self.git.url().clone()))
-        } else {
-            Cow::Borrowed(self.git.url())
-        };
-
-        // Fetch the commit, if we don't already have it. Wrapping this section in a closure makes
-        // it easier to short-circuit this in the cases where we do have the commit.
-        let (db, actual_rev, maybe_task) = || -> Result<(GitDatabase, GitOid, Option<usize>)> {
-            let git_remote = GitRemote::new(remote.clone().into_owned());
-            let maybe_db = git_remote.db_at(&db_path).ok();
-
-            // If we have a locked revision, and we have a pre-existing database which has that
-            // revision, then no update needs to happen.
-            // When requested, we also check if LFS artifacts have been fetched and validated.
-            if let (Some(rev), Some(db)) = (self.git.precise(), &maybe_db) {
-                if db.contains(rev) && (!lfs_requested || db.contains_lfs_artifacts(rev)) {
-                    debug!("Using existing Git source `{}`", self.git.url());
-                    return Ok((
-                        maybe_db
-                            .unwrap()
-                            .with_lfs_ready(lfs_requested.then_some(true)),
-                        rev,
-                        None,
-                    ));
-                }
-            }
-
-            // If the revision isn't locked, but it looks like it might be an exact commit hash,
-            // and we do have a pre-existing database, then check whether it is, in fact, a commit
-            // hash. If so, treat it like it's locked.
-            // When requested, we also check if LFS artifacts have been fetched and validated.
-            if let Some(db) = &maybe_db {
-                if let GitReference::BranchOrTagOrCommit(maybe_commit) = self.git.reference() {
-                    if let Ok(oid) = maybe_commit.parse::<GitOid>() {
-                        if db.contains(oid) && (!lfs_requested || db.contains_lfs_artifacts(oid)) {
-                            // This reference is an exact commit. Treat it like it's locked.
-                            debug!("Using existing Git source `{}`", self.git.url());
-                            return Ok((
-                                maybe_db
-                                    .unwrap()
-                                    .with_lfs_ready(lfs_requested.then_some(true)),
-                                oid,
-                                None,
-                            ));
-                        }
-                    }
-                }
-            }
-
-            // ... otherwise, we use this state to update the Git database. Note that we still check
-            // for being offline here, for example in the situation that we have a locked revision
-            // but the database doesn't have it.
-            debug!("Updating Git source `{}`", self.git.url());
-
-            // Report the checkout operation to the reporter.
-            let task = self.reporter.as_ref().map(|reporter| {
-                reporter.on_checkout_start(git_remote.url(), self.git.reference().as_rev())
-            });
-
-            let (db, actual_rev) = git_remote.checkout(
-                &db_path,
-                maybe_db,
-                self.git.reference(),
-                self.git.precise(),
-                self.disable_ssl,
-                self.offline,
-                lfs_requested,
-            )?;
-
-            Ok((db, actual_rev, task))
-        }()?;
+        let (db, actual_rev, maybe_task) = self.database(lfs_requested)?;
 
         // Validate the resolved commit before checking out its contents.
         let git = self.git.clone().with_precise(actual_rev)?;
@@ -157,7 +155,7 @@ impl GitSource {
         let ident = if lfs_requested {
             cache_digest(&canonical)
         } else {
-            ident
+            cache_digest(git.repository())
         };
         let checkout_path = self
             .cache
@@ -173,7 +171,11 @@ impl GitSource {
         // Report the checkout operation to the reporter.
         if let Some(task) = maybe_task {
             if let Some(reporter) = self.reporter.as_ref() {
-                reporter.on_checkout_complete(remote.as_ref(), actual_rev.as_str(), task);
+                reporter.on_checkout_complete(
+                    self.authenticated_remote().as_ref(),
+                    actual_rev.as_str(),
+                    task,
+                );
             }
         }
 

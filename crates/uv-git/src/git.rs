@@ -850,7 +850,10 @@ fn fetch_with_cli(
         debug!("Disabling remote protocols for Git fetch via `GIT_ALLOW_PROTOCOL=file`");
         cmd.env(EnvVars::GIT_ALLOW_PROTOCOL, "file");
     }
-    cmd.arg("--force") // handle force pushes
+    // The database fetch only needs Git objects. Submodules are initialized separately from the
+    // selected checkout, where their URLs can be resolved against the correct remote.
+    cmd.arg("--no-recurse-submodules")
+        .arg("--force") // handle force pushes
         .arg("--update-head-ok") // see discussion in #2078
         .arg(url.as_str())
         .args(refspecs)

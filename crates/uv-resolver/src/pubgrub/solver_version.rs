@@ -127,6 +127,17 @@ impl CandidateSet {
         }
     }
 
+    /// Require an independently authorized URL while its concrete Git reference is being compared.
+    pub(crate) fn urls(versions: Range<Version>) -> Self {
+        Self {
+            registry: Range::empty(),
+            indexed: Range::empty(),
+            indexes: BTreeMap::new(),
+            direct: versions,
+            urls: BTreeMap::new(),
+        }
+    }
+
     /// An explicit index constrains registry selection; an independently declared URL can take precedence.
     pub(crate) fn index_or_url(index: IndexId, versions: Range<Version>) -> Self {
         let mut candidates = Self::source(SolverSource::Index(index), versions.clone());

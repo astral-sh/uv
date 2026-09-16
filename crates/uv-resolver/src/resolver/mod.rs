@@ -31,6 +31,7 @@ use uv_distribution_types::{
     VersionOrUrlRef, implied_markers,
 };
 use uv_git::GitResolver;
+use uv_git_types::GitUrl;
 use uv_normalize::PackageName;
 use uv_pep440::{MIN_VERSION, Version, VersionSpecifiers, release_specifiers_to_ranges};
 use uv_pep508::{
@@ -433,6 +434,31 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     ForkContinuation::Propagate => {
                         // Run unit propagation.
                         let result = state.pubgrub.unit_propagation(state.next);
+                        if state.env.fork_markers().is_some()
+                            && state.source_dependencies.has_contextual_sources()
+                        {
+                            let grounding = state.source_dependencies.grounding(
+                                &state.pubgrub,
+                                &state.env,
+                                &state.python_requirement,
+                                &self.urls,
+                                &self.git,
+                            );
+                            if let Some(marker) =
+                                grounding.conditional_source(&state.env, &state.python_requirement)
+                                && let Some((with_source, without_source)) =
+                                    fork_version_by_marker(&state.env, marker)
+                            {
+                                for env in [with_source, without_source] {
+                                    forked_states.push(SourceSearch::new(self.fresh_source_fork(
+                                        env,
+                                        SourceAssumptions::default(),
+                                        requests,
+                                    )));
+                                }
+                                continue 'FORK;
+                            }
+                        }
                         match result {
                             Err(err) => {
                                 // A native conflict exhausts this retry, but other choices may
@@ -442,11 +468,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         .source_conflict(&err, &state)
                                         .or_else(|| search.failure_from_proof(&err));
                                 }
-                                let grounding = state.source_dependencies.grounding(&state.pubgrub);
+                                let grounding = state.source_dependencies.grounding(
+                                    &state.pubgrub,
+                                    &state.env,
+                                    &state.python_requirement,
+                                    &self.urls,
+                                    &self.git,
+                                );
                                 let fork_urls = grounding
                                     .iter()
                                     .filter_map(|(name, sources)| {
-                                        sources.first().map(|source| {
+                                        sources.first_key_value().map(|(source, _)| {
                                             (name.clone(), grounding.url(*source, &self.urls))
                                         })
                                     })
@@ -509,7 +541,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         // We aren't allowed to use the term intersection as it would extend the
                         // mutable borrow of `state`.
                         let Some(highest_priority_pkg) = state.pick_package() else {
-                            let grounding = state.source_dependencies.grounding(&state.pubgrub);
+                            let grounding = state.source_dependencies.grounding(
+                                &state.pubgrub,
+                                &state.env,
+                                &state.python_requirement,
+                                &self.urls,
+                                &self.git,
+                            );
                             let ungrounded = state
                                 .pubgrub
                                 .partial_solution
@@ -521,7 +559,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         SolverSource::Index(index) => grounding
                                             .indexes
                                             .get(name)
-                                            .is_some_and(|indexes| indexes.contains(&index)),
+                                            .is_some_and(|indexes| indexes.contains_key(&index)),
                                         SolverSource::Url(source) => {
                                             grounding.contains(name, source)
                                         }
@@ -554,15 +592,23 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         name: name.clone(),
                                         url: url.verbatim.to_string(),
                                     };
-                                    search.record_candidate_error(
-                                        *source,
-                                        enrich_dependency_error(
-                                            error,
-                                            *parent,
-                                            parent_candidate,
-                                            &state.pubgrub,
-                                        ),
+                                    let error = enrich_dependency_error(
+                                        error,
+                                        *parent,
+                                        parent_candidate,
+                                        &state.pubgrub,
                                     );
+                                    if urls::git_url(&url.parsed_url).is_some() {
+                                        search.record_policy_error(
+                                            vec![(
+                                                state.pubgrub.package_store[*parent].clone(),
+                                                parent_candidate.clone(),
+                                            )],
+                                            error,
+                                        );
+                                    } else {
+                                        search.record_candidate_error(*source, error);
+                                    }
                                 }
                                 if package_name.is_some_and(|name| {
                                     self.may_supply_url(
@@ -598,6 +644,66 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     ));
                                 continue;
                             }
+                            let unmatched_git = grounding.untrusted.iter().find_map(
+                                |(parent, parent_candidate, dependency, source)| {
+                                    let url = self.urls.get(*source);
+                                    urls::git_url(&url.parsed_url)?;
+                                    let name =
+                                        state.pubgrub.package_store[*dependency].name_no_root()?;
+                                    state
+                                        .pubgrub
+                                        .partial_solution
+                                        .extract_solution()
+                                        .any(|(id, candidate)| {
+                                            state.pubgrub.package_store[id].name_no_root()
+                                                == Some(name)
+                                                && !candidate.source.is_registry()
+                                        })
+                                        .then(|| {
+                                            (*parent, parent_candidate.clone(), name.clone(), url)
+                                        })
+                                },
+                            );
+                            if let Some((parent, candidate, name, url)) = unmatched_git {
+                                let package = state.pubgrub.package_store[parent].clone();
+                                let error = enrich_dependency_error(
+                                    ResolveError::DisallowedUrl {
+                                        name: name.clone(),
+                                        url: url.verbatim.to_string(),
+                                    },
+                                    parent,
+                                    &candidate,
+                                    &state.pubgrub,
+                                );
+                                search.record_policy_error(
+                                    vec![(package.clone(), candidate.clone())],
+                                    error,
+                                );
+                                if self.may_supply_url(
+                                    &name,
+                                    &CandidateSet::urls(Range::full()),
+                                    &state.env,
+                                    &state.python_requirement,
+                                ) {
+                                    self.enqueue_source_alternatives(&state, &mut search, requests);
+                                }
+                                let candidate = CandidateSet::singleton(candidate);
+                                state
+                                    .source_assumptions
+                                    .restrict(package, &candidate.complement());
+                                search.seen.insert((
+                                    state.source_assumptions.clone(),
+                                    state.preferred_lowest.clone(),
+                                ));
+                                state.next = parent;
+                                state
+                                    .pubgrub
+                                    .add_incompatibility(Incompatibility::no_versions(
+                                        parent,
+                                        Term::Positive(candidate),
+                                    ));
+                                continue;
+                            }
                             let candidate_policy = state
                                 .pubgrub
                                 .partial_solution
@@ -624,10 +730,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     let selector =
                                         self.selected_candidate_selector(&grounding, name);
                                     if state.env.fork_markers().is_some() {
-                                        let permission = selector.candidate_permission_marker(
-                                            name,
-                                            &candidate.version,
-                                            yanked,
+                                        let permission = state.python_requirement.simplify_markers(
+                                            selector.candidate_permission_marker(
+                                                name,
+                                                &candidate.version,
+                                                yanked,
+                                            ),
                                         );
                                         if state
                                             .env
@@ -688,37 +796,39 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             if matches!(self.options.resolution_mode, ResolutionMode::LowestDirect)
                             {
                                 if state.env.fork_markers().is_some()
-                                    && let Some((direct, transitive)) =
-                                        state.pubgrub.partial_solution.extract_solution().find_map(
-                                            |(id, candidate)| {
-                                                if !candidate.source.is_registry() {
-                                                    return None;
-                                                }
-                                                let package = &state.pubgrub.package_store[id];
-                                                let PubGrubPackageInner::Package {
-                                                    name,
-                                                    extra: None,
-                                                    group: None,
-                                                    ..
-                                                } = &**package
-                                                else {
-                                                    return None;
-                                                };
-                                                let needed = *grounding.contexts.get(&id)?;
-                                                let direct = self
-                                                    .selected_candidate_selector(&grounding, name)
-                                                    .lowest_marker(name);
-                                                if state.env.included_by_marker(needed.and(direct))
-                                                    && state.env.included_by_marker(
-                                                        needed.and(direct.negate()),
-                                                    )
-                                                {
-                                                    fork_version_by_marker(&state.env, direct)
-                                                } else {
-                                                    None
-                                                }
-                                            },
-                                        )
+                                    && let Some((direct, transitive)) = state
+                                        .pubgrub
+                                        .partial_solution
+                                        .extract_solution()
+                                        .find_map(|(id, candidate)| {
+                                            if !candidate.source.is_registry() {
+                                                return None;
+                                            }
+                                            let package = &state.pubgrub.package_store[id];
+                                            let PubGrubPackageInner::Package {
+                                                name,
+                                                extra: None,
+                                                group: None,
+                                                ..
+                                            } = &**package
+                                            else {
+                                                return None;
+                                            };
+                                            let needed = *grounding.contexts.get(&id)?;
+                                            let direct = state.python_requirement.simplify_markers(
+                                                self.selected_candidate_selector(&grounding, name)
+                                                    .lowest_marker(name),
+                                            );
+                                            if state.env.included_by_marker(needed.and(direct))
+                                                && state
+                                                    .env
+                                                    .included_by_marker(needed.and(direct.negate()))
+                                            {
+                                                fork_version_by_marker(&state.env, direct)
+                                            } else {
+                                                None
+                                            }
+                                        })
                                 {
                                     for env in [direct, transitive] {
                                         forked_states.push(SourceSearch::new(
@@ -935,7 +1045,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .clone();
                 let grounding = if self.urls.has_potential() || state.source_dependencies.has_urls()
                 {
-                    state.source_dependencies.grounding(&state.pubgrub)
+                    state.source_dependencies.grounding(
+                        &state.pubgrub,
+                        &state.env,
+                        &state.python_requirement,
+                        &self.urls,
+                        &self.git,
+                    )
                 } else {
                     Grounding::default()
                 };
@@ -1812,7 +1928,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         while let Some(requirement) = pending.pop_front() {
             let marker = requirement.marker.without_extras();
             if python_marker.is_disjoint(marker)
-                || !env.included_by_marker(marker)
+                || !env.included_by_marker(marker.and(python_marker))
                 || env
                     .marker_environment()
                     .is_some_and(|environment| !marker.evaluate(environment, &[]))
@@ -1897,7 +2013,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         while let Some(requirement) = pending.pop_front() {
             let marker = requirement.marker.without_extras();
             if python_marker.is_disjoint(marker)
-                || !env.included_by_marker(marker)
+                || !env.included_by_marker(marker.and(python_marker))
                 || env
                     .marker_environment()
                     .is_some_and(|environment| !marker.evaluate(environment, &[]))
@@ -1963,7 +2079,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         let possible_marker = |marker: MarkerTree| {
             let marker = marker.without_extras();
             !python_marker.is_disjoint(marker)
-                && env.included_by_marker(marker)
+                && env.included_by_marker(marker.and(python_marker))
                 && env
                     .marker_environment()
                     .is_none_or(|environment| marker.evaluate(environment, &[]))
@@ -2137,9 +2253,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         enrich_dependency_error(err, package, version, &forked_state.pubgrub)
                     })?;
 
-                let grounding = forked_state
-                    .source_dependencies
-                    .grounding(&forked_state.pubgrub);
+                let grounding = forked_state.source_dependencies.grounding(
+                    &forked_state.pubgrub,
+                    &forked_state.env,
+                    &forked_state.python_requirement,
+                    &self.urls,
+                    &self.git,
+                );
                 self.prepare_git_dependencies(&fork.dependencies, &grounding, requests)?;
 
                 // Add the dependencies to the state.
@@ -2222,61 +2342,78 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         Ok(())
     }
 
-    /// Resolve Git references only when two currently relevant trusted spellings could denote the
-    /// same package and commit. Untrusted registry URLs and URLs from excluded choices are ignored.
+    /// Resolve potentially equivalent Git references only when an independently trusted spelling
+    /// names the same package and repository. Registry references never cause package metadata or
+    /// build backends to be loaded for comparison.
     fn prepare_git_dependencies(
         &self,
         dependencies: &[PubGrubDependency],
         grounding: &Grounding,
         requests: &MetadataRequests,
     ) -> Result<(), ResolveError> {
-        let mut incoming = BTreeMap::<PackageName, Vec<VerbatimParsedUrl>>::new();
+        let mut incoming =
+            BTreeMap::<PackageName, (Vec<VerbatimParsedUrl>, Vec<VerbatimParsedUrl>)>::new();
         for dependency in dependencies {
-            if let DependencySource::Url {
-                url, trusted: true, ..
-            } = &dependency.source
-                && matches!(
-                    &url.parsed_url,
-                    ParsedUrl::GitDirectory(_) | ParsedUrl::GitPath(_)
-                )
+            if let DependencySource::Url { url, trusted, .. } = &dependency.source
+                && urls::git_url(&url.parsed_url).is_some()
                 && let Some(name) = dependency.package.name_no_root()
             {
-                incoming
-                    .entry(name.clone())
-                    .or_default()
-                    .push(url.as_ref().clone());
+                let (trusted_urls, registry_urls) = incoming.entry(name.clone()).or_default();
+                if *trusted {
+                    trusted_urls.push(url.as_ref().clone());
+                } else {
+                    registry_urls.push(url.as_ref().clone());
+                }
             }
         }
-        let hasher = grounding.hashes.strategy(&self.hasher)?;
-        let mut scheduled = Vec::new();
-        for (name, mut urls) in incoming {
-            urls.extend(
+        let mut unresolved = BTreeSet::new();
+        for (name, (mut trusted, mut registry)) in incoming {
+            trusted.extend(
                 grounding
                     .sources_for(&name)
                     .map(|source| grounding.url(source, &self.urls)),
             );
-            let mut unresolved = Vec::new();
-            for (index, url) in urls.iter().enumerate() {
-                if urls.iter().enumerate().any(|(other_index, other)| {
-                    index != other_index
-                        && urls::could_be_same_git_resource(&url.parsed_url, &other.parsed_url)
-                        && !urls::same_resource(&url.parsed_url, &other.parsed_url, &self.git)
-                }) && !unresolved.iter().any(|known: &&VerbatimParsedUrl| {
-                    urls::same_resource(&url.parsed_url, &known.parsed_url, &self.git)
-                }) {
-                    unresolved.push(url);
+            registry.extend(
+                grounding
+                    .untrusted_urls
+                    .get(&name)
+                    .into_iter()
+                    .flatten()
+                    .cloned(),
+            );
+            let could_match = |a: &VerbatimParsedUrl, b: &VerbatimParsedUrl| {
+                urls::could_be_same_git_resource(&a.parsed_url, &b.parsed_url)
+                    && !urls::same_resource(&a.parsed_url, &b.parsed_url, &self.git)
+            };
+            for url in &trusted {
+                if trusted
+                    .iter()
+                    .chain(&registry)
+                    .any(|other| could_match(url, other))
+                    && let Some(git) = urls::git_url(&url.parsed_url)
+                    && self.git.known_precise(git).is_none()
+                {
+                    unresolved.insert(git.clone());
                 }
             }
-            for url in unresolved {
-                let dist = Dist::from_url(name.clone(), url.clone())?;
-                requests.request_direct(dist.clone(), &hasher)?;
-                scheduled.push(dist);
+            for url in &registry {
+                if trusted.iter().any(|other| could_match(url, other))
+                    && let Some(git) = urls::git_url(&url.parsed_url)
+                    && self.git.known_precise(git).is_none()
+                {
+                    unresolved.insert(git.clone());
+                }
             }
         }
-        for dist in scheduled {
-            // The selected source handles metadata errors. Here only the Git reference mapping is
-            // needed; a failed speculative comparison must not reject a different valid choice.
-            requests.wait_for_direct(&dist, &hasher)?;
+        let mut scheduled = Vec::with_capacity(unresolved.len());
+        for git in unresolved {
+            let completion = requests.request_git_reference(git.clone())?;
+            scheduled.push((git, completion));
+        }
+        for (git, completion) in scheduled {
+            completion
+                .blocking_recv()
+                .map_err(|_| ResolveError::UnregisteredTask(git.to_string()))?;
         }
         Ok(())
     }
@@ -3321,14 +3458,50 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         ParsedUrl::Directory(_)
                     )),
                 };
-                let requirements = expander
-                    .expand(requirements, context)
-                    .map(|mut requirement| {
-                        if user_path {
-                            requirement.to_mut().set_force_relative(false);
-                        }
-                        requirement
-                    });
+                let source_context = env.fork_markers().map_or(MarkerTree::TRUE, |fork| {
+                    let context = grounding
+                        .contexts
+                        .get(&id)
+                        .copied()
+                        .unwrap_or_else(|| package.marker());
+                    if fork
+                        .and(python_requirement.to_marker_tree())
+                        .is_disjoint(context.negate())
+                    {
+                        MarkerTree::TRUE
+                    } else {
+                        python_requirement.simplify_markers(context)
+                    }
+                });
+                let requirements =
+                    expander
+                        .expand(requirements, context)
+                        .filter_map(|mut requirement| {
+                            if user_path {
+                                requirement.to_mut().set_force_relative(false);
+                            }
+                            let has_source = match &requirement.source {
+                                RequirementSource::Registry { index, .. } => index.is_some(),
+                                RequirementSource::Url { .. }
+                                | RequirementSource::GitDirectory { .. }
+                                | RequirementSource::GitPath { .. }
+                                | RequirementSource::Path { .. }
+                                | RequirementSource::Directory { .. } => true,
+                            };
+                            if has_source && !source_context.is_true() {
+                                // A concrete source can affect unmarked requirements from other parents.
+                                // Fork before applying it outside the path that reached this package or
+                                // activated this extra.
+                                let marker = requirement.marker.and(source_context);
+                                if marker.is_false() || !env.included_by_marker(marker) {
+                                    return None;
+                                }
+                                if marker != requirement.marker {
+                                    requirement.to_mut().marker = marker;
+                                }
+                            }
+                            Some(requirement)
+                        });
 
                 PubGrubDependency::from_requirements(
                     &self.conflicts,
@@ -3557,6 +3730,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     index,
                     package_versions,
                 )))
+            }
+
+            Request::GitReference(git, completion) => {
+                provider.resolve_git_reference(&git).await;
+                let _ = completion.send(());
+                Ok(None)
             }
 
             // Fetch distribution metadata from the distribution database.
@@ -4109,7 +4288,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .map(|b| (a, b))
             });
             let Some((a, b)) = pair else { continue };
-            let grounding = state.source_dependencies.grounding(&state.pubgrub);
+            let grounding = state.source_dependencies.grounding(
+                &state.pubgrub,
+                &state.env,
+                &state.python_requirement,
+                &self.urls,
+                &self.git,
+            );
             let mut urls = vec![
                 grounding.url(a.0, &self.urls).parsed_url,
                 grounding.url(b.0, &self.urls).parsed_url,
@@ -4524,8 +4709,8 @@ impl ForkState {
             .iter()
             .filter_map(|(name, declarations)| {
                 declarations
-                    .first()
-                    .map(|index| (name.clone(), self.indexes.resource(*index)))
+                    .first_key_value()
+                    .map(|(index, _)| (name.clone(), self.indexes.resource(*index)))
             })
             .collect()
     }
@@ -4693,13 +4878,19 @@ impl ForkState {
         }
         let is_proxy = self.pubgrub.package_store[for_package].is_proxy();
         let grounding = if urls.has_potential() || self.source_dependencies.has_urls() {
-            self.source_dependencies.grounding(&self.pubgrub)
+            self.source_dependencies.grounding(
+                &self.pubgrub,
+                &self.env,
+                &self.python_requirement,
+                urls,
+                git,
+            )
         } else {
             Grounding::default()
         };
         let mut preferred: FxHashMap<_, Vec<_>> = grounding
             .iter()
-            .map(|(name, sources)| (name.clone(), sources.iter().copied().collect()))
+            .map(|(name, sources)| (name.clone(), sources.keys().copied().collect()))
             .collect();
         let mut solved_dependencies = Vec::with_capacity(dependencies.len());
         for dependency in dependencies {
@@ -4730,8 +4921,16 @@ impl ForkState {
                 if *trusted && !preferred.contains(&source) {
                     preferred.push(source);
                 }
+                // Registry Git references cannot authorize a source. Keep the URL dimension open
+                // until an independent declaration can resolve and compare the exact reference;
+                // multiple aliases must not conflict before that declaration becomes available.
+                let candidates = if !*trusted && urls::git_url(&url.parsed_url).is_some() {
+                    CandidateSet::urls(version)
+                } else {
+                    CandidateSet::source(SolverSource::Url(source), version)
+                };
                 (
-                    CandidateSet::source(SolverSource::Url(source), version),
+                    candidates,
                     Some(UrlDeclaration {
                         source,
                         url: url.as_ref().clone(),
@@ -4808,6 +5007,7 @@ impl ForkState {
             for_package,
             for_version.clone(),
             solved_dependencies.clone(),
+            for_package != self.pubgrub.root_package,
         );
         self.pending_sources.clear();
         let native_dependencies = solved_dependencies
@@ -5285,6 +5485,8 @@ pub(crate) enum Request {
     Package(PackageName, Option<IndexMetadata>),
     /// A request to fetch the metadata for a built or source distribution.
     Dist(Dist, Option<HashStrategy>),
+    /// A request to compare a Git reference without loading package metadata.
+    GitReference(Box<GitUrl>, oneshot::Sender<()>),
     /// A request to fetch the metadata from an already-installed distribution.
     Installed(InstalledDist),
     /// A request to pre-fetch the metadata for a package and the best-guess distribution.
@@ -5336,6 +5538,9 @@ impl Display for Request {
             }
             Self::Dist(dist, _) => {
                 write!(f, "Metadata {dist}")
+            }
+            Self::GitReference(git, _) => {
+                write!(f, "Git reference {git}")
             }
             Self::Installed(dist) => {
                 write!(f, "Installed metadata {dist}")

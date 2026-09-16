@@ -1575,6 +1575,18 @@ struct DependencySources<'lock> {
     package_markers: PackageMarkers<'lock>,
 }
 
+/// Whether this requirement selects a registry source explicitly.
+fn requirement_has_explicit_index(requirement: &Requirement) -> bool {
+    match &requirement.source {
+        RequirementSource::Registry { index, .. } => index.is_some(),
+        RequirementSource::Url { .. }
+        | RequirementSource::GitDirectory { .. }
+        | RequirementSource::GitPath { .. }
+        | RequirementSource::Path { .. }
+        | RequirementSource::Directory { .. } => false,
+    }
+}
+
 /// Marker environments compared for each locked dependency identity.
 struct DependencyMarkers {
     marker: MarkerTree,
@@ -1702,13 +1714,12 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             MarkerTree::FALSE
         };
 
-        // A bare consumer can reuse a first-party direct source only in the environments where
-        // the dependency path that authorized the source is also included.
+        // A registry consumer can reuse a first-party direct source only in the environments where
+        // the dependency path that authorized the source is also included. A different registry
+        // index cannot stand in for an explicitly selected index.
         if source_marker.is_false()
-            && matches!(
-                requirement.source,
-                RequirementSource::Registry { index: None, .. }
-            )
+            && let RequirementSource::Registry { .. } = requirement.source
+            && !package.id.source.is_registry()
             && let Some(source_requirements) =
                 self.source_requirements.requirements.get(&requirement.name)
         {
@@ -3799,13 +3810,13 @@ impl Lock {
             ));
         }
 
-        if allow_missing_package_metadata {
+        if allow_missing_package_metadata || !indexes.is_empty() {
             let declarations = flattened.as_ref().unwrap_or(&expected_requirements);
             let package_activated_extras = activated_extras
                 .get(&package.id)
                 .cloned()
                 .unwrap_or_default();
-            let expected = ExpectedPackageDependencies::new(
+            let mut expected = ExpectedPackageDependencies::new(
                 self,
                 declarations,
                 provides_extra,
@@ -3820,14 +3831,26 @@ impl Lock {
                 root,
                 missing_metadata,
             );
-            match self.satisfied_no_metadata(
-                package,
-                activated_extras,
-                missing_metadata,
-                &expected,
-            )? {
-                SatisfiesResult::Satisfied => {}
-                dissatisfied => return Ok(dissatisfied),
+            if allow_missing_package_metadata {
+                match self.satisfied_no_metadata(
+                    package,
+                    activated_extras,
+                    missing_metadata,
+                    &expected,
+                )? {
+                    SatisfiesResult::Satisfied => {}
+                    dissatisfied => return Ok(dissatisfied),
+                }
+            }
+            if !indexes.is_empty() {
+                expected.declarations.retain(requirement_has_explicit_index);
+                for requirements in expected.dependency_groups.values_mut() {
+                    requirements.retain(requirement_has_explicit_index);
+                }
+                match self.satisfied_explicit_indexes(package, activated_extras, &expected)? {
+                    SatisfiesResult::Satisfied => {}
+                    dissatisfied => return Ok(dissatisfied),
+                }
             }
         }
 
@@ -3840,6 +3863,88 @@ impl Lock {
             Self::record_index(index, remotes, locals, root);
         }
 
+        Ok(SatisfiesResult::Satisfied)
+    }
+
+    /// Validate the resolved index where an active declaration pins it, including in locks that
+    /// already store distribution metadata. Ordinary requirements outside that marker stay free to
+    /// use the default index.
+    fn satisfied_explicit_indexes<'lock>(
+        &self,
+        package: &'lock Package,
+        activated_extras: &mut FxHashMap<PackageId, BTreeMap<ExtraName, UniversalMarker>>,
+        expected: &ExpectedPackageDependencies<'_>,
+    ) -> Result<SatisfiesResult<'lock>, LockError> {
+        for context in expected.contexts() {
+            if let DependencyContext::Extra(extra) = context
+                && (!expected.provides_extra.contains(extra)
+                    || (!self.is_workspace_package(package)
+                        && !expected.activated_extras.contains_key(extra)))
+            {
+                continue;
+            }
+            let empty = BTreeSet::new();
+            let requirements = match context {
+                DependencyContext::Production | DependencyContext::Extra(_) => {
+                    &expected.declarations
+                }
+                DependencyContext::Group(group) => {
+                    expected.dependency_groups.get(group).unwrap_or(&empty)
+                }
+            };
+            let mut scopes = BTreeMap::<_, MarkerTree>::new();
+            for requirement in requirements {
+                let marker = context.requirement_marker(requirement.marker);
+                if !marker.is_false() {
+                    scopes
+                        .entry(&requirement.name)
+                        .and_modify(|scope| *scope = scope.or(marker))
+                        .or_insert(marker);
+                }
+            }
+            if scopes.is_empty() {
+                continue;
+            }
+
+            let parent = expected.context_parent_marker(context);
+            let builder = LockedDependencyBuilder::new(
+                &self.requires_python,
+                expected.lock_marker,
+                expected.context_activation_marker(context, parent),
+                parent,
+                expected.simplification_parent_marker(context, parent),
+            );
+            let mut generated = Vec::new();
+            let complete =
+                builder.add_requirements(&mut generated, expected, context, activated_extras)?;
+            generated.sort();
+            let actual = context.dependencies(package);
+            let mut relevant = Vec::new();
+            for dependency in actual {
+                let Some(scope) = scopes.get(&dependency.package_id.name) else {
+                    continue;
+                };
+                let mut marker = dependency.complexified_marker;
+                marker.and(UniversalMarker::from_combined(*scope));
+                if !marker_is_unreachable(&self.requires_python, marker.combined()) {
+                    builder.add(
+                        &mut relevant,
+                        dependency.package_id.clone(),
+                        dependency.extra.clone(),
+                        marker,
+                    );
+                }
+            }
+            relevant.sort();
+            if !complete || !expected.dependencies_match(&generated, &relevant, parent, context) {
+                return Ok(SatisfiesResult::MismatchedPackageDependencies(
+                    &package.id.name,
+                    package.id.version.as_ref(),
+                    generated,
+                    actual,
+                ));
+            }
+        }
         Ok(SatisfiesResult::Satisfied)
     }
 
@@ -4228,14 +4333,16 @@ impl Lock {
             }
         }
 
+        let source_overrides = Overrides::from_entries(normalized_overrides.into_iter().collect())
+            .map_err(LockErrorKind::InvalidScopedOverride)?;
+        let source_excludes = Excludes::from_entries(excludes.iter().cloned());
         let dependency_overrides = if allow_missing_package_metadata {
-            Overrides::from_entries(normalized_overrides.into_iter().collect())
-                .map_err(LockErrorKind::InvalidScopedOverride)?
+            source_overrides.clone()
         } else {
             Overrides::default()
         };
         let dependency_excludes = if allow_missing_package_metadata {
-            Excludes::from_entries(excludes.iter().cloned())
+            source_excludes.clone()
         } else {
             Excludes::default()
         };
@@ -4252,13 +4359,35 @@ impl Lock {
                 !dependency_excludes.contains_for_package(None, &requirement.name)
             })
             .collect::<Vec<_>>();
-        let dependency_sources = if allow_missing_package_metadata {
+        let has_explicit_indexes = root_requirements
+            .iter()
+            .any(|requirement| requirement_has_explicit_index(requirement))
+            || self.packages.iter().any(|package| {
+                package
+                    .metadata
+                    .requires_dist
+                    .iter()
+                    .chain(package.metadata.dependency_groups.values().flatten())
+                    .any(requirement_has_explicit_index)
+            });
+        let dependency_sources = if allow_missing_package_metadata || has_explicit_indexes {
+            let source_root_requirements = source_overrides
+                .apply_for_package(
+                    None,
+                    requirements
+                        .iter()
+                        .chain(dependency_groups.values().flatten()),
+                )
+                .filter(|requirement| {
+                    !source_excludes.contains_for_package(None, &requirement.name)
+                })
+                .collect::<Vec<_>>();
             Box::pin(self.collect_dependency_sources(
                 normalized_constraints,
-                &root_requirements,
+                &source_root_requirements,
                 dependency_metadata,
-                &dependency_overrides,
-                &dependency_excludes,
+                &source_overrides,
+                &source_excludes,
                 root,
                 tags,
                 markers,
@@ -4272,6 +4401,16 @@ impl Lock {
         } else {
             DependencySources::default()
         };
+        for ((package_id, extra), marker) in &dependency_sources.package_markers.markers {
+            if let Some(extra) = *extra
+                && !self.is_workspace_package(self.package(self.by_id[*package_id]))
+            {
+                activated_extras
+                    .entry((*package_id).clone())
+                    .or_default()
+                    .insert(extra.clone(), UniversalMarker::from_combined(*marker));
+            }
+        }
 
         // Collect the set of available indexes (both `--index-url` and `--find-links` entries).
         let mut remotes = indexes.map(|locations| {
@@ -4961,63 +5100,58 @@ impl Lock {
             // Refresh source trees only after their exact path becomes reachable. Scoped rules
             // may also require their built version. Other backend-only trees, archives, and remote
             // providers wait for a refreshed declaration to select their source in the second phase.
-            let refreshed_source_tree = if let Some(source_tree) =
-                package.id.source.as_source_tree()
-            {
-                let metadata = Self::source_tree_requires_dist_cached(
-                    source_tree,
-                    root,
-                    package,
-                    database,
-                    source_tree_metadata,
-                )
-                .await?;
-                if configured_metadata.is_none()
-                    && package.id.version.is_none()
-                    && metadata
-                        .as_ref()
-                        .is_none_or(|metadata| metadata.version.is_none())
-                    && (dependency_overrides.has_scoped_package(&package.id.name)
-                        || dependency_excludes.has_scoped_package(&package.id.name))
-                {
-                    // Scoped rules need the resolved version before this authorized tree can
-                    // expose any dependency sources.
-                    let metadata = Self::package_metadata(
-                        package,
+            let refreshed_source_tree =
+                if let Some(source_tree) = package.id.source.as_source_tree() {
+                    let metadata = Self::source_tree_requires_dist_cached(
+                        source_tree,
                         root,
-                        tags,
-                        markers,
-                        build_options,
-                        hasher,
-                        index,
+                        package,
                         database,
+                        source_tree_metadata,
                     )
                     .await?;
-                    let metadata = SourceTreeRequiresDist {
-                        version: Some(metadata.version.clone()),
-                        requires_python: metadata.requires_python.clone(),
-                        metadata: metadata.into(),
-                    };
-                    source_tree_metadata.insert(package.id.clone(), Some(metadata.clone()));
-                    Some(metadata)
+                    if configured_metadata.is_none()
+                        && package.id.version.is_none()
+                        && metadata
+                            .as_ref()
+                            .is_none_or(|metadata| metadata.version.is_none())
+                        && (dependency_overrides.has_scoped_package(&package.id.name)
+                            || dependency_excludes.has_scoped_package(&package.id.name))
+                    {
+                        // Scoped rules need the resolved version before this authorized tree can
+                        // expose any dependency sources.
+                        let metadata = Self::package_metadata(
+                            package,
+                            root,
+                            tags,
+                            markers,
+                            build_options,
+                            hasher,
+                            index,
+                            database,
+                        )
+                        .await?;
+                        let metadata = SourceTreeRequiresDist {
+                            version: Some(metadata.version.clone()),
+                            requires_python: metadata.requires_python.clone(),
+                            metadata: metadata.into(),
+                        };
+                        source_tree_metadata.insert(package.id.clone(), Some(metadata.clone()));
+                        Some(metadata)
+                    } else {
+                        metadata
+                    }
                 } else {
-                    metadata
-                }
-            } else {
-                let is_opaque_source = matches!(
-                    package.id.source,
-                    Source::Path(..) | Source::Direct(..) | Source::Git(..)
-                );
-                let registry_has_declarations = matches!(package.id.source, Source::Registry(..))
-                    && (configured_metadata.is_some()
-                        || source_requirements.iter().any(|constraint| {
-                            !matches!(constraint.source, RequirementSource::Registry { .. })
-                        }));
-                if !is_opaque_source && !registry_has_declarations {
-                    continue;
-                }
-                None
-            };
+                    // Immutable registry edges can request other registry packages or extras on an
+                    // independently selected first-party source; they never authorize that source.
+                    match &package.id.source {
+                        Source::Registry(_)
+                        | Source::Path(_)
+                        | Source::Direct(..)
+                        | Source::Git(..) => None,
+                        Source::Directory(_) | Source::Editable(_) | Source::Virtual(_) => continue,
+                    }
+                };
             if refreshed_source_tree
                 .as_ref()
                 .and_then(|metadata| metadata.version.as_ref())
@@ -5218,12 +5352,22 @@ impl Lock {
                             matches!(package.id.source, Source::Registry(..))
                                 && !matches!(dependency_package.id.source, Source::Registry(..));
                         let constrained_source = if registry_external_source {
-                            marker = Self::constraint_source_marker(
+                            let authorized = Self::constraint_source_marker(
                                 dependency_package,
                                 marker,
                                 source_requirements,
                                 root,
                             )?;
+                            let deferred = marker.and(authorized.negate());
+                            if !deferred.is_false()
+                                && reachability
+                                    .deferred_package_markers
+                                    .merge(&dependency_package.id, dependency_extra, deferred)
+                                    .is_some()
+                            {
+                                changes.deferred.insert(&dependency_package.id);
+                            }
+                            marker = authorized;
                             !marker.is_false()
                         } else {
                             false
@@ -7653,6 +7797,19 @@ impl Source {
             _ => false,
         };
         Ok(result)
+    }
+
+    /// Returns `true` if the source is a registry or flat index.
+    fn is_registry(&self) -> bool {
+        match self {
+            Self::Registry(_) => true,
+            Self::Git(..)
+            | Self::Direct(..)
+            | Self::Path(_)
+            | Self::Directory(_)
+            | Self::Editable(_)
+            | Self::Virtual(_) => false,
+        }
     }
 
     /// Returns `true` if the source should be considered immutable.

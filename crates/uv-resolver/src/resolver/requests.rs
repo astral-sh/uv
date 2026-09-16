@@ -1,8 +1,10 @@
 use std::sync::Arc;
 
 use tokio::sync::mpsc::Sender;
+use tokio::sync::oneshot;
 
 use uv_distribution_types::{Dist, DistributionId, Identifier, IndexMetadata};
+use uv_git_types::GitUrl;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_types::HashStrategy;
@@ -71,6 +73,17 @@ impl MetadataRequests {
                 .blocking_send(Request::Dist(dist, Some(hasher.clone())))?;
         }
         Ok(())
+    }
+
+    /// Request a Git reference comparison independently of direct package metadata and builds.
+    pub(crate) fn request_git_reference(
+        &self,
+        git: GitUrl,
+    ) -> Result<oneshot::Receiver<()>, ResolveError> {
+        let (sender, receiver) = oneshot::channel();
+        self.sender
+            .blocking_send(Request::GitReference(Box::new(git), sender))?;
+        Ok(receiver)
     }
 
     /// Schedule speculative candidate selection using an already-requested package version map.

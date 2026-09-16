@@ -200,6 +200,44 @@ impl GitResolver {
         Ok(Some(precise))
     }
 
+    /// Resolve a Git revision without checking out files or fetching submodules or Git LFS.
+    pub async fn resolve_reference(
+        &self,
+        url: &GitUrl,
+        http_settings: GitHttpSettings,
+        cache: PathBuf,
+    ) -> Result<GitOid, GitResolverError> {
+        if let Some(precise) = self.known_precise(url) {
+            return Ok(precise);
+        }
+
+        let lock_dir = cache.join("locks");
+        fs::create_dir_all(&lock_dir).await?;
+        let repository = url.repository();
+        let _lock = LockedFile::acquire(
+            lock_dir.join(cache_digest(repository)),
+            LockedFileMode::Exclusive,
+            repository,
+        )
+        .await?;
+
+        if let Some(precise) = self.known_precise(url) {
+            return Ok(precise);
+        }
+
+        let source = GitSource::new(url.clone(), cache, http_settings.offline);
+        let source = if http_settings.disable_ssl {
+            source.dangerous()
+        } else {
+            source
+        };
+        let precise = tokio::task::spawn_blocking(move || source.resolve_reference())
+            .await?
+            .map_err(GitResolverError::Git)?;
+        self.insert(RepositoryReference::from(url), precise);
+        Ok(precise)
+    }
+
     /// Fetch a remote Git repository.
     pub async fn fetch(
         &self,
@@ -283,6 +321,20 @@ impl GitResolver {
         url.with_precise(precise).ok()
     }
 
+    /// Return an already known commit or the full commit spelled by the reference itself.
+    pub fn known_precise(&self, url: &GitUrl) -> Option<GitOid> {
+        url.precise()
+            .or_else(|| self.get(&RepositoryReference::from(url)))
+            .or_else(|| match url.reference() {
+                GitReference::BranchOrTagOrCommit(revision) => revision.parse().ok(),
+                GitReference::Branch(_)
+                | GitReference::Tag(_)
+                | GitReference::BranchOrTag(_)
+                | GitReference::NamedRef(_)
+                | GitReference::DefaultBranch => None,
+            })
+    }
+
     /// Returns `true` if the two Git URLs refer to the same precise commit.
     pub fn same_ref(&self, a: &GitUrl, b: &GitUrl) -> bool {
         // Convert `a` to a repository URL.
@@ -302,11 +354,11 @@ impl GitResolver {
         }
 
         // Otherwise, the URLs must resolve to the same precise commit.
-        let Some(a_precise) = a.precise().or_else(|| self.get(&a_ref)) else {
+        let Some(a_precise) = self.known_precise(a) else {
             return false;
         };
 
-        let Some(b_precise) = b.precise().or_else(|| self.get(&b_ref)) else {
+        let Some(b_precise) = self.known_precise(b) else {
             return false;
         };
 

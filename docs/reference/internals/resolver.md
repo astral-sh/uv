@@ -282,28 +282,36 @@ uv requires that URLs are either declared directly (in the project, in a
 [override](../../concepts/resolution.md#dependency-overrides)), or by other URL dependencies that
 are themselves authorized. uv discovers URL dependencies while resolving metadata. A declaration is
 attached to the selected version and source of the package that introduced it, and applies only in
-the environments where its marker is true. If backtracking excludes that package or extra, its URL
-no longer affects the solution. The registry can still provide a package required through another
-path, unless another included dependency independently declares a URL.
+the environments where both its marker and the dependency path that activates it are true. For
+example, if an index package requests a URL package's extra only on Linux, URLs declared by that
+extra apply only on Linux. Different platforms can consequently select different URLs for the same
+package. If backtracking excludes that package or extra, its URL no longer affects the solution. The
+registry can still provide a package required through another path, unless another included
+dependency independently declares a URL.
 
 An index package cannot independently authorize a URL. Its metadata can refer to the same URL when
 it is also authorized by an included first-party declaration, constraint, or override. It can also
 activate an extra on an already authorized URL package; that package's own metadata may then declare
-further URLs. This keeps the sources auditable: if only one index and no URL dependencies are
-provided, uv will not install any package from outside the index.
+further URLs. For Git, a different reference to the same repository, package location, and commit
+can use the authorized source. uv resolves the references to compare commits; it obtains package
+metadata only from an authorized source. This keeps the sources auditable: if only one index and no
+URL dependencies are provided, uv will not install any package from outside the index.
 
 The solver distinguishes registry and URL candidates even when their versions are identical: their
 metadata may be different. The same applies to different explicitly selected registries; an index
-declaration on an excluded package or extra no longer determines which registry supplies a package.
+declaration on an excluded package or extra no longer determines which registry supplies a package,
+and a declaration activated only on Linux does not determine the registry for other platforms.
 Hashes recorded for a registry pin are not reused for a selected URL merely because the versions
 match. Version requirements allow any source, including URLs not yet discovered. If the registry
 provides no suitable candidate but an authorized URL could still be introduced, the resolver
 continues processing other dependencies before rejecting the branch. It can revisit earlier
-candidate decisions, including extras, when a different selection might supply the missing URL. The
-same principle applies to first-party declarations that permit an explicit prerelease or a yanked
-version: the resolver can try such a candidate while other dependencies are undecided, but accepts
-it only if a selected first-party declaration actually permits it in the environments where the
-package is needed. A dependency of a selected local project can also make a package direct for
+candidate decisions, including extras, when a different selection might supply the missing URL. If a
+required URL cannot be fetched or its metadata is invalid, uv reports the underlying error; an error
+from an excluded candidate does not prevent resolution from succeeding. The same principle applies
+to first-party declarations that permit an explicit prerelease or a yanked version: the resolver can
+try such a candidate while other dependencies are undecided, but accepts it only if a selected
+first-party declaration actually permits it in the environments where the package is needed. A
+dependency of a selected local project can also make a package direct for
 `--resolution lowest-direct`, even if another dependency was processed first.
 
 ## Prioritization
