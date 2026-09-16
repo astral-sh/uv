@@ -2254,6 +2254,162 @@ fn build_fast_path_verbose() -> Result<()> {
     Ok(())
 }
 
+/// Exact backend pins must match the running uv version; compatible ranges can use the fast path.
+#[test]
+fn build_fast_path_exact_pin() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let project = context.temp_dir.child("project");
+    let pyproject_toml = project.child("pyproject.toml");
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build==0.11.33"]
+        build-backend = "uv_build"
+    "#})?;
+    project.child("src/project/__init__.py").touch()?;
+
+    uv_snapshot!(context.filters(), context.build()
+        .arg("project")
+        .arg("--wheel")
+        .arg("--no-index"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Building wheel...
+    error: Failed to build `[TEMP_DIR]/project`
+      cause: Failed to resolve requirements from `build-system.requires`
+      cause: No solution found when resolving: `uv-build==0.11.33`
+      cause: Because uv-build was not found in the provided package locations and you require uv-build==0.11.33, we can conclude that your requirements are unsatisfiable.
+
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+    ");
+
+    for requirement in [
+        format!("uv_build=={}", uv_version::version()),
+        "uv_build>=0.11,<0.12".to_string(),
+        "uv_build==0.11.*".to_string(),
+        "uv_build===0.11.33".to_string(),
+        "uv_build==0.11.33 ; python_version < '0'".to_string(),
+    ] {
+        pyproject_toml.write_str(&formatdoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = ["{requirement}"]
+            build-backend = "uv_build"
+        "#})?;
+
+        context
+            .build()
+            .arg("project")
+            .arg("--wheel")
+            .arg("--no-index")
+            .assert()
+            .success();
+    }
+
+    Ok(())
+}
+
+/// Active exact build constraints must match the running uv version to use the fast path.
+#[test]
+fn build_fast_path_constraint_exact_pin() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let project = context.temp_dir.child("project");
+
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.11,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    project.child("src/project/__init__.py").touch()?;
+
+    let constraints = context.temp_dir.child("constraints.txt");
+    constraints.write_str("uv_build==0.11.33")?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("./project")
+        .arg("--no-index")
+        .arg("--build-constraint")
+        .arg("constraints.txt"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to build `project @ file://[TEMP_DIR]/project`
+      cause: Failed to resolve requirements from `build-system.requires`
+      cause: No solution found when resolving: `uv-build>=0.11, <10000`
+      cause: Because uv-build was not found in the provided package locations and you require uv-build==0.11.33, we can conclude that your requirements are unsatisfiable.
+
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+    ");
+
+    constraints.write_str("uv_build>=0.11,==0.11.33")?;
+
+    uv_snapshot!(context.filters(), context.build()
+        .arg("project")
+        .arg("--wheel")
+        .arg("--no-index")
+        .arg("--build-constraint")
+        .arg("constraints.txt"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Building wheel...
+    error: Failed to build `[TEMP_DIR]/project`
+      cause: Failed to resolve requirements from `build-system.requires`
+      cause: No solution found when resolving: `uv-build>=0.11, <10000`
+      cause: Because uv-build was not found in the provided package locations and you require uv-build==0.11.33, we can conclude that your requirements are unsatisfiable.
+
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+    ");
+
+    // Listing files requires the fast path and must reject the incompatible constraint.
+    uv_snapshot!(context.filters(), context.build()
+        .arg("project")
+        .arg("--wheel")
+        .arg("--list")
+        .arg("--build-constraint")
+        .arg("constraints.txt"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to build `[TEMP_DIR]/project`
+      cause: Can only use `--list` with a compatible uv build backend, but `project` is not compatible because `uv_build==0.11.33` does not match the running uv version
+    ");
+
+    for constraint in [
+        format!("uv_build=={}", uv_version::version()),
+        "uv_build==0.11.33 ; python_version < '0'".to_string(),
+        "uv_build==0.11.*".to_string(),
+        "uv_build===0.11.33".to_string(),
+        "uv_build>=0.11,<0.12".to_string(),
+    ] {
+        constraints.write_str(&constraint)?;
+
+        context
+            .build()
+            .arg("project")
+            .arg("--wheel")
+            .arg("--no-index")
+            .arg("--build-constraint")
+            .arg("constraints.txt")
+            .assert()
+            .success();
+    }
+
+    Ok(())
+}
+
 /// Reject path-shaped script entry point names before writing wheel metadata.
 #[test]
 fn build_unsafe_script_entry_point_name() -> Result<()> {

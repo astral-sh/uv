@@ -134,6 +134,8 @@ pub enum DirectBuildIncompatibility {
     UrlRequirement,
     #[error("`uv_build{0}` is not a known compatible range")]
     IncompatibleRange(VersionSpecifiers),
+    #[error("`uv_build=={0}` does not match the running uv version")]
+    VersionMismatch(Version),
 }
 
 #[derive(Debug, Clone)]
@@ -241,6 +243,8 @@ fn parse_import_entry(value: &str, field: &'static str) -> Result<ImportEntry, V
 
 /// Check if the build backend is matching the currently running uv version.
 ///
+/// Return the backend requirement so the caller can check exact version pins and constraints.
+///
 /// Example table compatible with uv 0.4.21:
 ///
 /// ```toml
@@ -251,7 +255,7 @@ fn parse_import_entry(value: &str, field: &'static str) -> Result<ImportEntry, V
 pub fn check_direct_build(
     source_tree: &Path,
     uv_version: &str,
-) -> Result<(), DirectBuildIncompatibility> {
+) -> Result<Requirement<VerbatimParsedUrl>, DirectBuildIncompatibility> {
     #[derive(Deserialize)]
     #[serde(rename_all = "kebab-case")]
     struct PyProjectToml {
@@ -327,7 +331,7 @@ pub fn check_direct_build(
         Some(VersionOrUrl::VersionSpecifier(_)) => {}
     }
 
-    Ok(())
+    Ok((**uv_requirement).clone())
 }
 
 /// A package name as provided in a `pyproject.toml`.
