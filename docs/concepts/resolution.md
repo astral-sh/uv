@@ -231,7 +231,7 @@ Use `==` to require coverage at the baseline. A range like `>= '24.0.0'` can be 
 that only supports a newer release. Wheels targeting newer releases are still retained in the
 lockfile.
 
-### Glibc coverage (prototype)
+### Libc coverage (prototype)
 
 The uv-specific `uv:glibc_version` marker can require wheels for an exact glibc baseline:
 
@@ -250,6 +250,20 @@ select different versions for different architectures, but does not fork on glib
 baseline is recorded in `required-markers`, not in dependency markers.
 
 Only exact comparisons are supported, such as `uv:glibc_version == '2.31'`.
+
+Use `uv:musl_version` to require a musl baseline. To require coverage for both implementations, list
+them separately:
+
+```toml title="pyproject.toml"
+[tool.uv]
+required-environments = [
+    "platform_machine == 'x86_64' and uv:glibc_version == '2.31'",
+    "platform_machine == 'x86_64' and uv:musl_version == '1.2'",
+]
+```
+
+Both requirements must be satisfied by the same selected package version. Omitting an implementation
+does not require coverage for it or exclude its wheels.
 
 ## Common marker values
 

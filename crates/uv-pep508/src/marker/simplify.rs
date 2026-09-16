@@ -111,7 +111,7 @@ fn collect_dnf(
                 }
             }
         }
-        MarkerTreeKind::GlibcVersion(marker) => {
+        MarkerTreeKind::ArtifactVersion(marker) => {
             for (tree, range) in collect_edges(marker.edges()) {
                 for bounds in range.iter() {
                     let current = path.len();

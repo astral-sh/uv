@@ -54,6 +54,8 @@ pub enum MarkerWarningKind {
 pub enum MarkerValueVersion {
     /// A uv-only glibc artifact coverage requirement, unavailable in runtime environments.
     GlibcVersion,
+    /// A uv-only musl artifact coverage requirement, unavailable in runtime environments.
+    MuslVersion,
     /// `implementation_version`
     ImplementationVersion,
     /// `python_full_version`
@@ -66,6 +68,7 @@ impl Display for MarkerValueVersion {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::GlibcVersion => f.write_str("uv:glibc_version"),
+            Self::MuslVersion => f.write_str("uv:musl_version"),
             Self::ImplementationVersion => f.write_str("implementation_version"),
             Self::PythonFullVersion => f.write_str("python_full_version"),
             Self::PythonVersion => f.write_str("python_version"),
@@ -932,13 +935,13 @@ impl MarkerTree {
 
         let node = INTERNER.shared.node(self.0);
         match &node.var {
-            Variable::GlibcVersion => {
+            Variable::ArtifactVersion(key) => {
                 let Edges::Version { edges: ref map } = node.children else {
                     return MarkerTreeKind::False;
                 };
-                MarkerTreeKind::GlibcVersion(VersionMarkerTree {
+                MarkerTreeKind::ArtifactVersion(VersionMarkerTree {
                     id: self.0,
-                    key: MarkerValueVersion::GlibcVersion,
+                    key: *key,
                     map,
                 })
             }
@@ -1080,7 +1083,7 @@ impl MarkerTree {
             MarkerTreeKind::False => return false,
             // Coverage requirements are not runtime conditions. Fail closed if one escapes
             // into a dependency marker; normal dependency parsing rejects these markers.
-            MarkerTreeKind::GlibcVersion(_) => return false,
+            MarkerTreeKind::ArtifactVersion(_) => return false,
             MarkerTreeKind::Version(marker) => {
                 for (range, tree) in marker.edges() {
                     if range.contains(env.get_version(marker.key())) {
@@ -1176,7 +1179,7 @@ impl MarkerTree {
             MarkerTreeKind::VersionString(marker) => {
                 marker.edges().any(|(_, tree)| tree.evaluate_extras(extras))
             }
-            MarkerTreeKind::GlibcVersion(marker) => {
+            MarkerTreeKind::ArtifactVersion(marker) => {
                 marker.edges().any(|(_, tree)| tree.evaluate_extras(extras))
             }
             MarkerTreeKind::String(marker) => marker
@@ -1208,7 +1211,7 @@ impl MarkerTree {
             MarkerTreeKind::VersionString(marker) => marker
                 .edges()
                 .all(|(_, tree)| tree.evaluate_only_extras(extras)),
-            MarkerTreeKind::GlibcVersion(marker) => marker
+            MarkerTreeKind::ArtifactVersion(marker) => marker
                 .edges()
                 .all(|(_, tree)| tree.evaluate_only_extras(extras)),
             MarkerTreeKind::String(marker) => marker
@@ -1454,7 +1457,7 @@ impl MarkerTree {
                         imp(tree, f);
                     }
                 }
-                MarkerTreeKind::GlibcVersion(kind) => {
+                MarkerTreeKind::ArtifactVersion(kind) => {
                     for (tree, _) in simplify::collect_edges(kind.edges()) {
                         imp(tree, f);
                     }
@@ -1540,8 +1543,8 @@ impl Ord for MarkerTree {
 /// a value to that variable.
 #[derive(PartialEq, Eq, Clone, Debug, PartialOrd, Ord)]
 pub enum MarkerTreeKind<'a> {
-    /// A uv-only glibc version requirement used for artifact coverage, not runtime evaluation.
-    GlibcVersion(VersionMarkerTree<'a, MarkerValueVersion>),
+    /// A uv-only libc version requirement used for artifact coverage, not runtime evaluation.
+    ArtifactVersion(VersionMarkerTree<'a, MarkerValueVersion>),
     /// An empty marker that always evaluates to `true`.
     True,
     /// An unsatisfiable marker that always evaluates to `false`.
@@ -1942,6 +1945,39 @@ mod test {
         assert!(MarkerTree::parse_required_environment("uv:glibc_version == '0'").is_err());
         assert!(MarkerTree::parse_required_environment("uv:glibc_version == 'invalid'").is_err());
         let marker = MarkerTree::parse_required_environment("uv:glibc_version == '2.0'").unwrap();
+        assert_eq!(
+            marker,
+            MarkerTree::parse_required_environment(&marker.try_to_string().unwrap()).unwrap()
+        );
+    }
+
+    #[test]
+    fn musl_coverage_marker() {
+        let marker = MarkerTree::parse_required_environment(
+            "platform_machine == 'x86_64' and uv:musl_version == '1.2'",
+        )
+        .unwrap();
+        assert_eq!(
+            marker.without_artifact_markers(),
+            m("sys_platform == 'linux' and platform_machine == 'x86_64'")
+        );
+        assert_eq!(
+            marker,
+            MarkerTree::parse_required_environment(&marker.try_to_string().unwrap()).unwrap()
+        );
+        assert!("uv:musl_version == '1.2'".parse::<MarkerTree>().is_err());
+        let glibc = MarkerTree::parse_required_environment("uv:glibc_version == '2.31'").unwrap();
+        assert!(marker.is_disjoint(glibc));
+        assert!(marker.and(glibc).is_false());
+        assert_eq!(
+            marker.or(glibc).without_artifact_markers(),
+            m("sys_platform == 'linux'")
+        );
+        assert!(MarkerTree::parse_required_environment("musl_version == '1.2'").is_err());
+        assert!(MarkerTree::parse_required_environment("uv:musl_version >= '1.2'").is_err());
+        assert!(MarkerTree::parse_required_environment("uv:musl_version == '0'").is_err());
+        assert!(MarkerTree::parse_required_environment("uv:musl_version == 'invalid'").is_err());
+        let marker = MarkerTree::parse_required_environment("uv:musl_version == '1.0'").unwrap();
         assert_eq!(
             marker,
             MarkerTree::parse_required_environment(&marker.try_to_string().unwrap()).unwrap()

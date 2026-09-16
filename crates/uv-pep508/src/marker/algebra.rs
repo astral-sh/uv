@@ -168,9 +168,11 @@ impl InternerGuard<'_> {
             // A variable representing the output of a version key. Edges correspond
             // to disjoint version ranges.
             MarkerExpression::Version { key, specifier } => match key {
-                MarkerValueVersion::GlibcVersion => {
-                    let version =
-                        self.create_node(Variable::GlibcVersion, Edges::from_specifier(specifier));
+                MarkerValueVersion::GlibcVersion | MarkerValueVersion::MuslVersion => {
+                    let version = self.create_node(
+                        Variable::ArtifactVersion(key),
+                        Edges::from_specifier(specifier),
+                    );
                     let linux = self.expression(MarkerExpression::String {
                         key: MarkerValueString::SysPlatform,
                         operator: MarkerOperator::Equal,
@@ -204,8 +206,8 @@ impl InternerGuard<'_> {
                 versions,
                 operator,
             } => match key {
-                MarkerValueVersion::GlibcVersion => (
-                    Variable::GlibcVersion,
+                MarkerValueVersion::GlibcVersion | MarkerValueVersion::MuslVersion => (
+                    Variable::ArtifactVersion(key),
                     Edges::from_versions(versions, operator),
                 ),
                 MarkerValueVersion::ImplementationVersion => (
@@ -601,7 +603,7 @@ impl InternerGuard<'_> {
             return result;
         }
         let node = self.shared.node(i);
-        let result = if node.var == Variable::GlibcVersion {
+        let result = if matches!(node.var, Variable::ArtifactVersion(_)) {
             let mut result = NodeId::FALSE;
             for child in node.children.nodes() {
                 let child = self.without_artifact_markers_cached(child.negate(i), cache);
@@ -1174,6 +1176,18 @@ impl InternerGuard<'_> {
             (os_name_posix, sys_platform_win32),
         ];
 
+        // A runtime cannot use both libc implementations. Zero denotes the absence of a
+        // compatibility promise and is not a libc version.
+        let glibc = self.create_node(
+            Variable::ArtifactVersion(MarkerValueVersion::GlibcVersion),
+            Edges::from_specifier(VersionSpecifier::greater_than_version(Version::new([0]))),
+        );
+        let musl = self.create_node(
+            Variable::ArtifactVersion(MarkerValueVersion::MuslVersion),
+            Edges::from_specifier(VersionSpecifier::greater_than_version(Version::new([0]))),
+        );
+        pairs.push((glibc, musl));
+
         // Pairs of `platform_system` and `sys_platform` that are known to be incompatible.
         //
         // For example: `platform_system == 'FreeBSD' and sys_platform == 'aix'`
@@ -1230,7 +1244,7 @@ impl InternerGuard<'_> {
 #[derive(PartialOrd, Ord, PartialEq, Eq, Hash, Clone, Debug)]
 pub(crate) enum Variable {
     /// A uv-only artifact coverage baseline, excluded from runtime forks.
-    GlibcVersion,
+    ArtifactVersion(MarkerValueVersion),
     /// A string marker, such as `os_name`.
     String(CanonicalMarkerValueString),
     /// A string-valued marker interpreted as a version within a platform-specific scope.
@@ -1272,10 +1286,16 @@ impl Variable {
     /// For example, `sys_platform == 'win32'` and `platform_system == 'Darwin'` are known to
     /// never be true at the same time.
     fn is_conflicting_variable(&self) -> bool {
-        let Self::String(marker) = self else {
-            return false;
-        };
-        marker.is_conflicting()
+        match self {
+            Self::ArtifactVersion(_) => true,
+            Self::String(marker) => marker.is_conflicting(),
+            Self::VersionString(_)
+            | Self::Version(_)
+            | Self::In { .. }
+            | Self::Contains { .. }
+            | Self::Extra(_)
+            | Self::List(_) => false,
+        }
     }
 }
 

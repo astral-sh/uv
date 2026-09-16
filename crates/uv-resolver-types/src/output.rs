@@ -236,7 +236,7 @@ impl ResolverOutput {
                         add_marker_params_from_tree(tree, set);
                     }
                 }
-                MarkerTreeKind::GlibcVersion(marker) => {
+                MarkerTreeKind::ArtifactVersion(marker) => {
                     for (_, tree) in marker.edges() {
                         add_marker_params_from_tree(tree, set);
                     }

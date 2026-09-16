@@ -114,10 +114,15 @@ fn parse_marker_value<T: Pep508Url>(
                 !char.is_whitespace() && !matches!(char, '>' | '=' | '<' | '!' | '~' | ')')
             });
             let key = cursor.slice(start, len);
-            if dialect == MarkerDialect::Uv && key == "uv:glibc_version" {
-                return Ok(MarkerValue::MarkerEnvVersion(
-                    MarkerValueVersion::GlibcVersion,
-                ));
+            if dialect == MarkerDialect::Uv {
+                let artifact = match key {
+                    "uv:glibc_version" => Some(MarkerValueVersion::GlibcVersion),
+                    "uv:musl_version" => Some(MarkerValueVersion::MuslVersion),
+                    _ => None,
+                };
+                if let Some(key) = artifact {
+                    return Ok(MarkerValue::MarkerEnvVersion(key));
+                }
             }
             MarkerValue::from_str(key)
                 .map_err(|_| Pep508Error {
@@ -198,25 +203,32 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
     let len = cursor.pos() - start;
 
     // Coverage requirements name a concrete baseline. Zero is reserved internally for tags
-    // that make no glibc compatibility promise.
-    if l_value == MarkerValue::MarkerEnvVersion(MarkerValueVersion::GlibcVersion)
-        || r_value == MarkerValue::MarkerEnvVersion(MarkerValueVersion::GlibcVersion)
+    // that make no compatibility promise for the requested libc.
+    if let Some(key) = [&l_value, &r_value]
+        .into_iter()
+        .find_map(|value| match value {
+            MarkerValue::MarkerEnvVersion(
+                key @ (MarkerValueVersion::GlibcVersion | MarkerValueVersion::MuslVersion),
+            ) => Some(*key),
+            _ => None,
+        })
     {
+        let (minimum_major, example) = if key == MarkerValueVersion::GlibcVersion {
+            (2, "2.31")
+        } else {
+            (1, "1.2")
+        };
         let version = match (&l_value, &r_value) {
-            (
-                MarkerValue::MarkerEnvVersion(MarkerValueVersion::GlibcVersion),
-                MarkerValue::QuotedString(value),
-            )
-            | (
-                MarkerValue::QuotedString(value),
-                MarkerValue::MarkerEnvVersion(MarkerValueVersion::GlibcVersion),
-            ) => value.parse::<Version>().ok(),
+            (MarkerValue::MarkerEnvVersion(_), MarkerValue::QuotedString(value))
+            | (MarkerValue::QuotedString(value), MarkerValue::MarkerEnvVersion(_)) => {
+                value.parse::<Version>().ok()
+            }
             _ => None,
         };
         if operator != MarkerOperator::Equal
             || !version.as_ref().is_some_and(|version| {
                 version.release().len() <= 2
-                    && version.release()[0] >= 2
+                    && version.release()[0] >= minimum_major
                     && !version.any_prerelease()
                     && version.local().is_empty()
                     && version.epoch() == 0
@@ -224,10 +236,9 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
             })
         {
             return Err(Pep508Error {
-                message: Pep508ErrorSource::String(
-                    "Expected an exact glibc baseline, such as uv:glibc_version == '2.31'"
-                        .to_string(),
-                ),
+                message: Pep508ErrorSource::String(format!(
+                    "Expected an exact libc baseline, such as {key} == '{example}'"
+                )),
                 start,
                 len,
                 input: cursor.to_string(),

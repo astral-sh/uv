@@ -916,24 +916,35 @@ fn implied_platform_markers(filename: &WheelFilename) -> MarkerTree {
                     operator: MarkerOperator::Equal,
                     value: ArcStr::from(arch.name()),
                 }));
-                let glibc = match platform_tag {
+                let (glibc, musl) = match platform_tag {
                     PlatformTag::Manylinux { major, minor, .. } => {
-                        Some([u64::from(*major), u64::from(*minor)])
+                        (Some([u64::from(*major), u64::from(*minor)]), None)
                     }
-                    PlatformTag::Manylinux1 { .. } => Some([2, 5]),
-                    PlatformTag::Manylinux2010 { .. } => Some([2, 12]),
-                    PlatformTag::Manylinux2014 { .. } => Some([2, 17]),
-                    // Neither musllinux nor an unversioned Linux tag promises glibc coverage.
-                    _ => None,
+                    PlatformTag::Manylinux1 { .. } => (Some([2, 5]), None),
+                    PlatformTag::Manylinux2010 { .. } => (Some([2, 12]), None),
+                    PlatformTag::Manylinux2014 { .. } => (Some([2, 17]), None),
+                    PlatformTag::Musllinux { major, minor, .. } => {
+                        (None, Some([u64::from(*major), u64::from(*minor)]))
+                    }
+                    // An unversioned Linux tag makes no libc compatibility promise.
+                    _ => (None, None),
                 };
-                let specifier = glibc.map_or_else(
-                    || VersionSpecifier::equals_version(Version::new([0])),
-                    |version| VersionSpecifier::greater_than_equal_version(Version::new(version)),
-                );
-                tag_marker = tag_marker.and(MarkerTree::expression(MarkerExpression::Version {
-                    key: MarkerValueVersion::GlibcVersion,
-                    specifier,
-                }));
+                for (key, version) in [
+                    (MarkerValueVersion::GlibcVersion, glibc),
+                    (MarkerValueVersion::MuslVersion, musl),
+                ] {
+                    let specifier = version.map_or_else(
+                        || VersionSpecifier::equals_version(Version::new([0])),
+                        |version| {
+                            VersionSpecifier::greater_than_equal_version(Version::new(version))
+                        },
+                    );
+                    tag_marker =
+                        tag_marker.and(MarkerTree::expression(MarkerExpression::Version {
+                            key,
+                            specifier,
+                        }));
+                }
                 marker = marker.or(tag_marker);
             }
 
@@ -1111,24 +1122,30 @@ mod tests {
     }
 
     #[test]
-    fn test_glibc_coverage() {
-        let required =
-            MarkerTree::parse_required_environment("uv:glibc_version == '2.17'").unwrap();
-        for (tag, covered) in [
-            ("manylinux1_x86_64", true),
-            ("manylinux2010_x86_64", true),
-            ("manylinux2014_x86_64", true),
-            ("manylinux_2_17_x86_64", true),
-            ("manylinux_2_28_x86_64", false),
-            ("musllinux_1_2_x86_64", false),
-            ("linux_x86_64", false),
-            ("any", true),
+    fn test_libc_coverage() {
+        let glibc = MarkerTree::parse_required_environment("uv:glibc_version == '2.17'").unwrap();
+        let musl = MarkerTree::parse_required_environment("uv:musl_version == '1.1'").unwrap();
+        for (tag, glibc_covered, musl_covered) in [
+            ("manylinux1_x86_64", true, false),
+            ("manylinux2010_x86_64", true, false),
+            ("manylinux2014_x86_64", true, false),
+            ("manylinux_2_17_x86_64", true, false),
+            ("manylinux_2_28_x86_64", false, false),
+            ("musllinux_1_1_x86_64", false, true),
+            ("musllinux_1_2_x86_64", false, false),
+            ("linux_x86_64", false, false),
+            ("any", true, true),
         ] {
             let filename =
                 WheelFilename::from_str(&format!("example-1.0-py3-none-{tag}.whl")).unwrap();
             assert_eq!(
-                !implied_markers(&filename).is_disjoint(required),
-                covered,
+                !implied_markers(&filename).is_disjoint(glibc),
+                glibc_covered,
+                "{tag}"
+            );
+            assert_eq!(
+                !implied_markers(&filename).is_disjoint(musl),
+                musl_covered,
                 "{tag}"
             );
         }
