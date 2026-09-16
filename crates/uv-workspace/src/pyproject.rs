@@ -706,15 +706,15 @@ pub struct ToolUv {
     )]
     pub(crate) required_environments: Option<SupportedEnvironments>,
 
-    /// The libc implementations and minimum versions to support when resolving for Linux.
+    /// The libc implementation and minimum version to support when resolving for Linux.
     ///
-    /// During universal resolution, uv will exclude wheels for omitted libc implementations and
+    /// During universal resolution, uv will exclude wheels for the other libc implementation and
     /// wheels that require a newer version. For example, `{ glibc = "2.31" }` allows
     /// `manylinux_2_17` wheels, but not `manylinux_2_34` or `musllinux` wheels. If unset, both
     /// glibc and musl wheels remain eligible.
     ///
-    /// Use `required-environments` to specify the Linux architectures to support. Listing both
-    /// libc implementations allows wheels for either; it does not require wheels for both.
+    /// Specify either `glibc` or `musl`, but not both. Use `required-environments` to specify
+    /// the Linux architectures to support.
     /// Packages with a usable source distribution can still be selected.
     ///
     /// This setting is respected by `uv lock` and `uv pip compile --universal`.
@@ -731,7 +731,7 @@ pub struct ToolUv {
                 "sys_platform == 'linux' and platform_machine == 'x86_64'",
                 "sys_platform == 'linux' and platform_machine == 'aarch64'",
             ]
-            minimum-libc-version = { glibc = "2.31", musl = "1.2" }
+            minimum-libc-version = { glibc = "2.31" }
         "#
     )]
     pub(crate) minimum_libc_version: Option<MinimumLibcVersion>,
