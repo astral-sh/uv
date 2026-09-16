@@ -33,7 +33,7 @@ use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
-use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, ProjectStatus, Yanked};
+use uv_pypi_types::{Digest, HashDigest, HashDigests, ProjectStatus, Yanked};
 use uv_pypi_types::{PypiSimpleDetail, PypiSimpleIndex, ResolutionMetadata};
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
@@ -1117,7 +1117,7 @@ impl RegistryClient {
                     let mut hasher = Hasher::from(expected.algorithm());
                     hasher.update(&bytes);
                     let actual = HashDigest::from(hasher);
-                    if !actual.digest.eq_ignore_ascii_case(expected.digest.as_ref()) {
+                    if &actual != expected {
                         return Err(Error::from(ErrorKind::MetadataHashMismatch {
                             url: url.clone(),
                             expected: expected.clone(),
@@ -1509,10 +1509,8 @@ impl From<CachedFile> for File {
 
 /// A compact representation of a single, canonical hash digest.
 ///
-/// Only lowercase hexadecimal digests of the expected length use the packed variants. Multiple
-/// hashes and non-canonical spellings remain in [`Self::Other`] so conversion back to
-/// [`HashDigests`] is lossless. The larger digests are boxed to keep the common archived layout
-/// small.
+/// Single validated digests use the packed variants; empty and multiple-hash collections remain
+/// in [`Self::Other`]. The larger digests are boxed to keep the common archived layout small.
 #[derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
 enum CachedHashDigests {
@@ -1543,21 +1541,13 @@ impl From<HashDigests> for CachedHashDigests {
         let [hash] = hashes.as_slice() else {
             return Self::Other(hashes);
         };
-        let cached = match hash.algorithm {
-            HashAlgorithm::Md5 => decode_digest(hash).map(Self::Md5),
-            HashAlgorithm::Sha256 => decode_digest(hash).map(Self::Sha256),
-            HashAlgorithm::Blake2b => decode_digest(hash).map(Self::Blake2b),
-            HashAlgorithm::Sha384 => {
-                decode_digest(hash).map(|digest| Self::Sha384(Box::new(digest)))
-            }
-            HashAlgorithm::Sha512 => {
-                decode_digest(hash).map(|digest| Self::Sha512(Box::new(digest)))
-            }
-        };
-        let Some(cached) = cached else {
-            return Self::Other(hashes);
-        };
-        cached
+        match hash {
+            HashDigest::Md5(digest) => Self::Md5(digest.decode()),
+            HashDigest::Sha256(digest) => Self::Sha256(digest.decode()),
+            HashDigest::Blake2b256(digest) => Self::Blake2b(digest.decode()),
+            HashDigest::Sha384(digest) => Self::Sha384(Box::new(digest.decode())),
+            HashDigest::Sha512(digest) => Self::Sha512(Box::new(digest.decode())),
+        }
     }
 }
 
@@ -1573,55 +1563,24 @@ impl From<CachedHashDigests> for HashDigests {
 impl From<&CachedHashDigests> for HashDigests {
     fn from(hashes: &CachedHashDigests) -> Self {
         match hashes {
-            CachedHashDigests::Md5(digest) => Self::from(hash_digest(HashAlgorithm::Md5, digest)),
+            CachedHashDigests::Md5(digest) => {
+                Self::from(HashDigest::Md5(Digest::from_bytes(*digest)))
+            }
             CachedHashDigests::Sha256(digest) => {
-                Self::from(hash_digest(HashAlgorithm::Sha256, digest))
+                Self::from(HashDigest::Sha256(Digest::from_bytes(*digest)))
             }
             CachedHashDigests::Blake2b(digest) => {
-                Self::from(hash_digest(HashAlgorithm::Blake2b, digest))
+                Self::from(HashDigest::Blake2b256(Digest::from_bytes(*digest)))
             }
             CachedHashDigests::Sha384(digest) => {
-                Self::from(hash_digest(HashAlgorithm::Sha384, digest.as_slice()))
+                Self::from(HashDigest::Sha384(Digest::from_bytes(**digest)))
             }
             CachedHashDigests::Sha512(digest) => {
-                Self::from(hash_digest(HashAlgorithm::Sha512, digest.as_slice()))
+                Self::from(HashDigest::Sha512(Digest::from_bytes(**digest)))
             }
             CachedHashDigests::Other(hashes) => hashes.clone(),
         }
     }
-}
-
-/// Decodes a lowercase hexadecimal digest of exactly `N` bytes.
-///
-/// Rejecting non-canonical spellings lets [`CachedHashDigests::Other`] preserve their original
-/// text.
-fn decode_digest<const N: usize>(hash: &HashDigest) -> Option<[u8; N]> {
-    if hash.digest.len() != N * 2
-        || !hash
-            .digest
-            .as_bytes()
-            .iter()
-            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
-    {
-        return None;
-    }
-    let mut digest = [0; N];
-    hex::decode_to_slice(hash.digest.as_bytes(), &mut digest).ok()?;
-    Some(digest)
-}
-
-/// Reconstructs the canonical lowercase spelling of a packed digest.
-fn hash_digest(algorithm: HashAlgorithm, digest: &[u8]) -> HashDigest {
-    let mut encoded = [0; 128];
-    let length = digest.len() * 2;
-    let digest = if let Some(encoded) = encoded.get_mut(..length)
-        && hex::encode_to_slice(digest, &mut *encoded).is_ok()
-    {
-        SmallString::from(String::from_utf8_lossy(encoded))
-    } else {
-        SmallString::from(hex::encode(digest))
-    };
-    HashDigest { algorithm, digest }
 }
 
 /// The list of projects available in a Simple API index.
@@ -2167,7 +2126,7 @@ mod tests {
 
     #[test]
     fn ignore_failing_files() {
-        // 1.7.7 has an invalid requires-python field (double comma), 1.7.8 is valid
+        // 1.7.7 has an invalid requires-python field (double comma), 1.7.8 is valid.
         let response = r#"
     {
         "files": [

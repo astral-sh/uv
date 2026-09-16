@@ -1126,10 +1126,7 @@ impl<'lock> PylockToml {
         // Fetch and hash the files.
         let hashed = futures::stream::iter(jobs)
             .map(|(destination, source)| async move {
-                let hashes = Hashes {
-                    sha256: Some(client.hash_file(&source).await?.digest),
-                    ..Hashes::default()
-                };
+                let hashes = Hashes::from(client.hash_file(&source).await?);
                 Ok::<_, PylockTomlErrorKind>((destination, hashes))
             })
             .buffer_unordered(concurrency)

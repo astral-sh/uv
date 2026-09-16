@@ -8571,7 +8571,7 @@ fn require_hashes_build_dependencies() -> Result<()> {
 
     // Build constraints retain their hashes while ignoring extras during resolution.
     let constraints_txt = context.temp_dir.child("build_constraints.txt");
-    constraints_txt.write_str("hatchling[foo]==1.20.0 --hash=sha256:incorrect")?;
+    constraints_txt.write_str("hatchling[foo]==1.20.0 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000")?;
 
     uv_snapshot!(context.pip_install()
         .arg("--index-url").arg(server.index_url())
@@ -8590,7 +8590,7 @@ fn require_hashes_build_dependencies() -> Result<()> {
       cause: Hash mismatch for `hatchling==1.20.0`
 
              Expected:
-               sha256:incorrect
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
 
              Computed:
                sha256:872c63aa7e8aca85e8dba07b05c6a9b28d5a149fe00638f1a47e36930197248f
@@ -13065,6 +13065,44 @@ fn pep_751_install_invalid_artifact_urls() -> Result<()> {
     error: Invalid artifact URL: `data:application/octet-stream,ignored`
     "
     );
+
+    Ok(())
+}
+
+#[test]
+fn pep_751_install_invalid_hashes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pylock_toml = context.temp_dir.child("pylock.toml");
+
+    pylock_toml.write_str(
+        r#"
+        lock-version = "1.0"
+        created-by = "uv"
+        requires-python = ">=3.12"
+
+        [[packages]]
+        name = "foo"
+        version = "1.0.0"
+        wheels = [{ name = "foo-1.0.0-py3-none-any.whl", url = "https://example.com/foo-1.0.0-py3-none-any.whl", hashes = { sha256 = "short" } }]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview")
+        .arg("--offline")
+        .arg("--dry-run")
+        .arg("-r")
+        .arg("pylock.toml"), @r###"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Not a valid `pylock.toml` file: pylock.toml
+      cause: TOML parse error at line 9, column 123
+               |
+             9 |         wheels = [{ name = "foo-1.0.0-py3-none-any.whl", url = "https://example.com/foo-1.0.0-py3-none-any.whl", hashes = { sha256 = "short" } }]
+               |                                                                                                                           ^^^^^^^^^^^^^^^^^^^^
+             Invalid hash digest length (expected 64 hexadecimal characters, found 5)
+             in `sha256`
+    "###);
 
     Ok(())
 }
