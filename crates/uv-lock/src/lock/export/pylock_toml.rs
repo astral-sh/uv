@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::collections::HashSet;
 use std::ffi::OsStr;
-use std::path::{Path, PathBuf};
+use std::path::{Path, PathBuf, absolute};
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -11,12 +11,11 @@ use jiff::civil::{Date, DateTime, Time};
 use jiff::tz::{Offset, TimeZone};
 use petgraph::graph::NodeIndex;
 use serde::Deserialize;
-use tokio_util::compat::FuturesAsyncReadCompatExt;
 use toml::Table as TomlTable;
 use toml_edit::{Array, ArrayOfTables, Item, Table, Value, value};
 use url::Url;
 
-use uv_client::{RegistryClient, WrappedReqwestError};
+use uv_client::{FileHashError, RegistryClient};
 use uv_configuration::{
     BuildOptions, DependencyGroupsWithDefaults, EditableMode, ExtrasSpecificationWithDefaults,
     InstallOptions,
@@ -31,7 +30,6 @@ use uv_distribution_types::{
     PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource,
     RequiresPython, Resolution, ResolvedDist, SourceDist, ToUrlError, UrlString,
 };
-use uv_extract::hash::{HashReader, Hasher};
 use uv_fs::{PortablePathBuf, normalize_path, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
 use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
@@ -39,9 +37,7 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, MarkerTree, VerbatimUrl};
 use uv_platform_tags::{TagCompatibility, TagPriority, Tags};
-use uv_pypi_types::{
-    HashAlgorithm, HashDigest, HashDigests, Hashes, ParsedGitDirectoryUrl, VcsKind,
-};
+use uv_pypi_types::{HashDigests, Hashes, ParsedGitDirectoryUrl, VcsKind};
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 use uv_warnings::warn_user_once;
@@ -135,14 +131,8 @@ pub enum PylockTomlErrorKind {
     VcsMissingPathUrl(PackageName),
     #[error("`{1}` entry for `{0}` has no hashes and no URL or path to compute them")]
     MissingHashes(PackageName, &'static str),
-    // Request and status errors use `WrappedReqwestError`, while errors reading the response body
-    // use `io::Error`. Both are download failures.
-    #[error("Failed to download `{0}` to compute missing hashes")]
-    DownloadFile(Box<DisplaySafeUrl>, #[source] WrappedReqwestError),
-    #[error("Failed to download `{0}` to compute missing hashes")]
-    StreamFile(Box<DisplaySafeUrl>, #[source] std::io::Error),
-    #[error("Failed to read `{0}` to compute missing hashes")]
-    ReadFile(Box<Path>, #[source] std::io::Error),
+    #[error(transparent)]
+    FileHash(#[from] FileHashError),
     #[error("URL must end in a valid wheel filename: `{0}`")]
     UrlMissingFilename(DisplaySafeUrl),
     #[error("Invalid artifact URL: `{0}`")]
@@ -151,8 +141,6 @@ pub enum PylockTomlErrorKind {
     PathMissingFilename(Box<Path>),
     #[error("Failed to convert path to URL")]
     PathToUrl,
-    #[error("Failed to convert URL to path")]
-    UrlToPath,
     #[error(
         "Package `{0}` can't be installed because it doesn't have a source distribution or wheel for the current platform"
     )]
@@ -300,84 +288,21 @@ where
     hashes.try_into().map_err(serde::de::Error::custom)
 }
 
-/// The location of a distribution file with missing hashes.
-enum HashSource {
-    Url(DisplaySafeUrl),
-    Path(PathBuf),
-}
-
-impl HashSource {
-    fn new(
-        name: &PackageName,
-        field: &'static str,
-        url: Option<&DisplaySafeUrl>,
-        path: Option<&PortablePathBuf>,
-        install_path: &Path,
-    ) -> Result<Self, PylockTomlErrorKind> {
-        if let Some(url) = url {
-            if url.scheme() == "file" {
-                Ok(Self::Path(
-                    url.to_file_path()
-                        .map_err(|()| PylockTomlErrorKind::UrlToPath)?,
-                ))
-            } else {
-                Ok(Self::Url(url.clone()))
-            }
-        } else if let Some(path) = path {
-            Ok(Self::Path(install_path.join(path)))
-        } else {
-            Err(PylockTomlErrorKind::MissingHashes(name.clone(), field))
-        }
-    }
-
-    /// Download or read the file and compute its hashes.
-    async fn hash(self, client: &RegistryClient) -> Result<Hashes, PylockTomlErrorKind> {
-        let mut hashers = [Hasher::from(HashAlgorithm::Sha256)];
-        match self {
-            Self::Url(url) => {
-                let response = client
-                    .uncached_client(&url)
-                    .get(Url::from(url.clone()))
-                    .header(
-                        // `reqwest` defaults to accepting compressed responses.
-                        // Specify identity encoding to get consistent .whl downloading
-                        // behavior from servers. ref: https://github.com/pypa/pip/pull/1688
-                        "accept-encoding",
-                        reqwest::header::HeaderValue::from_static("identity"),
-                    )
-                    .send()
-                    .await
-                    .and_then(|response| response.error_for_status().map_err(Into::into))
-                    .map_err(|err| {
-                        PylockTomlErrorKind::DownloadFile(
-                            Box::new(url.clone()),
-                            WrappedReqwestError::from(err),
-                        )
-                    })?;
-                let reader = response
-                    .bytes_stream()
-                    .map_err(std::io::Error::other)
-                    .into_async_read();
-                HashReader::new(reader.compat(), &mut hashers)
-                    .finish()
-                    .await
-                    .map_err(|err| PylockTomlErrorKind::StreamFile(Box::new(url), err))?;
-            }
-            Self::Path(path) => {
-                let file = fs_err::tokio::File::open(&path).await.map_err(|err| {
-                    PylockTomlErrorKind::ReadFile(path.clone().into_boxed_path(), err)
-                })?;
-                HashReader::new(file, &mut hashers)
-                    .finish()
-                    .await
-                    .map_err(|err| PylockTomlErrorKind::ReadFile(path.into_boxed_path(), err))?;
-            }
-        }
-        let [hasher] = hashers;
-        Ok(Hashes {
-            sha256: Some(HashDigest::from(hasher).digest),
-            ..Hashes::default()
-        })
+/// Return the URL of a distribution file with missing hashes, resolving paths against `install_path`.
+fn hash_source(
+    name: &PackageName,
+    field: &'static str,
+    url: Option<&DisplaySafeUrl>,
+    path: Option<&PortablePathBuf>,
+    install_path: &Path,
+) -> Result<DisplaySafeUrl, PylockTomlErrorKind> {
+    if let Some(url) = url {
+        Ok(url.clone())
+    } else if let Some(path) = path {
+        DisplaySafeUrl::from_file_path(absolute(install_path.join(path))?)
+            .map_err(|()| PylockTomlErrorKind::PathToUrl)
+    } else {
+        Err(PylockTomlErrorKind::MissingHashes(name.clone(), field))
     }
 }
 
@@ -1163,7 +1088,7 @@ impl<'lock> PylockToml {
             if let Some(archive) = &mut package.archive
                 && archive.hashes.is_empty()
             {
-                let source = HashSource::new(
+                let source = hash_source(
                     &package.name,
                     "packages.archive",
                     archive.url.as_ref(),
@@ -1175,7 +1100,7 @@ impl<'lock> PylockToml {
             if let Some(sdist) = &mut package.sdist
                 && sdist.hashes.is_empty()
             {
-                let source = HashSource::new(
+                let source = hash_source(
                     &package.name,
                     "packages.sdist",
                     sdist.url.as_ref(),
@@ -1186,7 +1111,7 @@ impl<'lock> PylockToml {
             }
             for wheel in package.wheels.iter_mut().flatten() {
                 if wheel.hashes.is_empty() {
-                    let source = HashSource::new(
+                    let source = hash_source(
                         &package.name,
                         "packages.wheels",
                         wheel.url.as_ref(),
@@ -1201,7 +1126,10 @@ impl<'lock> PylockToml {
         // Fetch and hash the files.
         let hashed = futures::stream::iter(jobs)
             .map(|(destination, source)| async move {
-                let hashes = source.hash(client).await?;
+                let hashes = Hashes {
+                    sha256: Some(client.hash_file(&source).await?.digest),
+                    ..Hashes::default()
+                };
                 Ok::<_, PylockTomlErrorKind>((destination, hashes))
             })
             .buffer_unordered(concurrency)
