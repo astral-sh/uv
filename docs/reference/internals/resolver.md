@@ -312,7 +312,10 @@ to first-party declarations that permit an explicit prerelease or a yanked versi
 try such a candidate while other dependencies are undecided, but accepts it only if a selected
 first-party declaration actually permits it in the environments where the package is needed. A
 dependency of a selected local project can also make a package direct for
-`--resolution lowest-direct`, even if another dependency was processed first.
+`--resolution lowest-direct`, even if another dependency was processed first. When a package is
+direct in only some environments, `--fork-strategy fewest` can reuse the lowest compatible version
+across environments; the default strategy prefers the highest version where the package is only
+transitive.
 
 ## Prioritization
 

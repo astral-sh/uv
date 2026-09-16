@@ -4704,6 +4704,12 @@ fn add_lower_bound() -> Result<()> {
         );
     });
 
+    uv_snapshot!(context.filters(), context.lock().arg("--check").arg("--offline").arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
     Ok(())
 }
 

@@ -2,8 +2,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{self, Display};
 use std::sync::Arc;
 
-use pubgrub::{DerivationTree, Derived, External, Term, VersionSet};
-use rustc_hash::FxHashMap;
+use pubgrub::{DerivationTree, Derived, External, SetRelation, Term, VersionSet};
+use rustc_hash::{FxHashMap, FxHashSet};
+use uv_normalize::PackageName;
 use uv_pep440::Version;
 
 use crate::error::ErrorTree;
@@ -203,6 +204,25 @@ impl CandidateSet {
         )
     }
 
+    /// The concrete source required by a declaration or supplying a candidate's metadata. A
+    /// possible, unassigned URL can coexist with a named index without becoming a reporting source.
+    fn report_source(&self) -> Option<SolverSource> {
+        if self.registry != Range::empty() {
+            return None;
+        }
+        let indexes = self.indexes.iter().filter_map(|(index, versions)| {
+            (self.indexed == Range::empty() && *versions != Range::empty())
+                .then_some(SolverSource::Index(*index))
+        });
+        let urls = self.urls.iter().filter_map(|(source, versions)| {
+            (self.direct == Range::empty() && *versions != Range::empty())
+                .then_some(SolverSource::Url(*source))
+        });
+        let mut sources = indexes.chain(urls);
+        let source = sources.next()?;
+        sources.next().is_none().then_some(source)
+    }
+
     fn combine(
         &self,
         other: &Self,
@@ -245,6 +265,31 @@ impl CandidateSet {
             direct,
             urls,
         }
+    }
+
+    /// Compare every source that can distinguish the sets without materializing a candidate set.
+    /// The two default ranges also represent all indexes and URLs that are not yet known.
+    #[inline]
+    fn all_sources_match(
+        &self,
+        other: &Self,
+        mut matches: impl FnMut(&Range<Version>, &Range<Version>) -> bool,
+    ) -> bool {
+        matches(&self.registry, &other.registry)
+            && matches(&self.indexed, &other.indexed)
+            && matches(&self.direct, &other.direct)
+            && self.indexes.iter().all(|(index, versions)| {
+                matches(versions, other.for_source(SolverSource::Index(*index)))
+            })
+            && other.indexes.iter().all(|(index, versions)| {
+                self.indexes.contains_key(index) || matches(&self.indexed, versions)
+            })
+            && self.urls.iter().all(|(source, versions)| {
+                matches(versions, other.for_source(SolverSource::Url(*source)))
+            })
+            && other.urls.iter().all(|(source, versions)| {
+                self.urls.contains_key(source) || matches(&self.direct, versions)
+            })
     }
 }
 
@@ -297,6 +342,43 @@ impl VersionSet for CandidateSet {
         self.for_source(candidate.source)
             .contains(&candidate.version)
     }
+
+    #[inline]
+    fn is_disjoint(&self, other: &Self) -> bool {
+        self.all_sources_match(other, VersionSet::is_disjoint)
+    }
+
+    #[inline]
+    fn subset_of(&self, other: &Self) -> bool {
+        self.all_sources_match(other, VersionSet::subset_of)
+    }
+
+    #[inline]
+    fn relation(&self, other: &Self) -> SetRelation {
+        let mut subset = true;
+        let mut disjoint = true;
+        self.all_sources_match(other, |versions, other_versions| {
+            // An empty component is both a subset and disjoint; it cannot determine the result.
+            if *versions != Range::empty() {
+                match versions.relation(other_versions) {
+                    SetRelation::Subset => disjoint = false,
+                    SetRelation::Disjoint => subset = false,
+                    SetRelation::Overlapping => {
+                        subset = false;
+                        disjoint = false;
+                    }
+                }
+            }
+            subset || disjoint
+        });
+        if subset {
+            SetRelation::Subset
+        } else if disjoint {
+            SetRelation::Disjoint
+        } else {
+            SetRelation::Overlapping
+        }
+    }
 }
 
 impl Display for CandidateSet {
@@ -308,88 +390,62 @@ impl Display for CandidateSet {
 type SolverTree = DerivationTree<PubGrubPackage, CandidateSet, UnavailableReason>;
 type SolverDerived = Derived<PubGrubPackage, CandidateSet, UnavailableReason>;
 
-/// Convert a shared source-aware derivation to the PEP 440 report without recursive traversal.
-pub(crate) fn project_error(error: SolverTree) -> ErrorTree {
-    enum Frame<'a> {
-        Tree(&'a SolverTree),
-        Derived(&'a SolverTree, &'a SolverDerived),
-    }
-
-    let mut tasks = vec![Frame::Tree(&error)];
-    let mut results = FxHashMap::<*const SolverTree, Arc<ErrorTree>>::default();
-    while let Some(task) = tasks.pop() {
-        match task {
-            Frame::Tree(tree) => {
-                if results.contains_key(&std::ptr::from_ref(tree)) {
-                    continue;
-                }
-                match tree {
-                    SolverTree::External(external) => {
-                        let external = match external {
-                            External::NotRoot(package, version) => {
-                                External::NotRoot(package.clone(), version.version.clone())
-                            }
-                            External::NoVersions(package, versions) => {
-                                External::NoVersions(package.clone(), versions.project())
-                            }
-                            External::FromDependencyOf(
-                                package,
-                                versions,
-                                dependency,
-                                requirements,
-                            ) => External::FromDependencyOf(
-                                package.clone(),
-                                versions.project(),
-                                dependency.clone(),
-                                requirements.project(),
-                            ),
-                            External::Custom(package, versions, reason) => External::Custom(
-                                package.clone(),
-                                versions.project(),
-                                reason.clone(),
-                            ),
-                        };
-                        results.insert(
-                            std::ptr::from_ref(tree),
-                            Arc::new(ErrorTree::External(external)),
-                        );
-                    }
-                    SolverTree::Derived(derived) => {
-                        tasks.push(Frame::Derived(tree, derived));
-                        tasks.push(Frame::Tree(&derived.cause2));
-                        tasks.push(Frame::Tree(&derived.cause1));
-                    }
-                }
+/// Find the direct resources and named indexes involved in a failed proof. PubGrub can backtrack
+/// before returning the proof, so the parents declaring those sources may no longer be selected.
+pub(crate) fn report_sources(error: &SolverTree) -> FxHashMap<PackageName, SolverSource> {
+    let mut sources = FxHashMap::default();
+    let mut record = |package: &PubGrubPackage, candidates: &CandidateSet| {
+        if let Some(name) = package.name_no_root()
+            && let Some(source) = candidates.report_source()
+        {
+            let previous = sources.entry(name.clone()).or_insert(source);
+            if let SolverSource::Index(_) = *previous
+                && let SolverSource::Url(_) = source
+            {
+                *previous = source;
             }
-            Frame::Derived(tree, derived) => {
-                let terms = derived
-                    .terms
-                    .iter()
-                    .map(|(package, term)| {
-                        let term = match term {
-                            Term::Positive(versions) => Term::Positive(versions.project()),
-                            Term::Negative(versions) => Term::Negative(versions.project()),
-                        };
-                        (package.clone(), term)
-                    })
-                    .collect();
-                results.insert(
-                    std::ptr::from_ref(tree),
-                    Arc::new(ErrorTree::Derived(Derived {
-                        terms,
-                        shared_id: derived.shared_id,
-                        cause1: results[&Arc::as_ptr(&derived.cause1)].clone(),
-                        cause2: results[&Arc::as_ptr(&derived.cause2)].clone(),
-                    })),
-                );
+        }
+    };
+    let mut pending = vec![error];
+    let mut seen = FxHashSet::default();
+    while let Some(tree) = pending.pop() {
+        if !seen.insert(std::ptr::from_ref(tree)) {
+            continue;
+        }
+        match tree {
+            SolverTree::External(External::FromDependencyOf(
+                package,
+                versions,
+                dependency,
+                requirements,
+            )) => {
+                record(package, versions);
+                record(dependency, requirements);
+            }
+            SolverTree::External(External::Custom(package, versions, _)) => {
+                record(package, versions);
+            }
+            SolverTree::External(External::NotRoot(..) | External::NoVersions(..)) => {}
+            SolverTree::Derived(derived) => {
+                pending.push(&derived.cause2);
+                pending.push(&derived.cause1);
             }
         }
     }
+    sources
+}
 
-    let projected = results
-        .remove(&std::ptr::from_ref(&error))
+/// Convert a shared source-aware derivation to the PEP 440 report without recursive traversal.
+///
+/// A missing-version statement about another source does not establish that the version is missing
+/// from the source used in this fork. Remove those statements before dropping the source identity.
+pub(crate) fn project_error(
+    error: SolverTree,
+    source: impl Fn(&PubGrubPackage) -> SolverSource,
+) -> ErrorTree {
+    let projected = project_tree(&error, |package| Some(source(package)))
+        .or_else(|| project_tree(&error, |_| None))
         .expect("the root derivation was projected");
-    drop(results);
 
     let mut pending = vec![Arc::new(error)];
     while let Some(tree) = pending.pop() {
@@ -401,9 +457,118 @@ pub(crate) fn project_error(error: SolverTree) -> ErrorTree {
     Arc::try_unwrap(projected).expect("the projected root is not shared")
 }
 
+/// Project a proof onto the selected source, or onto all sources if a fork has no selected proof.
+fn project_tree(
+    error: &SolverTree,
+    source: impl Fn(&PubGrubPackage) -> Option<SolverSource>,
+) -> Option<Arc<ErrorTree>> {
+    enum Frame<'a> {
+        Tree(&'a SolverTree),
+        Derived(&'a SolverTree, &'a SolverDerived),
+    }
+
+    let project = |package: &PubGrubPackage, versions: &CandidateSet| {
+        source(package).map_or_else(
+            || versions.project(),
+            |source| versions.for_source(source).clone(),
+        )
+    };
+    let mut tasks = vec![Frame::Tree(error)];
+    let mut results = FxHashMap::<*const SolverTree, Option<Arc<ErrorTree>>>::default();
+    while let Some(task) = tasks.pop() {
+        match task {
+            Frame::Tree(tree) => {
+                if results.contains_key(&std::ptr::from_ref(tree)) {
+                    continue;
+                }
+                match tree {
+                    SolverTree::External(external) => {
+                        let external = match external {
+                            External::NotRoot(package, version) => {
+                                Some(External::NotRoot(package.clone(), version.version.clone()))
+                            }
+                            External::NoVersions(package, versions) => {
+                                let versions = project(package, versions);
+                                (versions != Range::empty())
+                                    .then(|| External::NoVersions(package.clone(), versions))
+                            }
+                            External::FromDependencyOf(
+                                package,
+                                versions,
+                                dependency,
+                                requirements,
+                            ) => {
+                                let versions = project(package, versions);
+                                (versions != Range::empty()).then(|| {
+                                    External::FromDependencyOf(
+                                        package.clone(),
+                                        versions,
+                                        dependency.clone(),
+                                        project(dependency, requirements),
+                                    )
+                                })
+                            }
+                            External::Custom(package, versions, reason) => {
+                                let versions = project(package, versions);
+                                (versions != Range::empty()).then(|| {
+                                    External::Custom(package.clone(), versions, reason.clone())
+                                })
+                            }
+                        };
+                        results.insert(
+                            std::ptr::from_ref(tree),
+                            external.map(|external| Arc::new(ErrorTree::External(external))),
+                        );
+                    }
+                    SolverTree::Derived(derived) => {
+                        tasks.push(Frame::Derived(tree, derived));
+                        tasks.push(Frame::Tree(&derived.cause2));
+                        tasks.push(Frame::Tree(&derived.cause1));
+                    }
+                }
+            }
+            Frame::Derived(tree, derived) => {
+                let projected = match (
+                    results[&Arc::as_ptr(&derived.cause1)].clone(),
+                    results[&Arc::as_ptr(&derived.cause2)].clone(),
+                ) {
+                    (Some(cause1), Some(cause2)) => {
+                        let terms = derived
+                            .terms
+                            .iter()
+                            .map(|(package, term)| {
+                                let term = match term {
+                                    Term::Positive(versions) => {
+                                        Term::Positive(project(package, versions))
+                                    }
+                                    Term::Negative(versions) => {
+                                        Term::Negative(project(package, versions))
+                                    }
+                                };
+                                (package.clone(), term)
+                            })
+                            .collect();
+                        Some(Arc::new(ErrorTree::Derived(Derived {
+                            terms,
+                            shared_id: derived.shared_id,
+                            cause1,
+                            cause2,
+                        })))
+                    }
+                    (Some(cause), None) | (None, Some(cause)) => Some(cause),
+                    (None, None) => None,
+                };
+                results.insert(std::ptr::from_ref(tree), projected);
+            }
+        }
+    }
+
+    results.remove(&std::ptr::from_ref(error)).flatten()
+}
+
 #[cfg(test)]
 mod tests {
-    use pubgrub::VersionSet;
+    use pubgrub::{SetRelation, VersionSet};
     use uv_pep440::Version;
 
     use super::{CandidateSet, IndexId, SolverSource, SolverVersion, SourceId};
@@ -458,5 +623,53 @@ mod tests {
             CandidateSet::full()
         );
         assert_eq!(registry_one.difference(&known_one), registry_one);
+    }
+
+    #[test]
+    fn source_relationships_match_materialized_sets() {
+        let one = Range::singleton(Version::new([1]));
+        let two = Range::singleton(Version::new([2]));
+        let lower = Range::strictly_lower_than(Version::new([2]));
+        let higher = Range::strictly_higher_than(Version::new([1]));
+        let index = SolverSource::Index(IndexId(0));
+        let second_index = SolverSource::Index(IndexId(1));
+        let url = SolverSource::Url(SourceId(0));
+        let second_url = SolverSource::Url(SourceId(1));
+        let mut sets = vec![
+            CandidateSet::empty(),
+            CandidateSet::full(),
+            CandidateSet::all(one.clone()),
+            CandidateSet::all(lower.clone()),
+            CandidateSet::registries(higher.clone()),
+            CandidateSet::urls(two.clone()),
+            CandidateSet::source(SolverSource::Registry, one.clone()),
+            CandidateSet::source(index, one.clone()),
+            CandidateSet::source(second_index, two.clone()),
+            CandidateSet::source(url, lower.clone()),
+            CandidateSet::source(second_url, higher.clone()),
+            CandidateSet::index_or_url(IndexId(1), two.clone()),
+            CandidateSet::source(index, lower.clone())
+                .union(&CandidateSet::source(second_index, one.clone()))
+                .union(&CandidateSet::source(url, higher.clone()))
+                .union(&CandidateSet::source(second_url, two.clone())),
+        ];
+        sets.extend(sets.clone().iter().map(CandidateSet::complement));
+        for left in &sets {
+            for right in &sets {
+                let intersection = left.intersection(right);
+                let disjoint = intersection == CandidateSet::empty();
+                let subset = intersection == *left;
+                let relation = if subset {
+                    SetRelation::Subset
+                } else if disjoint {
+                    SetRelation::Disjoint
+                } else {
+                    SetRelation::Overlapping
+                };
+                assert_eq!(left.is_disjoint(right), disjoint);
+                assert_eq!(left.subset_of(right), subset);
+                assert_eq!(left.relation(right), relation);
+            }
+        }
     }
 }

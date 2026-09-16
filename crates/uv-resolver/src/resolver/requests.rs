@@ -60,15 +60,21 @@ impl MetadataRequests {
         Ok(())
     }
 
-    /// Request a direct resource once for the current hash policy, independently of registry and
-    /// preparatory metadata caches, which may have used a different policy.
+    /// Request a direct resource once for the current hash policy. Source trees without required
+    /// validation share the metadata that project commands prepare and invalidate.
     pub(crate) fn request_direct(
         &self,
         dist: Dist,
         hasher: &HashStrategy,
     ) -> Result<(), ResolveError> {
-        let key = (dist.distribution_id(), DirectHashKey::new(&dist, hasher));
-        if self.index.direct().register(key) {
+        let id = dist.distribution_id();
+        let hashes = DirectHashKey::new(&dist, hasher);
+        let registered = if hashes.uses_project_cache(&dist) {
+            self.index.distributions().register(id)
+        } else {
+            self.index.direct().register((id, hashes))
+        };
+        if registered {
             self.sender
                 .blocking_send(Request::Dist(dist, Some(hasher.clone())))?;
         }
@@ -137,10 +143,15 @@ impl MetadataRequests {
         dist: &Dist,
         hasher: &HashStrategy,
     ) -> Result<Arc<MetadataResponse>, ResolveError> {
-        let key = (dist.distribution_id(), DirectHashKey::new(dist, hasher));
-        self.index
-            .direct()
-            .wait_blocking(&key)
-            .map_err(|_| ResolveError::UnregisteredTask(dist.to_string()))
+        let id = dist.distribution_id();
+        let hashes = DirectHashKey::new(dist, hasher);
+        if hashes.uses_project_cache(dist) {
+            self.wait_for_metadata(&id, || dist.to_string())
+        } else {
+            self.index
+                .direct()
+                .wait_blocking(&(id, hashes))
+                .map_err(|_| ResolveError::UnregisteredTask(dist.to_string()))
+        }
     }
 }

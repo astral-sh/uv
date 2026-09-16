@@ -75,6 +75,7 @@ pub(super) struct SourceDependencies {
     order: FxHashMap<(Id<PubGrubPackage>, SolverVersion), usize>,
     chains: FxHashMap<(Id<PubGrubPackage>, SolverVersion), DerivationChain>,
     has_urls: bool,
+    has_indexes: bool,
     has_contextual_sources: bool,
 }
 
@@ -113,6 +114,10 @@ impl SourceDependencies {
         self.has_urls
     }
 
+    pub(super) fn has_indexes(&self) -> bool {
+        self.has_indexes
+    }
+
     pub(super) fn has_contextual_sources(&self) -> bool {
         self.has_contextual_sources
     }
@@ -144,6 +149,9 @@ impl SourceDependencies {
         self.has_urls |= dependencies
             .iter()
             .any(|dependency| dependency.declaration.is_some());
+        self.has_indexes |= dependencies
+            .iter()
+            .any(|dependency| dependency.index.is_some());
         self.has_contextual_sources |= contextual
             && dependencies
                 .iter()
@@ -265,6 +273,59 @@ impl SourceDependencies {
             .collect()
     }
 
+    /// Find selected registry paths without repeatedly computing source authorities. Registry
+    /// metadata cannot introduce first-party candidate policies, but dependency-path markers still
+    /// determine which selected packages belong in the output and where root policies can apply.
+    pub(super) fn registry_grounding(
+        &self,
+        state: &State<UvDependencyProvider>,
+        env: &ResolverEnvironment,
+        python_requirement: &PythonRequirement,
+    ) -> Grounding {
+        let mut selected: FxHashMap<_, _> = state.partial_solution.extract_solution().collect();
+        selected
+            .entry(state.root_package)
+            .or_insert_with(|| SolverVersion::registry(MIN_VERSION.clone()));
+        let mut grounding = Grounding::default();
+        grounding.reachable.insert(state.root_package);
+        grounding.contexts.insert(
+            state.root_package,
+            env.fork_markers().map_or(MarkerTree::TRUE, |marker| {
+                marker.and(python_requirement.to_marker_tree())
+            }),
+        );
+        let mut pending = VecDeque::from([state.root_package]);
+        while let Some(package) = pending.pop_front() {
+            let Some(candidate) = selected.get(&package) else {
+                continue;
+            };
+            let Some(dependencies) = self.dependencies.get(&(package, candidate.clone())) else {
+                continue;
+            };
+            let context = grounding.contexts[&package];
+            for dependency in dependencies {
+                let context = context.and(in_environment(
+                    state.package_store[dependency.package].marker(),
+                    env,
+                ));
+                if context.is_false() {
+                    continue;
+                }
+                let previous = grounding
+                    .contexts
+                    .entry(dependency.package)
+                    .or_insert(MarkerTree::FALSE);
+                let updated = previous.or(context);
+                if updated != *previous {
+                    *previous = updated;
+                    grounding.reachable.insert(dependency.package);
+                    pending.push_back(dependency.package);
+                }
+            }
+        }
+        grounding
+    }
+
     /// Find the URLs authorized by paths from the real root under the current solver decisions.
     ///
     /// Registry packages can activate an extra on a grounded URL package, but only that URL
@@ -283,15 +344,6 @@ impl SourceDependencies {
             .entry(state.root_package)
             .or_insert_with(|| SolverVersion::registry(MIN_VERSION.clone()));
 
-        let in_environment = |marker: MarkerTree| {
-            env.marker_environment().map_or(marker, |environment| {
-                if marker.evaluate(environment, &[]) {
-                    MarkerTree::TRUE
-                } else {
-                    MarkerTree::FALSE
-                }
-            })
-        };
         let mut grounding = Grounding::default();
         grounding.reachable.insert(state.root_package);
         grounding.contexts.insert(
@@ -327,6 +379,7 @@ impl SourceDependencies {
                 for dependency in dependencies {
                     let context = context.and(in_environment(
                         state.package_store[dependency.package].marker(),
+                        env,
                     ));
                     if context.is_false() {
                         continue;
@@ -394,6 +447,7 @@ impl SourceDependencies {
                 for dependency in dependencies {
                     let edge_context = context.and(in_environment(
                         state.package_store[dependency.package].marker(),
+                        env,
                     ));
                     if edge_context.is_false() {
                         continue;
@@ -481,6 +535,17 @@ impl SourceDependencies {
             });
         grounding
     }
+}
+
+/// Keep the symbolic marker in a universal resolution, or evaluate it for a specific environment.
+fn in_environment(marker: MarkerTree, env: &ResolverEnvironment) -> MarkerTree {
+    env.marker_environment().map_or(marker, |environment| {
+        if marker.evaluate(environment, &[]) {
+            MarkerTree::TRUE
+        } else {
+            MarkerTree::FALSE
+        }
+    })
 }
 
 /// Source authorities derived from currently selected, reachable candidates.

@@ -4185,7 +4185,8 @@ fn url_source_late_candidate_policies() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: No solution found when resolving dependencies
-      cause: Because there is no version of a-preview==1.0.0a1 and you require a-preview, we can conclude that your requirements are unsatisfiable.
+      cause: Because only a-preview==1.0.0a1 is available and a-preview==1.0.0a1 is a pre-release, but pre-releases weren't enabled, we can conclude that all versions of a-preview cannot be used.
+             And because you require a-preview, we can conclude that your requirements are unsatisfiable.
 
     hint: Pre-releases are available for `a-preview` in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
     ");
@@ -4197,6 +4198,15 @@ fn url_source_late_candidate_policies() -> Result<()> {
 #[test]
 fn url_source_marker_limits_candidate_policies() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .chain([(
+            // This hint is only shown when the current platform doesn't match the target.
+            r"\nhint: The resolution failed for an environment that is not the current one[^\n]*",
+            "",
+        )])
+        .collect();
     let provider = source_dependency_wheel(
         &context,
         "direct",
@@ -4219,7 +4229,7 @@ fn url_source_marker_limits_candidate_policies() -> Result<()> {
     let server = PackseServer::from_scenario(&scenario);
     let requirements = context.temp_dir.child("requirements.in");
     requirements.write_str(&format!("provider @ {provider}\npreview"))?;
-    uv_snapshot!(context.filters(), context.pip_compile().arg("--universal").arg("--prerelease=explicit")
+    uv_snapshot!(filters, context.pip_compile().arg("--universal").arg("--prerelease=explicit")
         .arg("requirements.in").arg("--index-url").arg(server.index_url()), @"
     exit_code: 1 (failure)
     ----- stderr -----
@@ -4230,16 +4240,17 @@ fn url_source_marker_limits_candidate_policies() -> Result<()> {
     ");
 
     requirements.write_str(&format!("provider @ {provider}\nyanked"))?;
-    uv_snapshot!(context.filters(), context.pip_compile().arg("--universal").arg("--prerelease=explicit")
+    uv_snapshot!(filters, context.pip_compile().arg("--universal").arg("--prerelease=explicit")
         .arg("requirements.in").arg("--index-url").arg(server.index_url()), @"
     exit_code: 1 (failure)
     ----- stderr -----
     error: No solution found when resolving dependencies for split (markers: sys_platform != 'linux')
-      cause: Because yanked==1.0.0 was yanked and you require yanked, we can conclude that your requirements are unsatisfiable.
+      cause: Because yanked==1.0.0 was yanked and only yanked==1.0.0 is available, we can conclude that all versions of yanked cannot be used.
+             And because you require yanked, we can conclude that your requirements are unsatisfiable.
     ");
 
     requirements.write_str(&format!("provider @ {provider}"))?;
-    uv_snapshot!(context.filters(), context.pip_compile().arg("--universal").arg("--prerelease=explicit")
+    uv_snapshot!(filters, context.pip_compile().arg("--universal").arg("--prerelease=explicit")
         .arg("requirements.in").arg("--index-url").arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stdout -----
@@ -11339,7 +11350,9 @@ fn universal_nested_overlapping_local_requirement() -> Result<()> {
         # via torch
     tbb==2021.13.1 ; platform_machine != 'x86_64' and sys_platform == 'win32'
         # via mkl
-    torch==2.0.0+cu118 ; platform_machine == 'x86_64'
+    torch==2.0.0 ; os_name != 'Linux' and platform_machine == 'x86_64' and sys_platform == 'darwin'
+        # via -r requirements.in
+    torch==2.0.0+cu118 ; (os_name == 'Linux' and platform_machine == 'x86_64') or (platform_machine == 'x86_64' and sys_platform != 'darwin')
         # via
         #   -r requirements.in
         #   example
@@ -11352,7 +11365,7 @@ fn universal_nested_overlapping_local_requirement() -> Result<()> {
         # via torch
 
     ----- stderr -----
-    Resolved 17 packages in [TIME]
+    Resolved 18 packages in [TIME]
     "
     );
 
@@ -16304,7 +16317,7 @@ fn git_source_missing_tag() -> Result<()> {
       cause: Git operation failed
       cause: failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
       cause: failed to fetch tag `missing`
-      cause: process didn't exit successfully: `git fetch --force --update-head-ok 'https://github.com/astral-test/uv-public-pypackage' '+refs/tags/missing:refs/remotes/origin/tags/missing'` (exit status: 128)
+      cause: process didn't exit successfully: `git fetch --no-recurse-submodules --force --update-head-ok 'https://github.com/astral-test/uv-public-pypackage' '+refs/tags/missing:refs/remotes/origin/tags/missing'` (exit status: 128)
              --- stderr
              fatal: couldn't find remote ref refs/tags/missing
     ");
@@ -17970,14 +17983,40 @@ fn universal_conflicting_override_urls() -> Result<()> {
             .arg("--overrides")
             .arg("overrides.txt")
             .arg("--universal"), @"
-    exit_code: 1 (failure)
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --overrides overrides.txt --universal
+    anyio==1.0.0a2 ; sys_platform == 'win32'
+        # via -r requirements.in
+    anyio==4.3.0 ; sys_platform != 'win32'
+        # via -r requirements.in
+    async-generator==1.10 ; sys_platform == 'win32'
+        # via anyio
+    idna==3.6 ; sys_platform != 'win32'
+        # via anyio
+    sniffio @ https://files.pythonhosted.org/packages/c3/a0/5dba8ed157b0136607c7f2151db695885606968d1fae123dc3391e0cfdbf/sniffio-1.3.0-py3-none-any.whl ; sys_platform == 'darwin'
+        # via
+        #   --override overrides.txt
+        #   anyio
+
     ----- stderr -----
-    error: Failed to resolve dependencies for package `anyio==4.3.0`
-      cause: Requirements contain conflicting URLs for package `sniffio` in split `sys_platform == 'win32'`:
-             - https://files.pythonhosted.org/packages/c3/a0/5dba8ed157b0136607c7f2151db695885606968d1fae123dc3391e0cfdbf/sniffio-1.3.0-py3-none-any.whl
-             - https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl
+    Resolved 5 packages in [TIME]
     "
     );
+
+    requirements_in.write_str("anyio\nsniffio")?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+            .arg("requirements.in")
+            .arg("--overrides")
+            .arg("overrides.txt")
+            .arg("--universal"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Requirements contain conflicting URLs for package `sniffio` in split `sys_platform == 'win32'`:
+    - https://files.pythonhosted.org/packages/c3/a0/5dba8ed157b0136607c7f2151db695885606968d1fae123dc3391e0cfdbf/sniffio-1.3.0-py3-none-any.whl
+    - https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl
+    ");
 
     Ok(())
 }
@@ -18056,6 +18095,46 @@ fn compile_lowest_prereleases() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Fewest reuses a compatible version when a package is a direct dependency in only part of the resolution.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lowest_direct_fork_max_python_fewest() -> Result<()> {
+    let context = uv_test::test_context!("3.11");
+    let server = PackseServer::new("fork/lowest-direct-fork-max-python.toml");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str(indoc! {r"
+        forkroot==3.0.0
+        forkdep>=2.8 ; python_full_version < '3.12'
+    "})?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--resolution=lowest-direct")
+        .arg("--universal")
+        .arg("--fork-strategy=fewest")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --resolution=lowest-direct --universal --fork-strategy=fewest
+    forkdep==2.8
+        # via
+        #   -r requirements.in
+        #   forkroot
+    forkleaf==1.1.0
+        # via forkroot
+    forkroot==3.0.0
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
     ");
 
     Ok(())

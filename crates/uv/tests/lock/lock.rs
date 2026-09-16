@@ -22669,6 +22669,15 @@ fn lock_metadata_free_shared_disjoint_marker_direct_sources() -> Result<()> {
 #[test]
 fn lock_metadata_free_shared_conditional_provider_sources() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .chain([(
+            // This hint is only shown when the current platform doesn't match the target.
+            r"\nhint: The resolution failed for an environment that is not the current one[^\n]*\n",
+            "",
+        )])
+        .collect();
     context
         .temp_dir
         .child("pyproject.toml")
@@ -22780,15 +22789,13 @@ fn lock_metadata_free_shared_conditional_provider_sources() -> Result<()> {
     let root = context.temp_dir.child("pyproject.toml");
     let root_contents = context.read("pyproject.toml");
     root.write_str(&root_contents.replace("leaf ; sys_platform == 'darwin'", "leaf"))?;
-    uv_snapshot!(context.filters(), context.lock()
+    uv_snapshot!(filters, context.lock()
         .arg("--preview-features").arg("lock-without-metadata")
         .arg("--check").arg("--offline").arg("--no-cache").arg("--no-index"), @"
     exit_code: 1 (failure)
     ----- stderr -----
     error: No solution found when resolving dependencies for split (markers: python_full_version >= '3.12' and sys_platform != 'darwin')
       cause: Because leaf was not found in the provided package locations and your project depends on leaf, we can conclude that your project's requirements are unsatisfiable.
-
-    hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
 
     hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     ");
@@ -23299,6 +23306,15 @@ fn lock_url_override_and_constraint_markers() -> Result<()> {
 #[test]
 fn lock_metadata_free_shared_git_direct_source() -> Result<()> {
     let context = uv_test::test_context!("3.13");
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .chain([(
+            // This hint is only shown when the current platform doesn't match the target.
+            r"\nhint: The resolution failed for an environment that is not the current one[^\n]*",
+            "",
+        )])
+        .collect();
 
     let repository = context.temp_dir.child("repository");
     repository.child("archives").create_dir_all()?;
@@ -23387,15 +23403,13 @@ fn lock_metadata_free_shared_git_direct_source() -> Result<()> {
     let root = context.temp_dir.child("pyproject.toml");
     let root_contents = context.read("pyproject.toml");
     root.write_str(&root_contents.replace("sys_platform == 'darwin'", "sys_platform == 'win32'"))?;
-    uv_snapshot!(context.filters(), context.lock()
+    uv_snapshot!(filters, context.lock()
         .arg("--preview-features").arg("lock-without-metadata")
         .arg("--check").arg("--offline").arg("--no-cache"), @"
     exit_code: 1 (failure)
     ----- stderr -----
     error: No solution found when resolving dependencies for split (markers: python_full_version >= '3.13' and sys_platform != 'darwin')
       cause: Because there are no versions of basic-package{sys_platform == 'win32'} and your project depends on basic-package{sys_platform == 'win32'}, we can conclude that your project's requirements are unsatisfiable.
-
-    hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
     ");
 
     Ok(())
@@ -31812,6 +31826,10 @@ fn lock_extra_marker_preserves_production_platform() -> Result<()> {
         version = 1
         revision = 3
         requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform == 'win32'",
+            "sys_platform != 'win32'",
+        ]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"

@@ -1316,11 +1316,9 @@ fn mismatched_name() -> Result<()> {
         .arg("--strict"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies
-      cause: Because foo has an invalid package format and you require foo, we can conclude that your requirements are unsatisfiable.
-
-    hint: The structure of `foo` was invalid
-      Caused by: The .dist-info directory tomli-2.0.1 does not start with the normalized package name: foo
+    error: Failed to read `foo @ file://[TEMP_DIR]/foo-2.0.1-py3-none-any.whl`
+      cause: Failed to read metadata: `[TEMP_DIR]/foo-2.0.1-py3-none-any.whl`
+      cause: The .dist-info directory tomli-2.0.1 does not start with the normalized package name: foo
     "
     );
 
@@ -2494,12 +2492,10 @@ fn incompatible_wheel() -> Result<()> {
         .arg("--strict"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies
-      cause: Because foo has an invalid package format and you require foo, we can conclude that your requirements are unsatisfiable.
-
-    hint: The structure of `foo` was invalid
-      Caused by: Failed to read from zip file
-      Caused by: unable to locate the end of central directory record
+    error: Failed to read `foo @ file://[TEMP_DIR]/foo-1.2.3-py3-none-any.whl`
+      cause: Failed to read metadata: `[TEMP_DIR]/foo-1.2.3-py3-none-any.whl`
+      cause: Failed to read from zip file
+      cause: unable to locate the end of central directory record
     "
     );
 

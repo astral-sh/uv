@@ -21,7 +21,7 @@ use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{Level, debug, info, instrument, trace, warn};
 
-use uv_configuration::{Constraints, Excludes, Overrides};
+use uv_configuration::{Constraints, Excludes, ForkStrategy, Overrides};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase, Metadata};
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DependencyMetadata, Dist, DistErrorKind, Identifier,
@@ -55,6 +55,7 @@ use crate::manifest::Manifest;
 use crate::pins::FilePins;
 use crate::preferences::{PreferenceSource, Preferences};
 use crate::prerelease::contains_prerelease;
+use crate::pubgrub::solver_version::{project_error, report_sources as sources_for_report};
 use crate::pubgrub::{
     CandidateSet, DependencySource, IndexId, PubGrubDependency, PubGrubPackage,
     PubGrubPackageInner, PubGrubPriorities, PubGrubPython, Range, SolverSource, SolverVersion,
@@ -98,7 +99,6 @@ pub(crate) use provider::MetadataUnavailable;
 pub(crate) use resolution::{
     Resolution, ResolutionDependencyEdge, ResolutionNode, ResolutionPackage,
 };
-use uv_configuration::ForkStrategy;
 
 mod availability;
 mod batch_prefetch;
@@ -155,10 +155,13 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     index: InMemoryIndex,
     installed_packages: InstalledPackages,
     // Papaya's maps are large on Windows, so box them to keep resolver futures small.
-    /// Incompatibilities for packages that are entirely unavailable.
+    /// Incompatibilities for packages that are entirely unavailable from the implicit registry.
     unavailable_packages: Box<HashMap<PackageName, UnavailablePackage>>,
-    /// Incompatibilities for packages that are unavailable at specific versions.
-    incomplete_packages: Box<HashMap<PackageName, HashMap<Version, MetadataUnavailable>>>,
+    /// The same lookup failures for each explicitly selected registry.
+    unavailable_index_packages: Box<HashMap<IndexId, HashMap<PackageName, UnavailablePackage>>>,
+    /// Incompatibilities for packages that are unavailable at specific versions and sources.
+    incomplete_packages:
+        Box<HashMap<(PackageName, SolverSource), HashMap<Version, MetadataUnavailable>>>,
     /// The options that were used to configure this resolver.
     options: Options,
     /// The reporter to use for this resolver.
@@ -282,6 +285,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             conflicts,
             installed_packages,
             unavailable_packages: Box::default(),
+            unavailable_index_packages: Box::default(),
             incomplete_packages: Box::default(),
             options,
             reporter: None,
@@ -483,12 +487,39 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         })
                                     })
                                     .collect();
-                                let fork_indexes = state.report_indexes(&grounding);
+                                let mut report_sources = sources_for_report(&err);
+                                report_sources.extend(grounding.indexes.iter().filter_map(
+                                    |(name, sources)| {
+                                        sources.first_key_value().map(|(source, _)| {
+                                            (name.clone(), SolverSource::Index(*source))
+                                        })
+                                    },
+                                ));
+                                report_sources.extend(grounding.iter().filter_map(
+                                    |(name, sources)| {
+                                        sources.first_key_value().map(|(source, _)| {
+                                            (name.clone(), SolverSource::Url(*source))
+                                        })
+                                    },
+                                ));
+                                let fork_indexes = report_sources
+                                    .iter()
+                                    .filter_map(|(name, source)| match source {
+                                        SolverSource::Index(index) => {
+                                            Some((name.clone(), state.indexes.resource(*index)))
+                                        }
+                                        SolverSource::Registry | SolverSource::Url(_) => None,
+                                    })
+                                    .collect();
+                                let known_versions = state
+                                    .known_versions
+                                    .for_report(&report_sources, &state.indexes);
                                 let error = self.convert_no_solution_err(
                                     err,
                                     fork_urls,
                                     fork_indexes,
-                                    &state.known_versions.projected,
+                                    &report_sources,
+                                    &known_versions,
                                     state.env,
                                     self.current_environment.clone(),
                                     &visited,
@@ -541,13 +572,24 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         // We aren't allowed to use the term intersection as it would extend the
                         // mutable borrow of `state`.
                         let Some(highest_priority_pkg) = state.pick_package() else {
-                            let grounding = state.source_dependencies.grounding(
-                                &state.pubgrub,
-                                &state.env,
-                                &state.python_requirement,
-                                &self.urls,
-                                &self.git,
-                            );
+                            let grounding = if self.urls.has_potential()
+                                || state.source_dependencies.has_urls()
+                                || state.source_dependencies.has_indexes()
+                            {
+                                state.source_dependencies.grounding(
+                                    &state.pubgrub,
+                                    &state.env,
+                                    &state.python_requirement,
+                                    &self.urls,
+                                    &self.git,
+                                )
+                            } else {
+                                state.source_dependencies.registry_grounding(
+                                    &state.pubgrub,
+                                    &state.env,
+                                    &state.python_requirement,
+                                )
+                            };
                             let ungrounded = state
                                 .pubgrub
                                 .partial_solution
@@ -748,20 +790,37 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                                     fork_version_by_marker(&state.env, permission)
                                                 })
                                                 .flatten();
-                                            return Some((id, candidate, split));
+                                            let prerelease = candidate.version.any_prerelease()
+                                                && !state.env.included_by_marker(needed.and(
+                                                    selector.candidate_permission_marker(
+                                                        name,
+                                                        &candidate.version,
+                                                        false,
+                                                    ),
+                                                ));
+                                            return Some((id, candidate, split, prerelease));
                                         }
                                         None
                                     } else {
-                                        (!selector.allows_possible_candidate(
+                                        let disallowed = !selector.allows_possible_candidate(
                                             name,
                                             &candidate.version,
                                             yanked,
                                             &state.env,
-                                        ))
-                                        .then_some((id, candidate, None))
+                                        );
+                                        let prerelease = disallowed
+                                            && candidate.version.any_prerelease()
+                                            && !selector.allows_possible_candidate(
+                                                name,
+                                                &candidate.version,
+                                                false,
+                                                &state.env,
+                                            );
+                                        disallowed.then_some((id, candidate, None, prerelease))
                                     }
                                 });
-                            if let Some((package, candidate, split)) = candidate_policy {
+                            if let Some((package, candidate, split, prerelease)) = candidate_policy
+                            {
                                 if let Some((with_permission, without_permission)) = split {
                                     for env in [with_permission, without_permission] {
                                         forked_states.push(SourceSearch::new(
@@ -785,17 +844,24 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     state.preferred_lowest.clone(),
                                 ));
                                 state.next = package;
-                                state
-                                    .pubgrub
-                                    .add_incompatibility(Incompatibility::no_versions(
+                                let incompatibility = if prerelease {
+                                    Incompatibility::custom_term(
                                         package,
                                         Term::Positive(candidate),
-                                    ));
+                                        UnavailableReason::Version(UnavailableVersion::Prerelease),
+                                    )
+                                } else {
+                                    Incompatibility::no_versions(package, Term::Positive(candidate))
+                                };
+                                state.pubgrub.add_incompatibility(incompatibility);
                                 continue;
                             }
                             if matches!(self.options.resolution_mode, ResolutionMode::LowestDirect)
                             {
-                                if state.env.fork_markers().is_some()
+                                // Fewest can share the lowest preference where no dependency or
+                                // source incompatibility independently forces an environment split.
+                                if self.options.fork_strategy == ForkStrategy::RequiresPython
+                                    && state.env.fork_markers().is_some()
                                     && let Some((direct, transitive)) = state
                                         .pubgrub
                                         .partial_solution
@@ -1353,17 +1419,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             CandidateSet::source(solver_source, range.clone())
                         };
 
-                        if solver_source == SolverSource::Registry
+                        if solver_source.is_registry()
                             && let PubGrubPackageInner::Package { name, .. } = &**next_package
                         {
                             // Check if the decision was due to the package being unavailable
-                            if let Some(reason) = self.unavailable_packages.pin().get(name) {
+                            if let Some(reason) = self.unavailable_package(name, solver_source) {
                                 state
                                     .pubgrub
                                     .add_incompatibility(Incompatibility::custom_term(
                                         next_id,
                                         Term::Positive(ruled_out),
-                                        UnavailableReason::Package(reason.clone()),
+                                        UnavailableReason::Package(reason),
                                     ));
                                 continue;
                             }
@@ -2729,6 +2795,46 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         Ok(Some(ResolverVersion::Unforked(version.clone())))
     }
 
+    /// Return a package-level lookup failure from the selected registry.
+    fn unavailable_package(
+        &self,
+        name: &PackageName,
+        source: SolverSource,
+    ) -> Option<UnavailablePackage> {
+        match source {
+            SolverSource::Registry => self.unavailable_packages.pin().get(name).cloned(),
+            SolverSource::Index(index) => self
+                .unavailable_index_packages
+                .pin()
+                .get(&index)
+                .and_then(|packages| packages.pin().get(name).cloned()),
+            SolverSource::Url(_) => None,
+        }
+    }
+
+    /// Record a missing package against the registry that was actually queried.
+    fn record_unavailable_package(
+        &self,
+        name: &PackageName,
+        source: SolverSource,
+        reason: UnavailablePackage,
+    ) {
+        match source {
+            SolverSource::Registry => {
+                self.unavailable_packages.pin().insert(name.clone(), reason);
+            }
+            SolverSource::Index(index) => {
+                let indexes = self.unavailable_index_packages.pin();
+                let packages = indexes.get_or_insert(
+                    index,
+                    HashMap::builder().resize_mode(ResizeMode::Blocking).build(),
+                );
+                packages.pin().insert(name.clone(), reason);
+            }
+            SolverSource::Url(_) => {}
+        }
+    }
+
     /// Given a candidate registry requirement, choose the next version in range to try, or `None`
     /// if there is no version in this range.
     fn choose_version_registry(
@@ -2756,27 +2862,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         let version_maps = match *versions_response {
             VersionsResponse::Found(ref version_maps) => version_maps.as_slice(),
             VersionsResponse::NoIndex => {
-                if solver_source == SolverSource::Registry {
-                    self.unavailable_packages
-                        .pin()
-                        .insert(name.clone(), UnavailablePackage::NoIndex);
-                }
+                self.record_unavailable_package(name, solver_source, UnavailablePackage::NoIndex);
                 &[]
             }
             VersionsResponse::Offline => {
-                if solver_source == SolverSource::Registry {
-                    self.unavailable_packages
-                        .pin()
-                        .insert(name.clone(), UnavailablePackage::Offline);
-                }
+                self.record_unavailable_package(name, solver_source, UnavailablePackage::Offline);
                 &[]
             }
             VersionsResponse::NotFound => {
-                if solver_source == SolverSource::Registry {
-                    self.unavailable_packages
-                        .pin()
-                        .insert(name.clone(), UnavailablePackage::NotFound);
-                }
+                self.record_unavailable_package(name, solver_source, UnavailablePackage::NotFound);
                 &[]
             }
         };
@@ -3344,9 +3438,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 };
 
                 // If the package does not exist in the registry or locally, we cannot fetch its dependencies
-                if candidate.source == SolverSource::Registry
+                if candidate.source.is_registry()
                     && self.dependency_mode.is_transitive()
-                    && self.unavailable_packages.pin().contains_key(name)
+                    && self.unavailable_package(name, candidate.source).is_some()
                     && self.installed_packages.get_packages(name).is_empty()
                 {
                     debug_assert!(
@@ -3389,7 +3483,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         if candidate.source.is_registry() {
                             let incomplete_packages = self.incomplete_packages.pin();
                             let versions = incomplete_packages.get_or_insert(
-                                name.clone(),
+                                (name.clone(), candidate.source),
                                 HashMap::builder().resize_mode(ResizeMode::Blocking).build(),
                             );
                             versions.pin().insert(version.clone(), reason.clone());
@@ -3705,7 +3799,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             warn!("{dist} {message}");
                         }
                     }
-                    if let Some(hashes) = direct_hashes {
+                    if let Some(hashes) = direct_hashes
+                        && !hashes.uses_project_cache(&dist)
+                    {
                         self.index
                             .direct()
                             .done((dist.distribution_id(), hashes), Arc::new(metadata));
@@ -4045,12 +4141,20 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         err: pubgrub::NoSolutionError<UvDependencyProvider>,
         fork_urls: ForkUrls,
         fork_indexes: ForkIndexes,
+        report_sources: &FxHashMap<PackageName, SolverSource>,
         known_versions: &FxHashMap<PackageName, Arc<[Version]>>,
         env: ResolverEnvironment,
         current_environment: MarkerEnvironment,
         visited: &FxHashSet<PackageName>,
     ) -> ResolveError {
-        let mut err = crate::pubgrub::solver_version::project_error(err);
+        let source_for = |package: &PubGrubPackage| {
+            package
+                .name_no_root()
+                .and_then(|name| report_sources.get(name))
+                .copied()
+                .unwrap_or(SolverSource::Registry)
+        };
+        let mut err = project_error(err, source_for);
         err = NoSolutionError::collapse_local_version_segments(NoSolutionError::collapse_proxies(
             err,
         ));
@@ -4060,8 +4164,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         let mut unavailable_packages = FxHashMap::default();
         for package in derivation_tree_packages(&err) {
             if let PubGrubPackageInner::Package { name, .. } = &**package {
-                if let Some(reason) = self.unavailable_packages.pin().get(name) {
-                    unavailable_packages.insert(name.clone(), reason.clone());
+                if let Some(reason) = self.unavailable_package(name, source_for(package)) {
+                    unavailable_packages.insert(name.clone(), reason);
                 }
             }
         }
@@ -4070,7 +4174,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         let incomplete_packages_cache = self.incomplete_packages.pin();
         for package in derivation_tree_packages(&err) {
             if let PubGrubPackageInner::Package { name, .. } = &**package
-                && let Some(versions) = incomplete_packages_cache.get(name)
+                && let Some(versions) =
+                    incomplete_packages_cache.get(&(name.clone(), source_for(package)))
             {
                 for (version, reason) in &versions.pin() {
                     incomplete_packages
@@ -4366,10 +4471,31 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 #[derive(Clone, Default)]
 struct KnownVersions {
     by_source: FxHashMap<(PackageName, Option<IndexMetadata>), Arc<[Version]>>,
-    projected: FxHashMap<PackageName, Arc<[Version]>>,
 }
 
 impl KnownVersions {
+    /// Produce the listing for the source used to explain a failure. A URL's version is not part
+    /// of an independently queried registry listing for a package with the same name.
+    fn for_report(
+        &self,
+        sources: &FxHashMap<PackageName, SolverSource>,
+        indexes: &Indexes,
+    ) -> FxHashMap<PackageName, Arc<[Version]>> {
+        self.by_source
+            .iter()
+            .filter_map(|((name, index), versions)| {
+                let selected = match sources.get(name).copied().unwrap_or(SolverSource::Registry) {
+                    SolverSource::Registry => index.is_none(),
+                    SolverSource::Index(selected) => index
+                        .as_ref()
+                        .is_some_and(|index| *index == indexes.resource(selected)),
+                    SolverSource::Url(_) => false,
+                };
+                selected.then(|| (name.clone(), versions.clone()))
+            })
+            .collect()
+    }
+
     /// Returns the sorted, deduplicated candidate universe used to widen version sets.
     ///
     /// Results are cached on the first call per package.
@@ -4418,14 +4544,6 @@ impl KnownVersions {
                 .collect();
             versions.sort_unstable();
             versions.dedup();
-            let mut projected = self
-                .projected
-                .get(name)
-                .map_or_else(Vec::new, |versions| versions.to_vec());
-            projected.extend(versions.iter().cloned());
-            projected.sort_unstable();
-            projected.dedup();
-            self.projected.insert(name.clone(), projected.into());
             self.by_source.insert(key.clone(), versions.into());
         }
         Some(&self.by_source[&key][..])
@@ -4712,19 +4830,6 @@ impl ForkState {
         if self.source_package_set.insert(package) {
             self.source_packages.push(package);
         }
-    }
-
-    /// Return only currently rooted index declarations for registry diagnostics.
-    fn report_indexes(&self, grounding: &Grounding) -> ForkIndexes {
-        grounding
-            .indexes
-            .iter()
-            .filter_map(|(name, declarations)| {
-                declarations
-                    .first_key_value()
-                    .map(|(index, _)| (name.clone(), self.indexes.resource(*index)))
-            })
-            .collect()
     }
 
     fn pick_package(&mut self) -> Option<Id<PubGrubPackage>> {

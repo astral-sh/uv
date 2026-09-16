@@ -108,8 +108,7 @@ fn tool_run_at_version() {
         .arg("--version"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: Failed to resolve tool requirement
-      cause: Distribution not found at: file://[TEMP_DIR]/invalid
+    error: Distribution not found at: file://[TEMP_DIR]/invalid
     ");
 
     let filters = context
@@ -2890,8 +2889,7 @@ fn tool_run_with_url_ending_in_py() {
         .arg("easyeda2kicad @ git+https://github.com/uPesy/easyeda2kicad.py"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: Failed to resolve tool requirement
-      cause: Failed to download and build `easyeda2kicad @ git+https://github.com/uPesy/easyeda2kicad.py`
+    error: Failed to download and build `easyeda2kicad @ git+https://github.com/uPesy/easyeda2kicad.py`
       cause: Git operation failed
       cause: failed to fetch into: [CACHE_DIR]/git-v0/db/efbd3507bcbea33c
       cause: Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
@@ -2924,8 +2922,7 @@ fn tool_run_with_from_url_ending_in_py() {
         .arg("easyeda2kicad"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: Failed to resolve tool requirement
-      cause: Failed to download and build `easyeda2kicad @ git+https://github.com/uPesy/easyeda2kicad.py`
+    error: Failed to download and build `easyeda2kicad @ git+https://github.com/uPesy/easyeda2kicad.py`
       cause: Git operation failed
       cause: failed to fetch into: [CACHE_DIR]/git-v0/db/efbd3507bcbea33c
       cause: Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)

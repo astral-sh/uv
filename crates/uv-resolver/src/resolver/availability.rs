@@ -107,6 +107,8 @@ pub enum UnavailableVersion {
     InvalidStructure,
     /// The wheel metadata was not found in the cache and the network is not available.
     Offline,
+    /// The prerelease was considered speculatively, but no selected declaration permits it.
+    Prerelease,
     /// The source distribution has a `requires-python` requirement that is not met by the installed
     /// Python version (and static metadata is not available).
     RequiresPython(VersionSpecifiers),
@@ -123,6 +125,7 @@ impl UnavailableVersion {
             Self::InconsistentMetadata => Cow::Borrowed("inconsistent metadata"),
             Self::InvalidStructure => Cow::Borrowed("an invalid package format"),
             Self::Offline => Cow::Borrowed("to be downloaded from a registry"),
+            Self::Prerelease => Cow::Borrowed("a pre-release, but pre-releases weren't enabled"),
             Self::RequiresPython(requires_python) => {
                 Cow::Owned(format!("Python {requires_python}"))
             }
@@ -140,6 +143,7 @@ impl UnavailableVersion {
             Self::InconsistentMetadata => format!("has {self}"),
             Self::InvalidStructure => format!("has {self}"),
             Self::Offline => format!("needs {self}"),
+            Self::Prerelease => format!("is {self}"),
             Self::RequiresPython(..) => format!("requires {self}"),
             Self::Network(..) => format!("could not be fetched from the network (`{self}`)"),
         }
@@ -153,6 +157,7 @@ impl UnavailableVersion {
             Self::InconsistentMetadata => format!("have {self}"),
             Self::InvalidStructure => format!("have {self}"),
             Self::Offline => format!("need {self}"),
+            Self::Prerelease => "are pre-releases, but pre-releases weren't enabled".to_string(),
             Self::RequiresPython(..) => format!("require {self}"),
             Self::Network(..) => format!("could not be fetched from the network (`{self}`)"),
         }
@@ -172,6 +177,7 @@ impl UnavailableVersion {
             Self::InconsistentMetadata => None,
             Self::InvalidStructure => None,
             Self::Offline => None,
+            Self::Prerelease => None,
             Self::RequiresPython(..) => None,
             Self::Network(..) => None,
         }

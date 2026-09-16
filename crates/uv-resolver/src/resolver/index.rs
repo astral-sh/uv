@@ -2,7 +2,9 @@ use std::hash::BuildHasherDefault;
 use std::sync::{Arc, Mutex};
 
 use rustc_hash::{FxHashMap, FxHasher};
-use uv_distribution_types::{Dist, DistributionId, HashCollection, HashValidation, IndexMetadata};
+use uv_distribution_types::{
+    Dist, DistributionId, HashCollection, HashValidation, IndexMetadata, SourceDist,
+};
 use uv_normalize::PackageName;
 use uv_once_map::OnceMap;
 use uv_pypi_types::HashDigest;
@@ -24,7 +26,8 @@ struct SharedInMemoryIndex {
     /// A flat index and Simple API index at the same URL expose different package versions.
     explicit: FxOnceMap<(PackageName, IndexMetadata), Arc<VersionsResponse>>,
 
-    /// A map from a concrete distribution to its metadata.
+    /// A map from a concrete distribution to its metadata. Source trees that do not require hash
+    /// validation share this map with project commands so edits and in-memory metadata are visible.
     distributions: DistributionMetadataIndex,
 
     /// A direct source can be revisited after its trusted digests change. Its metadata request
@@ -70,6 +73,22 @@ impl DirectHashKey {
             validation,
         }
     }
+
+    /// Source trees cannot produce archive hashes. Without required validation, their preparatory
+    /// and solver metadata can therefore share the same cache, regardless of hash collection.
+    pub(crate) fn uses_project_cache(&self, dist: &Dist) -> bool {
+        match dist {
+            Dist::Built(_) => false,
+            Dist::Source(source) => match source {
+                SourceDist::Directory(_) => self.validation == DirectHashValidation::None,
+                SourceDist::Registry(_)
+                | SourceDist::DirectUrl(_)
+                | SourceDist::GitDirectory(_)
+                | SourceDist::GitPath(_)
+                | SourceDist::Path(_) => false,
+            },
+        }
+    }
 }
 
 impl InMemoryIndex {
@@ -88,6 +107,26 @@ impl InMemoryIndex {
     /// Returns a reference to the distribution metadata map.
     pub fn distributions(&self) -> &DistributionMetadataIndex {
         &self.0.distributions
+    }
+
+    /// Supply metadata for a source tree before the next solve, replacing any completed output.
+    pub fn insert_project_metadata(&self, id: DistributionId, metadata: Arc<MetadataResponse>) {
+        self.invalidate_project_metadata(&id);
+        self.0.distributions.done(id, metadata);
+    }
+
+    /// Discard source-tree metadata after editing a project and before starting the next solve.
+    pub fn invalidate_project_metadata(
+        &self,
+        id: &DistributionId,
+    ) -> Option<Arc<MetadataResponse>> {
+        let committed = self
+            .0
+            .resolved_direct
+            .lock()
+            .expect("distribution metadata lock is not poisoned")
+            .remove(id);
+        self.0.distributions.remove(id).or(committed)
     }
 
     pub(crate) fn direct(

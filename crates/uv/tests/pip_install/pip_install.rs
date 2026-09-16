@@ -2136,7 +2136,8 @@ fn install_editable_incompatible_constraint_version() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: No solution found when resolving dependencies
-      cause: Because only black<=0.1.0 is available and you require black>0.1.0, we can conclude that your requirements are unsatisfiable.
+      cause: Because only black<=0.1.0 is available and you require black, we can conclude that you require black<=0.1.0.
+             And because you require black>0.1.0, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -3375,7 +3376,7 @@ fn install_git_private_https_pat_not_authorized() {
     error: Failed to download and build `uv-private-pypackage @ git+https://git:****@github.com/astral-test/uv-private-pypackage`
       cause: Git operation failed
       cause: failed to clone into: [CACHE_DIR]/git-v0/db/8401f5508e3e612d
-      cause: process didn't exit successfully: `git fetch --force --update-head-ok 'https://git:****@github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
+      cause: process didn't exit successfully: `git fetch --no-recurse-submodules --force --update-head-ok 'https://git:****@github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
              --- stderr
              remote: Invalid username or token. Password authentication is not supported for Git operations.
              fatal: Authentication failed for 'https://github.com/astral-test/uv-private-pypackage/'
@@ -3464,7 +3465,7 @@ fn install_git_private_https_interactive() {
     error: Failed to download and build `uv-private-pypackage @ git+https://github.com/astral-test/uv-private-pypackage`
       cause: Git operation failed
       cause: failed to clone into: [CACHE_DIR]/git-v0/db/8401f5508e3e612d
-      cause: process didn't exit successfully: `/usr/bin/git fetch --force --update-head-ok 'https://github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
+      cause: process didn't exit successfully: `/usr/bin/git fetch --no-recurse-submodules --force --update-head-ok 'https://github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
              --- stderr
              fatal: could not read Username for 'https://github.com': terminal prompts disabled
     ");

@@ -816,15 +816,6 @@ impl SourceDist {
         matches!(self, Self::Directory(_) | Self::Path(_))
     }
 
-    /// Returns the path to the source distribution, if it's a local distribution.
-    pub fn as_path(&self) -> Option<&Path> {
-        match self {
-            Self::Path(dist) => Some(&dist.install_path),
-            Self::Directory(dist) => Some(&dist.install_path),
-            _ => None,
-        }
-    }
-
     /// Returns the source tree of the distribution, if available.
     fn source_tree(&self) -> Option<&Path> {
         match self {
