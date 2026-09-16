@@ -14,7 +14,16 @@ use crate::{CompatibleDist, Dist, Error, PrioritizedDist, ResolvedDist};
 #[derive(Debug, Clone)]
 pub struct PinnedDist {
     dist: ResolvedDist,
-    requires_artifact_hashes: bool,
+    hash_source: PinnedHashSource,
+}
+
+/// The source of hashes emitted for a pinned distribution.
+#[derive(Debug, Clone, Copy)]
+pub enum PinnedHashSource {
+    /// Reuse hashes collected during resolution, including existing requirements hashes.
+    Package,
+    /// Derive hashes from the retained registry files, hashing files that lack advertised hashes.
+    Artifacts,
 }
 
 impl PinnedDist {
@@ -29,24 +38,23 @@ impl PinnedDist {
                 dist: Arc::new(Dist::from_url(name, url)?),
                 version: Some(version),
             },
-            requires_artifact_hashes: false,
+            hash_source: PinnedHashSource::Package,
         })
     }
 
-    /// Whether requirements hashes must be derived from the retained registry artifacts instead
-    /// of reusing package-level hashes from an earlier resolution.
-    pub fn requires_artifact_hashes(&self) -> bool {
-        self.requires_artifact_hashes
+    pub fn hash_source(&self) -> PinnedHashSource {
+        self.hash_source
     }
 }
 
 impl From<&CompatibleDist<'_>> for PinnedDist {
+    /// Pin the installation artifact, not a wheel used only to read metadata.
     fn from(dist: &CompatibleDist<'_>) -> Self {
         Self {
             dist: dist.for_installation().to_owned(),
-            requires_artifact_hashes: dist
+            hash_source: dist
                 .prioritized()
-                .is_some_and(PrioritizedDist::requires_artifact_hashes),
+                .map_or(PinnedHashSource::Package, PrioritizedDist::hash_source),
         }
     }
 }

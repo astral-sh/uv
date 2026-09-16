@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::slice;
 
 use futures::{StreamExt, TryStreamExt};
 use petgraph::graph::NodeIndex;
@@ -7,7 +8,8 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use uv_client::{FileHashError, RegistryClient};
 use uv_configuration::BuildOptions;
 use uv_distribution_types::{
-    BuiltDist, Dist, File, FileLocation, Name, PinnedDist, ResolvedDist, SourceDist,
+    BuiltDist, Dist, File, FileLocation, Name, PinnedDist, PinnedHashSource, ResolvedDist,
+    SourceDist,
 };
 use uv_normalize::PackageName;
 use uv_pypi_types::HashDigest;
@@ -26,7 +28,8 @@ pub struct RequirementsExport<'a> {
 }
 
 impl<'a> RequirementsExport<'a> {
-    /// Prepare hashes without modifying the resolution or downloading omitted packages.
+    /// Prepare requested hashes without modifying the resolution or downloading omitted packages.
+    /// When hashes are disabled, no artifacts are traversed or downloaded.
     pub async fn new(
         resolution: &'a ResolverOutput,
         omit: &'a [PackageName],
@@ -68,7 +71,8 @@ impl<'a> RequirementsExport<'a> {
         self.omit
     }
 
-    /// Flatten artifact hashes only when serializing a requirements entry.
+    /// Return the hashes to emit, flattening artifact hashes only at serialization.
+    /// Omitted packages and exports without hashes return an empty slice.
     pub fn hashes(&self, index: NodeIndex) -> Cow<'_, [HashDigest]> {
         let Some(hashes) = &self.hashes else {
             return Cow::Borrowed(&[]);
@@ -79,35 +83,35 @@ impl<'a> RequirementsExport<'a> {
         if self.omit.contains(&distribution.name) {
             return Cow::Borrowed(&[]);
         }
-        if distribution.dist.requires_artifact_hashes() {
-            let mut hashes = hashes
-                .files
-                .get(&index)
-                .into_iter()
-                .flatten()
-                .flat_map(|file| {
-                    file.hashes.iter().chain(
-                        hashes
-                            .computed
-                            .get(&file.url)
-                            .filter(|_| file.hashes.is_empty()),
-                    )
-                })
-                .cloned()
-                .collect::<Vec<_>>();
-            hashes.sort_unstable();
-            hashes.dedup();
-            Cow::Owned(hashes)
-        } else {
-            Cow::Borrowed(distribution.hashes.as_slice())
+        match distribution.dist.hash_source() {
+            PinnedHashSource::Package => Cow::Borrowed(distribution.hashes.as_slice()),
+            PinnedHashSource::Artifacts => {
+                let mut hashes = hashes
+                    .files
+                    .get(&index)
+                    .into_iter()
+                    .flatten()
+                    .flat_map(|file| {
+                        if file.hashes.is_empty() {
+                            hashes
+                                .computed
+                                .get(&file.url)
+                                .map_or(&[][..], slice::from_ref)
+                        } else {
+                            file.hashes.as_slice()
+                        }
+                    })
+                    .cloned()
+                    .collect::<Vec<_>>();
+                hashes.sort_unstable();
+                hashes.dedup();
+                Cow::Owned(hashes)
+            }
         }
     }
 }
 
-/// Retained registry files and the hashes computed for files without advertised hashes.
-///
-/// Construction requires immutable installation pins and completes all missing hashes before
-/// returning. Hashes remain associated with their files rather than a package-level digest list.
+/// Retained registry files with advertised or computed hashes for every file.
 #[derive(Debug)]
 struct HashedArtifacts<'a> {
     files: FxHashMap<NodeIndex, Vec<&'a File>>,
@@ -115,6 +119,7 @@ struct HashedArtifacts<'a> {
 }
 
 impl<'a> HashedArtifacts<'a> {
+    /// Hash files retained by each pin and allowed by build options, downloading only missing hashes.
     async fn generate(
         pins: impl Iterator<Item = (NodeIndex, &'a PinnedDist)>,
         build_options: &BuildOptions,
@@ -124,8 +129,9 @@ impl<'a> HashedArtifacts<'a> {
         let mut files = FxHashMap::default();
         let mut missing = FxHashSet::default();
         for (index, pin) in pins {
-            if !pin.requires_artifact_hashes() {
-                continue;
+            match pin.hash_source() {
+                PinnedHashSource::Package => continue,
+                PinnedHashSource::Artifacts => {}
             }
             let ResolvedDist::Installable { dist, .. } = pin.as_ref() else {
                 continue;

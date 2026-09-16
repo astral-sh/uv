@@ -544,6 +544,22 @@ fn minimum_libc_unhashed_index_hashes() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     ");
+    // Preparing an export without hashes leaves the requirement unchanged.
+    uv_snapshot!(context.filters(), context.pip_compile().args(["pyproject.toml", "--universal", "--offline", "--no-header", "--no-annotate", "--preview-features", "minimum-libc-version"]), @r"
+    exit_code: 0 (success)
+    ----- stdout -----
+    demo==1.0.0
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // Omitted packages are not included in the hashed export.
+    uv_snapshot!(context.filters(), context.pip_compile().args(["pyproject.toml", "--universal", "--generate-hashes", "--no-emit-package", "demo", "--offline", "--no-header", "--no-annotate", "--preview-features", "minimum-libc-version"]), @r"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
     Ok(())
 }
 

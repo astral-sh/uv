@@ -11,8 +11,8 @@ use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagPri
 use uv_pypi_types::{HashDigest, Yanked};
 
 use crate::{
-    File, InstalledDist, KnownPlatform, MinimumLibcVersion, RegistryBuiltDist, RegistryBuiltWheel,
-    RegistrySourceDist, ResolvedDistRef,
+    File, InstalledDist, KnownPlatform, MinimumLibcVersion, PinnedHashSource, RegistryBuiltDist,
+    RegistryBuiltWheel, RegistrySourceDist, ResolvedDistRef,
 };
 
 /// A collection of distributions that have been filtered by relevance.
@@ -363,8 +363,12 @@ pub enum HashComparison {
 }
 
 impl PrioritizedDist {
-    pub(crate) fn requires_artifact_hashes(&self) -> bool {
-        self.0.minimum_libc_version.is_some()
+    pub(crate) fn hash_source(&self) -> PinnedHashSource {
+        if self.0.minimum_libc_version.is_some() {
+            PinnedHashSource::Artifacts
+        } else {
+            PinnedHashSource::Package
+        }
     }
 
     /// Create an empty distribution set governed by the given libc cutoff.
@@ -384,12 +388,10 @@ impl PrioritizedDist {
     ) {
         if compatibility.is_compatible() && !self.0.markers.iter().all(|markers| markers.is_true())
         {
-            for (coverage, markers) in self
-                .0
-                .markers
-                .iter_mut()
-                .zip(implied_libc_markers(&dist.filename, self.0.minimum_libc_version))
-            {
+            for (coverage, markers) in self.0.markers.iter_mut().zip(implied_libc_markers(
+                &dist.filename,
+                self.0.minimum_libc_version,
+            )) {
                 *coverage = coverage.or(markers);
             }
         }

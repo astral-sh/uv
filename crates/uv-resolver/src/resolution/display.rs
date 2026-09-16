@@ -11,14 +11,12 @@ use uv_normalize::PackageName;
 use uv_pep508::MarkerTree;
 use uv_resolver_types::RequirementsExport;
 
+use crate::ResolverEnvironment;
 use crate::resolution::{RequirementsTxtDist, ResolutionGraphNode};
-use crate::{ResolverEnvironment, ResolverOutput};
 
 /// A [`std::fmt::Display`] implementation for the resolution graph.
 #[derive(Debug)]
 pub struct DisplayResolutionGraph<'a> {
-    /// The underlying graph.
-    resolution: &'a ResolverOutput,
     /// The resolver marker environment, used to determine the markers that apply to each package.
     env: &'a ResolverEnvironment,
     /// The packages and hashes prepared for this export.
@@ -44,7 +42,7 @@ enum DisplayResolutionGraphNode<'dist> {
 }
 
 impl<'a> DisplayResolutionGraph<'a> {
-    /// Create a new [`DisplayResolutionGraph`] for the given graph.
+    /// Create a requirements formatter from an export whose requested hashes are ready.
     ///
     /// Note that this panics if any of the forks in the given resolver
     /// output contain non-empty conflicting groups. That is, when using `uv
@@ -60,8 +58,7 @@ impl<'a> DisplayResolutionGraph<'a> {
         include_index_annotation: bool,
         annotation_style: AnnotationStyle,
     ) -> Self {
-        let underlying = export.resolution();
-        for fork_marker in &underlying.fork_markers {
+        for fork_marker in &export.resolution().fork_markers {
             assert!(
                 fork_marker.conflict().is_true(),
                 "found fork marker {fork_marker:?} with non-trivial conflicting marker, \
@@ -69,7 +66,6 @@ impl<'a> DisplayResolutionGraph<'a> {
             );
         }
         Self {
-            resolution: underlying,
             env,
             export,
             include_extras,
@@ -84,11 +80,12 @@ impl<'a> DisplayResolutionGraph<'a> {
 /// Write the graph in the `{name}=={version}` format of requirements.txt that pip uses.
 impl std::fmt::Display for DisplayResolutionGraph<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let resolution = self.export.resolution();
         // Determine the annotation sources for each package.
         let sources = if self.include_annotations {
             let mut sources = SourceAnnotations::default();
 
-            for requirement in self.resolution.requirements.iter().filter(|requirement| {
+            for requirement in resolution.requirements.iter().filter(|requirement| {
                 requirement.evaluate_markers(self.env.marker_environment(), &[])
             }) {
                 if let Some(origin) = &requirement.origin {
@@ -99,14 +96,9 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                 }
             }
 
-            for requirement in self
-                .resolution
-                .constraints
-                .requirements()
-                .filter(|requirement| {
-                    requirement.evaluate_markers(self.env.marker_environment(), &[])
-                })
-            {
+            for requirement in resolution.constraints.requirements().filter(|requirement| {
+                requirement.evaluate_markers(self.env.marker_environment(), &[])
+            }) {
                 if let Some(origin) = &requirement.origin {
                     sources.add(
                         &requirement.name,
@@ -115,13 +107,12 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                 }
             }
 
-            for requirement in
-                self.resolution
-                    .overrides
-                    .global_requirements()
-                    .filter(|requirement| {
-                        requirement.evaluate_markers(self.env.marker_environment(), &[])
-                    })
+            for requirement in resolution
+                .overrides
+                .global_requirements()
+                .filter(|requirement| {
+                    requirement.evaluate_markers(self.env.marker_environment(), &[])
+                })
             {
                 if let Some(origin) = &requirement.origin {
                     sources.add(
@@ -131,15 +122,14 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                 }
             }
 
-            for edge in self.resolution.graph.edge_references() {
+            for edge in resolution.graph.edge_references() {
                 let (ResolutionGraphNode::Dist(parent), ResolutionGraphNode::Dist(dependency)) = (
-                    self.resolution.graph.node_weight(edge.source()).unwrap(),
-                    self.resolution.graph.node_weight(edge.target()).unwrap(),
+                    resolution.graph.node_weight(edge.source()).unwrap(),
+                    resolution.graph.node_weight(edge.target()).unwrap(),
                 ) else {
                     continue;
                 };
-                for requirement in self
-                    .resolution
+                for requirement in resolution
                     .overrides
                     .scoped_requirements_for(&parent.name, &parent.version)
                     .filter(|requirement| requirement.name == dependency.name)
@@ -168,7 +158,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
         // We assign each package its propagated markers: In `requirements.txt`, we want a flat list
         // that for each package tells us if it should be installed on the current platform, without
         // looking at which packages depend on it.
-        let graph = self.resolution.graph.map(
+        let graph = resolution.graph.map(
             |index, node| match node {
                 ResolutionGraphNode::Root => DisplayResolutionGraphNode::Root,
                 ResolutionGraphNode::Dist(dist) => {
@@ -210,7 +200,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
         for (index, node) in nodes {
             // Display the node itself.
             let mut line = node
-                .to_requirements_txt(&self.resolution.requires_python, self.include_markers)
+                .to_requirements_txt(&resolution.requires_python, self.include_markers)
                 .to_string();
 
             // Display the distribution hashes, if any.

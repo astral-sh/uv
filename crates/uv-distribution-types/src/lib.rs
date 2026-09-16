@@ -85,7 +85,7 @@ pub use crate::installed::*;
 pub use crate::known_platform::*;
 pub use crate::minimum_libc_version::MinimumLibcVersion;
 pub use crate::origin::*;
-pub use crate::pinned::PinnedDist;
+pub use crate::pinned::{PinnedDist, PinnedHashSource};
 pub use crate::pip_index::*;
 pub use crate::prioritized_distribution::*;
 pub use crate::requested::*;
