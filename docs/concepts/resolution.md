@@ -239,8 +239,8 @@ lockfile.
     `preview-features = ["minimum-libc-version"]` to disable the warning.
 
 Environment markers do not include the libc implementation or version. The `minimum-libc-version`
-setting specifies the oldest libc versions that must be supported in `required-environments`.
-An omitted libc is unconstrained.
+setting specifies the oldest libc versions that must be supported in `required-environments`. An
+omitted libc is unconstrained.
 
 For example, to require support for glibc 2.31 on x86-64 and ARM64 Linux:
 
