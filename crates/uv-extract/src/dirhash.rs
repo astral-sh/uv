@@ -71,6 +71,8 @@ use std::pin::{Pin, pin};
 use rayon::prelude::*;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
+use uv_threads::initialize_rayon_once;
+
 mod archive;
 mod seek;
 
@@ -238,7 +240,7 @@ fn canonical_path_to_symlink(symlink_path: &Path) -> Result<PathBuf, DirhashErro
 /// `dirhash_path` will traverse symlinks, including links that lead outside of `path`. However, if
 /// it encounters a symlink cycle, it will return an error.
 pub fn dirhash_path(path: &Path) -> Result<blake3::Hash, DirhashError> {
-    uv_configuration::initialize_rayon_once();
+    initialize_rayon_once();
     let seen_symlinks = SeenSymlinks::new();
     dirhash_path_inner(path, &seen_symlinks)
 }

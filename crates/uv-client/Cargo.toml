@@ -39,6 +39,7 @@ uv-pypi-types = { workspace = true }
 uv-small-str = { workspace = true }
 uv-redacted = { workspace = true }
 uv-static = { workspace = true }
+uv-threads = { workspace = true }
 uv-torch = { workspace = true }
 uv-version = { workspace = true }
 uv-warnings = { workspace = true }
