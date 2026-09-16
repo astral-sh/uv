@@ -4,12 +4,13 @@ use anyhow::Result;
 use tracing::info_span;
 
 use uv_configuration::Upgrade;
+use uv_distribution_types::IndexUrl;
 use uv_fs::CWD;
 use uv_git::ResolvedRepositoryReference;
+use uv_lock::{Lock, LockError, PylockToml, PylockTomlErrorKind};
+use uv_pep508::VerbatimUrl;
 use uv_requirements_txt::RequirementsTxt;
-use uv_resolver::{
-    Lock, LockError, Preference, PreferenceError, PylockToml, PylockTomlErrorKind, UpgradePackages,
-};
+use uv_resolver::{Preference, PreferenceError, UpgradePackages};
 
 #[derive(Debug, Default)]
 pub struct LockedRequirements {
@@ -78,7 +79,32 @@ pub fn read_lock_requirements(
 
     // Resolve the full set of packages to upgrade, combining `--upgrade-package` and
     // `--upgrade-group`.
-    let upgrade_packages = UpgradePackages::for_workspace(lock, upgrade);
+    let mut upgrade_packages = upgrade.packages().cloned().unwrap_or_default();
+    if upgrade.packages().is_some()
+        && let Some(groups) = upgrade.groups()
+    {
+        // Check package-level dependency groups (the standard case for projects with
+        // a `[project]` table).
+        for package in lock.packages() {
+            for (group_name, dependencies) in package.resolved_dependency_groups() {
+                if groups.contains(group_name) {
+                    for dependency in dependencies {
+                        upgrade_packages.insert(dependency.package_name().clone());
+                    }
+                }
+            }
+        }
+
+        // Check manifest-level dependency groups, which cover projects without a
+        // `[project]` table (e.g., virtual workspace roots or PEP 723 scripts).
+        for (group_name, requirements) in lock.dependency_groups() {
+            if groups.contains(group_name) {
+                for requirement in requirements {
+                    upgrade_packages.insert(requirement.name.clone());
+                }
+            }
+        }
+    }
 
     let mut preferences = Vec::new();
     let mut git = Vec::new();
@@ -91,8 +117,13 @@ pub fn read_lock_requirements(
         }
 
         // Map each entry in the lockfile to a preference.
-        if let Some(preference) = Preference::from_lock(package, install_path)? {
-            preferences.push(preference);
+        if let Some(version) = package.version() {
+            preferences.push(Preference::from_locked(
+                package.name().clone(),
+                version.clone(),
+                package.index(install_path)?,
+                package.fork_markers().to_vec(),
+            ));
         }
 
         // Map each entry in the lockfile to a Git SHA.
@@ -131,8 +162,16 @@ pub async fn read_pylock_toml_requirements(
         }
 
         // Map each entry in the lockfile to a preference.
-        if let Some(preference) = Preference::from_pylock_toml(package)? {
-            preferences.push(preference);
+        if let Some(version) = package.version.as_ref() {
+            preferences.push(Preference::from_locked(
+                package.name.clone(),
+                version.clone(),
+                package
+                    .index
+                    .as_ref()
+                    .map(|index| IndexUrl::from(VerbatimUrl::from(index.clone()))),
+                vec![],
+            ));
         }
 
         // Map each entry in the lockfile to a Git SHA.

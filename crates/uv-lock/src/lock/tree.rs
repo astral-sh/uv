@@ -21,12 +21,14 @@ use uv_pep440::Version;
 use uv_pep508::MarkerTree;
 use uv_pypi_types::ResolverMarkerEnvironment;
 
+use uv_resolver_types::{ConflictMarker, UniversalMarker};
+
 use crate::lock::export::{
     MetadataNode, MetadataNodeId, MetadataNodeKind, MetadataScript, MetadataWorkspace,
     MetadataWorkspaceMember,
 };
 use crate::lock::{Package, PackageId, PackageIndex};
-use crate::{ConflictMarker, Lock, PackageMap, UniversalMarker};
+use crate::{Lock, PackageMap};
 
 #[derive(Debug, Clone, Copy)]
 pub enum TreeJsonTarget<'a> {

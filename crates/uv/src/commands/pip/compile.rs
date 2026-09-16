@@ -29,6 +29,7 @@ use uv_distribution_types::{
 use uv_fs::{CWD, Simplified};
 use uv_git::ResolvedRepositoryReference;
 use uv_install_wheel::LinkMode;
+use uv_lock::PylockToml;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_preview::{Preview, PreviewFeature};
@@ -43,7 +44,7 @@ use uv_requirements::{
 };
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, FlatIndex, ForkStrategy,
-    InMemoryIndex, OptionsBuilder, Prerelease, PylockToml, PythonRequirement, ResolutionMode,
+    InMemoryIndex, OptionsBuilder, Prerelease, PythonRequirement, ResolutionMode,
     ResolverEnvironment,
 };
 use uv_settings::PythonInstallMirrors;
@@ -619,7 +620,8 @@ pub(crate) async fn pip_compile(
         PipCompileFormat::RequirementsTxt => {
             if include_marker_expression {
                 if let Some(marker_env) = resolver_env.marker_environment() {
-                    let relevant_markers = resolution.marker_tree(&top_level_index, marker_env)?;
+                    let relevant_markers =
+                        resolution.marker_tree(top_level_index.distributions(), marker_env)?;
                     if let Some(relevant_markers) = relevant_markers.contents() {
                         writeln!(
                             writer,

@@ -46,9 +46,11 @@ use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 use uv_warnings::warn_user_once;
 
+use uv_resolver_types::ResolverOutput;
+
 use crate::lock::export::ExportableRequirements;
 use crate::lock::{Source, WheelTagHint, is_wheel_unreachable};
-use crate::{Installable, LockError, ResolverOutput};
+use crate::{Installable, LockError};
 
 /// Format an array so that each element is on its own line and has a trailing comma.
 fn each_element_on_its_line_array(elements: impl Iterator<Item = impl Into<Value>>) -> Array {

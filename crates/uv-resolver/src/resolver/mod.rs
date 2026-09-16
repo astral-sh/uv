@@ -849,7 +849,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         for resolution in &resolutions {
             resolution.trace_resolution();
         }
-        ResolverOutput::from_state(
+        crate::resolution::from_state(
             &resolutions,
             self.project.as_ref(),
             &self.workspace_members,

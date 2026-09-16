@@ -28,6 +28,7 @@ use uv_distribution_types::{
 use uv_fs::{CWD, LockedFile, LockedFileError, LockedFileMode, Simplified, verbatim_path};
 use uv_git::ResolvedRepositoryReference;
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
+use uv_lock::{Installable, Lock, LockParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{TildeVersionSpecifier, Version, VersionSpecifiers};
 use uv_pep508::MarkerTreeContents;
@@ -45,8 +46,8 @@ use uv_requirements::{
     read_lock_requirements,
 };
 use uv_resolver::{
-    DependencyMode, FlatIndex, Installable, Lock, LockParseError, OptionsBuilder, Preference,
-    PythonRequirement, ResolverEnvironment, ResolverOutput,
+    DependencyMode, FlatIndex, OptionsBuilder, Preference, PythonRequirement, ResolverEnvironment,
+    ResolverOutput,
 };
 use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
@@ -302,7 +303,7 @@ pub(crate) enum ProjectError {
     FlatIndex(#[from] uv_client::FlatIndexError),
 
     #[error(transparent)]
-    Lock(#[from] uv_resolver::LockError),
+    Lock(#[from] uv_lock::LockError),
 
     #[error(transparent)]
     Operation(#[from] pip::operations::Error),

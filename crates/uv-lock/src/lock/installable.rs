@@ -18,12 +18,14 @@ use uv_normalize::{DefaultExtras, ExtraName, GroupName, PackageName};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{ConflictKind, ConflictSet, ResolverMarkerEnvironment};
 
+use uv_resolver_types::UniversalMarker;
+use uv_resolver_types::universal_marker::ActivatedConflictItems;
+
 use crate::lock::{
     Dependency, DependencySelectionContext, HashedDist, LockErrorKind, Package, PackageIndex,
     SelectedDependency, TagPolicy,
 };
-use crate::universal_marker::ActivatedConflictItems;
-use crate::{Lock, LockError, UniversalMarker};
+use crate::{Lock, LockError};
 
 fn newly_activated_extras<'lock>(
     dep: &'lock Dependency,

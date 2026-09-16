@@ -1,5 +1,5 @@
 ---
-source: crates/uv-resolver/src/lock/mod.rs
+source: crates/uv-lock/src/lock/mod.rs
 expression: result
 ---
 Ok(

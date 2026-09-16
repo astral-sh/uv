@@ -13,6 +13,7 @@ use uv_configuration::{
 };
 use uv_distribution::{ArchiveMetadata, Metadata};
 use uv_distribution_types::{Identifier, RequiresPython};
+use uv_lock::implicit_constraints_marker;
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{MarkerTree, Pep508ErrorSource, Requirement, VerbatimUrl, VersionOrUrl};
@@ -20,7 +21,7 @@ use uv_preview::Preview;
 use uv_pypi_types::{PyProjectToml, ResolutionMetadata, SupportedEnvironments, VerbatimParsedUrl};
 use uv_python::{ConfigDiscovery, Interpreter, PythonDownloads, PythonPreference};
 use uv_redacted::DisplaySafeUrl;
-use uv_resolver::{MetadataResponse, implicit_constraints_marker};
+use uv_resolver::MetadataResponse;
 use uv_settings::PythonInstallMirrors;
 use uv_workspace::pyproject::{DependencyType, Source};
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};

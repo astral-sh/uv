@@ -31,6 +31,7 @@ use uv_fs::replace_symlink;
 use uv_fs::{CWD, Simplified};
 use uv_git::GitResolver;
 use uv_installer::SitePackages;
+use uv_lock::{Installable, Lock, ResolverManifest};
 use uv_normalize::{DefaultExtras, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_preview::Preview;
@@ -41,9 +42,7 @@ use uv_python::{
     VersionFileDiscoveryOptions, VersionRequest,
 };
 use uv_requirements::RequirementsSpecification;
-use uv_resolver::{
-    FlatIndex, Installable, Lock, OptionsBuilder, Preference, ResolverManifest, ResolverOutput,
-};
+use uv_resolver::{FlatIndex, OptionsBuilder, Preference, ResolverOutput};
 use uv_settings::{PythonInstallMirrors, ToolOptions};
 use uv_shell::Shell;
 use uv_tool::{InstalledTools, Tool, ToolEntrypoint, entrypoint_paths};

@@ -13,7 +13,7 @@ use tracing::trace;
 use uv_distribution_types::{
     DerivationChain, DistErrorKind, IndexCapabilities, IndexLocations, IndexUrl, RequestedDist,
 };
-use uv_normalize::{ExtraName, InvalidNameError, PackageName};
+use uv_normalize::PackageName;
 use uv_pep440::{LowerBound, Version};
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Tags;
@@ -128,18 +128,8 @@ pub enum ResolveError {
     #[error("Package `{0}` is unavailable")]
     PackageUnavailable(PackageName),
 
-    #[error("Invalid extra value in conflict marker: {reason}: {raw_extra}")]
-    InvalidExtraInConflictMarker {
-        reason: String,
-        raw_extra: ExtraName,
-    },
-
-    #[error("Invalid {kind} value in conflict marker: {name_error}")]
-    InvalidValueInConflictMarker {
-        kind: &'static str,
-        #[source]
-        name_error: InvalidNameError,
-    },
+    #[error(transparent)]
+    ConflictMarker(#[from] uv_resolver_types::ConflictMarkerError),
     #[error(
         "The index returned metadata for the wrong package: expected {request} for {expected}, got {request} for {actual}"
     )]
@@ -164,8 +154,7 @@ impl ResolveError {
             | Self::NoSolution(_)
             | Self::UnhashedPackage(_)
             | Self::PackageUnavailable(_)
-            | Self::InvalidExtraInConflictMarker { .. }
-            | Self::InvalidValueInConflictMarker { .. }
+            | Self::ConflictMarker(_)
             | Self::MismatchedPackageName { .. } => true,
             Self::Dist(_, _, _, error) => error.is_user_failure(),
             Self::Client(error) => error.is_user_failure(),

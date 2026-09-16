@@ -16,10 +16,10 @@ use uv_distribution::LoweredRequirement;
 use uv_distribution_types::{
     Index, IndexLocations, NameRequirementSpecification, Requirement, RequiresPython,
 };
+use uv_lock::Lock;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep508::RequirementOrigin;
 use uv_pypi_types::{Conflicts, SupportedEnvironments, VerbatimParsedUrl};
-use uv_resolver::Lock;
 use uv_scripts::Pep723Script;
 use uv_workspace::dependency_groups::{
     DependencyGroupError, FlatDependencyGroup, FlatDependencyGroups,

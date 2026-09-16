@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use insta::assert_snapshot;
 use std::path::Path;
-use uv_resolver::Lock;
+use uv_lock::Lock;
 use uv_static::EnvVars;
 
 // These tests just run `uv lock` on an assorted of ecosystem
