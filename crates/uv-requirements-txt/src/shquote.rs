@@ -16,6 +16,8 @@
 //! See the License for the specific language governing permissions and
 //! limitations under the License.
 //! ```
+use std::borrow::Cow;
+
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub(crate) enum UnquoteError {
@@ -196,6 +198,19 @@ pub(crate) fn unquote(source: &str) -> Result<Option<String>, UnquoteError> {
     }
 }
 
+/// Quote one argument for use in a requirements file.
+pub fn quote(source: &str) -> Cow<'_, str> {
+    if !source.is_empty()
+        && source
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"@%+=:,./-_".contains(&byte))
+    {
+        Cow::Borrowed(source)
+    } else {
+        Cow::Owned(format!("'{}'", source.replace('\'', r#"'"'"'"#)))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -207,5 +222,21 @@ mod tests {
         assert_eq!(unquote("foo\"bar\"").unwrap().unwrap(), "foobar");
         assert_eq!(unquote("\\foobar\\").unwrap().unwrap(), "foobar");
         assert_eq!(unquote("\\'foobar\\'").unwrap().unwrap(), "'foobar'");
+    }
+
+    #[test]
+    fn quote_roundtrip() {
+        for value in [
+            "key=value",
+            "",
+            "key=hello world",
+            r#"key=it's "quoted"\path"#,
+        ] {
+            let quoted = quote(value);
+            assert_eq!(
+                unquote(&quoted).unwrap().as_deref().unwrap_or(&quoted),
+                value
+            );
+        }
     }
 }
