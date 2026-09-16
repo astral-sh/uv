@@ -12,7 +12,7 @@ use uv_pypi_types::{
 };
 
 use crate::pubgrub::{PubGrubDependency, PubGrubPackage};
-use crate::resolver::{ForkContinuation, ForkState};
+use crate::resolver::ForkState;
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::{PythonRequirement, ResolveError};
 
@@ -380,7 +380,7 @@ impl ResolverEnvironment {
                         .chain(exclude.into_iter().map(Err)),
                 )?;
                 env = env.narrow_environment(combined.pep508());
-                Some(Ok(init.clone().fork(env, ForkContinuation::Propagate)))
+                Some(Ok(init.clone().with_env(env)))
             })
             .collect()
     }

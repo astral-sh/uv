@@ -907,7 +907,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
 
                 let env = fork.env.clone();
-                (fork, forked_state.fork(env, ForkContinuation::Propagate))
+                (fork, forked_state.with_env(env))
             })
             .map(move |(fork, mut forked_state)| {
                 // Enrich the state with any URLs, etc.
@@ -972,7 +972,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 },
                 None => ForkContinuation::SelectVersion { package: fork.id },
             };
-            forked_state.fork(fork.env, continuation)
+            forked_state
+                .with_env(fork.env)
+                .with_continuation(continuation)
         })
     }
 
@@ -3491,9 +3493,13 @@ impl ForkState {
             ));
     }
 
-    /// Resume in a narrower environment, invalidating candidates selected for the parent fork.
-    fn fork(mut self, env: ResolverEnvironment, continuation: ForkContinuation) -> Self {
+    fn with_continuation(mut self, continuation: ForkContinuation) -> Self {
         self.continuation = continuation;
+        self
+    }
+
+    /// Narrow the environment and Python requirement, invalidating candidates from the parent fork.
+    fn with_env(mut self, env: ResolverEnvironment) -> Self {
         self.selected_versions.clear();
         self.env = env;
         // If the fork contains a narrowed Python requirement, apply it.
