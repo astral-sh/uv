@@ -56,7 +56,7 @@ impl ResolutionGraphNode {
         }
     }
 
-    pub fn package_extra_names(&self) -> Option<(&PackageName, &ExtraName)> {
+    pub(crate) fn package_extra_names(&self) -> Option<(&PackageName, &ExtraName)> {
         match self {
             Self::Root => None,
             Self::Dist(dist) => {
@@ -66,7 +66,7 @@ impl ResolutionGraphNode {
         }
     }
 
-    pub fn package_group_names(&self) -> Option<(&PackageName, &GroupName)> {
+    pub(crate) fn package_group_names(&self) -> Option<(&PackageName, &GroupName)> {
         match self {
             Self::Root => None,
             Self::Dist(dist) => {
@@ -76,7 +76,7 @@ impl ResolutionGraphNode {
         }
     }
 
-    pub fn package_name(&self) -> Option<&PackageName> {
+    pub(crate) fn package_name(&self) -> Option<&PackageName> {
         match self {
             Self::Root => None,
             Self::Dist(dist) => Some(&dist.name),

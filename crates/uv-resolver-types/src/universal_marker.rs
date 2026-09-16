@@ -184,7 +184,7 @@ impl UniversalMarker {
     }
 
     /// If all inference sets reduce to the same marker, simplify the marker using that knowledge.
-    pub fn unify_inference_sets(&mut self, conflict_sets: &[BTreeSet<Inference>]) {
+    pub(crate) fn unify_inference_sets(&mut self, conflict_sets: &[BTreeSet<Inference>]) {
         let mut previous_marker = None;
 
         for conflict_set in conflict_sets {
@@ -380,7 +380,7 @@ impl UniversalMarker {
     }
 
     /// Returns true if the marker always evaluates to true if the given set of extras is activated.
-    pub fn evaluate_only_extras<P, E, G>(self, extras: &[(P, E)], groups: &[(P, G)]) -> bool
+    pub(crate) fn evaluate_only_extras<P, E, G>(self, extras: &[(P, E)], groups: &[(P, G)]) -> bool
     where
         P: Borrow<PackageName>,
         E: Borrow<ExtraName>,

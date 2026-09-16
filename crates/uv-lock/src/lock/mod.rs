@@ -6273,7 +6273,7 @@ impl LockVersion {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Package {
-    pub(crate) id: PackageId,
+    id: PackageId,
     sdist: Option<SourceDist>,
     wheels: Vec<Wheel>,
     /// If there are multiple versions or sources for the same package name, we add the markers of
@@ -7208,7 +7208,7 @@ impl PackageWire {
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) struct PackageId {
-    pub(crate) name: PackageName,
+    name: PackageName,
     version: Option<Version>,
     source: Source,
 }

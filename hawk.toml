@@ -275,7 +275,7 @@ reason = "read by the AWS request signer"
 
 [[override]]
 lint = "hawk::dead_public"
-crate = "uv_resolver"
+crate = "uv_lock"
 item = "lock::Lock::is_empty"
 kind = "inherent_method"
 level = "expect"
@@ -283,8 +283,8 @@ reason = "kept public alongside Lock::len"
 
 [[override]]
 lint = "hawk::dead_public"
-crate = "uv_resolver"
-item = "resolution::output::ResolverOutput::is_empty"
+crate = "uv_resolver_types"
+item = "output::ResolverOutput::is_empty"
 kind = "inherent_method"
 level = "expect"
 reason = "kept public alongside ResolverOutput::len"
