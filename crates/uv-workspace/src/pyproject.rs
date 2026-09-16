@@ -21,7 +21,9 @@ use thiserror::Error;
 use tracing::instrument;
 use uv_build_backend::BuildBackendSettings;
 use uv_configuration::{ExcludeDependency, GitLfsSetting, Override};
-use uv_distribution_types::{MinimumLibcVersion, Index, IndexName, NameRequirementSpecification, RequirementSource};
+use uv_distribution_types::{
+    Index, IndexName, MinimumLibcVersion, NameRequirementSpecification, RequirementSource,
+};
 use uv_fs::{PortablePathBuf, try_relative_to_if};
 use uv_git_types::GitReference;
 use uv_macros::OptionsMetadata;
@@ -706,16 +708,16 @@ pub struct ToolUv {
     )]
     pub(crate) required_environments: Option<SupportedEnvironments>,
 
-    /// The libc implementation and minimum version to support when resolving for Linux.
+    /// The minimum libc versions to support when resolving for Linux.
     ///
-    /// During universal resolution, uv will exclude wheels for the other libc implementation and
-    /// wheels that require a newer version. For example, `{ glibc = "2.31" }` allows
-    /// `manylinux_2_17` wheels, but not `manylinux_2_34` or `musllinux` wheels. If unset, both
-    /// glibc and musl wheels remain eligible.
+    /// During universal resolution, uv excludes wheels that require a newer version of a configured
+    /// libc. For example, `{ glibc = "2.31" }` allows `manylinux_2_17` wheels, but not
+    /// `manylinux_2_34` wheels. An omitted libc is unconstrained; set it to `false` to exclude its
+    /// wheels, as in `{ glibc = "2.31", musl = false }`.
     ///
-    /// Specify either `glibc` or `musl`, but not both. Use `required-environments` to specify
-    /// the Linux architectures to support.
-    /// Packages with a usable source distribution can still be selected.
+    /// Use `required-environments` to specify the Linux architectures to support. Each configured
+    /// libc version needs compatible artifacts for those environments; wheels for another libc
+    /// do not provide coverage. Packages with a usable source distribution can still be selected.
     ///
     /// This setting is respected by `uv lock` and `uv pip compile --universal`.
     ///
@@ -724,7 +726,7 @@ pub struct ToolUv {
     /// `preview-features = ["minimum-libc-version"]` to disable the warning.
     #[option(
         default = "None",
-        value_type = "dict[str, str]",
+        value_type = "dict[str, str | bool]",
         example = r#"
             preview-features = ["minimum-libc-version"]
             required-environments = [

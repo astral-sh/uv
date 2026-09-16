@@ -13,8 +13,9 @@ use uv_configuration::{
     Constraints, DependencyGroupsWithDefaults, ExcludeDependency, NoSources, Upgrade,
 };
 use uv_distribution::LoweredRequirement;
-use uv_distribution_types::{MinimumLibcVersion, 
-    Index, IndexLocations, NameRequirementSpecification, Requirement, RequiresPython,
+use uv_distribution_types::{
+    Index, IndexLocations, MinimumLibcVersion, NameRequirementSpecification, Requirement,
+    RequiresPython,
 };
 use uv_lock::Lock;
 use uv_normalize::{GroupName, PackageName};

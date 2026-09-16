@@ -31,8 +31,10 @@ struct PrioritizedDistInner {
     wheels: Vec<(RegistryBuiltWheel, WheelCompatibility)>,
     /// The hashes for each distribution.
     hashes: Vec<HashDigest>,
-    /// The set of supported platforms for the distribution, described in terms of their markers.
-    markers: MarkerTree,
+    /// Coverage for the glibc and musl baselines, unioned over compatible artifacts separately.
+    /// Unconfigured baselines use ordinary platform coverage. Intersect only after unioning, so
+    /// separate glibc and musl wheels can jointly satisfy both baselines.
+    markers: [MarkerTree; 2],
 }
 
 impl Default for PrioritizedDistInner {
@@ -42,7 +44,7 @@ impl Default for PrioritizedDistInner {
             best_wheel_index: None,
             wheels: Vec::new(),
             hashes: Vec::new(),
-            markers: MarkerTree::FALSE,
+            markers: [MarkerTree::FALSE; 2],
         }
     }
 }
@@ -104,7 +106,10 @@ impl CompatibleDist<'_> {
     /// Return the set of supported platforms for the distribution, in terms of their markers.
     pub fn implied_markers(&self) -> MarkerTree {
         match self.prioritized() {
-            Some(prioritized) => prioritized.0.markers,
+            Some(prioritized) => {
+                let [glibc, musl] = prioritized.0.markers;
+                glibc.and(musl)
+            }
             None => MarkerTree::TRUE,
         }
     }
@@ -363,11 +368,16 @@ impl PrioritizedDist {
         compatibility: WheelCompatibility,
         minimum_libc_version: Option<MinimumLibcVersion>,
     ) {
-        if compatibility.is_compatible() && !self.0.markers.is_true() {
-            self.0.markers = self
+        if compatibility.is_compatible() && !self.0.markers.iter().all(|markers| markers.is_true())
+        {
+            for (coverage, markers) in self
                 .0
                 .markers
-                .or(implied_markers(&dist.filename, minimum_libc_version));
+                .iter_mut()
+                .zip(implied_libc_markers(&dist.filename, minimum_libc_version))
+            {
+                *coverage = coverage.or(markers);
+            }
         }
         // Track the hashes.
         if !compatibility.is_excluded() {
@@ -393,7 +403,7 @@ impl PrioritizedDist {
     ) {
         // A usable source distribution provides coverage for all environments.
         if compatibility.is_compatible() {
-            self.0.markers = MarkerTree::TRUE;
+            self.0.markers = [MarkerTree::TRUE; 2];
         }
         // Track the hashes.
         if !compatibility.is_excluded() {
@@ -822,20 +832,44 @@ impl IncompatibleWheel {
     }
 }
 
-/// Given a wheel filename, determine the supported markers, excluding disallowed libc tags.
+/// Given a wheel filename, determine the markers covered by every configured libc baseline.
 ///
 /// A wheel with multiple platform tags can remain eligible without covering every tagged platform.
 pub fn implied_markers(
     filename: &WheelFilename,
     minimum_libc_version: Option<MinimumLibcVersion>,
 ) -> MarkerTree {
-    implied_platform_markers(
-        filename
-            .platform_tags()
-            .iter()
-            .filter(|tag| minimum_libc_version.is_none_or(|version| version.allows_platform(tag))),
-    )
-    .and(implied_python_markers(filename))
+    let [glibc, musl] = implied_libc_markers(filename, minimum_libc_version);
+    glibc.and(musl)
+}
+
+/// Infer coverage for each libc before combining wheels, excluding tags that do not satisfy that
+/// baseline even if the wheel is retained for another platform or libc.
+fn implied_libc_markers(
+    filename: &WheelFilename,
+    minimum_libc_version: Option<MinimumLibcVersion>,
+) -> [MarkerTree; 2] {
+    let python = implied_python_markers(filename);
+    let Some(minimum_libc_version) = minimum_libc_version else {
+        return [implied_platform_markers(filename.platform_tags()).and(python); 2];
+    };
+    let [glibc, musl] = minimum_libc_version.coverage();
+    let markers = |version: MinimumLibcVersion| {
+        implied_platform_markers(
+            filename
+                .platform_tags()
+                .iter()
+                .filter(|tag| version.allows_platform(tag)),
+        )
+        .and(python)
+    };
+    let glibc_markers = markers(glibc);
+    let musl_markers = if glibc == musl {
+        glibc_markers
+    } else {
+        markers(musl)
+    };
+    [glibc_markers, musl_markers]
 }
 
 /// Infer the environments described by a set of platform tags.

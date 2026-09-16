@@ -12,10 +12,9 @@ use uv_configuration::{
     TrustedPublishing, Upgrade, serialize_exclude_newer_package_with_spans,
 };
 use uv_distribution_types::{
-    MinimumLibcVersion,
     ConfigSettings, ExcludeNewerOverride, ExcludeNewerSpan, ExcludeNewerValue, ExtraBuildVariables,
-    Index, IndexLocations, IndexUrl, IndexUrlError, Origin, PackageConfigSettings, PipExtraIndex,
-    PipFindLinks, PipIndex, StaticMetadata,
+    Index, IndexLocations, IndexUrl, IndexUrlError, MinimumLibcVersion, Origin,
+    PackageConfigSettings, PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
 };
 use uv_install_wheel::LinkMode;
 use uv_macros::{CombineOptions, OptionsMetadata};

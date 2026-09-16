@@ -224,8 +224,8 @@ required-environments = [
     `preview-features = ["minimum-libc-version"]` to disable the warning.
 
 Environment markers do not include the libc implementation or version. The `minimum-libc-version`
-setting selects the libc implementation to support and excludes wheels that require a newer
-version. If the setting is omitted, both glibc and musl wheels remain eligible.
+setting excludes wheels that require a newer version of a configured libc. An omitted libc is
+unconstrained.
 
 For example, to require support for glibc 2.31 on x86-64 and ARM64 Linux:
 
@@ -239,16 +239,21 @@ required-environments = [
 minimum-libc-version = { glibc = "2.31" }
 ```
 
-With this configuration, a `manylinux_2_17` wheel is allowed, but `manylinux_2_34` and `musllinux`
-wheels are not. To target musl instead:
+With this configuration, a `manylinux_2_17` wheel is allowed, but a `manylinux_2_34` wheel is not.
+Musl wheels are retained, but do not satisfy the glibc requirement. To exclude them:
 
 ```toml
-minimum-libc-version = { musl = "1.2" }
+minimum-libc-version = { glibc = "2.31", musl = false }
 ```
 
-Specify either `glibc` or `musl`, but not both.
-`required-environments` is checked against the remaining artifacts. If a required environment has
-no compatible wheel or usable source distribution, uv will try another version of the package.
+To require both glibc and musl support, set a version for each:
+
+```toml
+minimum-libc-version = { glibc = "2.31", musl = "1.2" }
+```
+
+Each configured libc version needs coverage in `required-environments`. If a required environment
+has no compatible wheel or usable source distribution, uv will try another version of the package.
 
 ## Common marker values
 
