@@ -1,4 +1,6 @@
 [bans]
+wildcards = "deny"
+
 # NOTE: Rust as a whole simply has too many split resolutions
 # for us to enforce a single version per crate. Maybe
 # in the distant future.
