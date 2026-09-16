@@ -4,14 +4,11 @@
 # This image provides the build environment; the workspace is bind-mounted
 # at runtime by scripts/build-trampolines.sh.
 
-# TODO: At some point we should switch this to astral-dev-toolchain-cargo-xwin,
-# rather that re-building cargo-xwin from source.
-
 ARG UBUNTU_SNAPSHOT=20260127T200000Z
 
 ARG RUST_NIGHTLY=nightly-2026-03-11
 
-ARG CARGO_XWIN_VERSION=0.21.4
+ARG CARGO_XWIN_VERSION=0.23.1
 ARG XWIN_SDK_VERSION=10.0.22621
 ARG XWIN_CRT_VERSION=14.44.17.14
 
@@ -34,6 +31,7 @@ RUN apt install -y --update ca-certificates && \
         llvm \
         clang \
         lld \
+        python3 \
     && ln -s /usr/bin/llvm-mt /usr/bin/mt.exe \
     && rm -rf /var/lib/apt/lists/*
 
@@ -56,7 +54,10 @@ ARG CARGO_XWIN_VERSION
 ARG XWIN_SDK_VERSION
 ARG XWIN_CRT_VERSION
 
-RUN cargo install --locked cargo-xwin@${CARGO_XWIN_VERSION}
+COPY --from=ghcr.io/astral-sh/uv:0.12.15@sha256:62f8c047d0a0e9ece6b53fc63df902585a67a47a7f318ddec4a37db586edc8e3 /uv /usr/local/bin/uv
+
+RUN uv pip install --python /usr/bin/python3 --prefix ${CARGO_HOME} \
+    --only-binary=:all: --no-deps astral-dev-toolchain-cargo-xwin==${CARGO_XWIN_VERSION}
 
 RUN cargo xwin cache xwin \
       --xwin-sdk-version ${XWIN_SDK_VERSION} \
