@@ -259,8 +259,11 @@ impl<'a> RequirementExpander<'a> {
             })
             .filter(move |requirement| self.is_requirement_applicable(requirement, extra))
             .flat_map(move |requirement| {
-                iter::once(requirement.clone())
-                    .chain(self.constraints_for_requirement(requirement, extra))
+                iter::once(requirement.clone()).chain(self.constraints_for_requirement(
+                    requirement,
+                    extra,
+                    context.override_package(),
+                ))
             })
     }
 
@@ -319,6 +322,7 @@ impl<'a> RequirementExpander<'a> {
         &'data self,
         requirement: Cow<'data, Requirement>,
         extra: Option<&'parameters ExtraName>,
+        package: Option<(&'parameters PackageName, &'parameters Version)>,
     ) -> impl Iterator<Item = Cow<'data, Requirement>> + 'parameters
     where
         'data: 'parameters,
@@ -331,6 +335,23 @@ impl<'a> RequirementExpander<'a> {
             .into_iter()
             .flatten()
             .filter_map(move |constraint| {
+                // A URL override supplies the source in these environments. Keep any version
+                // constraints, but do not introduce a second URL from a superseded constraint.
+                let mut constraint = Cow::Borrowed(constraint);
+                if constraint.source.to_verbatim_parsed_url().is_some() {
+                    let overridden = self
+                        .overrides
+                        .url_override_marker_for(package, &constraint.name);
+                    if !overridden.is_false() {
+                        let marker = constraint.marker.and(overridden.negate());
+                        if marker.is_false() {
+                            return None;
+                        }
+                        if marker != constraint.marker {
+                            constraint.to_mut().marker = marker;
+                        }
+                    }
+                }
                 // If the requirement would not be selected with any Python version
                 // supported by the root, skip it.
                 let constraint = if constraint.marker.is_true() {
@@ -338,7 +359,7 @@ impl<'a> RequirementExpander<'a> {
                     // and the constraint is `requests ; python_version == '3.6'`, the
                     // constraint should only apply when _both_ markers are true.
                     if requirement.marker.is_true() {
-                        Cow::Borrowed(constraint)
+                        constraint
                     } else {
                         let mut marker = constraint.marker;
                         marker = marker.and(requirement.marker);
@@ -387,7 +408,7 @@ impl<'a> RequirementExpander<'a> {
                     }
 
                     if marker == constraint.marker {
-                        Cow::Borrowed(constraint)
+                        constraint
                     } else {
                         Cow::Owned(Requirement {
                             name: constraint.name.clone(),

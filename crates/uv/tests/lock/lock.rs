@@ -22468,7 +22468,7 @@ fn lock_metadata_free_direct_url_constraint() -> Result<()> {
     Ok(())
 }
 
-/// A direct URL constraint can select a source across disjoint platform markers.
+/// A direct URL constraint selects its source only where its marker is active.
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_metadata_free_disjoint_marker_direct_url_constraint() -> Result<()> {
@@ -22514,7 +22514,7 @@ fn lock_metadata_free_disjoint_marker_direct_url_constraint() -> Result<()> {
         .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 4 packages in [TIME]
+    Resolved 5 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.lock()
@@ -22527,7 +22527,7 @@ fn lock_metadata_free_disjoint_marker_direct_url_constraint() -> Result<()> {
         .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 4 packages in [TIME]
+    Resolved 5 packages in [TIME]
     ");
 
     Ok(())
@@ -22599,7 +22599,7 @@ fn lock_metadata_free_shared_direct_sources() -> Result<()> {
     Ok(())
 }
 
-/// First-party direct sources apply globally, even across disjoint platform markers.
+/// First-party direct sources do not replace registry packages across disjoint platform markers.
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_metadata_free_shared_disjoint_marker_direct_sources() -> Result<()> {
@@ -22645,7 +22645,7 @@ fn lock_metadata_free_shared_disjoint_marker_direct_sources() -> Result<()> {
         .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 4 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.lock()
@@ -22658,13 +22658,13 @@ fn lock_metadata_free_shared_disjoint_marker_direct_sources() -> Result<()> {
         .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 4 packages in [TIME]
     ");
 
     Ok(())
 }
 
-/// A conditional provider shares its production and activated-extra sources across environments.
+/// A conditional provider shares its production and activated-extra sources only where it is included.
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_metadata_free_shared_conditional_provider_sources() -> Result<()> {
@@ -22679,10 +22679,10 @@ fn lock_metadata_free_shared_conditional_provider_sources() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = [
             "provider[direct] ; sys_platform == 'darwin'",
-            "leaf",
-            "twig",
-            "extra-leaf[nested]",
-            "extra-twig",
+            "leaf ; sys_platform == 'darwin'",
+            "twig ; sys_platform == 'darwin'",
+            "extra-leaf[nested] ; sys_platform == 'darwin'",
+            "extra-twig ; sys_platform == 'darwin'",
         ]
 
         [tool.uv.sources]
@@ -22696,10 +22696,10 @@ fn lock_metadata_free_shared_conditional_provider_sources() -> Result<()> {
         name = "provider"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["leaf ; sys_platform != 'darwin'"]
+        dependencies = ["leaf ; sys_platform == 'darwin'"]
 
         [project.optional-dependencies]
-        direct = ["extra-leaf[nested] ; sys_platform != 'darwin'"]
+        direct = ["extra-leaf[nested] ; sys_platform == 'darwin'"]
 
         [tool.uv.sources]
         leaf = { path = "../leaf" }
@@ -22776,16 +22776,34 @@ fn lock_metadata_free_shared_conditional_provider_sources() -> Result<()> {
     Resolved 6 packages in [TIME]
     ");
 
+    // Requiring the leaf outside the provider's marker cannot reuse the locked direct source.
+    let root = context.temp_dir.child("pyproject.toml");
+    let root_contents = context.read("pyproject.toml");
+    root.write_str(&root_contents.replace("leaf ; sys_platform == 'darwin'", "leaf"))?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features").arg("lock-without-metadata")
+        .arg("--check").arg("--offline").arg("--no-cache").arg("--no-index"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies for split (markers: python_full_version >= '3.12' and sys_platform != 'darwin')
+      cause: Because leaf was not found in the provided package locations and your project depends on leaf, we can conclude that your project's requirements are unsatisfiable.
+
+    hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
+
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+    ");
+    root.write_str(&root_contents)?;
+
     // Script requirements enter source discovery without a workspace package.
     context.temp_dir.child("script.py").write_str(indoc! {r#"
         # /// script
         # requires-python = ">=3.12"
         # dependencies = [
         #     "provider[direct] ; sys_platform == 'darwin'",
-        #     "leaf",
-        #     "twig",
-        #     "extra-leaf[nested]",
-        #     "extra-twig",
+        #     "leaf ; sys_platform == 'darwin'",
+        #     "twig ; sys_platform == 'darwin'",
+        #     "extra-leaf[nested] ; sys_platform == 'darwin'",
+        #     "extra-twig ; sys_platform == 'darwin'",
         # ]
         #
         # [tool.uv.sources]
@@ -22819,7 +22837,8 @@ fn lock_metadata_free_shared_conditional_provider_sources() -> Result<()> {
     Resolved 5 packages in [TIME]
     ");
 
-    // A bare extra request cannot authorize sources omitted by the direct source provider.
+    // The root's bare extra request can activate a source-bearing extra on the independently
+    // grounded direct package, even when the provider itself requests only the base package.
     context
         .temp_dir
         .child("provider/pyproject.toml")
@@ -22831,18 +22850,190 @@ fn lock_metadata_free_shared_conditional_provider_sources() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
         .arg("lock-without-metadata")
-        .arg("--check")
         .arg("--offline")
-        .arg("--no-cache")
         .arg("--no-index"), @"
-    exit_code: 1 (failure)
+    exit_code: 0 (success)
     ----- stderr -----
-    error: Failed to resolve dependencies for package `extra-leaf==0.1.0`
-      cause: Package `extra-twig` was included as a URL dependency. URL dependencies must be expressed as direct requirements or constraints. Consider adding `extra-twig @ file://[TEMP_DIR]/extra-twig` to your dependencies or constraints file.
-
-    hint: `extra-leaf` (v0.1.0) was included because `project` (v0.1.0) depends on `extra-leaf`
+    Resolved 6 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features").arg("lock-without-metadata")
+        .arg("--check").arg("--offline").arg("--no-cache").arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
     ");
 
+    Ok(())
+}
+
+/// A rejected registry candidate cannot activate a source-bearing extra on a retained local
+/// dependency; the target and its metadata must come from the registry in the resulting lock.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_excluded_direct_source_provider_keeps_registry() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "lock-excluded-url-source"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.selector.versions."2.0.0"]
+        requires = ["provider[url]", "missing"]
+        [packages.selector.versions."1.0.0"]
+        [packages.target.versions."1.0.0"]
+        requires = ["registry-only"]
+        [packages.registry-only.versions."1.0.0"]
+        [packages.url-only.versions."1.0.0"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["provider", "selector", "target"]
+
+        [tool.uv.sources]
+        provider = { path = "provider" }
+    "#})?;
+    context
+        .temp_dir
+        .child("provider/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "provider"
+        version = "1.0.0"
+
+        [project.optional-dependencies]
+        url = ["target"]
+
+        [tool.uv.sources]
+        target = { path = "../target" }
+    "#})?;
+    context
+        .temp_dir
+        .child("target/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "target"
+        version = "1.0.0"
+        dependencies = ["url-only"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features").arg("lock-without-metadata")
+        .arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.export().arg("--frozen").arg("--no-header")
+        .arg("--no-hashes").arg("--no-emit-project"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    ./provider
+        # via project
+    registry-only==1.0.0
+        # via target
+    selector==1.0.0
+        # via project
+    target==1.0.0
+        # via project
+    ");
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features").arg("lock-without-metadata")
+        .arg("--check").arg("--offline").arg("--no-cache")
+        .arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// A URL override replaces a URL constraint only in its own environments, both during resolution
+/// and when validating the resulting lock without cached metadata.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_url_override_and_constraint_markers() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "lock-conditional-url-override"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.constraint-only.versions."1.0.0"]
+        [packages.override-only.versions."1.0.0"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    let constrained = context.temp_dir.child("constrained");
+    let overridden = context.temp_dir.child("overridden");
+    constrained.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "target"
+        version = "1.0.0"
+        dependencies = ["constraint-only"]
+    "#})?;
+    overridden.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "target"
+        version = "1.0.0"
+        dependencies = ["override-only"]
+    "#})?;
+    let constrained = Url::from_directory_path(constrained.path())
+        .map_err(|()| anyhow!("constrained directory is not an absolute path"))?;
+    let overridden = Url::from_directory_path(overridden.path())
+        .map_err(|()| anyhow!("overridden directory is not an absolute path"))?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["target"]
+
+        [tool.uv]
+        constraint-dependencies = ["target @ {constrained}"]
+        override-dependencies = [
+            "target @ {overridden} ; sys_platform == 'linux'",
+            "target ; sys_platform != 'linux'",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features").arg("lock-without-metadata")
+        .arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.export().arg("--frozen").arg("--no-header")
+        .arg("--no-hashes").arg("--no-emit-project"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    file://[TEMP_DIR]/constrained ; sys_platform != 'linux'
+        # via project
+    file://[TEMP_DIR]/overridden ; sys_platform == 'linux'
+        # via project
+    constraint-only==1.0.0 ; sys_platform != 'linux'
+        # via target
+    override-only==1.0.0 ; sys_platform == 'linux'
+        # via target
+    ");
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features").arg("lock-without-metadata")
+        .arg("--check").arg("--offline").arg("--no-cache")
+        .arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
     Ok(())
 }
 
@@ -22910,7 +23101,7 @@ fn lock_metadata_free_shared_git_direct_source() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.13"
-        dependencies = ["basic-package ; sys_platform == 'win32'", "provider"]
+        dependencies = ["basic-package ; sys_platform == 'darwin'", "provider"]
 
         [tool.uv.sources]
         provider = {{ git = "{repository_url}" }}
@@ -22934,6 +23125,20 @@ fn lock_metadata_free_shared_git_direct_source() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
+    ");
+
+    let root = context.temp_dir.child("pyproject.toml");
+    let root_contents = context.read("pyproject.toml");
+    root.write_str(&root_contents.replace("sys_platform == 'darwin'", "sys_platform == 'win32'"))?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features").arg("lock-without-metadata")
+        .arg("--check").arg("--offline").arg("--no-cache"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies for split (markers: python_full_version >= '3.13' and sys_platform != 'darwin')
+      cause: Because there are no versions of basic-package{sys_platform == 'win32'} and your project depends on basic-package{sys_platform == 'win32'}, we can conclude that your project's requirements are unsatisfiable.
+
+    hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
     ");
 
     Ok(())
@@ -23516,7 +23721,7 @@ fn lock_metadata_free_shared_static_metadata_direct_source() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["httpx[http2]", "local", "anyio", "six"]
+        dependencies = ["httpx[http2]", "local", "anyio==4.4.0", "six"]
 
         [tool.uv.sources]
         local = {{ path = "local" }}
@@ -23589,7 +23794,7 @@ fn lock_metadata_free_shared_static_metadata_direct_source() -> Result<()> {
     error: Failed to resolve dependencies for package `anyio==4.4.0`
       cause: Package `six` was included as a URL dependency. URL dependencies must be expressed as direct requirements or constraints. Consider adding `six @ http://[LOCALHOST]/files/six-1.0.0-py3-none-any.whl` to your dependencies or constraints file.
 
-    hint: `anyio` (v4.4.0) was included because `project` (v0.1.0) depends on `anyio`
+    hint: `anyio` (v4.4.0) was included because `project` (v0.1.0) depends on `anyio==4.4.0`
     ");
 
     Ok(())

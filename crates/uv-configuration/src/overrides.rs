@@ -231,6 +231,26 @@ impl Overrides {
         self.scoped.contains_key(package)
     }
 
+    /// Return the environments in which an effective URL override replaces the named requirement's
+    /// direct source, including direct sources imposed by constraints.
+    pub fn url_override_marker_for(
+        &self,
+        package: Option<(&PackageName, &Version)>,
+        dependency: &PackageName,
+    ) -> MarkerTree {
+        let requirements = package
+            .and_then(|(package, version)| self.scoped_for(package, version))
+            .and_then(|scoped| scoped.overrides.get(dependency))
+            .or_else(|| self.get(dependency));
+        requirements
+            .into_iter()
+            .flatten()
+            .filter(|requirement| requirement.source.to_verbatim_parsed_url().is_some())
+            .fold(MarkerTree::FALSE, |marker, requirement| {
+                marker.or(requirement.marker.without_extras())
+            })
+    }
+
     /// Return whether a package has overrides for an exact version.
     pub(crate) fn has_exact_scope(&self, package: &PackageName, version: &Version) -> bool {
         self.scoped.get(package).is_some_and(|entries| {

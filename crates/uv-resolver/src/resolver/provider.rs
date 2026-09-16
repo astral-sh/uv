@@ -52,6 +52,7 @@ pub trait ResolverProvider {
     fn get_or_build_wheel_metadata<'io>(
         &'io self,
         dist: &'io Dist,
+        hasher: &'io HashStrategy,
     ) -> impl Future<Output = WheelMetadataResult> + 'io;
 
     /// Get the metadata for an installed distribution.
@@ -225,10 +226,14 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
     }
 
     /// Fetch the metadata for a distribution, building it if necessary.
-    async fn get_or_build_wheel_metadata<'io>(&'io self, dist: &'io Dist) -> WheelMetadataResult {
+    async fn get_or_build_wheel_metadata<'io>(
+        &'io self,
+        dist: &'io Dist,
+        hasher: &'io HashStrategy,
+    ) -> WheelMetadataResult {
         match self
             .fetcher
-            .get_or_build_wheel_metadata(dist, self.hasher.metadata_policy(dist))
+            .get_or_build_wheel_metadata(dist, hasher.metadata_policy(dist))
             .await
         {
             Ok(metadata) => Ok(MetadataResponse::Found(metadata)),

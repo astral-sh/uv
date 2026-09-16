@@ -346,12 +346,9 @@ fn parse_dist(
 
         // Extract the metadata.
         let metadata = {
-            let response = in_memory
-                .distributions()
-                .get(&metadata_id)
-                .unwrap_or_else(|| {
-                    panic!("Every URL distribution should have metadata: {metadata_id:?}")
-                });
+            let response = in_memory.resolved_direct(&metadata_id).unwrap_or_else(|| {
+                panic!("Every URL distribution should have metadata: {metadata_id:?}")
+            });
 
             let MetadataResponse::Found(archive) = &*response else {
                 panic!("Every URL distribution should have metadata: {metadata_id:?}")
@@ -454,13 +451,30 @@ fn get_hashes(
     }
 
     // 3. Look for hashes computed for the specific wheel or source distribution.
-    if let Some(metadata_response) = in_memory.distributions().get(metadata_id) {
+    let metadata_response = if url.is_some() {
+        in_memory.resolved_direct(metadata_id)
+    } else {
+        in_memory.distributions().get(metadata_id)
+    };
+    if let Some(metadata_response) = metadata_response {
         if let MetadataResponse::Found(ref archive) = *metadata_response {
             let mut digests = archive.hashes.clone();
             digests.sort_unstable();
             if !digests.is_empty() {
                 return digests;
             }
+        }
+    }
+
+    // A lockfile may already supply trusted digests for this exact direct artifact. Metadata for a
+    // wheel can be read without redownloading its bytes, so reuse those digests when none were
+    // computed during this resolution.
+    if let Some(url) = url
+        && hasher.collection() != HashCollection::None
+    {
+        let policy = hasher.archive_policy_for_url(&url.verbatim);
+        if !policy.digests().is_empty() {
+            return HashDigests::from(policy.digests());
         }
     }
 

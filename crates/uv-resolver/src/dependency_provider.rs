@@ -2,9 +2,9 @@ use std::convert::Infallible;
 
 use pubgrub::{Dependencies, DependencyProvider, PackageResolutionStatistics};
 
-use uv_pep440::Version;
-
-use crate::pubgrub::{PubGrubPackage, PubGrubPriority, PubGrubTiebreaker, Range};
+use crate::pubgrub::{
+    CandidateSet, PubGrubPackage, PubGrubPriority, PubGrubTiebreaker, SolverVersion,
+};
 use crate::resolver::UnavailableReason;
 
 /// We don't use a dependency provider, we interact with state directly, but we still need this one
@@ -14,8 +14,8 @@ pub(crate) struct UvDependencyProvider;
 
 impl DependencyProvider for UvDependencyProvider {
     type P = PubGrubPackage;
-    type V = Version;
-    type VS = Range<Version>;
+    type V = SolverVersion;
+    type VS = CandidateSet;
     type M = UnavailableReason;
     /// Main priority and tiebreak for virtual packages.
     type Priority = (PubGrubPriority, PubGrubTiebreaker);

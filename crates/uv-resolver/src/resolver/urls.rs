@@ -1,230 +1,280 @@
-use either::Either;
-use rustc_hash::FxHashMap;
+use std::sync::{Arc, Mutex};
+
+use rustc_hash::{FxHashMap, FxHashSet};
 use same_file::is_same_file;
-use tracing::debug;
 
 use uv_cache_key::CanonicalUrl;
-use uv_distribution_types::RequirementSource;
+use uv_distribution_types::Requirement;
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
-use uv_pep508::VerbatimUrl;
-use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl, VerbatimParsedUrl};
+use uv_pep440::Version;
+use uv_pep508::MarkerTree;
+use uv_pypi_types::{ParsedUrl, VerbatimParsedUrl};
 
-use crate::resolver::ForkMap;
-use crate::{DependencyMode, Manifest, ResolveError, ResolverEnvironment};
+use crate::pubgrub::SourceId;
+use crate::{DependencyMode, Manifest, ResolverEnvironment};
 
-/// The URLs that are allowed for packages.
-///
-/// These are the URLs used in the root package or by other URL dependencies (including path
-/// dependencies). They take precedence over requirements by version (except for the special case
-/// where we are in a fork that doesn't use any of the URL(s) used in other forks). Each fork may
-/// only use a single URL.
-///
-/// This type contains all URLs without checking, the validation happens in
-/// [`crate::fork_urls::ForkUrls`].
+/// Root URL inputs and shared identities for direct resources discovered during solving.
 #[derive(Debug, Default)]
 pub(crate) struct Urls {
-    /// URL requirements in overrides. An override URL replaces all requirements and constraints
-    /// URLs. There can be multiple URLs for the same package as long as they are in different
-    /// forks.
-    overrides: ForkMap<VerbatimParsedUrl>,
-    /// URLs from regular requirements or from constraints. There can be multiple URLs for the same
-    /// package as long as they are in different forks.
-    regular: FxHashMap<PackageName, Vec<VerbatimParsedUrl>>,
+    /// Names whose root URL input may affect whether speculative registry requests are useful.
+    root_names: FxHashSet<PackageName>,
+    /// The concrete resources which root requirements and configuration might authorize.
+    initial: Vec<Requirement>,
+    /// Root-authored constraints and overrides may authorize a dependency of a registry package.
+    configuration: FxHashMap<PackageName, Vec<ConfiguredUrl>>,
+    /// Resource identities are shared between environmental forks and source-search retries.
+    resources: Mutex<Vec<(PackageName, Arc<VerbatimParsedUrl>)>>,
+}
+
+#[derive(Debug)]
+struct ConfiguredUrl {
+    scope: Option<(PackageName, Option<Version>)>,
+    requirement: Requirement,
 }
 
 impl Urls {
     pub(crate) fn from_manifest(
         manifest: &Manifest,
         env: &ResolverEnvironment,
-        git: &GitResolver,
         dependencies: DependencyMode,
     ) -> Self {
-        let mut regular: FxHashMap<PackageName, Vec<VerbatimParsedUrl>> = FxHashMap::default();
-        let mut overrides = ForkMap::default();
-
-        // Merge requirement and constraint URLs in their original order. Then replay requirements
-        // which aren't forced-relative (user-provided) to allow the URL spelling to take precedence.
-        // Partitioning (instead of appending) would impact unrelated merging semantics.
-        for (requirement, force_relative) in manifest
+        let mut root_names = FxHashSet::default();
+        let mut initial = Vec::new();
+        for requirement in manifest
             .requirements_no_overrides(env, dependencies)
-            .map(|requirement| (requirement, true))
-            .chain(
-                manifest
-                    .requirements_no_overrides(env, dependencies)
-                    .filter(|requirement| {
-                        matches!(
-                            &requirement.source,
-                            RequirementSource::Path { url, .. }
-                                | RequirementSource::Directory { url, .. }
-                                if !url.force_relative()
-                        )
-                    })
-                    .map(|requirement| (requirement, false)),
-            )
+            .chain(manifest.overrides(env, dependencies))
         {
-            let Some(mut url) = requirement.source.to_verbatim_parsed_url() else {
-                // Registry requirement
-                continue;
-            };
-            if force_relative
-                && matches!(
-                    &url.parsed_url,
-                    ParsedUrl::Path(_) | ParsedUrl::Directory(_)
-                )
-            {
-                // Force relative paths for the initial merge so replayed user-provided requirements
-                // determine the final path preference.
-                url.verbatim = url.verbatim.with_force_relative(true);
-            }
-
-            let package_urls = regular.entry(requirement.name.clone()).or_default();
-            if let Some(package_url) = package_urls
-                .iter_mut()
-                .find(|package_url| same_resource(&package_url.parsed_url, &url.parsed_url, git))
-            {
-                // Allow editables to override non-editables.
-                let previous_editable = package_url.is_editable();
-                // The last specified URL spelling wins.
-                *package_url = url;
-                if previous_editable {
-                    if let VerbatimParsedUrl {
-                        parsed_url: ParsedUrl::Directory(ParsedDirectoryUrl { editable, .. }),
-                        verbatim: _,
-                    } = package_url
-                    {
-                        if editable.is_none() {
-                            debug!("Allowing an editable variant of {}", &package_url.verbatim);
-                            *editable = Some(true);
-                        }
-                    }
-                }
-            } else {
-                package_urls.push(url);
+            if requirement.source.to_verbatim_parsed_url().is_some() {
+                root_names.insert(requirement.name.clone());
+                initial.push(requirement.into_owned());
             }
         }
 
-        // Add all URLs from overrides. If there is an override URL, all other URLs from
-        // requirements and constraints are moot and will be removed.
-        for requirement in manifest.overrides(env, dependencies) {
-            let Some(url) = requirement.source.to_verbatim_parsed_url() else {
-                // Registry requirement
-                continue;
-            };
-            // We only clear for non-URL overrides, since e.g. with an override `anyio==0.0.0` and
-            // a requirements.txt entry `./anyio`, we still use the URL. See
-            // `allow_recursive_url_local_path_override_constraint`.
-            regular.remove(&requirement.name);
-            overrides.add(requirement.as_ref(), url);
+        let mut configuration = FxHashMap::<_, Vec<_>>::default();
+        for requirement in manifest
+            .constraints
+            .requirements()
+            .chain(manifest.overrides.global_requirements())
+        {
+            if requirement.source.to_verbatim_parsed_url().is_some() {
+                configuration
+                    .entry(requirement.name.clone())
+                    .or_default()
+                    .push(ConfiguredUrl {
+                        scope: None,
+                        requirement: requirement.clone(),
+                    });
+            }
+        }
+        for (package, version, requirement) in manifest.overrides.scoped_requirements() {
+            if requirement.source.to_verbatim_parsed_url().is_some() {
+                configuration
+                    .entry(requirement.name.clone())
+                    .or_default()
+                    .push(ConfiguredUrl {
+                        scope: Some((package.clone(), version.cloned())),
+                        requirement: requirement.clone(),
+                    });
+            }
         }
 
-        Self { overrides, regular }
-    }
-
-    /// Return an iterator over the allowed URLs for the given package.
-    ///
-    /// If we have a URL override, apply it unconditionally for registry and URL requirements.
-    /// Otherwise, there are two case: for a URL requirement (`url` isn't `None`), check that the
-    /// URL is allowed and return its canonical form.
-    ///
-    /// For registry requirements, we return an empty iterator.
-    pub(crate) fn get_url<'a>(
-        &'a self,
-        env: &'a ResolverEnvironment,
-        name: &'a PackageName,
-        url: Option<&'a VerbatimParsedUrl>,
-        git: &'a GitResolver,
-    ) -> Result<impl Iterator<Item = &'a VerbatimParsedUrl>, ResolveError> {
-        if self.overrides.contains_key(name) {
-            Ok(Either::Left(Either::Left(
-                self.overrides.get(name, env).into_iter(),
-            )))
-        } else if let Some(url) = url {
-            let url =
-                self.canonicalize_allowed_url(env, name, git, &url.verbatim, &url.parsed_url)?;
-            Ok(Either::Left(Either::Right(std::iter::once(url))))
-        } else {
-            Ok(Either::Right(std::iter::empty()))
+        root_names.extend(configuration.keys().cloned());
+        initial.extend(
+            configuration
+                .values()
+                .flatten()
+                .map(|configured| configured.requirement.clone()),
+        );
+        initial.sort();
+        initial.dedup();
+        Self {
+            root_names,
+            initial,
+            configuration,
+            resources: Mutex::default(),
         }
     }
 
-    /// Return `true` if the package has any URL (from overrides or regular requirements).
-    pub(crate) fn any_url(&self, name: &PackageName) -> bool {
-        self.overrides.contains_key(name) || self.get_regular(name).is_some()
+    /// Whether any root input can introduce a URL anywhere in the dependency graph.
+    pub(crate) fn has_potential(&self) -> bool {
+        !self.root_names.is_empty()
     }
 
-    /// Return the allowed [`VerbatimUrl`]s for given package from regular requirements and
-    /// constraints (but not overrides), if any.
-    ///
-    /// It's more than one more URL if they are in different forks (or conflict after forking).
-    fn get_regular(&self, package: &PackageName) -> Option<&[VerbatimParsedUrl]> {
-        self.regular.get(package).map(Vec::as_slice)
+    pub(crate) fn initial(&self) -> &[Requirement] {
+        &self.initial
     }
 
-    /// Check if a URL is allowed (known), and if so, return its canonical form.
-    fn canonicalize_allowed_url<'a>(
-        &'a self,
-        env: &ResolverEnvironment,
-        package_name: &'a PackageName,
-        git: &'a GitResolver,
-        verbatim_url: &'a VerbatimUrl,
-        parsed_url: &'a ParsedUrl,
-    ) -> Result<&'a VerbatimParsedUrl, ResolveError> {
-        let Some(expected) = self.get_regular(package_name) else {
-            return Err(ResolveError::DisallowedUrl {
-                name: package_name.clone(),
-                url: verbatim_url.to_string(),
-            });
-        };
+    /// Give equivalent resource spellings the same immutable solver identity.
+    pub(crate) fn intern(
+        &self,
+        name: &PackageName,
+        url: &VerbatimParsedUrl,
+        git: &GitResolver,
+        preferred: &[SourceId],
+    ) -> SourceId {
+        let mut resources = self
+            .resources
+            .lock()
+            .expect("URL resource lock is not poisoned");
+        if let Some(source) = preferred.iter().find(|source| {
+            let (package, resource) = &resources[source.0];
+            package == name && same_resource(&resource.parsed_url, &url.parsed_url, git)
+        }) {
+            return *source;
+        }
+        if let Some(index) = resources.iter().position(|(package, resource)| {
+            package == name && same_resource(&resource.parsed_url, &url.parsed_url, git)
+        }) {
+            return SourceId(index);
+        }
+        let id = SourceId(resources.len());
+        resources.push((name.clone(), Arc::new(url.clone())));
+        id
+    }
 
-        let matching_urls: Vec<_> = expected
+    /// Look up an already registered resource without adding URLs from inactive metadata.
+    pub(crate) fn lookup(
+        &self,
+        name: &PackageName,
+        url: &VerbatimParsedUrl,
+        git: &GitResolver,
+    ) -> Vec<SourceId> {
+        self.resources
+            .lock()
+            .expect("URL resource lock is not poisoned")
             .iter()
-            .filter(|requirement| same_resource(&requirement.parsed_url, parsed_url, git))
-            .collect();
+            .enumerate()
+            .filter_map(|(index, (package, resource))| {
+                (package == name && same_resource(&resource.parsed_url, &url.parsed_url, git))
+                    .then_some(SourceId(index))
+            })
+            .collect()
+    }
 
-        let [allowed_url] = matching_urls.as_slice() else {
-            let mut conflicting_urls: Vec<_> = matching_urls
-                .into_iter()
-                .map(|parsed_url| parsed_url.parsed_url.clone())
-                .chain(std::iter::once(parsed_url.clone()))
-                .collect();
-            conflicting_urls.sort();
-            return Err(ResolveError::ConflictingUrls {
-                package_name: package_name.clone(),
-                urls: conflicting_urls,
-                env: env.clone(),
-            });
+    /// Retrieve the presentation originally used to register a resource identity.
+    pub(crate) fn get(&self, source: SourceId) -> Arc<VerbatimParsedUrl> {
+        self.resources
+            .lock()
+            .expect("URL resource lock is not poisoned")[source.0]
+            .1
+            .clone()
+    }
+
+    /// Whether this expanded URL requirement is independently authorized by root configuration.
+    pub(crate) fn configuration_authorizes(
+        &self,
+        parent: Option<(&PackageName, &Version)>,
+        requirement: &Requirement,
+        git: &GitResolver,
+    ) -> bool {
+        let Some(url) = requirement.source.to_verbatim_parsed_url() else {
+            return false;
         };
-        Ok(*allowed_url)
+        self.configuration
+            .get(&requirement.name)
+            .is_some_and(|requirements| {
+                requirements.iter().any(|configured| {
+                    let matches_scope =
+                        configured.scope.as_ref().is_none_or(|(package, version)| {
+                            parent.is_some_and(|(parent, parent_version)| {
+                                parent == package
+                                    && version
+                                        .as_ref()
+                                        .is_none_or(|version| version == parent_version)
+                            })
+                        });
+                    let marker = requirement.marker.without_extras();
+                    let configured_marker = configured.requirement.marker.without_extras();
+                    matches_scope
+                        && (configured_marker == MarkerTree::TRUE
+                            || marker.is_disjoint(configured_marker.negate()))
+                        && configured
+                            .requirement
+                            .source
+                            .to_verbatim_parsed_url()
+                            .is_some_and(|configured| {
+                                same_resource(&url.parsed_url, &configured.parsed_url, git)
+                            })
+                })
+            })
+    }
+
+    /// Whether an initial requirement, override, or constraint names a URL for this package.
+    pub(crate) fn any_url(&self, name: &PackageName) -> bool {
+        self.root_names.contains(name)
     }
 }
 
 /// Returns `true` if the [`ParsedUrl`] instances point to the same resource.
-fn same_resource(a: &ParsedUrl, b: &ParsedUrl, git: &GitResolver) -> bool {
-    match (a, b) {
-        (ParsedUrl::Archive(a), ParsedUrl::Archive(b)) => {
-            a.subdirectory.as_deref().map(uv_fs::normalize_path)
-                == b.subdirectory.as_deref().map(uv_fs::normalize_path)
-                && CanonicalUrl::new(a.url.clone()) == CanonicalUrl::new(b.url.clone())
+pub(super) fn same_resource(a: &ParsedUrl, b: &ParsedUrl, git: &GitResolver) -> bool {
+    match a {
+        ParsedUrl::Archive(a) => {
+            if let ParsedUrl::Archive(b) = b {
+                a.subdirectory.as_deref().map(uv_fs::normalize_path)
+                    == b.subdirectory.as_deref().map(uv_fs::normalize_path)
+                    && CanonicalUrl::new(a.url.clone()) == CanonicalUrl::new(b.url.clone())
+            } else {
+                false
+            }
         }
-        (ParsedUrl::GitDirectory(a), ParsedUrl::GitDirectory(b)) => {
-            a.subdirectory.as_deref().map(uv_fs::normalize_path)
-                == b.subdirectory.as_deref().map(uv_fs::normalize_path)
-                && git.same_ref(&a.url, &b.url)
+        ParsedUrl::GitDirectory(a) => {
+            if let ParsedUrl::GitDirectory(b) = b {
+                a.subdirectory.as_deref().map(uv_fs::normalize_path)
+                    == b.subdirectory.as_deref().map(uv_fs::normalize_path)
+                    && git.same_ref(&a.url, &b.url)
+            } else {
+                false
+            }
         }
-        (ParsedUrl::GitPath(a), ParsedUrl::GitPath(b)) => {
-            uv_fs::normalize_path(&a.install_path) == uv_fs::normalize_path(&b.install_path)
-                && git.same_ref(&a.url, &b.url)
+        ParsedUrl::GitPath(a) => {
+            if let ParsedUrl::GitPath(b) = b {
+                uv_fs::normalize_path(&a.install_path) == uv_fs::normalize_path(&b.install_path)
+                    && git.same_ref(&a.url, &b.url)
+            } else {
+                false
+            }
         }
-        (ParsedUrl::Path(a), ParsedUrl::Path(b)) => {
-            a.install_path == b.install_path
-                || is_same_file(&a.install_path, &b.install_path).unwrap_or(false)
+        ParsedUrl::Path(a) => {
+            if let ParsedUrl::Path(b) = b {
+                a.install_path == b.install_path
+                    || is_same_file(&a.install_path, &b.install_path).unwrap_or(false)
+            } else {
+                false
+            }
         }
-        (ParsedUrl::Directory(a), ParsedUrl::Directory(b)) => {
-            (a.install_path == b.install_path
-                || is_same_file(&a.install_path, &b.install_path).unwrap_or(false))
-                && a.editable.is_none_or(|a| b.editable.is_none_or(|b| a == b))
+        ParsedUrl::Directory(a) => {
+            if let ParsedUrl::Directory(b) = b {
+                (a.install_path == b.install_path
+                    || is_same_file(&a.install_path, &b.install_path).unwrap_or(false))
+                    && a.editable.is_none_or(|a| b.editable.is_none_or(|b| a == b))
+            } else {
+                false
+            }
         }
-        _ => false,
+    }
+}
+
+/// Whether Git URLs could be aliases once their references have been resolved.
+pub(super) fn could_be_same_git_resource(a: &ParsedUrl, b: &ParsedUrl) -> bool {
+    match a {
+        ParsedUrl::GitDirectory(a) => {
+            if let ParsedUrl::GitDirectory(b) = b {
+                a.subdirectory.as_deref().map(uv_fs::normalize_path)
+                    == b.subdirectory.as_deref().map(uv_fs::normalize_path)
+                    && a.url.repository() == b.url.repository()
+            } else {
+                false
+            }
+        }
+        ParsedUrl::GitPath(a) => {
+            if let ParsedUrl::GitPath(b) = b {
+                uv_fs::normalize_path(&a.install_path) == uv_fs::normalize_path(&b.install_path)
+                    && a.url.repository() == b.url.repository()
+            } else {
+                false
+            }
+        }
+        ParsedUrl::Archive(_) | ParsedUrl::Path(_) | ParsedUrl::Directory(_) => false,
     }
 }

@@ -9,7 +9,6 @@ use uv_pep440::Version;
 
 use crate::FxHashbrownMap;
 use crate::dependency_provider::UvDependencyProvider;
-use crate::fork_urls::ForkUrls;
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubPython, Range};
 
 /// A prioritization map to guide the PubGrub resolution process.
@@ -37,7 +36,7 @@ impl PubGrubPriorities {
         &mut self,
         package: &PubGrubPackage,
         version: &Range<Version>,
-        urls: &ForkUrls,
+        has_url: bool,
     ) {
         let len = self.virtual_package_tiebreaker.len();
         self.virtual_package_tiebreaker
@@ -59,7 +58,7 @@ impl PubGrubPriorities {
                 let index = Self::get_index(&entry).unwrap_or(len);
 
                 // Compute the priority.
-                let priority = if urls.get(name).is_some() {
+                let priority = if has_url {
                     PubGrubPriority::DirectUrl(Reverse(index))
                 } else if version.is_singleton_constraint() {
                     PubGrubPriority::Singleton(Reverse(index))
@@ -82,7 +81,7 @@ impl PubGrubPriorities {
             }
             EntryRef::Vacant(entry) => {
                 // Compute the priority.
-                let priority = if urls.get(name).is_some() {
+                let priority = if has_url {
                     PubGrubPriority::DirectUrl(Reverse(len))
                 } else if version.is_singleton_constraint() {
                     PubGrubPriority::Singleton(Reverse(len))
@@ -258,7 +257,7 @@ pub(crate) enum PubGrubPriority {
     ///
     /// N.B.: URLs need to have priority over registry distributions for correctly matching registry
     /// distributions to URLs, see [`PubGrubPackage::from_package`] an
-    /// [`ForkUrls`].
+    /// the source constraints attached to dependency edges.
     DirectUrl(Reverse<usize>),
 
     /// The package is the root package.

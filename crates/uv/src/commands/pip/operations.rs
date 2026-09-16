@@ -40,8 +40,8 @@ use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
 use uv_python::managed::{ManagedPythonInstallation, PythonMinorVersionLink};
 use uv_python::{PythonEnvironment, PythonInstallation};
 use uv_requirements::{
-    GroupsSpecification, LookaheadResolver, NamedRequirementsResolver, RequirementsSource,
-    RequirementsSpecification, SourceTree, SourceTreeResolution, SourceTreeResolver,
+    GroupsSpecification, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
+    SourceTree, SourceTreeResolution, SourceTreeResolver,
 };
 use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, NoSolutionError,
@@ -265,7 +265,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     };
 
     // Incorporate hashes from requirements discovered while resolving source trees and groups.
-    let mut hasher = hasher
+    let hasher = hasher
         .clone()
         .augment_with_requirements(requirements.iter())?;
 
@@ -322,32 +322,6 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     let excludes = Excludes::from_entries(excludes);
     let preferences = Preferences::from_iter(preferences, &resolver_env);
 
-    // Determine any lookahead requirements.
-    let lookaheads = match options.dependency_mode {
-        DependencyMode::Transitive => {
-            let (lookaheads, updated_hasher) = LookaheadResolver::new(
-                &requirements,
-                &constraints,
-                &overrides,
-                &excludes,
-                build_dispatch.dependency_metadata(),
-                &hasher,
-                index,
-                DistributionDatabase::new(
-                    client,
-                    build_dispatch,
-                    concurrency.downloads_semaphore.clone(),
-                ),
-            )
-            .with_reporter(Arc::new(ResolverReporter::from(printer)))
-            .resolve(&resolver_env)
-            .await?;
-            hasher = updated_hasher;
-            lookaheads
-        }
-        DependencyMode::Direct => Vec::new(),
-    };
-
     // TODO(zanieb): Consider consuming these instead of cloning
     let exclusions = Exclusions::new(reinstall.clone(), UpgradePackages::for_non_project(upgrade));
 
@@ -361,11 +335,10 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         project,
         workspace_members,
         exclusions,
-        lookaheads,
     );
 
     // Resolve the dependencies.
-    let resolution = {
+    let (resolution, hasher) = {
         // If possible, create a bound on the progress bar.
         let reporter = match options.dependency_mode {
             DependencyMode::Transitive => ResolverReporter::from(printer),
@@ -395,7 +368,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         )?
         .with_reporter(Arc::new(reporter));
 
-        resolver.resolve().await?
+        resolver.resolve_with_hashes().await?
     };
 
     logger.on_complete(resolution.len(), start, printer)?;

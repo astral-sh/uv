@@ -78,7 +78,7 @@ impl VersionMap {
                     flat: None,
                     simple: Some(SimplePrioritizedDist {
                         datum_index,
-                        dist: OnceLock::new(),
+                        dist: [OnceLock::new(), OnceLock::new()],
                     }),
                 },
             });
@@ -143,6 +143,19 @@ impl VersionMap {
         match self.inner {
             VersionMapInner::Eager(ref eager) => eager.map.get(version),
             VersionMapInner::Lazy(ref lazy) => lazy.get(version),
+        }
+    }
+
+    pub(crate) fn get_with_yanks(
+        &self,
+        version: &Version,
+        allow_yanks: bool,
+    ) -> Option<&PrioritizedDist> {
+        match &self.inner {
+            VersionMapInner::Eager(eager) => eager.map.get(version),
+            VersionMapInner::Lazy(lazy) => {
+                lazy.get_lazy(&lazy.map.get(version)?.dist, Some(allow_yanks))
+            }
         }
     }
 
@@ -341,7 +354,19 @@ impl<'a> VersionMapDistHandle<'a> {
     pub(crate) fn prioritized_dist(&self) -> Option<&'a PrioritizedDist> {
         match self.inner {
             VersionMapDistHandleInner::Eager(dist) => Some(dist),
-            VersionMapDistHandleInner::Lazy { lazy, dist } => Some(lazy.get_lazy(dist)?),
+            VersionMapDistHandleInner::Lazy { lazy, dist } => Some(lazy.get_lazy(dist, None)?),
+        }
+    }
+
+    pub(crate) fn prioritized_dist_with_yanks(
+        &self,
+        allow_yanks: bool,
+    ) -> Option<&'a PrioritizedDist> {
+        match self.inner {
+            VersionMapDistHandleInner::Eager(dist) => Some(dist),
+            VersionMapDistHandleInner::Lazy { lazy, dist } => {
+                lazy.get_lazy(dist, Some(allow_yanks))
+            }
         }
     }
 }
@@ -522,7 +547,7 @@ impl VersionMapLazy {
 
     /// Returns the distribution for the given version, if it exists.
     fn get(&self, version: &Version) -> Option<&PrioritizedDist> {
-        self.get_lazy(&self.map.get(version)?.dist)
+        self.get_lazy(&self.map.get(version)?.dist, None)
     }
 
     /// Returns an iterator over the versions with at least one file within the exclude-newer
@@ -599,11 +624,15 @@ impl VersionMapLazy {
     ///
     /// When both a flat and simple distribution are present internally, they
     /// are merged automatically.
-    fn get_lazy<'p>(&'p self, lazy_dist: &'p LazyPrioritizedDist) -> Option<&'p PrioritizedDist> {
+    fn get_lazy<'p>(
+        &'p self,
+        lazy_dist: &'p LazyPrioritizedDist,
+        allow_yanks: Option<bool>,
+    ) -> Option<&'p PrioritizedDist> {
         match (&lazy_dist.flat, &lazy_dist.simple) {
-            (Some(flat), Some(simple)) => self.get_simple(Some(flat), simple),
+            (Some(flat), Some(simple)) => self.get_simple(Some(flat), simple, allow_yanks),
             (Some(flat), None) => Some(flat),
-            (None, Some(simple)) => self.get_simple(None, simple),
+            (None, Some(simple)) => self.get_simple(None, simple, allow_yanks),
             (None, None) => None,
         }
     }
@@ -616,7 +645,17 @@ impl VersionMapLazy {
         &'p self,
         init: Option<&'p PrioritizedDist>,
         simple: &'p SimplePrioritizedDist,
+        allow_yanks: Option<bool>,
     ) -> Option<&'p PrioritizedDist> {
+        let allow_yanks = allow_yanks.unwrap_or_else(|| {
+            let datum = self
+                .simple_metadata
+                .datum(simple.datum_index)
+                .expect("index to lazy dist is correct");
+            let version = rkyv::deserialize::<Version, rkyv::rancor::Error>(&datum.version)
+                .expect("archived version always deserializes");
+            self.allowed_yanks.contains(&self.package_name, &version)
+        });
         let get_or_init = || {
             let files = rkyv::deserialize::<VersionFiles, rkyv::rancor::Error>(
                 &self
@@ -680,6 +719,7 @@ impl VersionMapLazy {
                             &filename.version,
                             hashes.as_slice(),
                             yanked,
+                            allow_yanks,
                             excluded,
                             upload_time,
                         );
@@ -696,6 +736,7 @@ impl VersionMapLazy {
                             &filename,
                             hashes.as_slice(),
                             yanked,
+                            allow_yanks,
                             excluded,
                             upload_time,
                         );
@@ -718,7 +759,9 @@ impl VersionMapLazy {
                 Some(priority_dist)
             }
         };
-        simple.dist.get_or_init(get_or_init).as_ref()
+        simple.dist[usize::from(allow_yanks)]
+            .get_or_init(get_or_init)
+            .as_ref()
     }
 
     fn source_dist_compatibility(
@@ -726,6 +769,7 @@ impl VersionMapLazy {
         filename: &SourceDistFilename,
         hashes: &[HashDigest],
         yanked: Option<&Yanked>,
+        allow_yanks: bool,
         excluded: bool,
         upload_time: Option<i64>,
     ) -> SourceDistCompatibility {
@@ -743,11 +787,7 @@ impl VersionMapLazy {
 
         // Check if yanked
         if let Some(yanked) = yanked {
-            if yanked.is_yanked()
-                && !self
-                    .allowed_yanks
-                    .contains(&filename.name, &filename.version)
-            {
+            if yanked.is_yanked() && !allow_yanks {
                 return SourceDistCompatibility::Incompatible(IncompatibleSource::Yanked(
                     yanked.clone(),
                 ));
@@ -789,6 +829,7 @@ impl VersionMapLazy {
         version: &Version,
         hashes: &[HashDigest],
         yanked: Option<&Yanked>,
+        allow_yanks: bool,
         excluded: bool,
         upload_time: Option<i64>,
     ) -> WheelCompatibility {
@@ -804,7 +845,7 @@ impl VersionMapLazy {
 
         // Check if yanked
         if let Some(yanked) = yanked {
-            if yanked.is_yanked() && !self.allowed_yanks.contains(name, version) {
+            if yanked.is_yanked() && !allow_yanks {
                 return WheelCompatibility::Incompatible(IncompatibleWheel::Yanked(yanked.clone()));
             }
         }
@@ -873,7 +914,7 @@ struct SimplePrioritizedDist {
     /// if initialization could not find any usable files from which to
     /// construct a distribution. (One easy way to effect this, at the time
     /// of writing, is to use `--exclude-newer 1900-01-01`.)
-    dist: OnceLock<Option<PrioritizedDist>>,
+    dist: [OnceLock<Option<PrioritizedDist>>; 2],
 }
 
 /// A range that can be used to iterate over a subset of a [`BTreeMap`].

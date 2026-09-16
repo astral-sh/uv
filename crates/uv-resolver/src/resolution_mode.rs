@@ -1,4 +1,5 @@
 use uv_configuration::ResolutionMode;
+use uv_distribution_types::Requirement;
 
 use crate::resolver::{ForkMap, ForkSet};
 use crate::{DependencyMode, Manifest, ResolverEnvironment};
@@ -17,6 +18,13 @@ pub(crate) enum ResolutionStrategy {
 }
 
 impl ResolutionStrategy {
+    /// Treat a dependency of a selected local project as direct in lowest-direct mode.
+    pub(crate) fn register(&mut self, requirement: &Requirement) {
+        if let Self::LowestDirect(packages) = self {
+            packages.add(requirement, ());
+        }
+    }
+
     pub(crate) fn from_mode(
         mode: ResolutionMode,
         manifest: &Manifest,

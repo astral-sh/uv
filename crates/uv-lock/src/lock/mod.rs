@@ -1702,9 +1702,8 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             MarkerTree::FALSE
         };
 
-        // An authorized declaration selects its direct source throughout the resolution.
-        // Preserve its full environment when the consumer overlaps only part of the source
-        // marker; disjoint consumers may share the source but retain conflict predicates.
+        // A bare consumer can reuse a first-party direct source only in the environments where
+        // the dependency path that authorized the source is also included.
         if source_marker.is_false()
             && matches!(
                 requirement.source,
@@ -1719,17 +1718,8 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
                     .source
                     .satisfies_requirement_source(&source_requirement.source, self.workspace_root)?
                 {
-                    let source_environment = source_requirement.marker.without_extras();
-                    let marker = if !requirement_environment.is_disjoint(source_environment)
-                        && !requirement_environment
-                            .implies(source_environment)
-                            .is_true()
-                    {
-                        source_requirement.marker
-                    } else {
-                        source_requirement.marker.only_extras()
-                    };
-                    source_marker = source_marker.or(marker);
+                    source_marker =
+                        source_marker.or(source_requirement.marker.and(requirement_environment));
                 }
             }
         }
@@ -4762,13 +4752,14 @@ impl Lock {
         Ok(SatisfiesResult::Satisfied)
     }
 
-    /// Return whether an authorized direct source selects this package in the active context.
-    fn constraint_selects_source(
+    /// Return the part of the active context where an authorized direct source selects this package.
+    fn constraint_source_marker(
         package: &Package,
         marker: MarkerTree,
         constraints: &BTreeSet<Requirement>,
         root: &Path,
-    ) -> Result<bool, LockError> {
+    ) -> Result<MarkerTree, LockError> {
+        let mut authorized = MarkerTree::FALSE;
         for constraint in constraints {
             if constraint.name == package.id.name
                 && !matches!(constraint.source, RequirementSource::Registry { .. })
@@ -4778,10 +4769,10 @@ impl Lock {
                     .source
                     .satisfies_requirement_source(&constraint.source, root)?
             {
-                return Ok(true);
+                authorized = authorized.or(marker.and(constraint.marker));
             }
         }
-        Ok(false)
+        Ok(authorized)
     }
 
     /// Return whether an exact locked source is reachable where its declaration applies.
@@ -4879,9 +4870,7 @@ impl Lock {
         let Some(package_marker) = package_markers.get(&package.id) else {
             return Ok(());
         };
-        // A reachable provider shares its sources across environments. Only its conflict
-        // selections constrain where those sources can apply.
-        let package_marker = package_marker.only_extras();
+        // Both the provider's reachability and the declaring edge restrict source authority.
         let requirements = Self::preprocess_requirements(
             &package.id.name,
             package_version,
@@ -4914,8 +4903,7 @@ impl Lock {
                     };
                     let marker =
                         DependencyContext::Extra(extra).requirement_marker(requirement.marker);
-                    requirement_marker =
-                        requirement_marker.or(extra_marker.only_extras().and(marker));
+                    requirement_marker = requirement_marker.or(extra_marker.and(marker));
                 }
                 requirement_marker
             };
@@ -4928,7 +4916,7 @@ impl Lock {
             }
 
             let mut requirement = normalize_requirement(requirement, root, &self.requires_python)?;
-            requirement.marker = requirement_marker.only_extras();
+            requirement.marker = requirement_marker;
             pending_sources.push(requirement.clone());
             source_requirements.insert(requirement);
         }
@@ -5113,6 +5101,7 @@ impl Lock {
                                     && !matches!(dependency.id.source, Source::Registry(..));
                             let external_source_requires_constraint =
                                 inherited_source_tree || local_archive || registry_external_source;
+                            let mut effective_requirement_marker = requirement_marker;
                             if is_bare_registry_requirement && external_source_requires_constraint {
                                 let source_marker = marker
                                     .and(
@@ -5120,22 +5109,27 @@ impl Lock {
                                             .conflict_marker(&package.id.name, &self.conflicts),
                                     )
                                     .and(requirement_marker);
-                                if !Self::constraint_selects_source(
+                                let authorized = Self::constraint_source_marker(
                                     dependency,
                                     source_marker,
                                     source_requirements,
                                     root,
-                                )? {
+                                )?;
+                                let deferred = source_marker.and(authorized.negate());
+                                if !deferred.is_false() {
                                     if reachability.defer_requirement(
                                         dependency,
                                         &requirement,
-                                        source_marker,
+                                        deferred,
                                         &self.conflicts,
                                     ) {
                                         changes.deferred.insert(&dependency.id);
                                     }
+                                }
+                                if authorized.is_false() {
                                     continue;
                                 }
+                                effective_requirement_marker = authorized;
                             }
                             for requested_extra in
                                 iter::once(None).chain(requirement.extras.iter().map(Some))
@@ -5147,9 +5141,9 @@ impl Lock {
                                         group.clone(),
                                     ))
                                     .and_modify(|marker: &mut MarkerTree| {
-                                        *marker = marker.or(requirement_marker);
+                                        *marker = marker.or(effective_requirement_marker);
                                     })
-                                    .or_insert(requirement_marker);
+                                    .or_insert(effective_requirement_marker);
                             }
                         }
                     }
@@ -5209,7 +5203,7 @@ impl Lock {
                             }
                             None => None,
                         };
-                        let marker = if let Some(extra) = dependency_extra {
+                        let mut marker = if let Some(extra) = dependency_extra {
                             marker.and(
                                 DependencyContext::Extra(extra)
                                     .conflict_marker(&dependency_package.id.name, &self.conflicts),
@@ -5223,13 +5217,17 @@ impl Lock {
                         let registry_external_source =
                             matches!(package.id.source, Source::Registry(..))
                                 && !matches!(dependency_package.id.source, Source::Registry(..));
-                        let constrained_source = registry_external_source
-                            && Self::constraint_selects_source(
+                        let constrained_source = if registry_external_source {
+                            marker = Self::constraint_source_marker(
                                 dependency_package,
                                 marker,
                                 source_requirements,
                                 root,
                             )?;
+                            !marker.is_false()
+                        } else {
+                            false
+                        };
                         if registry_external_source && !constrained_source {
                             continue;
                         }
@@ -5291,12 +5289,24 @@ impl Lock {
             .cloned()
             .collect::<Vec<_>>();
         if !global_source_overrides.is_empty() {
-            source_requirements.retain(|requirement| {
-                matches!(requirement.source, RequirementSource::Registry { .. })
-                    || global_source_overrides
+            source_requirements = source_requirements
+                .into_iter()
+                .filter_map(|mut requirement| {
+                    if matches!(requirement.source, RequirementSource::Registry { .. }) {
+                        return Some(requirement);
+                    }
+                    let override_marker = global_source_overrides
                         .iter()
-                        .all(|override_requirement| override_requirement.name != requirement.name)
-            });
+                        .filter(|override_requirement| {
+                            override_requirement.name == requirement.name
+                        })
+                        .fold(MarkerTree::FALSE, |marker, override_requirement| {
+                            marker.or(override_requirement.marker.without_extras())
+                        });
+                    requirement.marker = requirement.marker.and(override_marker.negate());
+                    (!requirement.marker.is_false()).then_some(requirement)
+                })
+                .collect();
             source_requirements.extend(global_source_overrides);
         }
 
@@ -5332,22 +5342,34 @@ impl Lock {
                 let Some(marker) = self.root_requirement_marker(requirement, package) else {
                     continue;
                 };
-                let marker = root_marker.and(marker);
+                let mut marker = root_marker.and(marker);
                 if matches!(
                     requirement.source,
                     RequirementSource::Registry { index: None, .. }
                 ) && !matches!(package.id.source, Source::Registry(..))
-                    && !Self::constraint_selects_source(
+                {
+                    let authorized = Self::constraint_source_marker(
                         package,
                         marker,
                         &source_requirements,
                         root,
-                    )?
-                {
+                    )?;
                     // A bare root name cannot revive an old direct source. Current workspace
-                    // declarations, active constraints, and global overrides authorize it.
-                    reachability.defer_requirement(package, requirement, marker, &self.conflicts);
-                    continue;
+                    // declarations, active constraints, and global overrides authorize it only
+                    // in their own contexts; retain the remaining contexts for a later declaration.
+                    let deferred = marker.and(authorized.negate());
+                    if !deferred.is_false() {
+                        reachability.defer_requirement(
+                            package,
+                            requirement,
+                            deferred,
+                            &self.conflicts,
+                        );
+                    }
+                    if authorized.is_false() {
+                        continue;
+                    }
+                    marker = authorized;
                 }
                 reachability
                     .package_queue
@@ -5401,13 +5423,13 @@ impl Lock {
             source_requirements.remove(&constraint);
         }
 
-        // Root declarations can select a source only after its exact package is reachable;
-        // retain its platform context for that check before sharing it across the graph.
+        // Root declarations select a reachable source only in their own platform and conflict
+        // contexts; other consumers can reuse it only where those contexts overlap.
         for requirement in root_requirements {
             if matches!(requirement.source, RequirementSource::Registry { .. }) {
                 continue;
             }
-            let mut requirement = normalize_requirement(
+            let requirement = normalize_requirement(
                 requirement.clone().into_owned(),
                 root,
                 &self.requires_python,
@@ -5415,7 +5437,6 @@ impl Lock {
             if !self.source_is_reachable(&requirement, &reachability.package_markers, root)? {
                 continue;
             }
-            requirement.marker = requirement.marker.only_extras();
             pending_sources.push(requirement.clone());
             source_requirements.insert(requirement);
         }
@@ -5468,11 +5489,9 @@ impl Lock {
                             .package_queue
                             .push_back((package, None, deferred_marker));
                     }
-                    for extra in &requirement.extras {
-                        let Some((extra, _)) = package.optional_dependencies.get_key_value(extra)
-                        else {
-                            continue;
-                        };
+                    // The URL declaration authorizes the base. Every independently deferred
+                    // consumer may now activate its own requested extras on that exact source.
+                    for extra in package.optional_dependencies.keys() {
                         let Some(marker) = reachability
                             .deferred_package_markers
                             .get_extra(&package.id, extra)

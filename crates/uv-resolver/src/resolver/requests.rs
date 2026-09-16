@@ -2,11 +2,13 @@ use std::sync::Arc;
 
 use tokio::sync::mpsc::Sender;
 
-use uv_distribution_types::{DistributionId, IndexMetadata, IndexUrl};
+use uv_distribution_types::{Dist, DistributionId, Identifier, IndexMetadata, IndexUrl};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
+use uv_types::HashStrategy;
 
 use crate::pubgrub::Range;
+use crate::resolver::index::DirectHashKey;
 use crate::resolver::{InMemoryIndex, MetadataResponse, Request, VersionsResponse};
 use crate::{PythonRequirement, ResolveError};
 
@@ -56,6 +58,21 @@ impl MetadataRequests {
         Ok(())
     }
 
+    /// Request a direct resource once for the current hash policy, independently of registry and
+    /// preparatory metadata caches, which may have used a different policy.
+    pub(crate) fn request_direct(
+        &self,
+        dist: Dist,
+        hasher: &HashStrategy,
+    ) -> Result<(), ResolveError> {
+        let key = (dist.distribution_id(), DirectHashKey::new(&dist, hasher));
+        if self.index.direct().register(key) {
+            self.sender
+                .blocking_send(Request::Dist(dist, Some(hasher.clone())))?;
+        }
+        Ok(())
+    }
+
     /// Schedule speculative candidate selection using an already-requested package version map.
     pub(crate) fn prefetch(
         &self,
@@ -100,5 +117,17 @@ impl MetadataRequests {
             .distributions()
             .wait_blocking(id)
             .map_err(|_| ResolveError::UnregisteredTask(description()))
+    }
+
+    pub(crate) fn wait_for_direct(
+        &self,
+        dist: &Dist,
+        hasher: &HashStrategy,
+    ) -> Result<Arc<MetadataResponse>, ResolveError> {
+        let key = (dist.distribution_id(), DirectHashKey::new(dist, hasher));
+        self.index
+            .direct()
+            .wait_blocking(&key)
+            .map_err(|_| ResolveError::UnregisteredTask(dist.to_string()))
     }
 }

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use uv_distribution_types::RequirementSource;
+use uv_distribution_types::{Requirement, RequirementSource};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 
@@ -14,6 +14,34 @@ use crate::{DependencyMode, Manifest, ResolverEnvironment};
 pub struct AllowedYanks(Arc<FxHashMap<PackageName, FxHashSet<Version>>>);
 
 impl AllowedYanks {
+    /// Allow an explicitly pinned yank from a selected first-party candidate.
+    pub(crate) fn register(&mut self, requirement: &Requirement) {
+        if let Some(version) = Self::explicit_pin(requirement) {
+            self.register_version(&requirement.name, version);
+        }
+    }
+
+    pub(crate) fn register_version(&mut self, name: &PackageName, version: &Version) {
+        Arc::make_mut(&mut self.0)
+            .entry(name.clone())
+            .or_default()
+            .insert(version.clone());
+    }
+
+    pub(crate) fn explicit_pin(requirement: &Requirement) -> Option<&Version> {
+        let RequirementSource::Registry { specifier, .. } = &requirement.source else {
+            return None;
+        };
+        let [specifier] = specifier.as_ref() else {
+            return None;
+        };
+        matches!(
+            specifier.operator(),
+            uv_pep440::Operator::Equal | uv_pep440::Operator::ExactEqual
+        )
+        .then_some(specifier.version())
+    }
+
     pub fn from_manifest(
         manifest: &Manifest,
         env: &ResolverEnvironment,
@@ -23,20 +51,11 @@ impl AllowedYanks {
 
         // Allow yanks for any pinned input requirements.
         for requirement in manifest.candidate_selection_requirements(env, dependencies) {
-            let RequirementSource::Registry { specifier, .. } = &requirement.source else {
-                continue;
-            };
-            let [specifier] = specifier.as_ref() else {
-                continue;
-            };
-            if matches!(
-                specifier.operator(),
-                uv_pep440::Operator::Equal | uv_pep440::Operator::ExactEqual
-            ) {
+            if let Some(version) = Self::explicit_pin(&requirement) {
                 allowed_yanks
                     .entry(requirement.name.clone())
                     .or_default()
-                    .insert(specifier.version().clone());
+                    .insert(version.clone());
             }
         }
 
@@ -56,5 +75,17 @@ impl AllowedYanks {
         self.0
             .get(package_name)
             .is_some_and(|versions| versions.contains(version))
+    }
+
+    pub(crate) fn versions(&self, package_name: &PackageName) -> Vec<Version> {
+        let mut versions = self
+            .0
+            .get(package_name)
+            .into_iter()
+            .flatten()
+            .cloned()
+            .collect::<Vec<_>>();
+        versions.sort_unstable();
+        versions
     }
 }

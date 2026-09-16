@@ -1,11 +1,9 @@
-use pubgrub::{Id, Kind, State};
+use pubgrub::{Id, Kind, State, VersionSet};
 use rustc_hash::FxHashMap;
 
-use uv_distribution_types::{DerivationChain, DerivationStep};
-use uv_pep440::Version;
-
 use crate::dependency_provider::UvDependencyProvider;
-use crate::pubgrub::{PubGrubPackage, Range};
+use crate::pubgrub::{CandidateSet, PubGrubPackage, SolverVersion};
+use uv_distribution_types::{DerivationChain, DerivationStep};
 
 /// Build a [`DerivationChain`] from the pubgrub state, which is available in `uv-resolver`, but not
 /// in `uv-distribution-types`.
@@ -18,15 +16,15 @@ impl DerivationChainBuilder {
     /// This is used to construct a derivation chain upon resolution failure.
     pub(crate) fn from_state(
         id: Id<PubGrubPackage>,
-        version: &Version,
+        version: &SolverVersion,
         state: &State<UvDependencyProvider>,
     ) -> Option<DerivationChain> {
         /// Find a path from the current package to the root package.
         fn find_path(
             id: Id<PubGrubPackage>,
-            version: &Version,
+            version: &SolverVersion,
             state: &State<UvDependencyProvider>,
-            solution: &FxHashMap<Id<PubGrubPackage>, Version>,
+            solution: &FxHashMap<Id<PubGrubPackage>, SolverVersion>,
             path: &mut Vec<DerivationStep>,
         ) -> bool {
             // Retrieve the incompatibilities for the current package.
@@ -41,8 +39,9 @@ impl DerivationChainBuilder {
                     let Some((_, dependency_versions)) = incompat.dependency_version_sets() else {
                         continue;
                     };
-                    let dependency_versions =
-                        dependency_versions.cloned().unwrap_or_else(Range::empty);
+                    let dependency_versions = dependency_versions
+                        .cloned()
+                        .unwrap_or_else(CandidateSet::empty);
                     if id == *id2 && dependency_versions.contains(version) {
                         if let Some(version) = solution.get(id1) {
                             let p1 = &state.package_store[*id1];
@@ -59,8 +58,8 @@ impl DerivationChainBuilder {
                                     name.clone(),
                                     p1.extra().cloned(),
                                     p1.group().cloned(),
-                                    Some(version.clone()),
-                                    dependency_versions.encoded_versions().clone(),
+                                    Some(version.version.clone()),
+                                    dependency_versions.project().encoded_versions().clone(),
                                 ));
 
                                 // Recursively search the next package.

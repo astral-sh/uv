@@ -8,7 +8,9 @@ use tracing::{debug, trace};
 
 use uv_configuration::IndexStrategy;
 use uv_distribution_types::{CompatibleDist, IncompatibleDist, IncompatibleSource, IndexUrl};
-use uv_distribution_types::{DistributionMetadata, IncompatibleWheel, Name, PrioritizedDist};
+use uv_distribution_types::{
+    DistributionMetadata, IncompatibleWheel, Name, PrioritizedDist, Requirement,
+};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::Tags;
@@ -19,14 +21,23 @@ use crate::prerelease::{PrereleaseSelection, PrereleaseStrategy};
 use crate::pubgrub::Range;
 use crate::resolution_mode::ResolutionStrategy;
 use crate::version_map::{VersionMap, VersionMapDistHandle};
+use crate::yanks::AllowedYanks;
 use crate::{Exclusions, Manifest, Options, ResolverEnvironment};
 
 #[derive(Debug, Clone)]
-#[expect(clippy::struct_field_names)]
 pub(crate) struct CandidateSelector {
     resolution_strategy: ResolutionStrategy,
     prerelease_strategy: PrereleaseStrategy,
     index_strategy: IndexStrategy,
+    allowed_yanks: AllowedYanks,
+}
+
+/// The policies whose changes can invalidate a cached registry candidate for one package.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SelectionPolicy {
+    highest: bool,
+    prerelease: PrereleaseSelection,
+    yanks: Vec<Version>,
 }
 
 impl CandidateSelector {
@@ -50,6 +61,58 @@ impl CandidateSelector {
                 options.dependency_mode,
             ),
             index_strategy: options.index_strategy,
+            allowed_yanks: AllowedYanks::from_manifest(manifest, env, options.dependency_mode),
+        }
+    }
+
+    /// Apply candidate policies discovered from currently selected first-party candidates.
+    pub(crate) fn with_requirements<'a>(
+        &self,
+        requirements: impl IntoIterator<Item = (&'a Requirement, bool)>,
+    ) -> Self {
+        let mut selector = self.clone();
+        for (requirement, lowest) in requirements {
+            selector.prerelease_strategy.register(requirement);
+            selector.allowed_yanks.register(requirement);
+            if lowest {
+                selector.resolution_strategy.register(requirement);
+            }
+        }
+        selector
+    }
+
+    /// Consider a prerelease or yank that a selected first-party declaration could authorize.
+    pub(crate) fn with_possible_policy(&self, name: &PackageName, yank: Option<&Version>) -> Self {
+        let mut selector = self.clone();
+        selector.prerelease_strategy.permit_possible_explicit(name);
+        if let Some(version) = yank {
+            selector.allowed_yanks.register_version(name, version);
+        }
+        selector
+    }
+
+    /// Validate a candidate against declarations actually selected in the finished fork.
+    pub(crate) fn allows_possible_candidate(
+        &self,
+        name: &PackageName,
+        version: &Version,
+        yanked: bool,
+        env: &ResolverEnvironment,
+    ) -> bool {
+        (!version.any_prerelease()
+            || self.prerelease_strategy.selection(name, env) != PrereleaseSelection::Disallow)
+            && (!yanked || self.allowed_yanks.contains(name, version))
+    }
+
+    pub(crate) fn selection_policy(
+        &self,
+        name: &PackageName,
+        env: &ResolverEnvironment,
+    ) -> SelectionPolicy {
+        SelectionPolicy {
+            highest: self.use_highest_version(name, env),
+            prerelease: self.prerelease_strategy.selection(name, env),
+            yanks: self.allowed_yanks.versions(name),
         }
     }
 
@@ -235,7 +298,7 @@ impl CandidateSelector {
             }
         };
 
-        Self::get_preferred_from_iter(
+        self.get_preferred_from_iter(
             preferences,
             package_name,
             range,
@@ -249,6 +312,7 @@ impl CandidateSelector {
 
     /// Return the first preference that satisfies the current range and is allowed.
     fn get_preferred_from_iter<'a, InstalledPackages: InstalledPackagesProvider>(
+        &'a self,
         preferences: impl Iterator<Item = (&'a Version, PreferenceSource)>,
         package_name: &'a PackageName,
         range: &Range<Version>,
@@ -327,10 +391,11 @@ impl CandidateSelector {
             }
 
             // Check for a remote distribution that matches the preferred version
-            if let Some((version_map, file)) = version_maps
-                .iter()
-                .find_map(|version_map| version_map.get(version).map(|dist| (version_map, dist)))
-            {
+            if let Some((version_map, file)) = version_maps.iter().find_map(|version_map| {
+                version_map
+                    .get_with_yanks(version, self.allowed_yanks.contains(package_name, version))
+                    .map(|dist| (version_map, dist))
+            }) {
                 // If the preferred version has a local variant, prefer that.
                 if version_map.local() {
                     for local in version_map
@@ -347,7 +412,9 @@ impl CandidateSelector {
                         if !range.contains(local) {
                             continue;
                         }
-                        if let Some(dist) = version_map.get(local) {
+                        if let Some(dist) = version_map
+                            .get_with_yanks(local, self.allowed_yanks.contains(package_name, local))
+                        {
                             debug!("Preferring local version `{package_name}` (v{local})");
                             return Some(Candidate::new(
                                 package_name,
@@ -517,7 +584,7 @@ impl CandidateSelector {
 
         if self.index_strategy == IndexStrategy::UnsafeBestMatch {
             if highest {
-                Self::select_candidate(
+                self.select_candidate(
                     version_maps
                         .iter()
                         .enumerate()
@@ -543,7 +610,7 @@ impl CandidateSelector {
                     highest,
                 )
             } else {
-                Self::select_candidate(
+                self.select_candidate(
                     version_maps
                         .iter()
                         .enumerate()
@@ -571,7 +638,7 @@ impl CandidateSelector {
         } else {
             if highest {
                 version_maps.iter().find_map(|version_map| {
-                    Self::select_candidate(
+                    self.select_candidate(
                         version_map.iter_included(range).rev(),
                         package_name,
                         range,
@@ -581,7 +648,7 @@ impl CandidateSelector {
                 })
             } else {
                 version_maps.iter().find_map(|version_map| {
-                    Self::select_candidate(
+                    self.select_candidate(
                         version_map.iter_included(range),
                         package_name,
                         range,
@@ -619,6 +686,7 @@ impl CandidateSelector {
     /// `versions` must be ordered from highest to lowest when `highest` is `true`, and from lowest
     /// to highest otherwise.
     fn select_candidate<'a>(
+        &'a self,
         versions: impl Iterator<Item = (&'a Version, VersionMapDistHandle<'a>)>,
         package_name: &'a PackageName,
         range: &Range<Version>,
@@ -662,7 +730,9 @@ impl CandidateSelector {
                 if !cursor.contains(version) {
                     continue;
                 }
-                let Some(dist) = maybe_dist.prioritized_dist() else {
+                let Some(dist) = maybe_dist.prioritized_dist_with_yanks(
+                    self.allowed_yanks.contains(package_name, version),
+                ) else {
                     continue;
                 };
                 trace!(
