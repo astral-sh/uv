@@ -507,7 +507,12 @@ impl<const BYTES: usize> Digest<BYTES> {
         validate_hex(&digest, BYTES)?;
 
         if digest.as_bytes().iter().any(u8::is_ascii_uppercase) {
-            Ok(Self(SmallString::from(digest.to_ascii_lowercase())))
+            let digest = SmallString::init_with(digest.len(), |output| {
+                output.copy_from_slice(digest.as_bytes());
+                output.make_ascii_lowercase();
+            })
+            .expect("hexadecimal digits are valid UTF-8");
+            Ok(Self(digest))
         } else {
             Ok(Self(digest))
         }
