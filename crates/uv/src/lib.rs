@@ -2510,17 +2510,63 @@ async fn run_project(
                 .map(ScriptPath::Script)
                 .or(args.script.map(ScriptPath::Path));
 
-            let requirements = args
-                .packages
-                .iter()
-                .map(String::as_str)
-                .map(RequirementsSource::from_package_argument)
-                .chain(
+            let requirements = {
+                let mut requirements = Vec::new();
+                
+                // Process packages with their corresponding sources
+                // If a source (git, path, url, workspace) is provided without a package name,
+                // we create an unnamed requirement from the source.
+                // If both a package name and source are provided, we use the package name with the source.
+                
+                let mut packages_iter = args.packages.iter().map(String::as_str).peekable();
+
+                                // Helper to get next package or create unnamed requirement
+                                let get_requirement = |package_opt: Option<&str>, source_fn: &dyn Fn() -> RequirementsSource| -> Result<RequirementsSource> {
+                                    match package_opt {
+                                        Some(pkg) => RequirementsSource::from_package_argument(pkg),
+                                        None => Ok(source_fn()),
+                                    }
+                                };
+
+                                // Handle git source
+                                if let Some(git_url) = &args.git {
+                                    let pkg = packages_iter.next();
+                                    requirements.push(get_requirement(pkg, &|| RequirementsSource::from_git_url(git_url.clone()))?);
+                                }
+
+                                // Handle path source
+                                if let Some(path) = &args.path {
+                                    let pkg = packages_iter.next();
+                                    requirements.push(get_requirement(pkg, &|| RequirementsSource::from_local_path(path.clone()))?);
+                                }
+
+                                // Handle url source
+                                if let Some(url) = &args.url {
+                                    let pkg = packages_iter.next();
+                                    requirements.push(get_requirement(pkg, &|| RequirementsSource::from_direct_url(url.clone()))?);
+                                }
+
+                                // Handle workspace source
+                                if let Some(workspace_path) = &args.workspace_path {
+                                    let pkg = packages_iter.next();
+                                    requirements.push(get_requirement(pkg, &|| RequirementsSource::from_workspace_path(workspace_path.clone()))?);
+                                }
+                
+                // Add remaining packages (those without explicit sources)
+                for pkg in packages_iter {
+                    requirements.push(RequirementsSource::from_package_argument(pkg)?);
+                }
+                
+                // Add requirements from files
+                requirements.extend(
                     args.requirements
                         .into_iter()
-                        .map(RequirementsSource::from_requirements_file),
-                )
-                .collect::<Result<Vec<_>>>()?;
+                        .map(RequirementsSource::from_requirements_file)
+                        .collect::<Result<Vec<_>, _>>()?
+                );
+                
+                requirements
+            };
 
             // Special-case: any local source trees specified on the command-line are automatically
             // reinstalled.

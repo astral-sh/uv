@@ -184,6 +184,32 @@ impl RequirementsSource {
         Ok(Self::RequirementsTxt(path))
     }
 
+    /// Parse a [`RequirementsSource`] from a Git URL (e.g., `--git https://github.com/user/repo`).
+    pub fn from_git_url(url: String) -> Self {
+        // Prepend "git+" if not already present
+        let git_url = if url.starts_with("git+") {
+            url
+        } else {
+            format!("git+{}", url)
+        };
+        Self::Package(RequirementsTxtRequirement::parse(&git_url, &*CWD, false).unwrap())
+    }
+
+    /// Parse a [`RequirementsSource`] from a local path (e.g., `--path ./my-package`).
+    pub fn from_local_path(path: PathBuf) -> Self {
+        Self::Package(RequirementsTxtRequirement::parse(&path.to_string_lossy(), &*CWD, false).unwrap())
+    }
+
+    /// Parse a [`RequirementsSource`] from a direct URL (e.g., `--url https://example.com/package.whl`).
+    pub fn from_direct_url(url: String) -> Self {
+        Self::Package(RequirementsTxtRequirement::parse(&url, &*CWD, false).unwrap())
+    }
+
+    /// Parse a [`RequirementsSource`] from a workspace path (e.g., `--workspace ./my-package`).
+    pub fn from_workspace_path(path: PathBuf) -> Self {
+        Self::Package(RequirementsTxtRequirement::parse(&path.to_string_lossy(), &*CWD, false).unwrap())
+    }
+
     /// Parse a [`RequirementsSource`] from a user-provided string, assumed to be a positional
     /// package (e.g., `uv pip install flask`).
     ///

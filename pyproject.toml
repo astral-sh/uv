@@ -34,6 +34,9 @@ classifiers = [
   "Topic :: Software Development :: Libraries",
 ]
 readme = "README.md"
+dependencies = [
+    "httpx>0.2.0",
+]
 
 [project.urls]
 Repository = "https://github.com/astral-sh/uv"

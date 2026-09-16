@@ -4183,6 +4183,9 @@ pub struct UpgradeArgs {
 #[command(group = clap::ArgGroup::new("sources").required(true).multiple(true))]
 pub struct AddArgs {
     /// The packages to add, as PEP 508 requirements (e.g., `ruff==0.5.0`).
+    ///
+    /// When used with `--git`, `--path`, `--url`, or `--workspace`, the package name
+    /// is optional and will be inferred from the source if not provided.
     #[arg(group = "sources", value_hint = ValueHint::Other)]
     pub packages: Vec<String>,
 
@@ -4217,6 +4220,54 @@ pub struct AddArgs {
         value_hint = ValueHint::FilePath,
     )]
     pub constraints: Vec<Maybe<PathBuf>>,
+
+    /// Add the dependency from a Git repository.
+    ///
+    /// The repository URL can be an HTTPS, SSH, or Git URL.
+    /// Optionally specify a revision, tag, or branch with `--rev`, `--tag`, or `--branch`.
+    /// If no package name is provided, the package name will be inferred from the repository.
+    #[arg(
+        long,
+        group = "sources",
+        value_hint = ValueHint::Other,
+    )]
+    pub git: Option<String>,
+
+    /// Add the dependency from a local path.
+    ///
+    /// The path can be a directory or a file (e.g., a wheel or source distribution).
+    /// If no package name is provided, the package name will be inferred from the path.
+    #[arg(
+        long,
+        group = "sources",
+        value_parser = parse_file_path,
+        value_hint = ValueHint::FilePath,
+    )]
+    pub path: Option<PathBuf>,
+
+    /// Add the dependency from a direct URL.
+    ///
+    /// The URL must point to a source distribution or wheel.
+    /// If no package name is provided, the package name will be inferred from the URL.
+    #[arg(
+        long,
+        group = "sources",
+        value_hint = ValueHint::Url,
+    )]
+    pub url: Option<String>,
+
+    /// Add the dependency as a workspace member from the given path.
+    ///
+    /// This is similar to `--path` but adds the dependency as a workspace member
+    /// in the root `pyproject.toml` rather than as a direct path dependency.
+    /// If no package name is provided, the package name will be inferred from the path.
+    #[arg(
+        long,
+        group = "sources",
+        value_parser = parse_file_path,
+        value_hint = ValueHint::FilePath,
+    )]
+    pub workspace_path: Option<PathBuf>,
 
     /// Apply this marker to all added packages.
     #[arg(long, short, value_parser = MarkerTree::from_str, value_hint = ValueHint::Other)]

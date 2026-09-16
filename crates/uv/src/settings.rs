@@ -2383,6 +2383,10 @@ pub(crate) struct AddSettings {
     pub(crate) indexes: Vec<Index>,
     pub(crate) settings: ResolverInstallerSettings,
     pub(crate) malware_settings: MalwareCheckSettings,
+    pub(crate) git: Option<String>,
+    pub(crate) path: Option<PathBuf>,
+    pub(crate) url: Option<String>,
+    pub(crate) workspace_path: Option<PathBuf>,
 }
 
 impl AddSettings {
@@ -2433,6 +2437,10 @@ impl AddSettings {
             only_install_local,
             no_install_package,
             only_install_package,
+            git,
+            path,
+            url,
+            workspace_path,
         } = args;
 
         // Resolve flags from CLI and environment variables.
@@ -2621,6 +2629,10 @@ impl AddSettings {
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
             malware_settings,
+            git,
+            path,
+            url,
+            workspace_path,
         })
     }
 }

@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::collections::hash_map::Entry;
 use std::fmt::Write;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 
