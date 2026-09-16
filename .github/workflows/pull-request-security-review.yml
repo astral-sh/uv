@@ -24,17 +24,36 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: "Prepare review configuration"
+      - name: Save toolchain configuration at the workflow revision
+        env:
+          REVIEW_TOOLCHAIN: ${{ runner.temp }}/pull-request-review/toolchain
+        run: |
+          mkdir -p "$REVIEW_TOOLCHAIN"
+          cp pyproject.toml uv.lock "$REVIEW_TOOLCHAIN/"
+
+      - name: Prepare review configuration
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          REVIEW_CONFIG: ${{ runner.temp }}/pull-request-review
+          THREAT_MODELS: agents/references
         run: |
-          # Keep the review configuration at the workflow revision, even for older PR branches.
-          printf 'REVIEW_CONFIG=%s\n' "$REVIEW_CONFIG" >> "$GITHUB_ENV"
-          mkdir -p "$REVIEW_CONFIG"
-          cp -R agents/. "$REVIEW_CONFIG/"
-          mkdir -p "$REVIEW_CONFIG/toolchain"
-          cp pyproject.toml uv.lock "$REVIEW_CONFIG/toolchain/"
+          set -euo pipefail
+
+          : "${HEAD_SHA:?Pull request head SHA is required}"
+          : "${THREAT_MODELS:?Threat model directory is required}"
+
+          # Save configuration before switching to the PR head.
+          review_config="$RUNNER_TEMP/pull-request-review"
+          printf 'REVIEW_CONFIG=%s\n' "$review_config" >> "$GITHUB_ENV"
+          mkdir -p "$review_config/codex" "$review_config/references" "$review_config/scripts"
+          cp agents/security-pr-review/config.toml "$review_config/codex/config.toml"
+          cp agents/prompts/pull-request-security-review.md "$review_config/prompt.md"
+          cp agents/schemas/pull-request-security-review.json "$review_config/schema.json"
+          cp agents/scripts/install-codex-security.sh \
+            agents/scripts/agent-review-to-github-comments.py \
+            agents/scripts/agent-review-to-github-comments.py.lock "$review_config/scripts/"
+          cp -R "$THREAT_MODELS/." "$review_config/references/"
+          git rev-parse HEAD > "$review_config/configuration-revision.txt"
+          printf 'config-directory=%s\n' "$review_config" >> "$GITHUB_OUTPUT"
           git checkout --detach "$HEAD_SHA"
 
       - name: "Checkout Codex Security plugin"
@@ -106,7 +125,7 @@ jobs:
             printf 'Pull request security review for #%s: %s\n\n' \
               "$(jq -r '.number' .pull-request-review-event.json)" \
               "$(jq -r '.title | gsub("[\r\n]+"; " ")' .pull-request-review-event.json)"
-            cat "$REVIEW_CONFIG/prompts/pull-request-security-review.md"
+            cat "$REVIEW_CONFIG/prompt.md"
           } > "$RUNNER_TEMP/pull-request-security-review-prompt.md"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -148,7 +167,7 @@ jobs:
           safety-strategy: drop-sudo
           allow-bot-users: "astral-automations-bot[bot],renovate[bot]"
           prompt-file: "${{ runner.temp }}/pull-request-security-review-prompt.md"
-          output-schema-file: "${{ env.REVIEW_CONFIG }}/schemas/pull-request-security-review.json"
+          output-schema-file: "${{ env.REVIEW_CONFIG }}/schema.json"
           output-file: "${{ runner.temp }}/pull-request-review-result.json"
 
       - name: "Check review coverage"
@@ -209,11 +228,13 @@ jobs:
       - name: "Prepare review findings"
         id: comments
         run: |
+          set -euo pipefail
+
           delimiter="review-$(openssl rand -hex 16)"
           {
             printf 'result<<%s\n' "$delimiter"
             printf '%s\n' "$REVIEW_RESULT" \
-              | ./agents/scripts/agent-review-to-github-comments.py --commit-id "$HEAD_SHA"
+              | uv run --locked --script agents/scripts/agent-review-to-github-comments.py --commit-id "$HEAD_SHA"
             printf '%s\n' "$delimiter"
           } >> "$GITHUB_OUTPUT"
         env:
@@ -241,6 +262,8 @@ jobs:
 
       - name: "Publish review findings"
         run: |
+          set -euo pipefail
+
           printf '%s\n' "$REVIEW_RESULT" > "$RUNNER_TEMP/review.json"
 
           if jq --exit-status '.comments | length == 0' "$RUNNER_TEMP/review.json" > /dev/null; then
