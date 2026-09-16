@@ -224,9 +224,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             if let Some(config_settings) = self.config_settings_package.get(node.name()) {
                 for (key, value) in config_settings.iter() {
                     line.push_str(" --config-settings=");
-                    line.push_str(key);
-                    line.push('=');
-                    line.push_str(value);
+                    line.push_str(&uv_requirements_txt::quote(&format!("{key}={value}")));
                 }
             }
 
