@@ -15,7 +15,7 @@ use itertools::Itertools;
 use papaya::{HashMap, ResizeMode};
 use pubgrub::{Id, IncompId, Incompatibility, Kind, Ranges, State, Term};
 use rustc_hash::{FxHashMap, FxHashSet};
-use tokio::sync::mpsc::{self, Receiver, Sender};
+use tokio::sync::mpsc::{self, Receiver};
 use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{Level, debug, info, instrument, trace, warn};
@@ -75,6 +75,7 @@ pub use crate::resolver::provider::{
     VersionsResponse, WheelMetadataResult,
 };
 pub use crate::resolver::reporter::Reporter;
+use crate::resolver::requests::MetadataRequests;
 use crate::resolver::system::SystemDependency;
 pub(crate) use crate::resolver::urls::Urls;
 use crate::universal_marker::UniversalMarker;
@@ -92,6 +93,7 @@ mod index;
 mod indexes;
 mod provider;
 mod reporter;
+mod requests;
 mod resolution;
 mod system;
 mod urls;
@@ -285,6 +287,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         // metadata (e.g., given `flask==1.0.0`, fetch the metadata for that version).
         // Channel size is set large to accommodate batch prefetching.
         let (request_sink, request_stream) = mpsc::channel(300);
+        let requests = MetadataRequests::new(state.index.clone(), request_sink);
 
         // Run the fetcher.
         let requests_fut = state.clone().fetch(provider.clone(), request_stream).fuse();
@@ -295,7 +298,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         thread::Builder::new()
             .name("uv-resolver".into())
             .spawn(move || {
-                let result = solver.solve(&request_sink);
+                let result = solver.solve(&requests);
 
                 // This may fail if the main thread returned early due to an error.
                 let _ = tx.send(result);
@@ -314,10 +317,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
 
 impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackages> {
     #[instrument(skip_all)]
-    fn solve(
-        self: Arc<Self>,
-        request_sink: &Sender<Request>,
-    ) -> Result<ResolverOutput, ResolveError> {
+    fn solve(self: Arc<Self>, requests: &MetadataRequests) -> Result<ResolverOutput, ResolveError> {
         debug!(
             "Solving with installed Python version: {}",
             self.python_requirement.exact()
@@ -334,11 +334,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         let root = PubGrubPackage::from(PubGrubPackageInner::Root(self.project.clone()));
         let pubgrub = State::init(root.clone(), MIN_VERSION.clone());
-        let prefetcher = BatchPrefetcher::new(
-            self.capabilities.clone(),
-            self.index.clone(),
-            request_sink.clone(),
-        );
+        let prefetcher = BatchPrefetcher::new(self.capabilities.clone(), requests.clone());
         let state = ForkState::new(
             pubgrub,
             self.env.clone(),
@@ -411,7 +407,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 &self.urls,
                                 &self.indexes,
                                 &state.python_requirement,
-                                request_sink,
+                                requests,
                             )?;
                         }
 
@@ -516,7 +512,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // since we weren't sure whether it might also be a URL requirement when
                 // transforming the requirements. For that case, we do another request here
                 // (idempotent due to caching).
-                self.request_package(next_package, url, index, request_sink)?;
+                self.request_package(next_package, url, index, requests)?;
 
                 let version = if let Some(version) = state.initial_version.take() {
                     // If we just forked based on platform support, we can skip version selection,
@@ -554,7 +550,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             &state.python_requirement,
                             &state.pubgrub,
                             &mut visited,
-                            request_sink,
+                            requests,
                         )?;
 
                         if cache_selected_version
@@ -666,6 +662,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &state.env,
                     &state.python_requirement,
                     &state.pubgrub,
+                    requests,
                 )?;
 
                 match forked_deps {
@@ -709,7 +706,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             })?;
 
                         // Emit a request to fetch the metadata for each registry package.
-                        self.visit_dependencies(&dependencies, &state, request_sink)
+                        self.visit_dependencies(&dependencies, &state, requests)
                             .map_err(|err| {
                                 enrich_dependency_error(err, next_id, &version, &state.pubgrub)
                             })?;
@@ -765,7 +762,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             state,
                             &version,
                             forks,
-                            request_sink,
+                            requests,
                             &diverging_packages,
                         ) {
                             forked_states.push(new_fork_state?);
@@ -877,7 +874,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         current_state: ForkState,
         version: &'a Version,
         forks: Vec<Fork>,
-        request_sink: &'a Sender<Request>,
+        requests: &'a MetadataRequests,
         diverging_packages: &'a BTreeSet<PackageName>,
     ) -> impl Iterator<Item = Result<ForkState, ResolveError>> + 'a {
         debug!(
@@ -931,7 +928,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     })?;
 
                 // Emit a request to fetch the metadata for each registry package.
-                self.visit_dependencies(&fork.dependencies, &forked_state, request_sink)
+                self.visit_dependencies(&fork.dependencies, &forked_state, requests)
                     .map_err(|err| {
                         enrich_dependency_error(err, package, version, &forked_state.pubgrub)
                     })?;
@@ -980,7 +977,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         &self,
         dependencies: &[PubGrubDependency],
         state: &ForkState,
-        request_sink: &Sender<Request>,
+        requests: &MetadataRequests,
     ) -> Result<(), ResolveError> {
         for dependency in dependencies {
             let PubGrubDependency {
@@ -991,7 +988,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             } = dependency;
             let url = package.name().and_then(|name| state.fork_urls.get(name));
             let index = package.name().and_then(|name| state.fork_indexes.get(name));
-            self.visit_package(package, url, index, request_sink)?;
+            self.visit_package(package, url, index, requests)?;
         }
         Ok(())
     }
@@ -1003,14 +1000,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         package: &PubGrubPackage,
         url: Option<&VerbatimParsedUrl>,
         index: Option<&IndexMetadata>,
-        request_sink: &Sender<Request>,
+        requests: &MetadataRequests,
     ) -> Result<(), ResolveError> {
         // Ignore unresolved URL packages, i.e., packages that use a direct URL in some forks.
         if url.is_none() && package.name().is_none_or(|name| self.urls.any_url(name)) {
             return Ok(());
         }
 
-        self.request_package(package, url, index, request_sink)
+        self.request_package(package, url, index, requests)
     }
 
     fn request_package(
@@ -1018,7 +1015,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         package: &PubGrubPackage,
         url: Option<&VerbatimParsedUrl>,
         index: Option<&IndexMetadata>,
-        request_sink: &Sender<Request>,
+        requests: &MetadataRequests,
     ) -> Result<(), ResolveError> {
         // Only request real packages.
         let Some(name) = package.name_no_root() else {
@@ -1033,23 +1030,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
             // Emit a request to fetch the metadata for this distribution.
             let dist = Dist::from_url(name.clone(), url.clone())?;
-            if self.index.distributions().register(dist.distribution_id()) {
-                request_sink.blocking_send(Request::Dist(dist))?;
-            }
-        } else if let Some(index) = index {
-            // Emit a request to fetch the metadata for this package on the index.
-            if self
-                .index
-                .explicit()
-                .register((name.clone(), index.url().clone()))
-            {
-                request_sink.blocking_send(Request::Package(name.clone(), Some(index.clone())))?;
-            }
+            requests.request_metadata(dist.distribution_id(), || Ok(Request::Dist(dist)))?;
         } else {
-            // Emit a request to fetch the metadata for this package.
-            if self.index.implicit().register(name.clone()) {
-                request_sink.blocking_send(Request::Package(name.clone(), None))?;
-            }
+            requests.request_package(name, index)?;
         }
         Ok(())
     }
@@ -1068,7 +1051,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         urls: &Urls,
         indexes: &Indexes,
         python_requirement: &PythonRequirement,
-        request_sink: &Sender<Request>,
+        requests: &MetadataRequests,
     ) -> Result<(), ResolveError> {
         // Iterate over the potential packages, and fetch file metadata for any of them. These
         // represent our current best guesses for the versions that we _might_ select.
@@ -1097,11 +1080,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 continue;
             }
             pre_visited.insert(id, range.clone());
-            request_sink.blocking_send(Request::Prefetch(
-                name.clone(),
-                range.clone(),
-                python_requirement.clone(),
-            ))?;
+            requests.prefetch(name, range, python_requirement)?;
         }
         Ok(())
     }
@@ -1127,7 +1106,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
         visited: &mut FxHashSet<PackageName>,
-        request_sink: &Sender<Request>,
+        requests: &MetadataRequests,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
         match &**package {
             PubGrubPackageInner::Root(_) => {
@@ -1154,7 +1133,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             | PubGrubPackageInner::Group { name, .. }
             | PubGrubPackageInner::Package { name, .. } => {
                 if let Some(url) = package.name().and_then(|name| fork_urls.get(name)) {
-                    self.choose_version_url(id, name, range, url, env, python_requirement, pubgrub)
+                    self.choose_version_url(
+                        id,
+                        name,
+                        range,
+                        url,
+                        env,
+                        python_requirement,
+                        pubgrub,
+                        requests,
+                    )
                 } else {
                     self.choose_version_registry(
                         package,
@@ -1168,7 +1156,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         pubgrub,
                         pins,
                         visited,
-                        request_sink,
+                        requests,
                     )
                 }
             }
@@ -1186,6 +1174,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
+        requests: &MetadataRequests,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
         debug!(
             "Searching for a compatible version of {name} @ {} ({range})",
@@ -1194,11 +1183,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         let dist = Dist::from_url(name.clone(), url.clone())?;
         let distribution_id = dist.distribution_id();
-        let response = self
-            .index
-            .distributions()
-            .wait_blocking(&distribution_id)
-            .map_err(|_| ResolveError::UnregisteredTask(dist.to_string()))?;
+        let response = requests.wait_for_metadata(&distribution_id, || dist.to_string())?;
 
         // If we failed to fetch the metadata for a URL, we can't proceed.
         let metadata = match &*response {
@@ -1311,20 +1296,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         pubgrub: &State<UvDependencyProvider>,
         pins: &mut FilePins,
         visited: &mut FxHashSet<PackageName>,
-        request_sink: &Sender<Request>,
+        requests: &MetadataRequests,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
         // Wait for the metadata to be available.
-        let versions_response = if let Some(index) = index {
-            self.index
-                .explicit()
-                .wait_blocking(&(name.clone(), index.clone()))
-                .map_err(|_| ResolveError::UnregisteredTask(name.to_string()))?
-        } else {
-            self.index
-                .implicit()
-                .wait_blocking(name)
-                .map_err(|_| ResolveError::UnregisteredTask(name.to_string()))?
-        };
+        let versions_response = requests.wait_for_versions(name, index)?;
         visited.insert(name.clone());
 
         let version_maps = match *versions_response {
@@ -1440,7 +1415,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             env,
             pubgrub,
             pins,
-            request_sink,
+            requests,
         )? {
             return Ok(Some(forked));
         }
@@ -1462,7 +1437,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             candidate.choice_kind(),
             filename,
         );
-        self.visit_candidate(&candidate, dist, package, name, pins, request_sink)?;
+        self.visit_candidate(&candidate, dist, package, name, pins, requests)?;
 
         let version = candidate.version().clone();
         Ok(Some(ResolverVersion::Unforked(version)))
@@ -1494,7 +1469,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         env: &ResolverEnvironment,
         pubgrub: &State<UvDependencyProvider>,
         pins: &mut FilePins,
-        request_sink: &Sender<Request>,
+        requests: &MetadataRequests,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
         // This only applies to universal resolutions.
         if env.marker_environment().is_some() {
@@ -1624,14 +1599,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 base_candidate.choice_kind(),
                 filename,
             );
-            self.visit_candidate(
-                &base_candidate,
-                base_dist,
-                package,
-                name,
-                pins,
-                request_sink,
-            )?;
+            self.visit_candidate(&base_candidate, base_dist, package, name, pins, requests)?;
 
             return Ok(Some(ResolverVersion::Unforked(
                 base_candidate.version().clone(),
@@ -1678,15 +1646,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 .collect::<Vec<_>>()
                 .join(", ")
         );
-        self.visit_candidate(candidate, dist, package, name, pins, request_sink)?;
-        self.visit_candidate(
-            &base_candidate,
-            base_dist,
-            package,
-            name,
-            pins,
-            request_sink,
-        )?;
+        self.visit_candidate(candidate, dist, package, name, pins, requests)?;
+        self.visit_candidate(&base_candidate, base_dist, package, name, pins, requests)?;
 
         let forks = vec![
             VersionFork {
@@ -1711,7 +1672,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         package: &PubGrubPackage,
         name: &PackageName,
         pins: &mut FilePins,
-        request_sink: &Sender<Request>,
+        requests: &MetadataRequests,
     ) -> Result<(), ResolveError> {
         // We want to return a package pinned to a specific version; but we _also_ want to
         // store the exact file that we selected to satisfy that version.
@@ -1721,7 +1682,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         if matches!(&**package, PubGrubPackageInner::Package { .. }) {
             if self.dependency_mode.is_transitive() {
                 let dist = dist.for_resolution();
-                if self.index.distributions().register(dist.distribution_id()) {
+                requests.request_metadata(dist.distribution_id(), || {
                     if name != dist.name() {
                         return Err(ResolveError::MismatchedPackageName {
                             request: "distribution",
@@ -1737,9 +1698,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         return Err(ResolveError::UnhashedPackage(candidate.name().clone()));
                     }
 
-                    let request = Request::from(dist);
-                    request_sink.blocking_send(request)?;
-                }
+                    Ok(Request::from(dist))
+                })?;
             }
         }
 
@@ -1790,6 +1750,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
+        requests: &MetadataRequests,
     ) -> Result<ForkedDependencies, ResolveError> {
         let dependencies = self.get_dependencies(
             id,
@@ -1800,6 +1761,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             env,
             python_requirement,
             pubgrub,
+            requests,
         )?;
         if env.marker_environment().is_some() {
             Ok(ForkedDependencies::from_dependencies_platform_specific(
@@ -1827,6 +1789,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
+        requests: &MetadataRequests,
     ) -> Result<Dependencies, ResolveError> {
         let dependencies = match &**package {
             PubGrubPackageInner::Root(_) => {
@@ -1892,11 +1855,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
 
                 // Wait for the metadata to be available.
-                let response = self
-                    .index
-                    .distributions()
-                    .wait_blocking(distribution_id)
-                    .map_err(|_| ResolveError::UnregisteredTask(format!("{name}=={version}")))?;
+                let response =
+                    requests.wait_for_metadata(distribution_id, || format!("{name}=={version}"))?;
 
                 let metadata = match &*response {
                     MetadataResponse::Found(archive) => &archive.metadata,
