@@ -1484,8 +1484,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 if !env.included_by_marker(dist.implied_markers().and(marker))
                     && env.included_by_marker(find_environments(id, pubgrub).and(marker))
                 {
-                    // Then we need to fork.
-                    let Some((left, right)) = fork_version_by_marker(env, marker) else {
+                    // Artifact baselines constrain candidate coverage, not the runtime fork.
+                    // Backtrack throughout the corresponding ordinary marker environment.
+                    let Some((left, right)) =
+                        fork_version_by_marker(env, marker.without_artifact_markers())
+                    else {
                         return Ok(Some(ResolverVersion::Unavailable(
                             candidate.version().clone(),
                             UnavailableVersion::IncompatibleDist(IncompatibleDist::Wheel(
@@ -1557,8 +1560,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         // ...and the non-local version has greater platform support...
         let mut remainder = {
-            let mut remainder = base_dist.implied_markers();
-            remainder = remainder.and(dist.implied_markers().negate());
+            let mut remainder = base_dist.implied_markers().without_artifact_markers();
+            remainder = remainder.and(dist.implied_markers().without_artifact_markers().negate());
             remainder
         };
         if remainder.is_false() {

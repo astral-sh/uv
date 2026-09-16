@@ -6146,6 +6146,20 @@ impl ResolverManifest {
     }
 }
 
+/// Read coverage requirements without accepting artifact-only markers in dependency edges.
+fn deserialize_required_markers<'de, D>(deserializer: D) -> Result<Vec<MarkerTree>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let markers = <Vec<String> as serde::Deserialize>::deserialize(deserializer)?;
+    markers
+        .iter()
+        .map(|marker| {
+            MarkerTree::parse_required_environment(marker).map_err(serde::de::Error::custom)
+        })
+        .collect()
+}
+
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct LockWire {
@@ -6158,8 +6172,12 @@ struct LockWire {
     fork_markers: Vec<SimplifiedMarkerTree>,
     #[serde(rename = "supported-markers", default)]
     supported_environments: Vec<SimplifiedMarkerTree>,
-    #[serde(rename = "required-markers", default)]
-    required_environments: Vec<SimplifiedMarkerTree>,
+    #[serde(
+        rename = "required-markers",
+        default,
+        deserialize_with = "deserialize_required_markers"
+    )]
+    required_environments: Vec<MarkerTree>,
     #[serde(rename = "conflicts", default)]
     conflicts: Option<Conflicts>,
     /// We discard the lockfile if these options match.
@@ -6226,7 +6244,7 @@ impl TryFrom<LockWire> for Lock {
         let required_environments = wire
             .required_environments
             .into_iter()
-            .map(|simplified_marker| simplified_marker.into_marker(&wire.requires_python))
+            .map(|marker| wire.requires_python.complexify_markers(marker))
             .collect();
         let mut options_wire = wire.options;
         if options_wire.exclude_newer.exclude_newer_span.is_some() {

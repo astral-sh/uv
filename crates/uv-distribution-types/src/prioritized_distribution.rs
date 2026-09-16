@@ -6,7 +6,9 @@ use tracing::debug;
 
 use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
-use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
+use uv_pep508::{
+    MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString, MarkerValueVersion,
+};
 use uv_platform_tags::{
     AbiTag, BinaryFormat, IncompatibleTag, LanguageTag, PlatformTag, TagPriority, Tags,
 };
@@ -914,6 +916,24 @@ fn implied_platform_markers(filename: &WheelFilename) -> MarkerTree {
                     operator: MarkerOperator::Equal,
                     value: ArcStr::from(arch.name()),
                 }));
+                let glibc = match platform_tag {
+                    PlatformTag::Manylinux { major, minor, .. } => {
+                        Some([u64::from(*major), u64::from(*minor)])
+                    }
+                    PlatformTag::Manylinux1 { .. } => Some([2, 5]),
+                    PlatformTag::Manylinux2010 { .. } => Some([2, 12]),
+                    PlatformTag::Manylinux2014 { .. } => Some([2, 17]),
+                    // Neither musllinux nor an unversioned Linux tag promises glibc coverage.
+                    _ => None,
+                };
+                let specifier = glibc.map_or_else(
+                    || VersionSpecifier::equals_version(Version::new([0])),
+                    |version| VersionSpecifier::greater_than_equal_version(Version::new(version)),
+                );
+                tag_marker = tag_marker.and(MarkerTree::expression(MarkerExpression::Version {
+                    key: MarkerValueVersion::GlibcVersion,
+                    specifier,
+                }));
                 marker = marker.or(tag_marker);
             }
 
@@ -1067,7 +1087,7 @@ mod tests {
     fn assert_platform_markers(filename: &str, expected: &str) {
         let filename = WheelFilename::from_str(filename).unwrap();
         assert_eq!(
-            implied_platform_markers(&filename),
+            implied_platform_markers(&filename).without_artifact_markers(),
             expected.parse::<MarkerTree>().unwrap()
         );
     }
@@ -1085,9 +1105,33 @@ mod tests {
     fn assert_implied_markers(filename: &str, expected: &str) {
         let filename = WheelFilename::from_str(filename).unwrap();
         assert_eq!(
-            implied_markers(&filename),
+            implied_markers(&filename).without_artifact_markers(),
             expected.parse::<MarkerTree>().unwrap()
         );
+    }
+
+    #[test]
+    fn test_glibc_coverage() {
+        let required =
+            MarkerTree::parse_required_environment("uv:glibc_version == '2.17'").unwrap();
+        for (tag, covered) in [
+            ("manylinux1_x86_64", true),
+            ("manylinux2010_x86_64", true),
+            ("manylinux2014_x86_64", true),
+            ("manylinux_2_17_x86_64", true),
+            ("manylinux_2_28_x86_64", false),
+            ("musllinux_1_2_x86_64", false),
+            ("linux_x86_64", false),
+            ("any", true),
+        ] {
+            let filename =
+                WheelFilename::from_str(&format!("example-1.0-py3-none-{tag}.whl")).unwrap();
+            assert_eq!(
+                !implied_markers(&filename).is_disjoint(required),
+                covered,
+                "{tag}"
+            );
+        }
     }
 
     #[test]

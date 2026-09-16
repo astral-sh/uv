@@ -231,6 +231,26 @@ Use `==` to require coverage at the baseline. A range like `>= '24.0.0'` can be 
 that only supports a newer release. Wheels targeting newer releases are still retained in the
 lockfile.
 
+### Glibc coverage (prototype)
+
+The uv-specific `uv:glibc_version` marker can require wheels for an exact glibc baseline:
+
+```toml title="pyproject.toml"
+[tool.uv]
+required-environments = [
+    "platform_machine == 'x86_64' and uv:glibc_version == '2.31'",
+    "platform_machine == 'aarch64' and uv:glibc_version == '2.17'",
+]
+```
+
+This marker implies Linux and is only accepted in `required-environments`. It checks wheel coverage
+without filtering artifacts: newer manylinux and musllinux wheels remain in the lock. If a version
+has no compatible wheel or usable source distribution, uv backtracks to another version. It can
+select different versions for different architectures, but does not fork on glibc versions. The
+baseline is recorded in `required-markers`, not in dependency markers.
+
+Only exact comparisons are supported, such as `uv:glibc_version == '2.31'`.
+
 ## Common marker values
 
 The `environments` and `required-environments` settings accept

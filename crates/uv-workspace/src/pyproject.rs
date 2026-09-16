@@ -704,6 +704,10 @@ pub struct ToolUv {
             ]
         "#
     )]
+    #[serde(
+        default,
+        deserialize_with = "SupportedEnvironments::deserialize_required"
+    )]
     pub(crate) required_environments: Option<SupportedEnvironments>,
 
     /// Declare collections of extras or dependency groups that are conflicting

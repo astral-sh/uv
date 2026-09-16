@@ -42513,6 +42513,247 @@ fn lock_required_environment_python_fork() -> Result<()> {
     Ok(())
 }
 
+/// Glibc baselines constrain coverage without becoming runtime fork conditions.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_required_environment_glibc() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "required-environment-glibc"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.a.versions."1.0.0"]
+        sdist = false
+        wheel_tags = ["py3-none-manylinux2014_aarch64"]
+
+        [packages.a.versions."2.0.0"]
+        sdist = false
+        wheel_tags = ["py3-none-manylinux_2_28_x86_64", "py3-none-manylinux_2_34_x86_64", "py3-none-musllinux_1_2_x86_64", "py3-none-manylinux_2_28_aarch64"]
+
+        [packages.a.versions."3.0.0"]
+        sdist = false
+        wheel_tags = ["py3-none-manylinux_2_34_x86_64", "py3-none-musllinux_1_2_x86_64", "py3-none-manylinux_2_34_aarch64"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12").with_filters(
+        server
+            .files()
+            .map(|(filename, hash)| (hash.to_owned(), format!("[SHA256:{filename}]"))),
+    );
+    context.temp_dir.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a"]
+
+        [tool.uv]
+        environments = ["sys_platform == 'linux' and (platform_machine == 'x86_64' or platform_machine == 'aarch64')"]
+        required-environments = [
+            "platform_machine == 'x86_64' and uv:glibc_version == '2.31'",
+            "platform_machine == 'aarch64' and uv:glibc_version == '2.17'",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "platform_machine == 'aarch64' and sys_platform == 'linux'",
+            "platform_machine == 'x86_64' and sys_platform == 'linux'",
+        ]
+        supported-markers = [
+            "(platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')",
+        ]
+        required-markers = [
+            "uv:glibc_version == '2.31' and platform_machine == 'x86_64' and sys_platform == 'linux'",
+            "uv:glibc_version == '2.17' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "platform_machine == 'aarch64' and sys_platform == 'linux'",
+        ]
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-manylinux2014_aarch64.whl", hash = "sha256:[SHA256:a-1.0.0-py3-none-manylinux2014_aarch64.whl]", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "a"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "platform_machine == 'x86_64' and sys_platform == 'linux'",
+        ]
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-2.0.0-py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:[SHA256:a-2.0.0-py3-none-manylinux_2_28_x86_64.whl]", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/a-2.0.0-py3-none-manylinux_2_34_x86_64.whl", hash = "sha256:[SHA256:a-2.0.0-py3-none-manylinux_2_34_x86_64.whl]", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/a-2.0.0-py3-none-musllinux_1_2_x86_64.whl", hash = "sha256:[SHA256:a-2.0.0-py3-none-musllinux_1_2_x86_64.whl]", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "platform_machine != 'x86_64'" },
+            { name = "a", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "platform_machine == 'x86_64'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "a" }]
+        "#);
+    });
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.export().arg("--frozen").arg("--no-hashes"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv export --cache-dir [CACHE_DIR] --frozen --no-hashes
+    a==1.0.0 ; platform_machine == 'aarch64' and sys_platform == 'linux'
+        # via project
+    a==2.0.0 ; platform_machine == 'x86_64' and sys_platform == 'linux'
+        # via project
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--frozen")
+        .arg("--dry-run")
+        .arg("--python-platform")
+        .arg("x86_64-manylinux_2_31"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would use project environment at: .venv
+    Would download 1 package
+    Would install 1 package
+     + a==2.0.0
+    ");
+
+    // Requiring both baselines on x86 selects one version, rather than forking on glibc.
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(
+        &context
+            .read("pyproject.toml")
+            .replace(
+                "platform_machine == 'aarch64' and uv:glibc_version == '2.17'",
+                "platform_machine == 'x86_64' and uv:glibc_version == '2.28'",
+            )
+            .replace(
+                "(platform_machine == 'x86_64' or platform_machine == 'aarch64')",
+                "platform_machine == 'x86_64'",
+            ),
+    )?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Updated a v1.0.0, v2.0.0 -> v2.0.0
+    ");
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "platform_machine == 'x86_64' and sys_platform == 'linux'",
+        ]
+        supported-markers = [
+            "platform_machine == 'x86_64' and sys_platform == 'linux'",
+        ]
+        required-markers = [
+            "uv:glibc_version == '2.31' and platform_machine == 'x86_64' and sys_platform == 'linux'",
+            "uv:glibc_version == '2.28' and platform_machine == 'x86_64' and sys_platform == 'linux'",
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "a"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-2.0.0-py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:[SHA256:a-2.0.0-py3-none-manylinux_2_28_x86_64.whl]", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/a-2.0.0-py3-none-manylinux_2_34_x86_64.whl", hash = "sha256:[SHA256:a-2.0.0-py3-none-manylinux_2_34_x86_64.whl]", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/a-2.0.0-py3-none-musllinux_1_2_x86_64.whl", hash = "sha256:[SHA256:a-2.0.0-py3-none-musllinux_1_2_x86_64.whl]", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "a" }]
+        "#);
+    });
+
+    // Direct wheels must also satisfy the baseline.
+    let wheel = server.file_url("a-3.0.0-py3-none-manylinux_2_34_x86_64.whl");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a @ {wheel}"]
+
+        [tool.uv]
+        environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+        required-environments = ["platform_machine == 'x86_64' and uv:glibc_version == '2.31'"]
+    "#})?;
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .chain([(
+            r"\nhint: The resolution failed for an environment that is not the current one[^\n]*",
+            "",
+        )])
+        .collect();
+    uv_snapshot!(filters, context.lock(), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies for split (markers: platform_machine == 'x86_64' and sys_platform == 'linux')
+      cause: Because only a==3.0.0 is available and a==3.0.0 has no `uv:glibc_version == '2.31' and platform_machine == 'x86_64' and sys_platform == 'linux'`-compatible wheels, we can conclude that all versions of a cannot be used.
+             And because your project depends on a, we can conclude that your project's requirements are unsatisfiable.
+
+    ");
+    Ok(())
+}
+
 /// A required Darwin release must have a compatible wheel, without removing newer wheels.
 #[cfg(feature = "test-universal")]
 #[test]

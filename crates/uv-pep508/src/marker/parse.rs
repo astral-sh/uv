@@ -104,6 +104,11 @@ fn parse_marker_value<T: Pep508Url>(
                 !char.is_whitespace() && !matches!(char, '>' | '=' | '<' | '!' | '~' | ')')
             });
             let key = cursor.slice(start, len);
+            if cursor.artifact_markers && key == "uv:glibc_version" {
+                return Ok(MarkerValue::MarkerEnvVersion(
+                    MarkerValueVersion::GlibcVersion,
+                ));
+            }
             MarkerValue::from_str(key)
                 .map_err(|_| Pep508Error {
                     message: Pep508ErrorSource::String(format!(
@@ -180,6 +185,44 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
     cursor.eat_whitespace();
     let r_value = parse_marker_value(cursor, reporter)?;
     let len = cursor.pos() - start;
+
+    // Coverage requirements name a concrete baseline. Zero is reserved internally for tags
+    // that make no glibc compatibility promise.
+    if l_value == MarkerValue::MarkerEnvVersion(MarkerValueVersion::GlibcVersion)
+        || r_value == MarkerValue::MarkerEnvVersion(MarkerValueVersion::GlibcVersion)
+    {
+        let version = match (&l_value, &r_value) {
+            (
+                MarkerValue::MarkerEnvVersion(MarkerValueVersion::GlibcVersion),
+                MarkerValue::QuotedString(value),
+            )
+            | (
+                MarkerValue::QuotedString(value),
+                MarkerValue::MarkerEnvVersion(MarkerValueVersion::GlibcVersion),
+            ) => value.parse::<Version>().ok(),
+            _ => None,
+        };
+        if operator != MarkerOperator::Equal
+            || !version.as_ref().is_some_and(|version| {
+                version.release().len() <= 2
+                    && version.release()[0] >= 2
+                    && !version.any_prerelease()
+                    && version.local().is_empty()
+                    && version.epoch() == 0
+                    && version.post().is_none()
+            })
+        {
+            return Err(Pep508Error {
+                message: Pep508ErrorSource::String(
+                    "Expected an exact glibc baseline, such as uv:glibc_version == '2.31'"
+                        .to_string(),
+                ),
+                start,
+                len,
+                input: cursor.to_string(),
+            });
+        }
+    }
 
     // Convert a `<marker_value> <marker_op> <marker_value>` expression into its
     // typed equivalent.

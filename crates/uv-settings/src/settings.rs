@@ -163,6 +163,10 @@ pub struct Options {
     pub environments: Option<SupportedEnvironments>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
+    #[serde(
+        default,
+        deserialize_with = "SupportedEnvironments::deserialize_required"
+    )]
     pub required_environments: Option<SupportedEnvironments>,
 
     // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
@@ -2637,6 +2641,10 @@ struct OptionsWire {
     constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     build_constraint_dependencies: Option<Vec<BuildConstraintDependency>>,
     environments: Option<SupportedEnvironments>,
+    #[serde(
+        default,
+        deserialize_with = "SupportedEnvironments::deserialize_required"
+    )]
     required_environments: Option<SupportedEnvironments>,
 
     // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in

@@ -9,6 +9,31 @@ use uv_pep508::MarkerTree;
 pub struct SupportedEnvironments(Vec<MarkerTree>);
 
 impl SupportedEnvironments {
+    /// Deserialize required environments with uv-only artifact coverage markers enabled.
+    pub fn deserialize_required<'de, D>(deserializer: D) -> Result<Option<Self>, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(serde::Deserialize)]
+        #[serde(untagged)]
+        enum StringOrVec {
+            String(String),
+            Vec(Vec<String>),
+        }
+
+        let strings = match <StringOrVec as serde::Deserialize>::deserialize(deserializer)? {
+            StringOrVec::String(marker) => vec![marker],
+            StringOrVec::Vec(markers) => markers,
+        };
+        strings
+            .iter()
+            .map(|marker| {
+                MarkerTree::parse_required_environment(marker).map_err(serde::de::Error::custom)
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .map(|markers| Some(Self(markers)))
+    }
+
     /// Create a new [`SupportedEnvironments`] struct from a list of marker trees.
     pub fn from_markers(markers: Vec<MarkerTree>) -> Self {
         Self(markers)
