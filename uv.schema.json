@@ -332,7 +332,7 @@
       "type": ["boolean", "null"]
     },
     "minimum-libc-version": {
-      "description": "The libc implementation and minimum version to support when resolving for Linux.\n\nDuring universal resolution, uv will exclude wheels for the other libc implementation and\nwheels that require a newer version. For example, `{ glibc = \"2.31\" }` allows\n`manylinux_2_17` wheels, but not `manylinux_2_34` or `musllinux` wheels. If unset, both\nglibc and musl wheels remain eligible.\n\nSpecify either `glibc` or `musl`, but not both. Use `required-environments` to specify\nthe Linux architectures to support.\nPackages with a usable source distribution can still be selected.\n\nThis setting is respected by `uv lock` and `uv pip compile --universal`.\n\nThis option is in preview and may change in any future release. Use\n`--preview-features minimum-libc-version` or configure\n`preview-features = [\"minimum-libc-version\"]` to disable the warning.",
+      "description": "The minimum libc versions to support when resolving for Linux.\n\nDuring universal resolution, uv excludes wheels that require a newer version of a configured\nlibc. For example, `{ glibc = \"2.31\" }` allows `manylinux_2_17` wheels, but not\n`manylinux_2_34` wheels. An omitted libc is unconstrained; set it to `false` to exclude its\nwheels, as in `{ glibc = \"2.31\", musl = false }`.\n\nUse `required-environments` to specify the Linux architectures to support. Each configured\nlibc version needs compatible artifacts for those environments; wheels for another libc\ndo not provide coverage. Packages with a usable source distribution can still be selected.\n\nThis setting is respected by `uv lock` and `uv pip compile --universal`.\n\nThis option is in preview and may change in any future release. Use\n`--preview-features minimum-libc-version` or configure\n`preview-features = [\"minimum-libc-version\"]` to disable the warning.",
       "anyOf": [
         {
           "$ref": "#/definitions/MinimumLibcVersion"
@@ -1221,6 +1221,16 @@
         }
       ]
     },
+    "LibcConstraint": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "const": false
+        }
+      ]
+    },
     "LinkMode": {
       "description": "The method to use when linking.\n\nDefaults to [`LinkMode::Clone`] on macOS and Linux (which support copy-on-write on\nAPFS and btrfs/xfs/bcachefs respectively), and [`LinkMode::Hardlink`] on other\nplatforms.",
       "oneOf": [
@@ -1251,29 +1261,31 @@
       "type": "string"
     },
     "MinimumLibcVersion": {
-      "description": "The selected Linux libc implementation and its oldest supported release.",
-      "oneOf": [
-        {
-          "type": "object",
-          "properties": {
-            "glibc": {
-              "type": "string"
+      "description": "The oldest supported release of each Linux libc, or an explicit exclusion.",
+      "type": "object",
+      "properties": {
+        "glibc": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/LibcConstraint"
+            },
+            {
+              "type": "null"
             }
-          },
-          "additionalProperties": false,
-          "required": ["glibc"]
+          ]
         },
-        {
-          "type": "object",
-          "properties": {
-            "musl": {
-              "type": "string"
+        "musl": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/LibcConstraint"
+            },
+            {
+              "type": "null"
             }
-          },
-          "additionalProperties": false,
-          "required": ["musl"]
+          ]
         }
-      ]
+      },
+      "additionalProperties": false
     },
     "ModuleName": {
       "description": "Whether to include a single module or multiple modules.",

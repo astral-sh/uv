@@ -42,9 +42,8 @@ use uv_configuration::{
     VersionControlSystem,
 };
 use uv_distribution_types::{
-    MinimumLibcVersion,
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, IndexUrl,
-    NameRequirementSpecification, PackageConfigSettings, Requirement,
+    MinimumLibcVersion, NameRequirementSpecification, PackageConfigSettings, Requirement,
 };
 use uv_install_wheel::LinkMode;
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
