@@ -19,5 +19,8 @@ serde = { workspace = true }
 thiserror = { workspace = true }
 url = { workspace = true }
 
+[dev-dependencies]
+insta = { workspace = true }
+
 [features]
 schemars = ["dep:schemars"]

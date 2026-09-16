@@ -7190,6 +7190,7 @@ dependencies = [
 name = "uv-redacted"
 version = "0.0.82"
 dependencies = [
+ "insta",
  "ref-cast",
  "schemars",
  "serde",
