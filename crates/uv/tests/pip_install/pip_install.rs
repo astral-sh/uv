@@ -10659,6 +10659,53 @@ fn require_build_hashes_from_build_constraint() -> Result<()> {
     Ok(())
 }
 
+/// Required build hashes reject an MD5-only URL before running the build backend.
+#[test]
+fn require_build_hashes_rejects_md5_url() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = FindLinksServer::new(&context.workspace_root.join("test/links"));
+    let context = context.with_filter((server.url().to_string(), "http://[LOCALHOST]"));
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "hash-test"
+        version = "1.0.0"
+
+        [build-system]
+        requires = ["ok @ {}/ok-1.0.0-py3-none-any.whl#md5=88d6d524262f256596aa7f663c88038b"]
+        build-backend = "backend"
+        backend-path = ["."]
+    "#, server.url()})?;
+    context.temp_dir.child("backend.py").write_str(indoc! {r#"
+        from pathlib import Path
+        Path(__file__).with_name("backend-executed").touch()
+        raise RuntimeError("build backend executed")
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(".")
+        .arg("--no-index")
+        .arg("--require-build-hashes")
+        .arg("--preview-features").arg("build-dependency-hashes"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    WARN Range requests not supported for ok-1.0.0-py3-none-any.whl; streaming wheel
+    error: Failed to build `hash-test @ file://[TEMP_DIR]/`
+      cause: Failed to resolve requirements from `build-system.requires`
+      cause: No solution found when resolving: `ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl#md5=88d6d524262f256596aa7f663c88038b`
+      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `ok`
+    ");
+    context
+        .temp_dir
+        .child("backend-executed")
+        .assert(predicate::path::missing());
+
+    Ok(())
+}
+
 /// Include `build-constraint-dependencies` in pyproject.toml with an incompatible constraint.
 #[test]
 fn incompatible_build_constraint_in_pyproject_toml() -> Result<()> {
