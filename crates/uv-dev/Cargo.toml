@@ -52,12 +52,7 @@ markdown = { version = "1.0.0", default-features = false }
 poloto = { version = "19.1.2", default-features = false, optional = true }
 pretty_assertions = { version = "1.4.1", default-features = false, features = ["std"] }
 reqwest = { workspace = true, features = ["stream"] }
-resvg = { version = "0.47.0", default-features = false, features = [
-  "text",
-  "system-fonts",
-  "memmap-fonts",
-  "raster-images",
-], optional = true }
+resvg = { version = "0.47.0", default-features = false, features = ["text", "system-fonts"], optional = true }
 schemars = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

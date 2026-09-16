@@ -1,3 +1,7 @@
+[bans]
+multiple-versions = "allow"
+external-default-features = "deny"
+
 [bans.build]
 allow-build-scripts = [
     "anyhow",
