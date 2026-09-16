@@ -29,9 +29,9 @@ fn wheel(context: &TestContext, name: &str, version: &str, tag: &str) -> Result<
     Ok(wheel)
 }
 
-/// The glibc floor retains musl artifacts unless they are explicitly excluded.
+/// A libc baseline preserves newer wheels; only explicit exclusions remove artifacts.
 #[test]
-fn minimum_libc_filters_locked_wheels() -> Result<()> {
+fn minimum_libc_retains_locked_wheels() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     for tag in [
         "cp312-cp312-manylinux_2_17_x86_64",
@@ -138,6 +138,7 @@ fn minimum_libc_filters_locked_wheels() -> Result<()> {
         source = { registry = "links" }
         wheels = [
             { path = "demo-1.0.0-cp312-cp312-manylinux_2_17_x86_64.whl" },
+            { path = "demo-1.0.0-cp312-cp312-manylinux_2_34_x86_64.whl" },
             { path = "demo-1.0.0-cp312-cp312-musllinux_1_2_x86_64.whl" },
             { path = "demo-1.0.0-cp312-cp312-macosx_11_0_arm64.whl" },
             { path = "demo-1.0.0-cp312-cp312-win_amd64.whl" },
@@ -162,6 +163,35 @@ fn minimum_libc_filters_locked_wheels() -> Result<()> {
         Resolved 2 packages in [TIME]
     ");
 
+    uv_snapshot!(context.filters(), context.sync().args(["--frozen", "--offline", "--python-platform", "x86_64-manylinux_2_31", "--preview-features", "minimum-libc-version"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + demo==1.0.0
+    ");
+    assert_snapshot!(fs_err::read_to_string(context.site_packages().join("demo-1.0.0.dist-info/WHEEL"))?, @"
+    Wheel-Version: 1.0
+    Generator: uv-test
+    Root-Is-Purelib: true
+    Tag: cp312-cp312-manylinux_2_17_x86_64
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().args(["--frozen", "--offline", "--reinstall", "--python-platform", "x86_64-manylinux_2_34", "--preview-features", "minimum-libc-version"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ demo==1.0.0
+    ");
+    assert_snapshot!(fs_err::read_to_string(context.site_packages().join("demo-1.0.0.dist-info/WHEEL"))?, @"
+    Wheel-Version: 1.0
+    Generator: uv-test
+    Root-Is-Purelib: true
+    Tag: cp312-cp312-manylinux_2_34_x86_64
+    ");
+
     uv_snapshot!(context.filters(), context.pip_compile().args(["pyproject.toml", "--universal", "--format", "pylock.toml", "--offline", "--no-header", "--preview-features", "minimum-libc-version"]), @r#"
     exit_code: 0 (success)
     ----- stdout -----
@@ -174,6 +204,7 @@ fn minimum_libc_filters_locked_wheels() -> Result<()> {
     version = "1.0.0"
     wheels = [
         { url = "file://[TEMP_DIR]/links/demo-1.0.0-cp312-cp312-manylinux_2_17_x86_64.whl", hashes = { sha256 = "eb2ff51027ef5001a478ca15a93fbd009fdda87e36238238a52f1d4019502428" } },
+        { url = "file://[TEMP_DIR]/links/demo-1.0.0-cp312-cp312-manylinux_2_34_x86_64.whl", hashes = { sha256 = "323b83a192c357544c5a13f7f75beefb121ed3cddf6307d7811c062072530a81" } },
         { url = "file://[TEMP_DIR]/links/demo-1.0.0-cp312-cp312-musllinux_1_2_x86_64.whl", hashes = { sha256 = "194d18836a1a5cc527c87a7f315f12cb4b69516977e26583a6d7ca72ef2ee6de" } },
         { url = "file://[TEMP_DIR]/links/demo-1.0.0-cp312-cp312-macosx_11_0_arm64.whl", hashes = { sha256 = "ed676c33c75c4e3d56b53b061173a4ec378e289013cef527ae68ce525f30be80" } },
         { url = "file://[TEMP_DIR]/links/demo-1.0.0-cp312-cp312-win_amd64.whl", hashes = { sha256 = "c0b5946665f8aebba3d880c4e5658f346e3971ec2cc0013780eab4dafbbfcad6" } },
@@ -187,6 +218,7 @@ fn minimum_libc_filters_locked_wheels() -> Result<()> {
     ----- stdout -----
     demo==1.0.0 \
         --hash=sha256:194d18836a1a5cc527c87a7f315f12cb4b69516977e26583a6d7ca72ef2ee6de \
+        --hash=sha256:323b83a192c357544c5a13f7f75beefb121ed3cddf6307d7811c062072530a81 \
         --hash=sha256:c0b5946665f8aebba3d880c4e5658f346e3971ec2cc0013780eab4dafbbfcad6 \
         --hash=sha256:eb2ff51027ef5001a478ca15a93fbd009fdda87e36238238a52f1d4019502428 \
         --hash=sha256:ed676c33c75c4e3d56b53b061173a4ec378e289013cef527ae68ce525f30be80
@@ -235,6 +267,7 @@ fn minimum_libc_filters_locked_wheels() -> Result<()> {
         source = { registry = "links" }
         wheels = [
             { path = "demo-1.0.0-cp312-cp312-manylinux_2_17_x86_64.whl" },
+            { path = "demo-1.0.0-cp312-cp312-manylinux_2_34_x86_64.whl" },
             { path = "demo-1.0.0-cp312-cp312-macosx_11_0_arm64.whl" },
             { path = "demo-1.0.0-cp312-cp312-win_amd64.whl" },
         ]
@@ -261,6 +294,7 @@ fn minimum_libc_filters_locked_wheels() -> Result<()> {
     exit_code: 0 (success)
     ----- stdout -----
     demo==1.0.0 \
+        --hash=sha256:323b83a192c357544c5a13f7f75beefb121ed3cddf6307d7811c062072530a81 \
         --hash=sha256:c0b5946665f8aebba3d880c4e5658f346e3971ec2cc0013780eab4dafbbfcad6 \
         --hash=sha256:eb2ff51027ef5001a478ca15a93fbd009fdda87e36238238a52f1d4019502428 \
         --hash=sha256:ed676c33c75c4e3d56b53b061173a4ec378e289013cef527ae68ce525f30be80
@@ -453,14 +487,16 @@ fn minimum_libc_unhashed_index_hashes() -> Result<()> {
         "cp312-cp312-manylinux_2_17_x86_64",
         "cp312-cp312-manylinux_2_34_x86_64",
         "cp312-cp312-manylinux_2_28_x86_64",
+        "cp312-cp312-musllinux_1_2_x86_64",
     ] {
         let wheel = wheel(&context, "demo", "1.0.0", tag)?;
         hashes.push(hex::encode(Sha256::digest(fs_err::read(wheel)?)));
     }
     let context = context.with_filters([
         (hashes[0].clone(), "[GLIBC_2_17_HASH]".to_string()),
-        (hashes[1].clone(), "[EXCLUDED_HASH]".to_string()),
+        (hashes[1].clone(), "[GLIBC_2_34_HASH]".to_string()),
         (hashes[2].clone(), "[GLIBC_2_28_HASH]".to_string()),
+        (hashes[3].clone(), "[MUSL_HASH]".to_string()),
     ]);
     context
         .temp_dir
@@ -475,31 +511,33 @@ fn minimum_libc_unhashed_index_hashes() -> Result<()> {
         [tool.uv]
         no-index = true
         find-links = ["links"]
-        minimum-libc-version = { glibc = "2.31" }
+        minimum-libc-version = { glibc = "2.31", musl = false }
     "#})?;
     context
         .temp_dir
         .child("requirements.txt")
         .write_str(&format!(
-            "demo==1.0.0 --hash=sha256:{} --hash=sha256:{} --hash=sha256:{}\n",
-            hashes[0], hashes[1], hashes[2],
+            "demo==1.0.0 --hash=sha256:{} --hash=sha256:{} --hash=sha256:{} --hash=sha256:{}\n",
+            hashes[0], hashes[1], hashes[2], hashes[3],
         ))?;
 
     uv_snapshot!(context.filters(), context.pip_compile().args(["pyproject.toml", "--universal", "--generate-hashes", "--offline", "--no-header", "--no-annotate", "--output-file", "requirements.txt", "--preview-features", "minimum-libc-version"]), @r"
     exit_code: 0 (success)
     ----- stdout -----
     demo==1.0.0 \
+        --hash=sha256:[GLIBC_2_34_HASH] \
         --hash=sha256:[GLIBC_2_28_HASH] \
         --hash=sha256:[GLIBC_2_17_HASH]
 
     ----- stderr -----
     Resolved 1 package in [TIME]
     ");
-    // Reuse only valid hashes on the second compile without losing either allowed wheel.
+    // Recompiling retains the newer wheel's hash too.
     uv_snapshot!(context.filters(), context.pip_compile().args(["pyproject.toml", "--universal", "--generate-hashes", "--offline", "--no-header", "--no-annotate", "--output-file", "requirements.txt", "--preview-features", "minimum-libc-version"]), @r"
     exit_code: 0 (success)
     ----- stdout -----
     demo==1.0.0 \
+        --hash=sha256:[GLIBC_2_34_HASH] \
         --hash=sha256:[GLIBC_2_28_HASH] \
         --hash=sha256:[GLIBC_2_17_HASH]
 
@@ -509,7 +547,7 @@ fn minimum_libc_unhashed_index_hashes() -> Result<()> {
     Ok(())
 }
 
-/// Local-version fallback considers only wheels permitted by the libc cutoff.
+/// Local-version fallback requires coverage at the configured libc baseline.
 #[test]
 fn minimum_libc_local_version_fallback() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -584,6 +622,7 @@ fn minimum_libc_local_version_fallback() -> Result<()> {
         ]
         wheels = [
             { path = "demo-1.0.0+cpu-cp312-cp312-manylinux_2_17_x86_64.whl" },
+            { path = "demo-1.0.0+cpu-cp312-cp312-manylinux_2_34_aarch64.whl" },
         ]
 
         [[package]]
@@ -650,7 +689,7 @@ fn minimum_libc_backtracks_and_invalidates_lock() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
-    Resolved 2 packages in [TIME]
+    Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
 
     hint: To update the lockfile, run `uv lock`.
@@ -660,22 +699,24 @@ fn minimum_libc_backtracks_and_invalidates_lock() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
-    Resolved 2 packages in [TIME]
-    Updated demo v2.0.0 -> v1.0.0
+    Resolved 3 packages in [TIME]
+    Updated demo v2.0.0 -> v1.0.0, v2.0.0
     ");
-    uv_snapshot!(context.filters(), context.export().args(["--frozen", "--no-hashes", "--no-header", "--no-annotate"]), @r"
-        exit_code: 0 (success)
-        ----- stdout -----
-        demo==1.0.0
+    uv_snapshot!(context.filters(), context.export().args(["--frozen", "--no-hashes", "--no-header", "--no-annotate"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    demo==1.0.0 ; platform_machine == 'x86_64' and sys_platform == 'linux'
+    demo==2.0.0 ; platform_machine != 'x86_64' or sys_platform != 'linux'
     ");
     uv_snapshot!(context.filters(), context.pip_compile().args(["pyproject.toml", "--universal", "--offline", "--no-header", "--no-annotate"]), @"
     exit_code: 0 (success)
     ----- stdout -----
-    demo==1.0.0
+    demo==1.0.0 ; platform_machine == 'x86_64' and sys_platform == 'linux'
+    demo==2.0.0 ; platform_machine != 'x86_64' or sys_platform != 'linux'
 
     ----- stderr -----
     warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
-    Resolved 1 package in [TIME]
+    Resolved 2 packages in [TIME]
     ");
     let lock = context.read("uv.lock");
     insta::with_settings!({filters => context.filters()}, {
@@ -683,6 +724,10 @@ fn minimum_libc_backtracks_and_invalidates_lock() -> Result<()> {
         version = 1
         revision = 3
         requires-python = ">=3.12"
+        resolution-markers = [
+            "platform_machine != 'x86_64' or sys_platform != 'linux'",
+            "platform_machine == 'x86_64' and sys_platform == 'linux'",
+        ]
         required-markers = [
             "platform_machine == 'x86_64' and sys_platform == 'linux'",
         ]
@@ -695,8 +740,22 @@ fn minimum_libc_backtracks_and_invalidates_lock() -> Result<()> {
         name = "demo"
         version = "1.0.0"
         source = { registry = "links" }
+        resolution-markers = [
+            "platform_machine == 'x86_64' and sys_platform == 'linux'",
+        ]
         wheels = [
             { path = "demo-1.0.0-cp312-cp312-manylinux_2_17_x86_64.whl" },
+        ]
+
+        [[package]]
+        name = "demo"
+        version = "2.0.0"
+        source = { registry = "links" }
+        resolution-markers = [
+            "platform_machine != 'x86_64' or sys_platform != 'linux'",
+        ]
+        wheels = [
+            { path = "demo-2.0.0-cp312-cp312-manylinux_2_34_x86_64.whl" },
         ]
 
         [[package]]
@@ -704,7 +763,8 @@ fn minimum_libc_backtracks_and_invalidates_lock() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "demo" },
+            { name = "demo", version = "1.0.0", source = { registry = "links" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+            { name = "demo", version = "2.0.0", source = { registry = "links" }, marker = "platform_machine != 'x86_64' or sys_platform != 'linux'" },
         ]
 
         [package.metadata]
@@ -715,7 +775,7 @@ fn minimum_libc_backtracks_and_invalidates_lock() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
-    Resolved 2 packages in [TIME]
+    Resolved 3 packages in [TIME]
     ");
 
     // Changing the floor invalidates the lock even when the selected wheel remains compatible.
@@ -737,7 +797,7 @@ fn minimum_libc_backtracks_and_invalidates_lock() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
-    Resolved 2 packages in [TIME]
+    Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
 
     hint: To update the lockfile, run `uv lock`.
@@ -833,7 +893,11 @@ fn minimum_libc_no_compatible_version() -> Result<()> {
 /// A source distribution remains usable when its wheel requires a newer glibc.
 #[test]
 fn minimum_libc_allows_sdist_fallback() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filters([(
+        r"\nhint: The resolution failed for an environment that is not the current one[^\n]*"
+            .to_string(),
+        String::new(),
+    )]);
     wheel(
         &context,
         "demo",
@@ -904,6 +968,9 @@ fn minimum_libc_allows_sdist_fallback() -> Result<()> {
         version = "2.0.0"
         source = { registry = "links" }
         sdist = { path = "demo-2.0.0.tar.gz" }
+        wheels = [
+            { path = "demo-2.0.0-cp312-cp312-manylinux_2_34_x86_64.whl" },
+        ]
 
         [[package]]
         name = "project"
@@ -923,11 +990,9 @@ fn minimum_libc_allows_sdist_fallback() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
-    error: No solution found when resolving dependencies
-      cause: Because demo==2.0.0 has no usable wheels and only demo==2.0.0 is available, we can conclude that all versions of demo cannot be used.
+    error: No solution found when resolving dependencies for split (markers: platform_machine == 'x86_64' and sys_platform == 'linux')
+      cause: Because demo==2.0.0 has no `platform_machine == 'x86_64' and sys_platform == 'linux'`-compatible wheels and only demo==2.0.0 is available, we can conclude that all versions of demo cannot be used.
              And because your project depends on demo, we can conclude that your project's requirements are unsatisfiable.
-
-    hint: Wheels are required for `demo` because building from source is disabled for all packages (i.e., with `--no-build`)
     ");
 
     // With binaries disabled, a permitted wheel can provide metadata, but its hash must not
@@ -970,7 +1035,11 @@ fn minimum_libc_allows_sdist_fallback() -> Result<()> {
 
 #[test]
 fn minimum_libc_direct_url() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filters([(
+        r"\nhint: The resolution failed for an environment that is not the current one[^\n]*"
+            .to_string(),
+        String::new(),
+    )]);
     let wheel = wheel(
         &context,
         "demo",
@@ -994,7 +1063,7 @@ fn minimum_libc_direct_url() -> Result<()> {
         [tool.uv]
         no-index = true
         find-links = ["links"]
-        required-environments = []
+        required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
         minimum-libc-version = {{ glibc = "2.31" }}
     "#})?;
 
@@ -1003,7 +1072,7 @@ fn minimum_libc_direct_url() -> Result<()> {
     ----- stderr -----
     warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
     error: No solution found when resolving dependencies
-      cause: Because only demo==2.0.0 is available and demo==2.0.0 has no wheels compatible with glibc 2.31, we can conclude that all versions of demo cannot be used.
+      cause: Because only demo==2.0.0 is available and demo==2.0.0 has no `platform_machine == 'x86_64' and sys_platform == 'linux'`-compatible wheels, we can conclude that all versions of demo cannot be used.
              And because your project depends on demo, we can conclude that your project's requirements are unsatisfiable.
     ");
     assert!(!context.temp_dir.child("uv.lock").exists());
@@ -1151,6 +1220,7 @@ fn minimum_libc_architectures_and_markers() -> Result<()> {
             "sys_platform == 'darwin'",
         ]
         wheels = [
+            { path = "demo-2.0.0-cp312-cp312-manylinux_2_34_aarch64.whl" },
             { path = "demo-2.0.0-cp312-cp312-musllinux_1_2_aarch64.whl" },
             { path = "demo-2.0.0-cp312-cp312-macosx_11_0_arm64.whl" },
             { path = "demo-2.0.0-cp312-cp312-manylinux_2_17_x86_64.manylinux_2_34_aarch64.whl" },

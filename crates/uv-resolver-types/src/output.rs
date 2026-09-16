@@ -126,7 +126,7 @@ impl ResolverOutput {
         self.base_dists().next().is_none()
     }
 
-    /// Generate registry hashes from the artifacts retained by a libc cutoff and build options.
+    /// Generate registry hashes from the artifacts retained by libc exclusions and build options.
     ///
     /// Existing requirements hashes have no artifact association. When filtering artifacts, use
     /// advertised hashes or hash the retained files instead of reusing an ambiguous subset.

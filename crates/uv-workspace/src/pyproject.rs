@@ -710,10 +710,11 @@ pub struct ToolUv {
 
     /// The minimum libc versions to support when resolving for Linux.
     ///
-    /// During universal resolution, uv excludes wheels that require a newer version of a configured
-    /// libc. For example, `{ glibc = "2.31" }` allows `manylinux_2_17` wheels, but not
-    /// `manylinux_2_34` wheels. An omitted libc is unconstrained; set it to `false` to exclude its
-    /// wheels, as in `{ glibc = "2.31", musl = false }`.
+    /// During universal resolution, wheels must support the configured libc versions to satisfy
+    /// `required-environments`. For example, `{ glibc = "2.31" }` accepts `manylinux_2_17` wheels
+    /// as coverage, but not `manylinux_2_34` wheels. Both are retained in the lockfile so installation
+    /// can select the best wheel for the current machine. An omitted libc is unconstrained; set it
+    /// to `false` to exclude its wheels, as in `{ glibc = "2.31", musl = false }`.
     ///
     /// Use `required-environments` to specify the Linux architectures to support. Each configured
     /// libc version needs compatible artifacts for those environments; wheels for another libc
