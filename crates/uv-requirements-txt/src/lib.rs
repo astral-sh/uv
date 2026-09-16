@@ -1090,8 +1090,36 @@ fn parse_config_setting(
     s: &mut Scanner,
 ) -> Result<ConfigSettingEntry, RequirementsTxtParserError> {
     let start = s.cursor();
-    let value = parse_value(option, content, s, |c: char| !c.is_whitespace())?;
-    ConfigSettingEntry::from_str(value).map_err(|message| {
+    let mut quote = None;
+    let mut escaped = false;
+    let value = parse_value(option, content, s, |c: char| {
+        if matches!(c, '\n' | '\r') {
+            return false;
+        }
+        if escaped {
+            escaped = false;
+        } else if c == '\\' && quote != Some('\'') {
+            escaped = true;
+        } else if quote == Some(c) {
+            quote = None;
+        } else if quote.is_none() && matches!(c, '\'' | '"') {
+            quote = Some(c);
+        } else if quote.is_none() && c.is_whitespace() {
+            return false;
+        }
+        true
+    })?;
+    let value = unquote(value)
+        .map(|unquoted| unquoted.map_or(Cow::Borrowed(value), Cow::Owned))
+        .map_err(|err| {
+            let (line, column) = calculate_row_column(content, start);
+            RequirementsTxtParserError::Parser {
+                message: format!("Invalid argument for `{option}`: {err}"),
+                line,
+                column,
+            }
+        })?;
+    ConfigSettingEntry::from_str(&value).map_err(|message| {
         let (line, column) = calculate_row_column(content, start);
         RequirementsTxtParserError::Parser {
             message,
@@ -2968,6 +2996,53 @@ mod test {
                 .unwrap_or_default(),
             @r#"{"editable_mode":"compat"}"#
         );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn quoted_config_settings() -> Result<()> {
+        let temp_dir = assert_fs::TempDir::new()?;
+        let requirements_txt = temp_dir.child("requirements.txt");
+        requirements_txt.write_str(indoc! {r#"
+            --config-settings="mode=custom" flask --config-settings='greeting=hello world' -C path=hello\ world --config-settings="quote=it's \"quoted\"" --hash=sha256:deadbeef
+            idna --config-settings=mode='also custom'
+        "#})?;
+
+        let requirements = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path()).await?;
+        insta::assert_snapshot!(
+            requirements.requirements[0]
+                .config_settings
+                .as_ref()
+                .map(super::ConfigSettings::escape_for_python)
+                .unwrap_or_default(),
+            @r#"{"greeting":"hello world","mode":"custom","path":"hello world","quote":"it's \"quoted\""}"#
+        );
+        insta::assert_debug_snapshot!(requirements.requirements[0].hashes, @r#"
+        [
+            "sha256:deadbeef",
+        ]
+        "#);
+        insta::assert_snapshot!(
+            requirements.requirements[1]
+                .config_settings
+                .as_ref()
+                .map(super::ConfigSettings::escape_for_python)
+                .unwrap_or_default(),
+            @r#"{"mode":"also custom"}"#
+        );
+
+        requirements_txt.write_str("flask --config-settings='mode=custom\nidna\n")?;
+        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path())
+            .await
+            .unwrap_err();
+        let errors = anyhow::Error::new(error).chain().join("\n");
+        let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
+        insta::with_settings!({
+            filters => vec![(requirement_txt.as_str(), "<REQUIREMENTS_TXT>")]
+        }, {
+            insta::assert_snapshot!(errors, @"Invalid argument for `--config-settings`: UnterminatedSingleQuote { char_cursor: 0, byte_cursor: 0 } at <REQUIREMENTS_TXT>:1:24");
+        });
 
         Ok(())
     }
