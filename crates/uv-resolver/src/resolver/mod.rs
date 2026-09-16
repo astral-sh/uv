@@ -2253,14 +2253,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         enrich_dependency_error(err, package, version, &forked_state.pubgrub)
                     })?;
 
-                let grounding = forked_state.source_dependencies.grounding(
-                    &forked_state.pubgrub,
-                    &forked_state.env,
-                    &forked_state.python_requirement,
-                    &self.urls,
-                    &self.git,
-                );
-                self.prepare_git_dependencies(&fork.dependencies, &grounding, requests)?;
+                if Self::has_git_dependency(&fork.dependencies) {
+                    let grounding = forked_state.source_dependencies.grounding(
+                        &forked_state.pubgrub,
+                        &forked_state.env,
+                        &forked_state.python_requirement,
+                        &self.urls,
+                        &self.git,
+                    );
+                    self.prepare_git_dependencies(&fork.dependencies, &grounding, requests)?;
+                }
 
                 // Add the dependencies to the state.
                 forked_state.add_package_version_dependencies(
@@ -2340,6 +2342,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             )?;
         }
         Ok(())
+    }
+
+    /// Whether a dependency batch can require Git reference comparison.
+    fn has_git_dependency(dependencies: &[PubGrubDependency]) -> bool {
+        dependencies
+            .iter()
+            .any(|dependency| match &dependency.source {
+                DependencySource::Url { url, .. } => urls::git_url(&url.parsed_url).is_some(),
+                DependencySource::Unspecified | DependencySource::ExplicitIndex(_) => false,
+            })
     }
 
     /// Resolve potentially equivalent Git references only when an independently trusted spelling
@@ -4877,21 +4889,30 @@ impl ForkState {
                 .set_chain(for_package, for_version.clone(), chain);
         }
         let is_proxy = self.pubgrub.package_store[for_package].is_proxy();
-        let grounding = if urls.has_potential() || self.source_dependencies.has_urls() {
-            self.source_dependencies.grounding(
-                &self.pubgrub,
-                &self.env,
-                &self.python_requirement,
-                urls,
-                git,
-            )
+        // Only URL declarations consume the preferred authorized identities. Ordinary registry
+        // dependencies and proxy links do not need to walk the selected graph to lower their ranges.
+        let mut preferred: FxHashMap<_, Vec<_>> = if !is_proxy
+            && (urls.has_potential() || self.source_dependencies.has_urls())
+            && dependencies
+                .iter()
+                .any(|dependency| match &dependency.source {
+                    DependencySource::Url { .. } => true,
+                    DependencySource::Unspecified | DependencySource::ExplicitIndex(_) => false,
+                }) {
+            self.source_dependencies
+                .grounding(
+                    &self.pubgrub,
+                    &self.env,
+                    &self.python_requirement,
+                    urls,
+                    git,
+                )
+                .iter()
+                .map(|(name, sources)| (name.clone(), sources.keys().copied().collect()))
+                .collect()
         } else {
-            Grounding::default()
+            FxHashMap::default()
         };
-        let mut preferred: FxHashMap<_, Vec<_>> = grounding
-            .iter()
-            .map(|(name, sources)| (name.clone(), sources.keys().copied().collect()))
-            .collect();
         let mut solved_dependencies = Vec::with_capacity(dependencies.len());
         for dependency in dependencies {
             let PubGrubDependency {
