@@ -90,6 +90,7 @@ mod cache_size;
 pub(crate) mod diagnostics;
 mod editable;
 mod help;
+mod locked_requirements;
 pub(crate) mod pip;
 mod project;
 mod publish;

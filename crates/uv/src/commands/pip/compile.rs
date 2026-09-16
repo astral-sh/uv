@@ -39,8 +39,7 @@ use uv_python::{
     PythonPreference, PythonRequest, PythonVersion, VersionRequest,
 };
 use uv_requirements::{
-    GroupsSpecification, LockedRequirements, RequirementsSource, RequirementsSpecification,
-    is_pylock_toml, read_pylock_toml_requirements, read_requirements_txt,
+    GroupsSpecification, RequirementsSource, RequirementsSpecification, is_pylock_toml,
 };
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, FlatIndex, ForkStrategy,
@@ -55,6 +54,9 @@ use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 
+use crate::commands::locked_requirements::{
+    LockedRequirements, read_pylock_toml_requirements, read_requirements_txt,
+};
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::{operations, resolution_markers, resolution_tags};
 use crate::commands::reporters::PythonDownloadReporter;

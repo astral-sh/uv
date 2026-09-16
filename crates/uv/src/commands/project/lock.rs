@@ -32,7 +32,7 @@ use uv_python::{
     ConfigDiscovery, Interpreter, PythonDownloads, PythonEnvironment, PythonPreference,
     PythonRequest,
 };
-use uv_requirements::{ExtrasResolver, LockedRequirements, read_lock_requirements};
+use uv_requirements::ExtrasResolver;
 use uv_resolver::{
     FlatIndex, InMemoryIndex, Options, OptionsBuilder, PythonRequirement, ResolverEnvironment,
     UniversalMarker,
@@ -47,6 +47,7 @@ use uv_workspace::{
     DiscoveryOptions, Editability, VirtualProject, WorkspaceCache, WorkspaceMember,
 };
 
+use crate::commands::locked_requirements::{LockedRequirements, read_lock_requirements};
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
 use crate::commands::project::lock_target::{LockTarget, find_lock_format_error};
 use crate::commands::project::{

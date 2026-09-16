@@ -41,10 +41,7 @@ use uv_python::{
     PythonPreference, PythonRequest, PythonSource, PythonVariant, PythonVersionFile,
     VersionFileDiscoveryOptions, VersionRequest,
 };
-use uv_requirements::{
-    LockedRequirements, NamedRequirementsResolver, RequirementsSpecification,
-    read_lock_requirements,
-};
+use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
 use uv_resolver::{
     DependencyMode, FlatIndex, OptionsBuilder, Preference, PythonRequirement, ResolverEnvironment,
     ResolverOutput,
@@ -59,6 +56,7 @@ use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::pyproject::ExtraBuildDependency;
 use uv_workspace::{ProjectEnvironmentSelection, RequiresPythonSources, Workspace, WorkspaceCache};
 
+use crate::commands::locked_requirements::{LockedRequirements, read_lock_requirements};
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::{Changelog, Modifications};
 use crate::commands::project::install_target::InstallTarget;
