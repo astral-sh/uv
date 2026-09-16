@@ -35,26 +35,7 @@ jobs:
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           THREAT_MODELS: agents/references
-        run: |
-          set -euo pipefail
-
-          : "${HEAD_SHA:?Pull request head SHA is required}"
-          : "${THREAT_MODELS:?Threat model directory is required}"
-
-          # Save configuration before switching to the PR head.
-          review_config="$RUNNER_TEMP/pull-request-review"
-          printf 'REVIEW_CONFIG=%s\n' "$review_config" >> "$GITHUB_ENV"
-          mkdir -p "$review_config/codex" "$review_config/references" "$review_config/scripts"
-          cp agents/security-pr-review/config.toml "$review_config/codex/config.toml"
-          cp agents/prompts/pull-request-security-review.md "$review_config/prompt.md"
-          cp agents/schemas/pull-request-security-review.json "$review_config/schema.json"
-          cp agents/scripts/install-codex-security.sh \
-            agents/scripts/agent-review-to-github-comments.py \
-            agents/scripts/agent-review-to-github-comments.py.lock "$review_config/scripts/"
-          cp -R "$THREAT_MODELS/." "$review_config/references/"
-          git rev-parse HEAD > "$review_config/configuration-revision.txt"
-          printf 'config-directory=%s\n' "$review_config" >> "$GITHUB_OUTPUT"
-          git checkout --detach "$HEAD_SHA"
+        run: bash agents/security-pr-review/scripts/setup.sh
 
       - name: "Checkout Codex Security plugin"
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -77,56 +58,7 @@ jobs:
         run: '"$REVIEW_CONFIG/scripts/install-codex-security.sh" "$REVIEW_CONFIG/codex"'
 
       - name: "Collect pull request context"
-        run: |
-          set -euo pipefail
-
-          if [ "$(git rev-parse HEAD)" != "$HEAD_SHA" ]; then
-            echo "The checkout does not match the pull request head." >&2
-            exit 1
-          fi
-
-          gh pr view "$PULL_REQUEST_NUMBER" \
-            --repo "$GITHUB_REPOSITORY" \
-            --json number,title,body,author,baseRefName,baseRefOid,headRefName,headRefOid,isDraft,labels,files,additions,deletions,changedFiles \
-            > .pull-request-review-event.json
-
-          if ! jq --exit-status --arg head "$HEAD_SHA" \
-            '.headRefOid == $head' .pull-request-review-event.json > /dev/null; then
-            echo "The pull request head changed during review setup." >&2
-            exit 1
-          fi
-
-          merge_base="$(git merge-base "$BASE_SHA" "$HEAD_SHA")"
-          jq --null-input --arg base "$merge_base" --arg base_tip "$BASE_SHA" \
-            --arg head "$HEAD_SHA" \
-            '{base: $base, base_tip: $base_tip, head: $head}' \
-            > .pull-request-review-revisions.json
-
-          git diff --no-ext-diff --no-textconv --no-renames \
-            "$merge_base..$HEAD_SHA" > .pull-request-review.diff
-          git diff --no-ext-diff --no-textconv --no-renames --name-only -z \
-            "$merge_base..$HEAD_SHA" > "$RUNNER_TEMP/pull-request-review-paths.z"
-
-          : > .pull-request-review-paths.txt
-          while IFS= read -r -d '' path; do
-            if [[ "$path" == *$'\n'* || "$path" == *$'\r'* ]]; then
-              echo "A changed path cannot be represented in the scan inventory." >&2
-              exit 1
-            fi
-            printf '%s\n' "$path" >> .pull-request-review-paths.txt
-          done < "$RUNNER_TEMP/pull-request-review-paths.z"
-
-          gh api --paginate --slurp \
-            "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER/comments?per_page=100" \
-            | jq '[.[][] | {author: .user.login, body, path, line, original_line, side, start_line, original_start_line, start_side, commit_id, original_commit_id, in_reply_to_id, created_at, html_url}]' \
-            > .pull-request-review-comments.json
-
-          {
-            printf 'Pull request security review for #%s: %s\n\n' \
-              "$(jq -r '.number' .pull-request-review-event.json)" \
-              "$(jq -r '.title | gsub("[\r\n]+"; " ")' .pull-request-review-event.json)"
-            cat "$REVIEW_CONFIG/prompt.md"
-          } > "$RUNNER_TEMP/pull-request-security-review-prompt.md"
+        run: bash "$REVIEW_CONFIG/scripts/collect-context.sh"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
@@ -175,27 +107,7 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          set -euo pipefail
-
-          if [ "$(git rev-parse HEAD)" != "$HEAD_SHA" ]; then
-            echo "The review changed the checked-out revision." >&2
-            exit 1
-          fi
-
-          review="$RUNNER_TEMP/pull-request-review-result.json"
-          merge_base="$(git merge-base "$BASE_SHA" "$HEAD_SHA")"
-          git diff --no-ext-diff --no-textconv --no-renames --name-only -z \
-            "$merge_base..$HEAD_SHA" | LC_ALL=C sort -z \
-            > "$RUNNER_TEMP/expected-review-paths.z"
-          jq --join-output '.reviewed_paths[] | . + "\u0000"' "$review" \
-            | LC_ALL=C sort -z > "$RUNNER_TEMP/reviewed-paths.z"
-
-          if ! cmp --silent "$RUNNER_TEMP/expected-review-paths.z" \
-            "$RUNNER_TEMP/reviewed-paths.z"; then
-            echo "Infrastructure error: the security review did not account for every changed path" >&2
-            exit 1
-          fi
+        run: bash "$REVIEW_CONFIG/scripts/check-coverage.sh"
 
       - name: "Upload Codex thread"
         if: always()
@@ -227,16 +139,7 @@ jobs:
 
       - name: "Prepare review findings"
         id: comments
-        run: |
-          set -euo pipefail
-
-          delimiter="review-$(openssl rand -hex 16)"
-          {
-            printf 'result<<%s\n' "$delimiter"
-            printf '%s\n' "$REVIEW_RESULT" \
-              | uv run --locked --script agents/scripts/agent-review-to-github-comments.py --commit-id "$HEAD_SHA"
-            printf '%s\n' "$delimiter"
-          } >> "$GITHUB_OUTPUT"
+        run: bash agents/security-pr-review/scripts/prepare.sh
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           REVIEW_RESULT: ${{ needs.review.outputs.result }}
