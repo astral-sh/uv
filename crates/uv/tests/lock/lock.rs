@@ -2529,6 +2529,299 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
     Ok(())
 }
 
+/// Unrelated project changes retain direct archive hashes until an explicit upgrade releases them.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_sdist_url_relock_hash_mismatch() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let filename = "demo_pkg-1.0.0.tar.gz";
+    let sentinel = context.temp_dir.child("backend-executed");
+    let name = "demo-pkg".parse()?;
+    let server = PackageServer::new(&name).await;
+    let archive_url = server.file_url(filename);
+    let version = "1.0.0".parse()?;
+    let trusted = generate_source_archive(&name, &version, "", None)?;
+    let replacement = generate_source_archive(&name, &version, "", Some(sentinel.path()))?;
+    let trusted_digest = hex::encode(Sha256::digest(&trusted));
+    let replacement_digest = hex::encode(Sha256::digest(&replacement));
+    let context = context
+        .with_filter((trusted_digest, "[TRUSTED_HASH]"))
+        .with_filter((replacement_digest, "[REPLACEMENT_HASH]"));
+    server.serve(filename, &trusted, None).await;
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo-pkg @ {archive_url}"]
+
+        [dependency-groups]
+        dev = ["demo-pkg"]
+        empty = []
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    let locked = context.read("uv.lock");
+
+    // The same bytes remain usable when a Python requirement change forces fresh resolution.
+    pyproject.write_str(&context.read("pyproject.toml").replace(">=3.12", ">=3.12.1"))?;
+    uv_snapshot!(context.filters(), context.sync().arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + demo-pkg==1.0.0 (from http://[LOCALHOST]/demo_pkg-1.0.0.tar.gz)
+    ");
+    context.assert_installed("demo_pkg", "1.0.0");
+    assert_eq!(
+        context.read("uv.lock"),
+        locked.replace(">=3.12", ">=3.12.1")
+    );
+    context.temp_dir.child("uv.lock").write_str(&locked)?;
+
+    server.serve(filename, &replacement, None).await;
+
+    // Installing an already-present package must still validate the archive used for resolution.
+    uv_snapshot!(context.filters(), context.sync().arg("--no-cache"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to download and build `demo-pkg @ http://[LOCALHOST]/demo_pkg-1.0.0.tar.gz`
+      cause: Hash mismatch for `demo-pkg @ http://[LOCALHOST]/demo_pkg-1.0.0.tar.gz`
+
+             Expected:
+               sha256:[TRUSTED_HASH]
+
+             Computed:
+               sha256:[REPLACEMENT_HASH]
+    ");
+    assert!(
+        !sentinel.exists(),
+        "automatic relocking executed the replacement"
+    );
+    assert_eq!(context.read("uv.lock"), locked);
+
+    insta::allow_duplicates! {
+        for args in [
+            vec![],
+            vec!["--refresh"],
+            vec!["--upgrade-package", "project"],
+            vec!["--upgrade-group", "empty"],
+            vec!["--locked", "--upgrade-package", "demo-pkg"],
+            vec!["--locked", "--upgrade-group", "dev"],
+        ] {
+            uv_snapshot!(context.filters(), context.lock().args(args).arg("--no-cache"), @"
+            exit_code: 1 (failure)
+            ----- stderr -----
+            error: Failed to download and build `demo-pkg @ http://[LOCALHOST]/demo_pkg-1.0.0.tar.gz`
+              cause: Hash mismatch for `demo-pkg @ http://[LOCALHOST]/demo_pkg-1.0.0.tar.gz`
+
+                     Expected:
+                       sha256:[TRUSTED_HASH]
+
+                     Computed:
+                       sha256:[REPLACEMENT_HASH]
+            ");
+            assert!(!sentinel.exists(), "relocking executed the replacement");
+            assert_eq!(context.read("uv.lock"), locked);
+        }
+    }
+
+    // Each explicit upgrade mode releases the selected package's recorded hash.
+    insta::allow_duplicates! {
+        for args in [
+            vec!["--upgrade-package", "demo-pkg"],
+            vec!["--upgrade-group", "dev"],
+            vec!["--upgrade"],
+        ] {
+            uv_snapshot!(context.filters(), context.lock().args(args).arg("--no-cache"), @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Resolved 2 packages in [TIME]
+            ");
+            assert!(sentinel.exists());
+            assert_ne!(context.read("uv.lock"), locked);
+            context.temp_dir.child("uv.lock").write_str(&locked)?;
+            fs_err::remove_file(&sentinel)?;
+        }
+        Ok::<(), anyhow::Error>(())
+    }?;
+
+    // A new direct URL is a new identity and does not require an upgrade flag.
+    let replacement_server = PackageServer::new(&name).await;
+    replacement_server.serve(filename, &replacement, None).await;
+    pyproject.write_str(
+        &context
+            .read("pyproject.toml")
+            .replace(&archive_url, &replacement_server.file_url(filename)),
+    )?;
+    uv_snapshot!(context.filters(), context.lock().arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    assert!(sentinel.exists());
+    Ok(())
+}
+
+/// Automatic registry re-resolution verifies a known source archive before running its backend.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_sdist_registry_relock_hash_mismatch() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let filename = "demo_pkg-1.0.0.tar.gz";
+    let sentinel = context.temp_dir.child("backend-executed");
+    let name = "demo-pkg".parse()?;
+    let server = PackageServer::new(&name).await;
+    let version = "1.0.0".parse()?;
+    let trusted = generate_source_archive(&name, &version, "", None)?;
+    let replacement = generate_source_archive(&name, &version, "", Some(sentinel.path()))?;
+    let trusted_digest = hex::encode(Sha256::digest(&trusted));
+    let replacement_digest = hex::encode(Sha256::digest(&replacement));
+    let context = context
+        .with_filter((trusted_digest.clone(), "[TRUSTED_HASH]"))
+        .with_filter((replacement_digest.clone(), "[REPLACEMENT_HASH]"));
+    server
+        .serve(filename, &trusted, Some(&trusted_digest))
+        .await;
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo-pkg==1.0.0"]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#, server.index_url()})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    let locked = context.read("uv.lock");
+
+    pyproject.write_str(&context.read("pyproject.toml").replace(">=3.12", ">=3.12.1"))?;
+    uv_snapshot!(context.filters(), context.sync().arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + demo-pkg==1.0.0
+    ");
+    context.assert_installed("demo_pkg", "1.0.0");
+    assert_eq!(
+        context.read("uv.lock"),
+        locked.replace(">=3.12", ">=3.12.1")
+    );
+    context.temp_dir.child("uv.lock").write_str(&locked)?;
+
+    // Retain the index's old digest so candidate selection reaches archive verification.
+    server
+        .serve(filename, &replacement, Some(&trusted_digest))
+        .await;
+    uv_snapshot!(context.filters(), context.sync().arg("--no-cache"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to download and build `demo-pkg==1.0.0`
+      cause: Hash mismatch for `demo-pkg==1.0.0`
+
+             Expected:
+               sha256:[TRUSTED_HASH]
+
+             Computed:
+               sha256:[REPLACEMENT_HASH]
+
+    hint: `demo-pkg` (v1.0.0) was included because `project` (v0.1.0) depends on `demo-pkg==1.0.0`
+    ");
+    assert!(
+        !sentinel.exists(),
+        "automatic relocking executed the replacement"
+    );
+    assert_eq!(context.read("uv.lock"), locked);
+
+    // Advertising the replacement's digest must not replace the lockfile's trust.
+    server
+        .serve(filename, &replacement, Some(&replacement_digest))
+        .await;
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade-package").arg("project").arg("--no-cache"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to download and build `demo-pkg==1.0.0`
+      cause: Hash mismatch for `demo-pkg==1.0.0`
+
+             Expected:
+               sha256:[TRUSTED_HASH]
+
+             Computed:
+               sha256:[REPLACEMENT_HASH]
+
+    hint: `demo-pkg` (v1.0.0) was included because `project` (v0.1.0) depends on `demo-pkg==1.0.0`
+    ");
+    assert!(
+        !sentinel.exists(),
+        "an unrelated upgrade executed the replacement"
+    );
+    assert_eq!(context.read("uv.lock"), locked);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--upgrade-package").arg("demo-pkg").arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Checked 1 package in [TIME]
+    ");
+    assert!(sentinel.exists());
+    assert_ne!(context.read("uv.lock"), locked);
+    // A local version inherits the public version's trust policy until explicitly upgraded.
+    let locked = context.read("uv.lock");
+    fs_err::remove_file(&sentinel)?;
+    let local = generate_source_archive(&name, &"1.0.0+local".parse()?, "", Some(sentinel.path()))?;
+    let local_digest = hex::encode(Sha256::digest(&local));
+    let context = context.with_filter((local_digest.clone(), "[LOCAL_HASH]"));
+    server
+        .serve("demo_pkg-1.0.0+local.tar.gz", &local, Some(&local_digest))
+        .await;
+    pyproject.write_str(
+        &context
+            .read("pyproject.toml")
+            .replace("demo-pkg==1.0.0", "demo-pkg==1.0.0+local"),
+    )?;
+    uv_snapshot!(context.filters(), context.lock().arg("--no-cache"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to download and build `demo-pkg==1.0.0+local`
+      cause: Hash mismatch for `demo-pkg==1.0.0+local`
+
+             Expected:
+               sha256:[REPLACEMENT_HASH]
+
+             Computed:
+               sha256:[LOCAL_HASH]
+
+    hint: `demo-pkg` (v1.0.0+local) was included because `project` (v0.1.0) depends on `demo-pkg==1.0.0+local`
+    ");
+    assert!(
+        !sentinel.exists(),
+        "the local version's backend was executed"
+    );
+    assert_eq!(context.read("uv.lock"), locked);
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade-package").arg("demo-pkg").arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Updated demo-pkg v1.0.0 -> v1.0.0+local
+    ");
+    assert!(sentinel.exists());
+    Ok(())
+}
+
 /// Validate a locked source archive before invoking its potentially untrusted build backend.
 #[cfg(feature = "test-universal")]
 #[tokio::test]
@@ -2732,10 +3025,10 @@ async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
     Ok(())
 }
 
-/// A changed index hash must not replace the trusted lockfile hash.
+/// Refreshing or switching registries preserves a locked version's hashes until an explicit upgrade.
 #[cfg(feature = "test-universal")]
 #[tokio::test]
-async fn lock_sdist_registry_changed_index_locked_hash_mismatch() -> Result<()> {
+async fn lock_sdist_registry_hash_changes_require_upgrade() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let filename = "demo_pkg-1.0.0.tar.gz";
     let sentinel = context.temp_dir.child("backend-executed");
@@ -2800,6 +3093,43 @@ async fn lock_sdist_registry_changed_index_locked_hash_mismatch() -> Result<()> 
     );
     assert_eq!(context.read("uv.lock"), locked);
 
+    // Switching registries without changing the archive URL also requires an explicit upgrade.
+    let replacement_server = PackageServer::new(&name).await;
+    replacement_server
+        .serve_with(
+            filename,
+            &replacement_archive,
+            Some(&replacement_digest),
+            json!({ "url": server.file_url(filename) }),
+        )
+        .await;
+    pyproject_toml.write_str(
+        &context
+            .read("pyproject.toml")
+            .replace(&server.index_url(), &replacement_server.index_url()),
+    )?;
+    uv_snapshot!(context.filters(), context.lock().arg("--no-cache"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to download and build `demo-pkg==1.0.0`
+      cause: Hash mismatch for `demo-pkg==1.0.0`
+
+             Expected:
+               sha256:[TRUSTED_HASH]
+
+             Computed:
+               sha256:[REPLACEMENT_HASH]
+
+    hint: `demo-pkg` (v1.0.0) was included because `project` (v0.1.0) depends on `demo-pkg==1.0.0`
+    ");
+    assert!(!sentinel.exists(), "the new index's backend was executed");
+    assert_eq!(context.read("uv.lock"), locked);
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade-package").arg("demo-pkg").arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    assert!(sentinel.exists());
     Ok(())
 }
 

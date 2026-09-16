@@ -2948,12 +2948,19 @@ impl Lock {
 
     /// Return a [`HashStrategy`] that verifies artifacts recorded in this lockfile.
     ///
-    /// Artifacts absent from the lockfile do not require hashes. This strategy does not generate
-    /// hashes for those artifacts.
-    pub fn hash_strategy(&self, root: &Path) -> Result<HashStrategy, LockError> {
+    /// Registry hashes apply to package names and versions; direct archive hashes apply to URLs
+    /// or paths. Packages in `excluded_packages` are skipped. This strategy does not generate hashes.
+    pub fn hash_strategy(
+        &self,
+        root: &Path,
+        excluded_packages: &FxHashSet<PackageName>,
+    ) -> Result<HashStrategy, LockError> {
         let mut hashes: FxHashMap<VersionId, Vec<HashDigest>> = FxHashMap::default();
 
         for package in &self.packages {
+            if excluded_packages.contains(package.name()) {
+                continue;
+            }
             let (id, package_hashes) = match &package.id.source {
                 Source::Registry(_) => {
                     let Some(version) = &package.id.version else {
@@ -10361,7 +10368,9 @@ wheels = [{ filename = "local-1.0.0-py3-none-any.whl", hash = "sha256:53a42340ae
         )
         .expect("valid lock");
         let root = std::env::current_dir().expect("current directory");
-        let hasher = lock.hash_strategy(&root).expect("valid source paths");
+        let hasher = lock
+            .hash_strategy(&root, &FxHashSet::default())
+            .expect("valid source paths");
         let digest = HashDigest::from_str(
             "sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb",
         )
