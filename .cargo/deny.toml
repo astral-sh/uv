@@ -29,6 +29,7 @@ allow-build-scripts = [
     "codspeed",
     "codspeed-criterion-compat",
     "crc32fast",
+    "crossbeam-epoch",
     "crossbeam-utils",
     "crunchy",
     "erased-serde",
