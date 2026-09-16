@@ -1,5 +1,5 @@
 use uv_distribution_types::{Requirement, RequirementSource, Resolution};
-use uv_normalize::{ExtraName, PackageName};
+use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 
 use crate::HashStrategy;
@@ -45,6 +45,8 @@ pub struct RequestedRequirements {
     source: RequirementSource,
     /// The set of extras included on the originating requirement.
     extras: Box<[ExtraName]>,
+    /// The set of dependency groups included on the originating requirement.
+    groups: Box<[GroupName]>,
     /// The set of requirements that were requested by the originating requirement.
     requirements: Box<[Requirement]>,
     /// Whether the dependencies were direct or transitive.
@@ -58,6 +60,7 @@ impl RequestedRequirements {
         version: Version,
         source: RequirementSource,
         extras: Box<[ExtraName]>,
+        groups: Box<[GroupName]>,
         requirements: Box<[Requirement]>,
         direct: bool,
     ) -> Self {
@@ -66,6 +69,7 @@ impl RequestedRequirements {
             version,
             source,
             extras,
+            groups,
             requirements,
             direct,
         }
@@ -89,6 +93,11 @@ impl RequestedRequirements {
     /// Return the extras that were included on the originating requirement.
     pub fn extras(&self) -> &[ExtraName] {
         &self.extras
+    }
+
+    /// Return the dependency groups that were included on the originating requirement.
+    pub fn groups(&self) -> &[GroupName] {
+        &self.groups
     }
 
     /// Return the requirements that were included on the originating requirement.

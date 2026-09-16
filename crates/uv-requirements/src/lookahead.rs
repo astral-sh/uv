@@ -253,6 +253,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             version,
             requirement.source,
             requirement.extras,
+            requirement.groups,
             requires_dist,
             direct,
         )))

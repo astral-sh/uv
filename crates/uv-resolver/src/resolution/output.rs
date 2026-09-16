@@ -34,13 +34,15 @@ use crate::resolver::{Resolution, ResolutionDependencyEdge, ResolutionPackage};
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::{InMemoryIndex, MetadataResponse, Options, ResolveError, VersionsResponse};
 
-/// A remote package whose metadata was inspected during lookahead.
+/// A package whose metadata was inspected during lookahead.
 ///
 /// It can declare dependency sources even when it is absent from the selected dependency graph.
 #[derive(Debug, Clone)]
 pub(crate) struct LookaheadProvider {
     pub(crate) name: PackageName,
     pub(crate) source: RequirementSource,
+    pub(crate) extras: Box<[ExtraName]>,
+    pub(crate) groups: Box<[GroupName]>,
 }
 
 /// The output of a successful resolution.
@@ -60,7 +62,7 @@ pub struct ResolverOutput {
     pub(crate) diagnostics: Vec<ResolutionDiagnostic>,
     /// The requirements that were used to build the graph.
     pub(crate) requirements: Vec<Requirement>,
-    /// Remote providers inspected during lookahead, including those absent from the graph.
+    /// Providers inspected during lookahead, including those absent from the graph.
     pub(crate) lookahead_providers: Vec<LookaheadProvider>,
     /// The constraints that were used to build the graph.
     pub(crate) constraints: Constraints,

@@ -25,8 +25,8 @@ use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, Identifier, IncompatibleDist,
     IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations, IndexMetadata,
-    IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement,
-    RequirementSource, ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
+    IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement, ResolvedDist,
+    ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -242,16 +242,11 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             lookahead_providers: manifest
                 .lookaheads
                 .iter()
-                .filter_map(|lookahead| match lookahead.source() {
-                    RequirementSource::Url { .. }
-                    | RequirementSource::GitDirectory { .. }
-                    | RequirementSource::GitPath { .. } => Some(LookaheadProvider {
-                        name: lookahead.package().clone(),
-                        source: lookahead.source().clone(),
-                    }),
-                    RequirementSource::Registry { .. }
-                    | RequirementSource::Path { .. }
-                    | RequirementSource::Directory { .. } => None,
+                .map(|lookahead| LookaheadProvider {
+                    name: lookahead.package().clone(),
+                    source: lookahead.source().clone(),
+                    extras: lookahead.extras().into(),
+                    groups: lookahead.groups().into(),
                 })
                 .collect(),
             project: manifest.project,

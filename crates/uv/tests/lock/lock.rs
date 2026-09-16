@@ -22846,7 +22846,7 @@ fn lock_metadata_free_shared_conditional_provider_sources() -> Result<()> {
     Ok(())
 }
 
-/// A local provider can share its sources without appearing in the resolved package graph.
+/// Local providers omitted from the graph require full metadata for offline lock checks.
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_metadata_free_shared_source_only_provider() -> Result<()> {
@@ -22901,6 +22901,8 @@ fn lock_metadata_free_shared_source_only_provider() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
+    let lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+    assert_eq!(lock["revision"].as_integer(), Some(3));
 
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
@@ -22934,6 +22936,10 @@ fn lock_metadata_free_shared_source_only_provider() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
+    let lock = context
+        .read("script.py.lock")
+        .parse::<toml_edit::DocumentMut>()?;
+    assert_eq!(lock["revision"].as_integer(), Some(3));
 
     uv_snapshot!(context.filters(), context.lock()
         .arg("--script")
@@ -22947,33 +22953,6 @@ fn lock_metadata_free_shared_source_only_provider() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    ");
-
-    // A removed declaration cannot authorize the HTTP source retained in the lockfile.
-    context
-        .temp_dir
-        .child("leaf/pyproject.toml")
-        .write_str(indoc! {r#"
-        [project]
-        name = "leaf"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = ["httpx"]
-        "#})?;
-
-    uv_snapshot!(context.filters(), context.lock()
-        .arg("--preview-features")
-        .arg("lock-without-metadata")
-        .arg("--check")
-        .arg("--offline")
-        .arg("--no-cache")
-        .arg("--no-index"), @"
-    exit_code: 1 (failure)
-    ----- stderr -----
-    error: No solution found when resolving dependencies
-      cause: Because httpx was not found in the provided package locations and your project depends on httpx, we can conclude that your project's requirements are unsatisfiable.
-
-    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     ");
 
     // A source-selected extra can contribute declarations even when only the base is locked.
@@ -23014,6 +22993,8 @@ fn lock_metadata_free_shared_source_only_provider() -> Result<()> {
     ----- stderr -----
     Resolved 4 packages in [TIME]
     ");
+    let lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+    assert_eq!(lock["revision"].as_integer(), Some(3));
 
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
@@ -23183,7 +23164,7 @@ fn lock_metadata_free_source_only_remote_provider() -> Result<()> {
       cause: Network connectivity is disabled, but the requested data wasn't found in the cache for: `http://[LOCALHOST]/files/leaf-1.0.0-py3-none-any.whl`
     ");
 
-    // Once Leaf is represented in the graph, its retained metadata supports the smaller format.
+    // Locking the base package still leaves the requested extra outside the graph.
     provider.write_str(&provider_contents)?;
     pyproject.write_str(
         &fs_err::read_to_string(pyproject.path())?
@@ -23198,8 +23179,35 @@ fn lock_metadata_free_source_only_remote_provider() -> Result<()> {
     Resolved 4 packages in [TIME]
     Added leaf v1.0.0
     ");
-    let metadata_free = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
-    assert_eq!(metadata_free["revision"].as_integer(), Some(4));
+    let lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+    assert_eq!(lock["revision"].as_integer(), Some(3));
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    // Selecting the extra makes every lookahead provider available in the graph.
+    pyproject.write_str(
+        &fs_err::read_to_string(pyproject.path())?.replace("\"leaf\"", "\"leaf[feature]\""),
+    )?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+    let lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+    assert_eq!(lock["revision"].as_integer(), Some(4));
 
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
