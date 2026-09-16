@@ -7,7 +7,7 @@ use std::fmt::{Display, Formatter};
 use std::ops::Bound;
 use std::sync::Arc;
 use std::time::Instant;
-use std::{iter, slice, thread};
+use std::{iter, mem, slice, thread};
 
 use either::Either;
 use futures::{FutureExt, StreamExt};
@@ -370,13 +370,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
             let start = Instant::now();
             loop {
-                let highest_priority_pkg =
-                    if let Some(initial) = state.initial_id.take() {
-                        // If we just forked based on `requires-python`, we can skip unit
-                        // propagation, since we already propagated the package that initiated
-                        // the fork.
-                        initial
-                    } else {
+                let continuation = mem::take(&mut state.continuation);
+                let (highest_priority_pkg, initial_version) = match continuation {
+                    ForkContinuation::SelectVersion { package } => (package, None),
+                    ForkContinuation::UseVersion { package, version } => (package, Some(version)),
+                    ForkContinuation::Propagate => {
                         // Run unit propagation.
                         let result = state.pubgrub.unit_propagation(state.next);
                         match result {
@@ -489,8 +487,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 .join(", ")
                         );
 
-                        highest_priority_pkg
-                    };
+                        (highest_priority_pkg, None)
+                    }
+                };
 
                 state.next = highest_priority_pkg;
 
@@ -518,10 +517,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // (idempotent due to caching).
                 self.request_package(next_package, url, index, request_sink)?;
 
-                let version = if let Some(version) = state.initial_version.take() {
-                    // If we just forked based on platform support, we can skip version selection,
-                    // since the fork operation itself already selected the appropriate version for
-                    // the platform.
+                let version = if let Some(version) = initial_version {
                     version
                 } else {
                     let term_intersection = state
@@ -911,7 +907,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
 
                 let env = fork.env.clone();
-                (fork, forked_state.with_env(env))
+                (fork, forked_state.fork(env, ForkContinuation::Propagate))
             })
             .map(move |(fork, mut forked_state)| {
                 // Enrich the state with any URLs, etc.
@@ -965,13 +961,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         let forks_len = forks.len();
         forks.into_iter().enumerate().map(move |(i, fork)| {
             let is_last = i == forks_len - 1;
-            let mut forked_state = cur_state.take().unwrap();
+            let forked_state = cur_state.take().unwrap();
             if !is_last {
                 cur_state = Some(forked_state.clone());
             }
-            forked_state.initial_id = Some(fork.id);
-            forked_state.initial_version = fork.version;
-            forked_state.with_env(fork.env)
+            let continuation = match fork.version {
+                Some(version) => ForkContinuation::UseVersion {
+                    package: fork.id,
+                    version,
+                },
+                None => ForkContinuation::SelectVersion { package: fork.id },
+            };
+            forked_state.fork(fork.env, continuation)
         })
     }
 
@@ -3022,6 +3023,21 @@ impl KnownVersions {
     }
 }
 
+/// The operation to resume after creating a fork.
+#[derive(Clone, Default)]
+enum ForkContinuation {
+    /// Run unit propagation and choose the next package.
+    #[default]
+    Propagate,
+    /// Select a version for a package whose constraints have already been propagated.
+    SelectVersion { package: Id<PubGrubPackage> },
+    /// Use the version selected for this package by the fork operation.
+    UseVersion {
+        package: Id<PubGrubPackage>,
+        version: Version,
+    },
+}
+
 /// State that is used during unit propagation in the resolver, one instance per fork.
 #[derive(Clone)]
 pub(crate) struct ForkState {
@@ -3033,12 +3049,8 @@ pub(crate) struct ForkState {
     /// in this state. We also ultimately retrieve the final set of version
     /// assignments (to packages) from this state's "partial solution."
     pubgrub: State<UvDependencyProvider>,
-    /// The initial package to select. If set, the first iteration over this state will avoid
-    /// asking PubGrub for the highest-priority package, and will instead use the provided package.
-    initial_id: Option<Id<PubGrubPackage>>,
-    /// The initial version to select. If set, the first iteration over this state will avoid
-    /// asking PubGrub for the highest-priority version, and will instead use the provided version.
-    initial_version: Option<Version>,
+    /// The operation to resume when this fork is next visited.
+    continuation: ForkContinuation,
     /// The next package on which to run unit propagation.
     next: Id<PubGrubPackage>,
     /// The set of pinned versions we accrue throughout resolution.
@@ -3121,8 +3133,7 @@ impl ForkState {
         prefetcher: BatchPrefetcher,
     ) -> Self {
         Self {
-            initial_id: None,
-            initial_version: None,
+            continuation: ForkContinuation::Propagate,
             next: pubgrub.root_package,
             pubgrub,
             pins: FilePins::default(),
@@ -3480,12 +3491,9 @@ impl ForkState {
             ));
     }
 
-    /// Subset the current markers with the new markers and update the python requirements fields
-    /// accordingly.
-    ///
-    /// If the fork should be dropped (e.g., because its markers can never be true for its
-    /// Python requirement), then this returns `None`.
-    fn with_env(mut self, env: ResolverEnvironment) -> Self {
+    /// Resume in a narrower environment, invalidating candidates selected for the parent fork.
+    fn fork(mut self, env: ResolverEnvironment, continuation: ForkContinuation) -> Self {
+        self.continuation = continuation;
         self.selected_versions.clear();
         self.env = env;
         // If the fork contains a narrowed Python requirement, apply it.
