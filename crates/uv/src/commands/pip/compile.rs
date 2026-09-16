@@ -54,12 +54,12 @@ use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 
+use crate::commands::locked_requirements::{
+    LockedRequirements, read_pylock_toml_requirements, read_requirements_txt,
+};
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::{operations, resolution_markers, resolution_tags};
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::upgrade::{
-    LockedRequirements, read_pylock_toml_requirements, read_requirements_txt,
-};
 use crate::commands::{ExitStatus, OutputWriter, UvError};
 use crate::printer::Printer;
 

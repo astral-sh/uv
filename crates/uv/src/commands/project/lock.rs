@@ -47,6 +47,7 @@ use uv_workspace::{
     DiscoveryOptions, Editability, VirtualProject, WorkspaceCache, WorkspaceMember,
 };
 
+use crate::commands::locked_requirements::{LockedRequirements, read_lock_requirements};
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
 use crate::commands::project::lock_target::{LockTarget, find_lock_format_error};
 use crate::commands::project::{
@@ -55,7 +56,6 @@ use crate::commands::project::{
     script_extra_build_requires,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
-use crate::commands::upgrade::{LockedRequirements, read_lock_requirements};
 use crate::commands::{ExitStatus, ScriptPath, UvError, pip};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, LockedSource, ResolverSettings};
