@@ -2292,7 +2292,6 @@ fn build_fast_path_exact_pin() -> Result<()> {
         format!("uv_build=={}", uv_version::version()),
         "uv_build>=0.11,<0.12".to_string(),
         "uv_build==0.11.*".to_string(),
-        "uv_build===0.11.33".to_string(),
         "uv_build==0.11.33 ; python_version < '0'".to_string(),
     ] {
         pyproject_toml.write_str(&formatdoc! {r#"
@@ -2391,7 +2390,7 @@ fn build_fast_path_constraint_exact_pin() -> Result<()> {
         format!("uv_build=={}", uv_version::version()),
         "uv_build==0.11.33 ; python_version < '0'".to_string(),
         "uv_build==0.11.*".to_string(),
-        "uv_build===0.11.33".to_string(),
+        "other-package==0.11.33".to_string(),
         "uv_build>=0.11,<0.12".to_string(),
     ] {
         constraints.write_str(&constraint)?;

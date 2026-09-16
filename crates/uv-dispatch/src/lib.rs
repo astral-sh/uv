@@ -4,9 +4,7 @@
 
 use std::ffi::{OsStr, OsString};
 use std::future::{self, Future};
-use std::iter;
 use std::path::Path;
-use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use futures::FutureExt;
@@ -15,7 +13,7 @@ use rustc_hash::FxHashMap;
 use thiserror::Error;
 use tracing::{debug, instrument, trace};
 
-use uv_build_backend::{DirectBuildIncompatibility, check_direct_build};
+use uv_build_backend::check_direct_build;
 use uv_build_frontend::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
@@ -32,7 +30,6 @@ use uv_distribution_types::{
 };
 use uv_git::GitResolver;
 use uv_installer::{InstallationStrategy, Installer, Plan, Planner, Preparer, SitePackages};
-use uv_pep440::{Operator, Version};
 use uv_preview::Preview;
 use uv_pypi_types::Conflicts;
 use uv_python::{Interpreter, PythonEnvironment};
@@ -225,38 +222,6 @@ impl<'a> BuildDispatch<'a> {
             ),
             ..self.clone()
         }
-    }
-
-    /// Check whether the bundled backend satisfies explicit version pins for a direct build.
-    pub fn check_direct_build(&self, source_tree: &Path) -> Result<(), DirectBuildIncompatibility> {
-        let requirement =
-            Requirement::from(check_direct_build(source_tree, uv_version::version())?);
-        let marker_env = self.interpreter.to_resolver_marker_environment();
-        if !requirement.evaluate_markers(Some(&marker_env), &[]) {
-            return Ok(());
-        }
-
-        let uv_version =
-            Version::from_str(uv_version::version()).expect("uv version is not PEP 440 compliant");
-        for requirement in iter::once(&requirement).chain(
-            self.constraints
-                .get(&requirement.name)
-                .into_iter()
-                .flatten(),
-        ) {
-            if requirement.evaluate_markers(Some(&marker_env), &[])
-                && let Some(specifiers) = requirement.source.version_specifiers()
-                && let Some(specifier) = specifiers.iter().find(|specifier| {
-                    *specifier.operator() == Operator::Equal && !specifier.contains(&uv_version)
-                })
-            {
-                return Err(DirectBuildIncompatibility::VersionMismatch(
-                    specifier.version().clone(),
-                ));
-            }
-        }
-
-        Ok(())
     }
 
     /// Set the environment variables to be used when building a source distribution.
@@ -654,7 +619,12 @@ impl BuildContext for BuildDispatch<'_> {
         // Only perform the direct build if the backend is uv in a compatible version.
         let source_tree_str = source_tree.display().to_string();
         let identifier = version_id.unwrap_or_else(|| &source_tree_str);
-        if let Err(reason) = self.check_direct_build(&source_tree) {
+        if let Err(reason) = check_direct_build(
+            &source_tree,
+            uv_version::version(),
+            &self.interpreter.to_resolver_marker_environment(),
+            self.constraints.requirements().cloned().map(Into::into),
+        ) {
             trace!("Requirements for direct build not matched because {reason}");
             return Ok(None);
         }
