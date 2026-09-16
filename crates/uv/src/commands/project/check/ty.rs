@@ -1,68 +1,67 @@
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
 use std::str::FromStr;
-use std::time::Duration;
 
 use anyhow::{Context, Result};
-use tokio::io::AsyncWriteExt;
-use tokio::process::{ChildStdin, Command};
+use tokio::process::Command;
 use tracing::debug;
 
 use uv_bin_install::{BinVersion, Binary, ResolvedVersion, bin_install, find_matching_version};
 use uv_cache::Cache;
+use uv_cli::ColorChoice;
 use uv_client::BaseClientBuilder;
+use uv_fs::Simplified;
+use uv_pep440::Version;
+use uv_shell::shlex_posix;
 
 use crate::child::run_to_completion;
 use crate::commands::ExitStatus;
 use crate::commands::reporters::BinaryDownloadReporter;
+use crate::commands::workspace::list::{ScriptDiscoveryError, find_scripts};
 use crate::printer::Printer;
 
-/// Limit how long uv can block if a version of ty does not consume metadata from stdin.
-const WORKSPACE_METADATA_WRITE_TIMEOUT: Duration = Duration::from_mins(1);
-
-async fn write_workspace_metadata(mut stdin: ChildStdin, workspace_metadata: String) -> Result<()> {
-    match tokio::time::timeout(
-        WORKSPACE_METADATA_WRITE_TIMEOUT,
-        stdin.write_all(workspace_metadata.as_bytes()),
-    )
-    .await
-    {
-        Err(err) => Err(err).context("Timed out while writing workspace metadata to `ty check`"),
-        Ok(Err(err)) if err.kind() == std::io::ErrorKind::BrokenPipe => Ok(()),
-        Ok(Err(err)) => Err(err).context("Failed to write workspace metadata to `ty check`"),
-        Ok(Ok(())) => Ok(()),
-    }
-}
-
 /// Run a type check powered by ty.
+#[expect(clippy::fn_params_excessive_bools)]
 pub(super) async fn run(
     version: Option<String>,
     ty_path: Option<PathBuf>,
+    fix: bool,
     target_dir: &Path,
-    check_target: Option<&Path>,
+    workspace_root: Option<&Path>,
+    check_targets: &[PathBuf],
+    excluded_targets: &[PathBuf],
+    explicit_targets: bool,
     venv_path: Option<&Path>,
-    workspace_metadata: Option<String>,
     exclude_newer: Option<jiff::Timestamp>,
     show_version: bool,
+    show_command: bool,
     client_builder: &BaseClientBuilder<'_>,
     cache: &Cache,
+    color: ColorChoice,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let ty_path = if let Some(ty_path) = ty_path {
+    let (ty_path, ty_version) = if let Some(ty_path) = ty_path {
+        let output = Command::new(&ty_path)
+            .arg("--version")
+            .output()
+            .await
+            .context("Failed to query ty version")?;
+        if !output.status.success() {
+            anyhow::bail!("Failed to query ty version");
+        }
+        let version = String::from_utf8_lossy(&output.stdout);
+        let ty_version = version
+            .split_whitespace()
+            .nth(1)
+            .context("Failed to parse ty version")?
+            .parse::<Version>()
+            .context("Failed to parse ty version")?;
+
         if show_version {
-            let output = Command::new(&ty_path)
-                .arg("--version")
-                .output()
-                .await
-                .context("Failed to query ty version")?;
-            if !output.status.success() {
-                anyhow::bail!("Failed to query ty version");
-            }
-            let version = String::from_utf8_lossy(&output.stdout);
             writeln!(printer.stderr(), "Using {}", version.trim())?;
         }
-        ty_path
+
+        (ty_path, ty_version)
     } else {
         let retry_policy = client_builder.retry_policy();
         let ty_client = client_builder.clone().retries(0).build()?;
@@ -131,7 +130,7 @@ pub(super) async fn run(
             writeln!(printer.stderr(), "Using ty {}", resolved.version)?;
         }
 
-        bin_install(
+        let ty_path = bin_install(
             Binary::Ty,
             &resolved,
             &ty_client,
@@ -140,21 +139,82 @@ pub(super) async fn run(
             &reporter,
         )
         .await
-        .with_context(|| format!("Failed to install ty {}", resolved.version))?
+        .with_context(|| format!("Failed to install ty {}", resolved.version))?;
+
+        (ty_path, resolved.version)
     };
 
     let mut command = Command::new(&ty_path);
     command.current_dir(target_dir);
     command.arg("check");
-    if let Some(check_target) = check_target {
-        // Check only the requested script. Keep the path relative to the working directory for
-        // stable diagnostics, and use `--` so option-like filenames are treated as paths.
-        command.arg("--");
-        command.arg(
-            check_target
-                .strip_prefix(target_dir)
-                .unwrap_or(check_target),
+    command.arg("--color").arg(color.as_str());
+    if printer.suppresses_progress() {
+        command.arg("--no-progress");
+    }
+    if fix {
+        command.arg("--fix");
+    }
+    // PEP 723 scripts have independent environments and must be checked explicitly with
+    // `uv check --script`. This still allows explicitly selected script paths to be checked.
+    // Older versions of ty do not support `--exclude-scripts`, so discover and exclude their
+    // workspace scripts individually instead.
+    let mut excluded_scripts = Vec::new();
+    if ty_version >= Version::new([0, 0, 64]) {
+        command.arg("--exclude-scripts");
+    } else if let Some(workspace_root) = workspace_root {
+        excluded_scripts.extend(
+            find_scripts(workspace_root, cache)
+                .filter_map(|script| match script {
+                    Ok(script) => check_targets
+                        .iter()
+                        .any(|target| script.starts_with(target))
+                        .then_some(Ok(script)),
+                    Err(ScriptDiscoveryError::Parse { path, source }) => {
+                        debug!(
+                            "Excluding invalid PEP 723 script `{}` while checking project root `{}`: {source}",
+                            path.simplified_display(),
+                            target_dir.simplified_display(),
+                        );
+                        check_targets
+                            .iter()
+                            .any(|target| path.starts_with(target))
+                            .then_some(Ok(path))
+                    }
+                    Err(error) => Some(Err(error)),
+                })
+                .collect::<Result<Vec<_>, _>>()
+                .with_context(|| {
+                    format!(
+                        "Failed to discover PEP 723 scripts while checking project root `{}`",
+                        target_dir.simplified_display()
+                    )
+                })?,
         );
+    }
+
+    for excluded_target in excluded_targets.iter().chain(&excluded_scripts) {
+        command.arg("--exclude");
+        command.arg(
+            excluded_target
+                .strip_prefix(target_dir)
+                .unwrap_or(excluded_target),
+        );
+    }
+    if !check_targets.is_empty() {
+        // Respect configured exclusions when automatically selecting members of a virtual workspace.
+        if !explicit_targets {
+            command.arg("--force-exclude");
+        }
+        // Keep paths relative to the working directory for stable diagnostics, and use `--` so
+        // option-like filenames are treated as paths.
+        command.arg("--");
+        for check_target in check_targets {
+            command.arg(
+                check_target
+                    .strip_prefix(target_dir)
+                    .unwrap_or(check_target),
+            );
+        }
     }
     // Opt into ty querying uv for project metadata.
     command.env("TY_UV", "1");
@@ -163,33 +223,15 @@ pub(super) async fn run(
         command.env("VIRTUAL_ENV", venv_path);
     }
 
-    if workspace_metadata.is_some() {
-        // Tell `ty` to expect uv metadata on stdin.
-        // This is an environment variable so older ty's don't complain about an unknown CLI flag.
-        command.env("TY_UV_METADATA", "1");
-        command.stdin(Stdio::piped());
-        command.kill_on_drop(true);
-    } else {
-        // Do not let the calling environment opt ty into a protocol uv cannot supply.
-        command.env_remove("TY_UV_METADATA");
+    if show_command {
+        let mut stderr = printer.stderr_important();
+        write!(stderr, "Running `ty")?;
+        for argument in command.as_std().get_args() {
+            write!(stderr, " {}", shlex_posix(argument))?;
+        }
+        writeln!(stderr, "`")?;
     }
 
-    let mut handle = command.spawn().context("Failed to spawn `ty check`")?;
-    let writer = if let Some(workspace_metadata) = workspace_metadata {
-        debug!("Passing workspace metadata to `ty check` via stdin");
-        let stdin = handle
-            .stdin
-            .take()
-            .context("Failed to open stdin for `ty check`")?;
-        Some(write_workspace_metadata(stdin, workspace_metadata))
-    } else {
-        None
-    };
-
-    if let Some(writer) = writer {
-        let (status, ()) = tokio::try_join!(run_to_completion(handle), writer)?;
-        Ok(status)
-    } else {
-        run_to_completion(handle).await
-    }
+    let handle = command.spawn().context("Failed to spawn `ty check`")?;
+    run_to_completion(handle).await
 }

@@ -2,7 +2,7 @@ use std::{io::Write, process::Stdio};
 use tokio::process::Command;
 use tracing::{debug, instrument, trace, warn};
 use uv_redacted::DisplaySafeUrl;
-use uv_warnings::warn_user_once;
+use uv_warnings::{warn_user_once, warn_user_once_with_chain};
 
 use crate::credentials::Credentials;
 
@@ -371,8 +371,12 @@ impl KeyringProvider {
                 debug!("No entry found in system keyring for {service}");
             }
             Err(err) => {
-                warn_user_once!(
-                    "Unable to fetch credentials for {service} from system keyring: {err}"
+                warn_user_once_with_chain!(
+                    anyhow::Error::from(err)
+                        .context(format!(
+                            "Unable to fetch credentials for {service} from system keyring"
+                        ))
+                        .as_ref()
                 );
             }
         }
@@ -423,49 +427,57 @@ impl KeyringProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures::FutureExt;
     use url::Url;
 
     #[tokio::test]
+    #[cfg_attr(
+        debug_assertions,
+        should_panic(expected = "Should only use keyring for URLs with host")
+    )]
     async fn fetch_url_no_host() {
         let url = Url::parse("file:/etc/bin/").unwrap();
         let keyring = KeyringProvider::empty();
         // Panics due to debug assertion; returns `None` in production
-        let fetch = keyring.fetch(DisplaySafeUrl::ref_cast(&url), Some("user"));
-        if cfg!(debug_assertions) {
-            let result = std::panic::AssertUnwindSafe(fetch).catch_unwind().await;
-            assert!(result.is_err());
-        } else {
-            assert_eq!(fetch.await, None);
-        }
+        assert_eq!(
+            keyring
+                .fetch(DisplaySafeUrl::ref_cast(&url), Some("user"))
+                .await,
+            None
+        );
     }
 
     #[tokio::test]
+    #[cfg_attr(
+        debug_assertions,
+        should_panic(expected = "Should only use keyring for URLs without a password")
+    )]
     async fn fetch_url_with_password() {
         let url = Url::parse("https://user:password@example.com").unwrap();
         let keyring = KeyringProvider::empty();
         // Panics due to debug assertion; returns `None` in production
-        let fetch = keyring.fetch(DisplaySafeUrl::ref_cast(&url), Some(url.username()));
-        if cfg!(debug_assertions) {
-            let result = std::panic::AssertUnwindSafe(fetch).catch_unwind().await;
-            assert!(result.is_err());
-        } else {
-            assert_eq!(fetch.await, None);
-        }
+        assert_eq!(
+            keyring
+                .fetch(DisplaySafeUrl::ref_cast(&url), Some(url.username()))
+                .await,
+            None
+        );
     }
 
     #[tokio::test]
+    #[cfg_attr(
+        debug_assertions,
+        should_panic(expected = "Should only use keyring with a non-empty username")
+    )]
     async fn fetch_url_with_empty_username() {
         let url = Url::parse("https://example.com").unwrap();
         let keyring = KeyringProvider::empty();
         // Panics due to debug assertion; returns `None` in production
-        let fetch = keyring.fetch(DisplaySafeUrl::ref_cast(&url), Some(url.username()));
-        if cfg!(debug_assertions) {
-            let result = std::panic::AssertUnwindSafe(fetch).catch_unwind().await;
-            assert!(result.is_err());
-        } else {
-            assert_eq!(fetch.await, None);
-        }
+        assert_eq!(
+            keyring
+                .fetch(DisplaySafeUrl::ref_cast(&url), Some(url.username()))
+                .await,
+            None
+        );
     }
 
     #[tokio::test]

@@ -18,10 +18,10 @@ pub use crate::by_timestamp::CachedByTimestamp;
 #[cfg(feature = "clap")]
 pub use crate::cli::CacheArgs;
 use crate::removal::Remover;
-pub use crate::removal::{Removal, rm_rf};
+pub use crate::removal::{Removal, RemovalAccounting};
 pub use crate::wheel::WheelCache;
 use crate::wheel::WheelCacheKind;
-pub use archive::ArchiveId;
+pub use archive::{ArchiveFileId, ArchiveId};
 
 mod archive;
 mod by_timestamp;
@@ -166,8 +166,6 @@ pub struct Cache {
     root: PathBuf,
     /// The refresh strategy to use when reading from the cache.
     refresh: Refresh,
-    /// The timestamp at which this cache invocation was initialized.
-    invocation_timestamp: Timestamp,
     /// A temporary cache directory, if the user requested `--no-cache`.
     ///
     /// Included to ensure that the temporary directory exists for the length of the operation, but
@@ -176,31 +174,31 @@ pub struct Cache {
     /// Ensure that `uv cache` operations don't remove items from the cache that are used by another
     /// uv process.
     lock_file: Option<Arc<LockedFile>>,
+    /// The storage accounting used when removing cache entries.
+    removal_accounting: RemovalAccounting,
 }
 
 impl Cache {
     /// A persistent cache directory at `root`.
     pub fn from_path(root: impl Into<PathBuf>) -> Self {
-        let invocation_timestamp = Timestamp::now();
         Self {
             root: root.into(),
-            refresh: Refresh::None(invocation_timestamp),
-            invocation_timestamp,
+            refresh: Refresh::None(Timestamp::now()),
             temp_dir: None,
             lock_file: None,
+            removal_accounting: RemovalAccounting::Coarse,
         }
     }
 
     /// Create a temporary cache directory.
     pub fn temp() -> Result<Self, io::Error> {
         let temp_dir = tempfile::tempdir()?;
-        let invocation_timestamp = Timestamp::now();
         Ok(Self {
             root: temp_dir.path().to_path_buf(),
-            refresh: Refresh::None(invocation_timestamp),
-            invocation_timestamp,
+            refresh: Refresh::None(Timestamp::now()),
             temp_dir: Some(Arc::new(temp_dir)),
             lock_file: None,
+            removal_accounting: RemovalAccounting::Coarse,
         })
     }
 
@@ -210,14 +208,36 @@ impl Cache {
         Self { refresh, ..self }
     }
 
+    /// Set the storage accounting used when removing cache entries.
+    ///
+    /// Falls back to [`RemovalAccounting::Coarse`] when fine-grained accounting is unsupported.
+    #[must_use]
+    pub fn with_removal_accounting(self, removal_accounting: RemovalAccounting) -> Self {
+        let removal_accounting = match removal_accounting {
+            RemovalAccounting::Fine if !uv_fs::supports_fine_grained_accounting() => {
+                RemovalAccounting::Coarse
+            }
+            removal_accounting => removal_accounting,
+        };
+        Self {
+            removal_accounting,
+            ..self
+        }
+    }
+
+    /// Create an empty removal summary using the cache's configured accounting.
+    pub fn removal(&self) -> Removal {
+        Removal::new(self.removal_accounting)
+    }
+
     /// Acquire a lock that allows removing entries from the cache.
     pub async fn with_exclusive_lock(self) -> Result<Self, LockedFileError> {
         let Self {
             root,
             refresh,
-            invocation_timestamp,
             temp_dir,
             lock_file,
+            removal_accounting,
         } = self;
 
         // Release the existing lock, avoid deadlocks from a cloned cache.
@@ -238,9 +258,9 @@ impl Cache {
         Ok(Self {
             root,
             refresh,
-            invocation_timestamp,
             temp_dir,
             lock_file: Some(Arc::new(lock_file)),
+            removal_accounting,
         })
     }
 
@@ -251,9 +271,9 @@ impl Cache {
         let Self {
             root,
             refresh,
-            invocation_timestamp,
             temp_dir,
             lock_file,
+            removal_accounting,
         } = self;
 
         match LockedFile::acquire_no_wait(
@@ -264,16 +284,16 @@ impl Cache {
             Some(lock_file) => Ok(Self {
                 root,
                 refresh,
-                invocation_timestamp,
                 temp_dir,
                 lock_file: Some(Arc::new(lock_file)),
+                removal_accounting,
             }),
             None => Err(Self {
                 root,
                 refresh,
-                invocation_timestamp,
                 temp_dir,
                 lock_file,
+                removal_accounting,
             }),
         }
     }
@@ -281,11 +301,6 @@ impl Cache {
     /// Return the root of the cache.
     pub fn root(&self) -> &Path {
         &self.root
-    }
-
-    /// Return the timestamp at which this cache invocation was initialized.
-    pub fn timestamp(&self) -> Timestamp {
-        self.invocation_timestamp
     }
 
     /// The folder for a specific cache bucket
@@ -311,6 +326,11 @@ impl Cache {
     /// Return the path to an archive in the cache.
     pub fn archive(&self, id: &ArchiveId) -> PathBuf {
         self.bucket(CacheBucket::Archive).join(id)
+    }
+
+    /// Return the path to an archive file in the cache.
+    pub fn archive_file(&self, id: &ArchiveFileId) -> PathBuf {
+        self.bucket(CacheBucket::Files).join(id)
     }
 
     /// Create a temporary directory to be used as a Python virtual environment.
@@ -394,13 +414,38 @@ impl Cache {
         path: impl AsRef<Path>,
     ) -> io::Result<ArchiveId> {
         // Create a unique ID for the artifact.
-        // TODO(charlie): Support content-addressed persistence via SHAs.
         let id = ArchiveId::new();
 
         // Move the temporary directory into the directory store.
         let archive_entry = self.entry(CacheBucket::Archive, "", &id);
         fs_err::create_dir_all(archive_entry.dir())?;
         uv_fs::rename_with_retry(temp_dir.as_ref(), archive_entry.path()).await?;
+
+        // Create a symlink to the directory store.
+        fs_err::create_dir_all(path.as_ref().parent().expect("Cache entry to have parent"))?;
+        self.create_link(&id, path.as_ref())?;
+
+        Ok(id)
+    }
+
+    /// Persist a temporary directory to the artifact store under a caller-selected ID.
+    ///
+    /// If another writer has already persisted the same ID, discard `temp_dir` and link `path` to
+    /// the existing archive entry. The ID must therefore uniquely identify the directory contents.
+    pub async fn persist_with_id(
+        &self,
+        temp_dir: tempfile::TempDir,
+        path: impl AsRef<Path>,
+        id: ArchiveId,
+    ) -> io::Result<ArchiveId> {
+        // Move the temporary directory into the directory store.
+        let archive_entry = self.entry(CacheBucket::Archive, "", &id);
+        fs_err::create_dir_all(archive_entry.dir())?;
+        if let Err(err) = uv_fs::rename_with_retry(temp_dir.path(), archive_entry.path()).await {
+            if !archive_entry.path().is_dir() {
+                return Err(err);
+            }
+        }
 
         // Create a symlink to the directory store.
         fs_err::create_dir_all(path.as_ref().parent().expect("Cache entry to have parent"))?;
@@ -537,7 +582,9 @@ impl Cache {
     /// Clear the cache, removing all entries.
     pub fn clear(self, reporter: Box<dyn CleanReporter>) -> Result<Removal, io::Error> {
         // Remove everything but `.lock`, Windows does not allow removal of a locked file
-        let mut removal = Remover::new(reporter).rm_rf(&self.root, true)?;
+        let mut removal = Remover::new(reporter)
+            .with_removal_accounting(self.removal_accounting)
+            .rm_rf(&self.root, true)?;
         let Self {
             root, lock_file, ..
         } = self;
@@ -567,13 +614,15 @@ impl Cache {
 
     /// Remove a package from the cache.
     ///
+    /// Unreferenced file objects are removed separately by [`Cache::prune_archive_files`].
+    ///
     /// Returns the number of entries removed from the cache.
     pub fn remove(&self, name: &PackageName) -> io::Result<Removal> {
         // Collect the set of referenced archives.
         let references = self.find_archive_references()?;
 
         // Remove any entries for the package from the cache.
-        let mut summary = Removal::default();
+        let mut summary = self.removal();
         for bucket in CacheBucket::iter() {
             summary += bucket.remove(self, name)?;
         }
@@ -590,7 +639,59 @@ impl Cache {
         for (target, references) in references {
             if target.starts_with(&archive_root) && references.iter().all(|path| !path.exists()) {
                 debug!("Removing dangling cache entry: {}", target.display());
-                summary += rm_rf(target)?;
+                summary += self.remove_path(target)?;
+            }
+        }
+
+        Ok(summary)
+    }
+
+    /// Remove file objects with no hardlinks outside the files bucket.
+    ///
+    /// Archives refer to these objects via hardlinks, independently of the installation link mode.
+    /// Installed copies and reflinks remain valid when the cached file is removed, so they do not
+    /// need to keep the file object alive.
+    pub fn prune_archive_files(&self) -> Result<Removal, io::Error> {
+        let root = self.bucket(CacheBucket::Files);
+        if !root.exists() {
+            return Ok(self.removal());
+        }
+
+        let mut summary = self.removal();
+        let mut directories = Vec::new();
+        let mut entries = walkdir::WalkDir::new(&root).min_depth(1).into_iter();
+        while let Some(entry) = entries.next() {
+            let entry = entry?;
+            if entry.file_type().is_file() {
+                match uv_fs::hardlink_count(entry.path()) {
+                    Ok(1) => summary += self.remove_path(entry.path())?,
+                    Ok(_) => {}
+                    Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+                    Err(err) => return Err(err),
+                }
+            } else if entry.file_type().is_dir() {
+                if let Some(files) = uv_fs::files_with_one_hardlink(entry.path())? {
+                    entries.skip_current_dir();
+                    for file in files {
+                        summary += self.remove_path(file)?;
+                    }
+                }
+                directories.push(entry.into_path());
+            }
+        }
+        // The walk visits parents first so the bulk path can skip their contents.
+        // Remove directories in reverse order so children are removed before parents.
+        for directory in directories.into_iter().rev() {
+            match fs_err::remove_dir(directory) {
+                Ok(()) => {
+                    summary.num_dirs += 1;
+                }
+                Err(err)
+                    if matches!(
+                        err.kind(),
+                        io::ErrorKind::DirectoryNotEmpty | io::ErrorKind::NotFound
+                    ) => {}
+                Err(err) => return Err(err),
             }
         }
 
@@ -599,7 +700,7 @@ impl Cache {
 
     /// Prune dangling cache entries and cached environments.
     pub fn prune(&self, ci: bool) -> Result<Removal, io::Error> {
-        let mut summary = Removal::default();
+        let mut summary = self.removal();
 
         // First, remove any top-level directories that are unused. These typically represent
         // outdated cache buckets (e.g., `wheels-v0`, when latest is `wheels-v1`).
@@ -620,13 +721,13 @@ impl Cache {
                 if CacheBucket::iter().all(|bucket| entry.file_name() != bucket.to_str()) {
                     let path = entry.path();
                     debug!("Removing dangling cache bucket: {}", path.display());
-                    summary += rm_rf(path)?;
+                    summary += self.remove_path(path)?;
                 }
             } else {
                 // If the file is not a marker file, remove it.
                 let path = entry.path();
                 debug!("Removing dangling cache bucket: {}", path.display());
-                summary += rm_rf(path)?;
+                summary += self.remove_path(path)?;
             }
         }
 
@@ -638,7 +739,7 @@ impl Cache {
                     let entry = entry?;
                     let path = entry.path();
                     debug!("Removing cached environment: {}", path.display());
-                    summary += rm_rf(path)?;
+                    summary += self.remove_path(path)?;
                 }
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => (),
@@ -655,7 +756,7 @@ impl Cache {
                         let path = entry.path();
                         if path.is_dir() {
                             debug!("Removing unzipped wheel entry: {}", path.display());
-                            summary += rm_rf(path)?;
+                            summary += self.remove_path(path)?;
                         }
                     }
                 }
@@ -699,7 +800,7 @@ impl Cache {
                         }
 
                         debug!("Removing unzipped built wheel entry: {}", path.display());
-                        summary += rm_rf(path)?;
+                        summary += self.remove_path(path)?;
                     }
                 }
             }
@@ -716,7 +817,7 @@ impl Cache {
                     let target = fs_err::canonicalize(&path)?;
                     if !references.contains_key(&target) {
                         debug!("Removing dangling cache archive: {}", path.display());
-                        summary += rm_rf(path)?;
+                        summary += self.remove_path(path)?;
                     }
                 }
             }
@@ -724,7 +825,16 @@ impl Cache {
             Err(err) => return Err(err),
         }
 
+        summary += self.prune_archive_files()?;
+
         Ok(summary)
+    }
+
+    /// Remove a cache path using the cache's configured storage accounting.
+    pub fn remove_path(&self, path: impl AsRef<Path>) -> io::Result<Removal> {
+        Remover::default()
+            .with_removal_accounting(self.removal_accounting)
+            .rm_rf(path, false)
     }
 
     /// Find all references to entries in the archive bucket.
@@ -807,15 +917,7 @@ impl Cache {
                 Ok(())
             }
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
-                // Write to a temporary file, then move it into place.
-                let temp_dir = tempfile::tempdir_in(dst.as_ref().parent().unwrap())?;
-                let temp_file = temp_dir.path().join("link");
-                fs_err::write(&temp_file, contents.as_bytes())?;
-
-                // Move the symlink into the target location.
-                fs_err::rename(&temp_file, dst.as_ref())?;
-
-                Ok(())
+                uv_fs::write_atomic_sync(dst, contents.as_bytes())
             }
             Err(err) => Err(err),
         }
@@ -854,22 +956,7 @@ impl Cache {
         // Construct the relative link target.
         let src = uv_fs::relative_to(self.archive(id), dst_parent)?;
 
-        // Attempt to create the symlink directly.
-        match fs_err::os::unix::fs::symlink(&src, dst) {
-            Ok(()) => Ok(()),
-            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
-                // Create a symlink, using a temporary file to ensure atomicity.
-                let temp_dir = tempfile::tempdir_in(dst_parent)?;
-                let temp_file = temp_dir.path().join("link");
-                fs_err::os::unix::fs::symlink(&src, &temp_file)?;
-
-                // Move the symlink into the target location.
-                fs_err::rename(&temp_file, dst)?;
-
-                Ok(())
-            }
-            Err(err) => Err(err),
-        }
+        uv_fs::replace_symlink(&src, dst)
     }
 
     /// Resolve an archive link, returning the fully-resolved path.
@@ -1061,8 +1148,7 @@ pub enum CacheBucket {
     ///
     /// The structure is similar of that of the `Wheel` bucket, except we have an additional layer
     /// for the source distribution filename and the metadata is at the source distribution-level,
-    /// not at the wheel level. Build settings and non-isolated builds can add cache shards between
-    /// the source revision and its metadata.
+    /// not at the wheel level.
     ///
     /// TODO(konstin): The cache policy should be on the source distribution level, the metadata we
     /// can put next to the wheels as in the `Wheels` bucket.
@@ -1192,6 +1278,8 @@ pub enum CacheBucket {
     /// that cache entries can be atomically replaced and removed, as storing directories in the
     /// other buckets directly would make atomic operations impossible.
     Archive,
+    /// Content-addressed files that are hardlinked into cached archives.
+    Files,
     /// Ephemeral virtual environments used to execute PEP 517 builds and other operations.
     Builds,
     /// Reusable virtual environments for Python tools and projects.
@@ -1212,21 +1300,24 @@ impl CacheBucket {
         match self {
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/build/cache_prune.rs`.
+            // TODO(ww): Remove `uv_pypi_types::HashDigestWire` on the next cache bump
+            // or breaking release.
             Self::SourceDistributions => "sdists-v9",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/lock/lock.rs`.
-            Self::FlatIndex => "flat-index-v3",
+            Self::FlatIndex => "flat-index-v5",
             Self::Git => "git-v0",
             Self::Interpreter => "interpreter-v4",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/build/cache_clean.rs`.
-            Self::Simple => "simple-v22",
+            Self::Simple => "simple-v25",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/build/cache_prune.rs`.
             Self::Wheels => "wheels-v6",
             // Note that when bumping this, you'll also need to bump
             // `ARCHIVE_VERSION` in `crates/uv-cache/src/lib.rs`.
             Self::Archive => "archive-v0",
+            Self::Files => "files-v0",
             Self::Builds => "builds-v0",
             Self::Environments => "environments-v2",
             Self::Python => "python-v0",
@@ -1239,57 +1330,48 @@ impl CacheBucket {
     ///
     /// Returns the number of entries removed from the cache.
     fn remove(self, cache: &Cache, name: &PackageName) -> Result<Removal, io::Error> {
-        /// Returns `true` if the [`Path`] contains built-wheel metadata for the given package.
+        /// Returns `true` if the [`Path`] represents a built wheel for the given package.
         fn is_match(path: &Path, name: &PackageName) -> bool {
-            walkdir::WalkDir::new(path)
-                .max_depth(3)
-                .follow_links(false)
-                .into_iter()
-                .filter_map(Result::ok)
-                .filter(|entry| {
-                    entry.file_type().is_file() && entry.file_name() == "metadata.msgpack"
-                })
-                .any(|entry| {
-                    fs_err::read(entry.path())
-                        .ok()
-                        .and_then(|metadata| {
-                            rmp_serde::from_slice::<ResolutionMetadata>(&metadata).ok()
-                        })
-                        .is_some_and(|metadata| metadata.name == *name)
-                })
+            let Ok(metadata) = fs_err::read(path.join("metadata.msgpack")) else {
+                return false;
+            };
+            let Ok(metadata) = rmp_serde::from_slice::<ResolutionMetadata>(&metadata) else {
+                return false;
+            };
+            metadata.name == *name
         }
 
-        let mut summary = Removal::default();
+        let mut summary = cache.removal();
         match self {
             Self::Wheels => {
                 // For `pypi` wheels, we expect a directory per package (indexed by name).
                 let root = cache.bucket(self).join(WheelCacheKind::Pypi);
-                summary += rm_rf(root.join(name.to_string()))?;
+                summary += cache.remove_path(root.join(name.to_string()))?;
 
                 // For alternate indices, we expect a directory for every index (under an `index`
                 // subdirectory), followed by a directory per package (indexed by name).
                 let root = cache.bucket(self).join(WheelCacheKind::Index);
                 for directory in directories(root)? {
-                    summary += rm_rf(directory.join(name.to_string()))?;
+                    summary += cache.remove_path(directory.join(name.to_string()))?;
                 }
 
                 // For direct URLs, we expect a directory for every URL, followed by a
                 // directory per package (indexed by name).
                 let root = cache.bucket(self).join(WheelCacheKind::Url);
                 for directory in directories(root)? {
-                    summary += rm_rf(directory.join(name.to_string()))?;
+                    summary += cache.remove_path(directory.join(name.to_string()))?;
                 }
             }
             Self::SourceDistributions => {
                 // For `pypi` wheels, we expect a directory per package (indexed by name).
                 let root = cache.bucket(self).join(WheelCacheKind::Pypi);
-                summary += rm_rf(root.join(name.to_string()))?;
+                summary += cache.remove_path(root.join(name.to_string()))?;
 
                 // For alternate indices, we expect a directory for every index (under an `index`
                 // subdirectory), followed by a directory per package (indexed by name).
                 let root = cache.bucket(self).join(WheelCacheKind::Index);
                 for directory in directories(root)? {
-                    summary += rm_rf(directory.join(name.to_string()))?;
+                    summary += cache.remove_path(directory.join(name.to_string()))?;
                 }
 
                 // For direct URLs, we expect a directory for every URL, followed by a
@@ -1298,7 +1380,7 @@ impl CacheBucket {
                 let root = cache.bucket(self).join(WheelCacheKind::Url);
                 for url in directories(root)? {
                     if directories(&url)?.any(|version| is_match(&version, name)) {
-                        summary += rm_rf(url)?;
+                        summary += cache.remove_path(url)?;
                     }
                 }
 
@@ -1308,7 +1390,7 @@ impl CacheBucket {
                 let root = cache.bucket(self).join(WheelCacheKind::Path);
                 for path in directories(root)? {
                     if directories(&path)?.any(|version| is_match(&version, name)) {
-                        summary += rm_rf(path)?;
+                        summary += cache.remove_path(path)?;
                     }
                 }
 
@@ -1319,7 +1401,7 @@ impl CacheBucket {
                 for repository in directories(root)? {
                     for sha in directories(repository)? {
                         if is_match(&sha, name) {
-                            summary += rm_rf(sha)?;
+                            summary += cache.remove_path(sha)?;
                         }
                     }
                 }
@@ -1327,24 +1409,25 @@ impl CacheBucket {
             Self::Simple => {
                 // For `pypi` wheels, we expect a rkyv file per package, indexed by name.
                 let root = cache.bucket(self).join(WheelCacheKind::Pypi);
-                summary += rm_rf(root.join(format!("{name}.rkyv")))?;
+                summary += cache.remove_path(root.join(format!("{name}.rkyv")))?;
 
                 // For alternate indices, we expect a directory for every index (under an `index`
                 // subdirectory), followed by a directory per package (indexed by name).
                 let root = cache.bucket(self).join(WheelCacheKind::Index);
                 for directory in directories(root)? {
-                    summary += rm_rf(directory.join(format!("{name}.rkyv")))?;
+                    summary += cache.remove_path(directory.join(format!("{name}.rkyv")))?;
                 }
             }
             Self::FlatIndex => {
                 // We can't know if the flat index includes a package, so we just remove the entire
                 // cache entry.
                 let root = cache.bucket(self);
-                summary += rm_rf(root)?;
+                summary += cache.remove_path(root)?;
             }
             Self::Git
             | Self::Interpreter
             | Self::Archive
+            | Self::Files
             | Self::Builds
             | Self::Environments
             | Self::Python
@@ -1366,6 +1449,7 @@ impl CacheBucket {
             Self::Interpreter,
             Self::Simple,
             Self::Archive,
+            Self::Files,
             Self::Builds,
             Self::Environments,
             Self::Python,
@@ -1462,27 +1546,11 @@ impl Refresh {
 
 #[cfg(test)]
 mod tests {
-    use std::error::Error;
     use std::str::FromStr;
 
     use crate::ArchiveId;
 
-    use super::{Cache, CacheBucket, Link, Refresh};
-    use uv_cache_info::Timestamp;
-    use uv_normalize::PackageName;
-    use uv_pypi_types::ResolutionMetadata;
-
-    #[test]
-    fn refresh_preserves_invocation_timestamp() {
-        let cache = Cache::from_path("cache");
-        let invocation_timestamp = cache.timestamp();
-        let refreshed = cache.clone().with_refresh(Refresh::All(Timestamp::from(
-            std::time::SystemTime::UNIX_EPOCH,
-        )));
-
-        assert_eq!(cache.timestamp(), invocation_timestamp);
-        assert_eq!(refreshed.timestamp(), invocation_timestamp);
-    }
+    use super::{Cache, Link};
 
     #[test]
     fn test_link_round_trip() {
@@ -1495,45 +1563,26 @@ mod tests {
     }
 
     #[test]
+    fn test_replace_archive_link() {
+        let cache = Cache::temp().unwrap();
+        let link = cache.root().join("link");
+        for id in [ArchiveId::new(), ArchiveId::new()] {
+            let archive = cache.archive(&id);
+            fs_err::create_dir_all(&archive).unwrap();
+            cache.create_link(&id, &link).unwrap();
+            assert_eq!(
+                cache.resolve_link(&link).unwrap(),
+                archive.canonicalize().unwrap()
+            );
+        }
+    }
+
+    #[test]
     fn test_link_deserialize() {
         assert!(Link::from_str("archive-v0/foo").is_ok());
         assert!(Link::from_str("archive/foo").is_err());
         assert!(Link::from_str("v1/foo").is_err());
         assert!(Link::from_str("archive-v0/").is_err());
-    }
-
-    #[test]
-    fn clean_keyed_source_distributions() -> Result<(), Box<dyn Error>> {
-        let cache_root = tempfile::tempdir()?;
-        let bucket = cache_root
-            .path()
-            .join(CacheBucket::SourceDistributions.to_str());
-        let url = bucket.join("url/source-url");
-        let path = bucket.join("path/source-path");
-        let git = bucket.join("git/source-git/revision");
-        let entries = [
-            url.join("revision/build-key"),
-            path.join("revision/no-build-isolation/build-key"),
-            git.join("build-key"),
-        ];
-        let metadata = ResolutionMetadata::parse_metadata(
-            b"Metadata-Version: 2.3\nName: source-distribution\nVersion: 1.0.0\n",
-        )?;
-        let metadata = rmp_serde::to_vec(&metadata)?;
-
-        for entry in entries {
-            fs_err::create_dir_all(&entry)?;
-            fs_err::write(entry.join("metadata.msgpack"), &metadata)?;
-        }
-
-        let name = PackageName::from_str("source-distribution")?;
-        let summary = Cache::from_path(cache_root.path()).remove(&name)?;
-
-        assert_eq!(summary.num_files, 3);
-        assert!(!url.exists());
-        assert!(!path.exists());
-        assert!(!git.exists());
-        Ok(())
     }
 
     #[test]

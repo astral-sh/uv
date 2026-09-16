@@ -12,14 +12,14 @@ use uv_cli::version::ProjectVersionInfo;
 use uv_cli::{VersionBump, VersionBumpSpec, VersionFormat};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    Concurrency, DependencyGroups, DryRun, ExtrasSpecification, InstallOptions,
+    ActiveEnvironment, Concurrency, DependencyGroups, DryRun, ExtrasSpecification, InstallOptions,
 };
 use uv_fs::Simplified;
 use uv_normalize::DefaultExtras;
 use uv_normalize::PackageName;
 use uv_pep440::{BumpCommand, PrereleaseKind, Version};
 use uv_preview::Preview;
-use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
+use uv_python::{ConfigDiscovery, PythonDownloads, PythonPreference, PythonRequest};
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_workspace::pyproject::PyProjectToml;
 use uv_workspace::pyproject_mut::Error;
@@ -36,10 +36,10 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    LinkErrorReporting, ProjectEnvironment, ProjectError, ProjectInterpreter, UniversalState,
-    WorkspacePython, default_dependency_groups,
+    LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectError,
+    ProjectInterpreter, UniversalState, WorkspacePython,
 };
-use crate::commands::{ExitStatus, diagnostics, project};
+use crate::commands::{ExitStatus, UvError, project};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
@@ -80,7 +80,7 @@ pub(crate) async fn project_version(
     dry_run: bool,
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,
-    active: Option<bool>,
+    active: ActiveEnvironment,
     no_sync: bool,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
@@ -90,7 +90,7 @@ pub(crate) async fn project_version(
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: Concurrency,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
     printer: Printer,
@@ -353,7 +353,7 @@ pub(crate) async fn project_version(
             python_downloads,
             installer_metadata,
             &concurrency,
-            no_config,
+            config_discovery,
             cache,
             printer,
             preview,
@@ -380,7 +380,7 @@ pub(crate) struct MissingProjectVersionError {
     err: WorkspaceError,
 }
 
-impl uv_errors::Hint for MissingProjectVersionError {
+impl uv_errors::Hinted for MissingProjectVersionError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         uv_errors::Hints::from(format!(
             "If you meant to view uv's version, use `{}` instead",
@@ -502,17 +502,13 @@ async fn print_frozen_version(
     .await
     {
         Ok(result) => result.into_lock(),
-        Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::default()
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-        }
-        Err(err) => return Err(err.into()),
+        Err(err) => return Err(UvError::from(err).into()),
     };
 
     // Try to find the package of interest in the lock
     let Some(package) = lock
-        .runtime_packages()
+        .packages()
+        .iter()
         .find(|package| package.name() == name)
     else {
         return Err(anyhow!(
@@ -538,7 +534,7 @@ async fn lock_and_sync(
     project_dir: &Path,
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,
-    active: Option<bool>,
+    active: ActiveEnvironment,
     no_sync: bool,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
@@ -548,7 +544,7 @@ async fn lock_and_sync(
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: &Concurrency,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     cache: &Cache,
     printer: Printer,
     preview: Preview,
@@ -560,7 +556,7 @@ async fn lock_and_sync(
     }
 
     // Determine the groups and extras that should be enabled.
-    let default_groups = default_dependency_groups(project.pyproject_toml())?;
+    let default_groups = project.default_groups()?;
     let default_extras = DefaultExtras::default();
     let groups = DependencyGroups::default().with_defaults(default_groups);
     let extras = ExtrasSpecification::default().with_defaults(default_extras);
@@ -574,7 +570,7 @@ async fn lock_and_sync(
             Some(project.workspace()),
             &groups,
             project_dir,
-            no_config,
+            config_discovery,
         )
         .await?;
         let interpreter = ProjectInterpreter::discover(
@@ -585,7 +581,7 @@ async fn lock_and_sync(
             python_preference,
             python_downloads,
             &install_mirrors,
-            false,
+            ProjectEnvironmentPolicy::Optional,
             active,
             cache,
             printer,
@@ -605,7 +601,7 @@ async fn lock_and_sync(
             python_preference,
             python_downloads,
             no_sync,
-            no_config,
+            config_discovery,
             active,
             cache,
             DryRun::Disabled,
@@ -648,12 +644,7 @@ async fn lock_and_sync(
     .await
     {
         Ok(result) => result.into_lock(),
-        Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::default()
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-        }
-        Err(err) => return Err(err.into()),
+        Err(err) => return Err(UvError::from(err).into()),
     };
 
     let AddTarget::Project(project, environment) = target else {
@@ -708,12 +699,7 @@ async fn lock_and_sync(
     .await
     {
         Ok(_) => {}
-        Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::default()
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-        }
-        Err(err) => return Err(err.into()),
+        Err(err) => return Err(UvError::from(err).into()),
     }
 
     Ok(ExitStatus::Success)

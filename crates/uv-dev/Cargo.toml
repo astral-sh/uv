@@ -1,6 +1,6 @@
 [package]
 name = "uv-dev"
-version = "0.0.61"
+version = "0.0.82"
 description = "This is an internal component crate of uv"
 publish = false
 
@@ -42,20 +42,22 @@ uv-workspace = { workspace = true, features = ["schemars"] }
 # dependencies, to ensure that we're forced to think twice before including them in other crates.
 anstream = { workspace = true }
 anyhow = { workspace = true }
+blake3 = { workspace = true }
 clap = { workspace = true, features = ["derive", "wrap_help"] }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
+indexmap = { workspace = true, features = ["serde"] }
 itertools = { workspace = true }
-markdown = { version = "1.0.0" }
-poloto = { version = "19.1.2", optional = true }
-pretty_assertions = { version = "1.4.1" }
+markdown = { version = "1.0.0", default-features = false }
+poloto = { version = "19.1.2", default-features = false, optional = true }
+pretty_assertions = { version = "1.4.1", default-features = false, features = ["std"] }
 reqwest = { workspace = true, features = ["stream"] }
-resvg = { version = "0.47.0", optional = true }
+resvg = { version = "0.47.0", default-features = false, features = ["text", "system-fonts"], optional = true }
 schemars = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-serde_yaml = { version = "0.9.34" }
-tagu = { version = "0.1.6", optional = true }
+serde_yaml = { version = "0.9.34", default-features = false }
+tagu = { version = "0.1.6", default-features = false, optional = true }
 tempfile = { workspace = true }
 textwrap = { workspace = true }
 tokio = { workspace = true }
@@ -79,7 +81,7 @@ name = "uv-dev"
 required-features = ["dev"]
 
 [features]
-default = ["performance", "uv-extract/static"]
+default = ["performance"]
 # Actually build the dev CLI.
 dev = []
 performance = ["performance-memory-allocator"]

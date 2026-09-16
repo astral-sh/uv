@@ -1,6 +1,6 @@
 [package]
 name = "uv-redacted"
-version = "0.0.61"
+version = "0.0.82"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -18,6 +18,9 @@ schemars = { workspace = true, optional = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 url = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }
 
 [features]
 schemars = ["dep:schemars"]

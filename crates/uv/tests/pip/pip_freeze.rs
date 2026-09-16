@@ -1,7 +1,8 @@
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use assert_cmd::prelude::*;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
+use url::Url;
 
 use uv_test::uv_snapshot;
 
@@ -22,13 +23,10 @@ fn freeze_many() -> Result<()> {
     // Run `pip freeze`.
     uv_snapshot!(context.pip_freeze()
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     markupsafe==2.1.3
     tomli==2.0.1
-
-    ----- stderr -----
     "
     );
 
@@ -73,8 +71,7 @@ fn freeze_duplicate() -> Result<()> {
 
     // Run `pip freeze`.
     uv_snapshot!(context1.filters(), context1.pip_freeze().arg("--strict"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     pip==21.3.1
     pip==22.1.1
@@ -107,8 +104,7 @@ fn freeze_url() -> Result<()> {
     // Run `pip freeze`.
     uv_snapshot!(context.pip_freeze()
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     anyio==4.3.0
     iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl
@@ -118,6 +114,108 @@ fn freeze_url() -> Result<()> {
     warning: The package `anyio` requires `sniffio>=1.1`, but it's not installed
     "
     );
+
+    Ok(())
+}
+
+/// Preserve archive hashes recorded by another installer in `direct_url.json` so that frozen
+/// requirements keep their artifact verification.
+#[test]
+fn freeze_direct_archive_hashes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let site_packages = ChildPath::new(context.site_packages());
+
+    let project = site_packages.child("project-1.0.0.dist-info");
+    project.create_dir_all()?;
+    project
+        .child("METADATA")
+        .write_str("Metadata-Version: 2.1\nName: project\nVersion: 1.0.0\n")?;
+    project.child("direct_url.json").write_str(
+        r#"{"url":"https://example.com/project-1.0.0.tar.gz","subdirectory":"src","archive_info":{"hashes":{"sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}}"#,
+    )?;
+
+    let legacy = site_packages.child("legacy-1.0.0.dist-info");
+    legacy.create_dir_all()?;
+    legacy
+        .child("METADATA")
+        .write_str("Metadata-Version: 2.1\nName: legacy\nVersion: 1.0.0\n")?;
+    legacy.child("direct_url.json").write_str(
+        r#"{"url":"https://example.com/legacy-1.0.0.tar.gz","archive_info":{"hash":"sha256=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}}"#,
+    )?;
+
+    uv_snapshot!(context.pip_freeze(), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    legacy @ https://example.com/legacy-1.0.0.tar.gz#sha256=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    project @ https://example.com/project-1.0.0.tar.gz#subdirectory=src&sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    ");
+
+    Ok(())
+}
+
+/// A frozen direct URL with both a subdirectory and archive hash must keep enforcing that hash
+/// when it is consumed as a requirement again.
+#[test]
+fn freeze_direct_archive_hash_roundtrip() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let site_packages = ChildPath::new(context.site_packages());
+    let wheel_url = Url::from_file_path(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+    )
+    .map_err(|()| anyhow!("Failed to create wheel URL"))?;
+
+    let ok = site_packages.child("ok-1.0.0.dist-info");
+    ok.create_dir_all()?;
+    ok.child("METADATA")
+        .write_str("Metadata-Version: 2.1\nName: ok\nVersion: 1.0.0\n")?;
+    ok.child("direct_url.json").write_str(&format!(
+        r#"{{"url":"{wheel_url}","subdirectory":"src","archive_info":{{"hashes":{{"sha256":"79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f"}}}}}}"#,
+    ))?;
+
+    let frozen = uv_snapshot!(context.filters(), context.pip_freeze(), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    ok @ file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl#subdirectory=src&sha256=79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f
+    ");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_binary(&frozen.stdout)?;
+    fs_err::remove_dir_all(ok.path())?;
+
+    context
+        .pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .arg("--no-deps")
+        .arg("--require-hashes")
+        .assert()
+        .success();
+
+    requirements_txt.write_str(&String::from_utf8(frozen.stdout)?.replace(
+        "79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    ))?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .arg("--no-deps")
+        .arg("--require-hashes")
+        .arg("--reinstall"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to read `ok @ file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl#subdirectory=src&sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`
+      cause: Hash mismatch for `ok @ file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl#subdirectory=src&sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`
+
+             Expected:
+               sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+             Computed:
+               sha256:79f0b33e6ce1e09eaa1784c8eee275dfe84d215d9c65c652f07c18e85fdaac5f
+    ");
 
     Ok(())
 }
@@ -145,8 +243,7 @@ fn freeze_with_editable() -> Result<()> {
     // Run `pip freeze`.
     uv_snapshot!(context.filters(), context.pip_freeze()
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     anyio==4.3.0
     -e file://[WORKSPACE]/test/packages/poetry_editable
@@ -161,8 +258,7 @@ fn freeze_with_editable() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_freeze()
         .arg("--exclude-editable")
         .arg("--strict"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     anyio==4.3.0
 
@@ -216,12 +312,9 @@ fn freeze_with_egg_info() -> Result<()> {
 
     // Run `pip freeze`.
     uv_snapshot!(context.filters(), context.pip_freeze(), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     zstandard==0.22.0
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -269,12 +362,9 @@ fn freeze_with_egg_info_no_py() -> Result<()> {
 
     // Run `pip freeze`.
     uv_snapshot!(context.filters(), context.pip_freeze(), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     zstandard==0.22.0
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -306,13 +396,10 @@ fn freeze_with_egg_info_file() -> Result<()> {
 
     // Run `pip freeze`.
     uv_snapshot!(context.filters(), context.pip_freeze(), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     pycurl==7.45.1
     vtk==9.2.6
-
-    ----- stderr -----
     ");
     Ok(())
 }
@@ -344,12 +431,9 @@ Version: 0.22.0
 
     // Run `pip freeze`.
     uv_snapshot!(context.filters(), context.pip_freeze(), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     -e [TEMP_DIR]/zstandard_project
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -377,13 +461,10 @@ fn freeze_path() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_freeze()
         .arg("--path")
         .arg(target.path()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     markupsafe==2.1.3
     tomli==2.0.1
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -418,14 +499,11 @@ fn freeze_multiple_paths() -> Result<()> {
 
     // Run `pip freeze`.
     uv_snapshot!(context.filters(), context.pip_freeze().arg("--path").arg(target1.path()).arg("--path").arg(target2.path()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     markupsafe==2.1.3
     requests==2.31.0
     tomli==2.0.1
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -446,11 +524,7 @@ fn freeze_nonexistent_path() {
     uv_snapshot!(context.filters(), context.pip_freeze()
         .arg("--path")
         .arg(nonexistent_dir.path()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
+    exit_code: 0 (success)
     ");
 }
 
@@ -470,13 +544,10 @@ fn freeze_with_quiet_flag() -> Result<()> {
 
     // Run `pip freeze` with `--quiet` flag.
     uv_snapshot!(context.pip_freeze().arg("--quiet"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     markupsafe==2.1.3
     tomli==2.0.1
-
-    ----- stderr -----
     "
     );
 
@@ -506,23 +577,16 @@ fn freeze_target() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_freeze()
         .arg("--target")
         .arg(target.path()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     markupsafe==2.1.3
     tomli==2.0.1
-
-    ----- stderr -----
     "
     );
 
     // Without --target, the packages should not be visible.
     uv_snapshot!(context.pip_freeze(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
+    exit_code: 0 (success)
     "
     );
 
@@ -552,23 +616,16 @@ fn freeze_prefix() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_freeze()
         .arg("--prefix")
         .arg(prefix.path()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     markupsafe==2.1.3
     tomli==2.0.1
-
-    ----- stderr -----
     "
     );
 
     // Without --prefix, the packages should not be visible.
     uv_snapshot!(context.pip_freeze(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
+    exit_code: 0 (success)
     "
     );
 
@@ -593,22 +650,15 @@ fn freeze_exclude() {
 
     // Run `pip freeze --exclude MarkupSafe`.
     uv_snapshot!(context.filters(), context.pip_freeze().arg("--exclude").arg("MarkupSafe").arg("--prefix").arg(prefix.path()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     tomli==2.0.1
-
-    ----- stderr -----
     "
     );
 
     // Run `pip freeze --exclude MarkupSafe --exclude tomli`.
     uv_snapshot!(context.filters(), context.pip_freeze().arg("--exclude").arg("MarkupSafe").arg("--exclude").arg("tomli").arg("--prefix").arg(prefix.path()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
+    exit_code: 0 (success)
     "
     );
 }

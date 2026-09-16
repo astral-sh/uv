@@ -10,13 +10,13 @@ use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    Concurrency, DependencyGroups, DryRun, ExtrasSpecification, InstallOptions,
+    ActiveEnvironment, Concurrency, DependencyGroups, DryRun, ExtrasSpecification, InstallOptions,
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups};
 use uv_preview::Preview;
-use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
+use uv_python::{ConfigDiscovery, PythonDownloads, PythonPreference, PythonRequest};
 use uv_scripts::{Pep723Metadata, Pep723Script};
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_warnings::warn_user_once;
@@ -31,10 +31,10 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    LinkErrorReporting, ProjectEnvironment, ProjectError, ProjectInterpreter, ScriptInterpreter,
-    UniversalState, WorkspacePython, default_dependency_groups,
+    LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectError,
+    ProjectInterpreter, ScriptInterpreter, UniversalState, WorkspacePython,
 };
-use crate::commands::{ExitStatus, diagnostics, project};
+use crate::commands::{ExitStatus, UvError, project};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
@@ -43,7 +43,7 @@ pub(crate) async fn remove(
     project_dir: &Path,
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,
-    active: Option<bool>,
+    active: ActiveEnvironment,
     no_sync: bool,
     packages: Vec<PackageName>,
     dependency_type: DependencyType,
@@ -57,7 +57,7 @@ pub(crate) async fn remove(
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: Concurrency,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     cache: &Cache,
     printer: Printer,
     preview: Preview,
@@ -214,7 +214,7 @@ pub(crate) async fn remove(
 
     // Determine enabled groups and extras
     let default_groups = match &target {
-        RemoveTarget::Project(project) => default_dependency_groups(project.pyproject_toml())?,
+        RemoveTarget::Project(project) => project.default_groups()?,
         RemoveTarget::Script(_) => DefaultGroups::default(),
     };
     let groups = DependencyGroups::default().with_defaults(default_groups);
@@ -230,7 +230,7 @@ pub(crate) async fn remove(
                     Some(project.workspace()),
                     &groups,
                     project_dir,
-                    no_config,
+                    config_discovery,
                 )
                 .await?;
                 let interpreter = ProjectInterpreter::discover(
@@ -241,8 +241,9 @@ pub(crate) async fn remove(
                     python_preference,
                     python_downloads,
                     &install_mirrors,
-                    false,
-                    active,
+                    ProjectEnvironmentPolicy::Optional,
+                    // Suppress warnings about the active environment when we won't modify it.
+                    active.without_warning(),
                     cache,
                     printer,
                 )
@@ -261,7 +262,7 @@ pub(crate) async fn remove(
                     python_preference,
                     python_downloads,
                     no_sync,
-                    no_config,
+                    config_discovery,
                     active,
                     cache,
                     DryRun::Disabled,
@@ -283,7 +284,7 @@ pub(crate) async fn remove(
                 python_downloads,
                 &install_mirrors,
                 no_sync,
-                no_config,
+                config_discovery,
                 active,
                 cache,
                 printer,
@@ -332,12 +333,7 @@ pub(crate) async fn remove(
     .await
     {
         Ok(result) => result.into_lock(),
-        Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::default()
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-        }
-        Err(err) => return Err(err.into()),
+        Err(err) => return Err(UvError::from(err).into()),
     };
 
     let AddTarget::Project(project, environment) = target else {
@@ -390,12 +386,7 @@ pub(crate) async fn remove(
     .await
     {
         Ok(_) => {}
-        Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::default()
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-        }
-        Err(err) => return Err(err.into()),
+        Err(err) => return Err(UvError::from(err).into()),
     }
 
     Ok(ExitStatus::Success)
@@ -472,7 +463,7 @@ pub(crate) struct DependencyNotFoundError {
     found_in: Vec<DependencyType>,
 }
 
-impl uv_errors::Hint for DependencyNotFoundError {
+impl uv_errors::Hinted for DependencyNotFoundError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         self.found_in
             .iter()

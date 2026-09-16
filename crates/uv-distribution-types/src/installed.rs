@@ -102,7 +102,7 @@ impl PartialEq for InstalledDist {
 
 impl Eq for InstalledDist {}
 
-/// A built distribution (wheel) that is installed in a virtual environment.
+/// A distribution installed in a Python environment.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum InstalledDistKind {
     /// The distribution was derived from a registry, like `PyPI`.
@@ -281,8 +281,8 @@ impl InstalledDist {
                 let Some(egg_metadata) = read_metadata(path) else {
                     return Ok(None);
                 };
-                return Ok(Some(Self::from(InstalledDistKind::EggInfoDirectory(
-                    InstalledEggInfoDirectory {
+                return Ok(Some(Self::from(InstalledDistKind::EggInfoFile(
+                    InstalledEggInfoFile {
                         name: file_name.name,
                         version: Version::from_str(&egg_metadata.version)?,
                         path: path.to_path_buf().into_boxed_path(),

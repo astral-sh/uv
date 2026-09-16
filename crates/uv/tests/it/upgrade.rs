@@ -1,10 +1,5 @@
 use anyhow::{Result, anyhow};
-use assert_cmd::assert::OutputAssertExt;
-use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
-use async_zip::base::write::ZipFileWriter;
-use async_zip::{Compression, ZipEntryBuilder};
-use futures::executor::block_on;
 use insta::allow_duplicates;
 use url::Url;
 
@@ -57,32 +52,6 @@ fn write_fork_upgrade_project(
     Ok(pyproject_toml)
 }
 
-fn write_wheel(path: &ChildPath, name: &str, version: &str) -> Result<()> {
-    let mut zip = ZipFileWriter::new(Vec::new());
-    let dist_info = format!("{}-{version}.dist-info", name.replace('-', "_"));
-
-    let entry = ZipEntryBuilder::new(
-        format!("{}.py", name.replace('-', "_")).into(),
-        Compression::Stored,
-    );
-    block_on(zip.write_entry_whole(entry, b""))?;
-    let entry = ZipEntryBuilder::new(format!("{dist_info}/METADATA").into(), Compression::Stored);
-    block_on(zip.write_entry_whole(
-        entry,
-        format!("Metadata-Version: 2.3\nName: {name}\nVersion: {version}\n").as_bytes(),
-    ))?;
-    let entry = ZipEntryBuilder::new(format!("{dist_info}/WHEEL").into(), Compression::Stored);
-    block_on(zip.write_entry_whole(
-        entry,
-        b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
-    ))?;
-    let entry = ZipEntryBuilder::new(format!("{dist_info}/RECORD").into(), Compression::Stored);
-    block_on(zip.write_entry_whole(entry, b""))?;
-    fs_err::write(path.path(), block_on(zip.close())?)?;
-
-    Ok(())
-}
-
 #[test]
 fn upgrade_help() {
     let context = uv_test::test_context_with_versions!(&[]);
@@ -91,15 +60,17 @@ fn upgrade_help() {
         context.filters(),
         context.upgrade().arg("--help"),
         @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Upgrade a dependency in the project
 
-    Usage: uv upgrade [OPTIONS] <PACKAGE>
+    Usage: uv upgrade [OPTIONS] [PACKAGES]...
 
     Arguments:
-      <PACKAGE>  The package to upgrade
+      [PACKAGES]...  The packages to upgrade
+
+    Options:
+          --exclude <EXCLUDE>  Exclude the named package from upgrades
 
     Cache options:
       -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary
@@ -138,8 +109,6 @@ fn upgrade_help() {
               Avoid discovering configuration files (`pyproject.toml`, `uv.toml`) [env: UV_NO_CONFIG=]
       -h, --help
               Display the concise help for this command
-
-    ----- stderr -----
     "#
     );
 }
@@ -168,10 +137,7 @@ fn upgrade_selects_normalized_production_dependency() -> Result<()> {
         context.filters(),
         context.upgrade().arg("anyio"),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 4 packages in [TIME]
@@ -212,10 +178,7 @@ fn upgrade_ignores_disjoint_fork_version_for_selected_requirement() -> Result<()
             .arg("bar")
             .env_remove(EnvVars::UV_EXCLUDE_NEWER),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 4 packages in [TIME]
@@ -239,10 +202,7 @@ fn upgrade_preserves_constraint_that_admits_multiple_fork_versions() -> Result<(
             .arg("bar")
             .env_remove(EnvVars::UV_EXCLUDE_NEWER),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 4 packages in [TIME]
@@ -253,106 +213,9 @@ fn upgrade_preserves_constraint_that_admits_multiple_fork_versions() -> Result<(
     assert_project_unchanged(&context, &pyproject_toml)
 }
 
-/// Build-only versions must not widen the selected production requirement during `uv upgrade`.
 #[test]
-fn upgrade_ignores_build_only_version() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-
-    let links = context.temp_dir.child("links");
-    links.create_dir_all()?;
-    write_wheel(&links.child("foo-1.0.0-py3-none-any.whl"), "foo", "1.0.0")?;
-    write_wheel(&links.child("foo-2.0.0-py3-none-any.whl"), "foo", "2.0.0")?;
-
-    let dep = context.temp_dir.child("dep");
-    dep.create_dir_all()?;
-    dep.child("pyproject.toml").write_str(
-        r#"
-        [project]
-        name = "dep"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = ["foo<2"]
-
-        [build-system]
-        requires = ["foo==2.0.0"]
-        backend-path = ["."]
-        build-backend = "build_backend"
-        "#,
-    )?;
-    dep.child("build_backend.py").write_str(
-        r"
-def get_requires_for_build_wheel(config_settings=None):
-    return []
-",
-    )?;
-
-    let pyproject_toml = r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = ["foo<2", "dep"]
-
-        [tool.uv]
-        no-index = true
-        find-links = ["links"]
-
-        [tool.uv.sources]
-        dep = { path = "dep" }
-        "#;
-    context
-        .temp_dir
-        .child("pyproject.toml")
-        .write_str(pyproject_toml)?;
-
-    context
-        .lock()
-        .arg("--preview-features")
-        .arg("lock-build-dependencies")
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .assert()
-        .success();
-
-    let lock = fs_err::read(context.temp_dir.child("uv.lock"))?;
-    let lock_contents = context.read("uv.lock");
-    assert!(
-        lock_contents.contains("name = \"foo\"\nversion = \"1.0.0\""),
-        "{lock_contents}"
-    );
-    assert!(
-        lock_contents.contains("name = \"foo\"\nversion = \"2.0.0\""),
-        "{lock_contents}"
-    );
-    assert!(
-        lock_contents.contains("build-only = true"),
-        "{lock_contents}"
-    );
-
-    uv_snapshot!(context.filters(), context
-        .upgrade()
-        .arg("foo")
-        .env(EnvVars::UV_PREVIEW_FEATURES, "lock-build-dependencies"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 3 packages in [TIME]
-    No version change for foo
-    ");
-
-    assert_eq!(
-        fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?,
-        pyproject_toml
-    );
-    assert_eq!(fs_err::read(context.temp_dir.child("uv.lock"))?, lock);
-
-    Ok(())
-}
-
-#[test]
-fn upgrade_preserves_inapplicable_marked_dependency() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+fn upgrade_skips_inapplicable_marked_dependency() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
     let pyproject_toml = r#"
         [project]
         name = "project"
@@ -364,20 +227,123 @@ fn upgrade_preserves_inapplicable_marked_dependency() -> Result<()> {
         .temp_dir
         .child("pyproject.toml")
         .write_str(pyproject_toml)?;
-    fs_err::remove_dir_all(&context.venv)?;
-
     uv_snapshot!(context.filters(), context.upgrade().arg("anyio"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Resolved 1 package in [TIME]
-    No version change for anyio
+    warning: Skipping dependency `anyio` in `project.dependencies`: `anyio<3 ; python_full_version < '3.12'` (excluded by the project's environments or Python requirement)
     ");
 
     assert_project_unchanged(&context, pyproject_toml)
+}
+
+#[test]
+fn upgrade_skips_undefined_extra() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    let pyproject_toml = r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio<3 ; extra == 'does-not-exist'"]
+
+        [project.optional-dependencies]
+        test = []
+    "#;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject_toml)?;
+    uv_snapshot!(context.filters(), context.upgrade().arg("anyio"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Skipping dependency `anyio` in `project.dependencies`: `anyio<3 ; extra == 'does-not-exist'` (references an extra that the project does not provide)
+    ");
+
+    assert_project_unchanged(&context, pyproject_toml)
+}
+
+#[test]
+fn upgrade_warns_for_skipped_requirement_before_validation_error() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    let pyproject_toml = r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "bar @ https://example.com/bar-1.0.0-py3-none-any.whl",
+            "bar<2 ; python_version < '3.12'",
+        ]
+    "#;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject_toml)?;
+    uv_snapshot!(context.filters(), context.upgrade().arg("bar"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: Skipping dependency `bar` in `project.dependencies`: `bar<2 ; python_full_version < '3.12'` (excluded by the project's environments or Python requirement)
+    error: Dependency `bar` is a direct URL requirement and cannot be upgraded
+    ");
+
+    assert_project_unchanged(&context, pyproject_toml)
+}
+
+#[test]
+fn upgrade_rejects_conflicting_extra_declarations() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/fork-upgrade.toml");
+    let pyproject_toml = format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "bar<1 ; extra == 'cpu'",
+            "bar<2 ; extra == 'gpu'",
+            "foo==1",
+        ]
+
+        [project.optional-dependencies]
+        cpu = []
+        gpu = []
+
+        [tool.uv]
+        conflicts = [
+            [
+                {{ extra = "cpu" }},
+                {{ extra = "gpu" }},
+            ],
+        ]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("bar")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Could not update dependency `bar` in `project.dependencies`: `bar<1 ; extra == 'cpu'` (declared under conflicting extra `cpu`)
+    warning: Could not update dependency `bar` in `project.dependencies`: `bar<2 ; extra == 'gpu'` (declared under conflicting extra `gpu`)
+    "
+    );
+
+    assert_project_unchanged(&context, &pyproject_toml)
 }
 
 #[test]
@@ -393,10 +359,7 @@ fn upgrade_expands_constraint_for_multiple_fork_versions() -> Result<()> {
             .arg("bar")
             .env_remove(EnvVars::UV_EXCLUDE_NEWER),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 4 packages in [TIME]
@@ -451,10 +414,7 @@ fn upgrade_expands_compatible_constraint_for_multiple_fork_versions() -> Result<
             .arg("a")
             .env_remove(EnvVars::UV_EXCLUDE_NEWER),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 3 packages in [TIME]
@@ -495,10 +455,7 @@ fn upgrade_updates_requirement_without_updating_lockfile_or_environment() -> Res
         context.filters(),
         context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     ");
@@ -521,12 +478,8 @@ fn upgrade_updates_requirement_without_updating_lockfile_or_environment() -> Res
             .arg("anyio")
             .env_remove(EnvVars::UV_EXCLUDE_NEWER),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
-    Resolving despite existing lockfile due to change of exclude newer timestamp from `2021-01-01T00:00:00Z` to `2024-03-25T00:00:00Z`
     Resolved 4 packages in [TIME]
     Update anyio v2.0.0 -> v4.3.0
     Updated requirement: `anyio<=2` -> `anyio<=4.3.0`
@@ -567,14 +520,11 @@ fn upgrade_reports_no_solution_without_mutation() -> Result<()> {
     fs_err::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(context.filters(), context.upgrade().arg("anyio"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-      × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of idna==9999 and your project depends on idna==9999, we can conclude that your project's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because there is no version of idna==9999 and your project depends on idna==9999, we can conclude that your project's requirements are unsatisfiable.
     ");
 
     assert_project_unchanged(&context, pyproject_toml)
@@ -600,10 +550,7 @@ fn upgrade_reports_no_version_change_without_mutation() -> Result<()> {
         .write_str(pyproject_toml)?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     ");
@@ -613,10 +560,7 @@ fn upgrade_reports_no_version_change_without_mutation() -> Result<()> {
     let lock = fs_err::read(context.temp_dir.child("uv.lock"))?;
 
     uv_snapshot!(context.filters(), context.upgrade().arg("anyio"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 4 packages in [TIME]
@@ -649,10 +593,7 @@ fn upgrade_rejects_dynamic_project_version() -> Result<()> {
     fs_err::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(context.filters(), context.upgrade().arg("anyio"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: `uv upgrade` does not support projects with dynamic versions yet
     ");
@@ -684,10 +625,7 @@ fn upgrade_requires_production_dependency() -> Result<()> {
         context.filters(),
         context.upgrade().arg("requests"),
         @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Dependency `requests` was not found in `project.dependencies`
     "
@@ -697,10 +635,7 @@ fn upgrade_requires_production_dependency() -> Result<()> {
         context.filters(),
         context.upgrade().arg("httpx"),
         @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Dependency `httpx` was not found in `project.dependencies`
     "
@@ -710,15 +645,238 @@ fn upgrade_requires_production_dependency() -> Result<()> {
 }
 
 #[test]
-fn upgrade_rejects_duplicate_marked_production_dependencies() -> Result<()> {
+fn upgrade_updates_multiple_marked_production_dependencies() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/fork-upgrade.toml");
+    let pyproject_toml = format!(
+        r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            # No upper bound to upgrade.
+            "bar>=1",
+            "bar<1 ; sys_platform == 'linux'",
+            "bar<2 ; sys_platform != 'linux'",
+            "BAR<2; sys_platform != 'linux'",
+            "foo==1",
+        ]
+
+        [tool.uv]
+        environments = ["sys_platform != 'win32'"]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("bar")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 4 packages in [TIME]
+    Add bar v1.0.0, v2.0.0
+    Updated requirement: `bar<1 ; sys_platform == 'linux'` -> `bar<2 ; sys_platform == 'linux'`
+    Updated requirement: `bar<2 ; sys_platform != 'linux'` -> `bar<3 ; sys_platform != 'linux'`
+    "
+    );
+
+    let updated_pyproject_toml = fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?;
+    insta::with_settings!({ filters => packse_filters(&context) }, {
+        insta::assert_snapshot!(
+            updated_pyproject_toml,
+            @r#"
+
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            # No upper bound to upgrade.
+            "bar>=1",
+            "bar<2 ; sys_platform == 'linux'",
+            "bar<3 ; sys_platform != 'linux'",
+            "bar<3 ; sys_platform != 'linux'",
+            "foo==1",
+        ]
+
+        [tool.uv]
+        environments = ["sys_platform != 'win32'"]
+
+        [[tool.uv.index]]
+        url = "http://[LOCALHOST]/simple/"
+        default = true
+        "#
+        );
+    });
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
+}
+
+#[test]
+fn upgrade_updates_multiple_named_packages_together() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/fork-upgrade.toml");
+    let pyproject_toml = format!(
+        r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "foo==1",
+            "bar<2",
+        ]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("foo")
+            .arg("bar")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 3 packages in [TIME]
+    Add foo v2.0.0
+    Add bar v2.0.0
+    Updated requirement: `bar<2` -> `bar<3`
+    Updated requirement: `foo==1` -> `foo==2.0.0`
+    "
+    );
+
+    let updated_pyproject_toml = fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?;
+    insta::with_settings!({ filters => packse_filters(&context) }, {
+        insta::assert_snapshot!(
+            updated_pyproject_toml,
+            @r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "foo==2.0.0",
+            "bar<3",
+        ]
+
+        [[tool.uv.index]]
+        url = "http://[LOCALHOST]/simple/"
+        default = true
+        "#
+        );
+    });
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
+}
+
+#[test]
+fn upgrade_without_package_selects_all_production_dependencies() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/fork-upgrade.toml");
+    let pyproject_toml = format!(
+        r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "foo==1",
+            "bar<2",
+        ]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context.upgrade().env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 3 packages in [TIME]
+    Add foo v2.0.0
+    Add bar v2.0.0
+    Updated requirement: `bar<2` -> `bar<3`
+    Updated requirement: `foo==1` -> `foo==2.0.0`
+    "
+    );
+
+    let updated_pyproject_toml = fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?;
+    insta::with_settings!({ filters => packse_filters(&context) }, {
+        insta::assert_snapshot!(
+            updated_pyproject_toml,
+            @r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "foo==2.0.0",
+            "bar<3",
+        ]
+
+        [[tool.uv.index]]
+        url = "http://[LOCALHOST]/simple/"
+        default = true
+        "#
+        );
+    });
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
+}
+
+#[test]
+fn upgrade_without_package_rejects_direct_url_requirement() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[]);
     let pyproject_toml = r#"
         [project]
         name = "example"
         version = "0.1.0"
+        requires-python = ">=3.12"
         dependencies = [
-            "Requests>=2 ; sys_platform == 'darwin'",
-            "requests<3 ; sys_platform != 'darwin'",
+            "idna<3",
+            "requests @ https://example.com/requests-2.32.0-py3-none-any.whl",
         ]
     "#;
     context
@@ -728,18 +886,590 @@ fn upgrade_rejects_duplicate_marked_production_dependencies() -> Result<()> {
 
     uv_snapshot!(
         context.filters(),
-        context.upgrade().arg("requests"),
+        context.upgrade(),
         @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
-    error: Dependency `requests` is declared multiple times in `project.dependencies`
+    error: Dependency `requests` is a direct URL requirement and cannot be upgraded
     "
     );
 
     assert_project_unchanged(&context, pyproject_toml)
+}
+
+#[test]
+fn upgrade_without_package_rejects_non_registry_source() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    let pyproject_toml = r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["idna<3", "requests>=2"]
+
+        [tool.uv.sources]
+        requests = { path = "vendor/requests" }
+    "#;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject_toml)?;
+
+    uv_snapshot!(context.filters(), context.upgrade(), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Dependency `requests` uses a non-registry source in `tool.uv.sources` and cannot be upgraded
+    ");
+
+    assert_project_unchanged(&context, pyproject_toml)
+}
+
+#[test]
+fn upgrade_reports_selection_errors_before_interpreter_failure() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    let pyproject_toml = r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = [
+            "bar<2 ; python_version < '3.12'",
+            "requests @ https://example.com/requests-2.32.0-py3-none-any.whl",
+            "project[foo]>=0.1",
+            "source>=1",
+        ]
+
+        [tool.uv.sources]
+        source = { path = "vendor/source" }
+    "#;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject_toml)?;
+
+    uv_snapshot!(context.filters(), context.upgrade().args(["bar", "missing"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Dependency `missing` was not found in `project.dependencies`
+    ");
+
+    uv_snapshot!(context.filters(), context.upgrade().args(["bar", "requests"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Dependency `requests` is a direct URL requirement and cannot be upgraded
+    ");
+
+    uv_snapshot!(context.filters(), context.upgrade().args(["bar", "project"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Dependency `project` refers to the current project and cannot be upgraded
+    ");
+
+    uv_snapshot!(context.filters(), context.upgrade().args(["bar", "source"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Dependency `source` uses a non-registry source in `tool.uv.sources` and cannot be upgraded
+    ");
+
+    assert_project_unchanged(&context, pyproject_toml)
+}
+
+#[test]
+fn upgrade_redacts_malformed_direct_url_dependency() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    let pyproject_toml = r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = [
+            "bar @ https://user:super-secret@files.example.com/bar-1.0.0-py3-none-any.whl?X-Amz-Signature=signing-secret ; python_version <",
+        ]
+    "#;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject_toml)?;
+
+    uv_snapshot!(context.filters(), context.upgrade().arg("bar"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to parse dependency from `project.dependencies` in `[TEMP_DIR]/pyproject.toml`: Expected marker value, found end of dependency specification
+    ");
+
+    assert_project_unchanged(&context, pyproject_toml)
+}
+
+#[test]
+fn upgrade_exclude_leaves_dependency_as_hard_constraint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/fork-upgrade.toml");
+    let pyproject_toml = format!(
+        r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "foo==1",
+            "bar<2",
+        ]
+
+        [tool.uv]
+        environments = ["sys_platform == 'linux'"]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("--exclude")
+            .arg("bar")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 3 packages in [TIME]
+    Add foo v1.0.0
+    "
+    );
+
+    let updated_pyproject_toml = fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?;
+    insta::with_settings!({ filters => packse_filters(&context) }, {
+        insta::assert_snapshot!(
+            updated_pyproject_toml,
+            @r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "foo==1",
+            "bar<2",
+        ]
+
+        [tool.uv]
+        environments = ["sys_platform == 'linux'"]
+
+        [[tool.uv.index]]
+        url = "http://[LOCALHOST]/simple/"
+        default = true
+        "#
+        );
+    });
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
+}
+
+#[test]
+fn upgrade_updates_safe_declarations_and_warns_for_blocked_declarations() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/upgrade-outcomes.toml");
+    let pyproject_toml = format!(
+        r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "foo==1",
+            "bar>=1 ; extra == 'cpu'",
+            "baz<2",
+        ]
+
+        [project.optional-dependencies]
+        cpu = []
+        gpu = []
+
+        [tool.uv]
+        conflicts = [
+            [
+                {{ extra = "cpu" }},
+                {{ extra = "gpu" }},
+            ],
+        ]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("bar")
+            .arg("baz")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 5 packages in [TIME]
+    Add baz v2.0.0
+    warning: Could not update dependency `bar` in `project.dependencies`: `bar>=1 ; extra == 'cpu'` (declared under conflicting extra `cpu`)
+    Updated requirement: `baz<2` -> `baz<3`
+    "
+    );
+
+    let updated_pyproject_toml = fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?;
+    insta::with_settings!({ filters => packse_filters(&context) }, {
+        insta::assert_snapshot!(
+            updated_pyproject_toml,
+            @r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "foo==1",
+            "bar>=1 ; extra == 'cpu'",
+            "baz<3",
+        ]
+
+        [project.optional-dependencies]
+        cpu = []
+        gpu = []
+
+        [tool.uv]
+        conflicts = [
+            [
+                { extra = "cpu" },
+                { extra = "gpu" },
+            ],
+        ]
+
+        [[tool.uv.index]]
+        url = "http://[LOCALHOST]/simple/"
+        default = true
+        "#
+        );
+    });
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
+}
+
+#[test]
+fn upgrade_updates_requirement_constrained_by_conflicting_groups() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/upgrade-outcomes.toml");
+    let pyproject_toml = format!(
+        r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["baz<2"]
+
+        [dependency-groups]
+        old = ["baz==1"]
+        new = ["baz==2"]
+
+        [tool.uv]
+        conflicts = [
+            [
+                {{ group = "old" }},
+                {{ group = "new" }},
+            ],
+        ]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("baz")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 3 packages in [TIME]
+    Add baz v1.0.0, v2.0.0
+    Updated requirement: `baz<2` -> `baz<3`
+    "
+    );
+
+    assert_eq!(
+        fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?,
+        pyproject_toml.replace("baz<2", "baz<3")
+    );
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
+}
+
+#[test]
+fn upgrade_succeeds_when_all_selected_declarations_are_blocked() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/upgrade-outcomes.toml");
+    let pyproject_toml = format!(
+        r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "foo==1",
+            "bar==1.*",
+        ]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("bar")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 4 packages in [TIME]
+    warning: Could not update dependency `bar` in `project.dependencies`: `bar==1.*` (Dependency `bar` resolved to `1.0.0`, `2.0.0` which cannot be represented by the upgraded requirement; this is not supported yet)
+    "
+    );
+
+    assert_project_unchanged(&context, &pyproject_toml)?;
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
+}
+
+#[test]
+fn upgrade_rejects_mixed_updates_after_unrepresentable_blocker() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/upgrade-outcomes.toml");
+    let pyproject_toml = format!(
+        r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "foo==1",
+            "bar==1.*",
+            "baz<2",
+        ]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("bar")
+            .arg("baz")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 5 packages in [TIME]
+    warning: Could not update dependency `bar` in `project.dependencies`: `bar==1.*` (Dependency `bar` resolved to `1.0.0`, `2.0.0` which cannot be represented by the upgraded requirement; this is not supported yet)
+    error: Could not safely apply dependency updates because one or more selected requirements could not be represented
+    "
+    );
+
+    assert_project_unchanged(&context, &pyproject_toml)?;
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
+}
+
+#[test]
+fn upgrade_preserves_hard_constraint_no_solution_failure() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/upgrade-outcomes.toml");
+    let pyproject_toml = format!(
+        r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "foo==1",
+            "bar!=2,<2",
+        ]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    let filters: Vec<_> = packse_filters(&context)
+        .into_iter()
+        .chain([(
+            // This hint is only shown when the current platform doesn't match the target.
+            r"\nhint: The resolution failed for an environment that is not the current one[^\n]*",
+            "",
+        )])
+        .collect();
+
+    uv_snapshot!(
+        filters,
+        context
+            .upgrade()
+            .arg("bar")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    error: No solution found when resolving dependencies for split (markers: sys_platform != 'linux')
+      cause: Because all versions of foo depend on bar{sys_platform != 'linux'}==2 and your project depends on bar<2, we can conclude that your project and all versions of foo are incompatible.
+             And because your project depends on foo==1.0.0, we can conclude that your project's requirements are unsatisfiable.
+    "
+    );
+
+    assert_project_unchanged(&context, &pyproject_toml)?;
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
+}
+
+#[test]
+fn upgrade_ignores_unrelated_path_package_when_attributing_versions() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/fork-upgrade.toml");
+    let pyproject_toml = format!(
+        r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "bar<2",
+            "localpkg",
+        ]
+
+        [tool.uv.sources]
+        localpkg = {{ path = "localpkg" }}
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)?;
+    context
+        .temp_dir
+        .child("localpkg")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
+        [project]
+        name = "localpkg"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#,
+        )?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("bar")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 3 packages in [TIME]
+    Add bar v2.0.0
+    Updated requirement: `bar<2` -> `bar<3`
+    "
+    );
+
+    let updated_pyproject_toml = fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?;
+    insta::with_settings!({ filters => packse_filters(&context) }, {
+        insta::assert_snapshot!(
+            updated_pyproject_toml,
+            @r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "bar<3",
+            "localpkg",
+        ]
+
+        [tool.uv.sources]
+        localpkg = { path = "localpkg" }
+
+        [[tool.uv.index]]
+        url = "http://[LOCALHOST]/simple/"
+        default = true
+        "#
+        );
+    });
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
 }
 
 #[test]
@@ -762,10 +1492,7 @@ fn upgrade_rejects_direct_url_requirement() -> Result<()> {
         context.filters(),
         context.upgrade().arg("requests"),
         @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Dependency `requests` is a direct URL requirement and cannot be upgraded
     "
@@ -789,10 +1516,7 @@ fn upgrade_rejects_self_dependency() -> Result<()> {
         .write_str(pyproject_toml)?;
 
     uv_snapshot!(context.filters(), context.upgrade().arg("project"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Dependency `project` refers to the current project and cannot be upgraded
     ");
@@ -821,10 +1545,7 @@ fn upgrade_rejects_git_revision() -> Result<()> {
         context.filters(),
         context.upgrade().arg("requests"),
         @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Dependency `requests` is pinned to a Git revision and cannot be upgraded commit-to-commit
     "
@@ -864,10 +1585,7 @@ fn upgrade_rejects_non_registry_sources() -> Result<()> {
                 context.filters(),
                 context.upgrade().arg("requests"),
                 @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Dependency `requests` uses a non-registry source in `tool.uv.sources` and cannot be upgraded
     "
@@ -883,7 +1601,7 @@ fn upgrade_rejects_non_registry_sources() -> Result<()> {
 }
 
 #[test]
-fn upgrade_rejects_non_registry_source_for_top_level_extra() -> Result<()> {
+fn upgrade_skips_non_registry_source_for_undefined_extra() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[]);
     let pyproject_toml = r#"
         [project]
@@ -903,12 +1621,9 @@ fn upgrade_rejects_non_registry_source_for_top_level_extra() -> Result<()> {
         context.filters(),
         context.upgrade().arg("requests"),
         @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
-    error: Dependency `requests` uses a non-registry source in `tool.uv.sources` and cannot be upgraded
+    warning: Skipping dependency `requests` in `project.dependencies`: `requests>=2 ; extra == 'gpu'` (references an extra that the project does not provide)
     "
     );
 
@@ -958,10 +1673,7 @@ fn upgrade_allows_registry_source() -> Result<()> {
         context.filters(),
         context.upgrade().arg("idna"),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 2 packages in [TIME]
@@ -1006,10 +1718,7 @@ fn upgrade_ignores_inapplicable_non_registry_source() -> Result<()> {
         context.filters(),
         context.upgrade().arg("anyio"),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 4 packages in [TIME]
@@ -1024,6 +1733,128 @@ fn upgrade_ignores_inapplicable_non_registry_source() -> Result<()> {
             "anyio>=2,<3 ; python_version >= '3.12'",
             "anyio>=2,<5 ; python_full_version >= '3.12'"
         )
+    );
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
+}
+
+#[test]
+fn upgrade_ignores_inapplicable_non_registry_source_without_requires_python() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/upgrade-outcomes.toml");
+    let pyproject_toml = format!(
+        r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        dependencies = ["baz<2"]
+
+        [tool.uv.sources]
+        baz = {{ path = "vendor/baz", marker = "python_version < '3.12'" }}
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)?;
+    context
+        .temp_dir
+        .child("vendor/baz/pyproject.toml")
+        .write_str(
+            r#"
+        [project]
+        name = "baz"
+        version = "0.1.0"
+        "#,
+        )?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("baz")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 2 packages in [TIME]
+    Add baz v2.0.0
+    Updated requirement: `baz<2` -> `baz<3`
+    "
+    );
+
+    assert_eq!(
+        fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?,
+        pyproject_toml.replace("baz<2", "baz<3")
+    );
+    assert!(!context.temp_dir.child("uv.lock").exists());
+    assert!(!context.temp_dir.child(".venv").exists());
+    Ok(())
+}
+
+#[test]
+fn upgrade_skips_excluded_declarations_and_updates_applicable_requirement() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/fork-upgrade.toml");
+    let pyproject_toml = format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "bar<2",
+            "bar>=1 ; extra == 'does-not-exist' or sys_platform != 'win32'",
+            "bar @ https://user:secret@example.com/bar-1.0.0-py3-none-any.whl?token=secret ; python_version < '3.12' or sys_platform == 'win32'",
+            "bar<2 ; extra == 'does-not-exist'",
+            "foo==2",
+        ]
+
+        [tool.uv]
+        environments = ["sys_platform != 'win32'"]
+
+        [[tool.uv.index]]
+        url = "{}"
+        default = true
+    "#,
+        server.index_url()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    uv_snapshot!(
+        packse_filters(&context),
+        context
+            .upgrade()
+            .arg("bar")
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Skipping dependency `bar` in `project.dependencies`: `bar @ https://user:****@example.com/bar-1.0.0-py3-none-any.whl ; python_full_version < '3.12' or sys_platform == 'win32'` (excluded by the project's environments or Python requirement)
+    warning: Skipping dependency `bar` in `project.dependencies`: `bar<2 ; extra == 'does-not-exist'` (references an extra that the project does not provide)
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 3 packages in [TIME]
+    Add bar v2.0.0
+    Updated requirement: `bar<2` -> `bar<3`
+    "
+    );
+
+    assert_eq!(
+        fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?,
+        pyproject_toml.replacen("bar<2\",", "bar<3\",", 1)
     );
     assert!(!context.temp_dir.child("uv.lock").exists());
     assert!(!context.temp_dir.child(".venv").exists());
@@ -1064,10 +1895,7 @@ fn upgrade_rejects_workspace_root_non_registry_source() -> Result<()> {
             .current_dir(&project)
             .arg("requests"),
         @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Dependency `requests` uses a non-registry source in `tool.uv.sources` and cannot be upgraded
     "
@@ -1120,10 +1948,7 @@ fn upgrade_updates_nested_workspace_member_only() -> Result<()> {
         context.filters(),
         context.upgrade().current_dir(&project).arg("anyio"),
         @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 4 packages in [TIME]
@@ -1155,10 +1980,7 @@ fn upgrade_requires_current_project() {
         context.filters(),
         context.upgrade().arg("requests"),
         @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: `uv upgrade` requires a project with a `[project]` table
     "
@@ -1184,10 +2006,7 @@ fn upgrade_rejects_virtual_workspace_root() -> Result<()> {
         context.filters(),
         context.upgrade().arg("requests"),
         @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: `uv upgrade` requires a project with a `[project]` table
     "
@@ -1229,10 +2048,7 @@ fn upgrade_rejects_multi_member_workspace() -> Result<()> {
         context.filters(),
         context.upgrade().arg("requests"),
         @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: `uv upgrade` does not support workspaces with multiple members yet
     "

@@ -7,17 +7,16 @@ use owo_colors::OwoColorize;
 use tracing::{debug, warn};
 
 use uv_cache::{Cache, CacheBucket, WheelCache};
-use uv_cache_info::{CacheInfo, Timestamp};
+use uv_cache_info::Timestamp;
 use uv_configuration::{BuildOptions, Reinstall};
 use uv_distribution::{
     BuiltWheelIndex, HttpArchivePointer, PathArchivePointer, RegistryWheelIndex,
 };
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
-    BuildableSource, BuiltDist, CachedDirectUrlDist, CachedDist, ConfigSettings, Dist, Error,
-    ExtraBuildRequires, ExtraBuildVariables, Hashed, IndexLocations, InstalledDist,
-    InstalledDistKind, Name, PackageConfigSettings, RequirementSource, Resolution, ResolvedDist,
-    SourceDist,
+    BuiltDist, CachedDirectUrlDist, CachedDist, ConfigSettings, Dist, Error, ExtraBuildRequires,
+    ExtraBuildVariables, Hashed, IndexLocations, InstalledDist, Name, PackageConfigSettings,
+    RequirementSource, Resolution, ResolvedDist, SourceDist,
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
@@ -25,7 +24,7 @@ use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCom
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::PythonEnvironment;
 use uv_redacted::DisplaySafeUrl;
-use uv_types::{BuildPackageKey, HashStrategy, LockedBuildResolutions};
+use uv_types::HashStrategy;
 
 use crate::satisfies::RequirementSatisfaction;
 use crate::{InstallationStrategy, SitePackages};
@@ -222,7 +221,7 @@ impl fmt::Display for IncompatibleWheelError {
 
 impl std::error::Error for IncompatibleWheelError {}
 
-impl uv_errors::Hint for IncompatibleWheelError {
+impl uv_errors::Hinted for IncompatibleWheelError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         if let Some(hint) = &self.compatibility_hint {
             uv_errors::Hints::from(hint.to_string())
@@ -236,44 +235,12 @@ impl uv_errors::Hint for IncompatibleWheelError {
 #[derive(Debug)]
 pub struct Planner<'a> {
     resolution: &'a Resolution,
-    locked_build_resolutions: Option<&'a LockedBuildResolutions>,
-    unlocked_build_cache_key: Option<&'a str>,
-    allow_source_cache: bool,
 }
 
 impl<'a> Planner<'a> {
     /// Set the requirements use in the [`Plan`].
     pub fn new(resolution: &'a Resolution) -> Self {
-        Self {
-            resolution,
-            locked_build_resolutions: None,
-            unlocked_build_cache_key: None,
-            allow_source_cache: true,
-        }
-    }
-
-    /// Set the locked build resolutions used to validate source distributions.
-    #[must_use]
-    pub fn with_locked_build_resolutions(
-        mut self,
-        resolutions: &'a LockedBuildResolutions,
-    ) -> Self {
-        self.locked_build_resolutions = Some(resolutions);
-        self
-    }
-
-    /// Set the cache key for inputs used by unlocked build environments.
-    #[must_use]
-    pub fn with_unlocked_build_cache_key(mut self, cache_key: Option<&'a str>) -> Self {
-        self.unlocked_build_cache_key = cache_key;
-        self
-    }
-
-    /// Set whether installed and cached source builds may be reused.
-    #[must_use]
-    pub fn with_source_cache(mut self, allow_source_cache: bool) -> Self {
-        self.allow_source_cache = allow_source_cache;
-        self
+        Self { resolution }
     }
 
     /// Partition a set of requirements into those that should be linked from the cache, those that
@@ -313,7 +280,6 @@ impl<'a> Planner<'a> {
             config_settings_package,
             extra_build_requires,
             extra_build_variables,
-            self.unlocked_build_cache_key,
         );
         let built_index = BuiltWheelIndex::new(
             cache,
@@ -323,13 +289,13 @@ impl<'a> Planner<'a> {
             config_settings_package,
             extra_build_requires,
             extra_build_variables,
-            self.unlocked_build_cache_key,
         );
 
         let mut cached = vec![];
         let mut remote = vec![];
         let mut reinstalls = vec![];
         let mut extraneous = vec![];
+
         // TODO(charlie): There are a few assumptions here that are hard to spot:
         //
         // 1. Apparently, we never return direct URL distributions as [`ResolvedDist::Installed`].
@@ -342,84 +308,6 @@ impl<'a> Planner<'a> {
         //    So, e.g., if a package is marked as `--reinstall`, we _expect_ that it's not passed in
         //    as [`ResolvedDist::Installed`] here.
         for dist in self.resolution.distributions() {
-            if !self.allow_source_cache
-                && let ResolvedDist::Installable {
-                    dist: distribution, ..
-                } = dist
-                && matches!(distribution.as_ref(), Dist::Source(_))
-            {
-                debug!("Must rebuild source distribution in a shared environment: {distribution}");
-                reinstalls.extend(site_packages.remove_packages(distribution.name()));
-                remote.push(distribution.clone());
-                continue;
-            }
-
-            let build_resolution_cache_key = self
-                .locked_build_resolutions
-                .and_then(|resolutions| {
-                    let ResolvedDist::Installable {
-                        dist: distribution, ..
-                    } = dist
-                    else {
-                        return None;
-                    };
-                    let Dist::Source(source) = distribution.as_ref() else {
-                        return None;
-                    };
-                    let package = BuildPackageKey::from_source_dist(
-                        distribution.name().clone(),
-                        BuildableSource::Dist(source).version().cloned(),
-                        Some(source),
-                    );
-                    resolutions
-                        .cache_key(
-                            &package,
-                            config_settings,
-                            config_settings_package,
-                            extra_build_requires,
-                            extra_build_variables,
-                        )
-                        .transpose()
-                })
-                .transpose()?;
-            let has_locked_build_resolution = build_resolution_cache_key.is_some();
-            let build_resolution_cache_key = build_resolution_cache_key.or_else(|| {
-                let source_built = match dist {
-                    ResolvedDist::Installable { dist, .. } => {
-                        matches!(dist.as_ref(), Dist::Source(_))
-                    }
-                    ResolvedDist::Installed { dist } => dist.build_info().is_some(),
-                };
-                if source_built {
-                    self.unlocked_build_cache_key.map(str::to_string)
-                } else {
-                    None
-                }
-            });
-
-            // Hashless registry artifacts backed by local files are mutable. Check them before the
-            // installed-satisfaction fast path, since that path cannot observe file changes.
-            let local_cache_info = match dist {
-                ResolvedDist::Installable { dist, .. } if hasher.get(dist.as_ref()).is_none() => {
-                    let url = match dist.as_ref() {
-                        Dist::Built(BuiltDist::Registry(wheel)) => {
-                            Some(wheel.best_wheel().file.url.to_url()?)
-                        }
-                        Dist::Source(SourceDist::Registry(sdist)) => Some(sdist.file.url.to_url()?),
-                        _ => None,
-                    };
-                    if let Some(url) = url
-                        && url.scheme() == "file"
-                        && let Ok(path) = url.to_file_path()
-                    {
-                        Some(CacheInfo::from_path(&path)?)
-                    } else {
-                        None
-                    }
-                }
-                _ => None,
-            };
-
             // Check if the package should be reinstalled.
             let reinstall = reinstall.contains_package(dist.name())
                 || dist
@@ -450,7 +338,6 @@ impl<'a> Planner<'a> {
                             config_settings_package,
                             extra_build_requires,
                             extra_build_variables,
-                            build_resolution_cache_key.as_deref(),
                         ) {
                             RequirementSatisfaction::Mismatch => {
                                 debug!(
@@ -458,20 +345,8 @@ impl<'a> Planner<'a> {
                                 );
                             }
                             RequirementSatisfaction::Satisfied => {
-                                let installed_cache_info = match &installed.kind {
-                                    InstalledDistKind::Registry(installed) => {
-                                        installed.cache_info.as_ref()
-                                    }
-                                    _ => None,
-                                };
-                                if local_cache_info.as_ref().is_some_and(|cache_info| {
-                                    installed_cache_info != Some(cache_info)
-                                }) {
-                                    debug!("Local registry requirement is not fresh: {installed}");
-                                } else {
-                                    debug!("Requirement already installed: {installed}");
-                                    continue;
-                                }
+                                debug!("Requirement already installed: {installed}");
+                                continue;
                             }
                             RequirementSatisfaction::OutOfDate => {
                                 debug!("Requirement installed, but not fresh: {installed}");
@@ -521,20 +396,6 @@ impl<'a> Planner<'a> {
                 continue;
             }
 
-            // Locked build resolutions are keyed per source, so let the distribution database
-            // select the corresponding shard. Unlocked shards are indexed above.
-            if has_locked_build_resolution {
-                debug!("Using distribution database for source distribution: {dist}");
-                remote.push(dist.clone());
-                continue;
-            }
-
-            if local_cache_info.is_some() {
-                debug!("Must revalidate local requirement: {dist}");
-                remote.push(dist.clone());
-                continue;
-            }
-
             // Identify any cached distributions that satisfy the requirement.
             match dist.as_ref() {
                 Dist::Built(BuiltDist::Registry(wheel)) => {
@@ -578,7 +439,11 @@ impl<'a> Planner<'a> {
                             let cache_info = pointer.to_cache_info();
                             let build_info = pointer.to_build_info();
                             let archive = pointer.into_archive();
-                            if archive.satisfies(hasher.get(dist.as_ref())) {
+                            if archive.satisfies(hasher.archive_policy(dist.as_ref()))
+                                && wheel
+                                    .size
+                                    .is_none_or(|expected| archive.size == Some(expected))
+                            {
                                 let cached_dist = CachedDirectUrlDist {
                                     filename: wheel.filename.clone(),
                                     url: VerbatimParsedUrl {
@@ -596,7 +461,7 @@ impl<'a> Planner<'a> {
                                 continue;
                             }
                             debug!(
-                                "Cached URL wheel requirement does not match expected hash policy for: {wheel}"
+                                "Cached URL wheel requirement does not match expected hashes or size for: {wheel}"
                             );
                         }
                         Ok(None) => {}
@@ -647,7 +512,7 @@ impl<'a> Planner<'a> {
                                     let cache_info = pointer.to_cache_info();
                                     let build_info = pointer.to_build_info();
                                     let archive = pointer.into_archive();
-                                    if archive.satisfies(hasher.get(dist.as_ref())) {
+                                    if archive.satisfies(hasher.archive_policy(dist.as_ref())) {
                                         let cached_dist = CachedDirectUrlDist {
                                             filename: wheel.filename.clone(),
                                             url: VerbatimParsedUrl {
@@ -711,7 +576,7 @@ impl<'a> Planner<'a> {
                             let cache_info = pointer.to_cache_info();
                             let build_info = pointer.to_build_info();
                             let archive = pointer.into_archive();
-                            if archive.satisfies(hasher.get(dist.as_ref())) {
+                            if archive.satisfies(hasher.archive_policy(dist.as_ref())) {
                                 let cached_dist = CachedDirectUrlDist {
                                     filename: wheel.filename.clone(),
                                     url: VerbatimParsedUrl {

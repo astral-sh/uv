@@ -88,6 +88,10 @@ pub enum Pep508ErrorSource<T: Pep508Url = VerbatimUrl> {
 impl<T: Pep508Url> Display for Pep508Error<T> {
     /// Pretty formatting with underline.
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if self.input.is_empty() {
+            return Display::fmt(&self.message, f);
+        }
+
         // We can use char indices here since it's a Vec<char>
         let start_offset = self.input[..self.start]
             .chars()
@@ -284,7 +288,8 @@ impl<T: Pep508Url> Requirement<T> {
     /// `flask >= 2.0.2 ; extra == "dotenv"`.
     #[must_use]
     pub fn with_extra_marker(mut self, extra: ExtraName) -> Self {
-        self.marker
+        self.marker = self
+            .marker
             .and(MarkerTree::expression(MarkerExpression::Extra {
                 operator: ExtraOperator::Equal,
                 name: MarkerValueExtra::Extra(extra),
@@ -544,7 +549,9 @@ fn looks_like_unnamed_requirement(cursor: &mut Cursor) -> bool {
 /// Returns `true` if a file looks like an archive.
 ///
 /// See <https://github.com/pypa/pip/blob/111eed14b6e9fba7c78a5ec2b7594812d17b5d2b/src/pip/_internal/utils/filetypes.py#L8>
-/// for the list of supported archive extensions.
+/// for the original list of supported archive extensions.
+///
+/// Observe that we're currently much stricter here, as we no longer accept bz2 or lzma variants.
 fn looks_like_archive(file: impl AsRef<Path>) -> bool {
     let file = file.as_ref();
 
@@ -560,8 +567,7 @@ fn looks_like_archive(file: impl AsRef<Path>) -> bool {
 
     matches!(
         (pre_extension, extension),
-        (_, "whl" | "tbz" | "txz" | "tlz" | "zip" | "tgz" | "tar")
-            | (Some("tar"), "bz2" | "xz" | "lz" | "lzma" | "gz")
+        (_, "whl" | "zip" | "tgz" | "tar") | (Some("tar"), "gz")
     )
 }
 
@@ -1107,8 +1113,6 @@ mod tests {
             parse_pep508_err(""),
             @"
         Empty field is not allowed for PEP508
-
-        ^
         "
         );
     }
@@ -1500,17 +1504,17 @@ mod tests {
         .unwrap()
         .unwrap();
 
-        let mut a = MarkerTree::expression(MarkerExpression::Version {
+        let a = MarkerTree::expression(MarkerExpression::Version {
             key: MarkerValueVersion::PythonVersion,
             specifier: VersionSpecifier::from_pattern(Operator::Equal, "2.7".parse().unwrap())
                 .unwrap(),
         });
-        let mut b = MarkerTree::expression(MarkerExpression::String {
+        let b = MarkerTree::expression(MarkerExpression::String {
             key: MarkerValueString::SysPlatform,
             operator: MarkerOperator::Equal,
             value: arcstr::literal!("win32"),
         });
-        let mut c = MarkerTree::expression(MarkerExpression::String {
+        let c = MarkerTree::expression(MarkerExpression::String {
             key: MarkerValueString::OsName,
             operator: MarkerOperator::Equal,
             value: arcstr::literal!("linux"),
@@ -1521,9 +1525,9 @@ mod tests {
             value: arcstr::literal!("cpython"),
         });
 
-        c.and(d);
-        b.or(c);
-        a.and(b);
+        let c = c.and(d);
+        let b = b.or(c);
+        let a = a.and(b);
 
         assert_eq!(a, actual);
     }

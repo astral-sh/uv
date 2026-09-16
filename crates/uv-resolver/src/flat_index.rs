@@ -1,61 +1,68 @@
 use std::collections::BTreeMap;
-use std::collections::btree_map::Entry;
 
 use rustc_hash::FxHashMap;
 use tracing::instrument;
 
-use uv_client::{FlatIndexEntries, FlatIndexEntry};
+use uv_cache::Cache;
+use uv_client::{
+    FlatIndexClient, FlatIndexEntries, FlatIndexEntry, FlatIndexError, RegistryClient,
+};
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    File, HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
-    RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility, WheelCompatibility,
+    File, HashComparison, IncompatibleSource, IncompatibleWheel, Index, IndexLocations, IndexUrl,
+    PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility,
+    WheelCompatibility,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::{TagCompatibility, Tags};
 use uv_pypi_types::HashDigest;
 use uv_types::HashStrategy;
 
-use crate::yanks::AllowedYanks;
-
-/// A set of [`PrioritizedDist`] from a `--find-links` entry, indexed by [`PackageName`]
-/// and [`Version`].
+/// Unfiltered entries from `--find-links`, indexed by [`PackageName`].
 #[derive(Debug, Clone, Default)]
 pub struct FlatIndex {
-    /// The list of [`FlatDistributions`] from the `--find-links` entries, indexed by package name.
-    index: FxHashMap<PackageName, FlatDistributions>,
+    /// Entries are ranked using each resolver's platform and hash policies when requested.
+    index: FxHashMap<PackageName, Vec<FlatIndexEntry>>,
     /// Whether any `--find-links` entries could not be resolved due to a lack of network
     /// connectivity.
     offline: bool,
 }
 
 impl FlatIndex {
+    /// Load the `--find-links` entries from the configured indexes.
+    pub async fn load(
+        client: &RegistryClient,
+        cache: &Cache,
+        index_locations: &IndexLocations,
+    ) -> Result<Self, FlatIndexError> {
+        let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
+        let entries = client
+            .fetch_all(index_locations.flat_indexes().map(Index::url))
+            .await?;
+        Ok(Self::from_entries(entries))
+    }
+
     /// Collect all files from a `--find-links` target into a [`FlatIndex`].
     #[instrument(skip_all)]
-    pub fn from_entries(
-        entries: FlatIndexEntries,
-        tags: Option<&Tags>,
-        hasher: &HashStrategy,
-        build_options: &BuildOptions,
-    ) -> Self {
-        // Collect compatible distributions.
-        let mut index = FxHashMap::<PackageName, FlatDistributions>::default();
+    fn from_entries(entries: FlatIndexEntries) -> Self {
+        let mut index = FxHashMap::<PackageName, Vec<FlatIndexEntry>>::default();
         let (entries, offline) = entries.into_parts();
 
         for entry in entries {
-            let (filename, file, index_url) = entry.into_parts();
-            let distributions = index.entry(filename.name().clone()).or_default();
-            distributions.add_file(file, filename, tags, hasher, build_options, index_url);
+            index
+                .entry(entry.filename().name().clone())
+                .or_default()
+                .push(entry);
         }
 
         Self { index, offline }
     }
 
-    /// Get the [`FlatDistributions`] for the given package name.
-    pub(crate) fn get(&self, package_name: &PackageName) -> Option<&FlatDistributions> {
-        self.index.get(package_name)
+    /// Get the unfiltered entries for the given package name.
+    pub(crate) fn get(&self, package_name: &PackageName) -> Option<&[FlatIndexEntry]> {
+        self.index.get(package_name).map(Vec::as_slice)
     }
 
     /// Whether any `--find-links` entries could not be resolved due to a lack of network
@@ -68,13 +75,13 @@ impl FlatIndex {
 /// A set of [`PrioritizedDist`] from a `--find-links` entry for a single package, indexed
 /// by [`Version`].
 #[derive(Debug, Clone, Default)]
-pub struct FlatDistributions(BTreeMap<Version, PrioritizedDist>);
+pub(crate) struct FlatDistributions(BTreeMap<Version, PrioritizedDist>);
 
 impl FlatDistributions {
-    /// Collect all files from a `--find-links` target into a [`FlatIndex`].
+    /// Rank the entries for a package using the resolver's platform and hash policies.
     #[instrument(skip_all)]
     pub(crate) fn from_entries(
-        entries: Vec<FlatIndexEntry>,
+        entries: impl IntoIterator<Item = FlatIndexEntry>,
         tags: Option<&Tags>,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
@@ -92,24 +99,6 @@ impl FlatDistributions {
         self.0.iter()
     }
 
-    /// Prefer artifacts that can be installed in the active build environment.
-    pub(crate) fn prioritize_executor_artifacts(
-        mut self,
-        package_name: &PackageName,
-        tags: &Tags,
-        markers: &MarkerEnvironment,
-        allowed_yanks: &AllowedYanks,
-    ) -> Self {
-        for (version, prioritized_dist) in &mut self.0 {
-            prioritized_dist.prioritize_executor_artifacts(
-                tags,
-                markers,
-                allowed_yanks.contains(package_name, version),
-            );
-        }
-        self
-    }
-
     /// Add the given [`File`] to the [`FlatDistributions`] for the given package.
     fn add_file(
         &mut self,
@@ -120,9 +109,8 @@ impl FlatDistributions {
         build_options: &BuildOptions,
         index: IndexUrl,
     ) {
-        // Local flat-index entries may not include `requires-python`; wheel metadata is read
-        // lazily when selected. Universal build resolution reprioritizes entries that do include
-        // the metadata once its executor context is available.
+        // No `requires-python` here: for source distributions, we don't have that information;
+        // for wheels, we read it lazily only when selected.
         match filename {
             DistFilename::WheelFilename(filename) => {
                 let version = filename.version.clone();
@@ -138,15 +126,12 @@ impl FlatDistributions {
                     filename,
                     file: Box::new(file),
                     index,
+                    size_is_authoritative: false,
                 };
-                match self.0.entry(version) {
-                    Entry::Occupied(mut entry) => {
-                        entry.get_mut().insert_built(dist, vec![], compatibility);
-                    }
-                    Entry::Vacant(entry) => {
-                        entry.insert(PrioritizedDist::from_built(dist, vec![], compatibility));
-                    }
-                }
+                self.0
+                    .entry(version)
+                    .or_default()
+                    .insert_built(dist, vec![], compatibility);
             }
             DistFilename::SourceDistFilename(filename) => {
                 let compatibility = Self::source_dist_compatibility(
@@ -162,15 +147,13 @@ impl FlatDistributions {
                     file: Box::new(file),
                     index,
                     wheels: vec![],
+                    size_is_authoritative: false,
                 };
-                match self.0.entry(filename.version) {
-                    Entry::Occupied(mut entry) => {
-                        entry.get_mut().insert_source(dist, vec![], compatibility);
-                    }
-                    Entry::Vacant(entry) => {
-                        entry.insert(PrioritizedDist::from_source(dist, vec![], compatibility));
-                    }
-                }
+                self.0.entry(filename.version).or_default().insert_source(
+                    dist,
+                    vec![],
+                    compatibility,
+                );
             }
         }
     }
@@ -186,8 +169,16 @@ impl FlatDistributions {
             return SourceDistCompatibility::Incompatible(IncompatibleSource::NoBuild);
         }
 
+        // Check if the filename is PEP 625-compliant.
+        // TODO: Strengthen this check more; right now we allow `.zip`
+        // (which is not compliant) and we don't strictly
+        // enforce the formatting rules for the name or version.
+        if !filename.extension.is_pep625_compliant() {
+            return SourceDistCompatibility::Incompatible(IncompatibleSource::NotPep625Filename);
+        }
+
         // Check if hashes line up
-        let hash_policy = hasher.get_package(&filename.name, &filename.version);
+        let hash_policy = hasher.archive_policy_for_package(&filename.name, &filename.version);
         let hash = if hash_policy.requires_validation() {
             if hashes.is_empty() {
                 HashComparison::Missing
@@ -227,7 +218,7 @@ impl FlatDistributions {
         };
 
         // Check if hashes line up.
-        let hash_policy = hasher.get_package(&filename.name, &filename.version);
+        let hash_policy = hasher.archive_policy_for_package(&filename.name, &filename.version);
         let hash = if hash_policy.requires_validation() {
             if hashes.is_empty() {
                 HashComparison::Missing
@@ -259,12 +250,5 @@ impl IntoIterator for FlatDistributions {
 impl From<FlatDistributions> for BTreeMap<Version, PrioritizedDist> {
     fn from(distributions: FlatDistributions) -> Self {
         distributions.0
-    }
-}
-
-/// For external users.
-impl From<BTreeMap<Version, PrioritizedDist>> for FlatDistributions {
-    fn from(distributions: BTreeMap<Version, PrioritizedDist>) -> Self {
-        Self(distributions)
     }
 }

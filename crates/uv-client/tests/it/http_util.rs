@@ -55,10 +55,27 @@ pub(crate) fn generate_self_signed_certs_with_ca() -> Result<(SelfSigned, SelfSi
     generate_self_signed_certs_with_ca_custom_extensions(Vec::new())
 }
 
-/// Generates a self-signed root CA, server certificate, and client certificate,
-/// with additional custom extensions on the CA certificate.
+/// Like [`generate_self_signed_certs_with_ca`], but the server certificate is
+/// already expired (`not_after` is in the past).
+pub(crate) fn generate_expired_self_signed_certs_with_ca()
+-> Result<(SelfSigned, SelfSigned, SelfSigned)> {
+    generate_self_signed_certs_with_ca_impl(Vec::new(), (2020, 1, 1), (2021, 1, 1))
+}
+
+/// Like [`generate_self_signed_certs_with_ca`], but the CA certificate contains
+/// additional custom extensions.
 pub(crate) fn generate_self_signed_certs_with_ca_custom_extensions(
     custom_extensions: Vec<CustomExtension>,
+) -> Result<(SelfSigned, SelfSigned, SelfSigned)> {
+    generate_self_signed_certs_with_ca_impl(custom_extensions, (1975, 1, 1), (4096, 1, 1))
+}
+
+/// Generates a self-signed root CA, server certificate, and client certificate,
+/// with a configurable validity period for the server certificate.
+fn generate_self_signed_certs_with_ca_impl(
+    ca_custom_extensions: Vec<CustomExtension>,
+    server_not_before: (i32, u8, u8),
+    server_not_after: (i32, u8, u8),
 ) -> Result<(SelfSigned, SelfSigned, SelfSigned)> {
     let mut ca_params = CertificateParams::default();
     ca_params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained); // root cert
@@ -67,7 +84,7 @@ pub(crate) fn generate_self_signed_certs_with_ca_custom_extensions(
     ca_params.key_usages.push(KeyUsagePurpose::DigitalSignature);
     ca_params.key_usages.push(KeyUsagePurpose::KeyCertSign);
     ca_params.key_usages.push(KeyUsagePurpose::CrlSign);
-    ca_params.custom_extensions = custom_extensions;
+    ca_params.custom_extensions = ca_custom_extensions;
     ca_params
         .distinguished_name
         .push(DnType::OrganizationName, "Astral Software Inc.");
@@ -84,8 +101,13 @@ pub(crate) fn generate_self_signed_certs_with_ca_custom_extensions(
     // Generate server cert issued by this CA
     let mut server_params = CertificateParams::default();
     server_params.is_ca = IsCa::NoCa;
-    server_params.not_before = date_time_ymd(1975, 1, 1);
-    server_params.not_after = date_time_ymd(4096, 1, 1);
+    server_params.not_before = date_time_ymd(
+        server_not_before.0,
+        server_not_before.1,
+        server_not_before.2,
+    );
+    server_params.not_after =
+        date_time_ymd(server_not_after.0, server_not_after.1, server_not_after.2);
     server_params.use_authority_key_identifier_extension = true;
     server_params
         .key_usages

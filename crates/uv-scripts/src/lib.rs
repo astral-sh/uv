@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -17,7 +18,7 @@ use uv_pypi_types::VerbatimParsedUrl;
 use uv_redacted::DisplaySafeUrl;
 use uv_settings::{GlobalOptions, ResolverInstallerSchema};
 use uv_warnings::warn_user;
-use uv_workspace::pyproject::{ExtraBuildDependency, Sources};
+use uv_workspace::pyproject::{BuildConstraintDependency, ExtraBuildDependency, Sources};
 
 pub use uv_configuration::ExcludeDependency;
 pub use uv_workspace::pyproject::OverrideDependency;
@@ -98,29 +99,38 @@ impl Pep723ItemRef<'_> {
     /// Collect any `tool.uv.index` from the script.
     pub fn indexes(&self, source_strategy: &NoSources) -> &[uv_distribution_types::Index] {
         match source_strategy {
-            NoSources::None => self
+            NoSources::None | NoSources::Packages(_) => self
                 .metadata()
                 .tool
                 .as_ref()
                 .and_then(|tool| tool.uv.as_ref())
                 .and_then(|uv| uv.top_level.index.as_deref())
                 .unwrap_or(&[]),
-            NoSources::All | NoSources::Packages(_) => &[],
+            NoSources::All => &[],
         }
     }
 
     /// Collect any `tool.uv.sources` from the script.
-    pub fn sources(&self, source_strategy: &NoSources) -> &BTreeMap<PackageName, Sources> {
+    pub fn sources(&self, source_strategy: &NoSources) -> Cow<'_, BTreeMap<PackageName, Sources>> {
         static EMPTY: BTreeMap<PackageName, Sources> = BTreeMap::new();
+        let sources = self
+            .metadata()
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.sources.as_ref())
+            .unwrap_or(&EMPTY);
+
         match source_strategy {
-            NoSources::None => self
-                .metadata()
-                .tool
-                .as_ref()
-                .and_then(|tool| tool.uv.as_ref())
-                .and_then(|uv| uv.sources.as_ref())
-                .unwrap_or(&EMPTY),
-            NoSources::All | NoSources::Packages(_) => &EMPTY,
+            NoSources::None => Cow::Borrowed(sources),
+            NoSources::All => Cow::Borrowed(&EMPTY),
+            NoSources::Packages(packages) => Cow::Owned(
+                sources
+                    .iter()
+                    .filter(|(name, _)| !packages.contains(name))
+                    .map(|(name, sources)| (name.clone(), sources.clone()))
+                    .collect(),
+            ),
         }
     }
 }
@@ -281,7 +291,7 @@ impl Pep723Script {
                 // Issue a warning for users who might not know that.
                 // TODO: There are a lot of mistakes we could consider detecting here, like
                 // `uv run` without `--script` when the file doesn't end in `.py`.
-                if !regex::Regex::new(r"\buv\b").unwrap().is_match(&shebang) {
+                if !regex::regex!(r"\buv\b").is_match(&shebang) {
                     warn_user!(
                         "If you execute {} directly, it might ignore its inline metadata.\nConsider replacing its shebang with: {}",
                         file.to_string_lossy().cyan(),
@@ -418,7 +428,7 @@ pub struct ToolUv {
     pub override_dependencies: Option<Vec<OverrideDependency>>,
     pub exclude_dependencies: Option<Vec<ExcludeDependency>>,
     pub constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
-    pub build_constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+    pub build_constraint_dependencies: Option<Vec<BuildConstraintDependency>>,
     pub extra_build_dependencies: Option<BTreeMap<PackageName, Vec<ExtraBuildDependency>>>,
     pub sources: Option<BTreeMap<PackageName, Sources>>,
 }
@@ -429,6 +439,10 @@ pub enum Pep723Error {
         "An opening tag (`# /// script`) was found without a closing tag (`# ///`). Ensure that every line between the opening and closing tags (including empty lines) starts with a leading `#`."
     )]
     UnclosedBlock,
+    #[error(
+        "An opening tag (`# /// script`) was found, but the closing tag (`# ///`) has trailing content. Remove the trailing content so the line is exactly `# ///`."
+    )]
+    UnclosedBlockTrailingContent,
     #[error("The script contains multiple PEP 723 metadata blocks")]
     DuplicateBlock,
     #[error("The PEP 723 metadata block is missing from the script.")]
@@ -546,11 +560,29 @@ impl ScriptTag {
         // # ///
         // ```
         //
-        // The latter `///` is the closing pragma
-        let Some(index) = toml.iter().rev().position(|line| *line == "///") else {
-            return Err(Pep723Error::UnclosedBlock);
+        // The latter `///` is the closing pragma. Track malformed terminators while searching, but
+        // continue looking for an exact terminator so trailing comments cannot invalidate it.
+        let mut has_trailing_content = false;
+        let mut closing_index = None;
+
+        for (index, line) in toml.iter().enumerate().rev() {
+            if *line == "///" {
+                closing_index = Some(index + 1);
+                break;
+            }
+
+            if line.starts_with("///") {
+                has_trailing_content = true;
+            }
+        }
+
+        let Some(index) = closing_index else {
+            return Err(if has_trailing_content {
+                Pep723Error::UnclosedBlockTrailingContent
+            } else {
+                Pep723Error::UnclosedBlock
+            });
         };
-        let index = toml.len() - index;
 
         // Discard any lines after the closing `# ///`.
         //
@@ -694,6 +726,8 @@ fn serialize_metadata(metadata: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use crate::{Pep723Error, Pep723Script, ScriptTag, serialize_metadata};
     use std::str::FromStr;
 
@@ -705,10 +739,10 @@ mod tests {
         # ///
     "};
 
-        assert!(matches!(
+        assert_matches!(
             ScriptTag::parse(contents.as_bytes()),
             Err(Pep723Error::UnclosedBlock)
-        ));
+        );
     }
 
     #[test]
@@ -722,10 +756,65 @@ mod tests {
         # ]
     "};
 
-        assert!(matches!(
+        assert_matches!(
             ScriptTag::parse(contents.as_bytes()),
             Err(Pep723Error::UnclosedBlock)
-        ));
+        );
+    }
+
+    #[test]
+    fn closing_tag_trailing_whitespace() {
+        // Explicit string (not `indoc`) so the closing tag's trailing space is preserved.
+        let contents = "# /// script\n# requires-python = '>=3.11'\n# /// \n";
+
+        assert_matches!(
+            ScriptTag::parse(contents.as_bytes()),
+            Err(Pep723Error::UnclosedBlockTrailingContent)
+        );
+    }
+
+    #[test]
+    fn closing_tag_trailing_content() {
+        let contents = indoc::indoc! {r"
+            # /// script
+            # requires-python = '>=3.11'
+            # /// unexpected
+        "};
+
+        assert_matches!(
+            ScriptTag::parse(contents.as_bytes()),
+            Err(Pep723Error::UnclosedBlockTrailingContent)
+        );
+    }
+
+    #[test]
+    fn closing_tag_followed_by_prefixed_comment() {
+        let contents = indoc::indoc! {r#"
+            # /// script
+            # dependencies = []
+            # ///
+            # /// documentation
+            print("Hello, world!")
+        "#};
+
+        let actual = ScriptTag::parse(contents.as_bytes()).unwrap().unwrap();
+
+        assert_eq!(actual.metadata, "dependencies = []\n");
+        assert_eq!(
+            actual.postlude,
+            "# /// documentation\nprint(\"Hello, world!\")\n"
+        );
+    }
+
+    #[test]
+    fn closing_tag_followed_by_trailing_whitespace_comment() {
+        let contents =
+            "# /// script\n# dependencies = []\n# ///\n# /// \nprint(\"Hello, world!\")\n";
+
+        let actual = ScriptTag::parse(contents.as_bytes()).unwrap().unwrap();
+
+        assert_eq!(actual.metadata, "dependencies = []\n");
+        assert_eq!(actual.postlude, "# /// \nprint(\"Hello, world!\")\n");
     }
 
     #[test]
@@ -908,13 +997,29 @@ mod tests {
     }
 
     #[test]
+    fn adjacent_unclosed_second_script_block_is_not_duplicate() {
+        let contents = indoc::indoc! {r#"
+            # /// script
+            # dependencies = []
+            # ///
+            # /// script
+            print("Hello, world!")
+        "#};
+
+        let actual = ScriptTag::parse(contents.as_bytes()).unwrap().unwrap();
+
+        assert_eq!(actual.metadata, "dependencies = []\n");
+        assert_eq!(actual.postlude, "# /// script\nprint(\"Hello, world!\")\n");
+    }
+
+    #[test]
     fn other_script_block_is_ignored() {
         let contents = indoc::indoc! {r#"
             # /// script
             # dependencies = ["requests"]
             # ///
 
-            
+
             # /// other
             # /// script
             # ///

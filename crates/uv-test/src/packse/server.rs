@@ -13,7 +13,10 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use serde_json::json;
-use wiremock::{Request, ResponseTemplate};
+use wiremock::{
+    Mock, MockServer, Request, ResponseTemplate,
+    matchers::{header_exists, method, path},
+};
 
 use uv_distribution_filename::WheelFilename;
 use uv_normalize::PackageName;
@@ -33,7 +36,7 @@ struct DistInfo {
     filename: String,
     sha256: String,
     requires_python: Option<VersionSpecifiers>,
-    upload_time: &'static str,
+    upload_time: Option<String>,
     yanked: bool,
 }
 
@@ -70,6 +73,7 @@ struct ServerIndex {
 /// When [`PackseServer`] is dropped, the background thread and server are shut down.
 pub struct PackseServer {
     server: HttpServer,
+    index: Arc<ServerIndex>,
 }
 
 impl PackseServer {
@@ -91,12 +95,23 @@ impl PackseServer {
 
     /// Start a mock server for the given scenario.
     pub fn from_scenario(scenario: &Scenario) -> Self {
+        Self::start(scenario, true)
+    }
+
+    /// Start a mock server that omits hashes from the Simple API, mimicking indexes that don't
+    /// provide hashes, such as HTML-only indexes.
+    pub fn from_scenario_without_hashes(scenario: &Scenario) -> Self {
+        Self::start(scenario, false)
+    }
+
+    fn start(scenario: &Scenario, hashes: bool) -> Self {
         let index = Arc::new(build_server_index(scenario));
+        let server_index = Arc::clone(&index);
         let server = HttpServer::start(move |request, server_uri| {
-            handle_request(request, server_uri, &index)
+            handle_request(request, server_uri, &server_index, hashes)
         });
 
-        Self { server }
+        Self { server, index }
     }
 
     /// The Simple API index URL (e.g., `http://127.0.0.1:PORT/simple/`).
@@ -107,6 +122,15 @@ impl PackseServer {
     /// Return the URL for a generated distribution file.
     pub fn file_url(&self, filename: &str) -> String {
         format!("{}/files/{filename}", self.server.url())
+    }
+
+    /// Return the filename and advertised SHA-256 digest of each distribution.
+    pub fn files(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.index
+            .packages
+            .values()
+            .flat_map(|package| package.dists.iter())
+            .map(|dist| (dist.filename.as_str(), dist.sha256.as_str()))
     }
 }
 
@@ -119,7 +143,7 @@ fn build_server_index(scenario: &Scenario) -> ServerIndex {
         let mut dists = Vec::new();
 
         for (version, meta) in &package.versions {
-            if meta.wheel {
+            if let Some(wheel_metadata) = &meta.wheel {
                 let tags = if meta.wheel_tags.is_empty() {
                     vec!["py3-none-any"]
                 } else {
@@ -134,6 +158,7 @@ fn build_server_index(scenario: &Scenario) -> ServerIndex {
                         &meta.extras,
                         meta.requires_python.as_ref(),
                         tag,
+                        &meta.entry_points,
                     );
                     let sha256 = sha256_hex(&bytes);
                     files.insert(filename.clone(), FileData::Bytes(bytes.into()));
@@ -141,19 +166,20 @@ fn build_server_index(scenario: &Scenario) -> ServerIndex {
                         filename,
                         sha256,
                         requires_python: meta.requires_python.clone(),
-                        upload_time: PACKSE_UPLOAD_TIME,
+                        upload_time: wheel_metadata.upload_time.clone(),
                         yanked: meta.yanked,
                     });
                 }
             }
 
-            if meta.sdist {
+            if let Some(sdist_metadata) = &meta.sdist {
                 let (filename, bytes) = generate_sdist(
                     package_name,
                     version,
                     &meta.requires,
                     &meta.extras,
                     meta.requires_python.as_ref(),
+                    &meta.entry_points,
                 );
                 let sha256 = sha256_hex(&bytes);
                 files.insert(filename.clone(), FileData::Bytes(bytes.into()));
@@ -161,7 +187,7 @@ fn build_server_index(scenario: &Scenario) -> ServerIndex {
                     filename,
                     sha256,
                     requires_python: meta.requires_python.clone(),
-                    upload_time: PACKSE_UPLOAD_TIME,
+                    upload_time: sdist_metadata.upload_time.clone(),
                     yanked: meta.yanked,
                 });
             }
@@ -190,7 +216,7 @@ fn build_server_index(scenario: &Scenario) -> ServerIndex {
                 filename: artifact.filename.to_string(),
                 sha256: artifact.sha256.to_string(),
                 requires_python: None,
-                upload_time: PACKSE_UPLOAD_TIME,
+                upload_time: None,
                 yanked: false,
             });
     }
@@ -198,7 +224,12 @@ fn build_server_index(scenario: &Scenario) -> ServerIndex {
     ServerIndex { packages, files }
 }
 
-fn handle_request(req: &Request, server_uri: &str, index: &ServerIndex) -> ResponseTemplate {
+fn handle_request(
+    req: &Request,
+    server_uri: &str,
+    index: &ServerIndex,
+    hashes: bool,
+) -> ResponseTemplate {
     let path = req.url.path();
 
     if let Some(pkg) = extract_package_name(path) {
@@ -207,7 +238,7 @@ fn handle_request(req: &Request, server_uri: &str, index: &ServerIndex) -> Respo
         };
 
         if let Some(entry) = index.packages.get(&package_name) {
-            return build_simple_api_response(pkg, entry, server_uri);
+            return build_simple_api_response(pkg, entry, server_uri, hashes);
         }
         return ResponseTemplate::new(404);
     }
@@ -215,8 +246,7 @@ fn handle_request(req: &Request, server_uri: &str, index: &ServerIndex) -> Respo
     if let Some(filename) = path.strip_prefix("/files/") {
         if let Some(file) = index.files.get(filename) {
             return match file.bytes() {
-                Ok(bytes) => ResponseTemplate::new(200)
-                    .set_body_raw(bytes.to_vec(), content_type_for_filename(filename)),
+                Ok(bytes) => distribution_file_response(req, filename, &bytes),
                 Err(error) => ResponseTemplate::new(500).set_body_string(format!("{error:#}")),
             };
         }
@@ -226,11 +256,108 @@ fn handle_request(req: &Request, server_uri: &str, index: &ServerIndex) -> Respo
     ResponseTemplate::new(404)
 }
 
+/// Build a response for a distribution file, including support for single byte ranges.
+pub fn distribution_file_response(req: &Request, filename: &str, bytes: &[u8]) -> ResponseTemplate {
+    let content_type = content_type_for_filename(filename);
+    let Some(range) = req.headers.get("range") else {
+        return ResponseTemplate::new(200)
+            .insert_header("Accept-Ranges", "bytes")
+            .set_body_raw(bytes.to_vec(), content_type);
+    };
+
+    let Some((start, end)) = range
+        .to_str()
+        .ok()
+        .and_then(|range| parse_byte_range(range, bytes.len()))
+    else {
+        return ResponseTemplate::new(416)
+            .insert_header("Accept-Ranges", "bytes")
+            .insert_header("Content-Range", format!("bytes */{}", bytes.len()));
+    };
+
+    ResponseTemplate::new(206)
+        .insert_header("Accept-Ranges", "bytes")
+        .insert_header(
+            "Content-Range",
+            format!("bytes {start}-{end}/{}", bytes.len()),
+        )
+        .set_body_raw(bytes[start..=end].to_vec(), content_type)
+}
+
+/// Mount a distribution that serves different bytes to range and full-file requests.
+///
+/// `HEAD` responses advertise range support. Ranged `GET` requests receive the ranged bytes,
+/// while full `GET` requests receive the full-file bytes instead.
+pub async fn mount_mismatched_distribution(
+    server: &MockServer,
+    file_path: &str,
+    filename: &str,
+    ranged_bytes: Vec<u8>,
+    full_bytes: Vec<u8>,
+) {
+    Mock::given(method("HEAD"))
+        .and(path(file_path))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Accept-Ranges", "bytes")
+                .set_body_bytes(ranged_bytes.clone()),
+        )
+        .mount(server)
+        .await;
+
+    let filename = filename.to_string();
+    Mock::given(method("GET"))
+        .and(path(file_path))
+        .and(header_exists("range"))
+        .respond_with(move |request: &Request| {
+            distribution_file_response(request, &filename, &ranged_bytes)
+        })
+        .with_priority(1)
+        .expect(1..)
+        .mount(server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path(file_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(full_bytes))
+        .mount(server)
+        .await;
+}
+
+/// Parse a single HTTP byte range and return its inclusive bounds.
+fn parse_byte_range(range: &str, length: usize) -> Option<(usize, usize)> {
+    let range = range.strip_prefix("bytes=")?;
+    let (start, end) = range.split_once('-')?;
+
+    if start.is_empty() {
+        let suffix = end.parse::<usize>().ok()?;
+        if suffix == 0 || length == 0 {
+            return None;
+        }
+        return Some((length.saturating_sub(suffix), length - 1));
+    }
+
+    let start = start.parse::<usize>().ok()?;
+    if start >= length {
+        return None;
+    }
+    let end = if end.is_empty() {
+        length - 1
+    } else {
+        end.parse::<usize>().ok()?.min(length - 1)
+    };
+    if start > end {
+        return None;
+    }
+    Some((start, end))
+}
+
 /// Build PEP 691 JSON response for a package.
 fn build_simple_api_response(
     package_name: &str,
     entry: &PackageEntry,
     server_uri: &str,
+    hashes: bool,
 ) -> ResponseTemplate {
     let files: Vec<serde_json::Value> = entry
         .dists
@@ -240,11 +367,12 @@ fn build_simple_api_response(
             let mut file_obj = json!({
                 "filename": dist.filename,
                 "url": url,
-                "hashes": {
-                    "sha256": dist.sha256,
-                },
-                "upload-time": dist.upload_time,
+                "hashes": {},
+                "upload-time": dist.upload_time.as_deref().unwrap_or(PACKSE_UPLOAD_TIME),
             });
+            if hashes {
+                file_obj["hashes"] = json!({ "sha256": dist.sha256 });
+            }
             if let Some(rp) = &dist.requires_python {
                 file_obj["requires-python"] = json!(rp);
             }
@@ -279,9 +407,17 @@ fn extract_package_name(path: &str) -> Option<&str> {
 
 #[cfg(test)]
 mod tests {
+    use anyhow::Result;
+    use reqwest::StatusCode;
+    use reqwest::header::{ACCEPT_RANGES, CONTENT_RANGE, RANGE};
+    use wiremock::MockServer;
+
     use crate::vendor::vendor_artifacts;
 
-    use super::{Scenario, build_server_index, extract_package_name};
+    use super::{
+        PackseServer, Scenario, build_server_index, extract_package_name,
+        mount_mismatched_distribution,
+    };
 
     #[test]
     fn extract_package_name_accepts_with_or_without_trailing_slash() {
@@ -305,5 +441,177 @@ mod tests {
                 .iter()
                 .all(|artifact| !artifact.is_loaded())
         );
+    }
+
+    #[tokio::test]
+    async fn serves_artifact_upload_times() -> Result<()> {
+        let scenario = toml::from_str::<Scenario>(
+            r#"
+name = "artifact-upload-times"
+
+[root]
+requires = ["a"]
+
+[expected]
+satisfiable = true
+
+[packages.a.versions."1.0.0"]
+sdist = { upload_time = "2024-03-23T00:00:00Z" }
+wheel = { upload_time = "2024-03-26T00:00:00Z" }
+wheel_tags = ["py3-none-any", "cp312-abi3-win_amd64"]
+
+[packages.b.versions."1.0.0"]
+sdist = false
+wheel = {}
+
+[packages.c.versions."1.0.0"]
+wheel = false
+"#,
+        )?;
+        let server = PackseServer::from_scenario(&scenario);
+
+        let a: serde_json::Value = reqwest::get(format!("{}a/", server.index_url()))
+            .await?
+            .json()
+            .await?;
+        assert_eq!(a["files"].as_array().map(Vec::len), Some(3));
+        assert_eq!(a["files"][0]["filename"], "a-1.0.0-py3-none-any.whl");
+        assert_eq!(a["files"][0]["upload-time"], "2024-03-26T00:00:00Z");
+        assert_eq!(
+            a["files"][1]["filename"],
+            "a-1.0.0-cp312-abi3-win_amd64.whl"
+        );
+        assert_eq!(a["files"][1]["upload-time"], "2024-03-26T00:00:00Z");
+        assert_eq!(a["files"][2]["filename"], "a-1.0.0.tar.gz");
+        assert_eq!(a["files"][2]["upload-time"], "2024-03-23T00:00:00Z");
+
+        let b: serde_json::Value = reqwest::get(format!("{}b/", server.index_url()))
+            .await?
+            .json()
+            .await?;
+        assert_eq!(b["files"].as_array().map(Vec::len), Some(1));
+        assert_eq!(b["files"][0]["filename"], "b-1.0.0-py3-none-any.whl");
+        assert_eq!(b["files"][0]["upload-time"], "2024-03-24T00:00:00Z");
+
+        let c: serde_json::Value = reqwest::get(format!("{}c/", server.index_url()))
+            .await?
+            .json()
+            .await?;
+        assert_eq!(c["files"].as_array().map(Vec::len), Some(1));
+        assert_eq!(c["files"][0]["filename"], "c-1.0.0.tar.gz");
+        assert_eq!(c["files"][0]["upload-time"], "2024-03-24T00:00:00Z");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn file_requests_support_byte_ranges() -> Result<()> {
+        let scenario = toml::from_str::<Scenario>(
+            r#"
+name = "range-requests"
+
+[root]
+requires = ["a"]
+
+[expected]
+satisfiable = true
+
+[packages.a.versions."1.0.0"]
+sdist = false
+"#,
+        )?;
+        let server = PackseServer::from_scenario(&scenario);
+        let url = server.file_url("a-1.0.0-py3-none-any.whl");
+        let client = reqwest::Client::new();
+
+        let response = client.get(&url).send().await?;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.headers().get(ACCEPT_RANGES),
+            Some(&"bytes".parse()?)
+        );
+        let bytes = response.bytes().await?;
+        let length = bytes.len();
+
+        let response = client.get(&url).header(RANGE, "bytes=-8").send().await?;
+        assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
+        assert_eq!(
+            response.headers().get(CONTENT_RANGE),
+            Some(&format!("bytes {}-{}/{}", length - 8, length - 1, length).parse()?)
+        );
+        assert_eq!(response.bytes().await?, bytes[length - 8..]);
+
+        let response = client
+            .get(&url)
+            .header(RANGE, "bytes=-999999")
+            .send()
+            .await?;
+        assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
+        assert_eq!(
+            response.headers().get(CONTENT_RANGE),
+            Some(&format!("bytes 0-{}/{}", length - 1, length).parse()?)
+        );
+        assert_eq!(response.bytes().await?, bytes);
+
+        let response = client.get(&url).header(RANGE, "bytes=3-9").send().await?;
+        assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
+        assert_eq!(
+            response.headers().get(CONTENT_RANGE),
+            Some(&format!("bytes 3-9/{length}").parse()?)
+        );
+        assert_eq!(response.bytes().await?, bytes[3..=9]);
+
+        let response = client.get(&url).header(RANGE, "bytes=10-").send().await?;
+        assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
+        assert_eq!(
+            response.headers().get(CONTENT_RANGE),
+            Some(&format!("bytes 10-{}/{}", length - 1, length).parse()?)
+        );
+        assert_eq!(response.bytes().await?, bytes[10..]);
+
+        let response = client
+            .get(&url)
+            .header(RANGE, format!("bytes={length}-"))
+            .send()
+            .await?;
+        assert_eq!(response.status(), StatusCode::RANGE_NOT_SATISFIABLE);
+        assert_eq!(
+            response.headers().get(CONTENT_RANGE),
+            Some(&format!("bytes */{length}").parse()?)
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn mismatched_distribution_serves_ranged_and_full_bytes() -> Result<()> {
+        let server = MockServer::start().await;
+        mount_mismatched_distribution(
+            &server,
+            "/files/example.whl",
+            "example.whl",
+            b"forged".to_vec(),
+            b"authentic".to_vec(),
+        )
+        .await;
+        let url = format!("{}/files/example.whl", server.uri());
+        let client = reqwest::Client::new();
+
+        let response = client.head(&url).send().await?;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.headers().get(ACCEPT_RANGES),
+            Some(&"bytes".parse()?)
+        );
+
+        let response = client.get(&url).header(RANGE, "bytes=1-3").send().await?;
+        assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
+        assert_eq!(response.bytes().await?, b"org".as_slice());
+
+        let response = client.get(&url).send().await?;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.bytes().await?, b"authentic".as_slice());
+
+        Ok(())
     }
 }

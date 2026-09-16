@@ -181,7 +181,7 @@ impl FlatDependencyGroups {
                 for requirement in &mut requirements {
                     let extra_markers =
                         RequiresPython::from_specifiers(requires_python.clone()).to_marker_tree();
-                    requirement.marker.and(extra_markers);
+                    requirement.marker = requirement.marker.and(extra_markers);
                 }
             }
 

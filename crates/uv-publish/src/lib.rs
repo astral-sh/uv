@@ -1,6 +1,9 @@
 mod trusted_publishing;
 
+use std::borrow::Cow;
 use std::collections::BTreeSet;
+use std::fmt::Display;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::{fmt, io};
@@ -9,13 +12,16 @@ use fs_err::tokio::File;
 use futures::TryStreamExt;
 use glob::{GlobError, PatternError, glob};
 use itertools::Itertools;
-use reqwest::header::{AUTHORIZATION, LOCATION, ToStrError};
-use reqwest::multipart::Part;
+use reqwest::header::{
+    ACCEPT, AUTHORIZATION, CONTENT_TYPE, InvalidHeaderValue, LOCATION, ToStrError,
+};
+use reqwest::multipart::{Form, Part};
 use reqwest::{Body, Response, StatusCode};
 use reqwest_retry::RetryError;
 use reqwest_retry::policies::ExponentialBackoff;
 use rustc_hash::FxHashMap;
 use serde::Deserialize;
+use tar_codec::{Archive as _, Member, MemberPayload as _, TarArchive};
 use thiserror::Error;
 use tokio::io::{AsyncReadExt, BufReader};
 use tokio::sync::Semaphore;
@@ -23,27 +29,26 @@ use tokio_util::io::ReaderStream;
 use tracing::{Level, debug, enabled, trace, warn};
 use url::Url;
 
-use uv_auth::{Credentials, PyxTokenStore, Realm};
+use uv_auth::{Credentials, Realm};
 use uv_cache::{Cache, Refresh};
 use uv_client::{
     BaseClient, ClientBuildError, DEFAULT_MAX_REDIRECTS, MetadataFormat, OwnedArchive,
-    RegistryClientBuilder, RequestBuilder, RetryParsingError, RetryState,
+    ProblemDetails, RegistryClientBuilder, RequestBuilder, RetryParsingError, RetryState,
 };
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_filename::{DistFilename, SourceDistExtension, SourceDistFilename};
 use uv_distribution_types::{IndexCapabilities, IndexUrl};
-use uv_extract::hash::{HashReader, Hasher};
+use uv_extract::hash::Hasher;
 use uv_fs::{ProgressReader, Simplified};
-use uv_metadata::read_metadata_async_seek;
+use uv_metadata::read_archive_metadata;
+use uv_preview::PreviewFeature;
 use uv_pypi_types::{HashAlgorithm, HashDigest, Metadata23, MetadataError};
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_warnings::warn_user;
 
+pub use crate::trusted_publishing::TrustedPublishingToken;
 use crate::trusted_publishing::pypi::PyPIPublishingService;
-use crate::trusted_publishing::pyx::PyxPublishingService;
-use crate::trusted_publishing::{
-    TrustedPublishingError, TrustedPublishingService, TrustedPublishingToken,
-};
+use crate::trusted_publishing::{TrustedPublishingError, TrustedPublishingService};
 
 #[derive(Error, Debug)]
 pub enum PublishError {
@@ -62,12 +67,6 @@ pub enum PublishError {
     PublishPrepare(PathBuf, #[source] Box<PublishPrepareError>),
     #[error("Failed to publish `{}` to {}", _0.user_display(), _1)]
     PublishSend(
-        PathBuf,
-        Box<DisplaySafeUrl>,
-        #[source] Box<PublishSendError>,
-    ),
-    #[error("Validation failed for `{}` on {}", _0.user_display(), _1)]
-    Validate(
         PathBuf,
         Box<DisplaySafeUrl>,
         #[source] Box<PublishSendError>,
@@ -94,12 +93,6 @@ pub enum PublishError {
     MissingHash(Box<DistFilename>),
     #[error(transparent)]
     RetryParsing(#[from] RetryParsingError),
-    #[error("Failed to reserve upload slot for `{}`", _0.user_display())]
-    Reserve(PathBuf, #[source] Box<PublishSendError>),
-    #[error("Failed to upload to S3 for `{}`", _0.user_display())]
-    S3Upload(PathBuf, #[source] Box<PublishSendError>),
-    #[error("Failed to finalize upload for `{}`", _0.user_display())]
-    Finalize(PathBuf, #[source] Box<PublishSendError>),
 }
 
 /// Failure to get the metadata for a specific file.
@@ -107,6 +100,8 @@ pub enum PublishError {
 pub enum PublishPrepareError {
     #[error(transparent)]
     Io(#[from] io::Error),
+    #[error("Invalid authorization header")]
+    InvalidHeaderValue(#[from] InvalidHeaderValue),
     #[error("Failed to read metadata")]
     Metadata(#[from] uv_metadata::Error),
     #[error("Failed to read metadata")]
@@ -117,8 +112,14 @@ pub enum PublishPrepareError {
     MissingPkgInfo,
     #[error("Multiple PKG-INFO files found: `{0}`")]
     MultiplePkgInfo(String),
+    #[error("Failed to decode source distribution")]
+    Decode(#[source] tar_codec::DecodeError),
     #[error("Failed to read: `{0}`")]
-    Read(String, #[source] io::Error),
+    Read(String, #[source] tar_codec::DecodeError),
+    #[error(transparent)]
+    TokioTar(io::Error),
+    #[error("Failed to read: `{0}`")]
+    TokioTarRead(String, #[source] io::Error),
     #[error("Invalid PEP 740 attestation (not JSON): `{0}`")]
     InvalidAttestation(PathBuf, #[source] serde_json::Error),
 }
@@ -158,6 +159,12 @@ pub enum PublishSendError {
 }
 
 pub trait Reporter: Send + Sync + 'static {
+    fn on_validation_start(&self, _name: &DistFilename, _size: u64) -> Result<(), fmt::Error> {
+        Ok(())
+    }
+    fn on_upload_ready(&self, _name: &DistFilename, _size: u64) -> Result<(), fmt::Error> {
+        Ok(())
+    }
     fn on_progress(&self, name: &str, id: usize);
     fn on_upload_start(&self, name: &str, size: Option<u64>) -> usize;
     fn on_upload_progress(&self, id: usize, inc: u64);
@@ -167,13 +174,154 @@ pub trait Reporter: Send + Sync + 'static {
     fn on_hash_complete(&self, id: usize);
 }
 
+/// Credentials for publishing, including whether they require revocation after use.
+pub enum PublishingCredentials {
+    /// Credentials supplied by the user or resolved by the authentication middleware.
+    Supplied(Credentials),
+    /// A short-lived token obtained through trusted publishing.
+    TrustedPublishing(TrustedPublishingToken),
+}
+
+impl PublishingCredentials {
+    /// Return the HTTP credentials to use for uploads.
+    pub fn as_credentials(&self) -> Cow<'_, Credentials> {
+        match self {
+            Self::Supplied(credentials) => Cow::Borrowed(credentials),
+            Self::TrustedPublishing(token) => Cow::Owned(Credentials::basic(
+                Some("__token__".to_string()),
+                Some(token.to_string()),
+            )),
+        }
+    }
+}
+
+/// The result of uploading a prepared distribution.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UploadOutcome {
+    /// The registry accepted the upload.
+    Uploaded,
+    /// An identical file already exists on the registry.
+    AlreadyExists,
+}
+
+/// The outcome of preparation and uploads, before finalizing the session.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PublishOutcome {
+    /// All files were uploaded or skipped because they did not require uploading.
+    Success,
+    /// Preparation or uploading failed.
+    Failed,
+    /// Validation succeeded without uploading any files.
+    DryRun,
+}
+
+impl Display for PublishOutcome {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Success => write!(f, "success"),
+            Self::Failed => write!(f, "failed"),
+            Self::DryRun => write!(f, "dry-run"),
+        }
+    }
+}
+
+/// A failure while finalizing a publishing session.
+#[derive(Debug, Error)]
+pub enum PublishFinalizeError {
+    /// Token invalidation is best effort and must not change the publishing result.
+    #[error("Failed to invalidate trusted publishing token")]
+    TokenInvalidation(#[source] TrustedPublishingError),
+}
+
+/// A distribution and its associated attestation paths, collected by [`PublishSession::prepare`].
+///
+/// File contents are read and hashed when [`PublishSession::upload`] or
+/// [`PublishSession::dry_run`] is called, so files can be processed one at a time.
+#[derive(Debug)]
+pub struct PreparedDistribution {
+    file: PathBuf,
+    raw_filename: String,
+    filename: DistFilename,
+    attestations: Vec<PathBuf>,
+}
+
+impl PreparedDistribution {
+    /// The parsed distribution filename.
+    pub fn filename(&self) -> &DistFilename {
+        &self.filename
+    }
+
+    /// The original filename, before normalization.
+    pub fn raw_filename(&self) -> &str {
+        &self.raw_filename
+    }
+
+    /// Read the upload metadata once, for reuse across retries and redirects.
+    async fn read_metadata(
+        &self,
+        reporter: Arc<impl Reporter>,
+    ) -> Result<(FormMetadata, Option<String>, u64), PublishError> {
+        let size = fs_err::tokio::metadata(&self.file)
+            .await
+            .map_err(|err| {
+                PublishError::PublishPrepare(
+                    self.file.clone(),
+                    Box::new(PublishPrepareError::Io(err)),
+                )
+            })?
+            .len();
+        reporter.on_validation_start(&self.filename, size)?;
+
+        let metadata: Result<_, PublishPrepareError> = async {
+            let form_metadata =
+                FormMetadata::read_from_file(&self.file, &self.filename, reporter).await?;
+            let mut attestations = Vec::with_capacity(self.attestations.len());
+            for attestation_path in &self.attestations {
+                let contents = fs_err::tokio::read_to_string(attestation_path).await?;
+                // Only validate that attestations are JSON; their interior structure is not checked.
+                let attestation =
+                    serde_json::from_str::<serde_json::Value>(&contents).map_err(|err| {
+                        PublishPrepareError::InvalidAttestation(attestation_path.clone(), err)
+                    })?;
+                attestations.push(attestation);
+            }
+            // PEP 740 specifies the `attestations` field as a JSON array of attestation objects.
+            let attestations = if attestations.is_empty() {
+                None
+            } else {
+                Some(serde_json::Value::Array(attestations).to_string())
+            };
+            Ok((form_metadata, attestations, size))
+        }
+        .await;
+        metadata.map_err(|err| PublishError::PublishPrepare(self.file.clone(), Box::new(err)))
+    }
+}
+
 /// Context for using a fresh registry client for check URL requests.
-pub struct CheckUrlClient<'a> {
-    pub index_url: IndexUrl,
-    pub registry_client_builder: RegistryClientBuilder<'a>,
-    pub client: &'a BaseClient,
-    pub index_capabilities: IndexCapabilities,
-    pub cache: &'a Cache,
+struct CheckUrlClient<'a> {
+    index_url: IndexUrl,
+    registry_client_builder: RegistryClientBuilder<'a>,
+    index_capabilities: IndexCapabilities,
+    cache: &'a Cache,
+}
+
+/// Shared state for preparing, uploading, and finalizing a set of distributions.
+///
+/// Collect distributions with [`Self::prepare`], then pass each one to [`Self::upload`].
+/// Hashes, metadata, and attestations are read immediately before each upload. Call
+/// [`Self::finalize`] after processing the files, including after validation or upload errors
+/// and after a dry run. Finalization is explicit and asynchronous; dropping a session does not
+/// perform cleanup.
+#[must_use = "publishing sessions must be finalized after use"]
+pub struct PublishSession<'a> {
+    publish_url: DisplaySafeUrl,
+    credentials: PublishingCredentials,
+    upload_client: &'a BaseClient,
+    oidc_client: &'a BaseClient,
+    retry_policy: ExponentialBackoff,
+    check_url_client: Option<CheckUrlClient<'a>>,
+    download_concurrency: Semaphore,
 }
 
 impl PublishSendError {
@@ -249,9 +397,9 @@ impl PublishSendError {
     ///
     /// ```text
     /// error: Failed to publish `dist/astral_test_1-0.1.0-py3-none-any.whl` to `https://test.pypi.org/legacy/`
-    ///   Caused by: Incorrect credentials (status code 403 Forbidden): 403 Username/Password
-    ///     authentication is no longer supported. Migrate to API Tokens or Trusted Publishers
-    ///     instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
+    ///   └── Incorrect credentials (status code 403 Forbidden): 403 Username/Password
+    ///       authentication is no longer supported. Migrate to API Tokens or Trusted Publishers
+    ///       instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
     /// ```
     fn extract_error_message(body: String, content_type: Option<&str>) -> String {
         if content_type == Some("application/json") {
@@ -269,20 +417,6 @@ impl PublishSendError {
             body
         }
     }
-}
-
-/// Represents a single "to-be-uploaded" distribution, along with zero
-/// or more attestations that will be uploaded alongside it.
-#[derive(Debug)]
-pub struct UploadDistribution {
-    /// The path to the main distribution file to upload.
-    pub file: PathBuf,
-    /// The raw filename of the main distribution file.
-    pub raw_filename: String,
-    /// The parsed filename of the main distribution file.
-    pub filename: DistFilename,
-    /// Zero or more paths to PEP 740 attestations for the distribution.
-    pub attestations: Vec<PathBuf>,
 }
 
 /// Given a list of paths (which may contain globs), unroll them into
@@ -304,8 +438,8 @@ fn unroll_paths(paths: Vec<String>) -> Result<Vec<PathBuf>, PublishError> {
     Ok(files.into_iter().collect())
 }
 
-/// Given a flat list of input files, merge them into a list of [`UploadDistribution`]s.
-fn group_files(files: Vec<PathBuf>, no_attestations: bool) -> Vec<UploadDistribution> {
+/// Given a flat list of input files, merge them into a list of [`PreparedDistribution`]s.
+fn group_files(files: Vec<PathBuf>, no_attestations: bool) -> Vec<PreparedDistribution> {
     let mut groups = FxHashMap::default();
     let mut attestations_by_dist = FxHashMap::default();
     for file in files {
@@ -359,7 +493,7 @@ fn group_files(files: Vec<PathBuf>, no_attestations: bool) -> Vec<UploadDistribu
 
             groups.insert(
                 filename.clone(),
-                UploadDistribution {
+                PreparedDistribution {
                     file,
                     raw_filename: filename,
                     filename: dist_filename,
@@ -384,20 +518,6 @@ fn group_files(files: Vec<PathBuf>, no_attestations: bool) -> Vec<UploadDistribu
     groups.into_values().collect()
 }
 
-/// Collect the source distributions and wheels for publishing.
-///
-/// Returns an [`UploadGroup`] for each distribution to be published.
-/// This group contains the path, the raw filename and the parsed filename. The raw filename is a fixup for
-/// <https://github.com/astral-sh/uv/issues/8030> caused by
-/// <https://github.com/pypa/setuptools/issues/3777> in combination with
-/// <https://github.com/pypi/warehouse/blob/50a58f3081e693a3772c0283050a275e350004bf/warehouse/forklift/legacy.py#L1133-L1155>
-pub fn group_files_for_publishing(
-    paths: Vec<String>,
-    no_attestations: bool,
-) -> Result<Vec<UploadDistribution>, PublishError> {
-    Ok(group_files(unroll_paths(paths)?, no_attestations))
-}
-
 pub enum TrustedPublishResult {
     /// We didn't check for trusted publishing.
     Skipped,
@@ -412,7 +532,6 @@ pub async fn check_trusted_publishing(
     username: Option<&str>,
     password: Option<&str>,
     keyring_provider: KeyringProviderType,
-    token_store: &PyxTokenStore,
     trusted_publishing: TrustedPublishing,
     registry: &DisplaySafeUrl,
     client: &BaseClient,
@@ -430,17 +549,9 @@ pub async fn check_trusted_publishing(
             debug!("Attempting to get a token for trusted publishing");
 
             // Attempt to get a token for trusted publishing.
-            let token = if token_store.is_known_url(registry) {
-                debug!("Using trusted publishing flow for pyx");
-                PyxPublishingService::new(registry, client)
-                    .get_token()
-                    .await
-            } else {
-                debug!("Using trusted publishing flow for PyPI");
-                PyPIPublishingService::new(registry, client)
-                    .get_token()
-                    .await
-            };
+            let token = PyPIPublishingService::new(registry, client)
+                .get_token()
+                .await;
 
             match token {
                 // Success: we have a token for trusted publishing.
@@ -471,19 +582,10 @@ pub async fn check_trusted_publishing(
             }
 
             // Attempt to get a token for trusted publishing.
-            let token = if token_store.is_known_url(registry) {
-                debug!("Using trusted publishing flow for pyx");
-                PyxPublishingService::new(registry, client)
-                    .get_token()
-                    .await
-                    .map_err(Box::new)?
-            } else {
-                debug!("Using trusted publishing flow for PyPI");
-                PyPIPublishingService::new(registry, client)
-                    .get_token()
-                    .await
-                    .map_err(Box::new)?
-            };
+            let token = PyPIPublishingService::new(registry, client)
+                .get_token()
+                .await
+                .map_err(Box::new)?;
 
             let Some(token) = token else {
                 return Err(PublishError::TrustedPublishing(
@@ -497,374 +599,167 @@ pub async fn check_trusted_publishing(
     }
 }
 
-/// Upload a file to a registry.
-///
-/// Returns `true` if the file was newly uploaded and `false` if it already existed.
-///
-/// Implements a custom retry flow since the request isn't cloneable.
-pub async fn upload(
-    group: &UploadDistribution,
-    form_metadata: &FormMetadata,
-    registry: &DisplaySafeUrl,
-    client: &BaseClient,
-    retry_policy: ExponentialBackoff,
-    credentials: &Credentials,
-    check_url_client: Option<&CheckUrlClient<'_>>,
-    download_concurrency: &Semaphore,
-    reporter: Arc<impl Reporter>,
-) -> Result<bool, PublishError> {
-    let mut n_past_redirections = 0;
-    let max_redirects = DEFAULT_MAX_REDIRECTS;
-    let mut current_registry = registry.clone();
-    let mut retry_state = RetryState::start(retry_policy, registry.clone());
-
-    loop {
-        let (request, idx) = build_upload_request(
-            group,
-            &current_registry,
-            client,
+impl<'a> PublishSession<'a> {
+    /// Start a session with resolved credentials and configured HTTP clients.
+    ///
+    /// The retry policy applies to streaming uploads, whose client must have automatic retries
+    /// and redirects disabled. The OIDC client uses its own retry and timeout settings.
+    pub fn new(
+        publish_url: DisplaySafeUrl,
+        credentials: PublishingCredentials,
+        upload_client: &'a BaseClient,
+        oidc_client: &'a BaseClient,
+        retry_policy: ExponentialBackoff,
+    ) -> Self {
+        Self {
+            publish_url,
             credentials,
-            form_metadata,
-            reporter.clone(),
-        )
-        .await
-        .map_err(|err| PublishError::PublishPrepare(group.file.clone(), Box::new(err)))?;
-
-        let result = request.send().await;
-        let response = match result {
-            Ok(response) => {
-                // When the user accidentally uses https://test.pypi.org/legacy (no slash) as publish URL, we
-                // get a redirect to https://test.pypi.org/legacy/ (the canonical index URL).
-                // In the above case we get 308, where reqwest or `RedirectClientWithMiddleware` would try
-                // cloning the streaming body, which is not possible.
-                // For https://test.pypi.org/simple (no slash), we get 301, which means we should make a GET request:
-                // https://fetch.spec.whatwg.org/#http-redirect-fetch).
-                // Reqwest doesn't support redirect policies conditional on the HTTP
-                // method (https://github.com/seanmonstar/reqwest/issues/1777#issuecomment-2303386160), so we're
-                // implementing our custom redirection logic.
-                if response.status().is_redirection() {
-                    if n_past_redirections >= max_redirects {
-                        return Err(PublishError::PublishSend(
-                            group.file.clone(),
-                            current_registry.clone().into(),
-                            PublishSendError::TooManyRedirects(n_past_redirections).into(),
-                        ));
-                    }
-                    let location = response
-                        .headers()
-                        .get(LOCATION)
-                        .ok_or_else(|| {
-                            PublishError::PublishSend(
-                                group.file.clone(),
-                                current_registry.clone().into(),
-                                PublishSendError::RedirectNoLocation.into(),
-                            )
-                        })?
-                        .to_str()
-                        .map_err(|err| {
-                            PublishError::PublishSend(
-                                group.file.clone(),
-                                current_registry.clone().into(),
-                                PublishSendError::RedirectLocationInvalidStr(err).into(),
-                            )
-                        })?;
-                    current_registry = DisplaySafeUrl::parse(location).map_err(|err| {
-                        PublishError::PublishSend(
-                            group.file.clone(),
-                            current_registry.clone().into(),
-                            PublishSendError::RedirectInvalidLocation(err).into(),
-                        )
-                    })?;
-                    if Realm::from(&current_registry) != Realm::from(registry) {
-                        return Err(PublishError::PublishSend(
-                            group.file.clone(),
-                            current_registry.clone().into(),
-                            PublishSendError::RedirectRealmMismatch(current_registry.to_string())
-                                .into(),
-                        ));
-                    }
-                    debug!("Redirecting the request to: {}", current_registry);
-                    n_past_redirections += 1;
-                    continue;
-                }
-                reporter.on_upload_complete(idx);
-                response
-            }
-            Err(err) => {
-                let middleware_retries = if let Some(RetryError::WithRetries { retries, .. }) =
-                    (&err as &dyn std::error::Error).downcast_ref::<RetryError>()
-                {
-                    *retries
-                } else {
-                    0
-                };
-                if let Some(backoff) = retry_state.should_retry(&err, middleware_retries) {
-                    retry_state.sleep_backoff(backoff).await;
-                    continue;
-                }
-                return Err(PublishError::PublishSend(
-                    group.file.clone(),
-                    current_registry.clone().into(),
-                    PublishSendError::ReqwestMiddleware(err).into(),
-                ));
-            }
-        };
-
-        return match handle_response(&current_registry, response).await {
-            Ok(()) => {
-                // Upload successful; for PyPI this can also mean a hash match in a raced upload
-                // (but it doesn't tell us), for other registries it should mean a fresh upload.
-                Ok(true)
-            }
-            Err(err) => {
-                if matches!(
-                    err,
-                    PublishSendError::Status(..) | PublishSendError::StatusNoBody(..)
-                ) {
-                    if let Some(check_url_client) = &check_url_client {
-                        if check_url(
-                            check_url_client,
-                            &group.file,
-                            &group.filename,
-                            download_concurrency,
-                            reporter.clone(),
-                        )
-                        .await?
-                        {
-                            // There was a raced upload of the same file, so even though our upload failed,
-                            // the right file now exists in the registry.
-                            return Ok(false);
-                        }
-                    }
-                }
-                Err(PublishError::PublishSend(
-                    group.file.clone(),
-                    current_registry.clone().into(),
-                    err.into(),
-                ))
-            }
-        };
-    }
-}
-
-/// Validate a distribution before uploading.
-///
-/// Returns `true` if the file should be uploaded, `false` if it already exists on the server.
-pub async fn validate(
-    file: &Path,
-    form_metadata: &FormMetadata,
-    raw_filename: &str,
-    registry: &DisplaySafeUrl,
-    store: &PyxTokenStore,
-    client: &BaseClient,
-    credentials: &Credentials,
-) -> Result<bool, PublishError> {
-    if store.is_known_url(registry) {
-        debug!("Performing validation request for {registry}");
-
-        let mut validation_url = registry.clone();
-        validation_url
-            .path_segments_mut()
-            .expect("URL must have path segments")
-            .push("validate");
-
-        let request = build_metadata_request(
-            raw_filename,
-            &validation_url,
-            client,
-            credentials,
-            form_metadata,
-        );
-
-        let response = request.send().await.map_err(|err| {
-            PublishError::Validate(
-                file.to_path_buf(),
-                registry.clone().into(),
-                PublishSendError::ReqwestMiddleware(err).into(),
-            )
-        })?;
-
-        let status_code = response.status();
-        debug!("Response code for {validation_url}: {status_code}");
-
-        if status_code.is_success() {
-            #[derive(Deserialize)]
-            struct ValidateResponse {
-                exists: bool,
-            }
-
-            // Check if the file already exists.
-            match response.text().await {
-                Ok(body) => {
-                    trace!("Response content for {validation_url}: {body}");
-                    if let Ok(response) = serde_json::from_str::<ValidateResponse>(&body) {
-                        if response.exists {
-                            debug!("File already uploaded: {raw_filename}");
-                            return Ok(false);
-                        }
-                    }
-                }
-                Err(err) => {
-                    trace!("Failed to read response content for {validation_url}: {err}");
-                }
-            }
-            return Ok(true);
+            upload_client,
+            oidc_client,
+            retry_policy,
+            check_url_client: None,
+            // Check URL requests are made one at a time against a single index.
+            download_concurrency: Semaphore::new(1),
         }
-
-        // Handle error response.
-        handle_response(&validation_url, response)
-            .await
-            .map_err(|err| {
-                PublishError::Validate(file.to_path_buf(), registry.clone().into(), err.into())
-            })?;
-
-        Ok(true)
-    } else {
-        debug!("Skipping validation request for unsupported publish URL: {registry}");
-        Ok(true)
-    }
-}
-
-/// Upload a file using the two-phase upload protocol for pyx.
-///
-/// This is a more efficient upload method that:
-/// 1. Reserves an upload slot and gets a pre-signed S3 URL.
-/// 2. Uploads the file directly to S3.
-/// 3. Finalizes the upload with the registry.
-///
-/// Returns `true` if the file was newly uploaded and `false` if it already existed.
-pub async fn upload_two_phase(
-    group: &UploadDistribution,
-    form_metadata: &FormMetadata,
-    registry: &DisplaySafeUrl,
-    client: &BaseClient,
-    s3_client: &BaseClient,
-    retry_policy: ExponentialBackoff,
-    credentials: &Credentials,
-    reporter: Arc<impl Reporter>,
-) -> Result<bool, PublishError> {
-    #[derive(Debug, Deserialize)]
-    struct ReserveResponse {
-        upload_url: Option<String>,
-        upload_headers: Option<FxHashMap<String, String>>,
     }
 
-    // Step 1: Reserve an upload slot.
-    let mut reserve_url = registry.clone();
-    reserve_url
-        .path_segments_mut()
-        .expect("URL must have path segments")
-        .push("reserve");
+    /// Configure the index used to skip existing distributions and detect raced uploads.
+    pub fn with_check_url(
+        mut self,
+        index_url: IndexUrl,
+        registry_client_builder: RegistryClientBuilder<'a>,
+        cache: &'a Cache,
+    ) -> Self {
+        self.check_url_client = Some(CheckUrlClient {
+            index_url,
+            registry_client_builder,
+            index_capabilities: IndexCapabilities::default(),
+            cache,
+        });
+        self
+    }
 
-    debug!("Reserving upload slot at {reserve_url}");
+    /// Expand input globs, associate attestations, and order distributions for publishing.
+    ///
+    /// This only collects paths. Hashing and content validation happen in [`Self::upload`]
+    /// or [`Self::dry_run`], after the caller has checked whether the file can be skipped.
+    pub fn prepare(
+        paths: Vec<String>,
+        no_attestations: bool,
+    ) -> Result<Vec<PreparedDistribution>, PublishError> {
+        let mut distributions = group_files(unroll_paths(paths)?, no_attestations);
+        // Preserve filename order within each type, with wheels before source distributions.
+        distributions.sort_by(|left, right| left.raw_filename.cmp(&right.raw_filename));
+        distributions.sort_by_key(|distribution| match &distribution.filename {
+            DistFilename::WheelFilename(_) => false,
+            DistFilename::SourceDistFilename(_) => true,
+        });
+        Ok(distributions)
+    }
 
-    let reserve_request = build_metadata_request(
-        &group.raw_filename,
-        &reserve_url,
-        client,
-        credentials,
-        form_metadata,
-    );
+    /// Validate a distribution's metadata and attestations without uploading it.
+    ///
+    /// Used for dry runs. [`Self::upload`] performs the same validation before sending a file.
+    pub async fn dry_run(
+        &self,
+        prepared: &PreparedDistribution,
+        reporter: Arc<impl Reporter>,
+    ) -> Result<(), PublishError> {
+        prepared.read_metadata(reporter).await?;
+        Ok(())
+    }
 
-    let response = reserve_request.send().await.map_err(|err| {
-        PublishError::Reserve(
-            group.file.clone(),
-            PublishSendError::ReqwestMiddleware(err).into(),
-        )
-    })?;
+    /// Hash, validate, and upload a collected distribution.
+    ///
+    /// Metadata and attestations are read once and reused across attempts.
+    ///
+    /// Implements a custom retry and redirect flow since streaming requests cannot be cloned.
+    pub async fn upload(
+        &mut self,
+        prepared: PreparedDistribution,
+        reporter: Arc<impl Reporter>,
+    ) -> Result<UploadOutcome, PublishError> {
+        let (form_metadata, attestations, size) = prepared.read_metadata(reporter.clone()).await?;
+        reporter.on_upload_ready(&prepared.filename, size)?;
 
-    let status = response.status();
+        let mut n_past_redirections = 0;
+        let max_redirects = DEFAULT_MAX_REDIRECTS;
+        let mut current_registry = self.publish_url.clone();
+        let mut retry_state = RetryState::start(self.retry_policy, self.publish_url.clone());
 
-    let reserve_response: ReserveResponse = match status {
-        StatusCode::OK => {
-            debug!("File already uploaded: {}", group.raw_filename);
-            return Ok(false);
-        }
-        StatusCode::CREATED => {
-            let body = response.text().await.map_err(|err| {
-                PublishError::Reserve(
-                    group.file.clone(),
-                    PublishSendError::StatusNoBody(status, err).into(),
-                )
-            })?;
-            serde_json::from_str(&body).map_err(|_| {
-                PublishError::Reserve(
-                    group.file.clone(),
-                    PublishSendError::Status(status, format!("Invalid JSON response: {body}"))
-                        .into(),
-                )
-            })?
-        }
-        _ => {
-            let body = response.text().await.unwrap_or_default();
-            return Err(PublishError::Reserve(
-                group.file.clone(),
-                PublishSendError::Status(status, body).into(),
-            ));
-        }
-    };
-
-    // Step 2: Upload the file directly to S3 (if needed).
-    // When upload_url is None, the file already exists on S3 with the correct hash.
-    if let Some(upload_url) = reserve_response.upload_url {
-        let s3_url = DisplaySafeUrl::parse(&upload_url).map_err(|_| {
-            PublishError::S3Upload(
-                group.file.clone(),
-                PublishSendError::Status(
-                    StatusCode::BAD_REQUEST,
-                    "Invalid S3 URL in reserve response".to_string(),
-                )
-                .into(),
-            )
-        })?;
-
-        debug!("Got pre-signed URL for upload: {s3_url}");
-
-        // Use a custom retry loop since streaming uploads can't be retried by the middleware.
-        let file_size = fs_err::tokio::metadata(&group.file)
-            .await
-            .map_err(|err| {
-                PublishError::PublishPrepare(
-                    group.file.clone(),
-                    Box::new(PublishPrepareError::Io(err)),
-                )
-            })?
-            .len();
-
-        let mut retry_state = RetryState::start(retry_policy, s3_url.clone());
         loop {
-            let file = File::open(&group.file).await.map_err(|err| {
-                PublishError::PublishPrepare(
-                    group.file.clone(),
-                    Box::new(PublishPrepareError::Io(err)),
+            let (request, idx) = self
+                .build_upload_request(
+                    &prepared,
+                    &form_metadata,
+                    attestations.as_deref(),
+                    &current_registry,
+                    reporter.clone(),
                 )
-            })?;
+                .await
+                .map_err(|err| {
+                    PublishError::PublishPrepare(prepared.file.clone(), Box::new(err))
+                })?;
 
-            let idx = reporter.on_upload_start(&group.filename.to_string(), Some(file_size));
-            let reporter_clone = reporter.clone();
-            let reader = ProgressReader::new(file, move |read| {
-                reporter_clone.on_upload_progress(idx, read as u64);
-            });
-            let file_reader = Body::wrap_stream(ReaderStream::new(reader));
-
-            let mut request = s3_client
-                .for_host(&s3_url)
-                .raw_client()
-                .put(Url::from(s3_url.clone()))
-                .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
-                .header(reqwest::header::CONTENT_LENGTH, file_size);
-
-            // Add any required headers from the reserve response (e.g., x-amz-tagging).
-            if let Some(headers) = &reserve_response.upload_headers {
-                for (key, value) in headers {
-                    request = request.header(key, value);
-                }
-            }
-
-            let result = request.body(file_reader).send().await;
-
+            let result = request.send().await;
             let response = match result {
                 Ok(response) => {
+                    // When the user accidentally uses https://test.pypi.org/legacy (no slash) as publish URL, we
+                    // get a redirect to https://test.pypi.org/legacy/ (the canonical index URL).
+                    // In the above case we get 308, where reqwest or `RedirectClientWithMiddleware` would try
+                    // cloning the streaming body, which is not possible.
+                    // For https://test.pypi.org/simple (no slash), we get 301, which means we should make a GET request:
+                    // https://fetch.spec.whatwg.org/#http-redirect-fetch).
+                    // Reqwest doesn't support redirect policies conditional on the HTTP
+                    // method (https://github.com/seanmonstar/reqwest/issues/1777#issuecomment-2303386160), so we're
+                    // implementing our custom redirection logic.
+                    if response.status().is_redirection() {
+                        if n_past_redirections >= max_redirects {
+                            return Err(PublishError::PublishSend(
+                                prepared.file.clone(),
+                                current_registry.clone().into(),
+                                PublishSendError::TooManyRedirects(n_past_redirections).into(),
+                            ));
+                        }
+                        let location = response
+                            .headers()
+                            .get(LOCATION)
+                            .ok_or_else(|| {
+                                PublishError::PublishSend(
+                                    prepared.file.clone(),
+                                    current_registry.clone().into(),
+                                    PublishSendError::RedirectNoLocation.into(),
+                                )
+                            })?
+                            .to_str()
+                            .map_err(|err| {
+                                PublishError::PublishSend(
+                                    prepared.file.clone(),
+                                    current_registry.clone().into(),
+                                    PublishSendError::RedirectLocationInvalidStr(err).into(),
+                                )
+                            })?;
+                        current_registry = DisplaySafeUrl::parse(location).map_err(|err| {
+                            PublishError::PublishSend(
+                                prepared.file.clone(),
+                                current_registry.clone().into(),
+                                PublishSendError::RedirectInvalidLocation(err).into(),
+                            )
+                        })?;
+                        if Realm::from(&current_registry) != Realm::from(&self.publish_url) {
+                            return Err(PublishError::PublishSend(
+                                prepared.file.clone(),
+                                current_registry.clone().into(),
+                                PublishSendError::RedirectRealmMismatch(
+                                    current_registry.to_string(),
+                                )
+                                .into(),
+                            ));
+                        }
+                        debug!("Redirecting the request to: {}", current_registry);
+                        n_past_redirections += 1;
+                        continue;
+                    }
                     reporter.on_upload_complete(idx);
                     response
                 }
@@ -881,223 +776,237 @@ pub async fn upload_two_phase(
                         retry_state.sleep_backoff(backoff).await;
                         continue;
                     }
-                    return Err(PublishError::S3Upload(
-                        group.file.clone(),
+                    return Err(PublishError::PublishSend(
+                        prepared.file.clone(),
+                        current_registry.clone().into(),
                         PublishSendError::ReqwestMiddleware(err).into(),
                     ));
                 }
             };
 
-            if response.status().is_success() {
-                break;
-            }
-
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(PublishError::S3Upload(
-                group.file.clone(),
-                PublishSendError::Status(status, format!("S3 upload failed: {body}")).into(),
-            ));
-        }
-
-        debug!("S3 upload complete for {}", group.raw_filename);
-    } else {
-        debug!(
-            "File already exists on S3, skipping upload: {}",
-            group.raw_filename
-        );
-    }
-
-    // Step 3: Finalize the upload.
-    let mut finalize_url = registry.clone();
-    finalize_url
-        .path_segments_mut()
-        .expect("URL must have path segments")
-        .push("finalize");
-
-    debug!("Finalizing upload at {finalize_url}");
-
-    let finalize_request = build_metadata_request(
-        &group.raw_filename,
-        &finalize_url,
-        client,
-        credentials,
-        form_metadata,
-    );
-
-    let response = finalize_request.send().await.map_err(|err| {
-        PublishError::Finalize(
-            group.file.clone(),
-            PublishSendError::ReqwestMiddleware(err).into(),
-        )
-    })?;
-
-    handle_response(&finalize_url, response)
-        .await
-        .map_err(|err| PublishError::Finalize(group.file.clone(), err.into()))?;
-
-    debug!("Upload finalized for {}", group.raw_filename);
-
-    Ok(true)
-}
-
-/// Check whether we should skip the upload of a file because it already exists on the index.
-pub async fn check_url(
-    check_url_client: &CheckUrlClient<'_>,
-    file: &Path,
-    filename: &DistFilename,
-    download_concurrency: &Semaphore,
-    reporter: Arc<impl Reporter>,
-) -> Result<bool, PublishError> {
-    let CheckUrlClient {
-        index_url,
-        registry_client_builder,
-        client,
-        index_capabilities,
-        cache,
-    } = check_url_client;
-
-    // Avoid using the PyPI 10min default cache.
-    let cache_refresh = (*cache)
-        .clone()
-        .with_refresh(Refresh::from_args(None, vec![filename.name().clone()]));
-    let registry_client = registry_client_builder
-        .clone()
-        .cache(cache_refresh)
-        .wrap_existing(client)?;
-
-    debug!("Checking for {filename} in the registry");
-    let response = match registry_client
-        .simple_detail(
-            filename.name(),
-            Some(index_url.into()),
-            index_capabilities,
-            download_concurrency,
-        )
-        .await
-    {
-        Ok(response) => response,
-        Err(err) => {
-            return match err.kind() {
-                uv_client::ErrorKind::RemotePackageNotFound(_) => {
-                    // The package doesn't exist, so we can't have uploaded it.
-                    warn!(
-                        "Package not found in the registry; skipping upload check for {filename}"
-                    );
-                    Ok(false)
+            return match Self::handle_response(&current_registry, response).await {
+                Ok(()) => {
+                    // Upload successful; for PyPI this can also mean a hash match in a raced upload
+                    // (but it doesn't tell us), for other registries it should mean a fresh upload.
+                    Ok(UploadOutcome::Uploaded)
                 }
-                _ => Err(PublishError::CheckUrlIndex(err)),
+                Err(err) => {
+                    match &err {
+                        PublishSendError::Status(..) | PublishSendError::StatusNoBody(..) => {
+                            if self.check_existing(&prepared, reporter.clone()).await? {
+                                // A concurrent upload succeeded, so the right file now exists.
+                                return Ok(UploadOutcome::AlreadyExists);
+                            }
+                        }
+                        PublishSendError::ReqwestMiddleware(_)
+                        | PublishSendError::StatusProblemDetails(..)
+                        | PublishSendError::MethodNotAllowedNoBody
+                        | PublishSendError::MethodNotAllowed(_)
+                        | PublishSendError::PermissionDenied(..)
+                        | PublishSendError::TooManyRedirects(_)
+                        | PublishSendError::RedirectRealmMismatch(_)
+                        | PublishSendError::RedirectNoLocation
+                        | PublishSendError::RedirectLocationInvalidStr(_)
+                        | PublishSendError::RedirectInvalidLocation(_) => {}
+                    }
+                    Err(PublishError::PublishSend(
+                        prepared.file.clone(),
+                        current_registry.clone().into(),
+                        err.into(),
+                    ))
+                }
             };
         }
-    };
-    let [(_, MetadataFormat::Simple(simple_metadata))] = response.as_slice() else {
-        unreachable!("We queried a single index, we must get a single response");
-    };
-    let simple_metadata = OwnedArchive::deserialize(simple_metadata);
-    let Some(metadatum) = simple_metadata
-        .iter()
-        .find(|metadatum| &metadatum.version == filename.version())
-    else {
-        return Ok(false);
-    };
+    }
 
-    let archived_file = match filename {
-        DistFilename::SourceDistFilename(source_dist) => metadatum
-            .files
-            .source_dists
-            .iter()
-            .find(|entry| &entry.name == source_dist)
-            .map(|entry| &entry.file),
-        DistFilename::WheelFilename(wheel) => metadatum
-            .files
-            .wheels
-            .iter()
-            .find(|entry| &entry.name == wheel)
-            .map(|entry| &entry.file),
-    };
-    let Some(archived_file) = archived_file else {
-        return Ok(false);
-    };
+    /// Check whether an identical distribution already exists at the check URL, if configured.
+    pub async fn check_existing(
+        &self,
+        prepared: &PreparedDistribution,
+        reporter: Arc<impl Reporter>,
+    ) -> Result<bool, PublishError> {
+        let file = &prepared.file;
+        let filename = &prepared.filename;
+        let Some(CheckUrlClient {
+            index_url,
+            registry_client_builder,
+            index_capabilities,
+            cache,
+        }) = &self.check_url_client
+        else {
+            return Ok(false);
+        };
 
-    // TODO(konsti): Do we have a preference for a hash here?
-    if let Some(remote_hash) = archived_file.hashes.first() {
-        // We accept the risk for TOCTOU errors here, since we already read the file once before the
-        // streaming upload to compute the hash for the form metadata.
-        let local_hash = &hash_file(
-            file,
-            filename,
-            vec![Hasher::from(remote_hash.algorithm)],
-            reporter,
-        )
-        .await
-        .map_err(|err| {
-            PublishError::PublishPrepare(file.to_path_buf(), Box::new(PublishPrepareError::Io(err)))
-        })?[0];
-        if local_hash.digest == remote_hash.digest {
-            debug!(
-                "Found {filename} in the registry with matching hash {}",
-                remote_hash.digest
-            );
-            Ok(true)
+        // Avoid using the PyPI 10min default cache.
+        let cache_refresh = (*cache)
+            .clone()
+            .with_refresh(Refresh::from_args(None, vec![filename.name().clone()]));
+        let registry_client = registry_client_builder
+            .clone()
+            .cache(cache_refresh)
+            .wrap_existing(self.upload_client)?;
+
+        debug!("Checking for {filename} in the registry");
+        let response = match registry_client
+            .simple_detail(
+                filename.name(),
+                Some(index_url.into()),
+                index_capabilities,
+                &self.download_concurrency,
+            )
+            .await
+        {
+            Ok(response) => response,
+            Err(err) => {
+                return match err.kind() {
+                    uv_client::ErrorKind::RemotePackageNotFound(_) => {
+                        // The package doesn't exist, so we can't have uploaded it.
+                        warn!(
+                            "Package not found in the registry; skipping upload check for {filename}"
+                        );
+                        Ok(false)
+                    }
+                    _ => Err(PublishError::CheckUrlIndex(err)),
+                };
+            }
+        };
+        let [(_, MetadataFormat::Simple(simple_metadata))] = response.as_slice() else {
+            unreachable!("We queried a single index, we must get a single response");
+        };
+        let simple_metadata = OwnedArchive::deserialize(simple_metadata);
+        let Some(metadatum) = simple_metadata
+            .iter()
+            .find(|metadatum| &metadatum.version == filename.version())
+        else {
+            return Ok(false);
+        };
+
+        let archived_files = match filename {
+            DistFilename::SourceDistFilename(_) => &metadatum.files.source_dists,
+            DistFilename::WheelFilename(_) => &metadatum.files.wheels,
+        };
+        let archived_file = archived_files.iter().find(|file| {
+            DistFilename::try_from_filename(file.filename(), filename.name())
+                .is_some_and(|candidate| &candidate == filename)
+        });
+        let Some(archived_file) = archived_file else {
+            return Ok(false);
+        };
+
+        // TODO(konsti): Do we have a preference for a hash here?
+        if let Some(remote_hash) = archived_file.hashes().first() {
+            // We accept the risk for TOCTOU errors here, since we already read the file once before the
+            // streaming upload to compute the hash for the form metadata.
+            let [local_hash] = hash_file(
+                file,
+                filename,
+                [Hasher::from(remote_hash.algorithm())],
+                reporter,
+            )
+            .await
+            .map_err(|err| {
+                PublishError::PublishPrepare(file.clone(), Box::new(PublishPrepareError::Io(err)))
+            })?;
+            if &local_hash == remote_hash {
+                debug!(
+                    "Found {filename} in the registry with matching hash {}",
+                    remote_hash.digest()
+                );
+                Ok(true)
+            } else {
+                Err(PublishError::HashMismatch {
+                    filename: Box::new(filename.clone()),
+                    hash_algorithm: remote_hash.algorithm(),
+                    local: local_hash.digest().to_string(),
+                    remote: remote_hash.digest().to_string(),
+                })
+            }
         } else {
-            Err(PublishError::HashMismatch {
-                filename: Box::new(filename.clone()),
-                hash_algorithm: remote_hash.algorithm,
-                local: local_hash.digest.to_string(),
-                remote: remote_hash.digest.to_string(),
-            })
+            Err(PublishError::MissingHash(Box::new(filename.clone())))
         }
-    } else {
-        Err(PublishError::MissingHash(Box::new(filename.clone())))
+    }
+
+    /// Finish the session and request invalidation of any trusted publishing token.
+    ///
+    /// Currently, finalization only invalidates credentials, regardless of the outcome. A future
+    /// upload protocol may publish staged files atomically on [`PublishOutcome::Success`]; failed
+    /// runs and dry runs must only clean up, without publishing staged files.
+    ///
+    /// A successful invalidation request does not guarantee that the token was revoked.
+    pub async fn finalize(self, outcome: PublishOutcome) -> Result<(), PublishFinalizeError> {
+        debug!("Finalizing publishing session: {outcome}");
+        match self.credentials {
+            PublishingCredentials::Supplied(_) => Ok(()),
+            PublishingCredentials::TrustedPublishing(token) => {
+                PyPIPublishingService::new(&self.publish_url, self.oidc_client)
+                    .burn_token(&token)
+                    .await
+                    .map_err(PublishFinalizeError::TokenInvalidation)
+            }
+        }
     }
 }
 
 /// Calculate the requested hashes of a file.
-async fn hash_file(
+async fn hash_file<const COUNT: usize>(
     path: impl AsRef<Path>,
     filename: &DistFilename,
-    hashers: Vec<Hasher>,
+    hashers: [Hasher; COUNT],
     reporter: Arc<impl Reporter>,
-) -> Result<Vec<HashDigest>, io::Error> {
-    let path = path.as_ref();
+) -> Result<[HashDigest; COUNT], io::Error> {
+    let path = path.as_ref().to_path_buf();
     debug!("Hashing {}", path.user_display());
+    let filename = filename.clone();
 
-    let file = File::open(path).await?;
-    let file_size = file.metadata().await?.len();
-    let idx = reporter.on_hash_start(filename, Some(file_size));
+    // Read and hash the file in one blocking task, instead of dispatching each read separately.
+    tokio::task::spawn_blocking(move || {
+        let mut file = fs_err::File::open(path)?;
+        let file_size = file.metadata()?.len();
+        let index = reporter.on_hash_start(&filename, Some(file_size));
+        let mut hashers = hashers;
+        let mut buffer = vec![0; 64 * 1024];
 
-    let reader = BufReader::new(file);
-    let mut hashers = hashers;
-    let reporter_clone = reporter.clone();
-    let mut reader = HashReader::new(
-        ProgressReader::new(reader, move |read| {
-            reporter_clone.on_hash_progress(idx, read as u64);
-        }),
-        &mut hashers,
-    );
+        let result = loop {
+            let read = match file.read(&mut buffer) {
+                Ok(0) => break Ok(()),
+                Ok(read) => read,
+                Err(err) if err.kind() == io::ErrorKind::Interrupted => continue,
+                Err(err) => break Err(err),
+            };
+            reporter.on_hash_progress(index, read as u64);
+            for hasher in &mut hashers {
+                hasher.update(&buffer[..read]);
+            }
+        };
+        reporter.on_hash_complete(index);
+        result?;
 
-    let result = reader.finish().await;
-    reporter.on_hash_complete(idx);
-    result?;
-
-    Ok(hashers
-        .into_iter()
-        .map(HashDigest::from)
-        .collect::<Vec<_>>())
+        Ok(hashers.map(HashDigest::from))
+    })
+    .await?
 }
 
 // Not in `uv-metadata` because we only support tar files here.
 async fn source_dist_pkg_info(file: &Path) -> Result<Vec<u8>, PublishPrepareError> {
+    if uv_preview::is_enabled(PreviewFeature::TarCodec) {
+        source_dist_pkg_info_tar_codec(file).await
+    } else {
+        source_dist_pkg_info_tokio_tar(file).await
+    }
+}
+
+async fn source_dist_pkg_info_tokio_tar(file: &Path) -> Result<Vec<u8>, PublishPrepareError> {
     let reader = BufReader::new(File::open(&file).await?);
     let decoded = async_compression::tokio::bufread::GzipDecoder::new(reader);
     let mut archive = tokio_tar::Archive::new(decoded);
     let mut pkg_infos: Vec<(PathBuf, Vec<u8>)> = archive
-        .entries()?
-        .map_err(PublishPrepareError::from)
+        .entries()
+        .map_err(PublishPrepareError::TokioTar)?
+        .map_err(PublishPrepareError::TokioTar)
         .try_filter_map(async |mut entry| {
             let path = entry
                 .path()
-                .map_err(PublishPrepareError::from)?
+                .map_err(PublishPrepareError::TokioTar)?
                 .to_path_buf();
             let mut components = path.components();
             let Some(_top_level) = components.next() else {
@@ -1112,7 +1021,7 @@ async fn source_dist_pkg_info(file: &Path) -> Result<Vec<u8>, PublishPrepareErro
             let mut buffer = Vec::new();
             // We have to read while iterating or the entry is empty as we're beyond it in the file.
             entry.read_to_end(&mut buffer).await.map_err(|err| {
-                PublishPrepareError::Read(path.to_string_lossy().to_string(), err)
+                PublishPrepareError::TokioTarRead(path.to_string_lossy().to_string(), err)
             })?;
             Ok(Some((path, buffer)))
         })
@@ -1130,6 +1039,52 @@ async fn source_dist_pkg_info(file: &Path) -> Result<Vec<u8>, PublishPrepareErro
     }
 }
 
+async fn source_dist_pkg_info_tar_codec(file: &Path) -> Result<Vec<u8>, PublishPrepareError> {
+    let reader = BufReader::new(File::open(&file).await?);
+    let decoded = async_compression::tokio::bufread::GzipDecoder::new(reader);
+    // TODO(ww): Consider allowing vendor pax extensions while parsing here?
+    // We shouldn't encounter those with any normal Python build backend, but users
+    // can supply arbitrary dists so we may have to loosen here until PyPI itself
+    // restricts further.
+    let mut members = TarArchive::new(decoded).members();
+    let mut pkg_infos = Vec::new();
+
+    while let Some(member) = members.next().await.map_err(PublishPrepareError::Decode)? {
+        let path = member.metadata().path.clone();
+        let mut components = Path::new(&path).components();
+        let Some(_top_level) = components.next() else {
+            continue;
+        };
+        let Some(pkg_info) = components.next() else {
+            continue;
+        };
+        if components.next().is_some() || pkg_info.as_os_str() != "PKG-INFO" {
+            continue;
+        }
+
+        let mut buffer = Vec::new();
+        if let Member::File { mut payload, .. } | Member::HardLink { mut payload, .. } = member {
+            let mut chunk = Vec::new();
+            while payload
+                .next_chunk(&mut chunk, 8 * 1024)
+                .await
+                .map_err(|err| PublishPrepareError::Read(path.clone(), err))?
+            {
+                buffer.extend_from_slice(&chunk);
+            }
+        }
+        pkg_infos.push((path, buffer));
+    }
+
+    match pkg_infos.len() {
+        0 => Err(PublishPrepareError::MissingPkgInfo),
+        1 => Ok(pkg_infos.remove(0).1),
+        _ => Err(PublishPrepareError::MultiplePkgInfo(
+            pkg_infos.iter().map(|(path, _buffer)| path).join(", "),
+        )),
+    }
+}
+
 async fn metadata(file: &Path, filename: &DistFilename) -> Result<Metadata23, PublishPrepareError> {
     let contents = match filename {
         DistFilename::SourceDistFilename(source_dist) => {
@@ -1141,53 +1096,50 @@ async fn metadata(file: &Path, filename: &DistFilename) -> Result<Metadata23, Pu
             source_dist_pkg_info(file).await?
         }
         DistFilename::WheelFilename(wheel) => {
-            let reader = BufReader::new(File::open(&file).await?);
-            read_metadata_async_seek(wheel, reader).await?
+            let file = file.to_path_buf();
+            let wheel = wheel.clone();
+            return tokio::task::spawn_blocking(move || {
+                let reader = io::BufReader::new(fs_err::File::open(file)?);
+                let contents = read_archive_metadata(&wheel, reader)?;
+                Ok(Metadata23::parse(&contents)?)
+            })
+            .await
+            .map_err(io::Error::from)?;
         }
     };
     Ok(Metadata23::parse(&contents)?)
 }
 
 #[derive(Debug, Clone)]
-pub struct FormMetadata(Vec<(&'static str, String)>);
+struct FormMetadata(Vec<(&'static str, String)>);
 
 impl FormMetadata {
     /// Collect the non-file fields for the multipart request from the package METADATA.
     ///
     /// Reference implementation: <https://github.com/pypi/warehouse/blob/d2c36d992cf9168e0518201d998b2707a3ef1e72/warehouse/forklift/legacy.py#L1376-L1430>
-    pub async fn read_from_file(
+    async fn read_from_file(
         file: &Path,
         filename: &DistFilename,
         reporter: Arc<impl Reporter>,
     ) -> Result<Self, PublishPrepareError> {
-        let hashes = hash_file(
+        let [sha256_hash, blake2b_hash] = hash_file(
             file,
             filename,
-            vec![
+            [
                 Hasher::from(HashAlgorithm::Sha256),
-                Hasher::from(HashAlgorithm::Blake2b),
+                Hasher::from(HashAlgorithm::Blake2b256),
             ],
             reporter,
         )
         .await?;
-
-        let sha256_hash = hashes
-            .iter()
-            .find(|hash| hash.algorithm == HashAlgorithm::Sha256)
-            .unwrap();
-
-        let blake2b_hash = hashes
-            .iter()
-            .find(|hash| hash.algorithm == HashAlgorithm::Blake2b)
-            .unwrap();
 
         let metadata = metadata(file, filename).await?;
 
         Ok(Self::from_metadata(
             metadata,
             filename,
-            sha256_hash,
-            blake2b_hash,
+            &sha256_hash,
+            &blake2b_hash,
         ))
     }
 
@@ -1232,17 +1184,17 @@ impl FormMetadata {
 
         let mut form_metadata = vec![
             (":action", "file_upload".to_string()),
-            ("sha256_digest", sha256_hash.digest.to_string()),
-            ("blake2_256_digest", blake2b_hash.digest.to_string()),
+            ("sha256_digest", sha256_hash.digest().to_string()),
+            ("blake2_256_digest", blake2b_hash.digest().to_string()),
             ("protocol_version", "1".to_string()),
-            ("metadata_version", metadata_version.clone()),
+            ("metadata_version", metadata_version),
             // Twine transforms the name with `re.sub("[^A-Za-z0-9.]+", "-", name)`
             // * <https://github.com/pypa/twine/issues/743>
             // * <https://github.com/pypa/twine/blob/5bf3f38ff3d8b2de47b7baa7b652c697d7a64776/twine/package.py#L57-L65>
             // warehouse seems to call `packaging.utils.canonicalize_name` nowadays and has a separate
             // `normalized_name`, so we'll start with this and we'll readjust if there are user reports.
-            ("name", name.clone()),
-            ("version", version.clone()),
+            ("name", name),
+            ("version", version),
             ("filetype", filename.filetype().to_string()),
         ];
 
@@ -1253,7 +1205,7 @@ impl FormMetadata {
         }
 
         let mut add_option = |name, value: Option<String>| {
-            if let Some(some) = value.clone() {
+            if let Some(some) = value {
                 form_metadata.push((name, some));
             }
         };
@@ -1276,8 +1228,8 @@ impl FormMetadata {
         form_metadata.push(("requires_python", requires_python.unwrap_or(String::new())));
 
         let mut add_vec = |name, values: Vec<String>| {
-            for i in values {
-                form_metadata.push((name, i.clone()));
+            for value in values {
+                form_metadata.push((name, value));
             }
         };
 
@@ -1311,242 +1263,188 @@ impl<'a> IntoIterator for &'a FormMetadata {
     }
 }
 
-/// Build the upload request.
-///
-/// Returns the [`RequestBuilder`] and the reporter progress bar ID.
-async fn build_upload_request<'a>(
-    group: &UploadDistribution,
-    registry: &DisplaySafeUrl,
-    client: &'a BaseClient,
-    credentials: &Credentials,
-    form_metadata: &FormMetadata,
-    reporter: Arc<impl Reporter>,
-) -> Result<(RequestBuilder<'a>, usize), PublishPrepareError> {
-    let mut form = reqwest::multipart::Form::new();
-    for (key, value) in form_metadata.iter() {
-        form = form.text(*key, value.clone());
-    }
-
-    let file = File::open(&group.file).await?;
-    let file_size = file.metadata().await?.len();
-    let idx = reporter.on_upload_start(&group.filename.to_string(), Some(file_size));
-    let reader = ProgressReader::new(file, move |read| {
-        reporter.on_upload_progress(idx, read as u64);
-    });
-    // Stream wrapping puts a static lifetime requirement on the reader (so the request doesn't have
-    // a lifetime) -> callback needs to be static -> reporter reference needs to be Arc'd.
-    let file_reader = Body::wrap_stream(ReaderStream::new(reader));
-    // See [`files_for_publishing`] on `raw_filename`
-    let part =
-        Part::stream_with_length(file_reader, file_size).file_name(group.raw_filename.clone());
-    form = form.part("content", part);
-
-    let mut attestations = vec![];
-    for attestation_path in &group.attestations {
-        let contents = fs_err::read_to_string(attestation_path)?;
-        // NOTE: We don't currently validate the interior structure of an attestation beyond being
-        // valid JSON. We could validate it pretty easily in the future.
-        let raw_attestation = serde_json::from_str::<serde_json::Value>(&contents)
-            .map_err(|err| PublishPrepareError::InvalidAttestation(attestation_path.into(), err))?;
-        attestations.push(raw_attestation);
-    }
-
-    if !attestations.is_empty() {
-        // PEP 740 specifies the `attestations` field as a JSON array of attestation objects.
-        let attestations_json =
-            serde_json::to_string(&attestations).expect("Round-trip of PEP 740 attestation failed");
-        form = form.text("attestations", attestations_json);
-    }
-
-    // If we have a username but no password, attach the username to the URL so the authentication
-    // middleware can find the matching password.
-    let url = if let Some(username) = credentials
-        .username()
-        .filter(|_| credentials.password().is_none())
-    {
-        let mut url = registry.clone();
-        let _ = url.set_username(username);
-        url
-    } else {
-        registry.clone()
-    };
-
-    let mut request = client
-        .for_host(&url)
-        .post(Url::from(url))
-        .multipart(form)
-        // Ask PyPI for a structured error messages instead of HTML-markup error messages.
-        // For other registries, we ask them to return plain text over HTML. See
-        // [`PublishSendError::extract_remote_error`].
-        .header(
-            reqwest::header::ACCEPT,
-            "application/json;q=0.9, text/plain;q=0.8, text/html;q=0.7",
-        );
-
-    match credentials {
-        Credentials::Basic { password, .. } => {
-            if password.is_some() {
-                debug!("Using HTTP Basic authentication");
-                request = request.header(AUTHORIZATION, credentials.to_header_value());
-            }
+impl PublishSession<'_> {
+    /// Build the upload request.
+    ///
+    /// Returns the [`RequestBuilder`] and the reporter progress bar ID.
+    async fn build_upload_request(
+        &self,
+        prepared: &PreparedDistribution,
+        form_metadata: &FormMetadata,
+        attestations: Option<&str>,
+        registry: &DisplaySafeUrl,
+        reporter: Arc<impl Reporter>,
+    ) -> Result<(RequestBuilder<'_>, usize), PublishPrepareError> {
+        let credentials = self.credentials.as_credentials();
+        let mut form = Form::new();
+        for (key, value) in form_metadata.iter() {
+            form = form.text(*key, value.clone());
         }
-        Credentials::Bearer { .. } => {
-            debug!("Using Bearer token authentication");
-            request = request.header(AUTHORIZATION, credentials.to_header_value());
+
+        let file = File::open(&prepared.file).await?;
+        let file_size = file.metadata().await?.len();
+        let idx = reporter.on_upload_start(&prepared.filename.to_string(), Some(file_size));
+        let reader = ProgressReader::new(file, move |read| {
+            reporter.on_upload_progress(idx, read as u64);
+        });
+        // Stream wrapping puts a static lifetime requirement on the reader (so the request doesn't have
+        // a lifetime) -> callback needs to be static -> reporter reference needs to be Arc'd.
+        let file_reader = Body::wrap_stream(ReaderStream::new(reader));
+        // Preserve the original filename in the upload form for registry compatibility.
+        // See <https://github.com/astral-sh/uv/issues/8030>.
+        let part = Part::stream_with_length(file_reader, file_size)
+            .file_name(prepared.raw_filename.clone());
+        form = form.part("content", part);
+
+        if let Some(attestations) = attestations {
+            form = form.text("attestations", attestations.to_string());
         }
-    }
 
-    Ok((request, idx))
-}
-
-/// Build a request with form metadata but without the file content.
-fn build_metadata_request<'a>(
-    raw_filename: &str,
-    registry: &DisplaySafeUrl,
-    client: &'a BaseClient,
-    credentials: &Credentials,
-    form_metadata: &FormMetadata,
-) -> RequestBuilder<'a> {
-    let mut form = reqwest::multipart::Form::new();
-    for (key, value) in form_metadata.iter() {
-        form = form.text(*key, value.clone());
-    }
-    form = form.text("filename", raw_filename.to_owned());
-
-    // If we have a username but no password, attach the username to the URL so the authentication
-    // middleware can find the matching password.
-    let url = if let Some(username) = credentials
-        .username()
-        .filter(|_| credentials.password().is_none())
-    {
-        let mut url = registry.clone();
-        let _ = url.set_username(username);
-        url
-    } else {
-        registry.clone()
-    };
-
-    let mut request = client
-        .for_host(&url)
-        .post(Url::from(url))
-        .multipart(form)
-        // Ask PyPI for a structured error messages instead of HTML-markup error messages.
-        // For other registries, we ask them to return plain text over HTML. See
-        // [`PublishSendError::extract_remote_error`].
-        .header(
-            reqwest::header::ACCEPT,
-            "application/json;q=0.9, text/plain;q=0.8, text/html;q=0.7",
-        );
-
-    match credentials {
-        Credentials::Basic { password, .. } => {
-            if password.is_some() {
-                debug!("Using HTTP Basic authentication");
-                request = request.header(AUTHORIZATION, credentials.to_header_value());
-            }
-        }
-        Credentials::Bearer { .. } => {
-            debug!("Using Bearer token authentication");
-            request = request.header(AUTHORIZATION, credentials.to_header_value());
-        }
-    }
-
-    request
-}
-
-/// Log response information and map response to an error variant if not successful.
-async fn handle_response(
-    registry: &DisplaySafeUrl,
-    response: Response,
-) -> Result<(), PublishSendError> {
-    let status_code = response.status();
-    debug!("Response code for {registry}: {status_code}");
-    trace!("Response headers for {registry}: {response:?}");
-
-    if status_code.is_success() {
-        if enabled!(Level::TRACE) {
-            match response.text().await {
-                Ok(response_content) => {
-                    trace!("Response content for {registry}: {response_content}");
-                }
-                Err(err) => {
-                    trace!("Failed to read response content for {registry}: {err}");
-                }
-            }
-        }
-        return Ok(());
-    }
-
-    let content_type = response
-        .headers()
-        .get(reqwest::header::CONTENT_TYPE)
-        .and_then(|content_type| content_type.to_str().ok())
-        .map(ToString::to_string);
-    let upload_error = response.bytes().await.map_err(|err| {
-        if status_code == StatusCode::METHOD_NOT_ALLOWED {
-            PublishSendError::MethodNotAllowedNoBody
+        // If we have a username but no password, attach the username to the URL so the authentication
+        // middleware can find the matching password.
+        let url = if let Some(username) = credentials
+            .username()
+            .filter(|_| credentials.password().is_none())
+        {
+            let mut url = registry.clone();
+            let _ = url.set_username(username);
+            url
         } else {
-            PublishSendError::StatusNoBody(status_code, err)
+            registry.clone()
+        };
+
+        let mut request = self
+            .upload_client
+            .for_host(&url)
+            .post(Url::from(url))
+            .multipart(form)
+            // Ask PyPI for a structured error messages instead of HTML-markup error messages.
+            // For other registries, we ask them to return plain text over HTML. See
+            // [`PublishSendError::extract_error_message`].
+            .header(
+                ACCEPT,
+                "application/json;q=0.9, text/plain;q=0.8, text/html;q=0.7",
+            );
+
+        match credentials.as_ref() {
+            Credentials::Basic { password, .. } => {
+                if password.is_some() {
+                    debug!("Using HTTP Basic authentication");
+                    request = request.header(AUTHORIZATION, credentials.to_header_value()?);
+                }
+            }
+            Credentials::Bearer { .. } => {
+                debug!("Using Bearer token authentication");
+                request = request.header(AUTHORIZATION, credentials.to_header_value()?);
+            }
         }
-    })?;
-    let upload_error = String::from_utf8_lossy(&upload_error);
 
-    trace!("Response content for non-200 response for {registry}: {upload_error}");
+        Ok((request, idx))
+    }
 
-    debug!("Upload error response: {upload_error}");
+    /// Log response information and map response to an error variant if not successful.
+    async fn handle_response(
+        registry: &DisplaySafeUrl,
+        response: Response,
+    ) -> Result<(), PublishSendError> {
+        let status_code = response.status();
+        debug!("Response code for {registry}: {status_code}");
+        trace!("Response headers for {registry}: {response:?}");
 
-    // That's most likely the simple index URL, not the upload URL.
-    if status_code == StatusCode::METHOD_NOT_ALLOWED {
-        return Err(PublishSendError::MethodNotAllowed(
+        if status_code.is_success() {
+            if enabled!(Level::TRACE) {
+                match response.text().await {
+                    Ok(response_content) => {
+                        trace!("Response content for {registry}: {response_content}");
+                    }
+                    Err(err) => {
+                        trace!("Failed to read response content for {registry}: {err}");
+                    }
+                }
+            }
+            return Ok(());
+        }
+
+        let content_type = response
+            .headers()
+            .get(CONTENT_TYPE)
+            .and_then(|content_type| content_type.to_str().ok())
+            .map(ToString::to_string);
+        let upload_error = response.bytes().await.map_err(|err| {
+            if status_code == StatusCode::METHOD_NOT_ALLOWED {
+                PublishSendError::MethodNotAllowedNoBody
+            } else {
+                PublishSendError::StatusNoBody(status_code, err)
+            }
+        })?;
+        let upload_error = String::from_utf8_lossy(&upload_error);
+
+        trace!("Response content for non-200 response for {registry}: {upload_error}");
+
+        debug!("Upload error response: {upload_error}");
+
+        // That's most likely the simple index URL, not the upload URL.
+        if status_code == StatusCode::METHOD_NOT_ALLOWED {
+            return Err(PublishSendError::MethodNotAllowed(
+                PublishSendError::extract_error_message(
+                    upload_error.to_string(),
+                    content_type.as_deref(),
+                ),
+            ));
+        }
+
+        // Try to parse as RFC 9457 Problem Details.
+        if content_type.as_deref() == Some(ProblemDetails::CONTENT_TYPE)
+            && let Some(problem) = ProblemDetails::try_from_response_body(upload_error.as_bytes())
+            && let Some(description) = problem.description()
+        {
+            return Err(PublishSendError::StatusProblemDetails(
+                status_code,
+                description,
+            ));
+        }
+
+        // Raced uploads of the same file are handled by the caller.
+        Err(PublishSendError::Status(
+            status_code,
             PublishSendError::extract_error_message(
                 upload_error.to_string(),
                 content_type.as_deref(),
             ),
-        ));
+        ))
     }
-
-    // Try to parse as RFC 9457 Problem Details (e.g., from pyx).
-    if content_type.as_deref() == Some(uv_client::ProblemDetails::CONTENT_TYPE)
-        && let Some(problem) =
-            uv_client::ProblemDetails::try_from_response_body(upload_error.as_bytes())
-        && let Some(description) = problem.description()
-    {
-        return Err(PublishSendError::StatusProblemDetails(
-            status_code,
-            description,
-        ));
-    }
-
-    // Raced uploads of the same file are handled by the caller.
-    Err(PublishSendError::Status(
-        status_code,
-        PublishSendError::extract_error_message(upload_error.to_string(), content_type.as_deref()),
-    ))
 }
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
     use std::path::PathBuf;
     use std::sync::Arc;
 
+    use async_compression::tokio::write::GzipEncoder;
     use insta::{allow_duplicates, assert_debug_snapshot, assert_snapshot};
     use itertools::Itertools;
+    use tar_codec::{ArchiveBuilder as _, EntryMetadata, TarEncoder};
+    use tempfile::NamedTempFile;
+    use tokio::io::AsyncWriteExt as _;
     use uv_auth::Credentials;
-    use uv_client::{AuthIntegration, BaseClientBuilder, RedirectPolicy};
+    use uv_client::{AuthIntegration, BaseClient, BaseClientBuilder, RedirectPolicy};
     use uv_distribution_filename::DistFilename;
+    use uv_preview::PreviewFeature;
     use uv_pypi_types::{HashDigest, Metadata23};
     use uv_redacted::DisplaySafeUrl;
 
     use crate::{
-        FormMetadata, PublishError, Reporter, UploadDistribution, build_upload_request,
-        group_files, upload,
+        FormMetadata, PublishError, PublishOutcome, PublishPrepareError, PublishSession,
+        PublishingCredentials, Reporter, UploadOutcome, group_files, source_dist_pkg_info,
     };
-    use tokio::sync::Semaphore;
     use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     struct DummyReporter;
+
+    const TAR_BACKENDS: &[&[PreviewFeature]] = &[&[], &[PreviewFeature::TarCodec]];
 
     impl Reporter for DummyReporter {
         fn on_progress(&self, _name: &str, _id: usize) {}
@@ -1562,22 +1460,98 @@ mod tests {
         fn on_hash_complete(&self, _id: usize) {}
     }
 
-    async fn mock_server_upload(mock_server: &MockServer) -> Result<bool, PublishError> {
+    async fn source_dist(entries: &[(&str, &[u8])]) -> NamedTempFile {
+        let mut bytes = Vec::new();
+        {
+            let mut gzip = GzipEncoder::new(&mut bytes);
+            {
+                let mut archive = TarEncoder::new(&mut gzip).builder();
+                for (path, contents) in entries {
+                    archive
+                        .add_file(path, *contents, EntryMetadata::default())
+                        .await
+                        .expect("test archive entry should be added");
+                }
+                archive.finish().await.expect("test archive should finish");
+            }
+            gzip.shutdown().await.expect("gzip stream should finish");
+        }
+
+        let file = NamedTempFile::new().expect("temporary file should be created");
+        fs_err::write(file.path(), bytes).expect("test archive should be written");
+        file
+    }
+
+    #[tokio::test]
+    async fn source_dist_pkg_info_reads_single_top_level_file() {
+        let expected = b"Metadata-Version: 2.3\nName: example\nVersion: 1.0\n";
+        let file = source_dist(&[
+            ("example-1.0/nested/PKG-INFO", b"ignored"),
+            ("example-1.0/PKG-INFO", expected),
+            ("example-1.0/README", b"also ignored"),
+        ])
+        .await;
+
+        for features in TAR_BACKENDS {
+            let _preview = uv_preview::test::with_features(features);
+            assert_eq!(
+                source_dist_pkg_info(file.path())
+                    .await
+                    .expect("top-level PKG-INFO should be read"),
+                expected
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn source_dist_pkg_info_requires_a_file() {
+        let file = source_dist(&[("example-1.0/nested/PKG-INFO", b"ignored")]).await;
+
+        for features in TAR_BACKENDS {
+            let _preview = uv_preview::test::with_features(features);
+            assert_matches!(
+                source_dist_pkg_info(file.path()).await,
+                Err(PublishPrepareError::MissingPkgInfo)
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn source_dist_pkg_info_rejects_duplicates() {
+        let file = source_dist(&[
+            ("example-1.0/PKG-INFO", b"first"),
+            ("other-1.0/PKG-INFO", b"second"),
+        ])
+        .await;
+
+        for features in TAR_BACKENDS {
+            let _preview = uv_preview::test::with_features(features);
+            assert_matches!(
+                source_dist_pkg_info(file.path()).await,
+                Err(PublishPrepareError::MultiplePkgInfo(paths))
+                    if paths == "example-1.0/PKG-INFO, other-1.0/PKG-INFO"
+            );
+        }
+    }
+
+    fn test_session(registry: DisplaySafeUrl, client: &BaseClient) -> PublishSession<'_> {
+        PublishSession::new(
+            registry,
+            PublishingCredentials::Supplied(Credentials::basic(
+                Some("ferris".to_string()),
+                Some("F3RR!S".to_string()),
+            )),
+            client,
+            client,
+            client.retry_policy(),
+        )
+    }
+
+    async fn mock_server_upload(mock_server: &MockServer) -> Result<UploadOutcome, PublishError> {
         let raw_filename = "tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl";
         let file = PathBuf::from("../../test/links/").join(raw_filename);
-        let filename = DistFilename::try_from_normalized_filename(raw_filename).unwrap();
-
-        let group = UploadDistribution {
-            file,
-            raw_filename: raw_filename.to_string(),
-            filename,
-            attestations: vec![],
-        };
-
-        let form_metadata =
-            FormMetadata::read_from_file(&group.file, &group.filename, Arc::new(DummyReporter))
-                .await
-                .unwrap();
+        let mut preparation =
+            PublishSession::prepare(vec![file.to_string_lossy().into_owned()], false)?;
 
         let client = BaseClientBuilder::default()
             .redirect(RedirectPolicy::NoRedirect)
@@ -1586,20 +1560,20 @@ mod tests {
             .build()
             .expect("failed to build base client");
 
-        let download_concurrency = Arc::new(Semaphore::new(1));
-        let registry = DisplaySafeUrl::parse(&format!("{}/final", mock_server.uri())).unwrap();
-        upload(
-            &group,
-            &form_metadata,
-            &registry,
-            &client,
-            client.retry_policy(),
-            &Credentials::basic(Some("ferris".to_string()), Some("F3RR!S".to_string())),
-            None,
-            &download_concurrency,
-            Arc::new(DummyReporter),
-        )
-        .await
+        let registry = DisplaySafeUrl::parse(&format!("{}/final", mock_server.uri()))
+            .expect("Valid registry URL");
+        let mut session = test_session(registry, &client);
+        let prepared = preparation.pop().expect("Distribution should be found");
+        let result = session.upload(prepared, Arc::new(DummyReporter)).await;
+        let outcome = match &result {
+            Ok(UploadOutcome::Uploaded | UploadOutcome::AlreadyExists) => PublishOutcome::Success,
+            Err(_) => PublishOutcome::Failed,
+        };
+        session
+            .finalize(outcome)
+            .await
+            .expect("Finalization failed");
+        result
     }
 
     #[test]
@@ -1637,7 +1611,7 @@ mod tests {
 
             assert_debug_snapshot!(groups, @r#"
             [
-                UploadDistribution {
+                PreparedDistribution {
                     file: "dist/acme-1.2.3-py3-none-any.whl",
                     raw_filename: "acme-1.2.3-py3-none-any.whl",
                     filename: WheelFilename(
@@ -1660,7 +1634,7 @@ mod tests {
                     ),
                     attestations: [],
                 },
-                UploadDistribution {
+                PreparedDistribution {
                     file: "dist/acme-1.2.3.tar.gz",
                     raw_filename: "acme-1.2.3.tar.gz",
                     filename: SourceDistFilename(
@@ -1701,7 +1675,7 @@ mod tests {
 
                     assert_debug_snapshot!(groups, @r#"
                     [
-                        UploadDistribution {
+                        PreparedDistribution {
                             file: "dist/acme-1.2.3-py3-none-any.whl",
                             raw_filename: "acme-1.2.3-py3-none-any.whl",
                             filename: WheelFilename(
@@ -1728,7 +1702,7 @@ mod tests {
                                 "dist/acme-1.2.3-py3-none-any.whl.publish.attestation",
                             ],
                         },
-                        UploadDistribution {
+                        PreparedDistribution {
                             file: "dist/acme-1.2.3.tar.gz",
                             raw_filename: "acme-1.2.3.tar.gz",
                             filename: SourceDistFilename(
@@ -1776,7 +1750,7 @@ mod tests {
 
                     assert_debug_snapshot!(groups, @r#"
                     [
-                        UploadDistribution {
+                        PreparedDistribution {
                             file: "dist/acme-1.2.3-py3-none-any.whl",
                             raw_filename: "acme-1.2.3-py3-none-any.whl",
                             filename: WheelFilename(
@@ -1799,7 +1773,7 @@ mod tests {
                             ),
                             attestations: [],
                         },
-                        UploadDistribution {
+                        PreparedDistribution {
                             file: "dist/acme-1.2.3.tar.gz",
                             raw_filename: "acme-1.2.3.tar.gz",
                             filename: SourceDistFilename(
@@ -1835,7 +1809,7 @@ mod tests {
             let groups = group_files(dists.iter().map(PathBuf::from).collect(), false);
             assert_debug_snapshot!(groups, @r#"
             [
-                UploadDistribution {
+                PreparedDistribution {
                     file: "dist/acme-1.2.3-py3-none-any.whl",
                     raw_filename: "acme-1.2.3-py3-none-any.whl",
                     filename: WheelFilename(
@@ -1860,7 +1834,7 @@ mod tests {
                         "dist/acme-1.2.3-py3-none-any.whl.build.attestation",
                     ],
                 },
-                UploadDistribution {
+                PreparedDistribution {
                     file: "dist/acme-1.2.3.tar.gz",
                     raw_filename: "acme-1.2.3.tar.gz",
                     filename: SourceDistFilename(
@@ -1884,8 +1858,14 @@ mod tests {
     #[test]
     fn form_metadata_import_names() {
         let filename = DistFilename::try_from_normalized_filename("pkg-1.0.0.tar.gz").unwrap();
-        let sha256_hash: HashDigest = "sha256:0123".parse().unwrap();
-        let blake2b_hash: HashDigest = "blake2b:4567".parse().unwrap();
+        let sha256_hash: HashDigest =
+            "sha256:0123012301230123012301230123012301230123012301230123012301230123"
+                .parse()
+                .unwrap();
+        let blake2b_hash: HashDigest =
+            "blake2b:4567456745674567456745674567456745674567456745674567456745674567"
+                .parse()
+                .unwrap();
         let metadata = Metadata23 {
             metadata_version: "2.5".to_string(),
             name: "pkg".to_string(),
@@ -1905,8 +1885,8 @@ mod tests {
 
         assert_snapshot!(formatted_metadata, @r###"
         :action: file_upload
-        sha256_digest: 0123
-        blake2_256_digest: 4567
+        sha256_digest: 0123012301230123012301230123012301230123012301230123012301230123
+        blake2_256_digest: 4567456745674567456745674567456745674567456745674567456745674567
         protocol_version: 1
         metadata_version: 2.5
         name: pkg
@@ -1919,27 +1899,29 @@ mod tests {
         import_namespaces: zope
         "###);
     }
-
     /// Snapshot the data we send for an upload request for a source distribution.
     #[tokio::test]
     async fn upload_request_source_dist() {
-        let group = {
-            let raw_filename = "tqdm-999.0.0.tar.gz";
-            let file = PathBuf::from("../../test/links/").join(raw_filename);
-            let filename = DistFilename::try_from_normalized_filename(raw_filename).unwrap();
+        let _preview = uv_preview::test::with_features(&[]);
+        let raw_filename = "tqdm-999.0.0.tar.gz";
+        let file = PathBuf::from("../../test/links/").join(raw_filename);
+        let mut preparation =
+            PublishSession::prepare(vec![file.to_string_lossy().into_owned()], false)
+                .expect("Distribution inputs should be collected");
 
-            UploadDistribution {
-                file,
-                raw_filename: raw_filename.to_string(),
-                filename,
-                attestations: vec![],
-            }
-        };
-
-        let form_metadata =
-            FormMetadata::read_from_file(&group.file, &group.filename, Arc::new(DummyReporter))
-                .await
-                .unwrap();
+        let client = BaseClientBuilder::default()
+            .redirect(RedirectPolicy::NoRedirect)
+            .retries(0)
+            .build()
+            .expect("Failed to build client");
+        let registry =
+            DisplaySafeUrl::parse("https://example.org/upload").expect("Valid registry URL");
+        let session = test_session(registry, &client);
+        let prepared = preparation.pop().expect("Distribution should be found");
+        let (form_metadata, attestations, _) = prepared
+            .read_metadata(Arc::new(DummyReporter))
+            .await
+            .expect("Failed to read upload metadata");
 
         let formatted_metadata = form_metadata
             .iter()
@@ -1996,19 +1978,16 @@ mod tests {
         project_urls: Source, https://github.com/unknown/tqdm
         ");
 
-        let client = BaseClientBuilder::default()
-            .build()
-            .expect("failed to build base client");
-        let (request, _) = build_upload_request(
-            &group,
-            &DisplaySafeUrl::parse("https://example.org/upload").unwrap(),
-            &client,
-            &Credentials::basic(Some("ferris".to_string()), Some("F3RR!S".to_string())),
-            &form_metadata,
-            Arc::new(DummyReporter),
-        )
-        .await
-        .unwrap();
+        let (request, _) = session
+            .build_upload_request(
+                &prepared,
+                &form_metadata,
+                attestations.as_deref(),
+                &session.publish_url,
+                Arc::new(DummyReporter),
+            )
+            .await
+            .unwrap();
 
         insta::with_settings!({
             filters => [("boundary=[0-9a-f-]+", "boundary=[...]")],
@@ -2043,28 +2022,35 @@ mod tests {
             }
             "#);
         });
+        drop(request);
+        session
+            .finalize(PublishOutcome::DryRun)
+            .await
+            .expect("Finalization failed");
     }
 
     /// Snapshot the data we send for an upload request for a wheel.
     #[tokio::test]
     async fn upload_request_wheel() {
-        let group = {
-            let raw_filename = "tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl";
-            let file = PathBuf::from("../../test/links/").join(raw_filename);
-            let filename = DistFilename::try_from_normalized_filename(raw_filename).unwrap();
+        let raw_filename = "tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl";
+        let file = PathBuf::from("../../test/links/").join(raw_filename);
+        let mut preparation =
+            PublishSession::prepare(vec![file.to_string_lossy().into_owned()], false)
+                .expect("Distribution inputs should be collected");
 
-            UploadDistribution {
-                file,
-                raw_filename: raw_filename.to_string(),
-                filename,
-                attestations: vec![],
-            }
-        };
-
-        let form_metadata =
-            FormMetadata::read_from_file(&group.file, &group.filename, Arc::new(DummyReporter))
-                .await
-                .unwrap();
+        let client = BaseClientBuilder::default()
+            .redirect(RedirectPolicy::NoRedirect)
+            .retries(0)
+            .build()
+            .expect("Failed to build client");
+        let registry =
+            DisplaySafeUrl::parse("https://example.org/upload").expect("Valid registry URL");
+        let session = test_session(registry, &client);
+        let prepared = preparation.pop().expect("Distribution should be found");
+        let (form_metadata, attestations, _) = prepared
+            .read_metadata(Arc::new(DummyReporter))
+            .await
+            .expect("Failed to read upload metadata");
 
         let formatted_metadata = form_metadata
             .iter()
@@ -2159,19 +2145,16 @@ mod tests {
         requires_dist: requests ; extra == 'telegram'
         "#);
 
-        let client = BaseClientBuilder::default()
-            .build()
-            .expect("failed to build base client");
-        let (request, _) = build_upload_request(
-            &group,
-            &DisplaySafeUrl::parse("https://example.org/upload").unwrap(),
-            &client,
-            &Credentials::basic(Some("ferris".to_string()), Some("F3RR!S".to_string())),
-            &form_metadata,
-            Arc::new(DummyReporter),
-        )
-        .await
-        .unwrap();
+        let (request, _) = session
+            .build_upload_request(
+                &prepared,
+                &form_metadata,
+                attestations.as_deref(),
+                &session.publish_url,
+                Arc::new(DummyReporter),
+            )
+            .await
+            .unwrap();
 
         insta::with_settings!({
             filters => [("boundary=[0-9a-f-]+", "boundary=[...]")],
@@ -2206,6 +2189,11 @@ mod tests {
             }
             "#);
         });
+        drop(request);
+        session
+            .finalize(PublishOutcome::DryRun)
+            .await
+            .expect("Finalization failed");
     }
 
     #[tokio::test]
@@ -2225,7 +2213,12 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        assert!(mock_server_upload(&mock_server).await.unwrap());
+        assert_eq!(
+            mock_server_upload(&mock_server)
+                .await
+                .expect("Upload failed"),
+            UploadOutcome::Uploaded
+        );
     }
 
     #[tokio::test]
@@ -2253,18 +2246,19 @@ mod tests {
         let mut capture = String::new();
         write_error_chain_with_options(
             &err,
-            Hints::none(),
+            &Hints::none(),
             ErrorOptions::default().with_stream(&mut capture),
         )
         .unwrap();
 
         let capture = capture.replace(&mock_server.uri(), "[SERVER]");
+        let capture = capture.replace('\\', "/");
         let capture = anstream::adapter::strip_str(&capture);
         assert_snapshot!(
             &capture,
             @"
         error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to [SERVER]/final
-          Caused by: Too many redirects, only 10 redirects are allowed
+          cause: Too many redirects, only 10 redirects are allowed
         "
         );
     }
@@ -2286,18 +2280,19 @@ mod tests {
         let mut capture = String::new();
         write_error_chain_with_options(
             &err,
-            Hints::none(),
+            &Hints::none(),
             ErrorOptions::default().with_stream(&mut capture),
         )
         .unwrap();
 
         let capture = capture.replace(&mock_server.uri(), "[SERVER]");
+        let capture = capture.replace('\\', "/");
         let capture = anstream::adapter::strip_str(&capture);
         assert_snapshot!(
             &capture,
             @"
         error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to https://different.auth.tld/final/
-          Caused by: Redirected URL is not in the same realm. Redirected to: https://different.auth.tld/final/
+          cause: Redirected URL is not in the same realm. Redirected to: https://different.auth.tld/final/
         "
         );
     }
@@ -2324,23 +2319,24 @@ mod tests {
         let mut capture = String::new();
         write_error_chain_with_options(
             &err,
-            Hints::none(),
+            &Hints::none(),
             ErrorOptions::default().with_stream(&mut capture),
         )
         .unwrap();
 
         let capture = capture.replace(&mock_server.uri(), "[SERVER]");
+        let capture = capture.replace('\\', "/");
         let capture = anstream::adapter::strip_str(&capture);
         assert_snapshot!(
             &capture,
             @"
         error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to [SERVER]/final
-          Caused by: Server returned status code 400 Bad Request. Server says: 400 Error: Use 'source' as Python version for an sdist.
+          cause: Server returned status code 400 Bad Request. Server says: 400 Error: Use 'source' as Python version for an sdist.
         "
         );
     }
 
-    /// pyx returns `application/problem+json` with RFC 9457 Problem Details.
+    /// Handle `application/problem+json` errors with RFC 9457 Problem Details.
     #[tokio::test]
     async fn upload_error_problem_details() {
         let mock_server = MockServer::start().await;
@@ -2365,18 +2361,19 @@ mod tests {
         let mut capture = String::new();
         write_error_chain_with_options(
             &err,
-            Hints::none(),
+            &Hints::none(),
             ErrorOptions::default().with_stream(&mut capture),
         )
         .unwrap();
 
         let capture = capture.replace(&mock_server.uri(), "[SERVER]");
+        let capture = capture.replace('\\', "/");
         let capture = anstream::adapter::strip_str(&capture);
         assert_snapshot!(
             &capture,
             @"
         error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to [SERVER]/final
-          Caused by: Server returned status code 400 Bad Request. Server message: Bad Request, Missing required field `name`
+          cause: Server returned status code 400 Bad Request. Server message: Bad Request, Missing required field `name`
         "
         );
     }

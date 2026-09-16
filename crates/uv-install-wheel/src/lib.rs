@@ -15,7 +15,9 @@ pub use install::{install_wheel, installed_dist_info_path};
 pub use linker::{InstallState, LinkMode};
 pub use record::RecordEntry;
 pub use uninstall::{Uninstall, uninstall_egg, uninstall_legacy_editable, uninstall_wheel};
-pub use wheel::{WheelFile, read_record, read_record_into_iter, validate_and_heal_record};
+pub use wheel::{
+    WheelFile, read_record, read_record_into_iter, reserved_script_name, validate_and_heal_record,
+};
 
 mod install;
 mod linker;
@@ -90,4 +92,31 @@ pub enum Error {
     ReservedScriptName { reserved: String, declared: String },
     #[error(transparent)]
     Copy(#[from] uv_fs::link::LinkError),
+}
+
+impl Error {
+    /// Return whether this is an expected user-facing failure.
+    pub fn is_user_failure(&self) -> bool {
+        match self {
+            Self::InvalidWheel(_)
+            | Self::RecordFile { .. }
+            | Self::RecordCsv(_)
+            | Self::NonUtf8WheelPath(..)
+            | Self::UnsupportedWindowsArch(_)
+            | Self::DirectUrlJson(_)
+            | Self::MissingRecord(_)
+            | Self::MissingTopLevel(_)
+            | Self::InvalidVersion(_)
+            | Self::MismatchedName(..)
+            | Self::MismatchedVersion(..)
+            | Self::InvalidEggLink(_)
+            | Self::ReservedScriptName { .. } => true,
+            Self::Io(_)
+            | Self::WalkDir(_)
+            | Self::BrokenVenv(_)
+            | Self::NotWindows
+            | Self::LauncherError(_)
+            | Self::Copy(_) => false,
+        }
+    }
 }

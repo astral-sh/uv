@@ -1,6 +1,6 @@
 # Locking and syncing
 
-Locking is the process of resolving your project's dependencies into a
+Locking is the process of [resolving](../resolution.md) your project's dependencies into a
 [lockfile](./layout.md#the-lockfile). Syncing is the process of installing a subset of packages from
 the lockfile into the [project environment](./layout.md#the-project-environment).
 
@@ -233,4 +233,8 @@ against [OSV](https://osv.dev). OSV references MAL advisories from the OpenSSF's
 
 If a locked dependency matches a malware advisory, the sync will be terminated.
 
-To enable malware checks, set `UV_MALWARE_CHECK=1` in your environment.
+To enable malware checks, set `audit.malware-check = true` in your uv settings or set
+`UV_MALWARE_CHECK=1` in your environment.
+
+To use an alternative vulnerability service, set `audit.malware-check-url` in your uv settings or
+set `UV_MALWARE_CHECK_URL` in your environment.

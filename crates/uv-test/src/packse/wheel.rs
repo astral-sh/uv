@@ -1,11 +1,10 @@
 //! Generate minimal Python wheels and source distributions in memory.
 //!
-//! Packse scenario packages are trivial: they contain only metadata and a stub
-//! `__init__.py`. We generate them directly without invoking a Python build backend.
+//! Packse scenario packages contain metadata, a stub `__init__.py`, and optional console scripts.
+//! We generate them directly without invoking a Python build backend.
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
-use std::io::Cursor;
 
 use async_zip::base::write::ZipFileWriter;
 use async_zip::{Compression as ZipCompression, ZipEntryBuilder};
@@ -16,7 +15,8 @@ use futures::executor::block_on;
 use futures::io::AllowStdIo;
 use indoc::formatdoc;
 use sha2::{Digest, Sha256};
-use tokio_util::compat::{FuturesAsyncReadCompatExt, FuturesAsyncWriteCompatExt};
+use tar_codec::{ArchiveBuilder as _, EntryMetadata, TarEncoder};
+use tokio_util::compat::FuturesAsyncWriteCompatExt;
 
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
@@ -32,13 +32,57 @@ pub fn generate_wheel(
     extras: &BTreeMap<ExtraName, Vec<Requirement>>,
     requires_python: Option<&VersionSpecifiers>,
     tag: &str,
+    entry_points: &[String],
+) -> (String, Vec<u8>) {
+    let mut files = Vec::new();
+    if !entry_points.is_empty() {
+        let normalized = name.as_dist_info_name();
+        let mut entry_points_metadata = String::from("[console_scripts]\n");
+        for entry_point in entry_points {
+            entry_points_metadata.push_str(entry_point);
+            entry_points_metadata.push_str(" = ");
+            entry_points_metadata.push_str(&normalized);
+            entry_points_metadata.push_str(".cli:main\n");
+        }
+        files.push((
+            format!("{normalized}-{version}.dist-info/entry_points.txt"),
+            entry_points_metadata,
+        ));
+        files.push((format!("{normalized}/cli.py"), build_cli_module(name)));
+    }
+
+    generate_wheel_with_files(
+        name,
+        version,
+        requires,
+        extras,
+        requires_python,
+        tag,
+        &files
+            .iter()
+            .map(|(path, contents)| (path.as_str(), contents.as_str()))
+            .collect::<Vec<_>>(),
+    )
+}
+
+/// Generate a wheel (`.whl`) with additional files as an in-memory ZIP archive.
+///
+/// Returns `(filename, bytes)`.
+pub fn generate_wheel_with_files(
+    name: &PackageName,
+    version: &Version,
+    requires: &[Requirement],
+    extras: &BTreeMap<ExtraName, Vec<Requirement>>,
+    requires_python: Option<&VersionSpecifiers>,
+    tag: &str,
+    files: &[(&str, &str)],
 ) -> (String, Vec<u8>) {
     let normalized = name.as_dist_info_name();
     let dist_info = format!("{normalized}-{version}.dist-info");
 
     let mut zip = ZipFileWriter::new(Vec::new());
 
-    let entries = [
+    let mut entries = vec![
         (
             format!("{normalized}/__init__.py"),
             format!("__version__ = \"{version}\"\n"),
@@ -57,6 +101,11 @@ pub fn generate_wheel(
             ),
         ),
     ];
+    entries.extend(
+        files
+            .iter()
+            .map(|(path, contents)| ((*path).to_string(), (*contents).to_string())),
+    );
     for (path, contents) in &entries {
         let entry = ZipEntryBuilder::new(path.clone().into(), ZipCompression::Stored);
         block_on(zip.write_entry_whole(entry, contents.as_bytes()))
@@ -100,38 +149,56 @@ pub fn generate_sdist(
     requires: &[Requirement],
     extras: &BTreeMap<ExtraName, Vec<Requirement>>,
     requires_python: Option<&VersionSpecifiers>,
+    entry_points: &[String],
 ) -> (String, Vec<u8>) {
     let normalized = name.as_dist_info_name();
     let prefix = format!("{normalized}-{version}");
 
-    let buf = Vec::new();
-    let encoder = GzEncoder::new(buf, Compression::fast());
-    let mut tar = tokio_tar::Builder::new_non_terminated(AllowStdIo::new(encoder).compat_write());
+    let mut encoder = GzEncoder::new(Vec::new(), Compression::fast());
+    let mut tar = TarEncoder::new(AllowStdIo::new(&mut encoder).compat_write()).builder();
 
-    let pyproject = build_pyproject_toml(name, version, requires, extras, requires_python);
-    append_tar_file(
+    let pyproject = build_pyproject_toml(
+        name,
+        version,
+        requires,
+        extras,
+        requires_python,
+        entry_points,
+    );
+    add_tar_file(
         &mut tar,
         &format!("{prefix}/pyproject.toml"),
         pyproject.as_bytes(),
     );
 
     let pkg_info = build_metadata(name, version, requires, extras, requires_python);
-    append_tar_file(&mut tar, &format!("{prefix}/PKG-INFO"), pkg_info.as_bytes());
+    add_tar_file(&mut tar, &format!("{prefix}/PKG-INFO"), pkg_info.as_bytes());
 
     let init_py = format!("__version__ = \"{version}\"\n");
-    append_tar_file(
+    add_tar_file(
         &mut tar,
         &format!("{prefix}/src/{normalized}/__init__.py"),
         init_py.as_bytes(),
     );
+    if !entry_points.is_empty() {
+        add_tar_file(
+            &mut tar,
+            &format!("{prefix}/src/{normalized}/cli.py"),
+            build_cli_module(name).as_bytes(),
+        );
+    }
 
-    let writer = block_on(tar.into_inner()).expect("failed to finish in-memory source archive");
-    let encoder = writer.into_inner().into_inner();
+    block_on(tar.finish()).expect("failed to finish in-memory source archive");
     let bytes = encoder
         .finish()
         .expect("failed to finish in-memory gzip stream");
     let filename = format!("{normalized}-{version}.tar.gz");
     (filename, bytes)
+}
+
+/// Build the callable module used by generated console scripts.
+fn build_cli_module(name: &PackageName) -> String {
+    format!("def main():\n    print('Hello from {name}!')\n")
 }
 
 /// Build PEP 566 / PEP 643 metadata content.
@@ -180,6 +247,7 @@ fn build_pyproject_toml(
     requires: &[Requirement],
     extras: &BTreeMap<ExtraName, Vec<Requirement>>,
     requires_python: Option<&VersionSpecifiers>,
+    entry_points: &[String],
 ) -> String {
     let normalized = name.as_dist_info_name();
     let dependencies = if requires.is_empty() {
@@ -212,6 +280,17 @@ fn build_pyproject_toml(
         optional_dependencies
     };
 
+    let scripts = if entry_points.is_empty() {
+        String::new()
+    } else {
+        let scripts: BTreeMap<_, _> = entry_points
+            .iter()
+            .map(|entry_point| (entry_point, format!("{normalized}.cli:main")))
+            .collect();
+        let scripts = toml::to_string(&scripts).expect("console scripts should serialize to TOML");
+        format!("\n[project.scripts]\n{scripts}")
+    };
+
     formatdoc! {
         r#"
         [build-system]
@@ -227,42 +306,34 @@ fn build_pyproject_toml(
         [project]
         name = "{name}"
         version = "{version}"
-        {dependencies}{requires_python}{optional_dependencies}
+        {dependencies}{requires_python}{optional_dependencies}{scripts}
         "#
     }
 }
 
-/// Append a file entry to a tar archive from a byte slice.
-fn append_tar_file<W>(tar: &mut tokio_tar::Builder<W>, path: &str, data: &[u8])
+/// Add a file entry to a tar archive from a byte slice.
+fn add_tar_file<W>(tar: &mut tar_codec::Builder<TarEncoder<W>>, path: &str, data: &[u8])
 where
-    W: tokio::io::AsyncWrite + Unpin + Send,
+    W: tokio::io::AsyncWrite + Unpin,
 {
-    let mut header = tokio_tar::Header::new_gnu();
-    header.set_entry_type(tokio_tar::EntryType::Regular);
-    header.set_size(data.len() as u64);
-    header.set_mode(0o644);
-    header.set_cksum();
-    block_on(tar.append_data(
-        &mut header,
-        path,
-        AllowStdIo::new(Cursor::new(data)).compat(),
-    ))
-    .expect("failed to append file to in-memory source archive");
+    block_on(tar.add_file(path, data, EntryMetadata::default()))
+        .expect("failed to add file to in-memory source archive");
 }
 
 /// Compute the SHA-256 hex digest of a byte slice.
 pub fn sha256_hex(data: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(data);
-    format!("{:x}", hasher.finalize())
+    hex::encode(hasher.finalize())
 }
 
 #[cfg(test)]
 mod tests {
-    use std::pin::Pin;
+    use std::io::Cursor;
     use std::str::FromStr;
 
-    use futures::StreamExt;
+    use tar_codec::{Archive as _, Member, TarArchive};
+    use tokio_util::compat::FuturesAsyncReadCompatExt;
 
     use super::*;
 
@@ -278,6 +349,7 @@ mod tests {
             &BTreeMap::new(),
             Some(&requires_python),
             "py3-none-any",
+            &[],
         );
         assert_eq!(filename, "my_package-1.0.0-py3-none-any.whl");
 
@@ -340,24 +412,23 @@ mod tests {
             &requires,
             &BTreeMap::new(),
             Some(&requires_python),
+            &[],
         );
         assert_eq!(filename, "my_package-1.0.0.tar.gz");
 
         let decoder = flate2::read::GzDecoder::new(Cursor::new(bytes));
-        let mut archive = tokio_tar::Archive::new(AllowStdIo::new(decoder).compat());
+        let archive = TarArchive::new(AllowStdIo::new(decoder).compat());
         let names = block_on(async {
-            let mut entries = archive.entries().expect("sdist archive should be readable");
-            let mut entries = Pin::new(&mut entries);
+            let mut members = archive.members();
             let mut names = Vec::new();
-            while let Some(entry) = entries.next().await {
-                let entry = entry.expect("sdist archive entry should be readable");
-                names.push(
-                    entry
-                        .path()
-                        .expect("sdist archive entry should have a path")
-                        .to_string_lossy()
-                        .to_string(),
-                );
+            while let Some(member) = members
+                .next()
+                .await
+                .expect("sdist archive member should be readable")
+            {
+                if let Member::File { metadata, .. } = member {
+                    names.push(metadata.path);
+                }
             }
             names
         });

@@ -22,10 +22,7 @@ fn pip_install_exclude_newer_relative() {
         .arg("--exclude-newer")
         .arg("3 weeks")
         .arg("idna"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -44,10 +41,7 @@ fn pip_install_exclude_newer_relative() {
         .arg("idna=2 weeks")
         .arg("--upgrade")
         .arg("idna"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -81,10 +75,7 @@ fn pip_install_exclude_newer_relative_config() -> Result<()> {
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("idna"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -106,10 +97,7 @@ fn pip_install_exclude_newer_relative_config() -> Result<()> {
         .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--upgrade")
         .arg("idna"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]

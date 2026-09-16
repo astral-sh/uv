@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run agents/hooks/post-edit-format.py"
+            "command": "uv run --frozen agents/hooks/post-edit-format.py"
           }
         ]
       }

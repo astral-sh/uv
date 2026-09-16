@@ -1,6 +1,7 @@
 // The `unreachable_pub` is to silence false positives in RustRover.
 #![allow(dead_code, unreachable_pub)]
 
+pub mod archive;
 pub mod find_links;
 mod http_server;
 pub mod packse;
@@ -27,8 +28,9 @@ use futures::StreamExt;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use predicates::prelude::predicate;
-use regex::Regex;
+use regex::{Regex, regex};
 use tokio::io::AsyncWriteExt;
+use walkdir::WalkDir;
 
 use uv_cache::{Cache, CacheBucket};
 use uv_fs::Simplified;
@@ -44,26 +46,22 @@ static TEST_TIMESTAMP: &str = "2024-03-25T00:00:00Z";
 pub const DEFAULT_PYTHON_VERSION: &str = "3.12";
 
 // The expected latest patch version for each Python minor version.
-const LATEST_PYTHON_3_15: &str = "3.15.0b3";
-const LATEST_PYTHON_3_14: &str = "3.14.6";
-const LATEST_PYTHON_3_13: &str = "3.13.14";
-pub const LATEST_PYTHON_3_12: &str = "3.12.13";
-const LATEST_PYTHON_3_11: &str = "3.11.15";
-const LATEST_PYTHON_3_10: &str = "3.10.20";
+const LATEST_PYTHON_3_15: &str = "3.15.0rc2";
+const LATEST_PYTHON_3_14: &str = "3.14.7";
+const LATEST_PYTHON_3_13: &str = "3.13.15";
+pub const LATEST_PYTHON_3_12: &str = "3.12.14";
+const LATEST_PYTHON_3_11: &str = "3.11.16";
+const LATEST_PYTHON_3_10: &str = "3.10.21";
 
 /// Create a new [`TestContext`] with the given Python version.
 ///
 /// Creates a virtual environment for the test.
 ///
-/// This macro captures the uv binary path at compile time using `env!("CARGO_BIN_EXE_uv")`,
-/// which is only available in the test crate.
+/// Resolves the uv binary path at runtime via [`get_bin!`].
 #[macro_export]
 macro_rules! test_context {
     ($python_version:expr) => {
-        $crate::TestContext::new_with_bin(
-            $python_version,
-            std::path::PathBuf::from(env!("CARGO_BIN_EXE_uv")),
-        )
+        $crate::TestContext::new_with_bin($python_version, $crate::get_bin!())
     };
 }
 
@@ -71,26 +69,28 @@ macro_rules! test_context {
 ///
 /// Unlike [`test_context!`], this does not create a virtual environment.
 ///
-/// This macro captures the uv binary path at compile time using `env!("CARGO_BIN_EXE_uv")`,
-/// which is only available in the test crate.
+/// Resolves the uv binary path at runtime via [`get_bin!`].
 #[macro_export]
 macro_rules! test_context_with_versions {
     ($python_versions:expr) => {
-        $crate::TestContext::new_with_versions_and_bin(
-            $python_versions,
-            std::path::PathBuf::from(env!("CARGO_BIN_EXE_uv")),
-        )
+        $crate::TestContext::new_with_versions_and_bin($python_versions, $crate::get_bin!())
     };
 }
 
 /// Return the path to the uv binary.
 ///
-/// This macro captures the uv binary path at compile time using `env!("CARGO_BIN_EXE_uv")`,
-/// which is only available in the test crate.
+/// Reads the path supplied by Cargo or nextest at runtime, so compiled tests
+/// remain usable when the target directory is relocated.
+///
+/// This path is only available in the `uv` package's integration tests and benchmarks.
 #[macro_export]
 macro_rules! get_bin {
     () => {
-        std::path::PathBuf::from(env!("CARGO_BIN_EXE_uv"))
+        std::path::PathBuf::from(
+            std::env::var_os("NEXTEST_BIN_EXE_uv")
+                .or_else(|| std::env::var_os("CARGO_BIN_EXE_uv"))
+                .expect("Cargo or nextest should provide the uv binary path"),
+        )
     };
 }
 
@@ -99,8 +99,6 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"--cache-dir [^\s]+", "--cache-dir [CACHE_DIR]"),
     // Operation times
     (r"(\s|\()(\d+m )?(\d+\.)?\d+(ms|s)", "$1[TIME]"),
-    // File sizes
-    (r"(\s|\()(\d+\.)?\d+([KM]i)?B", "$1[SIZE]"),
     // Timestamps
     (r"tv_sec: \d+", "tv_sec: [TIME]"),
     (r"tv_nsec: \d+", "tv_nsec: [TIME]"),
@@ -112,17 +110,13 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
         r"uv(-.*)? \d+\.\d+\.\d+(-(alpha|beta|rc)\.\d+)?(\+\d+)?( \([^)]*\))?",
         r"uv [VERSION] ([COMMIT] DATE)",
     ),
-    // Build resolution identities include host-specific executor context.
-    (
-        r"build:([A-Za-z0-9_.-]+):wheel:([A-Za-z0-9_.-]+):[a-f0-9]{16}",
-        r"build:$1:wheel:$2:[BUILD-ID]",
-    ),
-    (
-        r#"executor = \{ marker = "[^"]*", python = "[^"]*" \}"#,
-        r#"executor = { marker = "[EXECUTOR]", python = "[PYTHON]" }"#,
-    ),
     // Trim end-of-line whitespaces, to allow removing them on save.
     (r"([^\s])[ \t]+(\r?\n)", "$1$2"),
+    // Certificate overrides and their contents depend on the host environment.
+    (
+        r"(?ms)^([ \t]*custom_certificates: )(?:None|Some\(\n.*?^[ \t]*\),\n[ \t]*\)),",
+        "${1}[CERTIFICATES],",
+    ),
     // Filter SSL certificate loading debug messages (environment-dependent)
     (r"DEBUG Loaded \d+ certificate\(s\) from [^\n]+\n", ""),
 ];
@@ -131,6 +125,7 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
 ///
 /// * Set the current directory to a temporary directory (`temp_dir`).
 /// * Set the cache dir to a different temporary directory (`cache_dir`).
+/// * Share the Python download cache unless explicitly disabled.
 /// * Set a shared test timestamp so snapshots don't change after a new release.
 /// * Set the venv to a fresh `.venv` in `temp_dir`
 pub struct TestContext {
@@ -178,6 +173,51 @@ impl TestContext {
         new
     }
 
+    /// Set the cache directory for all commands and update its snapshot filters.
+    ///
+    /// Relative paths are resolved against the test working directory.
+    #[must_use]
+    pub fn with_cache_dir(mut self, cache_dir: impl AsRef<Path>) -> Self {
+        let cache_dir = if cache_dir.as_ref().is_absolute() {
+            cache_dir.as_ref().to_path_buf()
+        } else {
+            self.temp_dir
+                .join(cache_dir.as_ref().components().collect::<PathBuf>())
+        };
+
+        self.filters
+            .retain(|(_, replacement)| replacement != "[CACHE_DIR]/");
+        self.cache_dir = ChildPath::new(cache_dir);
+
+        for pattern in Self::path_patterns(&self.cache_dir) {
+            self.filters
+                .insert(0, (pattern, "[CACHE_DIR]/".to_string()));
+        }
+
+        self
+    }
+
+    /// Return the sorted paths of all regular files in a cache bucket.
+    pub fn cache_files(&self, bucket: CacheBucket) -> anyhow::Result<Vec<PathBuf>> {
+        let cache = Cache::from_path(self.cache_dir.path());
+        let mut files = Vec::new();
+        for entry in WalkDir::new(cache.bucket(bucket)).min_depth(1) {
+            let entry = entry?;
+            if entry.file_type().is_file() {
+                files.push(entry.path().to_path_buf());
+            }
+        }
+        files.sort();
+        Ok(files)
+    }
+
+    /// Set an environment variable for all commands created from this context.
+    #[must_use]
+    pub fn with_env(mut self, key: impl Into<OsString>, value: impl Into<OsString>) -> Self {
+        self.extra_env.push((key.into(), value.into()));
+        self
+    }
+
     /// Set the "exclude newer" timestamp for all commands in this context.
     #[must_use]
     pub fn with_exclude_newer(mut self, exclude_newer: &str) -> Self {
@@ -192,6 +232,20 @@ impl TestContext {
         self.extra_env
             .push((EnvVars::UV_HTTP_TIMEOUT.into(), http_timeout.into()));
         self
+    }
+
+    /// Set the number of HTTP retries for all commands in this context.
+    #[must_use]
+    pub fn with_http_retries(mut self, http_retries: &str) -> Self {
+        self.extra_env
+            .push((EnvVars::UV_HTTP_RETRIES.into(), http_retries.into()));
+        self
+    }
+
+    /// Configure one HTTP retry with a one-second timeout for all commands in this context.
+    #[must_use]
+    pub fn with_fast_http_retry(self) -> Self {
+        self.with_http_timeout("1").with_http_retries("1")
     }
 
     /// Set the "concurrent installs" for all commands in this context.
@@ -222,6 +276,12 @@ impl TestContext {
                 format!("{verb} [N] packages"),
             ));
         }
+        self.with_filtered_file_counts()
+    }
+
+    /// Filter removed file counts without hiding exact package counts.
+    #[must_use]
+    pub fn with_filtered_file_counts(mut self) -> Self {
         self.filters.push((
             "Removed \\d+ files?".to_string(),
             "Removed [N] files".to_string(),
@@ -229,16 +289,36 @@ impl TestContext {
         self
     }
 
-    /// Add extra filtering for cache size output
+    /// Filter file sizes while retaining their units so human-readable output remains distinguishable.
+    #[must_use]
+    pub fn with_filtered_sizes(mut self) -> Self {
+        self.filters.push((
+            r"(\s|\()(\d+\.)?\d+(([KMGT]i)?B)".to_string(),
+            "$1[SIZE]$3".to_string(),
+        ));
+        self
+    }
+
+    /// Filter file sizes and units when the units vary across environments.
+    #[must_use]
+    pub fn with_filtered_sizes_and_units(mut self) -> Self {
+        self.filters.push((
+            r"(\s|\()(\d+\.)?\d+([KMGT]i)?B".to_string(),
+            "$1[SIZE]".to_string(),
+        ));
+        self
+    }
+
+    /// Filter cache size output while retaining human-readable units.
     #[must_use]
     pub fn with_filtered_cache_size(mut self) -> Self {
         // Filter raw byte counts (numbers on their own line)
         self.filters
             .push((r"(?m)^\d+\n".to_string(), "[SIZE]\n".to_string()));
-        // Filter human-readable sizes (e.g., "384.2 KiB")
+        // Filter human-readable sizes (e.g., "384.2 KiB") while retaining their units.
         self.filters.push((
-            r"(?m)^\d+(\.\d+)? [KMGT]i?B\n".to_string(),
-            "[SIZE]\n".to_string(),
+            r"(?m)^\d+(\.\d+)?( ?[KMGT]i?B)\n".to_string(),
+            "[SIZE]$2\n".to_string(),
         ));
         self
     }
@@ -257,7 +337,7 @@ impl TestContext {
     #[must_use]
     pub fn with_filtered_missing_file_error(mut self) -> Self {
         // The exact message string depends on the system language, so we remove it.
-        // We want to only remove the phrase after `Caused by:`
+        // Keep the severity or cause prefix while removing the operating system's message.
         self.filters.push((
             r"[^:\n]* \(os error 2\)".to_string(),
             " [OS ERROR 2]".to_string(),
@@ -372,7 +452,10 @@ impl TestContext {
             "/[BIN]/".to_string(),
         ));
         self.filters.push((
-            format!(r"[\\/]{}", venv_bin_path(PathBuf::new()).to_string_lossy()),
+            format!(
+                r"[\\/]{}\b",
+                venv_bin_path(PathBuf::new()).to_string_lossy()
+            ),
             "/[BIN]".to_string(),
         ));
         self
@@ -420,7 +503,6 @@ impl TestContext {
     /// depending on the specific machine used:
     /// - `home = foo/bar/baz/python3.X.X/bin`
     /// - `uv = X.Y.Z`
-    /// - `extends-environment = <path/to/parent/venv>`
     #[must_use]
     pub fn with_pyvenv_cfg_filters(mut self) -> Self {
         let added_filters = [
@@ -428,10 +510,6 @@ impl TestContext {
             (
                 r"uv = \d+\.\d+\.\d+(-(alpha|beta|rc)\.\d+)?(\+\d+)?".to_string(),
                 "uv = [UV_VERSION]".to_string(),
-            ),
-            (
-                r"extends-environment = .+".to_string(),
-                "extends-environment = [PARENT_VENV]".to_string(),
             ),
         ];
         for filter in added_filters {
@@ -625,19 +703,11 @@ impl TestContext {
         self
     }
 
-    /// Use a shared global cache for Python downloads.
+    /// Disable the shared Python download cache for tests that require fresh downloads or isolated cache state.
     #[must_use]
-    pub fn with_python_download_cache(mut self) -> Self {
-        self.extra_env.push((
-            EnvVars::UV_PYTHON_CACHE_DIR.into(),
-            // Respect `UV_PYTHON_CACHE_DIR` if set, or use the default cache directory
-            env::var_os(EnvVars::UV_PYTHON_CACHE_DIR).unwrap_or_else(|| {
-                uv_cache::Cache::from_settings(false, None)
-                    .unwrap()
-                    .bucket(CacheBucket::Python)
-                    .into()
-            }),
-        ));
+    pub fn without_python_download_cache(mut self) -> Self {
+        self.extra_env
+            .retain(|(key, _)| key != EnvVars::UV_PYTHON_CACHE_DIR);
         self
     }
 
@@ -667,6 +737,21 @@ impl TestContext {
         self
     }
 
+    /// Configure isolated directories for installed tools and their executable entry points.
+    #[must_use]
+    pub fn with_tool_dirs(mut self) -> Self {
+        self.extra_env.push((
+            EnvVars::UV_TOOL_DIR.into(),
+            self.temp_dir.join("tools").into(),
+        ));
+        self.extra_env.push((
+            EnvVars::XDG_BIN_HOME.into(),
+            self.temp_dir.join("bin").into(),
+        ));
+
+        self
+    }
+
     #[must_use]
     pub fn with_versions_as_managed(mut self, versions: &[&str]) -> Self {
         self.extra_env.push((
@@ -681,6 +766,13 @@ impl TestContext {
     #[must_use]
     pub fn with_filter(mut self, filter: (impl Into<String>, impl Into<String>)) -> Self {
         self.filters.push((filter.0.into(), filter.1.into()));
+        self
+    }
+
+    /// Add custom filters to the `TestContext`.
+    #[must_use]
+    pub fn with_filters(mut self, filters: impl IntoIterator<Item = (String, String)>) -> Self {
+        self.filters.extend(filters);
         self
     }
 
@@ -782,11 +874,9 @@ impl TestContext {
         self.cache_dir = ChildPath::new(tmp.path()).child("cache");
         fs_err::create_dir_all(&self.cache_dir)?;
         let replacement = format!("[{name}]/[CACHE_DIR]/");
-        self.filters.extend(
-            Self::path_patterns(&self.cache_dir)
-                .into_iter()
-                .map(|pattern| (pattern, replacement.clone())),
-        );
+        for pattern in Self::path_patterns(&self.cache_dir) {
+            self.filters.insert(0, (pattern, replacement.clone()));
+        }
         self._extra_tempdirs.push(tmp);
         Ok(self)
     }
@@ -1054,7 +1144,10 @@ impl TestContext {
 
         // Filter non-deterministic temporary directory names
         // Note we apply this _after_ all the full paths to avoid breaking their matching
-        filters.push((r"(\\|\/)\.tmp.*(\\|\/)".to_string(), "/[TMP]/".to_string()));
+        filters.push((
+            r#"(\\|/)\.tmp[^\\/\s"'`]*"#.to_string(),
+            "/[TMP]".to_string(),
+        ));
 
         // Account for platform prefix differences `file://` (Unix) vs `file:///` (Windows)
         filters.push((r"file:///".to_string(), "file://".to_string()));
@@ -1097,7 +1190,16 @@ impl TestContext {
             python_versions,
             uv_bin,
             filters,
-            extra_env: vec![],
+            extra_env: vec![(
+                EnvVars::UV_PYTHON_CACHE_DIR.into(),
+                // Respect `UV_PYTHON_CACHE_DIR` if set, or use the default cache directory.
+                env::var_os(EnvVars::UV_PYTHON_CACHE_DIR).unwrap_or_else(|| {
+                    Cache::from_settings(false, None)
+                        .expect("Failed to determine the shared Python download cache")
+                        .bucket(CacheBucket::Python)
+                        .into()
+                }),
+            )],
             _root: root,
             _extra_tempdirs: vec![],
         }
@@ -1107,6 +1209,13 @@ impl TestContext {
     pub fn command(&self) -> Command {
         let mut command = self.new_command();
         self.add_shared_options(&mut command, true);
+        command
+    }
+
+    /// Create a command for an external program with the test environment.
+    pub fn external_command(&self, program: impl AsRef<Path>) -> Command {
+        let mut command = Self::new_command_with(program.as_ref());
+        self.add_shared_env(&mut command, false);
         command
     }
 
@@ -1586,6 +1695,14 @@ impl TestContext {
         command
     }
 
+    /// Create a `uv tool audit` command with options shared across scenarios.
+    pub fn tool_audit(&self) -> Command {
+        let mut command = self.new_command();
+        command.arg("tool").arg("audit");
+        self.add_shared_options(&mut command, false);
+        command
+    }
+
     /// Create a `uv tool dir` command with options shared across scenarios.
     pub fn tool_dir(&self) -> Command {
         let mut command = self.new_command();
@@ -1900,7 +2017,7 @@ impl TestContext {
     /// This panics (fails the current test) for any failure.
     pub fn copy_ecosystem_project(&self, name: &str) {
         let project_dir = PathBuf::from(format!("../../test/ecosystem/{name}"));
-        self.temp_dir.copy_from(project_dir, &["*"]).unwrap();
+        self.temp_dir.copy_from(project_dir, &["**/*"]).unwrap();
         // If there is a (gitignore) lockfile, remove it.
         if let Err(err) = fs_err::remove_file(self.temp_dir.join("uv.lock")) {
             assert_eq!(
@@ -1920,9 +2037,6 @@ impl TestContext {
     ///
     /// This assumes that a lock has already been performed.
     pub fn diff_lock(&self, change: impl Fn(&Self) -> Command) -> String {
-        static TRIM_TRAILING_WHITESPACE: std::sync::LazyLock<Regex> =
-            std::sync::LazyLock::new(|| Regex::new(r"(?m)^\s+$").unwrap());
-
         let lock_path = ChildPath::new(self.temp_dir.join("uv.lock"));
         let old_lock = fs_err::read_to_string(&lock_path).unwrap();
         let (snapshot, output) = run_and_format(
@@ -1993,9 +2107,6 @@ impl TestContext {
 /// Creates a "unified" diff between the two line-oriented strings suitable
 /// for snapshotting.
 pub fn diff_snapshot(old: &str, new: &str, context_radius: usize) -> String {
-    static TRIM_TRAILING_WHITESPACE: std::sync::LazyLock<Regex> =
-        std::sync::LazyLock::new(|| Regex::new(r"(?m)^\s+$").unwrap());
-
     let diff = similar::TextDiff::from_lines(old, new);
     let unified = diff
         .unified_diff()
@@ -2005,9 +2116,7 @@ pub fn diff_snapshot(old: &str, new: &str, context_radius: usize) -> String {
     // Not totally clear why, but some lines end up containing only
     // whitespace in the diff, even though they don't appear in the
     // original data. So just strip them here.
-    TRIM_TRAILING_WHITESPACE
-        .replace_all(&unified, "")
-        .into_owned()
+    regex!(r"(?m)^\s+$").replace_all(&unified, "").into_owned()
 }
 
 /// Assert a snapshot of the diff between `old` and a command's output.
@@ -2205,7 +2314,8 @@ pub fn run_and_format<T: AsRef<str>>(
         run_and_format_silent(command, filters, function_name, windows_filters, input);
     eprintln!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Unfiltered output ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     eprintln!(
-        "----- stdout -----\n{}\n----- stderr -----\n{}",
+        "----- exit status -----\n{}\n----- stdout -----\n{}\n----- stderr -----\n{}",
+        output.status,
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr),
     );
@@ -2222,6 +2332,8 @@ pub fn run_and_format_silent<T: AsRef<str>>(
     windows_filters: Option<WindowsFilters>,
     input: Option<&str>,
 ) -> (String, Output) {
+    assert_effective_cache_directory(command.borrow_mut());
+
     let program = command
         .borrow_mut()
         .get_program()
@@ -2269,16 +2381,32 @@ pub fn run_and_format_silent<T: AsRef<str>>(
             .unwrap_or_else(|err| panic!("Failed to spawn {program}: {err}"))
     };
 
-    let mut snapshot = apply_filters(
-        format!(
-            "success: {:?}\nexit_code: {}\n----- stdout -----\n{}\n----- stderr -----\n{}",
-            output.status.success(),
-            output.status.code().unwrap_or(!0),
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr),
-        ),
-        filters,
+    let mut snapshot = format!(
+        "exit_code: {} ({})\n",
+        output.status.code().unwrap_or(!0),
+        if output.status.success() {
+            "success"
+        } else {
+            "failure"
+        },
     );
+    if output.status.code().is_none() {
+        snapshot.push_str("exit_status: ");
+        snapshot.push_str(&output.status.to_string());
+        snapshot.push('\n');
+    }
+    if !output.stdout.is_empty() {
+        snapshot.push_str("----- stdout -----\n");
+        snapshot.push_str(&String::from_utf8_lossy(&output.stdout));
+    }
+    if !output.stderr.is_empty() {
+        if !output.stdout.is_empty() {
+            snapshot.push('\n');
+        }
+        snapshot.push_str("----- stderr -----\n");
+        snapshot.push_str(&String::from_utf8_lossy(&output.stderr));
+    }
+    let mut snapshot = apply_filters(snapshot, filters);
 
     // This is a heuristic filter meant to try and make *most* of our tests
     // pass whether it's on Windows or Unix. In particular, there are some very
@@ -2330,6 +2458,33 @@ pub fn run_and_format_silent<T: AsRef<str>>(
     (snapshot, output)
 }
 
+/// Reject cache environment overrides hidden by an explicit cache-directory argument.
+///
+/// Context commands always include `--cache-dir`, so setting `UV_CACHE_DIR` after constructing
+/// one cannot change its cache. Check the completed command immediately before execution so
+/// snapshots cannot silently pass without exercising their intended cache configuration.
+fn assert_effective_cache_directory(command: &Command) {
+    let cache_directory_override = command
+        .get_envs()
+        .find(|(name, value)| *name == EnvVars::UV_CACHE_DIR && value.is_some());
+
+    if cache_directory_override.is_none() {
+        return;
+    }
+
+    let explicit_cache_directory = command.get_args().any(|argument| {
+        argument == "--cache-dir"
+            || argument
+                .to_str()
+                .is_some_and(|argument| argument.starts_with("--cache-dir="))
+    });
+
+    assert!(
+        !explicit_cache_directory,
+        "`UV_CACHE_DIR` is ignored because this command already supplies `--cache-dir`; configure `TestContext::cache_dir` instead"
+    );
+}
+
 /// Recursively copy a directory and its contents, skipping gitignored files.
 pub fn copy_dir_ignore(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> anyhow::Result<()> {
     for entry in ignore::Walk::new(&src) {
@@ -2364,165 +2519,6 @@ pub fn make_project(dir: &Path, name: &str, body: &str) -> anyhow::Result<()> {
     fs_err::create_dir_all(dir.join("src").join(name))?;
     fs_err::write(dir.join("src").join(name).join("__init__.py"), "")?;
     Ok(())
-}
-
-/// Create a static `match-runtime` target and a dynamic primer that shares a nested source build.
-pub fn match_runtime_nested_sources(temp_dir: &Path) -> anyhow::Result<(PathBuf, PathBuf)> {
-    let builder = temp_dir.join("builder");
-    fs_err::create_dir_all(&builder)?;
-    fs_err::write(
-        builder.join("pyproject.toml"),
-        indoc! {r#"
-            [project]
-            name = "builder"
-            version = "0.1.0"
-            requires-python = ">=3.12"
-
-            [build-system]
-            requires = ["ok"]
-            backend-path = ["."]
-            build-backend = "build_backend"
-        "#},
-    )?;
-    fs_err::write(
-        builder.join("build_backend.py"),
-        indoc! {r#"
-            from pathlib import Path
-            from zipfile import ZipFile
-
-            def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-                count = Path(__file__).with_name("build-count")
-                build_number = int(count.read_text() if count.exists() else "0") + 1
-                count.write_text(str(build_number))
-
-                filename = "builder-0.1.0-py3-none-any.whl"
-                with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
-                    wheel.writestr("builder/__init__.py", f"BUILD_NUMBER = {build_number}\n")
-                    wheel.writestr(
-                        "builder-0.1.0.dist-info/METADATA",
-                        "Metadata-Version: 2.3\nName: builder\nVersion: 0.1.0\n",
-                    )
-                    wheel.writestr(
-                        "builder-0.1.0.dist-info/WHEEL",
-                        "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
-                    )
-                    wheel.writestr("builder-0.1.0.dist-info/RECORD", "")
-                return filename
-        "#},
-    )?;
-
-    let builder_url = url::Url::from_directory_path(&builder)
-        .map_err(|()| anyhow::anyhow!("Failed to create builder URL"))?;
-    let primer = temp_dir.join("primer");
-    fs_err::create_dir_all(&primer)?;
-    fs_err::write(
-        primer.join("pyproject.toml"),
-        formatdoc! {r#"
-            [project]
-            name = "primer"
-            version = "0.1.0"
-            requires-python = ">=3.12"
-            dynamic = ["dependencies"]
-
-            [project.scripts]
-            primer = "primer:main"
-
-            [build-system]
-            requires = ["builder @ {builder_url}"]
-            backend-path = ["."]
-            build-backend = "build_backend"
-        "#},
-    )?;
-    fs_err::write(
-        primer.join("build_backend.py"),
-        indoc! {r#"
-            from pathlib import Path
-            from zipfile import ZipFile
-
-            def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
-                dist_info = Path(metadata_directory) / "primer-0.1.0.dist-info"
-                dist_info.mkdir()
-                (dist_info / "METADATA").write_text(
-                    "Metadata-Version: 2.3\nName: primer\nVersion: 0.1.0\n"
-                )
-                return dist_info.name
-
-            def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-                filename = "primer-0.1.0-py3-none-any.whl"
-                with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
-                    wheel.writestr(
-                        "primer/__init__.py",
-                        "def main():\n"
-                        "    from importlib.metadata import requires\n"
-                        "    import child\n"
-                        "    print(f'{child.RUNTIME_VERSION} {child.BUILDER_BUILD_NUMBER}')\n"
-                        "    print(requires('child')[0])\n",
-                    )
-                    wheel.writestr(
-                        "primer-0.1.0.dist-info/METADATA",
-                        "Metadata-Version: 2.3\nName: primer\nVersion: 0.1.0\n",
-                    )
-                    wheel.writestr(
-                        "primer-0.1.0.dist-info/WHEEL",
-                        "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
-                    )
-                    wheel.writestr(
-                        "primer-0.1.0.dist-info/entry_points.txt",
-                        "[console_scripts]\nprimer = primer:main\n",
-                    )
-                    wheel.writestr("primer-0.1.0.dist-info/RECORD", "")
-                return filename
-        "#},
-    )?;
-
-    let child = temp_dir.join("child");
-    fs_err::create_dir_all(&child)?;
-    fs_err::write(
-        child.join("pyproject.toml"),
-        formatdoc! {r#"
-            [project]
-            name = "child"
-            version = "0.1.0"
-            requires-python = ">=3.12"
-
-            [build-system]
-            requires = ["builder @ {builder_url}"]
-            backend-path = ["."]
-            build-backend = "build_backend"
-        "#},
-    )?;
-    fs_err::write(
-        child.join("build_backend.py"),
-        indoc! {r#"
-            from importlib.metadata import version
-            from pathlib import Path
-            from zipfile import ZipFile
-            import builder
-
-            def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-                runtime_version = version("ok")
-                filename = "child-0.1.0-py3-none-any.whl"
-                with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
-                    wheel.writestr(
-                        "child/__init__.py",
-                        f'RUNTIME_VERSION = "{runtime_version}"\n'
-                        f"BUILDER_BUILD_NUMBER = {builder.BUILD_NUMBER}\n",
-                    )
-                    wheel.writestr(
-                        "child-0.1.0.dist-info/METADATA",
-                        f"Metadata-Version: 2.3\nName: child\nVersion: 0.1.0\n"
-                        f"Requires-Dist: ok=={runtime_version} ; sys_platform == 'never'\n",
-                    )
-                    wheel.writestr(
-                        "child-0.1.0.dist-info/WHEEL",
-                        "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
-                    )
-                    wheel.writestr("child-0.1.0.dist-info/RECORD", "")
-                return filename
-        "#},
-    )?;
-
-    Ok((primer, child))
 }
 
 // This is a fine-grained token that only has read-only access to the `uv-private-pypackage` repository
@@ -2679,4 +2675,89 @@ macro_rules! uv_snapshot {
         ::insta::assert_snapshot!(snapshot, @$snapshot);
         output
     }};
+}
+
+#[cfg(all(test, unix))]
+mod process_status_tests {
+    use std::process::Command;
+
+    use super::run_and_format_silent;
+
+    #[test]
+    fn reports_signal() {
+        let mut command = Command::new("sh");
+        command.args(["-c", "kill -TERM $$"]);
+        let filters: &[(&str, &str)] = &[];
+        let (snapshot, _) = run_and_format_silent(command, filters, "reports_signal", None, None);
+
+        insta::assert_snapshot!(snapshot, @"
+        exit_code: -1 (failure)
+        exit_status: signal: 15 (SIGTERM)
+        ");
+    }
+
+    #[test]
+    fn preserves_exit_code() {
+        let mut command = Command::new("sh");
+        command.args(["-c", "exit 7"]);
+        let filters: &[(&str, &str)] = &[];
+        let (snapshot, _) =
+            run_and_format_silent(command, filters, "preserves_exit_code", None, None);
+
+        insta::assert_snapshot!(snapshot, @"exit_code: 7 (failure)");
+    }
+}
+
+#[cfg(test)]
+mod cache_directory_tests {
+    use std::process::Command;
+
+    use uv_static::EnvVars;
+
+    use super::assert_effective_cache_directory;
+
+    #[test]
+    #[should_panic(expected = "`UV_CACHE_DIR` is ignored")]
+    fn rejects_environment_override_with_explicit_cache_argument() {
+        let mut command = Command::new("uv");
+        command
+            .arg("--cache-dir")
+            .arg("context-cache")
+            .env(EnvVars::UV_CACHE_DIR, "ignored-cache");
+
+        assert_effective_cache_directory(&command);
+    }
+
+    #[test]
+    #[should_panic(expected = "`UV_CACHE_DIR` is ignored")]
+    fn rejects_environment_override_with_inline_cache_argument() {
+        let mut command = Command::new("uv");
+        command
+            .arg("--cache-dir=context-cache")
+            .env(EnvVars::UV_CACHE_DIR, "ignored-cache");
+
+        assert_effective_cache_directory(&command);
+    }
+
+    #[test]
+    fn allows_environment_override_without_explicit_cache_argument() {
+        let mut command = Command::new("uv");
+        command
+            .arg("cache")
+            .arg("dir")
+            .env(EnvVars::UV_CACHE_DIR, "effective-cache");
+
+        assert_effective_cache_directory(&command);
+    }
+
+    #[test]
+    fn allows_removed_environment_override_with_explicit_cache_argument() {
+        let mut command = Command::new("uv");
+        command
+            .arg("--cache-dir")
+            .arg("context-cache")
+            .env_remove(EnvVars::UV_CACHE_DIR);
+
+        assert_effective_cache_directory(&command);
+    }
 }

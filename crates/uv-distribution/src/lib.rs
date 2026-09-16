@@ -1,6 +1,4 @@
-pub use distribution_database::{
-    DistributionDatabase, HttpArchivePointer, PathArchivePointer, StaticBuildSystem,
-};
+pub use distribution_database::{DistributionDatabase, HttpArchivePointer, PathArchivePointer};
 pub use download::LocalWheel;
 pub use error::Error;
 pub use index::{BuiltWheelIndex, RegistryWheelIndex};
@@ -16,6 +14,7 @@ mod archive;
 mod distribution_database;
 mod download;
 mod error;
+mod extracted_wheel;
 mod hash;
 mod index;
 mod metadata;

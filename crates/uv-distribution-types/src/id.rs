@@ -2,7 +2,7 @@ use std::fmt::{Display, Formatter};
 use std::path::{Path, PathBuf};
 
 use uv_cache_key::{CanonicalUrl, RepositoryUrl};
-use uv_distribution_filename::DistExtension;
+use uv_fs::normalize_path;
 use uv_git_types::GitUrl;
 
 use uv_normalize::PackageName;
@@ -44,9 +44,9 @@ impl Display for PackageId {
 /// A unique identifier for a package at a specific version (e.g., `black==23.10.0`).
 ///
 /// URL-based variants use kind-specific identity semantics. Archive URLs ignore hash fragments
-/// while preserving semantic `subdirectory` information for source archives. Git URLs preserve
-/// semantic `subdirectory` information while ignoring unrelated fragments. Local file URLs are
-/// keyed by their resolved path and kind.
+/// while preserving semantic `subdirectory` information. Git URLs preserve semantic
+/// `subdirectory` information while ignoring unrelated fragments. Local file URLs are keyed by
+/// their resolved path and kind.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum VersionId {
     /// The identifier consists of a package name and version.
@@ -92,13 +92,9 @@ impl VersionId {
                 url: git.url,
                 subdirectory: Some(git.install_path),
             },
-            ParsedUrl::Archive(archive) => Self::from_archive(
-                archive.url,
-                match archive.ext {
-                    DistExtension::Wheel => None,
-                    DistExtension::Source(_) => archive.subdirectory.map(Path::into_path_buf),
-                },
-            ),
+            ParsedUrl::Archive(archive) => {
+                Self::from_archive(archive.url, archive.subdirectory.map(Path::into_path_buf))
+            }
         }
     }
 
@@ -112,6 +108,11 @@ impl VersionId {
 
     /// Create a new [`VersionId`] from an archive URL.
     pub fn from_archive(location: DisplaySafeUrl, subdirectory: Option<PathBuf>) -> Self {
+        // Use the same lexical normalization as the resolver's source comparison. Equivalent
+        // subdirectories must not lose their trusted hashes during lowering or lockfile reads.
+        let subdirectory = subdirectory
+            .map(|path| normalize_path(path).into_owned())
+            .filter(|path| !path.as_os_str().is_empty());
         Self::ArchiveUrl {
             location: CanonicalUrl::new(location),
             subdirectory,
@@ -243,6 +244,7 @@ impl From<&Self> for ResourceId {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use fs_err as fs;
@@ -260,20 +262,6 @@ mod tests {
             "https://example.com/pkg-0.1.0.whl#sha512=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         )
         .unwrap();
-
-        assert_eq!(VersionId::from_url(&first), VersionId::from_url(&second));
-    }
-
-    #[test]
-    fn version_id_ignores_wheel_subdirectory() {
-        let first = DisplaySafeUrl::parse(
-            "https://example.com/pkg-0.1.0-py3-none-any.whl#subdirectory=foo&sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        )
-        .expect("valid wheel URL");
-        let second = DisplaySafeUrl::parse(
-            "https://example.com/pkg-0.1.0-py3-none-any.whl#sha256=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb&subdirectory=bar",
-        )
-        .expect("valid wheel URL");
 
         assert_eq!(VersionId::from_url(&first), VersionId::from_url(&second));
     }
@@ -339,11 +327,8 @@ mod tests {
         let file_url = DisplaySafeUrl::from_file_path(&file).unwrap();
         let directory_url = DisplaySafeUrl::from_file_path(&directory).unwrap();
 
-        assert!(matches!(VersionId::from_url(&file_url), VersionId::Path(_)));
-        assert!(matches!(
-            VersionId::from_url(&directory_url),
-            VersionId::Directory(_)
-        ));
+        assert_matches!(VersionId::from_url(&file_url), VersionId::Path(_));
+        assert_matches!(VersionId::from_url(&directory_url), VersionId::Directory(_));
 
         fs::remove_file(file).unwrap();
         fs::remove_dir_all(root).unwrap();
@@ -354,6 +339,6 @@ mod tests {
         let url =
             DisplaySafeUrl::parse("git+ftp://example.com/pkg.git@main#subdirectory=foo").unwrap();
 
-        assert!(matches!(VersionId::from_url(&url), VersionId::Unknown(_)));
+        assert_matches!(VersionId::from_url(&url), VersionId::Unknown(_));
     }
 }

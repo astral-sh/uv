@@ -1,29 +1,7 @@
-use std::fmt::{Display, Formatter};
-
 use uv_normalize::PackageName;
+pub use uv_pypi_types::BuildKind;
 
 use crate::{PackageNameSpecifier, PackageNameSpecifiers};
-
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash)]
-pub enum BuildKind {
-    /// A PEP 517 wheel build.
-    #[default]
-    Wheel,
-    /// A PEP 517 source distribution build.
-    Sdist,
-    /// A PEP 660 editable installation wheel build.
-    Editable,
-}
-
-impl Display for BuildKind {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Wheel => f.write_str("wheel"),
-            Self::Sdist => f.write_str("sdist"),
-            Self::Editable => f.write_str("editable"),
-        }
-    }
-}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum BuildOutput {
@@ -87,12 +65,6 @@ impl BuildOptions {
             Some(name) => self.no_build_package(name),
             None => self.no_build_all(),
         }
-    }
-
-    /// Return `true` if building is permitted for at least one package.
-    pub fn allows_package_builds(&self) -> bool {
-        !self.no_build_all()
-            || matches!(&self.no_binary, NoBinary::Packages(packages) if !packages.is_empty())
     }
 
     fn no_build_all(&self) -> bool {

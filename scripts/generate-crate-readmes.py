@@ -1,6 +1,9 @@
 # /// script
 # requires-python = ">=3.13"
 # dependencies = []
+# [tool.uv]
+# no-build = true
+# exclude-newer = "P7D"
 # ///
 
 import json

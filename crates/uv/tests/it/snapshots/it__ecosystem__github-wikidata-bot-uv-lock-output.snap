@@ -2,10 +2,7 @@
 source: crates/uv/tests/it/ecosystem.rs
 expression: snapshot
 ---
-success: true
-exit_code: 0
------ stdout -----
-
+exit_code: 0 (success)
 ----- stderr -----
 warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
 Resolved 34 packages in [TIME]

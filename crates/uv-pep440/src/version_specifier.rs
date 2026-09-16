@@ -93,38 +93,47 @@ impl VersionSpecifiers {
 
         // Add specifiers for the holes between the bounds.
         for (lower, upper) in bounds {
-            let specifier = match (next, lower) {
+            let gap_specifiers = match (next, lower) {
                 // Ex) [3.7, 3.8.5), (3.8.5, 3.9] -> >=3.7,!=3.8.5,<=3.9
                 (Bound::Excluded(prev), Bound::Excluded(lower)) if prev == lower => {
-                    Some(VersionSpecifier::not_equals_version(prev.clone()))
+                    vec![VersionSpecifier::not_equals_version(prev.clone())]
                 }
                 // Ex) [3.7, 3.8), (3.8, 3.9] -> >=3.7,!=3.8.*,<=3.9
                 (Bound::Excluded(prev), Bound::Included(lower)) => {
-                    match *prev.only_release_trimmed().release() {
-                        [major] if *lower.only_release_trimmed().release() == [major, 1] => {
-                            Some(VersionSpecifier::not_equals_star_version(Version::new([
-                                major, 0,
-                            ])))
-                        }
-                        [major, minor]
-                            if *lower.only_release_trimmed().release() == [major, minor + 1] =>
+                    let prev = prev.only_release_trimmed();
+                    let lower = lower.only_release_trimmed();
+                    match (&*prev.release(), &*lower.release()) {
+                        ([major], [lower_major, lower_minor]) if major == lower_major => (0
+                            ..*lower_minor)
+                            .map(|minor| {
+                                VersionSpecifier::not_equals_star_version(Version::new([
+                                    *major, minor,
+                                ]))
+                            })
+                            .collect(),
+                        ([major, minor], [lower_major, lower_minor])
+                            if major == lower_major && minor < lower_minor =>
                         {
-                            Some(VersionSpecifier::not_equals_star_version(Version::new([
-                                major, minor,
-                            ])))
+                            (*minor..*lower_minor)
+                                .map(|minor| {
+                                    VersionSpecifier::not_equals_star_version(Version::new([
+                                        *major, minor,
+                                    ]))
+                                })
+                                .collect()
                         }
-                        _ => None,
+                        _ => Vec::new(),
                     }
                 }
-                _ => None,
+                _ => Vec::new(),
             };
-            if let Some(specifier) = specifier {
-                specifiers.push(specifier);
-            } else {
+            if gap_specifiers.is_empty() {
                 #[cfg(feature = "tracing")]
                 warn!(
                     "Ignoring unsupported gap in `requires-python` version: {next:?} -> {lower:?}"
                 );
+            } else {
+                specifiers.extend(gap_specifiers);
             }
             next = upper;
         }

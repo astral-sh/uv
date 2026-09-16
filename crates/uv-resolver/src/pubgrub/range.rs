@@ -176,6 +176,10 @@ impl Range<Version> {
         self.binary_op(other, Ranges::intersection)
     }
 
+    pub(crate) fn difference(&self, other: &Self) -> Self {
+        self.binary_op(other, Ranges::difference)
+    }
+
     pub(crate) fn union(&self, other: &Self) -> Self {
         self.binary_op(other, Ranges::union)
     }
@@ -233,6 +237,10 @@ impl VersionSet for Range<Version> {
 
     fn intersection(&self, other: &Self) -> Self {
         Self::intersection(self, other)
+    }
+
+    fn difference(&self, other: &Self) -> Self {
+        Self::difference(self, other)
     }
 
     fn contains(&self, version: &Self::V) -> bool {
@@ -369,6 +377,15 @@ mod tests {
             for right in &ranges {
                 assert_matches_recanonicalized(&left.intersection(right));
                 assert_matches_recanonicalized(&left.union(right));
+                assert_matches_recanonicalized(&left.difference(right));
+                assert_eq!(
+                    left.difference(right),
+                    left.intersection(&right.complement())
+                );
+                assert_eq!(
+                    left.difference(right).encoded_versions(),
+                    left.intersection(&right.complement()).encoded_versions()
+                );
             }
         }
     }

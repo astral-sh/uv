@@ -9,6 +9,9 @@ use std::collections::BTreeMap;
 use serde::Serialize;
 use serde_json::Value;
 use uv_audit::{AdverseStatus, ProjectStatus, Vulnerability};
+use uv_normalize::PackageName;
+
+use super::AuditResults;
 
 /// Top-level SARIF log object (SARIF §3.13).
 #[derive(Debug, Serialize)]
@@ -69,6 +72,7 @@ impl Report {
                 "https://docs.oasis-open.org/sarif/sarif/v2.1.0/os/schemas/sarif-schema-2.1.0.json"
                     .to_string(),
             runs: vec![Run {
+                automation_details: None,
                 invocations: vec![Invocation {
                     execution_successful: true,
                 }],
@@ -87,16 +91,51 @@ impl Report {
             version: "2.1.0".to_string(),
         }
     }
+
+    /// Combine tool findings into one SARIF document, retaining a run for each tool.
+    pub(crate) fn from_audits(audits: &[(PackageName, AuditResults)]) -> Self {
+        let mut report = Self::from_findings(&[], &[], "");
+        report.runs.clear();
+
+        for (name, results) in audits {
+            let (vulnerabilities, statuses) = results.split_findings();
+            let runs = Self::from_findings(&vulnerabilities, &statuses, &results.artifact_uri)
+                .runs
+                .into_iter()
+                .map(|mut run| {
+                    run.automation_details = Some(RunAutomationDetails {
+                        id: RunId(format!("uv/tool-audit/{name}")),
+                    });
+                    run
+                });
+            report.runs.extend(runs);
+        }
+
+        report
+    }
 }
 
 /// A single tool invocation's results (SARIF §3.14).
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Run {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    automation_details: Option<RunAutomationDetails>,
     invocations: Vec<Invocation>,
     results: Vec<Result>,
     tool: Tool,
 }
+
+/// Stable automation identity for an individual audited tool.
+#[derive(Debug, Serialize)]
+struct RunAutomationDetails {
+    id: RunId,
+}
+
+/// Stable identity for a SARIF run.
+#[derive(Debug, Serialize)]
+#[serde(transparent)]
+struct RunId(String);
 
 /// Tool metadata wrapper (SARIF §3.18).
 #[derive(Debug, Serialize)]

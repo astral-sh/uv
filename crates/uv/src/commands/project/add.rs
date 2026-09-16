@@ -14,10 +14,10 @@ use tracing::{debug, warn};
 
 use uv_cache::Cache;
 use uv_cache_key::RepositoryUrl;
-use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DevMode, DryRun,
-    EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, GitLfsSetting,
+    ActiveEnvironment, Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DevMode,
+    DryRun, EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, GitLfsSetting,
     InstallOptions, NoSources,
 };
 use uv_dispatch::BuildDispatch;
@@ -26,12 +26,16 @@ use uv_distribution_types::{
     Identifier, Index, IndexLocations, IndexName, IndexUrl, NameRequirementSpecification,
     Requirement, RequirementSource, UnresolvedRequirement,
 };
-use uv_fs::{CWD, LockedFile, LockedFileError, Simplified};
+use uv_errors::HintOrdering;
+use uv_fs::{LockedFile, LockedFileError, Simplified};
 use uv_git::store_credentials;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, ExtraName, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_preview::Preview;
-use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
+use uv_python::{
+    ConfigDiscovery, Interpreter, PythonDownloads, PythonEnvironment, PythonPreference,
+    PythonRequest,
+};
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
 use uv_resolver::FlatIndex;
@@ -54,14 +58,39 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    LinkErrorReporting, PlatformState, ProjectEnvironment, ProjectError, ProjectInterpreter,
-    ScriptInterpreter, UniversalState, WorkspacePython, default_dependency_groups,
+    LinkErrorReporting, PlatformState, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectError,
+    ProjectInterpreter, ScriptInterpreter, UniversalState, WorkspacePython,
     init_script_python_requirement,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
-use crate::commands::{ExitStatus, ScriptPath, diagnostics, project};
+use crate::commands::{ExitStatus, ScriptPath, UvError, project};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
+
+/// A failed dependency addition, with `uv add`-specific recovery context.
+#[derive(Debug, thiserror::Error)]
+#[error("Failed to add dependencies")]
+pub(crate) struct AddDependencyError {
+    #[source]
+    cause: anyhow::Error,
+    standard_library_package: Option<PackageName>,
+}
+
+impl uv_errors::Hinted for AddDependencyError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        let mut hints = uv_errors::Hints::none();
+        if let Some(package) = &self.standard_library_package {
+            hints.push(format!(
+                "The module `{package}` is included in the Python standard library and usually should not be added as a dependency"
+            ));
+        }
+        hints.push(format!(
+            "If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing",
+            "--frozen".green()
+        ));
+        hints.with_ordering(HintOrdering::Last)
+    }
+}
 
 /// Add one or more packages to the project requirements.
 #[expect(clippy::fn_params_excessive_bools)]
@@ -69,7 +98,7 @@ pub(crate) async fn add(
     project_dir: &Path,
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,
-    active: Option<bool>,
+    active: ActiveEnvironment,
     no_sync: bool,
     no_install_project: bool,
     only_install_project: bool,
@@ -103,7 +132,7 @@ pub(crate) async fn add(
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: Concurrency,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     cache: &Cache,
     printer: Printer,
     preview: Preview,
@@ -199,7 +228,7 @@ pub(crate) async fn add(
                     false,
                     python_preference,
                     python_downloads,
-                    no_config,
+                    config_discovery,
                     &client_builder,
                     cache,
                     &reporter,
@@ -221,7 +250,7 @@ pub(crate) async fn add(
             python_downloads,
             &install_mirrors,
             false,
-            no_config,
+            config_discovery,
             active,
             cache,
             printer,
@@ -274,8 +303,7 @@ pub(crate) async fn add(
         }
 
         // Enable the default groups of the project
-        defaulted_groups =
-            groups.with_defaults(default_dependency_groups(project.pyproject_toml())?);
+        defaulted_groups = groups.with_defaults(project.default_groups()?);
 
         if frozen.is_some() || no_sync {
             // Discover the interpreter.
@@ -284,7 +312,7 @@ pub(crate) async fn add(
                 Some(project.workspace()),
                 &defaulted_groups,
                 project_dir,
-                no_config,
+                config_discovery,
             )
             .await?;
             let interpreter = ProjectInterpreter::discover(
@@ -295,8 +323,9 @@ pub(crate) async fn add(
                 python_preference,
                 python_downloads,
                 &install_mirrors,
-                false,
-                active,
+                ProjectEnvironmentPolicy::Optional,
+                // Suppress warnings about the active environment when we won't modify it.
+                active.without_warning(),
                 cache,
                 printer,
             )
@@ -315,7 +344,7 @@ pub(crate) async fn add(
                 python_preference,
                 python_downloads,
                 no_sync,
-                no_config,
+                config_discovery,
                 active,
                 cache,
                 DryRun::Disabled,
@@ -382,12 +411,8 @@ pub(crate) async fn add(
 
         // Resolve any unnamed requirements.
         if !unnamed.is_empty() {
-            let name_state = state.clone().into_inner().fork();
-
             // TODO(charlie): These are all default values. We should consider whether we want to
             // make them optional on the downstream APIs.
-            let build_constraints = Constraints::default();
-            let build_hasher = HashStrategy::default();
             let hasher = HashStrategy::default();
             let sources = NoSources::None;
 
@@ -399,6 +424,20 @@ pub(crate) async fn add(
                 .platform(target.interpreter().platform())
                 .build()?;
 
+            let build_constraints = LockTarget::from(&target)
+                .lower_build_constraints(
+                    &settings.resolver.index_locations,
+                    &settings.resolver.sources,
+                    cache,
+                    &WorkspaceCache::default(),
+                    client.credentials_cache(),
+                )
+                .await?;
+            let build_hasher = HashStrategy::from_constraints(
+                &build_constraints,
+                Some(&target.interpreter().to_resolver_marker_environment()),
+                uv_configuration::HashCheckingMode::Verify,
+            )?;
             // Determine whether to enable build isolation.
             let environment;
             let build_isolation = match &settings.resolver.build_isolation {
@@ -414,20 +453,8 @@ pub(crate) async fn add(
             };
 
             // Resolve the flat indexes from `--find-links`.
-            let flat_index = {
-                let client =
-                    FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
-                let entries = client
-                    .fetch_all(
-                        settings
-                            .resolver
-                            .index_locations
-                            .flat_indexes()
-                            .map(Index::url),
-                    )
-                    .await?;
-                FlatIndex::from_entries(entries, None, &hasher, &settings.resolver.build_options)
-            };
+            let flat_index =
+                FlatIndex::load(&client, cache, &settings.resolver.index_locations).await?;
 
             // Lower the extra build dependencies, if any.
             let extra_build_requires = if let AddTarget::Project(project, _) = &target {
@@ -436,8 +463,11 @@ pub(crate) async fn add(
                     project.workspace(),
                     &settings.resolver.index_locations,
                     &settings.resolver.sources,
+                    cache,
+                    &WorkspaceCache::default(),
                     client.credentials_cache(),
-                )?
+                )
+                .await?
             } else {
                 LoweredExtraBuildDependencies::from_non_lowered(
                     settings.resolver.extra_build_dependencies.clone(),
@@ -455,7 +485,7 @@ pub(crate) async fn add(
                 &settings.resolver.index_locations,
                 &flat_index,
                 &settings.resolver.dependency_metadata,
-                name_state.clone(),
+                state.clone().into_inner(),
                 settings.resolver.index_strategy,
                 &settings.resolver.config_setting,
                 &settings.resolver.config_settings_package,
@@ -477,7 +507,7 @@ pub(crate) async fn add(
             requirements.extend(
                 NamedRequirementsResolver::new(
                     &hasher,
-                    name_state.index(),
+                    state.index(),
                     DistributionDatabase::new(
                         &client,
                         &build_dispatch,
@@ -691,7 +721,9 @@ pub(crate) async fn add(
     // Add any indexes that were provided on the command-line, in priority order.
     if !raw {
         let root_dir = match &target {
-            AddTarget::Script(_, _) => CWD.as_path(),
+            AddTarget::Script(script, _) => {
+                script.path.parent().expect("script path has no parent")
+            }
             AddTarget::Project(project, _) => project.root(),
         };
         let locations = IndexLocations::new(indexes, Vec::new(), false);
@@ -786,29 +818,29 @@ pub(crate) async fn add(
             }
             match err {
                 ProjectError::Operation(err) => {
-                    let standard_library_hint = standard_library_hint(&err, &edits, python_minor);
-                    let diagnostic = diagnostics::OperationDiagnostic::default();
-                    let diagnostic = if let Some(hint) = standard_library_hint {
-                        diagnostic.with_hint(hint)
-                    } else {
-                        diagnostic
-                    };
-                    diagnostic
-                        .with_hint(format!("If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing", "--frozen".green()))
-                        .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                    let standard_library_package =
+                        standard_library_package(&err, &edits, python_minor);
+                    Err(UvError::from(err)
+                        .map_user(|cause| {
+                            AddDependencyError {
+                                cause,
+                                standard_library_package,
+                            }
+                            .into()
+                        })
+                        .into())
                 }
-                err => Err(err.into()),
+                err => Err(UvError::from(err).into()),
             }
         }
     }
 }
 
-fn standard_library_hint(
+fn standard_library_package(
     operation_error: &crate::commands::pip::operations::Error,
     edits: &[DependencyEdit],
     python_minor: u8,
-) -> Option<String> {
+) -> Option<PackageName> {
     let crate::commands::pip::operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(
         no_solution_error,
     )) = operation_error
@@ -826,10 +858,7 @@ fn standard_library_hint(
                 .packages()
                 .any(|package| package == &edit.requirement.name)
         {
-            Some(format!(
-                "The module `{}` is included in the Python standard library and usually should not be added as a dependency",
-                edit.requirement.name
-            ))
+            Some(edit.requirement.name.clone())
         } else {
             None
         }
@@ -1096,7 +1125,7 @@ async fn lock_and_sync(
         // Extract the minimum-supported version for each dependency.
         let mut minimum_version =
             FxHashMap::with_capacity_and_hasher(lock.packages().len(), FxBuildHasher);
-        for dist in lock.runtime_packages() {
+        for dist in lock.packages() {
             let name = dist.name();
             let Some(version) = dist.version() else {
                 continue;
@@ -1186,6 +1215,7 @@ async fn lock_and_sync(
                     .expect("project root is a valid URL");
                 let distribution_id = url.distribution_id();
                 let existing = lock_state.index().distributions().remove(&distribution_id);
+                // TODO: Allow an absent entry after reusing a metadata-free lock.
                 debug_assert!(existing.is_some(), "distribution should exist");
             }
 

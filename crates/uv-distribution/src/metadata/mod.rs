@@ -54,7 +54,7 @@ pub enum MetadataError {
     IncompleteSourceGroup(PackageName, GroupName),
 }
 
-impl uv_errors::Hint for MetadataError {
+impl uv_errors::Hinted for MetadataError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::LoweringError(_, err) | Self::GroupLoweringError(_, _, err) => err.hints(),
@@ -80,6 +80,19 @@ impl Metadata {
     /// Lower without considering `tool.uv` in `pyproject.toml`, used for index and other archive
     /// dependencies.
     pub(crate) fn from_metadata23(metadata: ResolutionMetadata) -> Self {
+        // This route handles package metadata rather than explicit user input.
+        // Write local dependency paths relative to the lockfile.
+        Self::from_resolution_metadata(metadata).with_force_relative(true)
+    }
+
+    /// Lower metadata selected from `tool.uv.dependency-metadata`.
+    pub(crate) fn from_dependency_metadata(metadata: ResolutionMetadata) -> Self {
+        // Respect the relative/absolute path preference in user-provided metadata overrides.
+        Self::from_resolution_metadata(metadata)
+    }
+
+    /// Lower package metadata without selecting an output path policy.
+    fn from_resolution_metadata(metadata: ResolutionMetadata) -> Self {
         Self {
             name: metadata.name,
             version: metadata.version,
@@ -143,6 +156,22 @@ impl Metadata {
             dynamic,
         })
     }
+
+    /// Set whether local dependency sources should be represented by relative paths.
+    ///
+    /// Disabling this restores each URL's original path spelling preference.
+    #[must_use]
+    pub fn with_force_relative(mut self, force_relative: bool) -> Self {
+        for requirement in self.requires_dist.iter_mut().chain(
+            self.dependency_groups
+                .values_mut()
+                .flat_map(|requirements| requirements.iter_mut()),
+        ) {
+            requirement.set_force_relative(force_relative);
+        }
+
+        self
+    }
 }
 
 /// The metadata associated with an archive.
@@ -150,7 +179,7 @@ impl Metadata {
 pub struct ArchiveMetadata {
     /// The [`Metadata`] for the underlying distribution.
     pub metadata: Metadata,
-    /// The hashes of the source or built archive.
+    /// Hashes computed from the source or built archive.
     pub hashes: HashDigests,
 }
 

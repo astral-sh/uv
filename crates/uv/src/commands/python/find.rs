@@ -4,15 +4,16 @@ use std::path::Path;
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_configuration::DependencyGroupsWithDefaults;
+use uv_configuration::{ActiveEnvironment, DependencyGroupsWithDefaults};
 use uv_errors::ErrorWithHints;
 use uv_fs::Simplified;
 use uv_python::{
-    EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
+    ConfigDiscovery, EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference,
+    PythonRequest,
 };
 use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
-use uv_warnings::{warn_user, warn_user_once};
+use uv_warnings::{warn_user, warn_user_once_with_chain};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
 use crate::commands::{
@@ -29,8 +30,8 @@ pub(crate) async fn find(
     show_version: bool,
     resolve_links: bool,
     no_project: bool,
-    no_config: bool,
     system: bool,
+    config_discovery: ConfigDiscovery,
     python_preference: PythonPreference,
     python_downloads_json_url: Option<&str>,
     client_builder: &BaseClientBuilder<'_>,
@@ -64,7 +65,7 @@ pub(crate) async fn find(
                         | WorkspaceErrorKind::MissingPyprojectToml
                         | WorkspaceErrorKind::NonWorkspace(_)
                 ) {
-                    warn_user_once!("{err}");
+                    warn_user_once_with_chain!(&err);
                 }
                 None
             }
@@ -82,7 +83,7 @@ pub(crate) async fn find(
         project.as_ref().map(VirtualProject::workspace),
         &groups,
         project_dir,
-        no_config,
+        config_discovery,
     )
     .await?;
 
@@ -143,7 +144,7 @@ pub(crate) async fn find_script(
     client_builder: &BaseClientBuilder<'_>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -155,8 +156,8 @@ pub(crate) async fn find_script(
         python_downloads,
         &PythonInstallMirrors::default(),
         false,
-        no_config,
-        Some(false),
+        config_discovery,
+        ActiveEnvironment::Ignore,
         cache,
         printer,
     )
@@ -166,7 +167,7 @@ pub(crate) async fn find_script(
             writeln!(
                 printer.stderr(),
                 "{}",
-                ErrorWithHints::new(&error, uv_errors::Hint::hints(&error))
+                ErrorWithHints::new(&error, uv_errors::Hinted::hints(&error))
             )?;
             return Ok(ExitStatus::Failure);
         }

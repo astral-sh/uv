@@ -1,3 +1,4 @@
+use std::fmt::Write;
 use std::path::Path;
 
 use anstream::print;
@@ -5,16 +6,18 @@ use anyhow::{Error, Result};
 use futures::StreamExt;
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
+use uv_cli::TreeFormat;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
-use uv_configuration::{Concurrency, DependencyGroups, TargetTriple};
+use uv_configuration::{ActiveEnvironment, Concurrency, DependencyGroups, TargetTriple};
 use uv_distribution_types::IndexCapabilities;
+use uv_lock::{PackageMap, TreeDisplay, TreeJsonTarget};
 use uv_normalize::DefaultGroups;
 use uv_normalize::PackageName;
-use uv_preview::Preview;
-use uv_python::{PythonDownloads, PythonPreference, PythonRequest, PythonVersion};
-use uv_resolver::{PackageMap, TreeDisplay};
+use uv_preview::{Preview, PreviewFeature};
+use uv_python::{ConfigDiscovery, PythonDownloads, PythonPreference, PythonRequest, PythonVersion};
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
+use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
 use crate::commands::pip::latest::LatestClient;
@@ -23,11 +26,11 @@ use crate::commands::pip::resolution_markers;
 use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState, WorkspacePython,
-    default_dependency_groups,
+    ProjectEnvironmentPolicy, ProjectInterpreter, ScriptInterpreter, UniversalState,
+    WorkspacePython,
 };
 use crate::commands::reporters::LatestVersionReporter;
-use crate::commands::{ExitStatus, diagnostics};
+use crate::commands::{ExitStatus, UvError};
 use crate::printer::Printer;
 use crate::settings::FrozenSource;
 use crate::settings::LockCheck;
@@ -41,6 +44,7 @@ pub(crate) async fn tree(
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,
     universal: bool,
+    format: TreeFormat,
     depth: u8,
     prune: Vec<PackageName>,
     package: Vec<PackageName>,
@@ -58,12 +62,19 @@ pub(crate) async fn tree(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
+    if matches!(format, TreeFormat::Json) && !preview.is_enabled(PreviewFeature::JsonOutput) {
+        warn_user!(
+            "The `--format json` option is experimental and the schema may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeature::JsonOutput
+        );
+    }
+
     // Find the project requirements.
     let virtual_project;
     let target = if let Some(script) = script.as_ref() {
@@ -81,7 +92,7 @@ pub(crate) async fn tree(
 
     // Determine the groups to include.
     let default_groups = match target {
-        LockTarget::Workspace(workspace) => default_dependency_groups(workspace.pyproject_toml())?,
+        LockTarget::Workspace(workspace) => workspace.default_groups()?,
         LockTarget::Script(_) => DefaultGroups::default(),
     };
     let groups = groups.with_defaults(default_groups);
@@ -99,8 +110,8 @@ pub(crate) async fn tree(
                 python_downloads,
                 &install_mirrors,
                 false,
-                no_config,
-                Some(false),
+                config_discovery,
+                ActiveEnvironment::Ignore,
                 cache,
                 printer,
             )
@@ -112,7 +123,7 @@ pub(crate) async fn tree(
                     Some(workspace),
                     &groups,
                     project_dir,
-                    no_config,
+                    config_discovery,
                 )
                 .await?;
                 ProjectInterpreter::discover(
@@ -123,8 +134,8 @@ pub(crate) async fn tree(
                     python_preference,
                     python_downloads,
                     &install_mirrors,
-                    false,
-                    Some(false),
+                    ProjectEnvironmentPolicy::Optional,
+                    ActiveEnvironment::Ignore,
                     cache,
                     printer,
                 )
@@ -168,12 +179,7 @@ pub(crate) async fn tree(
     .await
     {
         Ok(result) => result.into_lock(),
-        Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::default()
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-        }
-        Err(err) => return Err(err.into()),
+        Err(err) => return Err(UvError::from(err).into()),
     };
 
     // Determine the markers to use for resolution.
@@ -189,7 +195,8 @@ pub(crate) async fn tree(
     let latest = if outdated {
         // Filter to packages that are derived from a registry.
         let packages = lock
-            .runtime_packages()
+            .packages()
+            .iter()
             .filter_map(|package| {
                 // TODO(charlie): We would need to know the format here.
                 let index = match package.index(target.install_path()) {
@@ -245,7 +252,7 @@ pub(crate) async fn tree(
             let client = LatestClient {
                 client: &client,
                 capabilities: &capabilities,
-                prerelease: lock.prerelease_mode(),
+                prerelease: lock.prerelease(),
                 exclude_newer,
                 index_locations,
                 requires_python: Some(lock.requires_python()),
@@ -301,7 +308,19 @@ pub(crate) async fn tree(
         show_sizes,
     );
 
-    print!("{tree}");
+    match format {
+        TreeFormat::Text => print!("{tree}"),
+        TreeFormat::Json => writeln!(
+            printer.stdout_important(),
+            "{}",
+            tree.to_json(match target {
+                LockTarget::Workspace(workspace) => {
+                    TreeJsonTarget::Workspace(workspace.install_path())
+                }
+                LockTarget::Script(script) => TreeJsonTarget::Script(&script.path),
+            })?
+        )?,
+    }
 
     Ok(ExitStatus::Success)
 }

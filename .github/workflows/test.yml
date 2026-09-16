@@ -10,14 +10,17 @@ on:
         type: string
         default: "false"
 
-permissions: {}
+permissions:
+  contents: read
 
 env:
   CARGO_INCREMENTAL: 0
   CARGO_NET_RETRY: 10
   CARGO_TERM_COLOR: always
   PYTHON_VERSION: "3.12"
+  RUSTC_BOOTSTRAP: 1
   RUSTUP_MAX_RETRIES: 10
+  UV_LOCKED: 1
 
 jobs:
   # We use the large GitHub actions runners
@@ -29,31 +32,47 @@ jobs:
     runs-on: depot-ubuntu-24.04-16
     name: "cargo test on linux"
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: "Install mold"
         run: ./scripts/install-mold.sh
 
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - name: "Install Rust toolchain"
+        run: rustup toolchain install --profile minimal
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        id: rust-cache
         with:
+          prefix-key: v1-rust-workspace
+          key: ${{ hashFiles('Cargo.toml') }}
+          cache-workspace-crates: "true"
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
-      - name: "Install Rust toolchain"
-        run: rustup show
+      - name: "Record Cargo cache freshness"
+        if: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
+        run: touch "$RUNNER_TEMP/uv-cargo-cache-marker"
 
-      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
-          version: "0.11.28"
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
+          version: "0.12.13"
+          checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
 
       - name: "Install required Python versions"
         run: uv python install
 
       - name: "Install secret service"
         run: |
-          echo 'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/80-retries > /dev/null
-          sudo apt install -y gnome-keyring
+          # Try the next configured mirror after the first failed download.
+          cat /etc/apt/apt-mirrors.txt
+          printf '%s\n' \
+            'Acquire::Retries "0";' \
+            'Acquire::http::Timeout "10";' \
+            'Acquire::https::Timeout "10";' \
+            | sudo tee /etc/apt/apt.conf.d/80-retries > /dev/null
+          sudo apt install -y --no-install-recommends gnome-keyring
 
       - name: "Start gnome-keyring"
         # run gnome-keyring with 'foobar' as password for the login keyring
@@ -84,16 +103,12 @@ jobs:
           sudo mount -o loop /tmp/minix.img /minix
           sudo chown "$(id -u):$(id -g)" /minix
 
-      - name: "Install cargo nextest"
-        uses: taiki-e/install-action@4684b8405694ae9dd42c9f39ba901a70ae83f4a3 # v2.82.9
-        with:
-          tool: cargo-nextest
-
       - name: "Cargo test"
         env:
           # Retry more than default to reduce flakes in CI
           UV_HTTP_RETRIES: 5
           RUST_BACKTRACE: 1
+          CARGO_UNSTABLE_MTIME_ON_USE: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
           UV_INTERNAL__TEST_COW_FS: /btrfs
           UV_INTERNAL__TEST_NOCOW_FS: /tmpfs
           UV_INTERNAL__TEST_ALT_FS: /tmpfs
@@ -102,11 +117,17 @@ jobs:
           INSTA_UPDATE: new
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         run: |
-          cargo nextest run \
-            --cargo-profile fast-build \
+          uv run --only-dev cargo nextest run \
+            --cargo-profile fast-build-nightly \
+            -Z panic-abort-tests \
+            -Z checksum-freshness \
             --features test-python-patch,test-universal,native-auth,secret-service \
             --workspace \
             --profile ci-linux
+
+      - name: "Prune superseded workspace artifacts"
+        if: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
+        run: python3 scripts/prune_cargo_workspace_cache.py target/fast-build-nightly "$RUNNER_TEMP/uv-cargo-cache-marker"
 
       - name: "Upload pending snapshots"
         if: ${{ failure() }}
@@ -131,19 +152,27 @@ jobs:
     timeout-minutes: 20
     # Only run macOS tests on main without opt-in
     if: ${{ inputs.test-macos == 'true' }}
-    runs-on: depot-macos-15
+    runs-on: namespace-profile-macos-15
     name: "cargo test on macos"
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - name: "Install Rust toolchain"
+        run: rustup toolchain install --profile minimal
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        id: rust-cache
         with:
+          prefix-key: v1-rust-workspace
+          key: ${{ hashFiles('Cargo.toml') }}
+          cache-workspace-crates: "true"
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
-      - name: "Install Rust toolchain"
-        run: rustup show
+      - name: "Record Cargo cache freshness"
+        if: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
+        run: touch "$RUNNER_TEMP/uv-cargo-cache-marker"
 
       - name: "Create HFS+ disk image (no reflink support)"
         run: |
@@ -151,23 +180,31 @@ jobs:
           hdiutil attach /tmp/noreflink.dmg
           echo "HFS_MOUNT=/Volumes/NoReflink" >> "$GITHUB_ENV"
 
-      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+      - name: "Create CI keychain"
+        # Namespace macOS runners do not start with an unlocked default user keychain. Create an
+        # empty-password keychain for native-auth tests; GitHub and Depot runners provide one.
+        run: |
+          security create-keychain -p "" "$RUNNER_TEMP/uv-ci.keychain-db"
+          security set-keychain-settings -lut 21600 "$RUNNER_TEMP/uv-ci.keychain-db"
+          security unlock-keychain -p "" "$RUNNER_TEMP/uv-ci.keychain-db"
+          security list-keychains -d user -s "$RUNNER_TEMP/uv-ci.keychain-db"
+          security default-keychain -d user -s "$RUNNER_TEMP/uv-ci.keychain-db"
+
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
-          version: "0.11.28"
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
+          version: "0.12.13"
+          checksum: "7e6ddb9316acc00f2296c82ff4d99977870ee34b2f0ddcae9444d714db9364ed"
 
       - name: "Install required Python versions"
         run: uv python install
-
-      - name: "Install cargo nextest"
-        uses: taiki-e/install-action@4684b8405694ae9dd42c9f39ba901a70ae83f4a3 # v2.82.9
-        with:
-          tool: cargo-nextest
 
       - name: "Cargo test"
         env:
           # Retry more than default to reduce flakes in CI
           UV_HTTP_RETRIES: 5
           RUST_BACKTRACE: 1
+          CARGO_UNSTABLE_MTIME_ON_USE: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
           # macOS tmpdir is on APFS which supports reflink
           UV_INTERNAL__TEST_COW_FS: ${{ runner.temp }}
           # HFS+ RAM disk does not support copy-on-write and is on a different device
@@ -177,12 +214,18 @@ jobs:
           INSTA_UPDATE: new
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         run: |
-          cargo nextest run \
-            --cargo-profile fast-build \
+          uv run --only-dev cargo nextest run \
+            --cargo-profile fast-build-nightly \
+            -Z panic-abort-tests \
+            -Z checksum-freshness \
             --no-default-features \
             --features test-python,test-python-managed,test-pypi,test-git,test-git-lfs,performance,test-crates-io,native-auth,apple-native \
             --workspace \
             --profile ci-macos
+
+      - name: "Prune superseded workspace artifacts"
+        if: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
+        run: python3 scripts/prune_cargo_workspace_cache.py target/fast-build-nightly "$RUNNER_TEMP/uv-cargo-cache-marker"
 
       - name: "Upload pending snapshots"
         if: ${{ failure() }}
@@ -212,7 +255,7 @@ jobs:
       matrix:
         partition: [1, 2, 3]
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -224,23 +267,33 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
 
-      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
-          version: "0.11.28"
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
+          version: "0.12.13"
+          checksum: "a86c9dc7bad9b03f388583b7187c05fe9951c2e0d392217e8fd43d97787f6ec2"
 
       - name: "Install required Python versions"
         run: uv python install
 
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - name: "Install Rust toolchain"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: rustup toolchain install --profile minimal
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        id: rust-cache
         with:
+          prefix-key: v1-rust-workspace
+          key: ${{ hashFiles('Cargo.toml') }}
           workspaces: ${{ env.UV_WORKSPACE }}
+          cache-workspace-crates: "true"
           # Use the same cache entry across the partitions
           add-job-id-key: false
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
-      - name: "Install Rust toolchain"
-        working-directory: ${{ env.UV_WORKSPACE }}
-        run: rustup show
+      - name: "Record Cargo cache freshness"
+        if: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
+        run: New-Item -ItemType File -Path "$env:RUNNER_TEMP/uv-cargo-cache-marker"
 
       - name: "Create NTFS test directory (low hardlink limit)"
         run: New-Item -Path "C:\uv" -ItemType Directory -Force
@@ -249,11 +302,6 @@ jobs:
         run: |
           New-Item -Path "C:\uv-smb" -ItemType Directory -Force
           New-SmbShare -Name "uv-alt-fs" -Path "C:\uv-smb" -FullAccess "Everyone"
-
-      - name: "Install cargo nextest"
-        uses: taiki-e/install-action@4684b8405694ae9dd42c9f39ba901a70ae83f4a3 # v2.82.9
-        with:
-          tool: cargo-nextest
 
       - name: "Cargo test"
         working-directory: ${{ env.UV_WORKSPACE }}
@@ -264,6 +312,7 @@ jobs:
           # See https://github.com/astral-sh/uv/issues/6940
           UV_LINK_MODE: copy
           RUST_BACKTRACE: 1
+          CARGO_UNSTABLE_MTIME_ON_USE: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
           UV_INTERNAL__TEST_ALT_FS: "\\\\localhost\\uv-alt-fs"
           UV_INTERNAL__TEST_SMB_FS: "\\\\localhost\\uv-alt-fs"
           UV_INTERNAL__TEST_LOWLINKS_FS: "C:\\uv"
@@ -272,13 +321,20 @@ jobs:
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         shell: bash
         run: |
-          cargo nextest run \
-            --cargo-profile fast-build \
+          uv run --only-dev cargo nextest run \
+            --cargo-profile fast-build-nightly \
+            -Z panic-abort-tests \
+            -Z checksum-freshness \
             --no-default-features \
             --features test-python,test-pypi,test-python-managed,test-windows-registry,native-auth,windows-native \
             --workspace \
             --profile ci-windows \
             --partition hash:${{ matrix.partition }}/3
+
+      - name: "Prune superseded workspace artifacts"
+        if: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: python scripts/prune_cargo_workspace_cache.py target/fast-build-nightly "$env:RUNNER_TEMP/uv-cargo-cache-marker"
 
       - name: "Upload pending snapshots"
         if: ${{ failure() }}

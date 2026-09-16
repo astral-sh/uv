@@ -32,12 +32,12 @@ impl EnvVars {
     pub const UV_OFFLINE: &'static str = "UV_OFFLINE";
 
     /// Equivalent to the `--default-index` command-line argument. If set, uv will use
-    /// this URL as the default index when searching for packages.
+    /// this index as the default index when searching for packages.
     #[attr_added_in("0.4.23")]
     pub const UV_DEFAULT_INDEX: &'static str = "UV_DEFAULT_INDEX";
 
     /// Equivalent to the `--index` command-line argument. If set, uv will use this
-    /// space-separated list of URLs as additional indexes when searching for packages.
+    /// space-separated list of additional indexes when searching for packages.
     #[attr_added_in("0.4.23")]
     pub const UV_INDEX: &'static str = "UV_INDEX";
 
@@ -140,6 +140,13 @@ impl EnvVars {
     /// uv will require that all dependencies have a hash specified in the requirements file.
     #[attr_added_in("0.1.34")]
     pub const UV_REQUIRE_HASHES: &'static str = "UV_REQUIRE_HASHES";
+
+    /// Require wheel metadata to be fetched with HTTP range requests when separate metadata is
+    /// unavailable. If set to `true`, uv will fail instead of downloading the entire wheel.
+    #[attr_hidden]
+    #[attr_added_in("0.12.8")]
+    pub const UV_REQUIRE_METADATA_RANGE_REQUESTS: &'static str =
+        "UV_REQUIRE_METADATA_RANGE_REQUESTS";
 
     /// Equivalent to the `--constraints` command-line argument. If set, uv will use this
     /// file as the constraints file. Uses space-separated list of files.
@@ -312,13 +319,15 @@ impl EnvVars {
     #[attr_added_in("0.5.30")]
     pub const UV_NO_BINARY_PACKAGE: &'static str = "UV_NO_BINARY_PACKAGE";
 
-    /// Equivalent to the `--no-build` command-line argument. If set, uv will not build
-    /// source distributions.
+    /// Equivalent to the `--no-build` command-line argument. If set, uv will not build source
+    /// distributions. First-party packages, such as projects in the workspace, will still be
+    /// built.
     #[attr_added_in("0.1.40")]
     pub const UV_NO_BUILD: &'static str = "UV_NO_BUILD";
 
-    /// Equivalent to the `--no-build-package` command line argument. If set, uv will
-    /// not build source distributions for the given space-delimited list of packages.
+    /// Equivalent to the `--no-build-package` command line argument. If set, uv will not build
+    /// source distributions for the given space-delimited list of packages. First-party packages,
+    /// such as projects in the workspace, will still be built.
     #[attr_added_in("0.6.5")]
     pub const UV_NO_BUILD_PACKAGE: &'static str = "UV_NO_BUILD_PACKAGE";
 
@@ -421,6 +430,10 @@ impl EnvVars {
     /// packages.
     #[attr_added_in("0.1.45")]
     pub const UV_CONCURRENT_INSTALLS: &'static str = "UV_CONCURRENT_INSTALLS";
+
+    /// Controls the number of threads used to read cached HTTP responses.
+    #[attr_added_in("0.11.29")]
+    pub const UV_CONCURRENT_CACHE_READS: &'static str = "UV_CONCURRENT_CACHE_READS";
 
     /// Equivalent to the `--no-progress` command-line argument. Disables all progress output. For
     /// example, spinners and progress bars.
@@ -1073,6 +1086,11 @@ impl EnvVars {
     #[attr_added_in("0.7.13")]
     pub const PYTHONHOME: &'static str = "PYTHONHOME";
 
+    /// Overrides the executable Python uses to determine its environment.
+    #[attr_hidden]
+    #[attr_added_in("0.12.4")]
+    pub const PYTHONEXECUTABLE: &'static str = "PYTHONEXECUTABLE";
+
     /// Used to correctly detect virtual environments when using trampolines.
     #[attr_hidden]
     #[attr_added_in("0.7.13")]
@@ -1342,6 +1360,14 @@ impl EnvVars {
     #[attr_added_in("0.5.19")]
     pub const UV_GIT_LFS: &'static str = "UV_GIT_LFS";
 
+    /// Sets the soft open-file descriptor limit for commands executed by `uv run`.
+    ///
+    /// The limit is applied after uv prepares the environment and immediately before the command
+    /// is spawned. The hard open-file descriptor limit remains unchanged. If the limit cannot be
+    /// applied, uv exits with an error without running the command. Only supported on Unix.
+    #[attr_added_in("0.12.3")]
+    pub const UV_RUN_RLIMIT_NOFILE: &'static str = "UV_RUN_RLIMIT_NOFILE";
+
     /// Number of times that `uv run` has been recursively invoked. Used to guard against infinite
     /// recursion, e.g., when `uv run`` is used in a script shebang.
     #[attr_hidden]
@@ -1423,14 +1449,6 @@ impl EnvVars {
     #[attr_added_in("0.11.14")]
     pub const UV_AZURE_ENDPOINT_URL: &'static str = "UV_AZURE_ENDPOINT_URL";
 
-    /// The URL of the pyx Simple API server.
-    #[attr_added_in("0.8.15")]
-    pub const PYX_API_URL: &'static str = "PYX_API_URL";
-
-    /// The domain of the pyx CDN.
-    #[attr_added_in("0.8.15")]
-    pub const PYX_CDN_DOMAIN: &'static str = "PYX_CDN_DOMAIN";
-
     /// The pyx API key (e.g., `sk-pyx-...`).
     #[attr_added_in("0.8.15")]
     pub const PYX_API_KEY: &'static str = "PYX_API_KEY";
@@ -1448,10 +1466,6 @@ impl EnvVars {
     #[attr_hidden]
     #[attr_added_in("0.8.15")]
     pub const UV_AUTH_TOKEN: &'static str = "UV_AUTH_TOKEN";
-
-    /// Specifies the directory where uv stores pyx credentials.
-    #[attr_added_in("0.8.15")]
-    pub const PYX_CREDENTIALS_DIR: &'static str = "PYX_CREDENTIALS_DIR";
 
     /// The AWS region to use when signing S3 requests.
     #[attr_added_in("0.8.21")]

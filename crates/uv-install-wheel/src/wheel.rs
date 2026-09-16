@@ -22,7 +22,7 @@ use uv_trampoline_builder::windows_script_launcher;
 use uv_warnings::warn_user_once;
 
 use crate::record::RecordEntry;
-use crate::script::{Script, scripts_from_ini};
+use crate::script::{EntryPoints, Script};
 use crate::{Error, Layout};
 
 /// Wrapper script template function
@@ -167,6 +167,92 @@ const RESERVED_VERSIONED_SCRIPT_NAME_PREFIX_ERROR: &str = "python3.";
 const RESERVED_FREE_THREADED_SCRIPT_NAME_PREFIXES_ERROR: &[&str; 2] = &["python3.", "pythonw3."];
 const RESERVED_SCRIPT_NAMES_WARN: &[&str; 2] = &["activate", "activate_this.py"];
 
+/// Return the reserved interpreter name if a script would overwrite a Python executable.
+///
+/// Expects a lowercase string.
+pub fn reserved_script_name(name: &str) -> Option<&str> {
+    let normalized_name = name.strip_suffix(".py").unwrap_or(name);
+    (RESERVED_SCRIPT_NAMES_ERROR.contains(&normalized_name)
+        || normalized_name
+            .strip_prefix(RESERVED_VERSIONED_SCRIPT_NAME_PREFIX_ERROR)
+            .is_some_and(|minor| minor.parse::<u8>().is_ok())
+        || RESERVED_FREE_THREADED_SCRIPT_NAME_PREFIXES_ERROR
+            .iter()
+            .any(|prefix| {
+                normalized_name
+                    .strip_prefix(prefix)
+                    .and_then(|minor| minor.strip_suffix('t'))
+                    .is_some_and(|minor| minor.parse::<u8>().is_ok())
+            }))
+    .then_some(normalized_name)
+}
+
+/// An unpacked wheel whose data directories cannot overwrite a reserved script.
+pub(crate) struct ValidatedWheel<'wheel> {
+    path: &'wheel Path,
+}
+
+impl<'wheel> ValidatedWheel<'wheel> {
+    pub(crate) fn new(
+        layout: &Layout,
+        wheel: &'wheel Path,
+        dist_info_prefix: &str,
+    ) -> Result<Self, Error> {
+        let data_dir = wheel.join(format!("{dist_info_prefix}.data"));
+        for (source, destination) in [
+            (data_dir.join("scripts"), &layout.scheme.scripts),
+            (data_dir.join("data"), &layout.scheme.data),
+        ] {
+            if !source.is_dir() {
+                continue;
+            }
+
+            for entry in WalkDir::new(&source).min_depth(1) {
+                let entry = entry?;
+                if entry.file_type().is_dir() {
+                    continue;
+                }
+
+                let relative = relative_to(entry.path(), &source)?;
+                validate_data_script_destination(
+                    &destination.join(relative),
+                    &layout.scheme.scripts,
+                )?;
+            }
+        }
+
+        Ok(Self { path: wheel })
+    }
+
+    pub(crate) fn as_path(&self) -> &Path {
+        self.path
+    }
+}
+
+fn validate_data_script_destination(target: &Path, scripts: &Path) -> Result<(), Error> {
+    let Some(name) = target
+        .strip_prefix(scripts)
+        .ok()
+        .filter(|relative| relative.components().count() == 1)
+        .and_then(Path::to_str)
+    else {
+        return Ok(());
+    };
+
+    let normalized_name = name.to_ascii_lowercase();
+    let normalized_name = normalized_name
+        .strip_suffix(".exe")
+        .unwrap_or(&normalized_name);
+    if let Some(reserved) = reserved_script_name(normalized_name) {
+        return Err(Error::ReservedScriptName {
+            reserved: reserved.to_string(),
+            declared: name.to_string(),
+        });
+    }
+
+    Ok(())
+}
+
 /// A form of [`Script`] guaranteed by [`ValidatedScript::try_from_script`] to be constrained to
 /// the scripts directory.
 struct ValidatedScript<'script> {
@@ -198,30 +284,19 @@ impl<'script> ValidatedScript<'script> {
         }
 
         // Reserve launcher basenames emitted by `uv venv` across supported platforms.
-        // Apply the Windows launcher normalization before checking so wheel validity is portable.
-        // FIXME: What are the in-reality rules here for name normalization?
-        let normalized_name = name.strip_suffix(".py").unwrap_or(name.as_str());
-        if RESERVED_SCRIPT_NAMES_ERROR.contains(&normalized_name)
-            || normalized_name
-                .strip_prefix(RESERVED_VERSIONED_SCRIPT_NAME_PREFIX_ERROR)
-                .is_some_and(|minor| minor.parse::<u8>().is_ok())
-            || RESERVED_FREE_THREADED_SCRIPT_NAME_PREFIXES_ERROR
-                .iter()
-                .any(|prefix| {
-                    normalized_name
-                        .strip_prefix(prefix)
-                        .and_then(|minor| minor.strip_suffix('t'))
-                        .is_some_and(|minor| minor.parse::<u8>().is_ok())
-                })
-        {
+        // Normalize casing before checking so wheel validity is portable.
+        let lowercase_name = name.to_ascii_lowercase();
+        if let Some(reserved) = reserved_script_name(&lowercase_name) {
             return Err(Error::ReservedScriptName {
-                reserved: normalized_name.to_string(),
+                reserved: reserved.to_string(),
                 declared: script.name.clone(),
             });
         }
 
         let path = if cfg!(windows) {
             // On Windows we actually build an `.exe` wrapper.
+            // FIXME: What are the in-reality rules here for name normalization?
+            let normalized_name = name.strip_suffix(".py").unwrap_or(name.as_str());
             let name = normalized_name.to_string() + std::env::consts::EXE_SUFFIX;
 
             layout.scheme.scripts.join(name)
@@ -392,6 +467,7 @@ pub(crate) enum LibKind {
 fn move_folder_recorded(
     src_dir: &Path,
     dest_dir: &Path,
+    scripts: &Path,
     site_packages: &Path,
     record: &mut [RecordEntry],
 ) -> Result<(), Error> {
@@ -414,6 +490,7 @@ fn move_folder_recorded(
         if entry.file_type().is_dir() {
             fs::create_dir_all(&target)?;
         } else {
+            validate_data_script_destination(&target, scripts)?;
             rename_or_copy.rename_or_copy(src, &target)?;
             let entry = record
                 .iter_mut()
@@ -467,6 +544,7 @@ fn install_script(
     }
 
     let script_absolute = layout.scheme.scripts.join(file.file_name());
+    validate_data_script_destination(&script_absolute, &layout.scheme.scripts)?;
     let script_relative =
         pathdiff::diff_paths(&script_absolute, site_packages).ok_or_else(|| {
             Error::Io(io::Error::other(format!(
@@ -658,7 +736,13 @@ pub(crate) fn install_data(
                     layout.scheme.data.user_display()
                 );
                 // Move the content of the folder to the root of the venv
-                move_folder_recorded(&path, &layout.scheme.data, site_packages, record)?;
+                move_folder_recorded(
+                    &path,
+                    &layout.scheme.data,
+                    &layout.scheme.scripts,
+                    site_packages,
+                    record,
+                )?;
             }
             Some("scripts") => {
                 trace!(
@@ -710,7 +794,13 @@ pub(crate) fn install_data(
                     "Installing data/headers to {}",
                     target_path.user_display()
                 );
-                move_folder_recorded(&path, &target_path, site_packages, record)?;
+                move_folder_recorded(
+                    &path,
+                    &target_path,
+                    &layout.scheme.scripts,
+                    site_packages,
+                    record,
+                )?;
             }
             Some("purelib") => {
                 trace!(
@@ -718,7 +808,13 @@ pub(crate) fn install_data(
                     "Installing data/purelib to {}",
                     layout.scheme.purelib.user_display()
                 );
-                move_folder_recorded(&path, &layout.scheme.purelib, site_packages, record)?;
+                move_folder_recorded(
+                    &path,
+                    &layout.scheme.purelib,
+                    &layout.scheme.scripts,
+                    site_packages,
+                    record,
+                )?;
             }
             Some("platlib") => {
                 trace!(
@@ -726,7 +822,13 @@ pub(crate) fn install_data(
                     "Installing data/platlib to {}",
                     layout.scheme.platlib.user_display()
                 );
-                move_folder_recorded(&path, &layout.scheme.platlib, site_packages, record)?;
+                move_folder_recorded(
+                    &path,
+                    &layout.scheme.platlib,
+                    &layout.scheme.scripts,
+                    site_packages,
+                    record,
+                )?;
             }
             _ => {
                 return Err(Error::InvalidWheel(format!(
@@ -887,16 +989,15 @@ pub(crate) fn write_record(
 ///
 /// This function is given both the location of the unpacked wheel and the list of files from the
 /// wheel that were unpacked to avoid a walkdir for this check.
+///
+/// Returns the relative path to the `RECORD` file if it was rewritten.
 pub fn validate_and_heal_record<'a>(
     wheel_dir: &Path,
-    unpacked_wheel: impl IntoIterator<Item = &'a (PathBuf, u64)>,
+    unpacked_wheel: impl IntoIterator<Item = (&'a Path, u64)>,
     dist: impl Display,
-) -> Result<(), Error> {
+) -> Result<Option<PathBuf>, Error> {
     // On the filesystem: The unpacked files of the wheel.
-    let mut files: BTreeMap<&Path, u64> = unpacked_wheel
-        .into_iter()
-        .map(|(path, size)| (path.as_path(), *size))
-        .collect();
+    let mut files: BTreeMap<&Path, u64> = unpacked_wheel.into_iter().collect();
 
     // In the record: The files we expect in the wheel.
     let dist_info_prefix = find_dist_info(wheel_dir)?;
@@ -948,7 +1049,8 @@ pub fn validate_and_heal_record<'a>(
                 .join("`, `")
         );
     }
-    if !extra_record_entries.is_empty() || !files.is_empty() {
+    let healed = !extra_record_entries.is_empty() || !files.is_empty();
+    if healed {
         debug!("Rewriting RECORD to match actual wheel contents for {dist}");
         // We already removed RECORD entries with no matching unpacked file, now add files that
         // were unpacked but not listed in the archive.
@@ -967,7 +1069,7 @@ pub fn validate_and_heal_record<'a>(
         write_record(wheel_dir, &dist_info_prefix, record)?;
     }
 
-    Ok(())
+    Ok(healed.then(|| PathBuf::from(dist_info_dir).join("RECORD")))
 }
 
 /// Parse a file with email message format such as WHEEL and METADATA
@@ -1079,16 +1181,12 @@ pub(crate) fn parse_scripts(
         .as_ref()
         .join(format!("{dist_info_prefix}.dist-info/entry_points.txt"));
 
-    // Read the entry points mapping. If the file doesn't exist, we just return an empty mapping.
-    let ini = match fs::read_to_string(entry_points_path) {
-        Ok(ini) => ini,
-        Err(err) if err.kind() == io::ErrorKind::NotFound => {
-            return Ok((Vec::new(), Vec::new()));
-        }
-        Err(err) => return Err(err.into()),
-    };
+    let EntryPoints {
+        console_scripts,
+        gui_scripts,
+    } = EntryPoints::read(entry_points_path, extras, python_minor)?;
 
-    scripts_from_ini(extras, python_minor, ini)
+    Ok((console_scripts, gui_scripts))
 }
 
 /// Rename a file with a fallback to copy that switches over on the first failure.
@@ -1124,6 +1222,7 @@ impl RenameOrCopy {
 
 #[cfg(test)]
 mod test {
+    use std::assert_matches;
     use std::io::{Cursor, ErrorKind};
     use std::path::Path;
 
@@ -1222,10 +1321,10 @@ mod test {
             .err()
             .ok_or_else(|| anyhow::anyhow!("invalid UTF-8 should fail to parse"))?;
 
-        assert!(matches!(
+        assert_matches!(
             error,
             Error::Io(err) if err.kind() == ErrorKind::InvalidData
-        ));
+        );
 
         Ok(())
     }

@@ -153,7 +153,7 @@ pub(crate) async fn list(
                     let latest_client = LatestClient {
                         client: &client,
                         capabilities: &capabilities,
-                        prerelease: settings.resolver.prerelease,
+                        prerelease: &settings.resolver.prerelease,
                         exclude_newer: &settings.resolver.exclude_newer,
                         index_locations: &settings.resolver.index_locations,
                         tags: None,

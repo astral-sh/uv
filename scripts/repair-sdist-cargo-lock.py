@@ -66,6 +66,7 @@ def fix_sdist_lockfile(sdist_path: str) -> None:
             ["cargo", "metadata", "--locked", "--format-version=1"],
             cwd=extracted_dir,
             capture_output=True,
+            check=False,
         )
         if result.returncode != 0:
             print(

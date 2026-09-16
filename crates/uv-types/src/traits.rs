@@ -7,7 +7,6 @@ use anyhow::Result;
 use rustc_hash::FxHashSet;
 
 use uv_cache::Cache;
-use uv_cache_info::CacheInfoError;
 use uv_configuration::{BuildKind, BuildOptions, BuildOutput, NoSources};
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
@@ -20,7 +19,7 @@ use uv_normalize::PackageName;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_workspace::WorkspaceCache;
 
-use crate::{BuildArena, BuildIsolation, BuildPackageKey, ResolvedRequirements};
+use crate::{BuildArena, BuildIsolation, ResolvedRequirements};
 
 /// Controls how source tree requirements influence workspace-member editability during lowering.
 #[derive(Debug, Clone, Copy, Default, Eq, PartialEq)]
@@ -106,20 +105,14 @@ pub trait BuildContext {
     /// Return a reference to the build arena.
     fn build_arena(&self) -> &BuildArena<Self::SourceDistBuilder>;
 
-    /// Whether an in-process build environment can be reused for this build context.
-    fn reuse_build_arena(&self) -> bool {
-        true
-    }
-
     /// Return a reference to the discovered registry capabilities.
     fn capabilities(&self) -> &IndexCapabilities;
 
     /// Return a reference to any pre-defined static metadata.
     fn dependency_metadata(&self) -> &DependencyMetadata;
 
-    /// Whether source distribution building or pre-built wheels is disabled.
+    /// Whether building source distributions or installing pre-built wheels is disabled.
     ///
-    /// This [`BuildContext::setup_build`] calls will fail if builds are disabled.
     /// This method exists to avoid fetching source distributions if we know we can't build them.
     fn build_options(&self) -> &BuildOptions;
 
@@ -152,38 +145,11 @@ pub trait BuildContext {
     /// Get the extra build variables.
     fn extra_build_variables(&self) -> &ExtraBuildVariables;
 
-    /// Whether a complete locked build resolution is available for the package.
-    fn has_locked_build_resolution(&self, _package: &BuildPackageKey) -> bool {
-        false
-    }
-
-    /// Return a stable cache key for the complete locked build resolution, if available.
-    fn locked_build_resolution_cache_key(
-        &self,
-        _package: &BuildPackageKey,
-    ) -> Result<Option<String>, CacheInfoError> {
-        Ok(None)
-    }
-
-    /// Return a stable cache key for the inputs to an unlocked build environment, if any.
-    fn unlocked_build_cache_key(&self) -> Option<&str> {
-        None
-    }
-
     /// Resolve the given requirements into a ready-to-install set of package versions.
-    ///
-    /// If a package key is provided, the resolver may use previously stored
-    /// build dependency preferences for that package to speed up resolution.
-    /// If `validate_locked_requirements` is provided, a stored locked resolution
-    /// may only be reused when it satisfies those requirements. This is used for
-    /// requirements returned by a backend hook, which can change after a lock is
-    /// generated.
     fn resolve<'a>(
         &'a self,
         requirements: &'a [Requirement],
-        package: Option<&'a BuildPackageKey>,
         build_stack: &'a BuildStack,
-        validate_locked_requirements: Option<&'a [Requirement]>,
     ) -> impl Future<Output = Result<ResolvedRequirements, impl IsBuildBackendError>> + 'a;
 
     /// Install the given set of package versions into the virtual environment. The environment must
@@ -199,6 +165,9 @@ pub trait BuildContext {
     /// `uv_build::SourceBuild::setup`.
     ///
     /// For PEP 517 builds, this calls `get_requires_for_build_wheel`.
+    ///
+    /// Callers are responsible for enforcing [`BuildOptions`] for the source distribution itself.
+    /// Build dependencies are still resolved and installed using [`Self::build_options`].
     ///
     /// `version_id` is for error reporting only.
     /// `dist` is for safety checks and may be null for editable builds.
@@ -298,10 +267,10 @@ impl InstalledPackagesProvider for EmptyInstalledPackages {
 /// Resolution and installation may need to build packages, while the build frontend needs to
 /// resolve and install for the PEP 517 build environment.
 ///
-/// Usually, [`anyhow::Error`] is opaque error type of choice. In this case though, we error type
-/// that we can inspect on whether it's a build backend error with [`IsBuildBackendError`], and
+/// Usually, [`anyhow::Error`] is the opaque error type of choice. Here, the error type must also
+/// classify user failures and build backend failures through [`IsBuildBackendError`], and
 /// [`anyhow::Error`] does not allow attaching more traits. The next choice would be
-/// `Box<dyn std::error::Error + IsBuildFrontendError + Send + Sync + 'static>`, but [`thiserror`]
+/// `Box<dyn IsBuildBackendError>`, but [`thiserror`]
 /// complains about the internal `AsDynError` not being implemented when being used as `#[source]`.
 /// This struct is an otherwise transparent error wrapper that thiserror recognizes.
 pub struct AnyErrorBuild(Box<dyn IsBuildBackendError>);
@@ -334,7 +303,7 @@ impl std::error::Error for AnyErrorBuild {
     }
 }
 
-impl uv_errors::Hint for AnyErrorBuild {
+impl uv_errors::Hinted for AnyErrorBuild {
     fn hints(&self) -> uv_errors::Hints<'_> {
         self.0.hints()
     }

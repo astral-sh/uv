@@ -1,6 +1,5 @@
 ---
 source: crates/uv-requirements-txt/src/lib.rs
-assertion_line: 1639
 expression: actual
 ---
 RequirementsTxt {
@@ -100,6 +99,7 @@ RequirementsTxt {
                                         "git+https://github.com/pandas-dev/pandas.git",
                                     ),
                                     expanded: false,
+                                    force_relative: false,
                                 },
                             },
                         ),
@@ -121,6 +121,7 @@ RequirementsTxt {
     extra_index_urls: [],
     find_links: [],
     no_index: false,
+    require_hashes: false,
     no_binary: None,
     only_binary: None,
 }

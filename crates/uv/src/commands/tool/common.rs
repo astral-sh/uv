@@ -12,39 +12,37 @@ use owo_colors::OwoColorize;
 use thiserror::Error;
 use tracing::{debug, warn};
 use uv_cache::{Cache, Refresh};
-use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, Constraints, DependencyGroupsWithDefaults, ExcludeDependency,
-    ExtrasSpecification, GitLfsSetting, InstallOptions, Override, TargetTriple,
+    ExtrasSpecification, GitLfsSetting, HashCheckingMode, InstallOptions, Override, TargetTriple,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{
     DistributionDatabase, LoweredExtraBuildDependencies, StaticMetadataDatabase,
 };
 use uv_distribution_types::{
-    DependencyMetadata, Dist, HashGeneration, Index, InstalledDist, Name, Requirement,
-    RequiresPython, Resolution, ResolvedDist, UnresolvedRequirement,
+    DependencyMetadata, HashCollection, IndexLocations, InstalledDist, Name,
+    NameRequirementSpecification, Requirement, RequiresPython, Resolution, UnresolvedRequirement,
 };
-use uv_errors::{ErrorWithHints, Hint, Hints};
+use uv_errors::{ErrorWithHints, Hinted, Hints};
 #[cfg(unix)]
 use uv_fs::replace_symlink;
 use uv_fs::{CWD, Simplified};
 use uv_git::GitResolver;
 use uv_installer::SitePackages;
+use uv_lock::{Installable, Lock, ResolverManifest};
 use uv_normalize::{DefaultExtras, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
-use uv_preview::{Preview, PreviewFeature};
+use uv_preview::Preview;
 use uv_pypi_types::Conflicts;
 use uv_python::{
-    EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions,
-    VersionRequest,
+    ConfigDiscovery, EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment,
+    PythonInstallation, PythonPreference, PythonRequest, PythonVariant, PythonVersionFile,
+    VersionFileDiscoveryOptions, VersionRequest,
 };
 use uv_requirements::RequirementsSpecification;
-use uv_resolver::{
-    FlatIndex, Installable, Lock, OptionsBuilder, Preference, ResolverManifest, ResolverOutput,
-    VERSION,
-};
+use uv_resolver::{FlatIndex, OptionsBuilder, Preference, ResolverOutput};
 use uv_settings::{PythonInstallMirrors, ToolOptions};
 use uv_shell::Shell;
 use uv_tool::{InstalledTools, Tool, ToolEntrypoint, entrypoint_paths};
@@ -69,7 +67,7 @@ pub(crate) enum NoExecutablesError {
     },
 }
 
-impl Hint for NoExecutablesError {
+impl Hinted for NoExecutablesError {
     fn hints(&self) -> Hints<'_> {
         let mut hints = Hints::none();
         let (package, matching_dependency_packages) = match self {
@@ -179,7 +177,7 @@ impl ToolPython {
     pub(crate) async fn from_request(
         python_request: Option<PythonRequest>,
         requirement: Option<&UnresolvedRequirement>,
-        no_config: bool,
+        config_discovery: ConfigDiscovery,
         lfs: GitLfsSetting,
         git_resolver: &GitResolver,
         client_builder: &BaseClientBuilder<'_>,
@@ -208,7 +206,7 @@ impl ToolPython {
         } else if let Some(file) = PythonVersionFile::discover(
             &*CWD,
             &VersionFileDiscoveryOptions::default()
-                .with_no_config(no_config)
+                .with_config_discovery(config_discovery)
                 .with_no_local(true),
         )
         .await?
@@ -317,7 +315,7 @@ impl ToolLock {
         constraints: &[Requirement],
         overrides: &[Requirement],
         excludes: &[ExcludeDependency],
-        build_constraints: &[Requirement],
+        build_constraints: &[NameRequirementSpecification],
         dependency_metadata: &DependencyMetadata,
     ) -> ResolverManifest {
         ResolverManifest::new(
@@ -337,12 +335,20 @@ impl ToolLock {
         root: &Path,
         resolution: &ResolverOutput,
         manifest: &ResolverManifest,
+        index_locations: &IndexLocations,
     ) -> anyhow::Result<Self> {
-        let lock = Lock::from_resolution(resolution, root, Vec::new())?;
         let manifest = manifest.clone().relative_to(root)?;
+        let lock = Lock::from_resolution(
+            resolution,
+            manifest,
+            root,
+            Vec::new(),
+            index_locations,
+            false,
+        )?;
         Ok(Self {
             root: root.to_path_buf(),
-            lock: lock.with_manifest(manifest),
+            lock,
         })
     }
 
@@ -350,23 +356,7 @@ impl ToolLock {
     pub(crate) fn read(directory: &Path) -> Option<Self> {
         let path = directory.join("uv.lock");
         match fs_err::read_to_string(&path) {
-            Ok(contents) => match toml::from_str::<Lock>(&contents) {
-                Ok(lock) if lock.version() > VERSION => {
-                    debug!(
-                        "Ignoring unsupported tool lock schema version v{} at `{}` (maximum supported version is v{VERSION})",
-                        lock.version(),
-                        path.user_display()
-                    );
-                    None
-                }
-                Ok(lock) if lock.supports_build_dependencies() => {
-                    debug!(
-                        "Ignoring unsupported build-dependency tool lock schema v{} at `{}`",
-                        lock.version(),
-                        path.user_display()
-                    );
-                    None
-                }
+            Ok(contents) => match Lock::from_toml(&contents) {
                 Ok(lock) => Some(Self {
                     root: directory.to_path_buf(),
                     lock,
@@ -413,7 +403,7 @@ impl ToolLock {
         constraints: &[Requirement],
         overrides: &[Requirement],
         excludes: &[ExcludeDependency],
-        build_constraints: &[Requirement],
+        build_constraints: &Constraints,
         refresh: &Refresh,
         interpreter: &Interpreter,
         settings: &ResolverSettings,
@@ -473,32 +463,28 @@ impl ToolLock {
 
         let options = OptionsBuilder::new()
             .resolution_mode(*resolution)
-            .prerelease_mode(*prerelease)
+            .prerelease(prerelease.clone())
             .fork_strategy(*fork_strategy)
             .exclude_newer(exclude_newer.clone())
             .index_strategy(*index_strategy)
             .build_options(build_options.clone())
             .build();
-        let hasher = HashStrategy::Generate(HashGeneration::Url);
-        let build_hasher = HashStrategy::default();
+        let hasher = HashStrategy::collect(HashCollection::Url);
+        let build_hasher = HashStrategy::from_constraints(
+            build_constraints,
+            Some(&interpreter.to_resolver_marker_environment()),
+            HashCheckingMode::Verify,
+        )?;
 
-        let flat_index = {
-            let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
-            let entries = client
-                .fetch_all(index_locations.flat_indexes().map(Index::url))
-                .await?;
-            FlatIndex::from_entries(entries, None, &hasher, build_options)
-        };
+        let flat_index = FlatIndex::load(&client, cache, index_locations).await?;
 
         let extra_build_requires =
             LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
                 .into_inner();
-        let dispatch_constraints =
-            Constraints::from_requirements(build_constraints.iter().cloned());
         let build_dispatch = BuildDispatch::new(
             &client,
             cache,
-            &dispatch_constraints,
+            build_constraints,
             interpreter,
             index_locations,
             &flat_index,
@@ -546,8 +532,6 @@ impl ToolLock {
             &overrides,
             excludes,
             build_constraints,
-            &extra_build_requires,
-            None,
             &Conflicts::empty(),
             None,
             None,
@@ -561,6 +545,7 @@ impl ToolLock {
             &hasher,
             state.index(),
             &database,
+            preview,
             printer,
         )
         .await?;
@@ -623,32 +608,6 @@ impl ToolLock {
             &InstallOptions::default(),
         )?)
     }
-}
-
-/// Reject tool locks that would need to capture a source build environment.
-pub(crate) fn validate_tool_lock_build_dependencies(
-    resolution: &Resolution,
-    preview: Preview,
-) -> anyhow::Result<()> {
-    if !preview.is_enabled(PreviewFeature::ToolInstallLocks)
-        || !preview.is_enabled(PreviewFeature::LockBuildDependencies)
-    {
-        return Ok(());
-    }
-
-    let Some(source) = resolution.distributions().find(|dist| {
-        matches!(
-            dist,
-            ResolvedDist::Installable { dist, .. } if matches!(dist.as_ref(), Dist::Source(_))
-        )
-    }) else {
-        return Ok(());
-    };
-
-    bail!(
-        "Locking build dependencies is not supported for tool environments; `{}` must be built from source",
-        source.name()
-    )
 }
 
 /// Build an environment specification for a tool, preferring versions from its existing lock when
@@ -783,7 +742,7 @@ pub(crate) fn finalize_tool_install(
     constraints: Vec<Requirement>,
     overrides: Vec<Requirement>,
     excludes: Vec<ExcludeDependency>,
-    build_constraints: Vec<Requirement>,
+    build_constraints: Vec<NameRequirementSpecification>,
     lock: Option<&ToolLock>,
     printer: Printer,
 ) -> anyhow::Result<()> {

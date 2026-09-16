@@ -21,6 +21,7 @@ use tokio::io::{AsyncRead, ReadBuf};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use url::Url;
 use uv_client::retryable_on_request_failure;
+use uv_distribution_filename::LegacySourceDistExtension;
 use uv_distribution_filename::SourceDistExtension;
 use uv_static::{astral_mirror_base_url, astral_mirror_url_from_env, custom_astral_mirror_url};
 
@@ -230,7 +231,7 @@ impl ArchiveFormat {
 impl From<ArchiveFormat> for SourceDistExtension {
     fn from(val: ArchiveFormat) -> Self {
         match val {
-            ArchiveFormat::Zip => Self::Zip,
+            ArchiveFormat::Zip => Self::Legacy(LegacySourceDistExtension::Zip),
             ArchiveFormat::TarGz => Self::TarGz,
         }
     }
@@ -841,14 +842,9 @@ async fn download_and_unpack(
 
     let id = reporter.on_download_start(binary.name(), version, size);
     let mut progress_reader = ProgressReader::new(reader, id, reporter);
-    stream::archive(
-        &download_url,
-        &mut progress_reader,
-        format.into(),
-        temp_dir.path(),
-    )
-    .await
-    .map_err(|e| Error::Extract { source: e })?;
+    let (temp_dir, _) = stream::archive(&mut progress_reader, format.into(), temp_dir)
+        .await
+        .map_err(|e| Error::Extract { source: e })?;
     reporter.on_download_complete(id);
 
     // Find the binary in the extracted files
@@ -926,6 +922,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use serde_json::json;
     use std::io::Write;
     use uv_client::{BaseClientBuilder, fetch_with_url_fallback, retryable_on_request_failure};
@@ -1320,7 +1318,7 @@ mod tests {
                 .await
                 .expect_err("no matching version should not fall back to canonical manifest");
 
-        assert!(matches!(err, Error::NoMatchingVersion { .. }));
+        assert_matches!(err, Error::NoMatchingVersion { .. });
         assert_eq!(mirror_server.received_requests().await.unwrap().len(), 1);
         assert_eq!(canonical_server.received_requests().await.unwrap().len(), 0);
     }

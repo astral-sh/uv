@@ -2,10 +2,6 @@
 
 ## Finding ways to help
 
-We label issues that would be good for a first time contributor as
-[`good first issue`](https://github.com/astral-sh/uv/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22).
-These usually do not require significant experience with Rust or the uv code base.
-
 We label issues that we think are a good opportunity for subsequent contributions as
 [`help wanted`](https://github.com/astral-sh/uv/issues?q=is%3Aopen+is%3Aissue+label%3A%22help+wanted%22).
 These require varying levels of experience with Rust and uv. Often, we want to accomplish these
@@ -150,7 +146,7 @@ cargo run -- pip install requests
 cargo fmt --all
 
 # Python
-uvx ruff format .
+uv run --only-group=check ruff format .
 
 # Markdown, YAML, and other files (requires Node.js)
 npx prettier@3.9.0 --write .
@@ -160,27 +156,34 @@ docker run --rm -v .:/src/ -w /src/ node:alpine npx prettier@3.9.0 --write .
 
 ## Linting
 
-Linting requires [shellcheck](https://github.com/koalaman/shellcheck) and
-[cargo-shear](https://github.com/Boshen/cargo-shear) to be installed separately.
+Linting requires [shellcheck](https://github.com/koalaman/shellcheck) to be installed separately.
+Validating `pyproject.toml` against the checked-in uv schema also requires
+[jq](https://jqlang.org/).
 
 ```shell
 # Rust
 cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
 # Python
-uvx ruff check .
+uv run --only-group=check ruff check .
 
 # Python type checking
-uvx ty check python/uv
+uv run --only-group=check ty check python/uv
+
+# Python project metadata and uv schema
+./scripts/validate-pyproject.sh
+
+# Generated files
+cargo dev generate-all --mode dry-run
 
 # Shell scripts
 shellcheck <script>
 
 # Spell checking
-uvx typos
+uv run --only-group=check typos
 
 # Unused Rust dependencies
-cargo shear
+uv run --only-group=check cargo-shear
 ```
 
 ### Compiling for Windows from Unix
@@ -190,7 +193,7 @@ To run clippy for a Windows target from Linux or macOS, you can use
 
 ```shell
 # Install cargo-xwin
-cargo install cargo-xwin --locked
+cargo install --locked cargo-xwin@0.21.4
 
 # Add the Windows target
 rustup target add x86_64-pc-windows-msvc
@@ -275,9 +278,11 @@ To preview any changes to the documentation locally:
 
 1. Install the [Rust toolchain](https://www.rust-lang.org/tools/install).
 
-2. Run `cargo dev generate-all`, to update any auto-generated documentation.
+2. Install [Node](https://nodejs.org/en/download) - needed to run Prettier to format the docs
 
-3. Run the development server with:
+3. Run `cargo dev generate-all`, to update any auto-generated documentation.
+
+4. Run the development server with:
 
    ```shell
    uv run --only-group docs mkdocs serve -f mkdocs.yml
@@ -343,6 +348,9 @@ Changelog entries and version bumps are automated. First, run:
 ```shell
 ./scripts/release.sh
 ```
+
+If release preparation detects a new workspace crate, add it to
+[`astral-sh/crates-policies`](https://github.com/astral-sh/crates-policies).
 
 Then, editorialize the `CHANGELOG.md` file to ensure entries are consistently styled.
 

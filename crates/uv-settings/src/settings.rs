@@ -6,12 +6,15 @@ use serde::{Deserialize, Serialize};
 
 use uv_cache_info::CacheKey;
 use uv_configuration::{
-    BuildIsolation, ExcludeDependency, IndexStrategy, KeyringProviderType, PackageNameSpecifier,
-    ProxyUrl, Reinstall, RequiredVersion, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
+    AnnotationStyle, BuildIsolation, ExcludeDependency, ExcludeNewerPackage, ForkStrategy,
+    IndexStrategy, KeyringProviderType, PackageNameSpecifier, PrereleaseMode, PrereleasePackage,
+    ProxyUrl, Reinstall, RequiredVersion, ResolutionMode, TargetTriple, TrustedHost,
+    TrustedPublishing, Upgrade, serialize_exclude_newer_package_with_spans,
 };
 use uv_distribution_types::{
-    ConfigSettings, ExtraBuildVariables, Index, IndexUrl, IndexUrlError, Origin,
-    PackageConfigSettings, PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
+    ConfigSettings, ExcludeNewerOverride, ExcludeNewerSpan, ExcludeNewerValue, ExtraBuildVariables,
+    Index, IndexLocations, IndexUrl, IndexUrlError, Origin, PackageConfigSettings, PipExtraIndex,
+    PipFindLinks, PipIndex, StaticMetadata,
 };
 use uv_install_wheel::LinkMode;
 use uv_macros::{CombineOptions, OptionsMetadata};
@@ -21,14 +24,13 @@ use uv_preview::{MaybePreviewFeature, Preview};
 use uv_pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
-use uv_resolver::{
-    AnnotationStyle, ExcludeNewerOverride, ExcludeNewerPackage, ExcludeNewerSpan,
-    ExcludeNewerValue, ForkStrategy, PrereleaseMode, ResolutionMode,
-    serialize_exclude_newer_package_with_spans,
-};
 use uv_torch::TorchMode;
-use uv_workspace::pyproject::{ExtraBuildDependencies, OverrideDependency};
+use uv_workspace::pyproject::{
+    BuildConstraintDependency, ExtraBuildDependencies, OverrideDependency,
+};
 use uv_workspace::pyproject_mut::AddBoundsKind;
+
+use crate::{EnvironmentOptions, FilesystemOptions};
 
 /// A `pyproject.toml` with an (optional) `[tool.uv]` section.
 #[allow(dead_code)]
@@ -155,7 +157,7 @@ pub struct Options {
     pub constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
-    pub build_constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+    pub build_constraint_dependencies: Option<Vec<BuildConstraintDependency>>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub environments: Option<SupportedEnvironments>,
@@ -508,6 +510,49 @@ impl TryFrom<GlobalOptionsWire> for GlobalOptions {
     }
 }
 
+/// Resolve registry indexes and find-links relative to the given root directory.
+fn rebase_indexes(
+    root_dir: &Path,
+    indexes: &mut Option<Vec<Index>>,
+    index_url: &mut Option<PipIndex>,
+    extra_index_urls: &mut Option<Vec<PipExtraIndex>>,
+    find_links: &mut Option<Vec<PipFindLinks>>,
+) -> Result<(), IndexUrlError> {
+    *indexes = indexes
+        .take()
+        .map(|indexes| {
+            indexes
+                .into_iter()
+                .map(|index| index.relative_to(root_dir))
+                .collect::<Result<Vec<_>, _>>()
+        })
+        .transpose()?;
+    *index_url = index_url
+        .take()
+        .map(|index| index.relative_to(root_dir))
+        .transpose()?;
+    *extra_index_urls = extra_index_urls
+        .take()
+        .map(|indexes| {
+            indexes
+                .into_iter()
+                .map(|index| index.relative_to(root_dir))
+                .collect::<Result<Vec<_>, _>>()
+        })
+        .transpose()?;
+    *find_links = find_links
+        .take()
+        .map(|find_links| {
+            find_links
+                .into_iter()
+                .map(|find_link| find_link.relative_to(root_dir))
+                .collect::<Result<Vec<_>, _>>()
+        })
+        .transpose()?;
+
+    Ok(())
+}
+
 /// Settings relevant to all installer operations.
 #[derive(Debug, Clone, Default, CombineOptions)]
 pub struct InstallerOptions {
@@ -532,18 +577,84 @@ pub struct InstallerOptions {
     no_sources_package: Option<Vec<PackageName>>,
 }
 
-/// Settings relevant to all resolver operations.
+/// Settings shared by all operations that use package indexes.
 #[derive(Debug, Clone, Default, CombineOptions)]
-pub struct ResolverOptions {
+pub struct IndexOptions {
     pub index: Option<Vec<Index>>,
     pub index_url: Option<PipIndex>,
     pub extra_index_url: Option<Vec<PipExtraIndex>>,
     pub no_index: Option<bool>,
     pub find_links: Option<Vec<PipFindLinks>>,
+}
+
+impl IndexOptions {
+    /// Resolve the [`IndexOptions`] relative to the given root directory.
+    pub fn relative_to(mut self, root_dir: &Path) -> Result<Self, IndexUrlError> {
+        rebase_indexes(
+            root_dir,
+            &mut self.index,
+            &mut self.index_url,
+            &mut self.extra_index_url,
+            &mut self.find_links,
+        )?;
+
+        Ok(self)
+    }
+}
+
+impl From<IndexOptions> for IndexLocations {
+    fn from(value: IndexOptions) -> Self {
+        let IndexOptions {
+            index,
+            index_url,
+            extra_index_url,
+            no_index,
+            find_links,
+        } = value;
+
+        Self::new(
+            index
+                .into_iter()
+                .flatten()
+                .chain(extra_index_url.into_iter().flatten().map(Index::from))
+                .chain(index_url.into_iter().map(Index::from))
+                .collect(),
+            find_links.into_iter().flatten().map(Index::from).collect(),
+            no_index.unwrap_or_default(),
+        )
+    }
+}
+
+impl From<IndexOptions> for PipOptions {
+    fn from(value: IndexOptions) -> Self {
+        let IndexOptions {
+            index,
+            index_url,
+            extra_index_url,
+            no_index,
+            find_links,
+        } = value;
+
+        Self {
+            index,
+            index_url,
+            extra_index_url,
+            no_index,
+            find_links,
+            ..Self::default()
+        }
+    }
+}
+
+/// Settings relevant to all resolver operations.
+#[derive(Debug, Clone, Default, CombineOptions)]
+pub struct ResolverOptions {
+    pub indexes: IndexOptions,
     pub index_strategy: Option<IndexStrategy>,
     pub keyring_provider: Option<KeyringProviderType>,
     pub resolution: Option<ResolutionMode>,
     pub prerelease: Option<PrereleaseMode>,
+    pub prerelease_package: Option<PrereleasePackage>,
     pub fork_strategy: Option<ForkStrategy>,
     pub dependency_metadata: Option<Vec<StaticMetadata>>,
     pub config_settings: Option<ConfigSettings>,
@@ -564,19 +675,24 @@ pub struct ResolverOptions {
     pub no_sources_package: Option<Vec<PackageName>>,
 }
 
+impl ResolverOptions {
+    /// Resolve the [`ResolverOptions`] relative to the given root directory.
+    pub fn relative_to(mut self, root_dir: &Path) -> Result<Self, IndexUrlError> {
+        self.indexes = self.indexes.relative_to(root_dir)?;
+        Ok(self)
+    }
+}
+
 /// Shared settings, relevant to all operations that must resolve and install dependencies. The
 /// union of [`InstallerOptions`] and [`ResolverOptions`].
 #[derive(Debug, Clone, Default, CombineOptions)]
 pub struct ResolverInstallerOptions {
-    pub index: Option<Vec<Index>>,
-    pub index_url: Option<PipIndex>,
-    pub extra_index_url: Option<Vec<PipExtraIndex>>,
-    pub no_index: Option<bool>,
-    pub find_links: Option<Vec<PipFindLinks>>,
+    pub indexes: IndexOptions,
     pub index_strategy: Option<IndexStrategy>,
     pub keyring_provider: Option<KeyringProviderType>,
     pub resolution: Option<ResolutionMode>,
     pub prerelease: Option<PrereleaseMode>,
+    pub prerelease_package: Option<PrereleasePackage>,
     pub fork_strategy: Option<ForkStrategy>,
     pub dependency_metadata: Option<Vec<StaticMetadata>>,
     pub config_settings: Option<ConfigSettings>,
@@ -599,6 +715,14 @@ pub struct ResolverInstallerOptions {
     pub no_binary_package: Option<Vec<PackageName>>,
 }
 
+impl ResolverInstallerOptions {
+    /// Resolve the [`ResolverInstallerOptions`] relative to the given root directory.
+    pub fn relative_to(mut self, root_dir: &Path) -> Result<Self, IndexUrlError> {
+        self.indexes = self.indexes.relative_to(root_dir)?;
+        Ok(self)
+    }
+}
+
 impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
     fn from(value: ResolverInstallerSchema) -> Self {
         let ResolverInstallerSchema {
@@ -611,6 +735,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
             keyring_provider,
             resolution,
             prerelease,
+            prerelease_package,
             fork_strategy,
             dependency_metadata,
             config_settings,
@@ -636,15 +761,18 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
             no_binary_package,
         } = value;
         Self {
-            index,
-            index_url,
-            extra_index_url,
-            no_index,
-            find_links,
+            indexes: IndexOptions {
+                index,
+                index_url,
+                extra_index_url,
+                no_index,
+                find_links,
+            },
             index_strategy,
             keyring_provider,
             resolution,
             prerelease,
+            prerelease_package,
             fork_strategy,
             dependency_metadata,
             config_settings,
@@ -682,41 +810,16 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
 
 impl ResolverInstallerSchema {
     /// Resolve the [`ResolverInstallerSchema`] relative to the given root directory.
-    fn relative_to(self, root_dir: &Path) -> Result<Self, IndexUrlError> {
-        Ok(Self {
-            index: self
-                .index
-                .map(|index| {
-                    index
-                        .into_iter()
-                        .map(|index| index.relative_to(root_dir))
-                        .collect::<Result<Vec<_>, _>>()
-                })
-                .transpose()?,
-            index_url: self
-                .index_url
-                .map(|index_url| index_url.relative_to(root_dir))
-                .transpose()?,
-            extra_index_url: self
-                .extra_index_url
-                .map(|extra_index_url| {
-                    extra_index_url
-                        .into_iter()
-                        .map(|extra_index_url| extra_index_url.relative_to(root_dir))
-                        .collect::<Result<Vec<_>, _>>()
-                })
-                .transpose()?,
-            find_links: self
-                .find_links
-                .map(|find_links| {
-                    find_links
-                        .into_iter()
-                        .map(|find_link| find_link.relative_to(root_dir))
-                        .collect::<Result<Vec<_>, _>>()
-                })
-                .transpose()?,
-            ..self
-        })
+    fn relative_to(mut self, root_dir: &Path) -> Result<Self, IndexUrlError> {
+        rebase_indexes(
+            root_dir,
+            &mut self.index,
+            &mut self.index_url,
+            &mut self.extra_index_url,
+            &mut self.find_links,
+        )?;
+
+        Ok(self)
     }
 }
 
@@ -868,11 +971,11 @@ pub struct ResolverInstallerSchema {
     pub resolution: Option<ResolutionMode>,
     /// The strategy to use when considering pre-release versions.
     ///
-    /// By default, uv will accept pre-releases for packages that _only_ publish pre-releases,
-    /// along with first-party requirements that contain an explicit pre-release marker in the
-    /// declared specifiers (`if-necessary-or-explicit`).
+    /// By default, uv will prefer stable candidates, falling back to pre-releases only after every
+    /// stable candidate that satisfies the active constraints is rejected
+    /// (`if-necessary`).
     #[option(
-        default = "\"if-necessary-or-explicit\"",
+        default = "\"if-necessary\"",
         value_type = "str",
         example = r#"
             prerelease = "allow"
@@ -880,6 +983,18 @@ pub struct ResolverInstallerSchema {
         possible_values = true
     )]
     pub prerelease: Option<PrereleaseMode>,
+    /// The strategy to use when considering pre-release versions for specific packages.
+    ///
+    /// Package-specific modes take precedence over the global [`prerelease`](#prerelease) mode.
+    /// Accepts a dictionary mapping package names to any supported pre-release mode.
+    #[option(
+        default = "{}",
+        value_type = "dict",
+        example = r#"
+            prerelease-package = { numpy = "allow", scipy = "disallow" }
+        "#
+    )]
+    pub prerelease_package: Option<PrereleasePackage>,
     /// The strategy to use when selecting multiple versions of a given package across Python
     /// versions and platforms.
     ///
@@ -1135,8 +1250,9 @@ pub struct ResolverInstallerSchema {
     /// Don't build source distributions.
     ///
     /// When enabled, uv will reuse cached wheels from previously built source distributions, but
-    /// operations that require building a source distribution will exit with an error. uv may
-    /// still build editable requirements, and their build backends may run arbitrary Python code.
+    /// operations that require building a source distribution will exit with an error. First-party
+    /// packages, such as projects in the workspace, will still be built. uv will also still build
+    /// editable requirements, and their build backends may run arbitrary Python code.
     #[option(
         default = "false",
         value_type = "bool",
@@ -1146,6 +1262,8 @@ pub struct ResolverInstallerSchema {
     )]
     pub no_build: Option<bool>,
     /// Don't build source distributions for a specific package.
+    ///
+    /// First-party packages, such as projects in the workspace, will still be built.
     #[option(
         default = "[]",
         value_type = "list[str]",
@@ -1617,11 +1735,11 @@ pub struct PipOptions {
     pub resolution: Option<ResolutionMode>,
     /// The strategy to use when considering pre-release versions.
     ///
-    /// By default, uv will accept pre-releases for packages that _only_ publish pre-releases,
-    /// along with first-party requirements that contain an explicit pre-release marker in the
-    /// declared specifiers (`if-necessary-or-explicit`).
+    /// By default, uv will prefer stable candidates, falling back to pre-releases only after every
+    /// stable candidate that satisfies the active constraints is rejected
+    /// (`if-necessary`).
     #[option(
-        default = "\"if-necessary-or-explicit\"",
+        default = "\"if-necessary\"",
         value_type = "str",
         example = r#"
             prerelease = "allow"
@@ -1629,6 +1747,9 @@ pub struct PipOptions {
         possible_values = true
     )]
     pub prerelease: Option<PrereleaseMode>,
+    #[serde(skip)]
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub prerelease_package: Option<PrereleasePackage>,
     /// The strategy to use when selecting multiple versions of a given package across Python
     /// versions and platforms.
     ///
@@ -2077,56 +2198,34 @@ pub struct PipOptions {
 
 impl PipOptions {
     /// Resolve the [`PipOptions`] relative to the given root directory.
-    fn relative_to(self, root_dir: &Path) -> Result<Self, IndexUrlError> {
-        Ok(Self {
-            index: self
-                .index
-                .map(|index| {
-                    index
-                        .into_iter()
-                        .map(|index| index.relative_to(root_dir))
-                        .collect::<Result<Vec<_>, _>>()
-                })
-                .transpose()?,
-            index_url: self
-                .index_url
-                .map(|index_url| index_url.relative_to(root_dir))
-                .transpose()?,
-            extra_index_url: self
-                .extra_index_url
-                .map(|extra_index_url| {
-                    extra_index_url
-                        .into_iter()
-                        .map(|extra_index_url| extra_index_url.relative_to(root_dir))
-                        .collect::<Result<Vec<_>, _>>()
-                })
-                .transpose()?,
-            find_links: self
-                .find_links
-                .map(|find_links| {
-                    find_links
-                        .into_iter()
-                        .map(|find_link| find_link.relative_to(root_dir))
-                        .collect::<Result<Vec<_>, _>>()
-                })
-                .transpose()?,
-            ..self
-        })
+    fn relative_to(mut self, root_dir: &Path) -> Result<Self, IndexUrlError> {
+        rebase_indexes(
+            root_dir,
+            &mut self.index,
+            &mut self.index_url,
+            &mut self.extra_index_url,
+            &mut self.find_links,
+        )?;
+
+        Ok(self)
     }
 }
 
 impl From<ResolverInstallerSchema> for ResolverOptions {
     fn from(value: ResolverInstallerSchema) -> Self {
         Self {
-            index: value.index,
-            index_url: value.index_url,
-            extra_index_url: value.extra_index_url,
-            no_index: value.no_index,
-            find_links: value.find_links,
+            indexes: IndexOptions {
+                index: value.index,
+                index_url: value.index_url,
+                extra_index_url: value.extra_index_url,
+                no_index: value.no_index,
+                find_links: value.find_links,
+            },
             index_strategy: value.index_strategy,
             keyring_provider: value.keyring_provider,
             resolution: value.resolution,
             prerelease: value.prerelease,
+            prerelease_package: value.prerelease_package,
             fork_strategy: value.fork_strategy,
             dependency_metadata: value.dependency_metadata,
             config_settings: value.config_settings,
@@ -2212,6 +2311,7 @@ pub struct ToolOptions {
     keyring_provider: Option<KeyringProviderType>,
     resolution: Option<ResolutionMode>,
     prerelease: Option<PrereleaseMode>,
+    prerelease_package: Option<PrereleasePackage>,
     fork_strategy: Option<ForkStrategy>,
     dependency_metadata: Option<Vec<StaticMetadata>>,
     config_settings: Option<ConfigSettings>,
@@ -2245,6 +2345,7 @@ pub struct ToolOptionsWire {
     keyring_provider: Option<KeyringProviderType>,
     resolution: Option<ResolutionMode>,
     prerelease: Option<PrereleaseMode>,
+    prerelease_package: Option<PrereleasePackage>,
     fork_strategy: Option<ForkStrategy>,
     dependency_metadata: Option<Vec<StaticMetadata>>,
     config_settings: Option<ConfigSettings>,
@@ -2270,20 +2371,21 @@ pub struct ToolOptionsWire {
 impl From<ResolverInstallerOptions> for ToolOptions {
     fn from(value: ResolverInstallerOptions) -> Self {
         Self {
-            index: value.index.map(|indexes| {
+            index: value.indexes.index.map(|indexes| {
                 indexes
                     .into_iter()
                     .map(Index::with_promoted_auth_policy)
                     .collect()
             }),
-            index_url: value.index_url,
-            extra_index_url: value.extra_index_url,
-            no_index: value.no_index,
-            find_links: value.find_links,
+            index_url: value.indexes.index_url,
+            extra_index_url: value.indexes.extra_index_url,
+            no_index: value.indexes.no_index,
+            find_links: value.indexes.find_links,
             index_strategy: value.index_strategy,
             keyring_provider: value.keyring_provider,
             resolution: value.resolution,
             prerelease: value.prerelease,
+            prerelease_package: value.prerelease_package,
             fork_strategy: value.fork_strategy,
             dependency_metadata: value.dependency_metadata,
             config_settings: value.config_settings,
@@ -2334,6 +2436,7 @@ impl From<ToolOptionsWire> for ToolOptions {
             keyring_provider: value.keyring_provider,
             resolution: value.resolution,
             prerelease: value.prerelease,
+            prerelease_package: value.prerelease_package,
             fork_strategy: value.fork_strategy,
             dependency_metadata: value.dependency_metadata,
             config_settings: value.config_settings,
@@ -2382,6 +2485,7 @@ impl From<ToolOptions> for ToolOptionsWire {
             keyring_provider: value.keyring_provider,
             resolution: value.resolution,
             prerelease: value.prerelease,
+            prerelease_package: value.prerelease_package,
             fork_strategy: value.fork_strategy,
             dependency_metadata: value.dependency_metadata,
             config_settings: value.config_settings,
@@ -2408,15 +2512,18 @@ impl From<ToolOptions> for ToolOptionsWire {
 impl From<ToolOptions> for ResolverInstallerOptions {
     fn from(value: ToolOptions) -> Self {
         Self {
-            index: value.index,
-            index_url: value.index_url,
-            extra_index_url: value.extra_index_url,
-            no_index: value.no_index,
-            find_links: value.find_links,
+            indexes: IndexOptions {
+                index: value.index,
+                index_url: value.index_url,
+                extra_index_url: value.extra_index_url,
+                no_index: value.no_index,
+                find_links: value.find_links,
+            },
             index_strategy: value.index_strategy,
             keyring_provider: value.keyring_provider,
             resolution: value.resolution,
             prerelease: value.prerelease,
+            prerelease_package: value.prerelease_package,
             fork_strategy: value.fork_strategy,
             dependency_metadata: value.dependency_metadata,
             config_settings: value.config_settings,
@@ -2477,6 +2584,7 @@ struct OptionsWire {
     allow_insecure_host: Option<Vec<TrustedHost>>,
     resolution: Option<ResolutionMode>,
     prerelease: Option<PrereleaseMode>,
+    prerelease_package: Option<PrereleasePackage>,
     fork_strategy: Option<ForkStrategy>,
     dependency_metadata: Option<Vec<StaticMetadata>>,
     config_settings: Option<ConfigSettings>,
@@ -2527,7 +2635,7 @@ struct OptionsWire {
     override_dependencies: Option<Vec<OverrideDependency>>,
     exclude_dependencies: Option<Vec<ExcludeDependency>>,
     constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
-    build_constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+    build_constraint_dependencies: Option<Vec<BuildConstraintDependency>>,
     environments: Option<SupportedEnvironments>,
     required_environments: Option<SupportedEnvironments>,
 
@@ -2582,6 +2690,7 @@ impl TryFrom<OptionsWire> for Options {
             allow_insecure_host,
             resolution,
             prerelease,
+            prerelease_package,
             fork_strategy,
             dependency_metadata,
             config_settings,
@@ -2660,6 +2769,7 @@ impl TryFrom<OptionsWire> for Options {
                 keyring_provider,
                 resolution,
                 prerelease,
+                prerelease_package,
                 fork_strategy,
                 dependency_metadata,
                 config_settings,
@@ -2799,6 +2909,26 @@ pub struct AddOptions {
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct AuditOptions {
+    /// Whether to run the automatic malware check during sync operations.
+    #[option(
+        default = "false",
+        value_type = "bool",
+        example = r#"
+            malware-check = true
+        "#
+    )]
+    pub malware_check: Option<bool>,
+
+    /// The vulnerability service URL to use for automatic malware checks.
+    #[option(
+        default = "\"https://api.osv.dev/\"",
+        value_type = "str",
+        example = r#"
+            malware-check-url = "https://example.com"
+        "#
+    )]
+    pub malware_check_url: Option<DisplaySafeUrl>,
+
     /// A list of vulnerability IDs to ignore during auditing.
     ///
     /// Vulnerabilities matching any of the provided IDs (including aliases) will be excluded from
@@ -2835,11 +2965,23 @@ pub struct MalwareCheckSettings {
     pub malware_check_url: Option<DisplaySafeUrl>,
 }
 
-impl From<&crate::EnvironmentOptions> for MalwareCheckSettings {
-    fn from(options: &crate::EnvironmentOptions) -> Self {
+impl MalwareCheckSettings {
+    pub fn resolve(
+        filesystem: Option<&FilesystemOptions>,
+        environment: &EnvironmentOptions,
+    ) -> Self {
+        let audit = filesystem.and_then(|options| options.audit.as_ref());
+
         Self {
-            enabled: options.malware_check.value == Some(true),
-            malware_check_url: options.malware_check_url.clone(),
+            enabled: environment
+                .malware_check
+                .value
+                .or(audit.and_then(|audit| audit.malware_check))
+                .unwrap_or_default(),
+            malware_check_url: environment
+                .malware_check_url
+                .clone()
+                .or_else(|| audit.and_then(|audit| audit.malware_check_url.clone())),
         }
     }
 }
@@ -2892,7 +3034,7 @@ struct PreviewOptionsDefinition {
         example = r#"
             preview-features = true
             # or
-            preview-features = ["python-upgrade"]
+            preview-features = ["json-output"]
         "#
     )]
     preview_features: Option<PreviewFeaturesOption>,
@@ -2914,6 +3056,27 @@ impl uv_options_metadata::OptionsMetadata for PreviewOption {
 }
 
 #[cfg(feature = "schemars")]
+struct ConflictingPreviewOptions;
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for ConflictingPreviewOptions {
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("ConflictingPreviewOptions")
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "object",
+            "properties": {
+                "preview": {},
+                "preview-features": {},
+            },
+            "required": ["preview", "preview-features"],
+        })
+    }
+}
+
+#[cfg(feature = "schemars")]
 impl schemars::JsonSchema for PreviewOption {
     fn schema_name() -> Cow<'static, str> {
         Cow::Borrowed("PreviewOption")
@@ -2921,16 +3084,13 @@ impl schemars::JsonSchema for PreviewOption {
 
     fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
         let mut schema = <PreviewOptionsDefinition as schemars::JsonSchema>::json_schema(generator);
+        // Keep this constraint in a referenced schema to avoid a fastjsonschema code-generation
+        // bug. See: https://github.com/astral-sh/uv/pull/20547.
         schema.insert(
             "not".to_string(),
-            schemars::json_schema!({
-                "properties": {
-                    "preview": {},
-                    "preview-features": {},
-                },
-                "required": ["preview", "preview-features"],
-            })
-            .into(),
+            generator
+                .subschema_for::<ConflictingPreviewOptions>()
+                .into(),
         );
         schema
     }

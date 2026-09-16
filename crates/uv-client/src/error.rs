@@ -16,9 +16,10 @@ use crate::{FlatIndexError, html};
 use uv_cache::Error as CacheError;
 use uv_distribution_filename::{WheelFilename, WheelFilenameError};
 use uv_distribution_types::IndexUrl;
-use uv_errors::{Hint, Hints};
+use uv_errors::{Hinted, Hints};
 use uv_git::GitError;
 use uv_normalize::PackageName;
+use uv_pypi_types::HashDigest;
 use uv_redacted::DisplaySafeUrl;
 
 /// RFC 9457 Problem Details for HTTP APIs
@@ -158,6 +159,44 @@ impl std::error::Error for Error {
 }
 
 impl Error {
+    /// Return whether this is an expected user-facing failure.
+    pub fn is_user_failure(&self) -> bool {
+        match self.kind() {
+            ErrorKind::InvalidUrl(_)
+            | ErrorKind::MissingWheelGitLfsArtifacts(..)
+            | ErrorKind::NonFileUrl(_)
+            | ErrorKind::CannotBeABase(_)
+            | ErrorKind::Metadata(..)
+            | ErrorKind::NoIndex(_)
+            | ErrorKind::RemotePackageNotFound(_)
+            | ErrorKind::LocalPackageNotFound(_)
+            | ErrorKind::LocalIndexNotFound(_)
+            | ErrorKind::MetadataHashMismatch { .. }
+            | ErrorKind::MetadataParseError(..)
+            | ErrorKind::BadJson { .. }
+            | ErrorKind::BadHtml { .. }
+            | ErrorKind::MetadataRangeRequestsRequired(..)
+            | ErrorKind::WheelFilename(_)
+            | ErrorKind::NameMismatch { .. }
+            | ErrorKind::Zip(..)
+            | ErrorKind::MissingContentType(_)
+            | ErrorKind::InvalidContentTypeHeader(..)
+            | ErrorKind::UnsupportedMediaType(..)
+            | ErrorKind::Offline(_) => true,
+            ErrorKind::Git(error) => error.is_user_failure(),
+            ErrorKind::WrappedReqwestError(_, error) => error.is_user_failure(),
+            ErrorKind::Flat(error) => error.is_user_failure(),
+            ErrorKind::AsyncHttpRangeReader(..)
+            | ErrorKind::CacheWrite(_)
+            | ErrorKind::CacheLock(_)
+            | ErrorKind::Io(_)
+            | ErrorKind::Decode(_)
+            | ErrorKind::Encode(_)
+            | ErrorKind::ArchiveRead(_)
+            | ErrorKind::ArchiveWrite(_) => false,
+        }
+    }
+
     /// Create a new [`Error`] with the given [`ErrorKind`] and number of retries.
     pub fn new(kind: ErrorKind, retries: u32, duration: Duration) -> Self {
         Self {
@@ -201,11 +240,6 @@ impl Error {
     /// Create a new error from an HTML parsing error.
     pub(crate) fn from_html_err(err: html::Error, url: DisplaySafeUrl) -> Self {
         ErrorKind::BadHtml { source: err, url }.into()
-    }
-
-    /// Create a new error from a `MessagePack` parsing error.
-    pub(crate) fn from_msgpack_err(err: rmp_serde::decode::Error, url: DisplaySafeUrl) -> Self {
-        ErrorKind::BadMessagePack { source: err, url }.into()
     }
 
     /// Create an [`Error`] from a [`reqwest_middleware::Error`].
@@ -380,7 +414,7 @@ impl Error {
     }
 }
 
-impl Hint for Error {
+impl Hinted for Error {
     fn hints(&self) -> Hints<'_> {
         if self.suggests_system_certs() {
             Hints::from(format!(
@@ -444,6 +478,16 @@ pub enum ErrorKind {
     #[error("Local index not found at: `{}`", _0.display())]
     LocalIndexNotFound(PathBuf),
 
+    /// The metadata file does not match a hash provided by its package index.
+    #[error(
+        "Hash mismatch for package metadata at `{url}`\n\nExpected:\n  {expected}\n\nComputed:\n  {actual}"
+    )]
+    MetadataHashMismatch {
+        url: DisplaySafeUrl,
+        expected: HashDigest,
+        actual: HashDigest,
+    },
+
     /// The metadata file could not be parsed.
     #[error("Couldn't parse metadata of {0} from {1}")]
     MetadataParseError(
@@ -468,14 +512,11 @@ pub enum ErrorKind {
         url: DisplaySafeUrl,
     },
 
-    #[error("Received some unexpected MessagePack from {}", url)]
-    BadMessagePack {
-        source: rmp_serde::decode::Error,
-        url: DisplaySafeUrl,
-    },
-
     #[error("Failed to read zip with range requests: `{0}`")]
     AsyncHttpRangeReader(DisplaySafeUrl, #[source] AsyncHttpRangeReaderError),
+
+    #[error("Wheel metadata range requests are required, but not supported for: `{0}`")]
+    MetadataRangeRequestsRequired(DisplaySafeUrl, #[source] Box<Error>),
 
     #[error("{0} is not a valid wheel filename")]
     WheelFilename(#[source] WheelFilenameError),
@@ -569,6 +610,13 @@ enum WrappedReqwestErrorContext {
 }
 
 impl WrappedReqwestError {
+    /// Return whether the request failed because the resource does not exist.
+    pub fn is_user_failure(&self) -> bool {
+        self.inner()
+            .and_then(reqwest::Error::status)
+            .is_some_and(|status| status == reqwest::StatusCode::NOT_FOUND)
+    }
+
     /// Create a new `WrappedReqwestError` with optional problem details
     pub fn with_problem_details(
         error: reqwest_middleware::Error,

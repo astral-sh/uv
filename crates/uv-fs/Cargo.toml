@@ -1,6 +1,6 @@
 [package]
 name = "uv-fs"
-version = "0.0.61"
+version = "0.0.82"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -39,6 +39,12 @@ walkdir = { workspace = true }
 
 [target.'cfg(any(unix, target_os = "wasi", target_os = "redox"))'.dependencies]
 rustix = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+linux-raw-sys = { workspace = true }
+
+[target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
+libc = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 backon = { workspace = true }

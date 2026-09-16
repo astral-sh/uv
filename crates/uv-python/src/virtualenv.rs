@@ -8,7 +8,6 @@ use std::{
 use fs_err as fs;
 use thiserror::Error;
 
-use uv_preview::PreviewFeature;
 use uv_pypi_types::Scheme;
 use uv_static::EnvVars;
 
@@ -113,17 +112,7 @@ impl CondaEnvironmentKind {
             return Self::Child;
         }
 
-        // If the environment name is "base" or "root", treat it as a base environment
-        //
-        // These are the expected names for the base environment; and is retained for backwards
-        // compatibility, but can be removed with the `special-conda-env-names` preview feature.
-        if !uv_preview::is_enabled(PreviewFeature::SpecialCondaEnvNames)
-            && (current_env == "base" || current_env == "root")
-        {
-            return Self::Base;
-        }
-
-        // For other environment names, use the path-based logic
+        // Use path-based logic for environment names, including `base` and `root`.
         let Some(name) = path.file_name() else {
             return Self::Child;
         };
@@ -160,9 +149,9 @@ pub(crate) fn conda_environment_from_env(kind: CondaEnvironmentKind) -> Option<P
 
 /// Locate a virtual environment by searching the file system.
 ///
-/// Searches for a `.venv` directory in the current or any parent directory. If the current
-/// directory is itself a virtual environment (or a subdirectory of a virtual environment), the
-/// containing virtual environment is returned.
+/// Searches for a `.venv` directory or symlink in the current or any parent directory. If the
+/// current directory is itself a virtual environment (or a subdirectory of a virtual environment),
+/// the containing virtual environment is returned.
 pub(crate) fn virtualenv_from_working_dir() -> Result<Option<PathBuf>, Error> {
     let current_dir = crate::current_dir()?;
 
@@ -174,7 +163,12 @@ pub(crate) fn virtualenv_from_working_dir() -> Result<Option<PathBuf>, Error> {
 
         // Otherwise, search for a `.venv` directory.
         let dot_venv = dir.join(".venv");
-        if dot_venv.is_dir() {
+        let metadata = match fs::symlink_metadata(&dot_venv) {
+            Ok(metadata) => metadata,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
+            Err(err) => return Err(err.into()),
+        };
+        if metadata.is_dir() || metadata.file_type().is_symlink() {
             if !uv_fs::is_virtualenv_base(&dot_venv) {
                 return Err(Error::MissingPyVenvCfg(dot_venv));
             }
@@ -211,13 +205,14 @@ pub(crate) fn virtualenv_python_executable(venv: impl AsRef<Path>) -> PathBuf {
         // If none of these exist, return the standard location
         default_executable
     } else {
-        // Check for both `python3` over `python`, preferring the more specific one
-        let default_executable = venv.join("bin").join("python3");
+        // Prefer the unversioned `python` command exposed by virtual environments.
+        let default_executable = venv.join("bin").join("python");
         if default_executable.exists() {
             return default_executable;
         }
 
-        let executable = venv.join("bin").join("python");
+        // Fall back to `python3` for installations without an unversioned executable.
+        let executable = venv.join("bin").join("python3");
         if executable.exists() {
             return executable;
         }

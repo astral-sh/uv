@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 use arcstr::ArcStr;
-use regex::Regex;
+use regex::regex;
 use thiserror::Error;
 use url::Url;
 use uv_cache_key::{CacheKey, CacheKeyHasher};
@@ -21,7 +21,7 @@ use crate::Pep508Url;
 /// A wrapper around [`Url`] that preserves the original string.
 ///
 /// The original string is not preserved after serialization/deserialization.
-#[derive(Debug, Clone, Eq)]
+#[derive(Clone, Eq)]
 pub struct VerbatimUrl {
     /// The parsed URL.
     url: DisplaySafeUrl,
@@ -33,6 +33,33 @@ pub struct VerbatimUrl {
     /// Given value is a [`Pep508Url`] which contained variable references which were successfully
     /// expanded.
     expanded: bool,
+    /// Whether this URL should be represented by a relative path regardless of its input.
+    force_relative: bool,
+}
+
+impl Debug for VerbatimUrl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let given = self.given.as_deref().map(|given| {
+            DisplaySafeUrl::parse(given).map_or_else(
+                |_| Cow::Borrowed(given),
+                |url| {
+                    let redacted = url.to_string();
+                    if redacted == url.displayable_with_credentials().to_string() {
+                        Cow::Borrowed(given)
+                    } else {
+                        Cow::Owned(redacted)
+                    }
+                },
+            )
+        });
+
+        f.debug_struct("VerbatimUrl")
+            .field("url", &self.url)
+            .field("given", &given)
+            .field("expanded", &self.expanded)
+            .field("force_relative", &self.force_relative)
+            .finish()
+    }
 }
 
 impl Hash for VerbatimUrl {
@@ -60,6 +87,7 @@ impl VerbatimUrl {
             url,
             given: None,
             expanded: false,
+            force_relative: false,
         }
     }
 
@@ -72,6 +100,7 @@ impl VerbatimUrl {
             url,
             given: None,
             expanded: false,
+            force_relative: false,
         })
     }
 
@@ -145,6 +174,7 @@ impl VerbatimUrl {
             url,
             given: None,
             expanded: false,
+            force_relative: false,
         })
     }
 
@@ -186,6 +216,7 @@ impl VerbatimUrl {
             url,
             given: None,
             expanded: false,
+            force_relative: false,
         })
     }
 
@@ -210,6 +241,7 @@ impl VerbatimUrl {
             url,
             given: None,
             expanded: false,
+            force_relative: false,
         })
     }
 
@@ -232,38 +264,54 @@ impl VerbatimUrl {
         }
     }
 
+    /// Set whether this URL should be represented by a relative path regardless of its input.
+    ///
+    /// When `false`, preserve the original input's path preference.
+    #[must_use]
+    pub fn with_force_relative(self, force_relative: bool) -> Self {
+        Self {
+            force_relative,
+            ..self
+        }
+    }
+
+    /// Return whether this URL is forced to prefer a relative path.
+    pub fn force_relative(&self) -> bool {
+        self.force_relative
+    }
+
     /// Return the original string as given by the user, if available.
     pub fn given(&self) -> Option<&str> {
         self.given.as_deref()
     }
 
-    /// Returns `true` if the `given` input was an absolute path or file URL.
+    /// Return whether this URL should be represented by a relative path.
     ///
     /// If the URL was a PEP 508 URL which contained environment variable references which were
-    /// expanded. This function returns false to preserve existing usecases which may rely on
+    /// expanded, this function returns true to preserve existing usecases which may rely on
     /// things like `${PWD}` or `${PROJECT_ROOT}`.
-    pub fn was_given_absolute(&self) -> bool {
+    pub fn prefers_relative(&self) -> bool {
         let Some(given) = &self.given else {
-            return false;
+            return true;
         };
-        if self.expanded {
-            return false;
+        if self.expanded || self.force_relative {
+            return true;
         }
 
         if let Some((scheme, _)) = split_scheme(given)
             && let Some(parsed_scheme) = Scheme::parse(scheme)
         {
-            return parsed_scheme.is_file();
+            return !parsed_scheme.is_file();
         }
 
-        Path::new(given.as_str()).is_absolute()
+        !Path::new(given.as_str()).is_absolute()
     }
 
     /// Set the "given value contained variables which were expanded" flag.
     ///
-    /// Intended to only be used by the [`Pep508Url`] impl.
+    /// Intended to only be used by the URL parser implementations.
     #[must_use]
-    fn with_expanded(self, expanded: bool) -> Self {
+    pub(crate) fn with_expanded(self, expanded: bool) -> Self {
         Self { expanded, ..self }
     }
 
@@ -375,15 +423,7 @@ impl Pep508Url for VerbatimUrl {
         // Expand environment variables in the URL.
         let expanded = expand_env_vars(url);
 
-        // Since `expand_env_vars` can return `Cow::Owned` even when variables were not expanded,
-        // the check needs to fall back to comparison for that case.
-        //
-        // Note: If a variable named `FOO` expands to `${FOO}` then this will produce a false
-        // negative. This seems like too much of a corner case to justify trying to fix it.
-        let vars_expanded = match &expanded {
-            Cow::Owned(owned) => owned != url,
-            Cow::Borrowed(_) => false,
-        };
+        let vars_expanded = were_vars_expanded(url, expanded.as_ref());
 
         if let Some((scheme, path)) = split_scheme(&expanded) {
             match Scheme::parse(scheme) {
@@ -512,16 +552,21 @@ pub fn expand_env_vars(s: &str) -> Cow<'_, str> {
         project_root.to_string_lossy().to_string()
     });
 
-    static RE: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"(?P<var>\$\{(?P<name>[A-Z0-9_]+)})").unwrap());
-
-    RE.replace_all(s, |caps: &regex::Captures<'_>| {
+    regex!(r"(?P<var>\$\{(?P<name>[A-Z0-9_]+)})").replace_all(s, |caps: &regex::Captures<'_>| {
         let name = caps.name("name").unwrap().as_str();
         std::env::var(name).unwrap_or_else(|_| match name {
             "PROJECT_ROOT" => PROJECT_ROOT_FRAGMENT.to_string(),
             _ => caps["var"].to_owned(),
         })
     })
+}
+
+/// Returns `true` if [`expand_env_vars`] changed the given value.
+///
+/// Note: If a variable named `FOO` expands to `${FOO}` then this will produce a false negative.
+/// This seems like too much of a corner case to justify trying to fix it.
+pub(crate) fn were_vars_expanded(given: &str, expanded: &str) -> bool {
+    expanded != given
 }
 
 /// Like [`Url::parse`], but only splits the scheme. Derived from the `url` crate.
@@ -725,6 +770,18 @@ mod tests {
     use insta::assert_snapshot;
 
     use super::*;
+
+    #[test]
+    fn forced_relative_overrides_absolute_spelling() -> Result<(), VerbatimUrlError> {
+        let absolute: VerbatimUrl = "file:///path/to/distribution".parse()?;
+        let relative = absolute.clone().with_force_relative(true);
+
+        assert!(relative.prefers_relative());
+        assert_eq!(absolute, relative);
+        assert!(!relative.with_force_relative(false).prefers_relative());
+
+        Ok(())
+    }
 
     #[test]
     fn scheme() {

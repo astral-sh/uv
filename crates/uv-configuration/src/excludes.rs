@@ -104,6 +104,11 @@ impl Excludes {
         self.global.contains(name)
     }
 
+    /// Return whether any exclusions are scoped to the given package.
+    pub fn has_scoped_package(&self, package: &PackageName) -> bool {
+        self.scoped.contains_key(package)
+    }
+
     /// Check if a dependency is excluded from a specific package version.
     pub fn contains_for(
         &self,

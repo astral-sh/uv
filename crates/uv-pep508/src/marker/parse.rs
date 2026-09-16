@@ -622,7 +622,7 @@ fn parse_marker_or<T: Pep508Url>(
 fn parse_marker_op<T: Pep508Url, R: Reporter>(
     cursor: &mut Cursor,
     op: &str,
-    apply: fn(&mut MarkerTree, MarkerTree),
+    apply: fn(MarkerTree, MarkerTree) -> MarkerTree,
     parse_inner: fn(&mut Cursor, &mut R) -> Result<Option<MarkerTree>, Pep508Error<T>>,
     reporter: &mut R,
 ) -> Result<Option<MarkerTree>, Pep508Error<T>> {
@@ -632,10 +632,10 @@ fn parse_marker_op<T: Pep508Url, R: Reporter>(
     let first_element = parse_inner(cursor, reporter)?;
 
     if let Some(expression) = first_element {
-        match tree {
-            Some(ref mut tree) => apply(tree, expression),
-            None => tree = Some(expression),
-        }
+        tree = Some(match tree {
+            Some(tree) => apply(tree, expression),
+            None => expression,
+        });
     }
 
     loop {
@@ -648,10 +648,10 @@ fn parse_marker_op<T: Pep508Url, R: Reporter>(
                 cursor.take_while(|c| !c.is_whitespace());
 
                 if let Some(expression) = parse_inner(cursor, reporter)? {
-                    match tree {
-                        Some(ref mut tree) => apply(tree, expression),
-                        None => tree = Some(expression),
-                    }
+                    tree = Some(match tree {
+                        Some(tree) => apply(tree, expression),
+                        None => expression,
+                    });
                 }
             }
             _ => return Ok(tree),

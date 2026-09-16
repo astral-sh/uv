@@ -3,24 +3,18 @@
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::{fixture::ChildPath, prelude::*};
-use async_zip::base::write::ZipFileWriter;
-use async_zip::{Compression, ZipEntryBuilder};
-use futures::executor::block_on;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use predicates::{prelude::predicate, str::contains};
 use serde_json::json;
-use sha2::{Digest, Sha256};
 use std::path::Path;
-#[cfg(feature = "test-git")]
-use std::process::Command;
 use uv_fs::copy_dir_all;
 use uv_python::PYTHON_VERSION_FILENAME;
 use uv_static::EnvVars;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-use uv_test::{TestContext, uv_snapshot};
+use uv_test::{TestContext, packse::PackseServer, uv_snapshot};
 
 #[test]
 fn run_with_python_version() -> Result<()> {
@@ -63,8 +57,7 @@ fn run_with_python_version() -> Result<()> {
     let mut command = context.run();
     let command_with_args = command.arg("python").arg("-B").arg("main.py");
     uv_snapshot!(context.filters(), command_with_args, @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     3.12.[X]
     3.7.0
@@ -90,8 +83,7 @@ fn run_with_python_version() -> Result<()> {
         .arg("-B")
         .arg("main.py");
     uv_snapshot!(context.filters(), command_with_args, @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     3.12.[X]
     3.7.0
@@ -112,8 +104,7 @@ fn run_with_python_version() -> Result<()> {
         .env_remove(EnvVars::VIRTUAL_ENV);
 
     uv_snapshot!(context.filters(), command_with_args, @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     3.11.[X]
     3.6.0
@@ -142,10 +133,7 @@ fn run_with_python_version() -> Result<()> {
         .env_remove(EnvVars::VIRTUAL_ENV);
 
     uv_snapshot!(context.filters(), command_with_args, @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
     error: The requested interpreter resolved to Python 3.9.[X], which is incompatible with the project's Python requirement: `>=3.11, <4` (from `project.requires-python`)
@@ -156,11 +144,15 @@ fn run_with_python_version() -> Result<()> {
 
 #[test]
 fn run_args() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-
-    let context = context
-        .with_filter((r"Usage: uv(\.exe)? run \[OPTIONS\] (?s).*", "[UV RUN HELP]"))
-        .with_filter((r"usage: .*(\n|.*)*", "usage: [PYTHON HELP]"));
+    let context = uv_test::test_context!("3.12")
+        .with_filter((
+            r"Usage: uv(?:\.exe)? run \[OPTIONS\] (?s:.*?)(\n----- stderr -----|$)",
+            "[UV RUN HELP]$1",
+        ))
+        .with_filter((
+            r"usage: (?s:.*?)(\n----- stderr -----|$)",
+            "usage: [PYTHON HELP]$1",
+        ));
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -184,26 +176,27 @@ fn run_args() -> Result<()> {
 
     // We treat arguments before the command as uv arguments
     uv_snapshot!(context.filters(), context.run().arg("--help").arg("python"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Run a command or script
 
-    [UV RUN HELP]
-    ");
+    [UV RUN HELP]");
 
     // We don't treat arguments after the command as uv arguments
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--help"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     usage: [PYTHON HELP]
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
     ");
 
     // Can use `--` to separate uv arguments from the command arguments.
     uv_snapshot!(context.filters(), context.run().arg("--").arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.[X]
 
@@ -245,8 +238,7 @@ fn run_no_args() -> Result<()> {
     // Run without specifying any arguments.
     #[cfg(not(windows))]
     uv_snapshot!(context.filters(), context.run(), @"
-    success: false
-    exit_code: 2
+    exit_code: 2 (failure)
     ----- stdout -----
     Provide a command or script to invoke with `uv run <command>` or `uv run <script>.py`.
 
@@ -267,8 +259,7 @@ fn run_no_args() -> Result<()> {
 
     #[cfg(windows)]
     uv_snapshot!(context.filters(), context.run(), @r###"
-    success: false
-    exit_code: 2
+    exit_code: 2 (failure)
     ----- stdout -----
     Provide a command or script to invoke with `uv run <command>` or `uv run <script>.py`.
 
@@ -332,10 +323,7 @@ fn run_pep723_script() -> Result<()> {
 
     // Running the script should install the requirements.
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -345,11 +333,7 @@ fn run_pep723_script() -> Result<()> {
 
     // Running again should use the existing environment.
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
+    exit_code: 0 (success)
     ");
 
     // But neither invocation should create a lockfile.
@@ -364,10 +348,7 @@ fn run_pep723_script() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -392,8 +373,7 @@ fn run_pep723_script() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
 
@@ -413,30 +393,23 @@ fn run_pep723_script() -> Result<()> {
        "#
     })?;
 
-    // Running the script should install the requirements.
+    // Running the script should succeed without installing any requirements.
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
-
-    ----- stderr -----
     ");
 
     // Running a script with `--locked` should error.
     uv_snapshot!(context.filters(), context.run().arg("--locked").arg("main.py"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Unable to find lockfile for Python script, but `--locked` was provided. To create a lockfile, run `uv lock --script`.
     ");
 
     // Running a script with `UV_LOCKED` should warn (not error).
     uv_snapshot!(context.filters(), context.run().env("UV_LOCKED", "1").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
 
@@ -458,13 +431,10 @@ fn run_pep723_script() -> Result<()> {
 
     // Running a script with `--group` should warn.
     uv_snapshot!(context.filters(), context.run().arg("--group").arg("foo").arg("main.py"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving script dependencies:
-      ╰─▶ Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving script dependencies
+      cause: Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
     ");
 
     // If the script can't be resolved, we should reference the script.
@@ -480,13 +450,10 @@ fn run_pep723_script() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("main.py"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving script dependencies:
-      ╰─▶ Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving script dependencies
+      cause: Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
     ");
 
     // If the script contains an unclosed PEP 723 tag, we should error.
@@ -505,10 +472,7 @@ fn run_pep723_script() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("main.py"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: An opening tag (`# /// script`) was found without a closing tag (`# ///`). Ensure that every line between the opening and closing tags (including empty lines) starts with a leading `#`.
     ");
@@ -529,13 +493,38 @@ fn run_pep723_script() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("main.py"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: The script contains multiple PEP 723 metadata blocks
     ");
+
+    Ok(())
+}
+
+#[test]
+fn run_pep723_script_empty_dependency() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let test_script = context.temp_dir.child("script.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [""]
+        # ///
+       "#
+    })?;
+
+    // The invalid requirement is empty, so the PEP 508 error should not include an orphaned caret;
+    // see astral-sh/uv#21089.
+    uv_snapshot!(context.filters(), context.run().arg("--script").arg("script.py"), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: TOML parse error at line 2, column 17
+      |
+    2 | dependencies = [""]
+      |                 ^^
+    Empty field is not allowed for PEP508
+    "#);
 
     Ok(())
 }
@@ -563,8 +552,7 @@ fn run_pep723_script_long_filename() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg(&script_name), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
 
@@ -601,24 +589,18 @@ fn run_pep723_script_requires_python() -> Result<()> {
     // The `.python-version` (3.11) is incompatible with the script's `requires-python` (>=3.12),
     // so uv should ignore it and discover a compatible Python (3.12) instead.
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     3.12.[X]
-
-    ----- stderr -----
     ");
 
     // Deleting the `.python-version` file should not change the behavior.
     fs_err::remove_file(&python_version)?;
 
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     3.12.[X]
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -647,12 +629,9 @@ fn run_pep723_script_requires_python_compatible() -> Result<()> {
     // The `.python-version` (3.11) is compatible with the script's `requires-python` (>=3.11),
     // so it should be used.
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     3.11.[X]
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -679,12 +658,9 @@ fn run_pep723_script_requires_python_incompatible_range() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     3.12.[X]
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -722,10 +698,7 @@ fn run_pythonw_script() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("main.pyw"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -762,12 +735,9 @@ fn run_pep723_script_metadata() -> Result<()> {
        "#
     })?;
 
-    // Running the script should fail without network access.
+    // Running the script should honor its inline resolution setting.
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -794,10 +764,7 @@ fn run_pep723_script_metadata() -> Result<()> {
 
     // The script should succeed with the specified source.
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -835,15 +802,121 @@ fn run_pep723_script_index() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + idna==2.7
+    ");
+
+    Ok(())
+}
+
+/// Run a PEP 723-compatible script with a relative index and pinned and unpinned dependencies.
+#[test]
+fn run_pep723_script_relative_index() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let scripts = context.temp_dir.child("scripts");
+    let links = scripts.child("links");
+    links.create_dir_all()?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        links.child("ok-1.0.0-py3-none-any.whl"),
+    )?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/validation-1.0.0-py3-none-any.whl"),
+        links.child("validation-1.0.0-py3-none-any.whl"),
+    )?;
+
+    let test_script = scripts.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = ["ok", "validation"]
+        #
+        # [[tool.uv.index]]
+        # name = "local"
+        # url = "./links"
+        # format = "flat"
+        #
+        # [tool.uv.sources]
+        # ok = { index = "local" }
+        # ///
+
+        import ok
+        import validation
+        "#
+    })?;
+
+    let elsewhere = context.temp_dir.child("elsewhere");
+    elsewhere.create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.run().current_dir(elsewhere).arg("--offline").arg(test_script.path()), @r"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + ok==1.0.0
+     + validation==1.0.0
+    ");
+
+    Ok(())
+}
+
+/// Package-scoped source disabling must not discard unrelated script sources or indexes.
+#[test]
+fn run_pep723_script_no_sources_package() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let explicit = PackseServer::new("simple/single-package.toml");
+    let default = PackseServer::new("extras/missing-extra.toml");
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(&formatdoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "a",
+        # ]
+        #
+        # [[tool.uv.index]]
+        # name = "test"
+        # url = "{index}"
+        # explicit = true
+        #
+        # [tool.uv.sources]
+        # a = {{ index = "test" }}
+        # ///
+
+        import a
+       "#,
+        index = explicit.index_url(),
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--default-index").arg(default.index_url()).arg("--no-sources-package").arg("unrelated").arg("main.py"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==2.0.0
+    ");
+
+    fs_err::remove_dir_all(&context.cache_dir)?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--default-index").arg(default.index_url()).arg("--no-sources-package").arg("a").arg("main.py"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.0.0
     ");
 
     Ok(())
@@ -871,10 +944,7 @@ fn run_pep723_script_constraints() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -909,10 +979,7 @@ fn run_pep723_script_overrides() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -947,10 +1014,7 @@ fn run_pep723_script_excludes() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -987,15 +1051,12 @@ fn run_pep723_script_build_constraints() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `requests==1.2.0`
-      ├─▶ Failed to resolve requirements from `setup.py` build
-      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
-      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
+    error: Failed to download and build `requests==1.2.0`
+      cause: Failed to resolve requirements from `setup.py` build
+      cause: No solution found when resolving: `setuptools>=40.8.0`
+      cause: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Compatible build constraints.
@@ -1016,10 +1077,7 @@ fn run_pep723_script_build_constraints() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Prepared 6 packages in [TIME]
@@ -1057,20 +1115,14 @@ fn run_pep723_script_lock() -> Result<()> {
 
     // Without a lockfile, running with `--locked` should error.
     uv_snapshot!(context.filters(), context.run().arg("--locked").arg("main.py"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Unable to find lockfile for Python script, but `--locked` was provided. To create a lockfile, run `uv lock --script`.
     ");
 
     // Explicitly lock the script.
     uv_snapshot!(context.filters(), context.lock().arg("--script").arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     ");
@@ -1106,8 +1158,7 @@ fn run_pep723_script_lock() -> Result<()> {
 
     // Run the script.
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
 
@@ -1120,8 +1171,7 @@ fn run_pep723_script_lock() -> Result<()> {
 
     // With a lockfile, running with `--locked` should not warn.
     uv_snapshot!(context.filters(), context.run().arg("--locked").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
 
@@ -1147,10 +1197,7 @@ fn run_pep723_script_lock() -> Result<()> {
 
     // Re-running the script with `--locked` should error.
     uv_snapshot!(context.filters(), context.run().arg("--locked").arg("main.py"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
@@ -1160,10 +1207,7 @@ fn run_pep723_script_lock() -> Result<()> {
 
     // Re-running the script with `--frozen` should also error, but at runtime.
     uv_snapshot!(context.filters(), context.run().arg("--frozen").arg("main.py"), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Checked 1 package in [TIME]
     Traceback (most recent call last):
@@ -1174,8 +1218,7 @@ fn run_pep723_script_lock() -> Result<()> {
 
     // Re-running the script should update the lockfile.
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
 
@@ -1265,12 +1308,9 @@ fn run_managed_false() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.[X]
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -1291,10 +1331,7 @@ fn run_exact() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import iniconfig"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -1314,10 +1351,7 @@ fn run_exact() -> Result<()> {
 
     // By default, `uv run` uses inexact semantics, so both `iniconfig` and `anyio` should still be available.
     uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import iniconfig; import anyio"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -1329,10 +1363,7 @@ fn run_exact() -> Result<()> {
 
     // But under `--exact`, `iniconfig` should not be available.
     uv_snapshot!(context.filters(), context.run().arg("--exact").arg("python").arg("-c").arg("import iniconfig"), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Uninstalled 1 package in [TIME]
@@ -1379,8 +1410,7 @@ fn run_with() -> Result<()> {
 
     // Requesting an unsatisfied requirement should install it.
     uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     1.3.0
 
@@ -1398,8 +1428,7 @@ fn run_with() -> Result<()> {
 
     // Requesting a satisfied requirement should use the base environment.
     uv_snapshot!(context.filters(), context.run().arg("--with").arg("sniffio").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     1.3.0
 
@@ -1410,8 +1439,7 @@ fn run_with() -> Result<()> {
 
     // Unless the user requests a different version.
     uv_snapshot!(context.filters(), context.run().arg("--with").arg("sniffio<1.3.0").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     1.2.0
 
@@ -1428,8 +1456,7 @@ fn run_with() -> Result<()> {
     // other dependencies. In this case, `sniffio==1.3.0` is not the latest-compatible version, but
     // we should use it anyway.
     uv_snapshot!(context.filters(), context.run().arg("--with").arg("anyio").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     1.3.0
 
@@ -1446,8 +1473,7 @@ fn run_with() -> Result<()> {
 
     // Even if we run with` --no-sync`.
     uv_snapshot!(context.filters(), context.run().arg("--with").arg("anyio==4.2.0").arg("--no-sync").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     1.3.0
 
@@ -1462,15 +1488,12 @@ fn run_with() -> Result<()> {
 
     // If the dependencies can't be resolved, we should reference `--with`.
     uv_snapshot!(context.filters(), context.run().arg("--with").arg("add").arg("main.py"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Checked 2 packages in [TIME]
-      × No solution found when resolving `--with` dependencies:
-      ╰─▶ Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving `--with` dependencies
+      cause: Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
     ");
 
     Ok(())
@@ -1523,8 +1546,7 @@ fn run_with_local_wheel_refreshes_rebuilt_wheel() -> Result<()> {
         .arg("-c")
         .arg("import foo; print(foo.hello())")
         .env_remove(EnvVars::VIRTUAL_ENV), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello from foo!
 
@@ -1565,8 +1587,7 @@ fn run_with_local_wheel_refreshes_rebuilt_wheel() -> Result<()> {
         .arg("-c")
         .arg("import foo; print(foo.hello())")
         .env_remove(EnvVars::VIRTUAL_ENV), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Updated code!
 
@@ -1589,8 +1610,7 @@ fn run_with_local_wheel_refreshes_rebuilt_wheel() -> Result<()> {
         .arg("-c")
         .arg("import foo; print(foo.hello())")
         .env_remove(EnvVars::VIRTUAL_ENV), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Updated code!
 
@@ -1604,2851 +1624,27 @@ fn run_with_local_wheel_refreshes_rebuilt_wheel() -> Result<()> {
     Ok(())
 }
 
-/// A satisfied `--with` request must not skip the ephemeral environment when an installed target
-/// has acquired a `match-runtime` build dependency. Rebuild the stale target and its nested source
-/// wheel using the now-selected runtime version, then verify the cached result can run offline.
-#[test]
-fn run_with_match_runtime_rebuilds_cached_nested_source_distribution() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let (primer, child) = uv_test::match_runtime_nested_sources(context.temp_dir.path())?;
-    let links = context.workspace_root.join("test/links");
-    let ok_1 = links.join("ok-1.0.0-py3-none-any.whl");
-    let ok_2 = links.join("ok-2.0.0-py3-none-any.whl");
-    let uv_toml = context.temp_dir.child("uv.toml");
-
-    uv_toml.write_str(indoc! {r#"
-        extra-build-dependencies = { child = ["ok==1.0.0"] }
-    "#})?;
-    context
-        .pip_install()
-        .arg("--no-index")
-        .arg("--find-links")
-        .arg(&links)
-        .arg(&primer)
-        .arg(&child)
-        .arg(&ok_1)
-        .assert()
-        .success();
-
-    context.pip_install().arg(&ok_2).assert().success();
-    uv_toml.write_str(indoc! {r#"
-        extra-build-dependencies = { child = [{ requirement = "ok", match-runtime = true }] }
-    "#})?;
-
-    let output = context
-        .run()
-        .arg("--no-project")
-        .arg("--no-index")
-        .arg("--find-links")
-        .arg(&links)
-        .arg("--with")
-        .arg(&primer)
-        .arg("--with")
-        .arg(&child)
-        .arg("--with")
-        .arg(&ok_2)
-        .arg("python")
-        .arg("-c")
-        .arg("import child; print(child.RUNTIME_VERSION, child.BUILDER_BUILD_NUMBER)")
-        .assert()
-        .success();
-    assert_snapshot!(std::str::from_utf8(&output.get_output().stdout)?.trim(), @"2.0.0 3");
-
-    let output = context
-        .run()
-        .arg("--no-project")
-        .arg("--no-index")
-        .arg("--find-links")
-        .arg(&links)
-        .arg("--offline")
-        .arg("--with")
-        .arg(&primer)
-        .arg("--with")
-        .arg(&child)
-        .arg("--with")
-        .arg(&ok_2)
-        .arg("python")
-        .arg("-c")
-        .arg("import child; print(child.RUNTIME_VERSION, child.BUILDER_BUILD_NUMBER)")
-        .assert()
-        .success();
-    assert_snapshot!(std::str::from_utf8(&output.get_output().stdout)?.trim(), @"2.0.0 3");
-
-    Ok(())
-}
-
-/// A source distribution installed into a cached `--with` environment must be rebuilt when its
-/// build settings change, even when the project does not lock build dependencies.
-#[test]
-fn run_with_invalidates_cached_build_settings() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-
-    context
-        .temp_dir
-        .child("pyproject.toml")
-        .write_str(indoc! { r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = []
-        "#
-        })?;
-
-    let source_dist = context.temp_dir.child("dep-0.1.0.zip");
-    let mut zip = ZipFileWriter::new(Vec::new());
-    let entry = ZipEntryBuilder::new("dep-0.1.0/pyproject.toml".into(), Compression::Stored);
-    block_on(zip.write_entry_whole(
-        entry,
-        br#"
-        [project]
-        name = "dep"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-
-        [build-system]
-        requires = []
-        backend-path = ["."]
-        build-backend = "build_backend"
-        "#,
-    ))?;
-    let entry = ZipEntryBuilder::new("dep-0.1.0/build_backend.py".into(), Compression::Stored);
-    block_on(zip.write_entry_whole(
-        entry,
-        br#"
-from pathlib import Path
-from zipfile import ZipFile
-
-def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-    value = config_settings.get("value", "missing")
-    filename = "dep-0.1.0-py3-none-any.whl"
-    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
-        wheel.writestr("dep.py", f"VALUE = {value!r}\n")
-        wheel.writestr(
-            "dep-0.1.0.dist-info/METADATA",
-            "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
-        )
-        wheel.writestr(
-            "dep-0.1.0.dist-info/WHEEL",
-            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
-        )
-        wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
-    return filename
-"#,
-    ))?;
-    fs_err::write(source_dist.path(), block_on(zip.close())?)?;
-
-    uv_snapshot!(context.filters(), context.run()
-        .arg("--no-project")
-        .arg("--no-index")
-        .arg("--with")
-        .arg(source_dist.path())
-        .arg("--config-settings-package")
-        .arg("dep:value=first")
-        .arg("python")
-        .arg("-c")
-        .arg("import dep; print(dep.VALUE)"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    first
-
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + dep==0.1.0 (from file://[TEMP_DIR]/dep-0.1.0.zip)
-    ");
-
-    uv_snapshot!(context.filters(), context.run()
-        .arg("--no-project")
-        .arg("--no-index")
-        .arg("--with")
-        .arg(source_dist.path())
-        .arg("--config-settings-package")
-        .arg("dep:value=second")
-        .arg("python")
-        .arg("-c")
-        .arg("import dep; print(dep.VALUE)"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    second
-
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + dep==0.1.0 (from file://[TEMP_DIR]/dep-0.1.0.zip)
-    ");
-
-    Ok(())
-}
-
-/// Explicit refresh must rebuild a cached source wheel before reusing a cached `--with` overlay.
-#[test]
-fn run_with_refresh_rebuilds_cached_source_overlay() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let value_file = context.temp_dir.child("value.txt");
-    value_file.write_str("first")?;
-
-    let source_dist = context.temp_dir.child("dep-0.1.0.zip");
-    let mut zip = ZipFileWriter::new(Vec::new());
-    let entry = ZipEntryBuilder::new("dep-0.1.0/pyproject.toml".into(), Compression::Stored);
-    block_on(zip.write_entry_whole(
-        entry,
-        br#"
-        [project]
-        name = "dep"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-
-        [build-system]
-        requires = []
-        backend-path = ["."]
-        build-backend = "build_backend"
-        "#,
-    ))?;
-    let entry = ZipEntryBuilder::new("dep-0.1.0/build_backend.py".into(), Compression::Stored);
-    let backend = format!(
-        r#"
-from pathlib import Path
-from zipfile import ZipFile
-
-def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-    value = Path({:?}).read_text().strip()
-    filename = "dep-0.1.0-py3-none-any.whl"
-    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
-        wheel.writestr("dep.py", f"VALUE = {{value!r}}\n")
-        wheel.writestr(
-            "dep-0.1.0.dist-info/METADATA",
-            "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
-        )
-        wheel.writestr(
-            "dep-0.1.0.dist-info/WHEEL",
-            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
-        )
-        wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
-    return filename
-"#,
-        value_file.path().to_string_lossy(),
-    );
-    block_on(zip.write_entry_whole(entry, backend.as_bytes()))?;
-    fs_err::write(source_dist.path(), block_on(zip.close())?)?;
-
-    let run = |refresh: &[&str]| -> Result<String> {
-        let output = context
-            .run()
-            .arg("--no-project")
-            .arg("--no-index")
-            .args(refresh)
-            .arg("--with")
-            .arg(source_dist.path())
-            .arg("python")
-            .arg("-c")
-            .arg("import dep; print(dep.VALUE)")
-            .assert()
-            .success();
-        Ok(std::str::from_utf8(&output.get_output().stdout)?
-            .trim()
-            .to_string())
-    };
-
-    assert_snapshot!(run(&[])?, @"first");
-
-    value_file.write_str("second")?;
-    assert_snapshot!(run(&["--refresh-package", "dep"])?, @"second");
-
-    value_file.write_str("third")?;
-    assert_snapshot!(run(&["--refresh"])?, @"third");
-
-    Ok(())
-}
-
-fn write_unlocked_helper_wheel(path: &ChildPath, version: &str) -> Result<()> {
-    let mut zip = ZipFileWriter::new(Vec::new());
-    let entry = ZipEntryBuilder::new("helper.py".into(), Compression::Stored);
-    block_on(zip.write_entry_whole(entry, b""))?;
-    let entry = ZipEntryBuilder::new(
-        format!("helper-{version}.dist-info/METADATA").into(),
-        Compression::Stored,
-    );
-    block_on(zip.write_entry_whole(
-        entry,
-        format!("Metadata-Version: 2.3\nName: helper\nVersion: {version}\n").as_bytes(),
-    ))?;
-    let entry = ZipEntryBuilder::new(
-        format!("helper-{version}.dist-info/WHEEL").into(),
-        Compression::Stored,
-    );
-    block_on(zip.write_entry_whole(
-        entry,
-        b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
-    ))?;
-    let entry = ZipEntryBuilder::new(
-        format!("helper-{version}.dist-info/RECORD").into(),
-        Compression::Stored,
-    );
-    block_on(zip.write_entry_whole(entry, b""))?;
-    fs_err::write(path.path(), block_on(zip.close())?)?;
-
-    Ok(())
-}
-
-fn write_unlocked_helper_source(path: &ChildPath) -> Result<()> {
-    let mut zip = ZipFileWriter::new(Vec::new());
-    let entry = ZipEntryBuilder::new("dep-0.1.0/pyproject.toml".into(), Compression::Stored);
-    block_on(zip.write_entry_whole(
-        entry,
-        br#"
-        [project]
-        name = "dep"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-
-        [build-system]
-        requires = ["helper"]
-        backend-path = ["."]
-        build-backend = "build_backend"
-        "#,
-    ))?;
-    let entry = ZipEntryBuilder::new("dep-0.1.0/build_backend.py".into(), Compression::Stored);
-    block_on(zip.write_entry_whole(
-        entry,
-        br#"
-from importlib.metadata import version
-from pathlib import Path
-from zipfile import ZipFile
-
-def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-    filename = "dep-0.1.0-py3-none-any.whl"
-    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
-        wheel.writestr("dep.py", f"HELPER = {version('helper')!r}\n")
-        wheel.writestr(
-            "dep-0.1.0.dist-info/METADATA",
-            "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
-        )
-        wheel.writestr(
-            "dep-0.1.0.dist-info/WHEEL",
-            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
-        )
-        wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
-    return filename
-"#,
-    ))?;
-    fs_err::write(path.path(), block_on(zip.close())?)?;
-
-    Ok(())
-}
-
-fn write_unlocked_build_requirement_source(path: &ChildPath) -> Result<()> {
-    let mut zip = ZipFileWriter::new(Vec::new());
-    let entry = ZipEntryBuilder::new("helper-2.0.0/pyproject.toml".into(), Compression::Stored);
-    block_on(zip.write_entry_whole(
-        entry,
-        br#"
-        [project]
-        name = "helper"
-        version = "2.0.0"
-        requires-python = ">=3.12"
-
-        [build-system]
-        requires = []
-        backend-path = ["."]
-        build-backend = "build_backend"
-        "#,
-    ))?;
-    let entry = ZipEntryBuilder::new("helper-2.0.0/build_backend.py".into(), Compression::Stored);
-    block_on(zip.write_entry_whole(
-        entry,
-        br#"
-from pathlib import Path
-from zipfile import ZipFile
-
-def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-    filename = "helper-2.0.0-py3-none-any.whl"
-    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
-        wheel.writestr("helper.py", "")
-        wheel.writestr(
-            "helper-2.0.0.dist-info/METADATA",
-            "Metadata-Version: 2.3\nName: helper\nVersion: 2.0.0\n",
-        )
-        wheel.writestr(
-            "helper-2.0.0.dist-info/WHEEL",
-            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
-        )
-        wheel.writestr("helper-2.0.0.dist-info/RECORD", "")
-    return filename
-"#,
-    ))?;
-    fs_err::write(path.path(), block_on(zip.close())?)?;
-
-    Ok(())
-}
-
-/// Changing a build constraint must invalidate both the cached overlay and its previously built
-/// source wheel.
-#[test]
-fn run_with_invalidates_cached_build_constraint() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let links = context.temp_dir.child("links");
-    links.create_dir_all()?;
-    write_unlocked_helper_wheel(&links.child("helper-1.0.0-py3-none-any.whl"), "1.0.0")?;
-    write_unlocked_helper_wheel(&links.child("helper-2.0.0-py3-none-any.whl"), "2.0.0")?;
-    let source_dist = context.temp_dir.child("dep-0.1.0.zip");
-    write_unlocked_helper_source(&source_dist)?;
-
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! { r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = []
-
-        [tool.uv]
-        build-constraint-dependencies = ["helper==1.0.0"]
-        "#
-    })?;
-
-    let first = context
-        .run()
-        .arg("--no-index")
-        .arg("--find-links")
-        .arg(links.path())
-        .arg("--with")
-        .arg(source_dist.path())
-        .arg("python")
-        .arg("-c")
-        .arg("import dep; print(dep.HELPER)")
-        .assert()
-        .success();
-    assert_snapshot!(String::from_utf8_lossy(&first.get_output().stdout), @"1.0.0");
-
-    pyproject_toml.write_str(indoc! { r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = []
-
-        [tool.uv]
-        build-constraint-dependencies = ["helper==2.0.0"]
-        "#
-    })?;
-
-    let second = context
-        .run()
-        .arg("--no-index")
-        .arg("--find-links")
-        .arg(links.path())
-        .arg("--with")
-        .arg(source_dist.path())
-        .arg("python")
-        .arg("-c")
-        .arg("import dep; print(dep.HELPER)")
-        .assert()
-        .success();
-    assert_snapshot!(String::from_utf8_lossy(&second.get_output().stdout), @"2.0.0");
-
-    Ok(())
-}
-
-/// Replacing a direct-path wheel used as a build constraint must invalidate both the cached
-/// overlay and the source wheel built against the previous artifact.
-#[test]
-fn run_with_invalidates_cached_build_replaced_direct_wheel_constraint() -> Result<()> {
-    fn write_helper(path: &ChildPath, value: &str) -> Result<()> {
-        let mut zip = ZipFileWriter::new(Vec::new());
-        let entry = ZipEntryBuilder::new("helper.py".into(), Compression::Stored);
-        block_on(zip.write_entry_whole(entry, format!("VALUE = {value:?}\n").as_bytes()))?;
-        let entry = ZipEntryBuilder::new(
-            "helper-1.0.0.dist-info/METADATA".into(),
-            Compression::Stored,
-        );
-        block_on(zip.write_entry_whole(
-            entry,
-            b"Metadata-Version: 2.3\nName: helper\nVersion: 1.0.0\n",
-        ))?;
-        let entry =
-            ZipEntryBuilder::new("helper-1.0.0.dist-info/WHEEL".into(), Compression::Stored);
-        block_on(zip.write_entry_whole(
-            entry,
-            b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
-        ))?;
-        let entry =
-            ZipEntryBuilder::new("helper-1.0.0.dist-info/RECORD".into(), Compression::Stored);
-        block_on(zip.write_entry_whole(entry, b""))?;
-        fs_err::write(path.path(), block_on(zip.close())?)?;
-        Ok(())
-    }
-
-    let context = uv_test::test_context!("3.12");
-    let helper = context.temp_dir.child("helper-1.0.0-py3-none-any.whl");
-    write_helper(&helper, "before")?;
-    let helper_url = url::Url::from_file_path(helper.path())
-        .map_err(|()| anyhow::anyhow!("Failed to create helper URL"))?;
-
-    let dep = context.temp_dir.child("dep");
-    dep.create_dir_all()?;
-    dep.child("pyproject.toml").write_str(indoc! { r#"
-        [project]
-        name = "dep"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-
-        [build-system]
-        requires = ["helper"]
-        backend-path = ["."]
-        build-backend = "build_backend"
-    "#,
-    })?;
-    dep.child("build_backend.py").write_str(indoc! { r#"
-        from pathlib import Path
-        from zipfile import ZipFile
-
-        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-            from helper import VALUE
-
-            filename = "dep-0.1.0-py3-none-any.whl"
-            with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
-                wheel.writestr("dep.py", f"HELPER = {VALUE!r}\n")
-                wheel.writestr(
-                    "dep-0.1.0.dist-info/METADATA",
-                    "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
-                )
-                wheel.writestr(
-                    "dep-0.1.0.dist-info/WHEEL",
-                    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
-                )
-                wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
-            return filename
-    "#,
-    })?;
-    context
-        .temp_dir
-        .child("pyproject.toml")
-        .write_str(&formatdoc! {r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = []
-
-        [tool.uv]
-        build-constraint-dependencies = ["helper @ {helper_url}"]
-    "#,
-        })?;
-
-    let run = || -> Result<String> {
-        let output = context
-            .run()
-            .arg("--no-index")
-            .arg("--with")
-            .arg(dep.path())
-            .arg("python")
-            .arg("-B")
-            .arg("-c")
-            .arg("import dep; print(dep.HELPER)")
-            .assert()
-            .success();
-        Ok(String::from_utf8_lossy(&output.get_output().stdout)
-            .trim()
-            .to_string())
-    };
-
-    assert_snapshot!(run()?, @"before");
-    write_helper(&helper, "after-in-place-replacement")?;
-    assert_snapshot!(run()?, @"after-in-place-replacement");
-
-    Ok(())
-}
-
-/// Changing a remote build constraint artifact must invalidate the cached overlay and source
-/// wheel, both when its hash changes and when an unhashed URL returns `Cache-Control: no-store`.
-#[tokio::test]
-async fn run_with_invalidates_cached_remote_build_constraint_hash() -> Result<()> {
-    fn write_helper(path: &ChildPath, value: &str) -> Result<Vec<u8>> {
-        let mut zip = ZipFileWriter::new(Vec::new());
-        let entry = ZipEntryBuilder::new("helper.py".into(), Compression::Stored);
-        block_on(zip.write_entry_whole(entry, format!("VALUE = {value:?}\n").as_bytes()))?;
-        let entry = ZipEntryBuilder::new(
-            "helper-1.0.0.dist-info/METADATA".into(),
-            Compression::Stored,
-        );
-        block_on(zip.write_entry_whole(
-            entry,
-            b"Metadata-Version: 2.3\nName: helper\nVersion: 1.0.0\n",
-        ))?;
-        let entry =
-            ZipEntryBuilder::new("helper-1.0.0.dist-info/WHEEL".into(), Compression::Stored);
-        block_on(zip.write_entry_whole(
-            entry,
-            b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
-        ))?;
-        let entry =
-            ZipEntryBuilder::new("helper-1.0.0.dist-info/RECORD".into(), Compression::Stored);
-        block_on(zip.write_entry_whole(entry, b""))?;
-        let wheel = block_on(zip.close())?;
-        fs_err::write(path.path(), &wheel)?;
-        Ok(wheel)
-    }
-
-    async fn mount_helper(server: &MockServer, wheel: Vec<u8>) {
-        Mock::given(method("GET"))
-            .and(path("/helper-1.0.0-py3-none-any.whl"))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .insert_header("Cache-Control", "no-store")
-                    .set_body_bytes(wheel),
-            )
-            .mount(server)
-            .await;
-    }
-
-    let context = uv_test::test_context!("3.12");
-    let artifacts = context.temp_dir.child("artifacts");
-    artifacts.create_dir_all()?;
-    let first = write_helper(&artifacts.child("first.whl"), "before")?;
-    let second = write_helper(&artifacts.child("second.whl"), "after")?;
-    let first_hash = format!("{:x}", Sha256::digest(&first));
-    let second_hash = format!("{:x}", Sha256::digest(&second));
-    assert_ne!(first_hash, second_hash);
-
-    let server = MockServer::start().await;
-    mount_helper(&server, first.clone()).await;
-    let helper_url = format!("{}/helper-1.0.0-py3-none-any.whl", server.uri());
-
-    let dep = context.temp_dir.child("dep");
-    dep.create_dir_all()?;
-    dep.child("pyproject.toml").write_str(indoc! { r#"
-        [project]
-        name = "dep"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-
-        [build-system]
-        requires = ["helper"]
-        backend-path = ["."]
-        build-backend = "build_backend"
-    "#,
-    })?;
-    dep.child("build_backend.py").write_str(indoc! { r#"
-        from pathlib import Path
-        from zipfile import ZipFile
-
-        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-            from helper import VALUE
-
-            filename = "dep-0.1.0-py3-none-any.whl"
-            with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
-                wheel.writestr("dep.py", f"HELPER = {VALUE!r}\n")
-                wheel.writestr(
-                    "dep-0.1.0.dist-info/METADATA",
-                    "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
-                )
-                wheel.writestr(
-                    "dep-0.1.0.dist-info/WHEEL",
-                    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
-                )
-                wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
-            return filename
-    "#,
-    })?;
-
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    let write_project = |hash: Option<&str>| {
-        let hash = hash.map_or_else(String::new, |hash| format!("#sha256={hash}"));
-        pyproject_toml.write_str(&formatdoc! {r#"
-            [project]
-            name = "project"
-            version = "0.1.0"
-            requires-python = ">=3.12"
-            dependencies = []
-
-            [tool.uv]
-            build-constraint-dependencies = ["helper @ {helper_url}{hash}"]
-        "#,
-        })
-    };
-    let run = || -> Result<String> {
-        let output = context
-            .run()
-            .env_remove(EnvVars::UV_DEFAULT_INDEX)
-            .arg("--no-index")
-            .arg("--with")
-            .arg(dep.path())
-            .arg("python")
-            .arg("-B")
-            .arg("-c")
-            .arg("import dep; print(dep.HELPER)")
-            .assert()
-            .success();
-        Ok(String::from_utf8_lossy(&output.get_output().stdout)
-            .trim()
-            .to_string())
-    };
-
-    write_project(Some(&first_hash))?;
-    assert_snapshot!(run()?, @"before");
-
-    server.reset().await;
-    mount_helper(&server, second.clone()).await;
-    write_project(Some(&second_hash))?;
-    assert_snapshot!(run()?, @"after");
-
-    server.reset().await;
-    mount_helper(&server, first).await;
-    write_project(None)?;
-    assert_snapshot!(run()?, @"before");
-
-    server.reset().await;
-    mount_helper(&server, second).await;
-    assert_snapshot!(run()?, @"after");
-
-    Ok(())
-}
-
-/// Moving a floating Git build constraint must invalidate the source wheel that was built
-/// against the previous commit, while keeping the outer source cache warm.
-#[test]
-#[cfg(feature = "test-git")]
-fn run_with_invalidates_cached_floating_git_build_constraint() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-
-    let helper_source = context.temp_dir.child("helper-source");
-    helper_source.create_dir_all()?;
-    helper_source.child("pyproject.toml").write_str(indoc! {r#"
-        [project]
-        name = "helper"
-        version = "1.0.0"
-        requires-python = ">=3.12"
-
-        [build-system]
-        requires = []
-        backend-path = ["."]
-        build-backend = "build_backend"
-    "#})?;
-    helper_source
-        .child("build_backend.py")
-        .write_str(indoc! {r#"
-        from pathlib import Path
-        from zipfile import ZipFile
-
-        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-            filename = "helper-1.0.0-py3-none-any.whl"
-            with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
-                wheel.writestr("helper.py", Path("helper.py").read_text())
-                wheel.writestr(
-                    "helper-1.0.0.dist-info/METADATA",
-                    "Metadata-Version: 2.3\nName: helper\nVersion: 1.0.0\n",
-                )
-                wheel.writestr(
-                    "helper-1.0.0.dist-info/WHEEL",
-                    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
-                )
-                wheel.writestr("helper-1.0.0.dist-info/RECORD", "")
-            return filename
-    "#})?;
-    helper_source
-        .child("helper.py")
-        .write_str("VALUE = 'before'\n")?;
-
-    Command::new("git")
-        .args([
-            "init",
-            "--quiet",
-            "--initial-branch",
-            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        ])
-        .arg(helper_source.path())
-        .assert()
-        .success();
-    Command::new("git")
-        .arg("-C")
-        .arg(helper_source.path())
-        .args(["config", "user.name", "uv-test"])
-        .assert()
-        .success();
-    Command::new("git")
-        .arg("-C")
-        .arg(helper_source.path())
-        .args(["config", "user.email", "uv-test@example.com"])
-        .assert()
-        .success();
-    Command::new("git")
-        .arg("-C")
-        .arg(helper_source.path())
-        .args(["add", "."])
-        .assert()
-        .success();
-    Command::new("git")
-        .arg("-C")
-        .arg(helper_source.path())
-        .args(["commit", "--quiet", "-m", "before"])
-        .assert()
-        .success();
-
-    let helper_bare = context.temp_dir.child("helper.git");
-    Command::new("git")
-        .args(["clone", "--quiet", "--bare"])
-        .arg(helper_source.path())
-        .arg(helper_bare.path())
-        .assert()
-        .success();
-    let helper_url = url::Url::from_directory_path(helper_bare.path())
-        .map_err(|()| anyhow::anyhow!("failed to create helper Git URL"))?;
-    let helper_url = helper_url.as_str().trim_end_matches('/');
-
-    let dep = context.temp_dir.child("dep");
-    dep.create_dir_all()?;
-    dep.child("pyproject.toml").write_str(indoc! {r#"
-        [project]
-        name = "dep"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-
-        [build-system]
-        requires = ["helper"]
-        backend-path = ["."]
-        build-backend = "build_backend"
-    "#})?;
-    dep.child("build_backend.py").write_str(indoc! {r#"
-        from pathlib import Path
-        from zipfile import ZipFile
-
-        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-            from helper import VALUE
-
-            filename = "dep-0.1.0-py3-none-any.whl"
-            with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
-                wheel.writestr("dep.py", f"HELPER = {VALUE!r}\n")
-                wheel.writestr(
-                    "dep-0.1.0.dist-info/METADATA",
-                    "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
-                )
-                wheel.writestr(
-                    "dep-0.1.0.dist-info/WHEEL",
-                    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
-                )
-                wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
-            return filename
-    "#})?;
-    context
-        .temp_dir
-        .child("pyproject.toml")
-        .write_str(&formatdoc! {r#"
-            [project]
-            name = "project"
-            version = "0.1.0"
-            requires-python = ">=3.12"
-            dependencies = []
-
-            [tool.uv]
-            build-constraint-dependencies = ["helper @ git+{helper_url}@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]
-        "#})?;
-
-    let run = || -> Result<String> {
-        let output = context
-            .run()
-            .env_remove(EnvVars::UV_DEFAULT_INDEX)
-            .env("GIT_ALLOW_PROTOCOL", "file")
-            .arg("--no-index")
-            .arg("--with")
-            .arg(dep.path())
-            .arg("python")
-            .arg("-B")
-            .arg("-c")
-            .arg("import dep; print(dep.HELPER)")
-            .assert()
-            .success();
-        Ok(String::from_utf8_lossy(&output.get_output().stdout)
-            .trim()
-            .to_string())
-    };
-
-    assert_snapshot!(run()?, @"before");
-    helper_source
-        .child("helper.py")
-        .write_str("VALUE = 'after'\n")?;
-    Command::new("git")
-        .arg("-C")
-        .arg(helper_source.path())
-        .args(["add", "."])
-        .assert()
-        .success();
-    Command::new("git")
-        .arg("-C")
-        .arg(helper_source.path())
-        .args(["commit", "--quiet", "-m", "after"])
-        .assert()
-        .success();
-    Command::new("git")
-        .arg("-C")
-        .arg(helper_source.path())
-        .arg("push")
-        .arg("--quiet")
-        .arg(helper_bare.path())
-        .arg("HEAD:refs/heads/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
-        .assert()
-        .success();
-    assert_snapshot!(run()?, @"after");
-
-    Ok(())
-}
-
-/// Changing the flat index used for build dependencies must invalidate both the cached overlay and
-/// its previously built source wheel.
-#[test]
-fn run_with_invalidates_cached_build_find_links() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let first_links = context.temp_dir.child("first-links");
-    first_links.create_dir_all()?;
-    write_unlocked_helper_wheel(&first_links.child("helper-1.0.0-py3-none-any.whl"), "1.0.0")?;
-    let second_links = context.temp_dir.child("second-links");
-    second_links.create_dir_all()?;
-    write_unlocked_helper_wheel(
-        &second_links.child("helper-2.0.0-py3-none-any.whl"),
-        "2.0.0",
-    )?;
-    let source_dist = context.temp_dir.child("dep-0.1.0.zip");
-    write_unlocked_helper_source(&source_dist)?;
-
-    context
-        .temp_dir
-        .child("pyproject.toml")
-        .write_str(indoc! { r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = []
-        "#
-        })?;
-
-    let first = context
-        .run()
-        .arg("--no-index")
-        .arg("--find-links")
-        .arg(first_links.path())
-        .arg("--with")
-        .arg(source_dist.path())
-        .arg("python")
-        .arg("-c")
-        .arg("import dep; print(dep.HELPER)")
-        .assert()
-        .success();
-    assert_snapshot!(String::from_utf8_lossy(&first.get_output().stdout), @"1.0.0");
-
-    let second = context
-        .run()
-        .arg("--no-index")
-        .arg("--find-links")
-        .arg(second_links.path())
-        .arg("--with")
-        .arg(source_dist.path())
-        .arg("python")
-        .arg("-c")
-        .arg("import dep; print(dep.HELPER)")
-        .assert()
-        .success();
-    assert_snapshot!(String::from_utf8_lossy(&second.get_output().stdout), @"2.0.0");
-
-    Ok(())
-}
-
-/// Changing the upload-time cutoff used for build dependencies must invalidate both the cached
-/// overlay and its previously built source wheel.
-#[tokio::test]
-async fn run_with_invalidates_cached_build_exclude_newer() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let artifacts = context.temp_dir.child("artifacts");
-    artifacts.create_dir_all()?;
-    let older = artifacts.child("helper-1.0.0-py3-none-any.whl");
-    write_unlocked_helper_wheel(&older, "1.0.0")?;
-    let newer = artifacts.child("helper-2.0.0-py3-none-any.whl");
-    write_unlocked_helper_wheel(&newer, "2.0.0")?;
-    let source_dist = context.temp_dir.child("dep-0.1.0.zip");
-    write_unlocked_helper_source(&source_dist)?;
-
-    let server = MockServer::start().await;
-    Mock::given(method("GET"))
-        .and(path("/simple/helper/"))
-        .respond_with(ResponseTemplate::new(200).set_body_raw(
-            format!(
-                r#"
-                <a href="{}/files/helper-1.0.0-py3-none-any.whl" data-upload-time="2024-03-01T00:00:00Z">helper-1.0.0-py3-none-any.whl</a>
-                <a href="{}/files/helper-2.0.0-py3-none-any.whl" data-upload-time="2024-04-01T00:00:00Z">helper-2.0.0-py3-none-any.whl</a>
-                "#,
-                server.uri(),
-                server.uri(),
-            ),
-            "text/html",
-        ))
-        .mount(&server)
-        .await;
-    Mock::given(method("GET"))
-        .and(path("/files/helper-1.0.0-py3-none-any.whl"))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(older.path())?))
-        .mount(&server)
-        .await;
-    Mock::given(method("GET"))
-        .and(path("/files/helper-2.0.0-py3-none-any.whl"))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(newer.path())?))
-        .mount(&server)
-        .await;
-
-    context
-        .temp_dir
-        .child("pyproject.toml")
-        .write_str(indoc! { r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = []
-        "#
-        })?;
-
-    let first = context
-        .run()
-        .arg("--default-index")
-        .arg(format!("{}/simple", server.uri()))
-        .arg("--exclude-newer")
-        .arg("2024-03-15T00:00:00Z")
-        .arg("--with")
-        .arg(source_dist.path())
-        .arg("python")
-        .arg("-c")
-        .arg("import dep; print(dep.HELPER)")
-        .assert()
-        .success();
-    assert_snapshot!(String::from_utf8_lossy(&first.get_output().stdout), @"1.0.0");
-
-    let second = context
-        .run()
-        .arg("--default-index")
-        .arg(format!("{}/simple", server.uri()))
-        .arg("--exclude-newer")
-        .arg("2024-04-15T00:00:00Z")
-        .arg("--with")
-        .arg(source_dist.path())
-        .arg("python")
-        .arg("-c")
-        .arg("import dep; print(dep.HELPER)")
-        .assert()
-        .success();
-    assert_snapshot!(String::from_utf8_lossy(&second.get_output().stdout), @"2.0.0");
-
-    let third = context
-        .run()
-        .arg("--default-index")
-        .arg(format!("{}/simple", server.uri()))
-        .arg("--exclude-newer")
-        .arg("2024-04-15T00:00:00Z")
-        .arg("--exclude-newer-package")
-        .arg("helper=2024-03-15T00:00:00Z")
-        .arg("--with")
-        .arg(source_dist.path())
-        .arg("python")
-        .arg("-c")
-        .arg("import dep; print(dep.HELPER)")
-        .assert()
-        .success();
-    assert_snapshot!(String::from_utf8_lossy(&third.get_output().stdout), @"1.0.0");
-
-    Ok(())
-}
-
-/// A relative upload-time cutoff changes meaning between invocations, so it must invalidate a
-/// cached source build whether it is configured globally, per package, or on the index.
-#[tokio::test]
-async fn run_with_invalidates_cached_build_relative_exclude_newer() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let artifacts = context.temp_dir.child("artifacts");
-    artifacts.create_dir_all()?;
-    let older = artifacts.child("helper-1.0.0-py3-none-any.whl");
-    write_unlocked_helper_wheel(&older, "1.0.0")?;
-    let newer = artifacts.child("helper-2.0.0-py3-none-any.whl");
-    write_unlocked_helper_wheel(&newer, "2.0.0")?;
-    let source_dist = context.temp_dir.child("dep-0.1.0.zip");
-    write_unlocked_helper_source(&source_dist)?;
-
-    let server = MockServer::start().await;
-    Mock::given(method("GET"))
-        .and(path("/simple/helper/"))
-        .respond_with(ResponseTemplate::new(200).set_body_raw(
-            format!(
-                r#"
-                <a href="{}/files/helper-1.0.0-py3-none-any.whl" data-upload-time="2024-03-01T00:00:00Z">helper-1.0.0-py3-none-any.whl</a>
-                <a href="{}/files/helper-2.0.0-py3-none-any.whl" data-upload-time="2024-04-01T00:00:00Z">helper-2.0.0-py3-none-any.whl</a>
-                "#,
-                server.uri(),
-                server.uri(),
-            ),
-            "text/html",
-        ))
-        .mount(&server)
-        .await;
-    Mock::given(method("GET"))
-        .and(path("/files/helper-1.0.0-py3-none-any.whl"))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(older.path())?))
-        .mount(&server)
-        .await;
-    Mock::given(method("GET"))
-        .and(path("/files/helper-2.0.0-py3-none-any.whl"))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(newer.path())?))
-        .mount(&server)
-        .await;
-
-    let pyproject = context.temp_dir.child("pyproject.toml");
-    pyproject.write_str(indoc! { r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = []
-        "#
-    })?;
-
-    for (scope, args) in [
-        ("global", vec!["--exclude-newer", "P30D"]),
-        ("package", vec!["--exclude-newer-package", "helper=P30D"]),
-    ] {
-        for (current_time, expected) in [
-            ("2024-04-10T00:00:00Z", "1.0.0"),
-            ("2024-05-10T00:00:00Z", "2.0.0"),
-        ] {
-            let output = context
-                .run()
-                .arg("--default-index")
-                .arg(format!("{}/simple", server.uri()))
-                .args(&args)
-                .arg("--with")
-                .arg(source_dist.path())
-                .arg("python")
-                .arg("-c")
-                .arg("import dep; print(dep.HELPER)")
-                .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-                .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_time)
-                .assert()
-                .success();
-            assert_eq!(
-                String::from_utf8_lossy(&output.get_output().stdout).trim(),
-                expected,
-                "{scope} relative cutoff at {current_time}",
-            );
-        }
-    }
-
-    pyproject.write_str(&format!(
-        r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = []
-
-        [[tool.uv.index]]
-        name = "relative"
-        url = "{}/simple"
-        default = true
-        exclude-newer = "P30D"
-        "#,
-        server.uri(),
-    ))?;
-
-    for (current_time, expected) in [
-        ("2024-04-10T00:00:00Z", "1.0.0"),
-        ("2024-05-10T00:00:00Z", "2.0.0"),
-    ] {
-        let output = context
-            .run()
-            .arg("--with")
-            .arg(source_dist.path())
-            .arg("python")
-            .arg("-c")
-            .arg("import dep; print(dep.HELPER)")
-            .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-            .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_time)
-            .assert()
-            .success();
-        assert_eq!(
-            String::from_utf8_lossy(&output.get_output().stdout).trim(),
-            expected,
-            "index relative cutoff at {current_time}",
-        );
-    }
-
-    Ok(())
-}
-
-/// An unlocked PEP 723 script must constrain `match-runtime` build requirements after resolution
-/// and preserve the selected runtime version on a repeated invocation.
-#[test]
-fn run_script_extra_match_runtime_repeat() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let selected_links = context.temp_dir.child("selected-links");
-    let unrelated_links = context.temp_dir.child("unrelated-links");
-    selected_links.create_dir_all()?;
-    unrelated_links.create_dir_all()?;
-    fs_err::copy(
-        context
-            .workspace_root
-            .join("test/links/ok-1.0.0-py3-none-any.whl"),
-        selected_links.child("ok-1.0.0-py3-none-any.whl"),
-    )?;
-
-    let mut zip = ZipFileWriter::new(Vec::new());
-    let entry = ZipEntryBuilder::new("ok.py".into(), Compression::Stored);
-    block_on(zip.write_entry_whole(entry, b""))?;
-    let entry = ZipEntryBuilder::new("ok-1.0.0.dist-info/METADATA".into(), Compression::Stored);
-    block_on(zip.write_entry_whole(entry, b"Metadata-Version: 2.3\nName: ok\nVersion: 1.0.0\n"))?;
-    let entry = ZipEntryBuilder::new("ok-1.0.0.dist-info/WHEEL".into(), Compression::Stored);
-    block_on(zip.write_entry_whole(
-        entry,
-        b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: cp312-none-any\n",
-    ))?;
-    let entry = ZipEntryBuilder::new("ok-1.0.0.dist-info/RECORD".into(), Compression::Stored);
-    block_on(zip.write_entry_whole(entry, b""))?;
-    fs_err::write(
-        unrelated_links.child("ok-1.0.0-cp312-none-any.whl"),
-        block_on(zip.close())?,
-    )?;
-
-    let child = context.temp_dir.child("child");
-    child.create_dir_all()?;
-    child.child("pyproject.toml").write_str(indoc! {r#"
-        [project]
-        name = "child"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-
-        [build-system]
-        requires = []
-        backend-path = ["."]
-        build-backend = "build_backend"
-    "#})?;
-    child.child("build_backend.py").write_str(indoc! {r#"
-        from importlib.metadata import version
-        from pathlib import Path
-        from zipfile import ZipFile
-
-        def get_requires_for_build_wheel(config_settings=None):
-            return []
-
-        def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
-            dist_info = Path(metadata_directory) / "child-0.1.0.dist-info"
-            dist_info.mkdir()
-            dist_info.joinpath("METADATA").write_text(
-                "Metadata-Version: 2.3\nName: child\nVersion: 0.1.0\n"
-            )
-            return dist_info.name
-
-        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-            helper_version = version("ok")
-            if helper_version != "1.0.0":
-                raise RuntimeError(f"Expected ok==1.0.0, found ok=={helper_version}")
-
-            count = Path(__file__).with_name("build-count")
-            count.write_text(str(int(count.read_text() if count.exists() else "0") + 1))
-
-            filename = "child-0.1.0-py3-none-any.whl"
-            with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
-                wheel.writestr("child.py", f'BUILD_OK = "{helper_version}"\n')
-                wheel.writestr(
-                    "child-0.1.0.dist-info/METADATA",
-                    "Metadata-Version: 2.3\nName: child\nVersion: 0.1.0\n",
-                )
-                wheel.writestr(
-                    "child-0.1.0.dist-info/WHEEL",
-                    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
-                )
-                wheel.writestr("child-0.1.0.dist-info/RECORD", "")
-            return filename
-    "#})?;
-
-    let selected_links = url::Url::from_directory_path(selected_links.path())
-        .map_err(|()| anyhow::anyhow!("Failed to create selected-links URL"))?;
-    let unrelated_links = url::Url::from_directory_path(unrelated_links.path())
-        .map_err(|()| anyhow::anyhow!("Failed to create unrelated-links URL"))?;
-    context
-        .temp_dir
-        .child("script.py")
-        .write_str(&formatdoc! {r#"
-        # /// script
-        # requires-python = ">=3.12"
-        # dependencies = ["child", "ok==1.0.0"]
-        #
-        # [[tool.uv.index]]
-        # name = "selected"
-        # url = "{selected_links}"
-        # format = "flat"
-        # explicit = true
-        #
-        # [[tool.uv.index]]
-        # name = "unrelated"
-        # url = "{unrelated_links}"
-        # format = "flat"
-        # default = true
-        #
-        # [tool.uv.sources]
-        # child = {{ path = "child" }}
-        # ok = {{ index = "selected" }}
-        #
-        # [tool.uv.extra-build-dependencies]
-        # child = [{{ requirement = "ok", match-runtime = true }}]
-        # ///
-
-        import child
-
-        print(child.BUILD_OK)
-    "#})?;
-
-    for _ in 0..2 {
-        let output = context
-            .run()
-            .arg("--no-project")
-            .arg("script.py")
-            .assert()
-            .success();
-        let stdout = std::str::from_utf8(&output.get_output().stdout)?.trim();
-        insta::allow_duplicates! {
-            assert_snapshot!(stdout, @"1.0.0");
-        }
-    }
-    Ok(())
-}
-
-/// An unlocked PEP 723 environment must re-resolve and rebuild an installed registry source when
-/// package-specific build isolation is disabled, since its output can depend on mutable state.
-#[test]
-fn run_script_shared_package_rebuilds_installed_registry_source_distribution() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let value_file = context.temp_dir.child("value.txt");
-    value_file.write_str("first")?;
-    let links = context.temp_dir.child("links");
-    links.create_dir_all()?;
-
-    let source_dist = links.child("dep-0.1.0.zip");
-    let mut zip = ZipFileWriter::new(Vec::new());
-    let entry = ZipEntryBuilder::new("dep-0.1.0/pyproject.toml".into(), Compression::Stored);
-    block_on(zip.write_entry_whole(
-        entry,
-        br#"
-        [project]
-        name = "dep"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-
-        [build-system]
-        requires = []
-        backend-path = ["."]
-        build-backend = "build_backend"
-        "#,
-    ))?;
-    let entry = ZipEntryBuilder::new("dep-0.1.0/build_backend.py".into(), Compression::Stored);
-    let backend = format!(
-        r#"
-from pathlib import Path
-from zipfile import ZipFile
-
-def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-    value = Path({:?}).read_text().strip()
-    filename = "dep-0.1.0-py3-none-any.whl"
-    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
-        wheel.writestr("dep.py", f"VALUE = {{value!r}}\n")
-        wheel.writestr(
-            "dep-0.1.0.dist-info/METADATA",
-            "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
-        )
-        wheel.writestr(
-            "dep-0.1.0.dist-info/WHEEL",
-            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
-        )
-        wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
-    return filename
-"#,
-        value_file.path().to_string_lossy(),
-    );
-    block_on(zip.write_entry_whole(entry, backend.as_bytes()))?;
-    fs_err::write(source_dist.path(), block_on(zip.close())?)?;
-
-    context.temp_dir.child("script.py").write_str(indoc! {r#"
-        # /// script
-        # requires-python = ">=3.12"
-        # dependencies = ["dep==0.1.0"]
-        # ///
-
-        import dep
-
-        print(dep.VALUE)
-    "#})?;
-
-    let run = || -> Result<String> {
-        let output = context
-            .run()
-            .arg("--no-project")
-            .arg("--no-index")
-            .arg("--find-links")
-            .arg(links.path())
-            .arg("--no-build-isolation-package")
-            .arg("dep")
-            .arg("script.py")
-            .assert()
-            .success();
-        Ok(std::str::from_utf8(&output.get_output().stdout)?
-            .trim()
-            .to_string())
-    };
-
-    assert_snapshot!(run()?, @"first");
-    value_file.write_str("second")?;
-    assert_snapshot!(run()?, @"second");
-
-    Ok(())
-}
-
-/// An irrelevant `match-runtime` target must not prevent an unchanged script environment from
-/// running offline without re-resolution.
-#[test]
-fn run_script_irrelevant_match_runtime_offline_repeat() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let links = context.workspace_root.join("test/links");
-
-    context.temp_dir.child("script.py").write_str(indoc! {r#"
-        # /// script
-        # requires-python = ">=3.12"
-        # dependencies = ["ok==1.0.0"]
-        #
-        # [tool.uv.extra-build-dependencies]
-        # unused = [{ requirement = "ok", match-runtime = true }]
-        # ///
-
-        from importlib.metadata import version
-
-        print(version("ok"))
-    "#})?;
-
-    context
-        .run()
-        .arg("--no-project")
-        .arg("--no-index")
-        .arg("--find-links")
-        .arg(&links)
-        .arg("script.py")
-        .assert()
-        .success();
-
-    uv_snapshot!(context.filters(), context.run()
-        .arg("--no-project")
-        .arg("--no-index")
-        .arg("--offline")
-        .arg("script.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    1.0.0
-
-    ----- stderr -----
-    ");
-
-    Ok(())
-}
-
-/// A cached `--with` environment must not reuse a nested source wheel primed while resolving a
-/// dynamic dependency when a static target has a runtime-matched build requirement.
-#[test]
-fn run_with_match_runtime_rebuilds_nested_source_distribution() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let (primer, child) = uv_test::match_runtime_nested_sources(context.temp_dir.path())?;
-    context
-        .temp_dir
-        .child("pyproject.toml")
-        .write_str(indoc! {r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = []
-    "#})?;
-    let ok = context
-        .workspace_root
-        .join("test/links/ok-1.0.0-py3-none-any.whl");
-    context.temp_dir.child("uv.toml").write_str(indoc! {r#"
-        extra-build-dependencies = { child = [{ requirement = "ok", match-runtime = true }] }
-    "#})?;
-
-    uv_snapshot!(context.filters(), context.run()
-        .arg("--no-project")
-        .arg("--no-index")
-        .arg("--find-links")
-        .arg(context.workspace_root.join("test/links"))
-        .arg("--no-cache")
-        .arg("--with")
-        .arg(&primer)
-        .arg("--with")
-        .arg(&child)
-        .arg("--with")
-        .arg(&ok)
-        .arg("python")
-        .arg("-c")
-        .arg("import child; print(child.RUNTIME_VERSION, child.BUILDER_BUILD_NUMBER)"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    1.0.0 2
-
-    ----- stderr -----
-    Resolved 3 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
-     + ok==1.0.0 (from file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl)
-     + primer==0.1.0 (from file://[TEMP_DIR]/primer)
-    ");
-
-    Ok(())
-}
-
-/// An unlocked PEP 723 environment must rebuild a nested source wheel that was primed while
-/// resolving dynamic metadata before applying its static `match-runtime` build requirement.
-#[test]
-fn run_script_match_runtime_rebuilds_nested_source_distribution() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let (primer, child) = uv_test::match_runtime_nested_sources(context.temp_dir.path())?;
-    let primer_url = url::Url::from_directory_path(&primer)
-        .map_err(|()| anyhow::anyhow!("Failed to create primer URL"))?;
-    let child_url = url::Url::from_directory_path(&child)
-        .map_err(|()| anyhow::anyhow!("Failed to create child URL"))?;
-    let ok = context
-        .workspace_root
-        .join("test/links/ok-1.0.0-py3-none-any.whl");
-    let ok_url =
-        url::Url::from_file_path(&ok).map_err(|()| anyhow::anyhow!("Failed to create ok URL"))?;
-    context.temp_dir.child("script.py").write_str(&format!(
-        indoc! {r#"
-        # /// script
-        # requires-python = ">=3.12"
-        # dependencies = ["primer @ {primer_url}", "child @ {child_url}", "ok @ {ok_url}"]
-        #
-        # [tool.uv.extra-build-dependencies]
-        # child = [{{ requirement = "ok", match-runtime = true }}]
-        # ///
-
-        import child
-
-        print(child.RUNTIME_VERSION, child.BUILDER_BUILD_NUMBER)
-    "#},
-        primer_url = primer_url,
-        child_url = child_url,
-        ok_url = ok_url,
-    ))?;
-
-    uv_snapshot!(context.filters(), context.run()
-        .arg("--no-project")
-        .arg("--no-index")
-        .arg("--find-links")
-        .arg(context.workspace_root.join("test/links"))
-        .arg("--no-cache")
-        .arg("script.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    1.0.0 2
-
-    ----- stderr -----
-    Resolved 3 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
-     + ok==1.0.0 (from file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl)
-     + primer==0.1.0 (from file://[TEMP_DIR]/primer)
-    ");
-
-    Ok(())
-}
-
-/// Changing whether a build dependency may be built from source must invalidate both the cached
-/// overlay and its previously built source wheel.
-#[test]
-fn run_with_invalidates_cached_build_options() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let links = context.temp_dir.child("links");
-    links.create_dir_all()?;
-    write_unlocked_helper_wheel(&links.child("helper-1.0.0-py3-none-any.whl"), "1.0.0")?;
-    write_unlocked_build_requirement_source(&links.child("helper-2.0.0.zip"))?;
-    let source_dist = context.temp_dir.child("dep-0.1.0.zip");
-    write_unlocked_helper_source(&source_dist)?;
-
-    context
-        .temp_dir
-        .child("pyproject.toml")
-        .write_str(indoc! { r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = []
-        "#
-        })?;
-
-    let first = context
-        .run()
-        .arg("--no-index")
-        .arg("--find-links")
-        .arg(links.path())
-        .arg("--with")
-        .arg(source_dist.path())
-        .arg("python")
-        .arg("-c")
-        .arg("import dep; print(dep.HELPER)")
-        .assert()
-        .success();
-    assert_snapshot!(String::from_utf8_lossy(&first.get_output().stdout), @"2.0.0");
-
-    let second = context
-        .run()
-        .arg("--no-index")
-        .arg("--find-links")
-        .arg(links.path())
-        .arg("--no-build-package")
-        .arg("helper")
-        .arg("--with")
-        .arg(source_dist.path())
-        .arg("python")
-        .arg("-c")
-        .arg("import dep; print(dep.HELPER)")
-        .assert()
-        .success();
-    assert_snapshot!(String::from_utf8_lossy(&second.get_output().stdout), @"1.0.0");
-
-    let third = context
-        .run()
-        .arg("--no-index")
-        .arg("--find-links")
-        .arg(links.path())
-        .arg("--no-binary-package")
-        .arg("helper")
-        .arg("--with")
-        .arg(source_dist.path())
-        .arg("python")
-        .arg("-c")
-        .arg("import dep; print(dep.HELPER)")
-        .assert()
-        .success();
-    assert_snapshot!(String::from_utf8_lossy(&third.get_output().stdout), @"2.0.0");
-
-    Ok(())
-}
-
-/// Changing supplied metadata for a transitive build dependency must invalidate the previously
-/// built source wheel and cached overlay.
-#[test]
-fn run_with_invalidates_cached_build_dependency_metadata() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let links = context.temp_dir.child("links");
-    links.create_dir_all()?;
-    write_unlocked_helper_wheel(&links.child("helper-1.0.0-py3-none-any.whl"), "1.0.0")?;
-    fs_err::copy(
-        context
-            .workspace_root
-            .join("test/links/ok-1.0.0-py3-none-any.whl"),
-        links.child("ok-1.0.0-py3-none-any.whl").path(),
-    )?;
-    fs_err::copy(
-        context
-            .workspace_root
-            .join("test/links/ok-2.0.0-py3-none-any.whl"),
-        links.child("ok-2.0.0-py3-none-any.whl").path(),
-    )?;
-
-    let source_dist = context.temp_dir.child("dep-0.1.0.zip");
-    let mut zip = ZipFileWriter::new(Vec::new());
-    let entry = ZipEntryBuilder::new("dep-0.1.0/pyproject.toml".into(), Compression::Stored);
-    block_on(zip.write_entry_whole(
-        entry,
-        br#"
-        [project]
-        name = "dep"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-
-        [build-system]
-        requires = ["helper==1.0.0"]
-        backend-path = ["."]
-        build-backend = "build_backend"
-        "#,
-    ))?;
-    let entry = ZipEntryBuilder::new("dep-0.1.0/build_backend.py".into(), Compression::Stored);
-    block_on(zip.write_entry_whole(
-        entry,
-        br#"
-from importlib.metadata import version
-from pathlib import Path
-from zipfile import ZipFile
-
-def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-    filename = "dep-0.1.0-py3-none-any.whl"
-    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
-        wheel.writestr("dep.py", f"OK = {version('ok')!r}\n")
-        wheel.writestr(
-            "dep-0.1.0.dist-info/METADATA",
-            "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
-        )
-        wheel.writestr(
-            "dep-0.1.0.dist-info/WHEEL",
-            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
-        )
-        wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
-    return filename
-"#,
-    ))?;
-    fs_err::write(source_dist.path(), block_on(zip.close())?)?;
-
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! { r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = []
-
-        [tool.uv]
-        dependency-metadata = [
-          { name = "helper", version = "1.0.0", requires-dist = ["ok==1.0.0"] },
-        ]
-        "#
-    })?;
-
-    let first = context
-        .run()
-        .arg("--no-index")
-        .arg("--find-links")
-        .arg(links.path())
-        .arg("--with")
-        .arg(source_dist.path())
-        .arg("python")
-        .arg("-c")
-        .arg("import dep; print(dep.OK)")
-        .assert()
-        .success();
-    assert_snapshot!(String::from_utf8_lossy(&first.get_output().stdout), @"1.0.0");
-
-    pyproject_toml.write_str(indoc! { r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = []
-
-        [tool.uv]
-        dependency-metadata = [
-          { name = "helper", version = "1.0.0", requires-dist = ["ok==2.0.0"] },
-        ]
-        "#
-    })?;
-
-    let second = context
-        .run()
-        .arg("--no-index")
-        .arg("--find-links")
-        .arg(links.path())
-        .arg("--with")
-        .arg(source_dist.path())
-        .arg("python")
-        .arg("-c")
-        .arg("import dep; print(dep.OK)")
-        .assert()
-        .success();
-    assert_snapshot!(String::from_utf8_lossy(&second.get_output().stdout), @"2.0.0");
-
-    Ok(())
-}
-
-/// Changing source lowering for a build requirement must invalidate both the cached overlay and
-/// its previously built source wheel, in either direction and for package-specific disabling.
-#[test]
-fn run_with_invalidates_cached_build_no_sources() -> Result<()> {
-    fn setup(context: &TestContext) -> Result<(ChildPath, ChildPath)> {
-        let links = context.temp_dir.child("links");
-        links.create_dir_all()?;
-        write_unlocked_helper_wheel(&links.child("helper-1.0.0-py3-none-any.whl"), "1.0.0")?;
-        write_unlocked_build_requirement_source(&context.temp_dir.child("helper-2.0.0.zip"))?;
-
-        let dep = context.temp_dir.child("dep");
-        dep.create_dir_all()?;
-        dep.child("pyproject.toml").write_str(indoc! { r#"
-            [project]
-            name = "dep"
-            version = "0.1.0"
-            requires-python = ">=3.12"
-
-            [build-system]
-            requires = ["helper"]
-            backend-path = ["."]
-            build-backend = "build_backend"
-
-            [tool.uv.sources]
-            helper = { path = "../helper-2.0.0.zip" }
-            "#,
-        })?;
-        dep.child("build_backend.py").write_str(indoc! { r#"
-            from importlib.metadata import version
-            from pathlib import Path
-            from zipfile import ZipFile
-
-            def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-                filename = "dep-0.1.0-py3-none-any.whl"
-                with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
-                    wheel.writestr("dep.py", f"HELPER = {version('helper')!r}\n")
-                    wheel.writestr(
-                        "dep-0.1.0.dist-info/METADATA",
-                        "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
-                    )
-                    wheel.writestr(
-                        "dep-0.1.0.dist-info/WHEEL",
-                        "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
-                    )
-                    wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
-                return filename
-            "#,
-        })?;
-        context
-            .temp_dir
-            .child("pyproject.toml")
-            .write_str(indoc! { r#"
-                [project]
-                name = "project"
-                version = "0.1.0"
-                requires-python = ">=3.12"
-                dependencies = []
-                "#,
-            })?;
-
-        Ok((links, dep))
-    }
-
-    fn run(
-        context: &TestContext,
-        links: &ChildPath,
-        dep: &ChildPath,
-        source_args: &[&str],
-    ) -> Result<String> {
-        let output = context
-            .run()
-            .args(source_args)
-            .arg("--no-index")
-            .arg("--find-links")
-            .arg(links.path())
-            .arg("--with")
-            .arg(dep.path())
-            .arg("python")
-            .arg("-c")
-            .arg("import dep; print(dep.HELPER)")
-            .assert()
-            .success();
-        Ok(std::str::from_utf8(&output.get_output().stdout)?
-            .trim()
-            .to_string())
-    }
-
-    let context = uv_test::test_context!("3.12");
-    let (links, dep) = setup(&context)?;
-    assert_snapshot!(run(&context, &links, &dep, &[])?, @"2.0.0");
-    assert_snapshot!(run(&context, &links, &dep, &["--no-sources"])?, @"1.0.0");
-
-    let context = uv_test::test_context!("3.12");
-    let (links, dep) = setup(&context)?;
-    assert_snapshot!(run(&context, &links, &dep, &["--no-sources"])?, @"1.0.0");
-    assert_snapshot!(run(&context, &links, &dep, &[])?, @"2.0.0");
-
-    let context = uv_test::test_context!("3.12");
-    let (links, dep) = setup(&context)?;
-    assert_snapshot!(run(&context, &links, &dep, &[])?, @"2.0.0");
-    assert_snapshot!(
-        run(&context, &links, &dep, &["--no-sources-package", "helper"])?,
-        @"1.0.0"
-    );
-
-    Ok(())
-}
-
-/// Replacing an existing local flat-index wheel requires an explicit refresh to rebuild a source
-/// wheel built against it.
-#[test]
-fn run_with_refreshes_cached_build_replaced_local_flat_wheel() -> Result<()> {
-    fn write_helper(path: &ChildPath, value: &str) -> Result<()> {
-        let mut zip = ZipFileWriter::new(Vec::new());
-        let entry = ZipEntryBuilder::new("helper.py".into(), Compression::Stored);
-        block_on(zip.write_entry_whole(entry, format!("VALUE = {value:?}\n").as_bytes()))?;
-        let entry = ZipEntryBuilder::new(
-            "helper-1.0.0.dist-info/METADATA".into(),
-            Compression::Stored,
-        );
-        block_on(zip.write_entry_whole(
-            entry,
-            b"Metadata-Version: 2.3\nName: helper\nVersion: 1.0.0\n",
-        ))?;
-        let entry =
-            ZipEntryBuilder::new("helper-1.0.0.dist-info/WHEEL".into(), Compression::Stored);
-        block_on(zip.write_entry_whole(
-            entry,
-            b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
-        ))?;
-        let entry =
-            ZipEntryBuilder::new("helper-1.0.0.dist-info/RECORD".into(), Compression::Stored);
-        block_on(zip.write_entry_whole(entry, b""))?;
-        fs_err::write(path.path(), block_on(zip.close())?)?;
-
-        Ok(())
-    }
-
-    fn run(
-        context: &TestContext,
-        links: &ChildPath,
-        dep: &ChildPath,
-        named_flat: bool,
-        refresh: bool,
-    ) -> Result<String> {
-        let mut command = context.run();
-        if !named_flat {
-            command
-                .arg("--no-index")
-                .arg("--find-links")
-                .arg(links.path());
-        }
-        if refresh {
-            command.arg("--refresh");
-        }
-        let output = command
-            .arg("--with")
-            .arg(dep.path())
-            .arg("python")
-            .arg("-c")
-            .arg("import dep; print(dep.HELPER)")
-            .assert()
-            .success();
-        Ok(std::str::from_utf8(&output.get_output().stdout)?
-            .trim()
-            .to_string())
-    }
-
-    for named_flat in [false, true] {
-        let context = uv_test::test_context!("3.12");
-        let links = context.temp_dir.child("links");
-        links.create_dir_all()?;
-        let helper = links.child("helper-1.0.0-py3-none-any.whl");
-        write_helper(&helper, "before")?;
-
-        let dep = context.temp_dir.child("dep");
-        dep.create_dir_all()?;
-        let named_index = if named_flat {
-            let url = url::Url::from_directory_path(links.path())
-                .map_err(|()| anyhow::anyhow!("Failed to create links URL"))?;
-            format!(
-                r#"
-                [[tool.uv.index]]
-                name = "local"
-                url = "{url}"
-                format = "flat"
-                default = true
-
-                [tool.uv.sources]
-                helper = {{ index = "local" }}
-                "#
-            )
-        } else {
-            String::new()
-        };
-        dep.child("pyproject.toml").write_str(&format!(
-            r#"
-        [project]
-        name = "dep"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-
-        [build-system]
-        requires = ["helper==1.0.0"]
-        backend-path = ["."]
-        build-backend = "build_backend"
-
-        {named_index}
-        "#
-        ))?;
-        dep.child("build_backend.py").write_str(indoc! { r#"
-        from pathlib import Path
-        from zipfile import ZipFile
-
-        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-            from helper import VALUE
-
-            filename = "dep-0.1.0-py3-none-any.whl"
-            with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
-                wheel.writestr("dep.py", f"HELPER = {VALUE!r}\n")
-                wheel.writestr(
-                    "dep-0.1.0.dist-info/METADATA",
-                    "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
-                )
-                wheel.writestr(
-                    "dep-0.1.0.dist-info/WHEEL",
-                    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
-                )
-                wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
-            return filename
-        "#,
-        })?;
-        context
-            .temp_dir
-            .child("pyproject.toml")
-            .write_str(indoc! { r#"
-            [project]
-            name = "project"
-            version = "0.1.0"
-            requires-python = ">=3.12"
-            dependencies = []
-            "#,
-            })?;
-
-        let before = run(&context, &links, &dep, named_flat, false)?;
-        write_helper(&helper, "after-in-place-replacement")?;
-        let cached = run(&context, &links, &dep, named_flat, false)?;
-        let refreshed = run(&context, &links, &dep, named_flat, true)?;
-        insta::allow_duplicates! {
-            assert_snapshot!(before, @"before");
-            assert_snapshot!(cached, @"before");
-            assert_snapshot!(refreshed, @"after-in-place-replacement");
-        }
-    }
-
-    Ok(())
-}
-
-/// Replacing a local wheel referenced by a remote flat index requires an explicit refresh to
-/// rebuild a source wheel built against it.
-#[tokio::test]
-async fn run_with_refreshes_cached_build_remote_flat_file_wheel() -> Result<()> {
-    fn write_helper(path: &ChildPath, value: &str) -> Result<()> {
-        let mut zip = ZipFileWriter::new(Vec::new());
-        let entry = ZipEntryBuilder::new("helper.py".into(), Compression::Stored);
-        block_on(zip.write_entry_whole(entry, format!("VALUE = {value:?}\n").as_bytes()))?;
-        let entry = ZipEntryBuilder::new(
-            "helper-1.0.0.dist-info/METADATA".into(),
-            Compression::Stored,
-        );
-        block_on(zip.write_entry_whole(
-            entry,
-            b"Metadata-Version: 2.3\nName: helper\nVersion: 1.0.0\n",
-        ))?;
-        let entry =
-            ZipEntryBuilder::new("helper-1.0.0.dist-info/WHEEL".into(), Compression::Stored);
-        block_on(zip.write_entry_whole(
-            entry,
-            b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
-        ))?;
-        let entry =
-            ZipEntryBuilder::new("helper-1.0.0.dist-info/RECORD".into(), Compression::Stored);
-        block_on(zip.write_entry_whole(entry, b""))?;
-        fs_err::write(path.path(), block_on(zip.close())?)?;
-        Ok(())
-    }
-
-    let context = uv_test::test_context!("3.12");
-    let links = context.temp_dir.child("links");
-    links.create_dir_all()?;
-    let helper = links.child("helper-1.0.0-py3-none-any.whl");
-    write_helper(&helper, "before")?;
-    let helper_url = url::Url::from_file_path(helper.path())
-        .map_err(|()| anyhow::anyhow!("Failed to create helper URL"))?;
-
-    let server = MockServer::start().await;
-    Mock::given(method("GET"))
-        .and(path("/"))
-        .respond_with(ResponseTemplate::new(200).set_body_raw(
-            format!(
-                r#"<a href="{helper_url}" data-upload-time="2024-01-01T00:00:00Z">helper-1.0.0-py3-none-any.whl</a>"#
-            ),
-            "text/html",
-        ))
-        .mount(&server)
-        .await;
-
-    let dep = context.temp_dir.child("dep");
-    dep.create_dir_all()?;
-    dep.child("pyproject.toml").write_str(indoc! { r#"
-        [project]
-        name = "dep"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-
-        [build-system]
-        requires = ["helper==1.0.0"]
-        backend-path = ["."]
-        build-backend = "build_backend"
-        "#
-    })?;
-    dep.child("build_backend.py").write_str(indoc! { r#"
-        from pathlib import Path
-        from zipfile import ZipFile
-
-        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-            from helper import VALUE
-
-            filename = "dep-0.1.0-py3-none-any.whl"
-            with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
-                wheel.writestr("dep.py", f"HELPER = {VALUE!r}\n")
-                wheel.writestr(
-                    "dep-0.1.0.dist-info/METADATA",
-                    "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
-                )
-                wheel.writestr(
-                    "dep-0.1.0.dist-info/WHEEL",
-                    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
-                )
-                wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
-            return filename
-        "#
-    })?;
-
-    let run = |refresh: bool| -> Result<String> {
-        let mut command = context.run();
-        command.env_remove(EnvVars::UV_EXCLUDE_NEWER);
-        if refresh {
-            command.arg("--refresh");
-        }
-        let output = command
-            .arg("--no-project")
-            .arg("--no-index")
-            .arg("--find-links")
-            .arg(server.uri())
-            .arg("--with")
-            .arg(dep.path())
-            .arg("python")
-            .arg("-c")
-            .arg("import dep; print(dep.HELPER)")
-            .assert()
-            .success();
-        Ok(std::str::from_utf8(&output.get_output().stdout)?
-            .trim()
-            .to_string())
-    };
-
-    assert_snapshot!(run(false)?, @"before");
-    write_helper(&helper, "after-in-place-replacement")?;
-    assert_snapshot!(run(false)?, @"before");
-    assert_snapshot!(run(true)?, @"after-in-place-replacement");
-
-    Ok(())
-}
-
-/// Explicit Simple-index cache control must invalidate an outer source wheel when a same-version
-/// build artifact changes between invocations.
-#[tokio::test]
-async fn run_with_invalidates_cached_build_simple_cache_control() -> Result<()> {
-    fn write_helper(path: &ChildPath, value: &str) -> Result<()> {
-        let mut zip = ZipFileWriter::new(Vec::new());
-        let entry = ZipEntryBuilder::new("helper.py".into(), Compression::Stored);
-        block_on(zip.write_entry_whole(entry, format!("VALUE = {value:?}\n").as_bytes()))?;
-        let entry = ZipEntryBuilder::new(
-            "helper-1.0.0.dist-info/METADATA".into(),
-            Compression::Stored,
-        );
-        block_on(zip.write_entry_whole(
-            entry,
-            b"Metadata-Version: 2.3\nName: helper\nVersion: 1.0.0\n",
-        ))?;
-        let entry =
-            ZipEntryBuilder::new("helper-1.0.0.dist-info/WHEEL".into(), Compression::Stored);
-        block_on(zip.write_entry_whole(
-            entry,
-            b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
-        ))?;
-        let entry =
-            ZipEntryBuilder::new("helper-1.0.0.dist-info/RECORD".into(), Compression::Stored);
-        block_on(zip.write_entry_whole(entry, b""))?;
-        fs_err::write(path.path(), block_on(zip.close())?)?;
-        Ok(())
-    }
-
-    async fn mount_helper(server: &MockServer, filename: &str, wheel: Vec<u8>) {
-        let url = format!("{}/files/{filename}", server.uri());
-        Mock::given(method("GET"))
-            .and(path("/simple/helper/"))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .insert_header("Cache-Control", "max-age=3600, immutable")
-                    .set_body_raw(
-                        format!(
-                            r#"<a href="{url}" data-upload-time="2024-01-01T00:00:00Z">{filename}</a>"#
-                        ),
-                        "text/html",
-                    ),
-            )
-            .mount(server)
-            .await;
-        Mock::given(method("HEAD"))
-            .and(path(format!("/files/{filename}")))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .insert_header("Cache-Control", "max-age=3600, immutable")
-                    .insert_header("Content-Length", wheel.len().to_string()),
-            )
-            .mount(server)
-            .await;
-        Mock::given(method("GET"))
-            .and(path(format!("/files/{filename}")))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .insert_header("Cache-Control", "max-age=3600, immutable")
-                    .set_body_bytes(wheel),
-            )
-            .mount(server)
-            .await;
-    }
-
-    let context = uv_test::test_context!("3.12");
-    let artifacts = context.temp_dir.child("artifacts");
-    artifacts.create_dir_all()?;
-    let first = artifacts.child("helper-1.0.0-1-py3-none-any.whl");
-    let second = artifacts.child("helper-1.0.0-2-py3-none-any.whl");
-    write_helper(&first, "first")?;
-    write_helper(&second, "second")?;
-
-    let server = MockServer::start().await;
-    mount_helper(
-        &server,
-        "helper-1.0.0-1-py3-none-any.whl",
-        fs_err::read(first.path())?,
-    )
-    .await;
-
-    context
-        .temp_dir
-        .child("pyproject.toml")
-        .write_str(&format!(
-            r#"
-            [project]
-            name = "project"
-            version = "0.1.0"
-            requires-python = ">=3.12"
-            dependencies = []
-
-            [[tool.uv.index]]
-            name = "mutable"
-            url = "{}/simple"
-            default = true
-            cache-control = {{ api = "no-cache", files = "no-store" }}
-            "#,
-            server.uri(),
-        ))?;
-    let dep = context.temp_dir.child("dep");
-    dep.create_dir_all()?;
-    dep.child("pyproject.toml").write_str(indoc! { r#"
-        [project]
-        name = "dep"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-
-        [build-system]
-        requires = ["helper==1.0.0"]
-        backend-path = ["."]
-        build-backend = "build_backend"
-        "#
-    })?;
-    dep.child("build_backend.py").write_str(indoc! { r#"
-        import os
-        from pathlib import Path
-        from zipfile import ZipFile
-
-        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-            from helper import VALUE
-            with Path(os.environ["UV_TEST_BUILD_COUNTER"]).open("a") as counter:
-                counter.write("built\n")
-
-            filename = "dep-0.1.0-py3-none-any.whl"
-            with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
-                wheel.writestr("dep.py", f"HELPER = {VALUE!r}\n")
-                wheel.writestr(
-                    "dep-0.1.0.dist-info/METADATA",
-                    "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
-                )
-                wheel.writestr(
-                    "dep-0.1.0.dist-info/WHEEL",
-                    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
-                )
-                wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
-            return filename
-        "#
-    })?;
-
-    let build_counter = context.temp_dir.child("build-counter");
-    let run = || -> Result<String> {
-        let output = context
-            .run()
-            .env("UV_TEST_BUILD_COUNTER", build_counter.path())
-            .env_remove(EnvVars::UV_DEFAULT_INDEX)
-            .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-            .arg("--with")
-            .arg(dep.path())
-            .arg("python")
-            .arg("-c")
-            .arg("import dep; print(dep.HELPER)")
-            .assert()
-            .success();
-        Ok(std::str::from_utf8(&output.get_output().stdout)?
-            .trim()
-            .to_string())
-    };
-
-    assert_snapshot!(run()?, @"first");
-    server.reset().await;
-    mount_helper(
-        &server,
-        "helper-1.0.0-2-py3-none-any.whl",
-        fs_err::read(second.path())?,
-    )
-    .await;
-    assert_snapshot!(run()?, @"second");
-
-    let pyproject = context.temp_dir.child("pyproject.toml");
-    let configuration = fs_err::read_to_string(pyproject.path())?;
-    pyproject.write_str(&configuration.replace(
-        r#"cache-control = { api = "no-cache", files = "no-store" }"#,
-        r#"cache-control = { api = "max-age=600", files = "max-age=3600, immutable" }"#,
-    ))?;
-    assert_snapshot!(run()?, @"second");
-
-    let builds = fs_err::read_to_string(build_counter.path())?;
-    assert_snapshot!(run()?, @"second");
-    assert_eq!(fs_err::read_to_string(build_counter.path())?, builds);
-
-    Ok(())
-}
-
-/// Changing settings for a nested source build must invalidate the previously built outer wheel.
-#[test]
-fn run_with_invalidates_cached_nested_build_settings() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-
-    let helper = context.temp_dir.child("helper");
-    helper.create_dir_all()?;
-    helper.child("pyproject.toml").write_str(indoc! { r#"
-        [project]
-        name = "helper"
-        version = "1.0.0"
-        requires-python = ">=3.12"
-
-        [build-system]
-        requires = []
-        backend-path = ["."]
-        build-backend = "build_backend"
-        "#
-    })?;
-    helper.child("build_backend.py").write_str(indoc! { r#"
-        import os
-        from pathlib import Path
-        from zipfile import ZipFile
-
-        try:
-            import toggle
-        except ImportError:
-            toggle = None
-
-        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-            value = os.environ.get("HELPER_VALUE")
-            if value is None:
-                value = (config_settings or {}).get("value")
-            if value is None:
-                value = toggle.VALUE if toggle is not None else "missing"
-            filename = "helper-1.0.0-py3-none-any.whl"
-            with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
-                wheel.writestr("helper.py", f"VALUE = {value!r}\n")
-                wheel.writestr(
-                    "helper-1.0.0.dist-info/METADATA",
-                    "Metadata-Version: 2.3\nName: helper\nVersion: 1.0.0\n",
-                )
-                wheel.writestr(
-                    "helper-1.0.0.dist-info/WHEEL",
-                    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
-                )
-                wheel.writestr("helper-1.0.0.dist-info/RECORD", "")
-            return filename
-        "#
-    })?;
-    let helper_url = url::Url::from_directory_path(helper.path())
-        .map_err(|()| anyhow::anyhow!("Failed to create helper URL"))?;
-
-    let outer = context.temp_dir.child("outer");
-    outer.create_dir_all()?;
-    outer.child("pyproject.toml").write_str(&formatdoc! { r#"
-        [project]
-        name = "outer"
-        version = "1.0.0"
-        dynamic = ["requires-python"]
-
-        [build-system]
-        requires = ["helper @ {helper_url}"]
-        backend-path = ["."]
-        build-backend = "build_backend"
-        "#
-    })?;
-    outer.child("build_backend.py").write_str(indoc! { r#"
-        from pathlib import Path
-        from zipfile import ZipFile
-
-        import helper
-
-        def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
-            dist_info = Path(metadata_directory) / "outer-1.0.0.dist-info"
-            dist_info.mkdir()
-            (dist_info / "METADATA").write_text(
-                "Metadata-Version: 2.3\nName: outer\nVersion: 1.0.0\nRequires-Python: >=3.12\n"
-            )
-            return dist_info.name
-
-        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-            filename = "outer-1.0.0-py3-none-any.whl"
-            with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
-                wheel.writestr("outer.py", f"VALUE = {helper.VALUE!r}\n")
-                wheel.writestr(
-                    "outer-1.0.0.dist-info/METADATA",
-                    "Metadata-Version: 2.3\nName: outer\nVersion: 1.0.0\nRequires-Python: >=3.12\n",
-                )
-                wheel.writestr(
-                    "outer-1.0.0.dist-info/WHEEL",
-                    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
-                )
-                wheel.writestr("outer-1.0.0.dist-info/RECORD", "")
-            return filename
-        "#
-    })?;
-
-    let first = context
-        .run()
-        .arg("--no-project")
-        .arg("--no-index")
-        .arg("--with")
-        .arg(outer.path())
-        .arg("--config-settings-package")
-        .arg("helper:value=first")
-        .arg("python")
-        .arg("-c")
-        .arg("import outer; print(outer.VALUE)")
-        .assert()
-        .success();
-    assert_snapshot!(String::from_utf8_lossy(&first.get_output().stdout), @"first");
-    let second = context
-        .run()
-        .arg("--no-project")
-        .arg("--no-index")
-        .arg("--with")
-        .arg(outer.path())
-        .arg("--config-settings-package")
-        .arg("helper:value=second")
-        .arg("python")
-        .arg("-c")
-        .arg("import outer; print(outer.VALUE)")
-        .assert()
-        .success();
-    assert_snapshot!(String::from_utf8_lossy(&second.get_output().stdout), @"second");
-
-    let first_variables = context.temp_dir.child("variables-first.toml");
-    first_variables
-        .write_str(r#"extra-build-variables = { helper = { HELPER_VALUE = "first" } }"#)?;
-    let second_variables = context.temp_dir.child("variables-second.toml");
-    second_variables
-        .write_str(r#"extra-build-variables = { helper = { HELPER_VALUE = "second" } }"#)?;
-    let first = context
-        .run()
-        .arg("--config-file")
-        .arg(first_variables.path())
-        .arg("--no-project")
-        .arg("--no-index")
-        .arg("--with")
-        .arg(outer.path())
-        .arg("python")
-        .arg("-c")
-        .arg("import outer; print(outer.VALUE)")
-        .assert()
-        .success();
-    assert_snapshot!(String::from_utf8_lossy(&first.get_output().stdout), @"first");
-    let second = context
-        .run()
-        .arg("--config-file")
-        .arg(second_variables.path())
-        .arg("--no-project")
-        .arg("--no-index")
-        .arg("--with")
-        .arg(outer.path())
-        .arg("python")
-        .arg("-c")
-        .arg("import outer; print(outer.VALUE)")
-        .assert()
-        .success();
-    assert_snapshot!(String::from_utf8_lossy(&second.get_output().stdout), @"second");
-
-    let write_toggle = |path: &ChildPath, value: &str| -> Result<()> {
-        path.create_dir_all()?;
-        path.child("pyproject.toml").write_str(indoc! { r#"
-            [project]
-            name = "toggle"
-            version = "1.0.0"
-            requires-python = ">=3.12"
-
-            [build-system]
-            requires = []
-            backend-path = ["."]
-            build-backend = "build_backend"
-            "#
-        })?;
-        path.child("build_backend.py").write_str(&formatdoc! { r#"
-            from pathlib import Path
-            from zipfile import ZipFile
-
-            def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-                filename = "toggle-1.0.0-py3-none-any.whl"
-                with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
-                    wheel.writestr("toggle.py", "VALUE = '{value}'\n")
-                    wheel.writestr(
-                        "toggle-1.0.0.dist-info/METADATA",
-                        "Metadata-Version: 2.3\nName: toggle\nVersion: 1.0.0\n",
-                    )
-                    wheel.writestr(
-                        "toggle-1.0.0.dist-info/WHEEL",
-                        "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
-                    )
-                    wheel.writestr("toggle-1.0.0.dist-info/RECORD", "")
-                return filename
-            "#
-        })?;
-        Ok(())
-    };
-    let first_toggle = context.temp_dir.child("toggle-first");
-    let second_toggle = context.temp_dir.child("toggle-second");
-    write_toggle(&first_toggle, "first")?;
-    write_toggle(&second_toggle, "second")?;
-    let first_toggle_url = url::Url::from_directory_path(first_toggle.path())
-        .map_err(|()| anyhow::anyhow!("Failed to create toggle URL"))?;
-    let second_toggle_url = url::Url::from_directory_path(second_toggle.path())
-        .map_err(|()| anyhow::anyhow!("Failed to create toggle URL"))?;
-    let first_dependencies = context.temp_dir.child("dependencies-first.toml");
-    first_dependencies.write_str(&format!(
-        r#"extra-build-dependencies = {{ helper = ["toggle @ {first_toggle_url}"] }}"#
-    ))?;
-    let second_dependencies = context.temp_dir.child("dependencies-second.toml");
-    second_dependencies.write_str(&format!(
-        r#"extra-build-dependencies = {{ helper = ["toggle @ {second_toggle_url}"] }}"#
-    ))?;
-    let first = context
-        .run()
-        .arg("--config-file")
-        .arg(first_dependencies.path())
-        .arg("--no-project")
-        .arg("--no-index")
-        .arg("--with")
-        .arg(outer.path())
-        .arg("python")
-        .arg("-c")
-        .arg("import outer; print(outer.VALUE)")
-        .assert()
-        .success();
-    assert_snapshot!(String::from_utf8_lossy(&first.get_output().stdout), @"first");
-    let second = context
-        .run()
-        .arg("--config-file")
-        .arg(second_dependencies.path())
-        .arg("--no-project")
-        .arg("--no-index")
-        .arg("--with")
-        .arg(outer.path())
-        .arg("python")
-        .arg("-c")
-        .arg("import outer; print(outer.VALUE)")
-        .assert()
-        .success();
-    assert_snapshot!(String::from_utf8_lossy(&second.get_output().stdout), @"second");
-
-    Ok(())
-}
-
-/// Adding a newer local Simple-index wheel or replacing an existing wheel in place must
-/// invalidate a source wheel built against that index.
-#[test]
-fn run_with_invalidates_cached_build_local_simple_index() -> Result<()> {
-    fn write_helper(path: &ChildPath, version: &str, value: &str) -> Result<()> {
-        let mut zip = ZipFileWriter::new(Vec::new());
-        let entry = ZipEntryBuilder::new("helper.py".into(), Compression::Stored);
-        block_on(zip.write_entry_whole(entry, format!("VALUE = {value:?}\n").as_bytes()))?;
-        let entry = ZipEntryBuilder::new(
-            format!("helper-{version}.dist-info/METADATA").into(),
-            Compression::Stored,
-        );
-        block_on(zip.write_entry_whole(
-            entry,
-            format!("Metadata-Version: 2.3\nName: helper\nVersion: {version}\n").as_bytes(),
-        ))?;
-        let entry = ZipEntryBuilder::new(
-            format!("helper-{version}.dist-info/WHEEL").into(),
-            Compression::Stored,
-        );
-        block_on(zip.write_entry_whole(
-            entry,
-            b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
-        ))?;
-        let entry = ZipEntryBuilder::new(
-            format!("helper-{version}.dist-info/RECORD").into(),
-            Compression::Stored,
-        );
-        block_on(zip.write_entry_whole(entry, b""))?;
-        fs_err::write(path.path(), block_on(zip.close())?)?;
-
-        Ok(())
-    }
-
-    fn setup(context: &TestContext) -> Result<(ChildPath, ChildPath)> {
-        let index = context.temp_dir.child("simple");
-        index.child("helper").create_dir_all()?;
-        let dep = context.temp_dir.child("dep");
-        dep.create_dir_all()?;
-        dep.child("pyproject.toml").write_str(indoc! { r#"
-            [project]
-            name = "dep"
-            version = "0.1.0"
-            requires-python = ">=3.12"
-
-            [build-system]
-            requires = ["helper"]
-            backend-path = ["."]
-            build-backend = "build_backend"
-            "#,
-        })?;
-        dep.child("build_backend.py").write_str(indoc! { r#"
-            from pathlib import Path
-            from zipfile import ZipFile
-
-            def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-                from helper import VALUE
-
-                filename = "dep-0.1.0-py3-none-any.whl"
-                with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
-                    wheel.writestr("dep.py", f"HELPER = {VALUE!r}\n")
-                    wheel.writestr(
-                        "dep-0.1.0.dist-info/METADATA",
-                        "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
-                    )
-                    wheel.writestr(
-                        "dep-0.1.0.dist-info/WHEEL",
-                        "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
-                    )
-                    wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
-                return filename
-            "#,
-        })?;
-        context
-            .temp_dir
-            .child("pyproject.toml")
-            .write_str(indoc! { r#"
-                [project]
-                name = "project"
-                version = "0.1.0"
-                requires-python = ">=3.12"
-                dependencies = []
-                "#,
-            })?;
-
-        Ok((index, dep))
-    }
-
-    fn write_index(index: &ChildPath, versions: &[&str]) -> Result<()> {
-        let links = versions
-            .iter()
-            .map(|version| {
-                format!(
-                    r#"<a href="helper-{version}-py3-none-any.whl" data-upload-time="2024-01-01T00:00:00Z">helper-{version}-py3-none-any.whl</a>"#
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
-        index.child("helper/index.html").write_str(&links)?;
-
-        Ok(())
-    }
-
-    fn run(context: &TestContext, index: &ChildPath, dep: &ChildPath) -> Result<String> {
-        let index_url = url::Url::from_directory_path(index.path())
-            .map_err(|()| anyhow::anyhow!("Failed to create local index URL"))?;
-        let output = context
-            .run()
-            .arg("--default-index")
-            .arg(index_url.as_str())
-            .arg("--with")
-            .arg(dep.path())
-            .arg("python")
-            .arg("-c")
-            .arg("import dep; print(dep.HELPER)")
-            .assert()
-            .success();
-        Ok(std::str::from_utf8(&output.get_output().stdout)?
-            .trim()
-            .to_string())
-    }
-
-    let context = uv_test::test_context!("3.12");
-    let (index, dep) = setup(&context)?;
-    write_helper(
-        &index.child("helper/helper-1.0.0-py3-none-any.whl"),
-        "1.0.0",
-        "1.0.0",
-    )?;
-    write_index(&index, &["1.0.0"])?;
-    assert_snapshot!(run(&context, &index, &dep)?, @"1.0.0");
-    write_helper(
-        &index.child("helper/helper-2.0.0-py3-none-any.whl"),
-        "2.0.0",
-        "2.0.0",
-    )?;
-    write_index(&index, &["1.0.0", "2.0.0"])?;
-    assert_snapshot!(run(&context, &index, &dep)?, @"2.0.0");
-
-    let context = uv_test::test_context!("3.12");
-    let (index, dep) = setup(&context)?;
-    let helper = index.child("helper/helper-1.0.0-py3-none-any.whl");
-    write_helper(&helper, "1.0.0", "before")?;
-    write_index(&index, &["1.0.0"])?;
-    assert_snapshot!(run(&context, &index, &dep)?, @"before");
-    write_helper(&helper, "1.0.0", "after-in-place-replacement")?;
-    assert_snapshot!(run(&context, &index, &dep)?, @"after-in-place-replacement");
-
-    let context = uv_test::test_context!("3.12");
-    let (index, dep) = setup(&context)?;
-    let linked = context.temp_dir.child("linked");
-    linked.create_dir_all()?;
-    let helper = linked.child("helper-1.0.0-py3-none-any.whl");
-    write_helper(&helper, "1.0.0", "linked-before")?;
-    index.child("helper/index.html").write_str(
-        r#"<a href="../../linked/helper-1.0.0-py3-none-any.whl" data-upload-time="2024-01-01T00:00:00Z">helper-1.0.0-py3-none-any.whl</a>"#,
-    )?;
-    assert_snapshot!(run(&context, &index, &dep)?, @"linked-before");
-    write_helper(&helper, "1.0.0", "linked-after-in-place-replacement")?;
-    assert_snapshot!(
-        run(&context, &index, &dep)?,
-        @"linked-after-in-place-replacement"
-    );
-
-    Ok(())
-}
-
-/// A cached `--with` environment must not mask a nested source built from a shared environment.
-#[test]
-fn run_with_invalidates_cached_non_isolated_nested_build() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-
-    let helper = context.temp_dir.child("helper");
-    helper.create_dir_all()?;
-    helper.child("pyproject.toml").write_str(indoc! { r#"
-        [project]
-        name = "helper"
-        version = "1.0.0"
-        requires-python = ">=3.12"
-
-        [build-system]
-        requires = []
-        backend-path = ["."]
-        build-backend = "build_backend"
-        "#
-    })?;
-    helper.child("build_backend.py").write_str(indoc! { r#"
-        import os
-        from pathlib import Path
-        from zipfile import ZipFile
-
-        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-            value = os.environ["UV_TEST_BUILD_VALUE"]
-            filename = "helper-1.0.0-py3-none-any.whl"
-            with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
-                wheel.writestr("helper.py", f"VALUE = {value!r}\n")
-                wheel.writestr(
-                    "helper-1.0.0.dist-info/METADATA",
-                    "Metadata-Version: 2.3\nName: helper\nVersion: 1.0.0\n",
-                )
-                wheel.writestr(
-                    "helper-1.0.0.dist-info/WHEEL",
-                    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
-                )
-                wheel.writestr("helper-1.0.0.dist-info/RECORD", "")
-            return filename
-        "#
-    })?;
-    let helper_url = url::Url::from_directory_path(helper.path())
-        .map_err(|()| anyhow::anyhow!("Failed to create helper URL"))?;
-
-    let outer = context.temp_dir.child("outer");
-    outer.create_dir_all()?;
-    outer.child("pyproject.toml").write_str(&formatdoc! { r#"
-        [project]
-        name = "outer"
-        version = "1.0.0"
-        requires-python = ">=3.12"
-
-        [build-system]
-        requires = ["helper @ {helper_url}"]
-        backend-path = ["."]
-        build-backend = "build_backend"
-        "#
-    })?;
-    outer.child("build_backend.py").write_str(indoc! { r#"
-        from pathlib import Path
-        from zipfile import ZipFile
-
-        import helper
-
-        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-            filename = "outer-1.0.0-py3-none-any.whl"
-            with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
-                wheel.writestr("outer.py", f"VALUE = {helper.VALUE!r}\n")
-                wheel.writestr(
-                    "outer-1.0.0.dist-info/METADATA",
-                    "Metadata-Version: 2.3\nName: outer\nVersion: 1.0.0\n",
-                )
-                wheel.writestr(
-                    "outer-1.0.0.dist-info/WHEEL",
-                    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
-                )
-                wheel.writestr("outer-1.0.0.dist-info/RECORD", "")
-            return filename
-        "#
-    })?;
-
-    let run = |value: &str| -> Result<String> {
-        let output = context
-            .run()
-            .env("UV_TEST_BUILD_VALUE", value)
-            .arg("--no-project")
-            .arg("--no-index")
-            .arg("--no-build-isolation-package")
-            .arg("helper")
-            .arg("--with")
-            .arg(outer.path())
-            .arg("python")
-            .arg("-c")
-            .arg("import outer; print(outer.VALUE)")
-            .assert()
-            .success();
-        Ok(std::str::from_utf8(&output.get_output().stdout)?
-            .trim()
-            .to_string())
-    };
-
-    assert_snapshot!(run("before")?, @"before");
-    assert_snapshot!(run("after")?, @"after");
-
-    Ok(())
-}
-
+/// Test that an ephemeral environment writes the path of its parent environment to the `extends-environment` key
+/// of its `pyvenv.cfg` file. This feature makes it easier for static-analysis tools like ty to resolve which import
 /// search paths are available in these ephemeral environments.
 #[test]
 fn run_with_pyvenv_cfg_file() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_pyvenv_cfg_filters();
+    let context = uv_test::test_context_with_versions!(&["3.12"]).with_pyvenv_cfg_filters();
+
+    // This sets up to test for a regression where we escaped double quotes and backslashes.
+    // Windows paths don't allow double quotes and use backslash as a path separator so the path has
+    // to differ.
+    let parent_environment = context.temp_dir.child(if cfg!(windows) {
+        ".\\parent-environment"
+    } else {
+        "parent\"\\environment"
+    });
+    context
+        .venv()
+        .arg(parent_environment.path())
+        .assert()
+        .success();
+    let context = context.with_filtered_path(&parent_environment, "PARENT_VENV");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -4478,16 +1674,20 @@ fn run_with_pyvenv_cfg_file() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    uv_snapshot!(context.filters(), context.run()
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, parent_environment.path())
+        .env(EnvVars::VIRTUAL_ENV, parent_environment.path())
+        .arg("--with")
+        .arg("iniconfig")
+        .arg("main.py"), @"
+    exit_code: 0 (success)
     ----- stdout -----
     home = [PYTHON_HOME]
     implementation = CPython
     uv = [UV_VERSION]
     version_info = 3.12.[X]
     include-system-site-packages = false
-    extends-environment = [PARENT_VENV]
+    extends-environment = [PARENT_VENV]/
 
 
     ----- stderr -----
@@ -4506,7 +1706,9 @@ fn run_with_pyvenv_cfg_file() -> Result<()> {
 
 #[test]
 fn run_with_overlay_interpreter() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -4561,10 +1763,9 @@ fn run_with_overlay_interpreter() -> Result<()> {
 
     // The project's entrypoint should be rewritten to use the overlay interpreter.
     uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main").arg(context.temp_dir.child("main").as_os_str()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
-    [CACHE_DIR]/builds-v0/[TMP]/python
+    [CACHE_DIR]/builds-v0/[TMP]/[BIN]/python
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
@@ -4583,10 +1784,9 @@ fn run_with_overlay_interpreter() -> Result<()> {
     // The project's gui entrypoint should be rewritten to use the overlay interpreter.
     #[cfg(windows)]
     uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main_gui").arg(context.temp_dir.child("main_gui").as_os_str()), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
-    [CACHE_DIR]/builds-v0/[TMP]/pythonw
+    [CACHE_DIR]/builds-v0/[TMP]/[BIN]/pythonw
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
@@ -4600,7 +1800,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
     }, {
             assert_snapshot!(
                 context.read("main"), @r#"
-            #![CACHE_DIR]/builds-v0/[TMP]/python
+            #![CACHE_DIR]/builds-v0/[TMP]/[BIN]/python
             # -*- coding: utf-8 -*-
             import sys
             from foo import main
@@ -4628,10 +1828,9 @@ fn run_with_overlay_interpreter() -> Result<()> {
 
     // When layering the project on top (via `--with`), the overlay interpreter also should be used.
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--with").arg(".").arg("main"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
-    [CACHE_DIR]/builds-v0/[TMP]/python
+    [CACHE_DIR]/builds-v0/[TMP]/[BIN]/python
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
@@ -4646,10 +1845,9 @@ fn run_with_overlay_interpreter() -> Result<()> {
     // When layering the project on top (via `--with`), the overlay gui interpreter also should be used.
     #[cfg(windows)]
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--gui-script").arg("--with").arg(".").arg("main_gui"), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
-    [CACHE_DIR]/builds-v0/[TMP]/pythonw
+    [CACHE_DIR]/builds-v0/[TMP]/[BIN]/pythonw
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
@@ -4670,10 +1868,9 @@ fn run_with_overlay_interpreter() -> Result<()> {
 
     // The project's entrypoint should be rewritten to use the overlay interpreter.
     uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main").arg(context.temp_dir.child("main").as_os_str()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
-    [CACHE_DIR]/builds-v0/[TMP]/python
+    [CACHE_DIR]/builds-v0/[TMP]/[BIN]/python
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
@@ -4684,10 +1881,9 @@ fn run_with_overlay_interpreter() -> Result<()> {
     // The project's gui entrypoint should be rewritten to use the overlay interpreter.
     #[cfg(windows)]
     uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main_gui").arg(context.temp_dir.child("main_gui").as_os_str()), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
-    [CACHE_DIR]/builds-v0/[TMP]/pythonw
+    [CACHE_DIR]/builds-v0/[TMP]/[BIN]/pythonw
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
@@ -4712,7 +1908,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
     }, {
             assert_snapshot!(
                 context.read("main"), @r#"
-            #![CACHE_DIR]/builds-v0/[TMP]/python
+            #![CACHE_DIR]/builds-v0/[TMP]/[BIN]/python
             # -*- coding: utf-8 -*-
             import sys
             from foo import main
@@ -4729,10 +1925,9 @@ fn run_with_overlay_interpreter() -> Result<()> {
 
     // When layering the project on top (via `--with`), the overlay interpreter also should be used.
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--with").arg(".").arg("main"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
-    [CACHE_DIR]/builds-v0/[TMP]/python
+    [CACHE_DIR]/builds-v0/[TMP]/[BIN]/python
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
@@ -4741,10 +1936,9 @@ fn run_with_overlay_interpreter() -> Result<()> {
     // When layering the project on top (via `--with`), the overlay gui interpreter also should be used.
     #[cfg(windows)]
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--gui-script").arg("--with").arg(".").arg("main_gui"), @r"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
-    [CACHE_DIR]/builds-v0/[TMP]/pythonw
+    [CACHE_DIR]/builds-v0/[TMP]/[BIN]/pythonw
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
@@ -4778,10 +1972,7 @@ fn run_with_build_constraints() -> Result<()> {
 
     // Installing requests with incompatible build constraints should fail.
     uv_snapshot!(context.filters(), context.run().arg("--with").arg("requests==1.2").arg("main.py"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Prepared 5 packages in [TIME]
@@ -4791,10 +1982,10 @@ fn run_with_build_constraints() -> Result<()> {
      + idna==3.6
      + sniffio==1.3.1
      + typing-extensions==4.10.0
-      × Failed to download and build `requests==1.2.0`
-      ├─▶ Failed to resolve requirements from `setup.py` build
-      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
-      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
+    error: Failed to download and build `requests==1.2.0`
+      cause: Failed to resolve requirements from `setup.py` build
+      cause: No solution found when resolving: `setuptools>=40.8.0`
+      cause: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Change the build constraint to be compatible with `requests==1.2`.
@@ -4811,10 +2002,7 @@ fn run_with_build_constraints() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("--with").arg("requests==1.2").arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Checked 5 packages in [TIME]
@@ -4907,10 +2095,7 @@ fn run_in_workspace() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 8 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -4928,10 +2113,7 @@ fn run_in_workspace() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 8 packages in [TIME]
     Checked 4 packages in [TIME]
@@ -4942,10 +2124,7 @@ fn run_in_workspace() -> Result<()> {
     "#);
 
     uv_snapshot!(context.filters(), context.run().arg("--package").arg("child1").arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 8 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -4961,10 +2140,7 @@ fn run_in_workspace() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 8 packages in [TIME]
     Checked 4 packages in [TIME]
@@ -4975,10 +2151,7 @@ fn run_in_workspace() -> Result<()> {
     "#);
 
     uv_snapshot!(context.filters(), context.run().arg("--all-packages").arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 8 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -5035,10 +2208,7 @@ fn run_with_editable() -> Result<()> {
 
     // Requesting an editable requirement should install it in a layer.
     uv_snapshot!(context.filters(), context.run().arg("--with-editable").arg("./src/black_editable").arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -5055,10 +2225,7 @@ fn run_with_editable() -> Result<()> {
 
     // Requesting an editable requirement should install it in a layer, even if it satisfied
     uv_snapshot!(context.filters(), context.run().arg("--with-editable").arg("./src/anyio_local").arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Checked 4 packages in [TIME]
@@ -5070,10 +2237,7 @@ fn run_with_editable() -> Result<()> {
 
     // Requesting the project itself should use the base environment.
     uv_snapshot!(context.filters(), context.run().arg("--with-editable").arg(".").arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Checked 4 packages in [TIME]
@@ -5097,10 +2261,7 @@ fn run_with_editable() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -5113,10 +2274,7 @@ fn run_with_editable() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--with-editable").arg("./src/anyio_local").arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Checked 3 packages in [TIME]
@@ -5124,15 +2282,12 @@ fn run_with_editable() -> Result<()> {
 
     // If invalid, we should reference `--with-editable`.
     uv_snapshot!(context.filters(), context.run().arg("--with-editable").arg("./foo").arg("main.py"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Checked 3 packages in [TIME]
-      × Failed to resolve `--with` requirement
-      ╰─▶ Distribution not found at: file://[TEMP_DIR]/foo
+    error: Failed to resolve `--with` requirement
+      cause: Distribution not found at: file://[TEMP_DIR]/foo
     ");
 
     Ok(())
@@ -5183,8 +2338,7 @@ fn run_group() -> Result<()> {
     context.lock().assert().success();
 
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     failed to import `anyio`
     failed to import `iniconfig`
@@ -5199,8 +2353,7 @@ fn run_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--only-group").arg("bar").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     failed to import `anyio`
     imported `iniconfig`
@@ -5214,8 +2367,7 @@ fn run_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--group").arg("foo").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     imported `anyio`
     imported `iniconfig`
@@ -5230,8 +2382,7 @@ fn run_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--group").arg("foo").arg("--group").arg("bar").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     imported `anyio`
     imported `iniconfig`
@@ -5243,8 +2394,7 @@ fn run_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--all-groups").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     imported `anyio`
     imported `iniconfig`
@@ -5256,8 +2406,7 @@ fn run_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--all-groups").arg("--no-group").arg("bar").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     imported `anyio`
     imported `iniconfig`
@@ -5269,8 +2418,7 @@ fn run_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--group").arg("foo").arg("--no-project").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     imported `anyio`
     imported `iniconfig`
@@ -5281,8 +2429,7 @@ fn run_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--group").arg("foo").arg("--group").arg("bar").arg("--no-project").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     imported `anyio`
     imported `iniconfig`
@@ -5293,8 +2440,7 @@ fn run_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--group").arg("dev").arg("--no-project").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     imported `anyio`
     imported `iniconfig`
@@ -5305,8 +2451,7 @@ fn run_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--all-groups").arg("--no-project").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     imported `anyio`
     imported `iniconfig`
@@ -5317,8 +2462,7 @@ fn run_group() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--dev").arg("--no-project").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     imported `anyio`
     imported `iniconfig`
@@ -5357,8 +2501,7 @@ fn run_dev_overrides_uv_no_dev() -> Result<()> {
         .arg("-c")
         .arg("import iniconfig; print(iniconfig.__name__)")
         .env(EnvVars::UV_NO_DEV, "1"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     iniconfig
 
@@ -5399,10 +2542,7 @@ fn run_locked() -> Result<()> {
 
     // Running with `--locked` should error, if no lockfile is present.
     uv_snapshot!(context.filters(), context.run().arg("--locked").arg("--").arg("python").arg("--version"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`, but `--locked` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
     ");
@@ -5486,10 +2626,7 @@ fn run_locked() -> Result<()> {
 
     // Running with `--locked` should error.
     uv_snapshot!(context.filters(), context.run().arg("--locked").arg("--").arg("python").arg("--version"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
@@ -5504,10 +2641,7 @@ fn run_locked() -> Result<()> {
 
     // Lock the updated requirements.
     uv_snapshot!(context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Removed anyio v3.7.0
@@ -5518,18 +2652,14 @@ fn run_locked() -> Result<()> {
 
     // Lock the updated requirements.
     uv_snapshot!(context.lock(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
 
     // Running with `--locked` should succeed.
     uv_snapshot!(context.filters(), context.run().arg("--locked").arg("--").arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.[X]
 
@@ -5571,10 +2701,7 @@ fn run_frozen() -> Result<()> {
 
     // Running with `--frozen` should error, if no lockfile is present.
     uv_snapshot!(context.filters(), context.run().arg("--frozen").arg("--").arg("python").arg("--version"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
     ");
@@ -5598,8 +2725,7 @@ fn run_frozen() -> Result<()> {
 
     // Running with `--frozen` should install the stale lockfile.
     uv_snapshot!(context.filters(), context.run().arg("--frozen").arg("--").arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.[X]
 
@@ -5640,38 +2766,29 @@ fn run_no_sync() -> Result<()> {
         .child("__init__.py")
         .touch()?;
 
-    // Running with `--no-sync` should succeed error, even if the lockfile isn't present.
+    // Running with `--no-sync` should succeed, even if the lockfile isn't present.
     uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("--").arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.[X]
-
-    ----- stderr -----
     ");
 
     context.lock().assert().success();
 
     // Running with `--no-sync` should not install any requirements.
     uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("--").arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.[X]
-
-    ----- stderr -----
     ");
 
     context.sync().assert().success();
 
     // But it should have access to the installed packages.
     uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("--").arg("python").arg("-c").arg("import anyio; print(anyio.__name__)"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     anyio
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -5707,36 +2824,27 @@ fn run_no_sync_env_var() -> Result<()> {
 
     // Running with `UV_NO_SYNC=1` should succeed, even if the lockfile isn't present.
     uv_snapshot!(context.filters(), context.run().env(EnvVars::UV_NO_SYNC, "1").arg("--").arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.[X]
-
-    ----- stderr -----
     ");
 
     context.lock().assert().success();
 
     // Running with `UV_NO_SYNC=1` should not install any requirements.
     uv_snapshot!(context.filters(), context.run().env(EnvVars::UV_NO_SYNC, "1").arg("--").arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.[X]
-
-    ----- stderr -----
     ");
 
     context.sync().assert().success();
 
     // But it should have access to the installed packages.
     uv_snapshot!(context.filters(), context.run().env(EnvVars::UV_NO_SYNC, "1").arg("--").arg("python").arg("-c").arg("import anyio; print(anyio.__name__)"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     anyio
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -5778,10 +2886,7 @@ fn run_empty_requirements_txt() -> Result<()> {
 
     // The project environment is synced on the first invocation.
     uv_snapshot!(context.filters(), context.run().arg("--with-requirements").arg(requirements_txt.as_os_str()).arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -5795,10 +2900,7 @@ fn run_empty_requirements_txt() -> Result<()> {
 
     // Then reused in subsequent invocations
     uv_snapshot!(context.filters(), context.run().arg("--with-requirements").arg(requirements_txt.as_os_str()).arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Checked 4 packages in [TIME]
@@ -5843,10 +2945,7 @@ fn run_requirements_txt() -> Result<()> {
     requirements_txt.write_str("iniconfig")?;
 
     uv_snapshot!(context.filters(), context.run().arg("--with-requirements").arg(requirements_txt.as_os_str()).arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Prepared 4 packages in [TIME]
@@ -5865,10 +2964,7 @@ fn run_requirements_txt() -> Result<()> {
     requirements_txt.write_str("sniffio")?;
 
     uv_snapshot!(context.filters(), context.run().arg("--with-requirements").arg(requirements_txt.as_os_str()).arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Checked 4 packages in [TIME]
@@ -5878,10 +2974,7 @@ fn run_requirements_txt() -> Result<()> {
     requirements_txt.write_str("sniffio<1.3.1")?;
 
     uv_snapshot!(context.filters(), context.run().arg("--with-requirements").arg(requirements_txt.as_os_str()).arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Checked 4 packages in [TIME]
@@ -5900,10 +2993,7 @@ fn run_requirements_txt() -> Result<()> {
         .arg("--with")
         .arg("iniconfig")
         .arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Checked 4 packages in [TIME]
@@ -5921,10 +3011,7 @@ fn run_requirements_txt() -> Result<()> {
         .arg("iniconfig")
         .arg("main.py")
         .stdin(std::fs::File::open(&requirements_txt)?), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Checked 4 packages in [TIME]
@@ -5938,10 +3025,7 @@ fn run_requirements_txt() -> Result<()> {
         // The script to run
         .arg("-")
         .stdin(std::fs::File::open(&requirements_txt)?), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Cannot read both requirements file and script from stdin
     ");
@@ -5952,10 +3036,7 @@ fn run_requirements_txt() -> Result<()> {
         .arg("--script")
         .arg("-")
         .stdin(std::fs::File::open(&requirements_txt)?), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Cannot read both requirements file and script from stdin
     ");
@@ -6003,10 +3084,7 @@ fn run_requirements_txt_arguments() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("--with-requirements").arg(requirements_txt.as_os_str()).arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -6057,8 +3135,7 @@ fn run_editable() -> Result<()> {
 
     // We treat arguments before the command as uv arguments
     uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
 
@@ -6074,8 +3151,7 @@ fn run_editable() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--no-editable-package").arg("foo").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
 
@@ -6144,8 +3220,7 @@ fn run_from_directory() -> Result<()> {
     // Use `--project`, which resolves configuration relative to the provided directory, but paths
     // relative to the current working directory.
     uv_snapshot!(filters.clone(), context.run().arg("--project").arg("project").arg("main"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     3.12.[X]
 
@@ -6161,10 +3236,7 @@ fn run_from_directory() -> Result<()> {
 
     fs_err::remove_dir_all(context.temp_dir.join("project").join(".venv"))?;
     uv_snapshot!(filters.clone(), context.run().arg("--project").arg("project").arg("./project/main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: `VIRTUAL_ENV=.venv` does not match the project environment path `[PROJECT_VENV]/` and will be ignored; use `--active` to target the active environment instead
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
@@ -6177,8 +3249,7 @@ fn run_from_directory() -> Result<()> {
     // Use `--directory`, which switches to the provided directory entirely.
     fs_err::remove_dir_all(context.temp_dir.join("project").join(".venv"))?;
     uv_snapshot!(filters.clone(), context.run().arg("--directory").arg("project").arg("main"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     3.12.[X]
 
@@ -6193,10 +3264,7 @@ fn run_from_directory() -> Result<()> {
 
     fs_err::remove_dir_all(context.temp_dir.join("project").join(".venv"))?;
     uv_snapshot!(filters.clone(), context.run().arg("--directory").arg("project").arg("./main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
@@ -6208,10 +3276,7 @@ fn run_from_directory() -> Result<()> {
 
     fs_err::remove_dir_all(context.temp_dir.join("project").join(".venv"))?;
     uv_snapshot!(filters.clone(), context.run().arg("--directory").arg("project").arg("./project/main.py"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
@@ -6220,7 +3285,7 @@ fn run_from_directory() -> Result<()> {
     Installed 1 package in [TIME]
      + foo==1.0.0 (from file://[TEMP_DIR]/project)
     error: Failed to spawn: `./project/main.py`
-      Caused by: [OS ERROR 2]
+      cause: [OS ERROR 2]
     ");
 
     // Even if we write a `.python-version` file in the current directory, we should prefer the
@@ -6236,8 +3301,7 @@ fn run_from_directory() -> Result<()> {
 
     fs_err::remove_dir_all(context.temp_dir.join("project").join(".venv"))?;
     uv_snapshot!(filters.clone(), context.run().arg("--project").arg("project").arg("main"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     3.10.[X]
 
@@ -6252,8 +3316,7 @@ fn run_from_directory() -> Result<()> {
 
     fs_err::remove_dir_all(context.temp_dir.join("project").join(".venv"))?;
     uv_snapshot!(filters.clone(), context.run().arg("--directory").arg("project").arg("main"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     3.10.[X]
 
@@ -6302,10 +3365,7 @@ fn run_without_output() -> Result<()> {
 
     // On the first run, we only show the summary line for each environment.
     uv_snapshot!(context.filters(), context.run().env_remove(EnvVars::UV_SHOW_RESOLUTION).arg("--with").arg("iniconfig").arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Installed 4 packages in [TIME]
     Installed 1 package in [TIME]
@@ -6313,11 +3373,7 @@ fn run_without_output() -> Result<()> {
 
     // Subsequent runs are quiet.
     uv_snapshot!(context.filters(), context.run().env_remove(EnvVars::UV_SHOW_RESOLUTION).arg("--with").arg("iniconfig").arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
+    exit_code: 0 (success)
     ");
 
     Ok(())
@@ -6357,8 +3413,7 @@ fn run_isolated_python_version() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     (3, 9)
 
@@ -6377,8 +3432,7 @@ fn run_isolated_python_version() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--isolated").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     (3, 9)
 
@@ -6400,8 +3454,7 @@ fn run_isolated_python_version() -> Result<()> {
         .write_str("3.12")?;
 
     uv_snapshot!(context.filters(), context.run().arg("--isolated").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     (3, 12)
 
@@ -6447,8 +3500,7 @@ fn run_no_project() -> Result<()> {
 
     // `run` should run in the context of the project.
     uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import sys; print(sys.executable)"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [VENV]/[BIN]/[PYTHON]
 
@@ -6465,39 +3517,29 @@ fn run_no_project() -> Result<()> {
     // `run --no-project` should not (but it should still run in the same environment, as it would
     // if there were no project at all).
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [VENV]/[BIN]/[PYTHON]
-
-    ----- stderr -----
     ");
 
     // `run --no-project --isolated` should run in an entirely isolated environment.
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--isolated").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
-    [CACHE_DIR]/builds-v0/[TMP]/[PYTHON]
-
-    ----- stderr -----
+    [CACHE_DIR]/builds-v0/[TMP]/[BIN]/[PYTHON]
     ");
 
     // `run --no-project` should not (but it should still run in the same environment, as it would
     // if there were no project at all).
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [VENV]/[BIN]/[PYTHON]
-
-    ----- stderr -----
     ");
 
-    // `run --no-project --locked` should fail.
+    // `run --no-project --locked` should warn about `--locked`.
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--locked").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [VENV]/[BIN]/[PYTHON]
 
@@ -6521,12 +3563,9 @@ fn run_stdin() -> Result<()> {
     let mut command = context.run();
     let command_with_args = command.stdin(std::fs::File::open(test_script)?).arg("-");
     uv_snapshot!(context.filters(), command_with_args, @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -6543,12 +3582,9 @@ fn run_package() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("."), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -6582,12 +3618,9 @@ fn run_zipapp() -> Result<()> {
 
     // Run the zipapp.
     uv_snapshot!(context.filters(), context.run().arg(zipapp.as_ref()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -6598,12 +3631,9 @@ fn run_stdin_args() {
     let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import sys; print(sys.argv)").arg("foo").arg("bar"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     ['-c', 'foo', 'bar']
-
-    ----- stderr -----
     ");
 }
 
@@ -6613,17 +3643,13 @@ fn run_module() {
     let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.run().arg("-m").arg("__hello__"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello world!
-
-    ----- stderr -----
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("-m").arg("http.server").arg("-h"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     usage: server.py [-h] [--cgi] [-b ADDRESS] [-d DIRECTORY] [-p VERSION] [port]
 
@@ -6639,8 +3665,6 @@ fn run_module() {
                             serve this directory (default: current directory)
       -p VERSION, --protocol VERSION
                             conform to this HTTP version (default: HTTP/1.0)
-
-    ----- stderr -----
     ");
 }
 
@@ -6649,10 +3673,7 @@ fn run_module_stdin() {
     let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.run().arg("-m").arg("-"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Cannot run a Python module from stdin
     ");
@@ -6678,8 +3699,7 @@ fn virtual_empty() -> Result<()> {
 
     // `run` should work fine
     uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import sys; print(sys.executable)"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [VENV]/[BIN]/[PYTHON]
 
@@ -6691,12 +3711,9 @@ fn virtual_empty() -> Result<()> {
 
     // `run --no-project` should also work fine
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [VENV]/[BIN]/[PYTHON]
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -6734,10 +3751,7 @@ fn run_isolated_incompatible_python() -> Result<()> {
 
     // We should reject Python 3.9...
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
     error: The Python request from `.python-version` resolved to Python 3.9.[X], which is incompatible with the project's Python requirement: `>=3.12` (from `project.requires-python`)
@@ -6746,10 +3760,7 @@ fn run_isolated_incompatible_python() -> Result<()> {
 
     // ...even if `--isolated` is provided.
     uv_snapshot!(context.filters(), context.run().arg("--isolated").arg("main.py"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: The Python request from `.python-version` resolved to Python 3.9.[X], which is incompatible with the project's Python requirement: `>=3.12` (from `project.requires-python`)
     Use `uv python pin` to update the `.python-version` file to a compatible version
@@ -6794,8 +3805,7 @@ fn run_isolated_does_not_modify_lock() -> Result<()> {
     uv_snapshot!(context.filters(), context.run()
         .arg("--isolated")
         .arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     4.3.0
 
@@ -6817,8 +3827,7 @@ fn run_isolated_does_not_modify_lock() -> Result<()> {
 
     // Create initial lock with default resolution
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     4.3.0
 
@@ -6841,8 +3850,7 @@ fn run_isolated_does_not_modify_lock() -> Result<()> {
         .arg("--resolution")
         .arg("lowest-direct")
         .arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     3.0.0
 
@@ -6904,8 +3912,7 @@ fn run_isolated_with_frozen() -> Result<()> {
         .arg("--resolution")
         .arg("lowest-direct")
         .arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     3.0.0
 
@@ -6925,8 +3932,7 @@ fn run_isolated_with_frozen() -> Result<()> {
         .arg("--isolated")
         .arg("--frozen")
         .arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     3.0.0
 
@@ -6954,12 +3960,9 @@ fn run_compiled_python_file() -> Result<()> {
 
     // Run a non-PEP 723 script.
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
-
-    ----- stderr -----
     ");
 
     let compile_output = context
@@ -6978,12 +3981,9 @@ fn run_compiled_python_file() -> Result<()> {
     // Run the compiled non-PEP 723 script.
     let compiled_non_script = context.temp_dir.child("__pycache__/main.cpython-312.pyc");
     uv_snapshot!(context.filters(), context.run().arg(compiled_non_script.path()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
-
-    ----- stderr -----
     ");
 
     // If the script contains a PEP 723 tag, we should install its requirements.
@@ -7000,10 +4000,7 @@ fn run_compiled_python_file() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("script.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -7028,10 +4025,7 @@ fn run_compiled_python_file() -> Result<()> {
     // Run the compiled PEP 723 script. This fails, since we can't read the script tag.
     let compiled_script = context.temp_dir.child("__pycache__/script.cpython-312.pyc");
     uv_snapshot!(context.filters(), context.run().arg(compiled_script.path()), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Traceback (most recent call last):
       File "[TEMP_DIR]/script.py", line 7, in <module>
@@ -7083,17 +4077,14 @@ fn run_invalid_project_table() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
-      Caused by: TOML parse error at line 1, column 2
-          |
-        1 | [project.urls]
-          |  ^^^^^^^
-        `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set
+      cause: TOML parse error at line 1, column 2
+               |
+             1 | [project.urls]
+               |  ^^^^^^^
+             `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set
     ");
 
     Ok(())
@@ -7127,15 +4118,12 @@ fn run_script_without_build_system() -> Result<()> {
     // TODO(lucab): this should match `entry` and warn
     // <https://github.com/astral-sh/uv/issues/7428>
     uv_snapshot!(context.filters(), context.run().arg("entry"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Checked in [TIME]
     error: Failed to spawn: `entry`
-      Caused by: No such file or directory (os error 2)
+      cause: No such file or directory (os error 2)
     ");
 
     Ok(())
@@ -7170,8 +4158,7 @@ fn run_script_module_conflict() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("foo"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello from `__init__`
 
@@ -7190,8 +4177,7 @@ fn run_script_module_conflict() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("foo"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello from `__init__`
 
@@ -7202,8 +4188,7 @@ fn run_script_module_conflict() -> Result<()> {
 
     // Even if the working directory is `src`
     uv_snapshot!(context.filters(), context.run().arg("--directory").arg("src").arg("foo"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello from `__init__`
 
@@ -7214,8 +4199,7 @@ fn run_script_module_conflict() -> Result<()> {
 
     // Unless the user opts-in to module running with `-m`
     uv_snapshot!(context.filters(), context.run().arg("-m").arg("foo"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello from `__main__`
 
@@ -7245,8 +4229,7 @@ fn run_script_explicit() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("--script").arg("script"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
 
@@ -7278,8 +4261,7 @@ fn run_script_explicit_stdin() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("--script").arg("-").stdin(std::fs::File::open(test_script)?), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
 
@@ -7313,10 +4295,7 @@ fn run_script_explicit_directory() -> Result<()> {
     fs_err::create_dir(context.temp_dir.child("script"))?;
 
     uv_snapshot!(context.filters(), context.run().arg("--script").arg("script"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: failed to read from file `script`: Is a directory (os error 21)
     ");
@@ -7347,10 +4326,7 @@ fn run_gui_script_explicit_windows() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.run().arg("--gui-script").arg("script"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using executable: pythonw.exe
     "###);
@@ -7377,8 +4353,7 @@ fn run_gui_script_explicit_stdin_windows() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("--gui-script").arg("-").stdin(std::fs::File::open(test_script)?), @r###"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
 
@@ -7410,10 +4385,7 @@ fn run_gui_script_explicit_unix() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.run().arg("--gui-script").arg("script"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using executable: python
     ");
@@ -7447,10 +4419,7 @@ fn run_linked_environment_path() -> Result<()> {
     // Running `uv sync` should use the environment at `target``
     uv_snapshot!(context.filters(), context.sync()
         .env(EnvVars::UV_PROJECT_ENVIRONMENT, "target"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 8 packages in [TIME]
     Prepared 6 packages in [TIME]
@@ -7468,8 +4437,7 @@ fn run_linked_environment_path() -> Result<()> {
         .env_remove(EnvVars::VIRTUAL_ENV)  // Ignore the test context's active virtual environment
         .env(EnvVars::UV_PROJECT_ENVIRONMENT, "target")
         .arg("python").arg("-c").arg("import sys; print(sys.prefix); print(sys.executable)"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [TEMP_DIR]/target
     [TEMP_DIR]/target/[BIN]/[PYTHON]
@@ -7524,8 +4492,7 @@ fn run_active_project_environment() -> Result<()> {
     uv_snapshot!(context.filters(), context.run()
         .arg("python").arg("--version")
         .env(EnvVars::VIRTUAL_ENV, "foo"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.11.[X]
 
@@ -7544,8 +4511,7 @@ fn run_active_project_environment() -> Result<()> {
         .arg("--no-active")
         .arg("python").arg("--version")
         .env(EnvVars::VIRTUAL_ENV, "foo"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.11.[X]
 
@@ -7569,8 +4535,7 @@ fn run_active_project_environment() -> Result<()> {
         .arg("--active")
         .arg("python").arg("--version")
         .env(EnvVars::VIRTUAL_ENV, "foo"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.11.[X]
 
@@ -7593,8 +4558,7 @@ fn run_active_project_environment() -> Result<()> {
         .arg("-p").arg("3.12")
         .arg("python").arg("--version")
         .env(EnvVars::VIRTUAL_ENV, "foo"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.[X]
 
@@ -7636,8 +4600,7 @@ fn run_active_script_environment() -> Result<()> {
         .arg("--script")
         .arg("main.py")
         .env(EnvVars::VIRTUAL_ENV, "foo"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
 
@@ -7654,12 +4617,9 @@ fn run_active_script_environment() -> Result<()> {
         .arg("--script")
         .arg("main.py")
         .env(EnvVars::VIRTUAL_ENV, "foo"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
-
-    ----- stderr -----
     ");
 
     context
@@ -7673,8 +4633,7 @@ fn run_active_script_environment() -> Result<()> {
         .arg("--script")
         .arg("main.py")
         .env(EnvVars::VIRTUAL_ENV, "foo"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
 
@@ -7696,8 +4655,7 @@ fn run_active_script_environment() -> Result<()> {
         .arg("--script")
         .arg("main.py")
         .env(EnvVars::VIRTUAL_ENV, "foo"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
 
@@ -7706,6 +4664,46 @@ fn run_active_script_environment() -> Result<()> {
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     ");
+
+    Ok(())
+}
+
+/// Regression test for <https://github.com/astral-sh/uv/issues/21364>.
+#[test]
+fn run_active_script_environment_non_virtualenv() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+
+        print("Hello, world!")
+       "#
+    })?;
+
+    let active_environment = context.temp_dir.child("foo");
+    active_environment.create_dir_all()?;
+    active_environment
+        .child("important.txt")
+        .write_str("important data")?;
+
+    context
+        .run()
+        .arg("--active")
+        .arg("--script")
+        .arg("main.py")
+        .env(EnvVars::VIRTUAL_ENV, "foo")
+        .assert()
+        .success();
+
+    active_environment.assert(predicate::path::is_dir());
+    // Silently deleting user data outside a virtual environment is undesirable.
+    active_environment
+        .child("important.txt")
+        .assert(predicate::path::missing());
 
     Ok(())
 }
@@ -7729,8 +4727,7 @@ fn run_gui_script_explicit_stdin_unix() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("--gui-script").arg("-").stdin(std::fs::File::open(test_script)?), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
 
@@ -7746,14 +4743,14 @@ fn run_gui_script_explicit_stdin_unix() -> Result<()> {
 
 #[test]
 fn run_remote_pep723_script() {
-    let context = uv_test::test_context!("3.12").with_filtered_python_names();
-    let context = context.with_filter((
-        r"(?m)^Downloaded remote script to:.*\.py$",
-        "Downloaded remote script to: [TEMP_PATH].py",
-    ));
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_names()
+        .with_filter((
+            r"(?m)^Downloaded remote script to:.*\.py$",
+            "Downloaded remote script to: [TEMP_PATH].py",
+        ));
     uv_snapshot!(context.filters(), context.run().arg("https://raw.githubusercontent.com/astral-sh/uv/df45b9ac2584824309ff29a6a09421055ad730f6/scripts/uv-run-remote-script-test.py").arg(EnvVars::CI), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello CI, from uv!
 
@@ -7769,6 +4766,27 @@ fn run_remote_pep723_script() {
 }
 
 #[test]
+fn run_remote_pep723_script_with_nonexistent_ssl_cert_file() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("https://raw.githubusercontent.com/astral-sh/uv/df45b9ac2584824309ff29a6a09421055ad730f6/scripts/uv-run-remote-script-test.py")
+        .arg(EnvVars::CI)
+        .env(EnvVars::SSL_CERT_FILE, context.temp_dir.join("missing.pem"))
+        .env(EnvVars::UV_HTTP_RETRIES, "0")
+        .env_remove(EnvVars::SSL_CERT_DIR)
+        .env_remove(EnvVars::UV_NATIVE_TLS)
+        .env_remove(EnvVars::UV_SYSTEM_CERTS), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: Invalid `SSL_CERT_FILE`. Path does not exist: [TEMP_DIR]/missing.pem. No default certificates will be trusted.
+    error: error sending request for url (https://raw.githubusercontent.com/astral-sh/uv/df45b9ac2584824309ff29a6a09421055ad730f6/scripts/uv-run-remote-script-test.py)
+      cause: client error (Connect)
+      cause: invalid peer certificate: UnknownIssuer
+    ");
+}
+
+#[test]
 fn run_remote_requirements_offline_redacts_credentials() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -7780,10 +4798,7 @@ fn run_remote_requirements_offline_redacts_credentials() -> Result<()> {
         .arg("--with-requirements")
         .arg("http://username:password@example.com/requirements.txt")
         .arg(script.as_os_str()), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Network connectivity is disabled, but a remote requirements file was requested: http://username:****@example.com/requirements.txt
     ");
@@ -7794,8 +4809,8 @@ fn run_remote_requirements_offline_redacts_credentials() -> Result<()> {
 #[test]
 fn run_remote_pep723_requirements_fetch_error_does_not_leak_credentials() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filter((
-        r"(?m)^  Caused by: .*(Connection refused|No connection could be made).*$",
-        "  Caused by: [CONNECTION_REFUSED]",
+        r"(?m)^  cause: .*(Connection refused|No connection could be made).*$",
+        "  cause: [CONNECTION_REFUSED]",
     ));
 
     let script = context.temp_dir.child("main.py");
@@ -7811,16 +4826,13 @@ fn run_remote_pep723_requirements_fetch_error_does_not_leak_credentials() -> Res
         .arg(url)
         .arg(script.as_os_str())
         .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Request failed after 3 retries
-      Caused by: error sending request for url (http://[LOCALHOST]/requirements.py)
-      Caused by: client error (Connect)
-      Caused by: tcp connect error
-      Caused by: [CONNECTION_REFUSED]
+      cause: error sending request for url (http://[LOCALHOST]/requirements.py)
+      cause: client error (Connect)
+      cause: tcp connect error
+      cause: [CONNECTION_REFUSED]
     ");
 
     Ok(())
@@ -7844,12 +4856,9 @@ fn run_url_like_with_local_file_priority() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg(url), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -7873,8 +4882,7 @@ fn run_stdin_with_pep723() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().stdin(std::fs::File::open(test_script)?).arg("-"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
 
@@ -7910,27 +4918,21 @@ fn run_with_env() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("test.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     None
     None
     None
     None
-
-    ----- stderr -----
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env").arg("test.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     palpatine
     leia_organa
     obi_wan_kenobi
     C3PO
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -7958,15 +4960,12 @@ fn run_with_env_file() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".file").arg("test.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     palpatine
     leia_organa
     obi_wan_kenobi
     C3PO
-
-    ----- stderr -----
     ");
 
     context.temp_dir.child(".file").write_str(indoc! { "
@@ -7987,15 +4986,12 @@ fn run_with_env_file() -> Result<()> {
         .env_remove(EnvVars::VIRTUAL_ENV)
         .env_remove(EnvVars::UV_PYTHON_SEARCH_PATH)
         .env(EnvVars::PATH, context.python_path()), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     palpatine
     leia_organa
     obi_wan_kenobi
     C3PO
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -8027,25 +5023,19 @@ fn run_with_multiple_env_files() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env1").arg("--env-file").arg(".env2").arg("test.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     palpatine
     obi_wan_kenobi
     C3PO
-
-    ----- stderr -----
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("test.py").env(EnvVars::UV_ENV_FILE, ".env1 .env2"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     palpatine
     obi_wan_kenobi
     C3PO
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -8067,12 +5057,9 @@ fn run_with_env_omitted() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env").arg("--no-env-file").arg("test.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     None
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -8094,8 +5081,7 @@ fn run_with_malformed_env() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env").arg("test.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     None
 
@@ -8108,7 +5094,10 @@ fn run_with_malformed_env() -> Result<()> {
 
 #[test]
 fn run_with_not_existing_env_file() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filter((
+        r"(?m)^error: Failed to read environment file `.env.development`: .*$",
+        "error: Failed to read environment file `.env.development`: [ERR]",
+    ));
 
     context.temp_dir.child("test.py").write_str(indoc! { "
         import os
@@ -8116,35 +5105,20 @@ fn run_with_not_existing_env_file() -> Result<()> {
        "
     })?;
 
-    let context = context.with_filter((
-        r"(?m)^error: Failed to read environment file `.env.development`: .*$",
-        "error: Failed to read environment file `.env.development`: [ERR]",
-    ));
-
     uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env.development").arg("test.py"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: No environment file found at: `.env.development`
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env.development").arg("--quiet").arg("test.py"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: No environment file found at: `.env.development`
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env.development").arg("--quiet").arg("--quiet").arg("test.py"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
+    exit_code: 2 (failure)
     ");
 
     Ok(())
@@ -8182,10 +5156,7 @@ fn run_with_extra_conflict() -> Result<()> {
         .arg("python")
         .arg("-c")
         .arg("import iniconfig"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -8228,10 +5199,7 @@ fn run_with_group_conflict() -> Result<()> {
         .arg("python")
         .arg("-c")
         .arg("import iniconfig"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -8266,10 +5234,7 @@ fn run_default_groups() -> Result<()> {
 
     // Only the main dependencies and `dev` group should be installed.
     uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import typing_extensions"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -8302,10 +5267,7 @@ fn run_default_groups() -> Result<()> {
         .arg("python")
         .arg("-c")
         .arg("import typing_extensions"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -8322,10 +5284,7 @@ fn run_default_groups() -> Result<()> {
         .arg("python")
         .arg("-c")
         .arg("import typing_extensions"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Uninstalled 3 packages in [TIME]
@@ -8342,10 +5301,7 @@ fn run_default_groups() -> Result<()> {
         .arg("python")
         .arg("-c")
         .arg("import iniconfig"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -8363,10 +5319,7 @@ fn run_default_groups() -> Result<()> {
         .arg("python")
         .arg("-c")
         .arg("import iniconfig"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Checked 5 packages in [TIME]
@@ -8380,10 +5333,7 @@ fn run_default_groups() -> Result<()> {
         .arg("python")
         .arg("-c")
         .arg("import iniconfig"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Uninstalled 4 packages in [TIME]
@@ -8399,10 +5349,7 @@ fn run_default_groups() -> Result<()> {
         .arg("python")
         .arg("-c")
         .arg("import iniconfig"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -8419,10 +5366,7 @@ fn run_default_groups() -> Result<()> {
         .arg("python")
         .arg("-c")
         .arg("import typing_extensions"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Uninstalled 4 packages in [TIME]
@@ -8437,10 +5381,7 @@ fn run_default_groups() -> Result<()> {
         .arg("python")
         .arg("-c")
         .arg("import iniconfig"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -8462,10 +5403,7 @@ fn run_default_groups() -> Result<()> {
         .arg("python")
         .arg("-c")
         .arg("import typing_extensions"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Checked 5 packages in [TIME]
@@ -8500,8 +5438,7 @@ fn run_groups_requires_python() -> Result<()> {
     uv_snapshot!(context.filters(), context.run()
         .arg("--no-default-groups")
         .arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.[X]
 
@@ -8516,8 +5453,7 @@ fn run_groups_requires_python() -> Result<()> {
     // (This should trigger a version bump)
     uv_snapshot!(context.filters(), context.run()
         .arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.13.[X]
 
@@ -8583,8 +5519,7 @@ fn run_groups_requires_python_environment() -> Result<()> {
     uv_snapshot!(context.filters(), context.run()
         .arg("--no-default-groups")
         .arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.13.[X]
 
@@ -8598,8 +5533,7 @@ fn run_groups_requires_python_environment() -> Result<()> {
         .arg("--no-default-groups")
         .arg("-p").arg("3.12")
         .arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.[X]
 
@@ -8642,10 +5576,7 @@ fn run_groups_requires_python_errors() -> Result<()> {
     uv_snapshot!(context.filters(), context.run()
         .arg("-p").arg("3.12")
         .arg("python").arg("--version"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     error: The requested interpreter resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.13` (from `tool.uv.dependency-groups.dev.requires-python`).
@@ -8655,10 +5586,7 @@ fn run_groups_requires_python_errors() -> Result<()> {
     uv_snapshot!(context.filters(), context.run()
         .arg("--group").arg("foo")
         .arg("python").arg("--version"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: No interpreter found for Python >=3.100 in [PYTHON SOURCES]
     ");
@@ -8698,10 +5626,7 @@ fn run_groups_include_requires_python() -> Result<()> {
     uv_snapshot!(context.filters(), context.run()
         .arg("--no-default-groups")
         .arg("python").arg("-c").arg("import typing_extensions"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
@@ -8715,10 +5640,7 @@ fn run_groups_include_requires_python() -> Result<()> {
     // (This should trigger a version bump)
     uv_snapshot!(context.filters(), context.run()
         .arg("python").arg("-c").arg("import typing_extensions"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Removed virtual environment at: .venv
@@ -8738,10 +5660,7 @@ fn run_groups_include_requires_python() -> Result<()> {
     uv_snapshot!(context.filters(), context.run()
         .arg("--group").arg("bar")
         .arg("python").arg("-c").arg("import typing_extensions"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Found conflicting Python requirements:
     - project: >=3.11
@@ -8753,10 +5672,7 @@ fn run_groups_include_requires_python() -> Result<()> {
     uv_snapshot!(context.filters(), context.run()
         .arg("-p").arg("3.13")
         .arg("python").arg("-c").arg("import typing_extensions"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Using CPython 3.13.[X] interpreter at: [PYTHON-3.13]
     error: The requested interpreter resolved to Python 3.13.[X], which is incompatible with the project's Python requirement: `==3.12.*` (from `tool.uv.dependency-groups.dev.requires-python`).
@@ -8798,10 +5714,7 @@ fn run_repeated() -> Result<()> {
     uv_snapshot!(
         context.filters(),
         context.run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.13.[X] interpreter at: [PYTHON-3.13]
     Creating virtual environment at: .venv
@@ -8819,10 +5732,7 @@ fn run_repeated() -> Result<()> {
     uv_snapshot!(
         context.filters(),
         context.run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Checked 1 package in [TIME]
@@ -8833,10 +5743,7 @@ fn run_repeated() -> Result<()> {
     uv_snapshot!(
         context.filters(),
         context.tool_run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Traceback (most recent call last):
@@ -8868,10 +5775,7 @@ fn run_without_overlay() -> Result<()> {
     uv_snapshot!(
         context.filters(),
         context.run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.13.[X] interpreter at: [PYTHON-3.13]
     Creating virtual environment at: .venv
@@ -8889,10 +5793,7 @@ fn run_without_overlay() -> Result<()> {
     uv_snapshot!(
         context.filters(),
         context.tool_run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Traceback (most recent call last):
@@ -8906,10 +5807,7 @@ fn run_without_overlay() -> Result<()> {
     uv_snapshot!(
         context.filters(),
         context.run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Checked 1 package in [TIME]
@@ -8938,17 +5836,13 @@ fn detect_infinite_recursion() -> Result<()> {
 
     fs_err::set_permissions(test_script.path(), PermissionsExt::from_mode(0o0744))?;
 
-    let mut cmd = std::process::Command::new(test_script.as_os_str());
-    context.add_shared_env(&mut cmd, false);
+    let mut command = context.external_command(&test_script);
 
     // Set the max recursion depth to a lower amount to speed up testing.
-    cmd.env(EnvVars::UV_RUN_MAX_RECURSION_DEPTH, "5");
+    command.env(EnvVars::UV_RUN_MAX_RECURSION_DEPTH, "5");
 
-    uv_snapshot!(context.filters(), cmd, @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    uv_snapshot!(context.filters(), command, @"
+    exit_code: 2 (failure)
     ----- stderr -----
     error: `uv run` was recursively invoked 6 times which exceeds the limit of 5
 
@@ -8966,12 +5860,9 @@ fn run_uv_variable() {
     uv_snapshot!(
         context.filters(),
         context.run().arg("python").arg("-c").arg("import os; print(os.environ['UV'])"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     [UV]
-
-    ----- stderr -----
     ");
 }
 
@@ -9016,8 +5907,7 @@ fn run_windows_legacy_scripts() -> Result<()> {
     custom_pydoc_ps1.write_str("python.exe -m pydoc $args")?;
 
     uv_snapshot!(context.filters(), context.run(), @r###"
-    success: false
-    exit_code: 2
+    exit_code: 2 (failure)
     ----- stdout -----
     Provide a command or script to invoke with `uv run <command>` or `uv run <script>.py`.
 
@@ -9041,8 +5931,7 @@ fn run_windows_legacy_scripts() -> Result<()> {
 
     // Test with explicit .bat extension
     uv_snapshot!(context.filters(), context.run().arg("custom_pydoc.bat"), @r###"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     pydoc - the Python documentation tool
 
@@ -9082,8 +5971,7 @@ fn run_windows_legacy_scripts() -> Result<()> {
 
     // Test with explicit .cmd extension
     uv_snapshot!(context.filters(), context.run().arg("custom_pydoc.cmd"), @r###"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     pydoc - the Python documentation tool
 
@@ -9123,8 +6011,7 @@ fn run_windows_legacy_scripts() -> Result<()> {
 
     // Test with explicit .ps1 extension
     uv_snapshot!(context.filters(), context.run().arg("custom_pydoc.ps1"), @r###"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     pydoc - the Python documentation tool
 
@@ -9164,8 +6051,7 @@ fn run_windows_legacy_scripts() -> Result<()> {
 
     // Test without explicit extension (.ps1 should be used) as there's no .exe available.
     uv_snapshot!(context.filters(), context.run().arg("custom_pydoc"), @r###"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     pydoc - the Python documentation tool
 
@@ -9231,10 +6117,7 @@ fn run_pep723_script_with_constraints_lock() -> Result<()> {
 
     // Explicitly lock the script.
     uv_snapshot!(context.filters(), context.lock().arg("--script").arg("main.py"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     ");
@@ -9281,8 +6164,7 @@ fn run_pep723_script_with_constraints_lock() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("--with").arg(".").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
 
@@ -9337,8 +6219,7 @@ fn run_pep723_script_with_constraints() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("--with").arg(".").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
 
@@ -9381,8 +6262,7 @@ fn run_no_sync_incompatible_python() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
 
@@ -9396,8 +6276,7 @@ fn run_no_sync_incompatible_python() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("--python").arg("3.9").arg("main.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Hello, world!
 
@@ -9416,41 +6295,29 @@ fn run_python_preference_no_project() {
     context.venv().assert().success();
 
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.[X]
-
-    ----- stderr -----
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--managed-python").arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.[X]
-
-    ----- stderr -----
     ");
 
     // `VIRTUAL_ENV` is set here, so we'll ignore the flag
     uv_snapshot!(context.filters(), context.run().arg("--no-managed-python").arg("python").arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.[X]
-
-    ----- stderr -----
     ");
 
     // If we remove the `VIRTUAL_ENV` variable, we should get the unmanaged Python
     uv_snapshot!(context.filters(), context.run().arg("--no-managed-python").arg("python").arg("--version").env_remove(EnvVars::VIRTUAL_ENV), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.11.[X]
-
-    ----- stderr -----
     ");
 }
 
@@ -9489,10 +6356,7 @@ fn isolate_child_environment() -> Result<()> {
 
     // Sync the parent package.
     uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 1 package in [TIME]
@@ -9502,10 +6366,7 @@ fn isolate_child_environment() -> Result<()> {
 
     // Ensure that the isolated environment can't access `iniconfig` (from the parent package).
     uv_snapshot!(context.filters(), context.run().arg("--package").arg("child").arg("--isolated").arg("python").arg("-c").arg("import iniconfig"), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Checked in [TIME]
@@ -9516,10 +6377,7 @@ fn isolate_child_environment() -> Result<()> {
 
     // Ensure that the isolated environment can't access `iniconfig` (from the parent package).
     uv_snapshot!(context.filters(), context.run().arg("--package").arg("child").arg("--isolated").arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import iniconfig"), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Checked in [TIME]
@@ -9558,10 +6416,7 @@ fn run_only_group_and_extra_conflict() -> Result<()> {
 
     // Using --only-group and --extra together should error.
     uv_snapshot!(context.filters(), context.run().arg("--only-group").arg("dev").arg("--extra").arg("test").arg("python").arg("-c").arg("print('hello')"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: the argument '--only-group <ONLY_GROUP>' cannot be used with '--extra <EXTRA>'
 
@@ -9572,10 +6427,7 @@ fn run_only_group_and_extra_conflict() -> Result<()> {
 
     // Using --only-group and --all-extras together should also error.
     uv_snapshot!(context.filters(), context.run().arg("--only-group").arg("dev").arg("--all-extras").arg("python").arg("-c").arg("print('hello')"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: the argument '--only-group <ONLY_GROUP>' cannot be used with '--all-extras'
 
@@ -9624,35 +6476,19 @@ fn setup_target_workspace_discovery_context() -> Result<TestContext> {
     Ok(context)
 }
 
-/// Test that `--preview-features target-workspace-discovery` discovers the workspace
-/// from the target's directory rather than the current working directory.
+/// Test that `uv run` discovers the workspace from the target's directory rather than the current
+/// working directory.
 #[test]
 fn run_target_workspace_discovery() -> Result<()> {
     let context = setup_target_workspace_discovery_context()?;
 
-    // Without the preview feature, running from the parent directory fails to find the workspace,
-    // so the dependency is not installed.
-    uv_snapshot!(context.filters(), context.run().arg("project/script.py").env_remove(EnvVars::VIRTUAL_ENV), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
-    ----- stderr -----
-    Traceback (most recent call last):
-      File "[TEMP_DIR]/project/script.py", line 1, in <module>
-        import iniconfig
-    ModuleNotFoundError: No module named 'iniconfig'
-    "#);
-
     // Write invalid configuration files to the cwd to verify that the
-    // target-workspace-discovery feature skips parsing them.
+    // target workspace discovery skips parsing them.
     context.temp_dir.child("uv.toml").write_str("bad")?;
     context.temp_dir.child("pyproject.toml").write_str("bad")?;
 
-    // With the preview feature, the workspace is discovered from the target's directory.
-    uv_snapshot!(context.filters(), context.run().arg("--preview-features").arg("target-workspace-discovery").arg("project/script.py").env_remove(EnvVars::VIRTUAL_ENV), @"
-    success: true
-    exit_code: 0
+    uv_snapshot!(context.filters(), context.run().arg("project/script.py").env_remove(EnvVars::VIRTUAL_ENV), @"
+    exit_code: 0 (success)
     ----- stdout -----
     success
 
@@ -9669,9 +6505,1006 @@ fn run_target_workspace_discovery() -> Result<()> {
     Ok(())
 }
 
-/// Test that `--preview-features target-workspace-discovery` works with a bare script
-/// filename (no directory component), which would otherwise cause `Path::parent()` to
-/// return an empty path.
+/// Regression test for <https://github.com/astral-sh/uv/issues/8851#issuecomment-5123317996>.
+#[test]
+fn run_target_workspace_discovery_workspace_root_group() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! { r#"
+        [project]
+        name = "myproj"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.workspace]
+        members = ["subproj-a", "subproj-b"]
+
+        [dependency-groups]
+        test = ["iniconfig"]
+        "#
+        })?;
+
+    let subproject_a = context.temp_dir.child("subproj-a");
+    subproject_a.child("pyproject.toml").write_str(indoc! { r#"
+        [project]
+        name = "subproj-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        integration = ["typing-extensions"]
+        "#
+    })?;
+
+    context
+        .temp_dir
+        .child("subproj-b")
+        .child("pyproject.toml")
+        .write_str(indoc! { r#"
+            [project]
+            name = "subproj-b"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            "#
+        })?;
+
+    subproject_a
+        .child("scripts")
+        .child("thing.py")
+        .write_str(indoc! { r"
+            import iniconfig
+
+            print('success')
+            "
+        })?;
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--only-group")
+        .arg("test")
+        .arg("subproj-a/scripts/thing.py"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    success
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
+/// Excluded inherited groups must still be recognized during group validation.
+#[test]
+fn run_target_workspace_discovery_excluded_workspace_root_group() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! { r#"
+            [project]
+            name = "root"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [dependency-groups]
+            root-only = []
+
+            [tool.uv.workspace]
+            members = ["child"]
+            "#
+        })?;
+
+    context
+        .temp_dir
+        .child("child")
+        .child("pyproject.toml")
+        .write_str(indoc! { r#"
+            [project]
+            name = "child"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            "#
+        })?;
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--offline")
+        .arg("--project")
+        .arg("child")
+        .arg("--no-group")
+        .arg("root-only")
+        .arg("python")
+        .arg("-c")
+        .arg("print('success')"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    success
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Checked in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Workspace defaults and member-defined groups remain distinct when a member is selected.
+#[test]
+fn run_target_workspace_discovery_workspace_group_defaults() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! { r#"
+            [project]
+            name = "root"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["iniconfig"]
+
+            [dependency-groups]
+            dev = ["sniffio"]
+            root-only = ["idna"]
+
+            [tool.uv]
+            default-groups = ["root-only"]
+
+            [tool.uv.workspace]
+            members = ["child"]
+            "#
+        })?;
+
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(indoc! { r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+        "#
+    })?;
+
+    child
+        .child("scripts")
+        .child("groups.py")
+        .write_str(indoc! { r#"
+            import importlib.util
+
+            installed = [
+                package
+                for package in (
+                    "iniconfig",
+                    "typing_extensions",
+                    "sniffio",
+                    "packaging",
+                    "idna",
+                    "six",
+                )
+                if importlib.util.find_spec(package) is not None
+            ]
+            print(f"installed: {', '.join(installed)}")
+            "#
+        })?;
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("child/scripts/groups.py"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    installed: typing_extensions
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + typing-extensions==4.10.0
+    ");
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("--no-default-groups")
+        .arg("child/scripts/groups.py"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    installed: typing_extensions
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Installed 1 package in [TIME]
+     + typing-extensions==4.10.0
+    ");
+
+    child.child("pyproject.toml").write_str(indoc! { r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [dependency-groups]
+        dev = ["packaging"]
+        "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("child/scripts/groups.py"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    installed: typing_extensions, packaging
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 2 packages in [TIME]
+     + packaging==24.0
+     + typing-extensions==4.10.0
+    ");
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("--only-group")
+        .arg("dev")
+        .arg("child/scripts/groups.py"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    installed: packaging
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Installed 1 package in [TIME]
+     + packaging==24.0
+    ");
+
+    child.child("pyproject.toml").write_str(indoc! { r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [dependency-groups]
+        dev = []
+        "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("--only-group")
+        .arg("dev")
+        .arg("child/scripts/groups.py"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    installed:
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Checked in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Member-defined groups override inherited groups from a project-backed workspace root.
+#[test]
+fn run_target_workspace_discovery_workspace_project_groups() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! { r#"
+            [project]
+            name = "root"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["iniconfig"]
+
+            [dependency-groups]
+            root-only = ["sniffio"]
+            shared = ["idna"]
+
+            [tool.uv]
+            default-groups = ["root-only"]
+
+            [tool.uv.workspace]
+            members = ["child"]
+            "#
+        })?;
+
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(indoc! { r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [dependency-groups]
+        member-only = ["packaging"]
+        shared = ["six"]
+
+        [tool.uv]
+        default-groups = ["member-only"]
+        "#
+    })?;
+
+    child
+        .child("scripts")
+        .child("groups.py")
+        .write_str(indoc! { r#"
+            import importlib.util
+
+            installed = [
+                package
+                for package in (
+                    "iniconfig",
+                    "typing_extensions",
+                    "sniffio",
+                    "packaging",
+                    "idna",
+                    "six",
+                )
+                if importlib.util.find_spec(package) is not None
+            ]
+            print(f"installed: {', '.join(installed)}")
+            "#
+        })?;
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("--only-group")
+        .arg("root-only")
+        .arg("python")
+        .arg("child/scripts/groups.py"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    installed: sniffio
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + sniffio==1.3.1
+    ");
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("--only-group")
+        .arg("member-only")
+        .arg("child/scripts/groups.py"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    installed: packaging
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + packaging==24.0
+    ");
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("--group")
+        .arg("root-only")
+        .arg("--group")
+        .arg("member-only")
+        .arg("child/scripts/groups.py"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    installed: typing_extensions, sniffio, packaging
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 3 packages in [TIME]
+     + packaging==24.0
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+    ");
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("--only-group")
+        .arg("shared")
+        .arg("child/scripts/groups.py"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    installed: six
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + six==1.16.0
+    ");
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("--all-packages")
+        .arg("--only-group")
+        .arg("shared")
+        .arg("child/scripts/groups.py"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    installed: idna, six
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 2 packages in [TIME]
+     + idna==3.6
+     + six==1.16.0
+    ");
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("--all-groups")
+        .arg("child/scripts/groups.py"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    installed: typing_extensions, sniffio, packaging, six
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + packaging==24.0
+     + six==1.16.0
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+    ");
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("--project")
+        .arg(".")
+        .arg("--only-group")
+        .arg("root-only")
+        .arg("child/scripts/groups.py"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    installed: sniffio
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Installed 1 package in [TIME]
+     + sniffio==1.3.1
+    ");
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("--project")
+        .arg("child")
+        .arg("--only-group")
+        .arg("root-only")
+        .arg("child/scripts/groups.py"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    installed: sniffio
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Installed 1 package in [TIME]
+     + sniffio==1.3.1
+    ");
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("--package")
+        .arg("child")
+        .arg("--only-group")
+        .arg("root-only")
+        .arg("python")
+        .arg("child/scripts/groups.py"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    installed: sniffio
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Installed 1 package in [TIME]
+     + sniffio==1.3.1
+    ");
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("--package")
+        .arg("child")
+        .arg("--only-group")
+        .arg("member-only")
+        .arg("python")
+        .arg("child/scripts/groups.py"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    installed: packaging
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Installed 1 package in [TIME]
+     + packaging==24.0
+    ");
+
+    Ok(())
+}
+
+/// Non-project workspace roots retain manifest-level groups even for selected members.
+#[test]
+fn run_target_workspace_discovery_virtual_workspace_groups() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! { r#"
+            [dependency-groups]
+            root-only = ["sniffio"]
+            shared = ["idna"]
+
+            [tool.uv]
+            default-groups = ["root-only"]
+
+            [tool.uv.workspace]
+            members = ["child"]
+            "#
+        })?;
+
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(indoc! { r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [dependency-groups]
+        member-only = ["packaging"]
+        shared = ["six"]
+
+        [tool.uv]
+        default-groups = ["member-only"]
+        "#
+    })?;
+
+    child
+        .child("scripts")
+        .child("groups.py")
+        .write_str(indoc! { r#"
+            import importlib.util
+
+            installed = [
+                package
+                for package in (
+                    "iniconfig",
+                    "typing_extensions",
+                    "sniffio",
+                    "packaging",
+                    "idna",
+                    "six",
+                )
+                if importlib.util.find_spec(package) is not None
+            ]
+            print(f"installed: {', '.join(installed)}")
+            "#
+        })?;
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("--only-group")
+        .arg("root-only")
+        .arg("python")
+        .arg("child/scripts/groups.py"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    installed: sniffio
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + sniffio==1.3.1
+    ");
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("--only-group")
+        .arg("member-only")
+        .arg("python")
+        .arg("child/scripts/groups.py"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    installed: packaging
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + packaging==24.0
+    ");
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("--only-group")
+        .arg("root-only")
+        .arg("child/scripts/groups.py"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    installed: sniffio
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Installed 1 package in [TIME]
+     + sniffio==1.3.1
+    ");
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("--only-group")
+        .arg("member-only")
+        .arg("child/scripts/groups.py"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    installed: packaging
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Installed 1 package in [TIME]
+     + packaging==24.0
+    ");
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("--only-group")
+        .arg("shared")
+        .arg("child/scripts/groups.py"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    installed: six
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + six==1.16.0
+    ");
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("--all-groups")
+        .arg("child/scripts/groups.py"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    installed: typing_extensions, sniffio, packaging, six
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 4 packages in [TIME]
+     + packaging==24.0
+     + six==1.16.0
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+    ");
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("--project")
+        .arg(".")
+        .arg("--only-group")
+        .arg("root-only")
+        .arg("child/scripts/groups.py"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    installed: sniffio
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Installed 1 package in [TIME]
+     + sniffio==1.3.1
+    ");
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("--package")
+        .arg("child")
+        .arg("--only-group")
+        .arg("root-only")
+        .arg("python")
+        .arg("child/scripts/groups.py"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    installed: sniffio
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Installed 1 package in [TIME]
+     + sniffio==1.3.1
+    ");
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("--package")
+        .arg("child")
+        .arg("--only-group")
+        .arg("shared")
+        .arg("python")
+        .arg("child/scripts/groups.py"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    installed: six
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Installed 1 package in [TIME]
+     + six==1.16.0
+    ");
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("--all-packages")
+        .arg("--only-group")
+        .arg("shared")
+        .arg("child/scripts/groups.py"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    installed: idna, six
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 2 packages in [TIME]
+     + idna==3.6
+     + six==1.16.0
+    ");
+
+    Ok(())
+}
+
+/// Workspace group selection should be consistent across run, sync, and export.
+#[test]
+fn run_target_workspace_discovery_workspace_project_group_commands() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! { r#"
+            [project]
+            name = "root"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["iniconfig"]
+
+            [dependency-groups]
+            root-only = ["sniffio"]
+            shared = ["idna"]
+
+            [tool.uv]
+            default-groups = ["root-only"]
+
+            [tool.uv.workspace]
+            members = ["child"]
+            "#
+        })?;
+
+    context
+        .temp_dir
+        .child("child")
+        .child("pyproject.toml")
+        .write_str(indoc! { r#"
+            [project]
+            name = "child"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["typing-extensions"]
+
+            [dependency-groups]
+            member-only = ["packaging"]
+            shared = ["six"]
+
+            [tool.uv]
+            default-groups = ["member-only"]
+            "#
+        })?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--package")
+        .arg("child")
+        .arg("--only-group")
+        .arg("root-only"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + sniffio==1.3.1
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--package")
+        .arg("child")
+        .arg("--only-group")
+        .arg("shared"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + six==1.16.0
+     - sniffio==1.3.1
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--package")
+        .arg("child")
+        .arg("--all-groups"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + packaging==24.0
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+    ");
+
+    uv_snapshot!(context.filters(), context.export()
+        .args(["--no-header", "--no-hashes", "--no-annotate"])
+        .arg("--package")
+        .arg("child")
+        .arg("--only-group")
+        .arg("root-only"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    sniffio==1.3.1
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.export()
+        .args(["--no-header", "--no-hashes", "--no-annotate"])
+        .arg("--package")
+        .arg("child")
+        .arg("--only-group")
+        .arg("shared"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    six==1.16.0
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.export()
+        .args(["--no-header", "--no-hashes", "--no-annotate"])
+        .arg("--package")
+        .arg("child")
+        .arg("--all-groups"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    packaging==24.0
+    six==1.16.0
+    sniffio==1.3.1
+    typing-extensions==4.10.0
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Projectless root groups should also behave consistently across commands.
+#[test]
+fn run_target_workspace_discovery_virtual_workspace_group_commands() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! { r#"
+            [dependency-groups]
+            root-only = ["sniffio"]
+            shared = ["idna"]
+
+            [tool.uv]
+            default-groups = ["root-only"]
+
+            [tool.uv.workspace]
+            members = ["child"]
+            "#
+        })?;
+
+    context
+        .temp_dir
+        .child("child")
+        .child("pyproject.toml")
+        .write_str(indoc! { r#"
+            [project]
+            name = "child"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["typing-extensions"]
+
+            [dependency-groups]
+            member-only = ["packaging"]
+            shared = ["six"]
+
+            [tool.uv]
+            default-groups = ["member-only"]
+            "#
+        })?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--package")
+        .arg("child")
+        .arg("--only-group")
+        .arg("root-only"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + sniffio==1.3.1
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--package")
+        .arg("child")
+        .arg("--only-group")
+        .arg("shared"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + six==1.16.0
+     - sniffio==1.3.1
+    ");
+
+    uv_snapshot!(context.filters(), context.export()
+        .args(["--no-header", "--no-hashes", "--no-annotate"])
+        .arg("--package")
+        .arg("child")
+        .arg("--only-group")
+        .arg("root-only"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    sniffio==1.3.1
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.export()
+        .args(["--no-header", "--no-hashes", "--no-annotate"])
+        .arg("--package")
+        .arg("child")
+        .arg("--only-group")
+        .arg("shared"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    six==1.16.0
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Test target workspace discovery with a bare script filename (no directory component), which
+/// would otherwise cause `Path::parent()` to return an empty path.
 #[test]
 fn run_target_workspace_discovery_bare_script() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -9681,17 +7514,11 @@ fn run_target_workspace_discovery_bare_script() -> Result<()> {
         .child("script.py")
         .write_str(r"print('success')")?;
 
-    // With the preview feature and a bare filename, the script should run without error.
     uv_snapshot!(context.filters(), context.run()
-        .arg("--preview-features")
-        .arg("target-workspace-discovery")
         .arg("script.py"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     success
-
-    ----- stderr -----
     ");
 
     Ok(())
@@ -9704,17 +7531,11 @@ fn run_project_precedes_target_workspace_discovery() -> Result<()> {
     let missing_project = context.temp_dir.child("missing-project");
 
     uv_snapshot!(context.filters(), context.run()
-        .env("UV_PREVIEW", "1")
-        .arg("--preview-features")
-        .arg("target-workspace-discovery")
         .arg("--project")
         .arg(missing_project.path())
         .arg("project/script.py")
         .env_remove(EnvVars::VIRTUAL_ENV), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Project directory `missing-project` does not exist
     ");
@@ -9722,32 +7543,13 @@ fn run_project_precedes_target_workspace_discovery() -> Result<()> {
     Ok(())
 }
 
-/// Using `--project` with a non-existent directory should warn.
+/// Using `--project` with a non-existent directory should error.
 #[test]
 fn run_project_not_found() {
     let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.run().arg("--project").arg("/tmp/does-not-exist-uv-test").arg("python").arg("-c").arg("print('hello')"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    hello
-
-    ----- stderr -----
-    warning: Project directory `/tmp/does-not-exist-uv-test` does not exist. This will become an error in a future release. Use `--preview-features project-directory-must-exist` to error on this now.
-    ");
-}
-
-/// Using `--project` with a non-existent directory should error with the preview flag.
-#[test]
-fn run_project_not_found_preview() {
-    let context = uv_test::test_context!("3.12");
-
-    uv_snapshot!(context.filters(), context.run().arg("--preview-features").arg("project-directory-must-exist").arg("--project").arg("/tmp/does-not-exist-uv-test").arg("python").arg("-c").arg("print('hello')"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Project directory `/tmp/does-not-exist-uv-test` does not exist
     ");
@@ -9759,10 +7561,7 @@ fn run_project_not_found_uv_preview_env() {
     let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.run().env("UV_PREVIEW", "1").arg("--project").arg("/tmp/does-not-exist-uv-test").arg("python").arg("-c").arg("print('hello')"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Project directory `/tmp/does-not-exist-uv-test` does not exist
     ");
@@ -9797,8 +7596,7 @@ fn run_project_pyproject_toml_file() -> Result<()> {
         .arg("--")
         .arg("python")
         .arg("--version"), @"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
     ----- stdout -----
     Python 3.12.[X]
 
@@ -9812,7 +7610,7 @@ fn run_project_pyproject_toml_file() -> Result<()> {
     Ok(())
 }
 
-/// Using `--project` with a non-`pyproject.toml` file should warn.
+/// Using `--project` with a non-`pyproject.toml` file should error.
 #[test]
 fn run_project_non_pyproject_file() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -9840,24 +7638,15 @@ fn run_project_non_pyproject_file() -> Result<()> {
         .arg("--")
         .arg("python")
         .arg("--version"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    Python 3.12.[X]
-
+    exit_code: 2 (failure)
     ----- stderr -----
-    warning: Project path `project/README.md` is not a directory. This will become an error in a future release. Use `--preview-features project-directory-must-exist` to error on this now.
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment at: project/.venv
-    Resolved 1 package in [TIME]
-    Checked in [TIME]
+    error: Project path `project/README.md` is not a directory
     ");
 
     Ok(())
 }
 
-/// Using `--project` with a nested non-`pyproject.toml` file should warn. Workspace discovery
-/// walks ancestors to find the `pyproject.toml`.
+/// Using `--project` with a nested non-`pyproject.toml` file should error.
 #[test]
 fn run_project_nested_file() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -9887,23 +7676,15 @@ fn run_project_nested_file() -> Result<()> {
         .arg("--")
         .arg("python")
         .arg("--version"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    Python 3.12.[X]
-
+    exit_code: 2 (failure)
     ----- stderr -----
-    warning: Project path `project/subdir/somefile` is not a directory. This will become an error in a future release. Use `--preview-features project-directory-must-exist` to error on this now.
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment at: project/.venv
-    Resolved 1 package in [TIME]
-    Checked in [TIME]
+    error: Project path `project/subdir/somefile` is not a directory
     ");
 
     Ok(())
 }
 
-/// Using `--project` with a file that has no ancestor project should warn, then fail downstream.
+/// Using `--project` with a file that has no ancestor project should error.
 #[test]
 #[cfg(unix)]
 fn run_project_file_no_ancestor_project() -> Result<()> {
@@ -9920,13 +7701,9 @@ fn run_project_file_no_ancestor_project() -> Result<()> {
         .arg("--")
         .arg("python")
         .arg("--version"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
-    warning: Project path `isolated/somefile` is not a directory. This will become an error in a future release. Use `--preview-features project-directory-must-exist` to error on this now.
-    error: failed to open file `[TEMP_DIR]/isolated/somefile/uv.toml`: Not a directory (os error 20)
+    error: Project path `isolated/somefile` is not a directory
     ");
 
     Ok(())
@@ -9976,10 +7753,7 @@ async fn run_malware_detected() {
         .arg("--version")
         .env(EnvVars::UV_MALWARE_CHECK, "1")
         .env(EnvVars::UV_MALWARE_CHECK_URL, server.uri()), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     warning: Malware detected in locked dependencies:
@@ -10021,8 +7795,64 @@ fn run_centralized_environment_no_sync_uses_incompatible_python() -> Result<()> 
         .arg("python")
         .arg("-c")
         .arg("import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"), @r#"
-    success: true
-    exit_code: 0
+    exit_code: 0 (success)
+    ----- stdout -----
+    3.12
+
+    ----- stderr -----
+    warning: Using incompatible environment (`project-cp3.12.[X]-[HASH]`) due to `--no-sync` (The project environment's Python version does not satisfy the request: `Python 3.11`)
+    "#);
+    Ok(())
+}
+
+#[test]
+fn run_centralized_environment_path_file() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
+        .with_filtered_centralized_environment_hashes();
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = []
+    "#})?;
+    context
+        .sync()
+        .arg("--preview-features")
+        .arg("centralized-project-envs")
+        .arg("--python")
+        .arg("3.12")
+        .assert()
+        .success();
+
+    // Point the path file at an environment outside the centralized store.
+    let environment = context.temp_dir.child(".venv");
+    uv_fs::remove_virtualenv(environment.path())?;
+    let external = context.temp_dir.child("external");
+    context
+        .venv()
+        .arg(external.path())
+        .arg("--python")
+        .arg("3.12")
+        .assert()
+        .success();
+    // Resolve a relative path file target from `.venv`'s parent.
+    environment.write_str("external")?;
+
+    // Like a directory link, use the path file's interpreter to select the cached environment.
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--preview-features")
+        .arg("centralized-project-envs")
+        .arg("--no-sync")
+        .arg("--python")
+        .arg("3.11")
+        .arg("python")
+        .arg("-c")
+        .arg("import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"), @r#"
+    exit_code: 0 (success)
     ----- stdout -----
     3.12
 

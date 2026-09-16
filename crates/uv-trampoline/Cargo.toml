@@ -37,7 +37,6 @@ debug = false
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-uv-static = { path = "../uv-static" }
 uv-windows = { path = "../uv-windows", default-features = false }
 
 windows = { version = "0.61.0", features = [
@@ -57,6 +56,4 @@ ufmt = { version = "0.2.0", features = ["std"] }
 dunce = { version = "1.0.5" }
 
 [build-dependencies]
-uv-static = { path = "../uv-static" }
-
 embed-manifest = "1.4.0"

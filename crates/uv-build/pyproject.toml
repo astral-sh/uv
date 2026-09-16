@@ -1,6 +1,6 @@
 [project]
 name = "uv-build"
-version = "0.11.28"
+version = "0.12.15"
 description = "The uv build backend"
 authors = [{ name = "Astral Software Inc.", email = "hey@astral.sh" }]
 requires-python = ">=3.8"
@@ -51,4 +51,5 @@ include = [
 ]
 
 [tool.uv]
+no-build = true
 managed = false

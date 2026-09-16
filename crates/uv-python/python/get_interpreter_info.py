@@ -15,7 +15,7 @@ import sysconfig
 
 
 def format_full_version(info):
-    version = "{0.major}.{0.minor}.{0.micro}".format(info)
+    version = f"{info.major}.{info.minor}.{info.micro}"
     kind = info.releaselevel
     if kind != "final":
         version += kind[0] + str(info.serial)

@@ -24,7 +24,9 @@ impl DependencyGroups {
     }
 
     /// Returns an iterator over the dependency groups.
-    pub fn iter(&self) -> impl Iterator<Item = (&GroupName, &Vec<DependencyGroupSpecifier>)> {
+    pub(crate) fn iter(
+        &self,
+    ) -> impl Iterator<Item = (&GroupName, &Vec<DependencyGroupSpecifier>)> {
         self.0.iter()
     }
 }

@@ -84,14 +84,21 @@ pub enum Error {
     VenvInSourceTree(PathBuf),
     #[error("Inconsistent metadata between prepare and build step: {0}")]
     InconsistentSteps(&'static str),
-    #[error("Failed to write to {}", _0.user_display())]
+    #[error("Failed to write tar archive to {}", _0.user_display())]
     TarWrite(PathBuf, #[source] io::Error),
+    #[error("Failed to write tar archive to {}", _0.user_display())]
+    TarCodecWrite(
+        PathBuf,
+        #[source] tar_codec::BuildError<tar_codec::EncodeError>,
+    ),
+    #[error("Failed to finish gzip stream for {}", _0.user_display())]
+    GzipWrite(PathBuf, #[source] io::Error),
 }
 
-impl uv_errors::Hint for Error {
+impl uv_errors::Hinted for Error {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
-            Self::PortableGlob { source, .. } => uv_errors::Hint::hints(source),
+            Self::PortableGlob { source, .. } => uv_errors::Hinted::hints(source),
             _ => uv_errors::Hints::none(),
         }
     }
@@ -475,18 +482,18 @@ mod tests {
     use async_zip::base::read::mem::ZipFileReader;
     use flate2::bufread::GzDecoder;
     use fs_err::File;
-    use futures_lite::{StreamExt, future::block_on};
+    use futures_lite::future::block_on;
     use indoc::indoc;
     use insta::assert_snapshot;
     use itertools::Itertools;
-    use regex::Regex;
+    use regex::regex;
     use sha2::Digest;
     use std::io::BufReader;
     use std::iter;
-    use std::pin::Pin;
+    use tar_codec::{Archive as _, TarArchive, extract::ExtractPolicy};
     use tempfile::TempDir;
     use uv_distribution_filename::{SourceDistFilename, WheelFilename};
-    use uv_errors::{ErrorWithHints, Hint};
+    use uv_errors::{ErrorWithHints, Hinted};
     use uv_fs::{copy_dir_all, relative_to};
     use uv_preview::PreviewFeature;
 
@@ -603,22 +610,12 @@ mod tests {
 
     fn sdist_contents(source_dist_path: &Path) -> Vec<String> {
         let sdist_reader = BufReader::new(File::open(source_dist_path).unwrap());
-        let mut source_dist =
-            tokio_tar::Archive::new(SyncReader::new(GzDecoder::new(sdist_reader)));
+        let source_dist = TarArchive::new(SyncReader::new(GzDecoder::new(sdist_reader)));
         let mut source_dist_contents = block_on(async {
-            let mut entries = source_dist.entries().unwrap();
-            let mut entries = Pin::new(&mut entries);
+            let mut members = source_dist.members();
             let mut contents = Vec::new();
-            while let Some(entry) = entries.next().await {
-                contents.push(
-                    entry
-                        .unwrap()
-                        .path()
-                        .unwrap()
-                        .to_str()
-                        .unwrap()
-                        .replace('\\', "/"),
-                );
+            while let Some(member) = members.next().await.unwrap() {
+                contents.push(member.metadata().path.replace('\\', "/"));
             }
             contents
         });
@@ -628,12 +625,12 @@ mod tests {
 
     fn unpack_sdist(source_dist_path: &Path, target: &Path) -> Result<(), Error> {
         let sdist_reader = BufReader::new(File::open(source_dist_path)?);
-        let mut source_dist =
-            tokio_tar::Archive::new(SyncReader::new(GzDecoder::new(sdist_reader)));
+        let source_dist = TarArchive::new(SyncReader::new(GzDecoder::new(sdist_reader)));
         tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()?
-            .block_on(source_dist.unpack(target))?;
+            .block_on(source_dist.extract_in(target, ExtractPolicy::default()))
+            .map_err(io::Error::other)?;
         Ok(())
     }
 
@@ -716,7 +713,25 @@ mod tests {
     /// platform-independent deterministic builds.
     #[test]
     fn built_by_uv_building() {
-        let _preview = uv_preview::test::with_features(&[]);
+        built_by_uv_building_with_backend(
+            &[],
+            "1d9ce1ce63195fbee07314c0b595ba9e063670da8d10c252c351b21e94e3f508",
+        );
+    }
+
+    #[test]
+    fn built_by_uv_building_tar_codec() {
+        built_by_uv_building_with_backend(
+            &[PreviewFeature::TarCodec],
+            "88540014e8884fff1d6479c0c7315fcf497ba2a46f6db5c9f6e04f64a8620dcc",
+        );
+    }
+
+    fn built_by_uv_building_with_backend(
+        preview_features: &[PreviewFeature],
+        expected_source_dist_hash: &str,
+    ) {
+        let _preview = uv_preview::test::with_features(preview_features);
         let built_by_uv = Path::new("../../test/packages/built-by-uv");
         let src = TempDir::new().unwrap();
         for dir in [
@@ -756,8 +771,7 @@ mod tests {
 
         // Redact the uv_build version to keep the hash stable across releases
         let pyproject_toml = fs_err::read_to_string(src.path().join("pyproject.toml")).unwrap();
-        let current_requires =
-            Regex::new(r#"requires = \["uv_build>=[0-9.]+,<[0-9.]+"\]"#).unwrap();
+        let current_requires = regex!(r#"requires = \["uv_build>=[0-9.]+,<[0-9.]+"\]"#);
         let mocked_requires = r#"requires = ["uv_build>=1,<2"]"#;
         let pyproject_toml = current_requires.replace(pyproject_toml.as_str(), mocked_requires);
         fs_err::write(src.path().join("pyproject.toml"), pyproject_toml.as_bytes()).unwrap();
@@ -787,19 +801,22 @@ mod tests {
             "built_by_uv-0.1.0.tar.gz"
         );
         // Check that the source dist is reproducible across platforms.
-        assert_snapshot!(
-            format!("{:x}", sha2::Sha256::digest(fs_err::read(&source_dist_path).unwrap())),
-            @"8bed1f7a8059064bcbeedb61a867cca7f63a474306011d0114280de631ac705e"
+        assert_eq!(
+            hex::encode(sha2::Sha256::digest(
+                fs_err::read(&source_dist_path).unwrap()
+            )),
+            expected_source_dist_hash
         );
         // Check both the files we report and the actual files
         assert_snapshot!(format_file_list(build.source_dist_list_files, src.path()), @"
         built_by_uv-0.1.0/PKG-INFO (generated)
+        built_by_uv-0.1.0/pyproject.toml (generated)
+        built_by_uv-0.1.0/pyproject.toml.orig (pyproject.toml)
         built_by_uv-0.1.0/LICENSE-APACHE (LICENSE-APACHE)
         built_by_uv-0.1.0/LICENSE-MIT (LICENSE-MIT)
         built_by_uv-0.1.0/README.md (README.md)
         built_by_uv-0.1.0/assets/data.csv (assets/data.csv)
         built_by_uv-0.1.0/header/built_by_uv.h (header/built_by_uv.h)
-        built_by_uv-0.1.0/pyproject.toml (pyproject.toml)
         built_by_uv-0.1.0/scripts/whoami.sh (scripts/whoami.sh)
         built_by_uv-0.1.0/src/built_by_uv/__init__.py (src/built_by_uv/__init__.py)
         built_by_uv-0.1.0/src/built_by_uv/arithmetic/__init__.py (src/built_by_uv/arithmetic/__init__.py)
@@ -820,6 +837,7 @@ mod tests {
         built_by_uv-0.1.0/header
         built_by_uv-0.1.0/header/built_by_uv.h
         built_by_uv-0.1.0/pyproject.toml
+        built_by_uv-0.1.0/pyproject.toml.orig
         built_by_uv-0.1.0/scripts
         built_by_uv-0.1.0/scripts/whoami.sh
         built_by_uv-0.1.0/src
@@ -842,7 +860,7 @@ mod tests {
         );
         // Check that the wheel is reproducible across platforms.
         assert_snapshot!(
-            format!("{:x}", sha2::Sha256::digest(fs_err::read(&wheel_path).unwrap())),
+            hex::encode(sha2::Sha256::digest(fs_err::read(&wheel_path).unwrap())),
             @"9e8d80fef76be79a7fe73a2ccac3bdd0132b10fdcff7271ca8b868c99061b8ce"
         );
         assert_snapshot!(build.wheel_contents.join("\n"), @"
@@ -1061,6 +1079,7 @@ mod tests {
         two_step_build-1.0.0/
         two_step_build-1.0.0/PKG-INFO
         two_step_build-1.0.0/pyproject.toml
+        two_step_build-1.0.0/pyproject.toml.orig
         two_step_build-1.0.0/two_step_build
         two_step_build-1.0.0/two_step_build/__init__.py
         ");
@@ -1463,6 +1482,7 @@ mod tests {
         simple_namespace_part-1.0.0/
         simple_namespace_part-1.0.0/PKG-INFO
         simple_namespace_part-1.0.0/pyproject.toml
+        simple_namespace_part-1.0.0/pyproject.toml.orig
         simple_namespace_part-1.0.0/src
         simple_namespace_part-1.0.0/src/simple_namespace
         simple_namespace_part-1.0.0/src/simple_namespace/part
@@ -1725,6 +1745,7 @@ mod tests {
         simple_namespace_part-1.0.0/
         simple_namespace_part-1.0.0/PKG-INFO
         simple_namespace_part-1.0.0/pyproject.toml
+        simple_namespace_part-1.0.0/pyproject.toml.orig
         simple_namespace_part-1.0.0/src
         simple_namespace_part-1.0.0/src/foo
         simple_namespace_part-1.0.0/src/foo/__init__.py
@@ -1840,6 +1861,7 @@ mod tests {
         duplicate-1.0.0/
         duplicate-1.0.0/PKG-INFO
         duplicate-1.0.0/pyproject.toml
+        duplicate-1.0.0/pyproject.toml.orig
         duplicate-1.0.0/src
         duplicate-1.0.0/src/bar
         duplicate-1.0.0/src/bar/baz
@@ -1907,8 +1929,7 @@ mod tests {
     /// not accidentally skipped by the root-level TOML rewriting logic.
     #[test]
     fn nested_pyproject_toml_preserved() {
-        let _preview =
-            uv_preview::test::with_features(&[PreviewFeature::TomlBackwardsCompatibility]);
+        let _preview = uv_preview::test::with_features(&[]);
         let tmp_dir = TempDir::new().unwrap();
 
         fs_err::write(
@@ -1967,98 +1988,6 @@ mod tests {
     /// compatibility with older tools. The original file is preserved as pyproject.toml.orig.
     #[test]
     fn toml_1_1_backward_compatibility() {
-        let _preview =
-            uv_preview::test::with_features(&[PreviewFeature::TomlBackwardsCompatibility]);
-        let src = TempDir::new().unwrap();
-
-        // A `pyproject.toml` with a TOML 1.1 feature, trailing commas in inline tables.
-        let pyproject_toml = indoc! {r#"
-            [project]
-            name = "toml11-project"
-            version = "0.1.0"
-            description = "A test package using TOML 1.1 features"
-            requires-python = ">=3.12"
-            # TOML 1.1 feature: Trailing comma in inline table
-            authors = [
-                { name = "Ferris", email = "ferris@example.com", },
-                { name = "Platypus", email = "platypus@example.com", },
-            ]
-
-            [tool.foo]
-            when = 1969-06-20T20:17Z
-
-            [build-system]
-            requires = ["uv_build>=0.5.15,<0.6.0"]
-            build-backend = "uv_build"
-        "#};
-
-        fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
-        fs_err::create_dir_all(src.path().join("src").join("toml11_project")).unwrap();
-        File::create(
-            src.path()
-                .join("src")
-                .join("toml11_project")
-                .join("__init__.py"),
-        )
-        .unwrap();
-
-        let dist = TempDir::new().unwrap();
-        let build = build(src.path(), dist.path()).unwrap();
-
-        // Check that both `pyproject.toml` and `pyproject.toml.orig` are in the sdist.
-        assert_snapshot!(build.source_dist_contents.join("\n"), @"
-        toml11_project-0.1.0/
-        toml11_project-0.1.0/PKG-INFO
-        toml11_project-0.1.0/pyproject.toml
-        toml11_project-0.1.0/pyproject.toml.orig
-        toml11_project-0.1.0/src
-        toml11_project-0.1.0/src/toml11_project
-        toml11_project-0.1.0/src/toml11_project/__init__.py
-        ");
-
-        // Extract the sdist to verify the contents of both files.
-        let source_dist_path = dist.path().join(build.source_dist_filename.to_string());
-        let sdist_tree = TempDir::new().unwrap();
-        unpack_sdist(&source_dist_path, sdist_tree.path()).unwrap();
-        let sdist_top_level_directory = sdist_tree.path().join(format!(
-            "{}-{}",
-            build.source_dist_filename.name.as_dist_info_name(),
-            build.source_dist_filename.version
-        ));
-        let pyproject_toml_content =
-            fs_err::read_to_string(sdist_top_level_directory.join("pyproject.toml")).unwrap();
-        let pyproject_toml_orig_content =
-            fs_err::read_to_string(sdist_top_level_directory.join("pyproject.toml.orig")).unwrap();
-
-        assert_eq!(pyproject_toml_orig_content, pyproject_toml);
-        assert_snapshot!(pyproject_toml_content, @r#"
-        [project]
-        name = "toml11-project"
-        version = "0.1.0"
-        description = "A test package using TOML 1.1 features"
-        requires-python = ">=3.12"
-
-        [[project.authors]]
-        name = "Ferris"
-        email = "ferris@example.com"
-
-        [[project.authors]]
-        name = "Platypus"
-        email = "platypus@example.com"
-
-        [tool.foo]
-        when = 1969-06-20T20:17:00Z
-
-        [build-system]
-        requires = ["uv_build>=0.5.15,<0.6.0"]
-        build-backend = "uv_build"
-        "#);
-    }
-
-    /// Test that TOML 1.1 features in pyproject.toml trigger auto-detection and rewrite to TOML
-    /// 1.0, even without explicitly enabling `PreviewFeature::TomlBackwardsCompatibility`.
-    #[test]
-    fn toml_1_1_backward_compatibility_auto_detection() {
         let _preview = uv_preview::test::with_features(&[]);
         let src = TempDir::new().unwrap();
 

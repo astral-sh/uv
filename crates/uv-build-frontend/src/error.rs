@@ -3,57 +3,18 @@ use std::fmt::{Display, Formatter};
 use std::io;
 use std::path::PathBuf;
 use std::process::ExitStatus;
-use std::sync::LazyLock;
 
 use crate::PythonRunnerOutput;
 use owo_colors::OwoColorize;
-use regex::Regex;
+use regex::regex;
 use thiserror::Error;
 use uv_configuration::BuildOutput;
 use uv_distribution_types::IsBuildBackendError;
-use uv_errors::{Hint, Hints};
+use uv_errors::{Hinted, Hints};
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_types::AnyErrorBuild;
-
-/// e.g. `pygraphviz/graphviz_wrap.c:3020:10: fatal error: graphviz/cgraph.h: No such file or directory`
-static MISSING_HEADER_RE_GCC: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
-        r".*\.(?:c|c..|h|h..):\d+:\d+: fatal error: (.*\.(?:h|h..)): No such file or directory",
-    )
-    .unwrap()
-});
-
-/// e.g. `pygraphviz/graphviz_wrap.c:3023:10: fatal error: 'graphviz/cgraph.h' file not found`
-static MISSING_HEADER_RE_CLANG: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r".*\.(?:c|c..|h|h..):\d+:\d+: fatal error: '(.*\.(?:h|h..))' file not found")
-        .unwrap()
-});
-
-/// e.g. `pygraphviz/graphviz_wrap.c(3023): fatal error C1083: Cannot open include file: 'graphviz/cgraph.h': No such file or directory`
-static MISSING_HEADER_RE_MSVC: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r".*\.(?:c|c..|h|h..)\(\d+\): fatal error C1083: Cannot open include file: '(.*\.(?:h|h..))': No such file or directory")
-        .unwrap()
-});
-
-/// e.g. `/usr/bin/ld: cannot find -lncurses: No such file or directory`
-static LD_NOT_FOUND_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"/usr/bin/ld: cannot find -l([a-zA-Z10-9]+): No such file or directory").unwrap()
-});
-
-/// e.g. `error: invalid command 'bdist_wheel'`
-static WHEEL_NOT_FOUND_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"error: invalid command 'bdist_wheel'").unwrap());
-
-/// e.g. `ModuleNotFoundError`
-static MODULE_NOT_FOUND: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new("ModuleNotFoundError: No module named ['\"]([^'\"]+)['\"]").unwrap()
-});
-
-/// e.g. `ModuleNotFoundError: No module named 'distutils'`
-static DISTUTILS_NOT_FOUND_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"ModuleNotFoundError: No module named 'distutils'").unwrap());
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -71,6 +32,8 @@ pub enum Error {
     InvalidPyprojectTomlSchema(#[from] toml_edit::de::Error),
     #[error("`backend-path` entry `{0}` does not exist or is not a directory")]
     InvalidBackendPath(String),
+    #[error("`backend-path` entry `{0}` must be a relative path within the source tree")]
+    BackendPathOutsideSourceTree(String),
     #[error("Failed to resolve requirements from {0}")]
     RequirementsResolve(&'static str, #[source] AnyErrorBuild),
     #[error("Failed to install requirements from {0}")]
@@ -86,15 +49,8 @@ pub enum Error {
     MissingHeader(#[from] Box<MissingHeaderError>),
     #[error("Failed to build PATH for build script")]
     BuildScriptPath(#[source] env::JoinPathsError),
-    // For the convenience of typing `setup_build` properly.
-    #[error("Building source distributions for `{0}` is disabled")]
-    NoSourceDistBuild(PackageName),
-    #[error("Building source distributions is disabled")]
-    NoSourceDistBuilds,
     #[error("Cyclic build dependency detected for `{0}`")]
     CyclicBuildDependency(PackageName),
-    #[error("Cannot replay locked build dependencies for `{0}` without build isolation")]
-    NonIsolatedLockedBuild(PackageName),
     #[error(
         "Extra build requirement `{0}` was declared with `match-runtime = true`, but `{1}` does not declare static metadata, making runtime-matching impossible"
     )]
@@ -102,6 +58,27 @@ pub enum Error {
 }
 
 impl IsBuildBackendError for Error {
+    fn is_user_failure(&self) -> bool {
+        match self {
+            Self::InvalidSourceDist(_)
+            | Self::InvalidPyprojectTomlSyntax(_)
+            | Self::InvalidPyprojectTomlSchema(_)
+            | Self::InvalidBackendPath(_)
+            | Self::BackendPathOutsideSourceTree(_)
+            | Self::CommandFailed(..)
+            | Self::BuildBackend(_)
+            | Self::MissingHeader(_)
+            | Self::BuildScriptPath(_)
+            | Self::CyclicBuildDependency(_)
+            | Self::UnmatchedRuntime(..)
+            | Self::Lowering(_) => true,
+            Self::RequirementsResolve(_, error) | Self::RequirementsInstall(_, error) => {
+                error.is_user_failure()
+            }
+            Self::Io(_) | Self::Virtualenv(_) => false,
+        }
+    }
+
     fn is_build_backend_error(&self) -> bool {
         match self {
             Self::Io(_)
@@ -110,13 +87,11 @@ impl IsBuildBackendError for Error {
             | Self::InvalidPyprojectTomlSyntax(_)
             | Self::InvalidPyprojectTomlSchema(_)
             | Self::InvalidBackendPath(_)
+            | Self::BackendPathOutsideSourceTree(_)
             | Self::RequirementsResolve(_, _)
             | Self::RequirementsInstall(_, _)
             | Self::Virtualenv(_)
-            | Self::NoSourceDistBuild(_)
-            | Self::NoSourceDistBuilds
             | Self::CyclicBuildDependency(_)
-            | Self::NonIsolatedLockedBuild(_)
             | Self::UnmatchedRuntime(_, _) => false,
             Self::CommandFailed(_, _)
             | Self::BuildBackend(_)
@@ -126,7 +101,7 @@ impl IsBuildBackendError for Error {
     }
 }
 
-impl Hint for Error {
+impl Hinted for Error {
     fn hints(&self) -> Hints<'_> {
         match self {
             Self::BuildBackend(_) => Hints::from(
@@ -382,27 +357,48 @@ impl Error {
         version: Option<&Version>,
         version_id: Option<&str>,
     ) -> Self {
+        // e.g. `pygraphviz/graphviz_wrap.c:3020:10: fatal error: graphviz/cgraph.h: No such file or directory`
+        let missing_header_re_gcc = regex!(
+            r".*\.(?:c|c..|h|h..):\d+:\d+: fatal error: (.*\.(?:h|h..)): No such file or directory"
+        );
+        // e.g. `pygraphviz/graphviz_wrap.c:3023:10: fatal error: 'graphviz/cgraph.h' file not found`
+        let missing_header_re_clang =
+            regex!(r".*\.(?:c|c..|h|h..):\d+:\d+: fatal error: '(.*\.(?:h|h..))' file not found");
+        // e.g. `pygraphviz/graphviz_wrap.c(3023): fatal error C1083: Cannot open include file: 'graphviz/cgraph.h': No such file or directory`
+        let missing_header_re_msvc = regex!(
+            r".*\.(?:c|c..|h|h..)\(\d+\): fatal error C1083: Cannot open include file: '(.*\.(?:h|h..))': No such file or directory"
+        );
+        // e.g. `/usr/bin/ld: cannot find -lncurses: No such file or directory`
+        let ld_not_found_re =
+            regex!(r"/usr/bin/ld: cannot find -l([a-zA-Z10-9]+): No such file or directory");
+        // e.g. `error: invalid command 'bdist_wheel'`
+        let wheel_not_found_re = regex!(r"error: invalid command 'bdist_wheel'");
+        // e.g. `ModuleNotFoundError: No module named 'distutils'`
+        let distutils_not_found_re = regex!(r"ModuleNotFoundError: No module named 'distutils'");
+        // e.g. `ModuleNotFoundError`
+        let module_not_found = regex!(r#"ModuleNotFoundError: No module named ['"]([^'"]+)['"]"#);
+
         // In the cases I've seen it was the 5th and 3rd last line (see test case), 10 seems like a reasonable cutoff.
         let missing_library = output.stderr.iter().rev().take(10).find_map(|line| {
-            if let Some((_, [header])) = MISSING_HEADER_RE_GCC
+            if let Some((_, [header])) = missing_header_re_gcc
                 .captures(line.trim())
-                .or(MISSING_HEADER_RE_CLANG.captures(line.trim()))
-                .or(MISSING_HEADER_RE_MSVC.captures(line.trim()))
+                .or(missing_header_re_clang.captures(line.trim()))
+                .or(missing_header_re_msvc.captures(line.trim()))
                 .map(|c| c.extract())
             {
                 Some(MissingLibrary::Header(header.to_string()))
             } else if let Some((_, [library])) =
-                LD_NOT_FOUND_RE.captures(line.trim()).map(|c| c.extract())
+                ld_not_found_re.captures(line.trim()).map(|c| c.extract())
             {
                 Some(MissingLibrary::Linker(library.to_string()))
-            } else if WHEEL_NOT_FOUND_RE.is_match(line.trim()) {
+            } else if wheel_not_found_re.is_match(line.trim()) {
                 Some(MissingLibrary::BuildDependency("wheel".to_string()))
-            } else if DISTUTILS_NOT_FOUND_RE.is_match(line.trim()) {
+            } else if distutils_not_found_re.is_match(line.trim()) {
                 Some(MissingLibrary::DeprecatedModule(
                     "distutils".to_string(),
                     Version::new([3, 12]),
                 ))
-            } else if let Some(caps) = MODULE_NOT_FOUND.captures(line.trim()) {
+            } else if let Some(caps) = module_not_found.captures(line.trim()) {
                 if let Some(module_match) = caps.get(1) {
                     let module_name = module_match.as_str();
                     let package_name = match crate::pipreqs::MODULE_MAPPING.lookup(module_name) {
@@ -468,12 +464,14 @@ impl Error {
 
 #[cfg(test)]
 mod test {
+    use std::assert_matches;
+
     use crate::{Error, PythonRunnerOutput};
     use indoc::indoc;
     use std::process::ExitStatus;
     use std::str::FromStr;
     use uv_configuration::BuildOutput;
-    use uv_errors::{ErrorWithHints, Hint};
+    use uv_errors::{ErrorWithHints, Hinted};
     use uv_normalize::PackageName;
     use uv_pep440::Version;
 
@@ -522,7 +520,7 @@ mod test {
             Some("pygraphviz-1.11"),
         );
 
-        assert!(matches!(err, Error::MissingHeader { .. }));
+        assert_matches!(err, Error::MissingHeader { .. });
         let formatted = format_error_with_hints(&err);
         insta::assert_snapshot!(formatted, @r#"
         Failed building wheel through setup.py (exit code: 0)
@@ -575,7 +573,7 @@ mod test {
             None,
             Some("pygraphviz-1.11"),
         );
-        assert!(matches!(err, Error::MissingHeader { .. }));
+        assert_matches!(err, Error::MissingHeader { .. });
         let formatted = format_error_with_hints(&err);
         insta::assert_snapshot!(formatted, @"
         Failed building wheel through setup.py (exit code: 0)
@@ -618,7 +616,7 @@ mod test {
             None,
             Some("pygraphviz-1.11"),
         );
-        assert!(matches!(err, Error::MissingHeader { .. }));
+        assert_matches!(err, Error::MissingHeader { .. });
         let formatted = format_error_with_hints(&err);
         insta::assert_snapshot!(formatted, @r#"
         Failed building wheel through setup.py (exit code: 0)
@@ -664,7 +662,7 @@ mod test {
             Some(&Version::new([1, 11])),
             Some("pygraphviz-1.11"),
         );
-        assert!(matches!(err, Error::MissingHeader { .. }));
+        assert_matches!(err, Error::MissingHeader { .. });
         let formatted = format_error_with_hints(&err);
         insta::assert_snapshot!(formatted, @"
         Failed building wheel through setup.py (exit code: 0)

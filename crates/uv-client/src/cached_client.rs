@@ -6,10 +6,10 @@ use reqwest::{Request, Response};
 use rkyv::util::AlignedVec;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use tracing::{Instrument, debug, info_span, instrument, trace, warn};
+use tracing::{Instrument, Span, debug, info_span, instrument, trace, warn};
 
 use uv_cache::{CacheEntry, Freshness};
-use uv_fs::write_atomic;
+use uv_fs::write_atomic_sync;
 use uv_redacted::DisplaySafeUrl;
 
 use crate::base_client::CertificateSource;
@@ -29,7 +29,7 @@ use crate::{BaseClient, Error, ErrorKind, OwnedArchive, ProblemDetails, RetrySta
 /// [`CachedClient::get_cacheable_with_retry`]. If your types fit into the
 /// `rkyvutil::OwnedArchive` mold, then an implementation of `Cacheable` is
 /// already provided for that type.
-pub(crate) trait Cacheable: Sized {
+pub(crate) trait Cacheable: Sized + Send + 'static {
     /// This associated type permits customizing what the "output" type of
     /// deserialization is. It can be identical to `Self`.
     ///
@@ -99,8 +99,7 @@ where
 pub enum CachedClientError<CallbackError: std::error::Error + 'static> {
     /// The client tracks retries internally.
     Client(Error),
-    /// Track retries before a callback explicitly, as we can't attach them to the callback error
-    /// type.
+    /// The callback error, with retry context attached by the outer request loop.
     Callback {
         retries: u32,
         err: CallbackError,
@@ -238,7 +237,7 @@ impl CachedClient {
     async fn get_cacheable<
         Payload: Cacheable,
         CallBackError: std::error::Error + 'static,
-        Callback: AsyncFn(Response) -> Result<Payload, CallBackError>,
+        Callback: AsyncFnOnce(Response) -> Result<Payload, CallBackError>,
     >(
         &self,
         req: Request,
@@ -246,50 +245,109 @@ impl CachedClient {
         cache_control: CacheControl,
         response_callback: Callback,
     ) -> Result<Payload::Target, CachedClientError<CallBackError>> {
-        let fresh_req = req.try_clone().expect("HTTP request must be cloneable");
         let start = Instant::now();
-        let cached_response = if let Some(cached) = Self::read_cache(cache_entry).await {
-            self.send_cached(req, cache_control.clone(), cached)
+
+        if matches!(cache_control, CacheControl::AllowStale) {
+            let (req, cached) = self
+                .read_and_decode_stale_cache::<Payload>(req, cache_entry)
+                .await;
+            match cached {
+                Ok(Some(payload)) => return Ok(payload),
+                Ok(None) => warn!(
+                    "Cached response doesn't match current request for: {}",
+                    DisplaySafeUrl::from_url(req.url().clone())
+                ),
+                Err(err) if err.is_file_not_exists() => {
+                    trace!("No cache entry exists for {}", cache_entry.path().display());
+                }
+                Err(err) => {
+                    warn!(
+                        "Broken cache entry at {}, removing: {err}",
+                        cache_entry.path().display()
+                    );
+                    let _ = fs_err::tokio::remove_file(&cache_entry.path()).await;
+                }
+            }
+
+            let (response, cache_policy) = self.fresh_request(req, cache_control).await?;
+            return self
+                .run_response_callback(
+                    cache_entry,
+                    cache_policy,
+                    start,
+                    response,
+                    response_callback,
+                )
+                .await;
+        }
+
+        let fresh_req = req.try_clone().expect("HTTP request must be cloneable");
+        let (req, cached) = self
+            .read_cache::<Payload>(req, cache_entry, cache_control.clone())
+            .await;
+        let cached_response = match cached {
+            Some(CachedEntry::Fresh(payload)) => {
+                return match payload {
+                    Ok(payload) => Ok(payload),
+                    Err(err) => {
+                        warn!(
+                            "Broken fresh cache entry (for payload) at {}, removing: {err}",
+                            cache_entry.path().display()
+                        );
+                        self.resend_and_heal_cache(
+                            fresh_req,
+                            cache_entry,
+                            cache_control,
+                            response_callback,
+                        )
+                        .await
+                    }
+                };
+            }
+            Some(CachedEntry::Stale {
+                cached,
+                new_cache_policy_builder,
+            }) => {
+                self.send_cached_handle_stale(
+                    req,
+                    cache_control.clone(),
+                    cached,
+                    *new_cache_policy_builder,
+                )
                 .boxed_local()
                 .await?
-        } else {
-            debug!(
-                "No cache entry for: {}",
-                DisplaySafeUrl::from_url(req.url().clone())
-            );
-            let (response, cache_policy) = self.fresh_request(req, cache_control.clone()).await?;
-            CachedResponse::ModifiedOrNew {
-                response,
-                cache_policy,
+            }
+            None => {
+                debug!(
+                    "No cache entry for: {}",
+                    DisplaySafeUrl::from_url(req.url().clone())
+                );
+                let (response, cache_policy) =
+                    self.fresh_request(req, cache_control.clone()).await?;
+                CachedResponse::ModifiedOrNew {
+                    response,
+                    cache_policy,
+                }
             }
         };
         match cached_response {
-            CachedResponse::FreshCache(cached) => match Payload::from_aligned_bytes(cached.data) {
-                Ok(payload) => Ok(payload),
-                Err(err) => {
-                    warn!(
-                        "Broken fresh cache entry (for payload) at {}, removing: {err}",
-                        cache_entry.path().display()
-                    );
-                    self.resend_and_heal_cache(
-                        fresh_req,
-                        cache_entry,
-                        cache_control.clone(),
-                        response_callback,
-                    )
-                    .await
-                }
-            },
             CachedResponse::NotModified { cached, new_policy } => {
                 let refresh_cache =
                     info_span!("refresh_cache", file = %cache_entry.path().display());
                 async {
-                    let data_with_cache_policy_bytes =
-                        DataWithCachePolicy::serialize(&new_policy, &cached.data)?;
-                    write_atomic(cache_entry.path(), data_with_cache_policy_bytes)
-                        .await
-                        .map_err(ErrorKind::CacheWrite)?;
-                    match Payload::from_aligned_bytes(cached.data) {
+                    let path = cache_entry.path().to_path_buf();
+                    let span = Span::current();
+                    let payload = tokio::task::spawn_blocking(move || {
+                        span.in_scope(|| {
+                            let bytes = DataWithCachePolicy::serialize(&new_policy, &cached.data)?;
+                            write_atomic_sync(path, bytes).map_err(ErrorKind::CacheWrite)?;
+                            // Keep decoding errors separate so a corrupt payload can be refetched.
+                            Ok::<_, Error>(Payload::from_aligned_bytes(cached.data))
+                        })
+                    })
+                    .await
+                    .expect("cache refresh task panicked")?;
+                    match payload {
                         Ok(payload) => Ok(payload),
                         Err(err) => {
                             warn!(
@@ -404,43 +462,84 @@ impl CachedClient {
         response_callback: Callback,
     ) -> Result<Payload::Target, CachedClientError<CallBackError>> {
         let new_cache = info_span!("new_cache", file = %cache_entry.path().display());
-        // Capture retries from the retry middleware
-        let retries = response
-            .extensions()
-            .get::<reqwest_retry::RetryCount>()
-            .map(|retries| retries.value())
-            .unwrap_or_default();
         let data = response_callback(response)
             .boxed_local()
             .await
             .map_err(|err| CachedClientError::Callback {
-                retries,
+                // These retries are already counted in RetryState, so don't count them again.
+                // The outer loop fills in the total before returning the error to the caller.
+                retries: 0,
                 err,
                 duration: start.elapsed(),
             })?;
         let Some(cache_policy) = cache_policy else {
             return Ok(data.into_target());
         };
-        async {
-            fs_err::tokio::create_dir_all(cache_entry.dir())
-                .await
-                .map_err(ErrorKind::CacheWrite)?;
-            let data_with_cache_policy_bytes =
-                DataWithCachePolicy::serialize(&cache_policy, &data.to_bytes()?)?;
-            write_atomic(cache_entry.path(), data_with_cache_policy_bytes)
-                .await
-                .map_err(ErrorKind::CacheWrite)?;
-            Ok(data.into_target())
-        }
-        .instrument(new_cache)
+        let cache_entry = cache_entry.clone();
+        tokio::task::spawn_blocking(move || {
+            new_cache.in_scope(|| {
+                fs_err::create_dir_all(cache_entry.dir()).map_err(ErrorKind::CacheWrite)?;
+                let bytes = DataWithCachePolicy::serialize(&cache_policy, &data.to_bytes()?)?;
+                write_atomic_sync(cache_entry.path(), bytes).map_err(ErrorKind::CacheWrite)?;
+                Ok::<_, Error>(data.into_target())
+            })
+        })
         .await
+        .expect("cache write task panicked")
+        .map_err(CachedClientError::Client)
     }
 
-    #[instrument(name = "read_and_parse_cache", skip_all, fields(file = %cache_entry.path().display()
-    ))]
-    async fn read_cache(cache_entry: &CacheEntry) -> Option<DataWithCachePolicy> {
-        match DataWithCachePolicy::from_path_async(cache_entry.path()).await {
-            Ok(data) => Some(data),
+    /// Reads the cache policy and decodes a fresh payload in one blocking task.
+    ///
+    /// Stale payloads remain encoded until revalidation confirms they can be reused.
+    #[instrument(name = "read_and_parse_cache", skip_all, fields(file = %cache_entry.path().display()))]
+    async fn read_cache<Payload: Cacheable>(
+        &self,
+        mut req: Request,
+        cache_entry: &CacheEntry,
+        cache_control: CacheControl,
+    ) -> (Request, Option<CachedEntry<Payload::Target>>) {
+        let path = cache_entry.path().to_path_buf();
+        let span = Span::current();
+        let (req, cached) = self
+            .0
+            .cache_read_runtime()
+            .spawn_blocking(move || {
+                span.in_scope(|| {
+                    let cached = DataWithCachePolicy::from_path_sync(&path).map(|cached| {
+                        // Apply the cache control header only when checking an existing entry.
+                        if let CacheControl::MustRevalidate = cache_control {
+                            req.headers_mut().insert(
+                                http::header::CACHE_CONTROL,
+                                http::HeaderValue::from_static("no-cache"),
+                            );
+                        }
+                        let url = DisplaySafeUrl::from_url(req.url().clone());
+                        match cached.cache_policy.before_request(&mut req) {
+                            BeforeRequest::Fresh => {
+                                debug!("Found fresh response for: {url}");
+                                Some(CachedEntry::Fresh(Payload::from_aligned_bytes(cached.data)))
+                            }
+                            BeforeRequest::Stale(new_cache_policy_builder) => {
+                                debug!("Found stale response for: {url}");
+                                Some(CachedEntry::Stale {
+                                    cached,
+                                    new_cache_policy_builder: Box::new(new_cache_policy_builder),
+                                })
+                            }
+                            BeforeRequest::NoMatch => {
+                                warn!("Cached response doesn't match current request for: {url}");
+                                None
+                            }
+                        }
+                    });
+                    (req, cached)
+                })
+            })
+            .await
+            .expect("cache read and payload decoding task panicked");
+        let cached = match cached {
+            Ok(cached) => cached,
             Err(err) => {
                 // When we know the cache entry doesn't exist, then things are
                 // normal and we shouldn't emit a WARN.
@@ -455,58 +554,35 @@ impl CachedClient {
                 }
                 None
             }
-        }
+        };
+        (req, cached)
     }
 
-    /// Send a request given that we have a (possibly) stale cached response.
+    /// Reads and decodes an allowed-stale cache entry in one blocking task.
     ///
-    /// If the cached response is valid but stale, then this will attempt a
-    /// revalidation request.
-    async fn send_cached(
+    /// The task returns the request it owns while checking the policy. `Ok(None)` means the entry
+    /// belongs to a different request; errors indicate a broken entry for the caller to remove.
+    #[instrument(name = "read_and_decode_stale_cache", skip_all, fields(file = %cache_entry.path().display()))]
+    async fn read_and_decode_stale_cache<Payload: Cacheable>(
         &self,
-        mut req: Request,
-        cache_control: CacheControl,
-        cached: DataWithCachePolicy,
-    ) -> Result<CachedResponse, Error> {
-        // Apply the cache control header, if necessary.
-        if matches!(&cache_control, CacheControl::MustRevalidate) {
-            req.headers_mut().insert(
-                http::header::CACHE_CONTROL,
-                http::HeaderValue::from_static("no-cache"),
-            );
-        }
-        let url = DisplaySafeUrl::from_url(req.url().clone());
-        Ok(match cached.cache_policy.before_request(&mut req) {
-            BeforeRequest::Fresh => {
-                debug!("Found fresh response for: {url}");
-                CachedResponse::FreshCache(cached)
-            }
-            BeforeRequest::Stale(new_cache_policy_builder) => match cache_control {
-                CacheControl::None | CacheControl::MustRevalidate | CacheControl::Override(_) => {
-                    debug!("Found stale response for: {url}");
-                    self.send_cached_handle_stale(
-                        req,
-                        cache_control,
-                        cached,
-                        new_cache_policy_builder,
-                    )
-                    .await?
-                }
-                CacheControl::AllowStale => {
-                    debug!("Found stale (but allowed) response for: {url}");
-                    CachedResponse::FreshCache(cached)
-                }
-            },
-            BeforeRequest::NoMatch => {
-                // This shouldn't happen; if it does, we'll override the cache.
-                warn!("Cached response doesn't match current request for: {url}",);
-                let (response, cache_policy) = self.fresh_request(req, cache_control).await?;
-                CachedResponse::ModifiedOrNew {
-                    response,
-                    cache_policy,
-                }
-            }
-        })
+        req: Request,
+        cache_entry: &CacheEntry,
+    ) -> (Request, Result<Option<Payload::Target>, Error>) {
+        let path = cache_entry.path().to_path_buf();
+        self.0
+            .cache_read_runtime()
+            .spawn_blocking(move || {
+                let cached = DataWithCachePolicy::from_path_sync(&path).and_then(|cached| {
+                    if cached.cache_policy.matches_stale_request(&req) {
+                        Payload::from_aligned_bytes(cached.data).map(Some)
+                    } else {
+                        Ok(None)
+                    }
+                });
+                (req, cached)
+            })
+            .await
+            .expect("cache read and payload decoding task panicked")
     }
 
     async fn send_cached_handle_stale(
@@ -534,14 +610,18 @@ impl CachedClient {
         );
 
         // Check for HTTP error status and extract problem details if available
+        let retry_count = response
+            .extensions()
+            .get::<reqwest_retry::RetryCount>()
+            .map(|retries| retries.value());
+
         if let Err(status_error) = response.error_for_status_ref() {
             let problem_details = ProblemDetails::try_from_response(response).await;
-            return Err(ErrorKind::from_reqwest_with_problem_details(
-                url.clone(),
-                status_error,
-                problem_details,
-            )
-            .into());
+            return Err(Error::new(
+                ErrorKind::from_reqwest_with_problem_details(url, status_error, problem_details),
+                retry_count.unwrap_or_default(),
+                start.elapsed(),
+            ));
         }
 
         // If the user set a custom `Cache-Control` header, override it.
@@ -625,11 +705,14 @@ impl CachedClient {
     }
 
     /// Perform a [`CachedClient::get_serde`] request with a default retry strategy.
+    ///
+    /// The callback shares the request's [`RetryState`]. It must use that state for any retries
+    /// it performs and send subsequent requests through [`RetryState::send`].
     #[instrument(skip_all)]
     pub async fn get_serde_with_retry<
         Payload: Serialize + DeserializeOwned + Send + 'static,
         CallBackError: std::error::Error + 'static,
-        Callback: AsyncFn(Response) -> Result<Payload, CallBackError>,
+        Callback: AsyncFn(Response, &mut RetryState) -> Result<Payload, CallBackError>,
     >(
         &self,
         req: Request,
@@ -638,10 +721,15 @@ impl CachedClient {
         response_callback: Callback,
     ) -> Result<Payload, CachedClientError<CallBackError>> {
         let payload = self
-            .get_cacheable_with_retry(req, cache_entry, cache_control, async |resp| {
-                let payload = response_callback(resp).await?;
-                Ok(SerdeCacheable { inner: payload })
-            })
+            .get_cacheable_with_retry(
+                req,
+                cache_entry,
+                cache_control,
+                async |resp, retry_state| {
+                    let payload = response_callback(resp, retry_state).await?;
+                    Ok(SerdeCacheable { inner: payload })
+                },
+            )
             .await?;
         Ok(payload)
     }
@@ -653,7 +741,7 @@ impl CachedClient {
     pub(crate) async fn get_cacheable_with_retry<
         Payload: Cacheable,
         CallBackError: std::error::Error + 'static,
-        Callback: AsyncFn(Response) -> Result<Payload, CallBackError>,
+        Callback: AsyncFn(Response, &mut RetryState) -> Result<Payload, CallBackError>,
     >(
         &self,
         req: Request,
@@ -669,7 +757,11 @@ impl CachedClient {
                     fresh_req,
                     cache_entry,
                     cache_control.clone(),
-                    &response_callback,
+                    async |response| {
+                        retry_state
+                            .handle_response(response, &response_callback)
+                            .await
+                    },
                 )
                 .await;
 
@@ -687,11 +779,13 @@ impl CachedClient {
 
     /// Perform a [`CachedClient::skip_cache`] request with a default retry strategy.
     ///
+    /// The callback shares the request's [`RetryState`], as in [`Self::get_serde_with_retry`].
+    ///
     /// See: <https://github.com/TrueLayer/reqwest-middleware/blob/8a494c165734e24c62823714843e1c9347027e8a/reqwest-retry/src/middleware.rs#L137>
     pub async fn skip_cache_with_retry<
         Payload: Serialize + DeserializeOwned + Send + 'static,
         CallBackError: std::error::Error + 'static,
-        Callback: AsyncFn(Response) -> Result<Payload, CallBackError>,
+        Callback: AsyncFn(Response, &mut RetryState) -> Result<Payload, CallBackError>,
     >(
         &self,
         req: Request,
@@ -707,7 +801,11 @@ impl CachedClient {
                     fresh_req,
                     cache_entry,
                     cache_control.clone(),
-                    &response_callback,
+                    async |response| {
+                        retry_state
+                            .handle_response(response, &response_callback)
+                            .await
+                    },
                 )
                 .await;
 
@@ -724,10 +822,20 @@ impl CachedClient {
     }
 }
 
+/// A cache entry checked against the current request.
+#[derive(Debug)]
+enum CachedEntry<Payload> {
+    /// The payload was decoded without an HTTP request (e.g. age < max-age).
+    Fresh(Result<Payload, Error>),
+    /// The payload may be reused if the server confirms it is unmodified.
+    Stale {
+        cached: DataWithCachePolicy,
+        new_cache_policy_builder: Box<CachePolicyBuilder>,
+    },
+}
+
 #[derive(Debug)]
 enum CachedResponse {
-    /// The cached response is fresh without an HTTP request (e.g. age < max-age).
-    FreshCache(DataWithCachePolicy),
     /// The cached response is fresh after an HTTP request (e.g. 304 not modified)
     NotModified {
         /// The cached response (with its old cache policy).
@@ -804,21 +912,6 @@ pub struct DataWithCachePolicy {
 }
 
 impl DataWithCachePolicy {
-    /// Loads cached data and its associated HTTP cache policy from the given
-    /// file path in an asynchronous fashion (via `spawn_blocking`).
-    ///
-    /// # Errors
-    ///
-    /// If the given byte buffer is not in a valid format or if reading the
-    /// file given fails, then this returns an error.
-    async fn from_path_async(path: &Path) -> Result<Self, Error> {
-        let path = path.to_path_buf();
-        tokio::task::spawn_blocking(move || Self::from_path_sync(&path))
-            .await
-            // This just forwards panics from the closure.
-            .unwrap()
-    }
-
     /// Loads cached data and its associated HTTP cache policy from the given
     /// file path in a synchronous fashion.
     ///

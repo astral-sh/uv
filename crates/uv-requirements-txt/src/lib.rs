@@ -59,8 +59,7 @@ use uv_pypi_types::VerbatimParsedUrl;
 use uv_redacted::DisplaySafeUrl;
 use uv_redacted::DisplaySafeUrlError;
 
-use crate::requirement::EditableError;
-pub use crate::requirement::RequirementsTxtRequirement;
+pub use crate::requirement::{MakeEditableError, RequirementsTxtRequirement};
 use crate::shquote::unquote;
 
 mod requirement;
@@ -95,6 +94,8 @@ enum RequirementsTxtStatement {
     FindLinks(VerbatimUrl),
     /// `--no-index`
     NoIndex,
+    /// `--require-hashes`
+    RequireHashes,
     /// `--no-binary`
     NoBinary(NoBinary),
     /// `--only-binary`
@@ -158,6 +159,8 @@ pub struct RequirementsTxt {
     pub find_links: Vec<VerbatimUrl>,
     /// Whether to ignore the index, specified with `--no-index`.
     pub no_index: bool,
+    /// Whether all requirements must be hashed, specified with `--require-hashes`.
+    pub require_hashes: bool,
     /// Whether to disallow wheels, specified with `--no-binary`.
     pub no_binary: NoBinary,
     /// Whether to allow only wheels, specified with `--only-binary`.
@@ -237,7 +240,7 @@ impl RequirementsTxt {
         )
         .await
         .map_err(|err| RequirementsTxtFileError {
-            file: requirements_txt.to_path_buf(),
+            file: requirements_txt.into(),
             error: err,
         })
     }
@@ -265,7 +268,7 @@ impl RequirementsTxt {
             #[cfg(not(feature = "http"))]
             {
                 return Err(RequirementsTxtFileError {
-                    file: requirements_txt.to_path_buf(),
+                    file: requirements_txt.into(),
                     error: RequirementsTxtParserError::Io(io::Error::new(
                         io::ErrorKind::InvalidInput,
                         "Remote file not supported without `http` feature",
@@ -277,7 +280,7 @@ impl RequirementsTxt {
             {
                 let url = requirements_txt.display().to_string();
                 let url = DisplaySafeUrl::parse(&url).map_err(|err| RequirementsTxtFileError {
-                    file: requirements_txt.to_path_buf(),
+                    file: requirements_txt.into(),
                     error: RequirementsTxtParserError::InvalidUrl(
                         requirements_txt.display().to_string(),
                         err,
@@ -287,7 +290,7 @@ impl RequirementsTxt {
                 // Avoid constructing a client if network is disabled already
                 if client_builder.is_offline() {
                     return Err(RequirementsTxtFileError {
-                        file: requirements_txt.to_path_buf(),
+                        file: requirements_txt.into(),
                         error: RequirementsTxtParserError::Io(io::Error::new(
                             io::ErrorKind::InvalidInput,
                             format!(
@@ -299,13 +302,13 @@ impl RequirementsTxt {
                 let client = client_builder
                     .build()
                     .map_err(|err| RequirementsTxtFileError {
-                        file: requirements_txt.to_path_buf(),
+                        file: requirements_txt.into(),
                         error: RequirementsTxtParserError::ClientBuild(url.clone(), Box::new(err)),
                     })?;
                 let content = read_url_to_string(&requirements_txt, client)
                     .await
                     .map_err(|err| RequirementsTxtFileError {
-                        file: requirements_txt.to_path_buf(),
+                        file: requirements_txt.into(),
                         error: err,
                     })?;
                 cache.insert(requirements_txt.to_path_buf(), content.clone());
@@ -316,7 +319,7 @@ impl RequirementsTxt {
             let content = uv_fs::read_to_string_transcode(&requirements_txt)
                 .await
                 .map_err(|err| RequirementsTxtFileError {
-                    file: requirements_txt.to_path_buf(),
+                    file: requirements_txt.into(),
                     error: RequirementsTxtParserError::Io(err),
                 })?;
             cache.insert(requirements_txt.to_path_buf(), content.clone());
@@ -335,7 +338,7 @@ impl RequirementsTxt {
         )
         .await
         .map_err(|err| RequirementsTxtFileError {
-            file: requirements_txt.to_path_buf(),
+            file: requirements_txt.into(),
             error: err,
         })?;
 
@@ -360,7 +363,13 @@ impl RequirementsTxt {
         let mut s = Scanner::new(content);
 
         let mut data = Self::default();
-        while let Some(statement) = parse_entry(&mut s, content, working_dir, requirements_txt)? {
+        while let Some(statement) = parse_entry(
+            &mut s,
+            content,
+            working_dir,
+            requirements_dir,
+            requirements_txt,
+        )? {
             match statement {
                 RequirementsTxtStatement::Requirements {
                     filename,
@@ -542,6 +551,9 @@ impl RequirementsTxt {
                 RequirementsTxtStatement::NoIndex => {
                     data.no_index = true;
                 }
+                RequirementsTxtStatement::RequireHashes => {
+                    data.require_hashes = true;
+                }
                 RequirementsTxtStatement::NoBinary(no_binary) => {
                     data.no_binary.extend(no_binary);
                 }
@@ -592,6 +604,7 @@ impl RequirementsTxt {
             extra_index_urls,
             find_links,
             no_index,
+            require_hashes,
             no_binary,
             only_binary,
         } = other;
@@ -604,6 +617,7 @@ impl RequirementsTxt {
         self.extra_index_urls.extend(extra_index_urls);
         self.find_links.extend(find_links);
         self.no_index = self.no_index || no_index;
+        self.require_hashes = self.require_hashes || require_hashes;
         self.no_binary.extend(no_binary);
         self.only_binary.extend(only_binary);
     }
@@ -615,7 +629,6 @@ impl RequirementsTxt {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum UnsupportedOption {
     PreferBinary,
-    RequireHashes,
     Pre,
     TrustedHost,
     UseFeature,
@@ -626,7 +639,6 @@ impl UnsupportedOption {
     fn name(self) -> &'static str {
         match self {
             Self::PreferBinary => "--prefer-binary",
-            Self::RequireHashes => "--require-hashes",
             Self::Pre => "--pre",
             Self::TrustedHost => "--trusted-host",
             Self::UseFeature => "--use-feature",
@@ -637,7 +649,6 @@ impl UnsupportedOption {
     fn cli(self) -> bool {
         match self {
             Self::PreferBinary => false,
-            Self::RequireHashes => true,
             Self::Pre => true,
             Self::TrustedHost => true,
             Self::UseFeature => false,
@@ -648,7 +659,6 @@ impl UnsupportedOption {
     fn iter() -> impl Iterator<Item = Self> {
         [
             Self::PreferBinary,
-            Self::RequireHashes,
             Self::Pre,
             Self::TrustedHost,
             Self::UseFeature,
@@ -677,6 +687,7 @@ fn parse_entry(
     s: &mut Scanner,
     content: &str,
     working_dir: &Path,
+    requirements_dir: &Path,
     requirements_txt: &Path,
 ) -> Result<Option<RequirementsTxtStatement>, RequirementsTxtParserError> {
     // Eat all preceding whitespace, this may run us to the end of file
@@ -733,16 +744,17 @@ fn parse_entry(
             Some(requirements_txt)
         };
 
-        let (requirement, hashes) =
+        let (mut requirement, hashes) =
             parse_requirement_and_hashes(s, content, source, working_dir, true)?;
-        let requirement =
-            requirement
-                .into_editable()
-                .map_err(|err| RequirementsTxtParserError::NonEditable {
-                    source: err,
-                    start,
-                    end: s.cursor(),
-                })?;
+        requirement
+            .make_editable()
+            .map_err(|source| RequirementsTxtParserError::NonEditable {
+                source,
+                requirement: requirement.to_string(),
+                start,
+                end: s.cursor(),
+                line: calculate_row_column(content, start).0,
+            })?;
         RequirementsTxtStatement::EditableRequirementEntry(RequirementEntry {
             requirement,
             hashes,
@@ -811,6 +823,8 @@ fn parse_entry(
         RequirementsTxtStatement::ExtraIndexUrl(url.with_given(given))
     } else if s.eat_if("--no-index") {
         RequirementsTxtStatement::NoIndex
+    } else if s.eat_if("--require-hashes") {
+        RequirementsTxtStatement::RequireHashes
     } else if s.eat_if("--find-links") || s.eat_if("-f") {
         let given = parse_value("--find-links", content, s, |c: char| !is_terminal(c))?;
         let given = unquote(given)
@@ -819,7 +833,7 @@ fn parse_entry(
             .map(Cow::Owned)
             .unwrap_or(Cow::Borrowed(given));
         let expanded = expand_env_vars(given.as_ref());
-        let url = if let Some(path) = std::path::absolute(expanded.as_ref())
+        let url = if let Some(path) = std::path::absolute(requirements_dir.join(expanded.as_ref()))
             .ok()
             .filter(|path| path.exists())
         {
@@ -1127,7 +1141,7 @@ async fn read_url_to_string(
 /// Error parsing requirements.txt, wrapper with filename
 #[derive(Debug)]
 pub struct RequirementsTxtFileError {
-    file: PathBuf,
+    file: Box<Path>,
     error: RequirementsTxtParserError,
 }
 
@@ -1156,9 +1170,11 @@ pub enum RequirementsTxtParserError {
     UnsupportedUrl(String),
     MissingRequirementPrefix(String),
     NonEditable {
-        source: EditableError,
+        source: MakeEditableError,
+        requirement: String,
         start: usize,
         end: usize,
+        line: usize,
     },
     NoBinary {
         source: uv_normalize::InvalidNameError,
@@ -1231,8 +1247,13 @@ impl Display for RequirementsTxtParserError {
             Self::UnsupportedUrl(url) => {
                 write!(f, "Unsupported URL (expected a `file://` scheme): `{url}`")
             }
-            Self::NonEditable { .. } => {
-                write!(f, "Unsupported editable requirement")
+            Self::NonEditable {
+                requirement, line, ..
+            } => {
+                write!(
+                    f,
+                    "Unsupported editable requirement at line {line}: `{requirement}`"
+                )
             }
             Self::MissingRequirementPrefix(given) => {
                 write!(
@@ -1368,10 +1389,12 @@ impl Display for RequirementsTxtFileError {
                     self.file.user_display(),
                 )
             }
-            RequirementsTxtParserError::NonEditable { .. } => {
+            RequirementsTxtParserError::NonEditable {
+                requirement, line, ..
+            } => {
                 write!(
                     f,
-                    "Unsupported editable requirement in `{}`",
+                    "Unsupported editable requirement in `{}` at line {line}: `{requirement}`",
                     self.file.user_display(),
                 )
             }
@@ -1884,8 +1907,8 @@ mod test {
             filters => filters
         }, {
             insta::assert_snapshot!(errors, @"
-            Unsupported editable requirement in `<REQUIREMENTS_TXT>`
-            Editable must refer to a local directory, not an HTTPS URL: `https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.gz`
+            Unsupported editable requirement in `<REQUIREMENTS_TXT>` at line 1: `https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.gz`
+            Remote archives cannot be editable
             ");
         });
 
@@ -2087,6 +2110,7 @@ mod test {
                 extra_index_urls: [],
                 find_links: [],
                 no_index: false,
+                require_hashes: false,
                 no_binary: None,
                 only_binary: None,
             }
@@ -2147,6 +2171,7 @@ mod test {
                 extra_index_urls: [],
                 find_links: [],
                 no_index: false,
+                require_hashes: false,
                 no_binary: Packages(
                     [
                         PackageName(
@@ -2235,6 +2260,7 @@ mod test {
                                             "/foo/bar",
                                         ),
                                         expanded: false,
+                                        force_relative: false,
                                     },
                                 },
                                 extras: [],
@@ -2253,6 +2279,7 @@ mod test {
                 extra_index_urls: [],
                 find_links: [],
                 no_index: true,
+                require_hashes: false,
                 no_binary: None,
                 only_binary: None,
             }
@@ -2498,11 +2525,13 @@ mod test {
                             "https://test.pypi.org/simple/",
                         ),
                         expanded: false,
+                        force_relative: false,
                     },
                 ),
                 extra_index_urls: [],
                 find_links: [],
                 no_index: false,
+                require_hashes: false,
                 no_binary: All,
                 only_binary: None,
             }
@@ -2585,6 +2614,7 @@ mod test {
                                             "importlib_metadata-8.3.0-py3-none-any.whl",
                                         ),
                                         expanded: false,
+                                        force_relative: false,
                                     },
                                 },
                                 extras: [],
@@ -2635,6 +2665,7 @@ mod test {
                                             "importlib_metadata-8.2.0-py3-none-any.whl",
                                         ),
                                         expanded: false,
+                                        force_relative: false,
                                     },
                                 },
                                 extras: [],
@@ -2685,6 +2716,7 @@ mod test {
                                             "importlib_metadata-8.2.0-py3-none-any.whl",
                                         ),
                                         expanded: false,
+                                        force_relative: false,
                                     },
                                 },
                                 extras: [
@@ -2739,6 +2771,7 @@ mod test {
                                             "importlib_metadata-8.2.0+local-py3-none-any.whl",
                                         ),
                                         expanded: false,
+                                        force_relative: false,
                                     },
                                 },
                                 extras: [],
@@ -2789,6 +2822,7 @@ mod test {
                                             "importlib_metadata-8.2.0+local-py3-none-any.whl",
                                         ),
                                         expanded: false,
+                                        force_relative: false,
                                     },
                                 },
                                 extras: [],
@@ -2839,6 +2873,7 @@ mod test {
                                             "importlib_metadata-8.2.0+local-py3-none-any.whl",
                                         ),
                                         expanded: false,
+                                        force_relative: false,
                                     },
                                 },
                                 extras: [
@@ -2863,6 +2898,7 @@ mod test {
                 extra_index_urls: [],
                 find_links: [],
                 no_index: false,
+                require_hashes: false,
                 no_binary: None,
                 only_binary: None,
             }

@@ -1,6 +1,7 @@
 #![cfg(feature = "native-auth")]
 
 use common::{generate_random_string, init_logger};
+use std::assert_matches;
 use uv_keyring::{Entry, Error};
 
 mod common;
@@ -43,8 +44,9 @@ async fn test_create_then_move() {
             .delete_credential()
             .await
             .expect("Can't delete non-ascii password");
-        assert!(
-            matches!(entry.get_password().await, Err(Error::NoEntry)),
+        assert_matches!(
+            entry.get_password().await,
+            Err(Error::NoEntry),
             "Able to read a deleted non-ascii password"
         );
     });
@@ -81,8 +83,9 @@ async fn test_simultaneous_create_then_move() {
                 .delete_credential()
                 .await
                 .expect("Can't delete ascii password");
-            assert!(
-                matches!(entry.get_password().await, Err(Error::NoEntry)),
+            assert_matches!(
+                entry.get_password().await,
+                Err(Error::NoEntry),
                 "Able to read a deleted ascii password"
             );
         });
@@ -120,8 +123,9 @@ async fn test_create_set_then_move() {
             .delete_credential()
             .await
             .expect("Can't delete ascii password");
-        assert!(
-            matches!(entry.get_password().await, Err(Error::NoEntry)),
+        assert_matches!(
+            entry.get_password().await,
+            Err(Error::NoEntry),
             "Able to read a deleted ascii password"
         );
     });
@@ -156,8 +160,9 @@ async fn test_simultaneous_create_set_then_move() {
                 .delete_credential()
                 .await
                 .expect("Can't delete ascii password");
-            assert!(
-                matches!(entry.get_password().await, Err(Error::NoEntry)),
+            assert_matches!(
+                entry.get_password().await,
+                Err(Error::NoEntry),
                 "Able to read a deleted ascii password"
             );
         });
@@ -197,8 +202,9 @@ async fn test_simultaneous_independent_create_set() {
                 .delete_credential()
                 .await
                 .expect("Can't delete ascii password");
-            assert!(
-                matches!(entry.get_password().await, Err(Error::NoEntry)),
+            assert_matches!(
+                entry.get_password().await,
+                Err(Error::NoEntry),
                 "Able to read a deleted ascii password"
             );
         });
@@ -235,8 +241,9 @@ async fn test_multiple_create_delete_single_thread() {
             .delete_credential()
             .await
             .expect("Can't delete ascii password");
-        assert!(
-            matches!(entry.get_password().await, Err(Error::NoEntry)),
+        assert_matches!(
+            entry.get_password().await,
+            Err(Error::NoEntry),
             "Able to read a deleted ascii password"
         );
     }
@@ -273,8 +280,9 @@ async fn test_simultaneous_multiple_create_delete_single_thread() {
                     .delete_credential()
                     .await
                     .expect("Can't delete ascii password");
-                assert!(
-                    matches!(entry.get_password().await, Err(Error::NoEntry)),
+                assert_matches!(
+                    entry.get_password().await,
+                    Err(Error::NoEntry),
                     "Able to read a deleted ascii password"
                 );
             }

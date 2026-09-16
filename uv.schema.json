@@ -44,10 +44,10 @@
       ]
     },
     "build-constraint-dependencies": {
-      "description": "PEP 508-style requirements, e.g., `ruff==0.5.0`, or `ruff @ https://...`.",
+      "description": "Constraints to apply when solving build dependencies.\n\nBuild constraints are used to restrict the versions of build dependencies that are selected\nwhen building a package during resolution or installation.\n\nIncluding a package as a constraint will _not_ trigger installation of the package during\na build; instead, the package must be requested elsewhere in the project's build dependency\ngraph.\n\n!!! note\n    In `uv lock`, `uv sync`, and `uv run`, uv will only read `build-constraint-dependencies` from\n    the `pyproject.toml` at the workspace root, and will ignore any declarations in other\n    workspace members or `uv.toml` files.\n\nHashes can be included to verify downloaded build dependency archives. To provide hashes,\nuse a table with `requirement` and `hashes`. uv records these hashes in `uv.lock`.",
       "type": ["array", "null"],
       "items": {
-        "type": "string"
+        "$ref": "#/definitions/BuildConstraintDependency"
       }
     },
     "cache-dir": {
@@ -348,7 +348,7 @@
       }
     },
     "no-build": {
-      "description": "Don't build source distributions.\n\nWhen enabled, uv will reuse cached wheels from previously built source distributions, but\noperations that require building a source distribution will exit with an error. uv may\nstill build editable requirements, and their build backends may run arbitrary Python code.",
+      "description": "Don't build source distributions.\n\nWhen enabled, uv will reuse cached wheels from previously built source distributions, but\noperations that require building a source distribution will exit with an error. First-party\npackages, such as projects in the workspace, will still be built. uv will also still build\neditable requirements, and their build backends may run arbitrary Python code.",
       "type": ["boolean", "null"]
     },
     "no-build-isolation": {
@@ -363,7 +363,7 @@
       }
     },
     "no-build-package": {
-      "description": "Don't build source distributions for a specific package.",
+      "description": "Don't build source distributions for a specific package.\n\nFirst-party packages, such as projects in the workspace, will still be built.",
       "type": ["array", "null"],
       "items": {
         "$ref": "#/definitions/PackageName"
@@ -421,10 +421,21 @@
       ]
     },
     "prerelease": {
-      "description": "The strategy to use when considering pre-release versions.\n\nBy default, uv will accept pre-releases for packages that _only_ publish pre-releases,\nalong with first-party requirements that contain an explicit pre-release marker in the\ndeclared specifiers (`if-necessary-or-explicit`).",
+      "description": "The strategy to use when considering pre-release versions.\n\nBy default, uv will prefer stable candidates, falling back to pre-releases only after every\nstable candidate that satisfies the active constraints is rejected\n(`if-necessary`).",
       "anyOf": [
         {
           "$ref": "#/definitions/PrereleaseMode"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "prerelease-package": {
+      "description": "The strategy to use when considering pre-release versions for specific packages.\n\nPackage-specific modes take precedence over the global [`prerelease`](#prerelease) mode.\nAccepts a dictionary mapping package names to any supported pre-release mode.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/PrereleasePackage"
         },
         {
           "type": "null"
@@ -594,11 +605,7 @@
   },
   "additionalProperties": false,
   "not": {
-    "properties": {
-      "preview": {},
-      "preview-features": {}
-    },
-    "required": ["preview", "preview-features"]
+    "$ref": "#/definitions/ConflictingPreviewOptions"
   },
   "definitions": {
     "AddBoundsKind": {
@@ -657,6 +664,21 @@
           "items": {
             "type": "string"
           }
+        },
+        "malware-check": {
+          "description": "Whether to run the automatic malware check during sync operations.",
+          "type": ["boolean", "null"]
+        },
+        "malware-check-url": {
+          "description": "The vulnerability service URL to use for automatic malware checks.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/DisplaySafeUrl"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
     },
@@ -752,6 +774,35 @@
         }
       }
     },
+    "BuildConstraintDependency": {
+      "description": "A build constraint, optionally accompanied by archive hashes.",
+      "anyOf": [
+        {
+          "description": "A PEP 508 requirement without additional hashes.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Requirement"
+            }
+          ]
+        },
+        {
+          "description": "A PEP 508 requirement and its archive hashes.",
+          "type": "object",
+          "properties": {
+            "hashes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "requirement": {
+              "$ref": "#/definitions/Requirement"
+            }
+          },
+          "required": ["requirement", "hashes"]
+        }
+      ]
+    },
     "CacheKey": {
       "anyOf": [
         {
@@ -826,6 +877,14 @@
         "$ref": "#/definitions/ConfigSettingValue"
       }
     },
+    "ConflictingPreviewOptions": {
+      "type": "object",
+      "properties": {
+        "preview": {},
+        "preview-features": {}
+      },
+      "required": ["preview", "preview-features"]
+    },
     "DefaultGroups": {
       "description": "Either the literal \"all\" or a list of groups",
       "oneOf": [
@@ -881,6 +940,7 @@
       ]
     },
     "ExcludeNewerPackage": {
+      "description": "Package-specific `exclude-newer` settings.\n\nEntries are stored in package-name order for deterministic serialization.",
       "type": "object",
       "additionalProperties": {
         "$ref": "#/definitions/ExcludeNewerOverride"
@@ -1023,6 +1083,17 @@
           ],
           "default": "simple"
         },
+        "hash-algorithm": {
+          "description": "The hash algorithm that must be used for distributions resolved from this index.\n\nIf a distribution does not advertise a hash using this algorithm, lockfile generation\nwill fail.\n\nThis option is in preview and may change in any future release.\n\n```toml\n[[tool.uv.index]]\nname = \"my-index\"\nurl = \"https://<omitted>/simple\"\nhash-algorithm = \"sha256\"\n```",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/IndexHashAlgorithm"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "ignore-error-codes": {
           "description": "Status codes that uv should ignore when deciding whether to continue resolution after a\nrequest to this index fails.\n\n```toml\n[[tool.uv.index]]\nname = \"my-index\"\nurl = \"https://<omitted>/simple\"\nignore-error-codes = [401, 403]\n```",
           "type": ["array", "null"],
@@ -1091,6 +1162,11 @@
           "const": "flat"
         }
       ]
+    },
+    "IndexHashAlgorithm": {
+      "description": "A hash algorithm that can be required for distributions resolved from an index.",
+      "type": "string",
+      "enum": ["md5", "sha256", "sha384", "sha512", "blake2b"]
     },
     "IndexName": {
       "description": "The normalized name of an index.\n\nIndex names may contain letters, digits, hyphens, underscores, and periods, and must be ASCII.",
@@ -1585,7 +1661,7 @@
           "type": ["string", "null"]
         },
         "prerelease": {
-          "description": "The strategy to use when considering pre-release versions.\n\nBy default, uv will accept pre-releases for packages that _only_ publish pre-releases,\nalong with first-party requirements that contain an explicit pre-release marker in the\ndeclared specifiers (`if-necessary-or-explicit`).",
+          "description": "The strategy to use when considering pre-release versions.\n\nBy default, uv will prefer stable candidates, falling back to pre-releases only after every\nstable candidate that satisfies the active constraints is rejected\n(`if-necessary`).",
           "anyOf": [
             {
               "$ref": "#/definitions/PrereleaseMode"
@@ -1708,21 +1784,29 @@
           "const": "allow"
         },
         {
-          "description": "Allow pre-release versions if all versions of a package are pre-release.",
+          "description": "Prefer stable versions, falling back to pre-release versions when necessary.",
           "type": "string",
           "const": "if-necessary"
         },
         {
-          "description": "Allow pre-release versions for first-party packages with explicit pre-release markers in\ntheir version requirements.",
+          "description": "Prefer stable versions for first-party packages with explicit pre-release specifiers,\nfalling back to pre-release versions when necessary. Disallow pre-release versions for all\nother packages.",
           "type": "string",
           "const": "explicit"
         },
         {
-          "description": "Allow pre-release versions if all versions of a package are pre-release, or if the package\nhas an explicit pre-release marker in its version requirements.",
+          "description": "Deprecated alias for `if-necessary`.",
           "type": "string",
-          "const": "if-necessary-or-explicit"
+          "const": "if-necessary-or-explicit",
+          "deprecated": true
         }
       ]
+    },
+    "PrereleasePackage": {
+      "description": "Pre-release selection policies that apply to individual packages.",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/PrereleaseMode"
+      }
     },
     "PreviewFeature": {
       "type": "string",
@@ -1730,7 +1814,6 @@
         {
           "enum": [
             "python-install-default",
-            "python-upgrade",
             "json-output",
             "pylock",
             "add-bounds",
@@ -1741,13 +1824,13 @@
             "native-auth",
             "s3-endpoint",
             "cache-size",
+            "cache-physical-space",
             "init-project-flag",
             "workspace-metadata",
             "workspace-dir",
             "workspace-list",
             "sbom-export",
             "auth-helper",
-            "direct-publish",
             "target-workspace-discovery",
             "metadata-json",
             "gcs-endpoint",
@@ -1768,7 +1851,15 @@
             "tool-install-locks",
             "workspace-list-scripts",
             "no-distutils-patch",
-            "lock-build-dependencies"
+            "index-hash-algorithm",
+            "lockfile-format-check",
+            "lock-without-metadata",
+            "tar-codec",
+            "index-by-name",
+            "artifact-hash-filtering",
+            "content-addressed-cache",
+            "missing-exclude-newer-package-lock",
+            "batch-export"
           ]
         },
         {
@@ -2157,8 +2248,12 @@
               "$ref": "#/definitions/MarkerTree"
             },
             "workspace": {
-              "description": "When set to `false`, the package will be fetched from the remote index, rather than\nincluded as a workspace package.",
-              "type": "boolean"
+              "description": "`true` selects the current workspace. A string selects another workspace discovered\nfrom the given path.\n\nWhen set to `false`, the package will be fetched from the remote index, rather than\nincluded as a workspace package.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/WorkspaceReference"
+                }
+              ]
             }
           },
           "additionalProperties": false,
@@ -2280,6 +2375,21 @@
           "description": "An `x86_64` Linux target.",
           "type": "string",
           "const": "x86_64-unknown-linux-musl"
+        },
+        {
+          "description": "An s390x Linux target. Equivalent to `s390x-manylinux_2_28`.",
+          "type": "string",
+          "const": "s390x-unknown-linux-gnu"
+        },
+        {
+          "description": "A little-endian `PowerPC64` Linux target. Equivalent to `ppc64le-manylinux_2_28`.",
+          "type": "string",
+          "const": "powerpc64le-unknown-linux-gnu"
+        },
+        {
+          "description": "A `LoongArch64` Linux target. Equivalent to `loongarch64-manylinux_2_36`.",
+          "type": "string",
+          "const": "loongarch64-unknown-linux-gnu"
         },
         {
           "description": "A RISCV64 Linux target.",
@@ -2415,6 +2525,161 @@
           "description": "An ARM64 target for the `manylinux_2_40` platform.",
           "type": "string",
           "const": "aarch64-manylinux_2_40"
+        },
+        {
+          "description": "An s390x target for the `manylinux2014` platform. Equivalent to `s390x-manylinux_2_17`.",
+          "type": "string",
+          "const": "s390x-manylinux2014"
+        },
+        {
+          "description": "An s390x target for the `manylinux_2_17` platform.",
+          "type": "string",
+          "const": "s390x-manylinux_2_17"
+        },
+        {
+          "description": "An s390x target for the `manylinux_2_28` platform.",
+          "type": "string",
+          "const": "s390x-manylinux_2_28"
+        },
+        {
+          "description": "An s390x target for the `manylinux_2_31` platform.",
+          "type": "string",
+          "const": "s390x-manylinux_2_31"
+        },
+        {
+          "description": "An s390x target for the `manylinux_2_32` platform.",
+          "type": "string",
+          "const": "s390x-manylinux_2_32"
+        },
+        {
+          "description": "An s390x target for the `manylinux_2_33` platform.",
+          "type": "string",
+          "const": "s390x-manylinux_2_33"
+        },
+        {
+          "description": "An s390x target for the `manylinux_2_34` platform.",
+          "type": "string",
+          "const": "s390x-manylinux_2_34"
+        },
+        {
+          "description": "An s390x target for the `manylinux_2_35` platform.",
+          "type": "string",
+          "const": "s390x-manylinux_2_35"
+        },
+        {
+          "description": "An s390x target for the `manylinux_2_36` platform.",
+          "type": "string",
+          "const": "s390x-manylinux_2_36"
+        },
+        {
+          "description": "An s390x target for the `manylinux_2_37` platform.",
+          "type": "string",
+          "const": "s390x-manylinux_2_37"
+        },
+        {
+          "description": "An s390x target for the `manylinux_2_38` platform.",
+          "type": "string",
+          "const": "s390x-manylinux_2_38"
+        },
+        {
+          "description": "An s390x target for the `manylinux_2_39` platform.",
+          "type": "string",
+          "const": "s390x-manylinux_2_39"
+        },
+        {
+          "description": "An s390x target for the `manylinux_2_40` platform.",
+          "type": "string",
+          "const": "s390x-manylinux_2_40"
+        },
+        {
+          "description": "A little-endian `PowerPC64` target for the `manylinux2014` platform. Equivalent to `ppc64le-manylinux_2_17`.",
+          "type": "string",
+          "const": "ppc64le-manylinux2014"
+        },
+        {
+          "description": "A little-endian `PowerPC64` target for the `manylinux_2_17` platform.",
+          "type": "string",
+          "const": "ppc64le-manylinux_2_17"
+        },
+        {
+          "description": "A little-endian `PowerPC64` target for the `manylinux_2_28` platform.",
+          "type": "string",
+          "const": "ppc64le-manylinux_2_28"
+        },
+        {
+          "description": "A little-endian `PowerPC64` target for the `manylinux_2_31` platform.",
+          "type": "string",
+          "const": "ppc64le-manylinux_2_31"
+        },
+        {
+          "description": "A little-endian `PowerPC64` target for the `manylinux_2_32` platform.",
+          "type": "string",
+          "const": "ppc64le-manylinux_2_32"
+        },
+        {
+          "description": "A little-endian `PowerPC64` target for the `manylinux_2_33` platform.",
+          "type": "string",
+          "const": "ppc64le-manylinux_2_33"
+        },
+        {
+          "description": "A little-endian `PowerPC64` target for the `manylinux_2_34` platform.",
+          "type": "string",
+          "const": "ppc64le-manylinux_2_34"
+        },
+        {
+          "description": "A little-endian `PowerPC64` target for the `manylinux_2_35` platform.",
+          "type": "string",
+          "const": "ppc64le-manylinux_2_35"
+        },
+        {
+          "description": "A little-endian `PowerPC64` target for the `manylinux_2_36` platform.",
+          "type": "string",
+          "const": "ppc64le-manylinux_2_36"
+        },
+        {
+          "description": "A little-endian `PowerPC64` target for the `manylinux_2_37` platform.",
+          "type": "string",
+          "const": "ppc64le-manylinux_2_37"
+        },
+        {
+          "description": "A little-endian `PowerPC64` target for the `manylinux_2_38` platform.",
+          "type": "string",
+          "const": "ppc64le-manylinux_2_38"
+        },
+        {
+          "description": "A little-endian `PowerPC64` target for the `manylinux_2_39` platform.",
+          "type": "string",
+          "const": "ppc64le-manylinux_2_39"
+        },
+        {
+          "description": "A little-endian `PowerPC64` target for the `manylinux_2_40` platform.",
+          "type": "string",
+          "const": "ppc64le-manylinux_2_40"
+        },
+        {
+          "description": "A `LoongArch64` target for the `manylinux_2_36` platform.",
+          "type": "string",
+          "const": "loongarch64-manylinux_2_36"
+        },
+        {
+          "description": "A `LoongArch64` target for the `manylinux_2_37` platform.",
+          "type": "string",
+          "const": "loongarch64-manylinux_2_37"
+        },
+        {
+          "description": "A `LoongArch64` target for the `manylinux_2_38` platform.",
+          "type": "string",
+          "const": "loongarch64-manylinux_2_38"
+        },
+        {
+          "description": "A `LoongArch64` target for the `manylinux_2_39` platform.",
+          "type": "string",
+          "const": "loongarch64-manylinux_2_39"
+        },
+        {
+          "description": "A `LoongArch64` target for the `manylinux_2_40` platform.",
+          "type": "string",
+          "const": "loongarch64-manylinux_2_40"
         },
         {
           "description": "An ARM64 Android target.\n\nBy default uses Android API level 24, but respects\nthe `ANDROID_API_LEVEL` environment variable if set.",
@@ -2783,6 +3048,17 @@
         }
       },
       "additionalProperties": false
+    },
+    "WorkspaceReference": {
+      "description": "A reference to either the current workspace or a workspace discovered from a path.",
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "$ref": "#/definitions/PortablePathBuf"
+        }
+      ]
     }
   }
 }

@@ -1,3 +1,11 @@
+# /// script
+# requires-python = ">=3.12"
+# dependencies = []
+#
+# [tool.uv]
+# no-build = true
+# exclude-newer = "P7D"
+# ///
 """Check that uv and uv_build wheels contain exactly the expected files"""
 
 import re
@@ -59,7 +67,7 @@ def check_uv_wheel(uv_wheel: Path) -> None:
         # Verbose log
         print(f"Expected: {sorted(expected)}", file=sys.stderr)
         print(f"Actual:   {sorted(actual)}", file=sys.stderr)
-        print("", file=sys.stderr)
+        print(file=sys.stderr)
         # Concise error
         print("error: uv wheel has unexpected contents", file=sys.stderr)
         if expected - actual:

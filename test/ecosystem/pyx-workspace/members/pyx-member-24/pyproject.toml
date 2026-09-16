@@ -1,0 +1,44 @@
+[project]
+name = "pyx-member-24"
+version = "0.1.0"
+requires-python = "==3.14.*"
+dependencies = [
+    "aiofiles==25.1.0",
+    "aiohttp==3.14.1",
+    "msgspec==0.21.1",
+    "packaging==26.0",
+    "pyx-member-05",
+    "pyx-member-06",
+    "pyx-member-09",
+    "pyx-member-23",
+    "pyx-member-28",
+    "pyx-member-32",
+    "pyx-member-37",
+    "sentry-sdk==2.57.0",
+    "sqlalchemy==2.0.49",
+    "stamina==25.2.0",
+]
+
+[project.optional-dependencies]
+aws = [
+    "boto3==1.42.88",
+    "pyx-member-09[aws]",
+    "pyx-member-28[aws]",
+]
+
+[dependency-groups]
+dev = [
+    "aioresponses==0.7.8",
+    "coverage==7.13.5",
+    "deptry==0.25.1",
+    "dirty-equals==0.11",
+    "freezegun==1.5.5",
+    "inline-snapshot==0.32.6",
+    "pytest==9.0.3",
+    "pytest-asyncio==1.3.0",
+    "python-dotenv==1.2.2",
+    "pyx-member-33",
+    "ruff==0.15.18",
+    "ty==0.0.51",
+    "types-aiofiles==25.1.0.20260409",
+]

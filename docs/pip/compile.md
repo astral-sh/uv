@@ -142,7 +142,7 @@ dependencies of the current project.
 
 To define a constraint, define a bound for a package:
 
-```python title="constraints.txt"
+```requirements title="constraints.txt"
 pydantic<2.0
 ```
 
@@ -179,7 +179,7 @@ build-backend = "setuptools.build_meta"
 Build constraints could be used to ensure that a specific version of `setuptools` is used for every
 package in the workspace:
 
-```python title="build-constraints.txt"
+```requirements title="build-constraints.txt"
 setuptools==75.0.0
 ```
 
@@ -202,7 +202,7 @@ then the dependencies cannot be resolved.
 
 To define an override, define the new requirement for the problematic package:
 
-```python title="overrides.txt"
+```requirements title="overrides.txt"
 c>=2.0
 ```
 

@@ -88,5 +88,6 @@ Write-Output `
 	"RUSTUP_HOME=$($Drive)/.rustup" `
 	"CARGO_HOME=$($Drive)/.cargo" `
 	"UV_WORKSPACE=$($Drive)/uv" `
+	"UV_PYTHON_INSTALL_DIR=$($Drive)/uv-python" `
 	"PATH=$($Drive)/.cargo/bin;$env:PATH" `
 	>> $env:GITHUB_ENV

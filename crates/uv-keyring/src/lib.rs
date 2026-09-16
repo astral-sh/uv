@@ -354,6 +354,8 @@ impl Entry {
 /// Instead, it contains generics that each keystore invokes in their tests,
 /// passing their store-specific parameters for the generic ones.
 mod tests {
+    use std::assert_matches;
+
     use super::{Entry, Error};
     #[cfg(feature = "native-auth")]
     use super::{Result, credential::CredentialApi};
@@ -397,8 +399,9 @@ mod tests {
             .await
             .unwrap_or_else(|err| panic!("Can't delete password for {case}: {err:?}"));
         let password = entry.get_password().await;
-        assert!(
-            matches!(password, Err(Error::NoEntry)),
+        assert_matches!(
+            password,
+            Err(Error::NoEntry),
             "Read deleted password for {case}",
         );
     }
@@ -422,8 +425,9 @@ mod tests {
             .await
             .unwrap_or_else(|err| panic!("Can't delete password for {case}: {err:?}"));
         let password = entry.get_secret().await;
-        assert!(
-            matches!(password, Err(Error::NoEntry)),
+        assert_matches!(
+            password,
+            Err(Error::NoEntry),
             "Read deleted password for {case}",
         );
     }
@@ -455,8 +459,9 @@ mod tests {
     {
         let name = generate_random_string();
         let entry = f(&name, &name);
-        assert!(
-            matches!(entry.get_password().await, Err(Error::NoEntry)),
+        assert_matches!(
+            entry.get_password().await,
+            Err(Error::NoEntry),
             "Missing entry has password"
         );
     }
@@ -519,14 +524,16 @@ mod tests {
     {
         let name = generate_random_string();
         let entry = f(&name, &name);
-        assert!(
-            matches!(entry.get_attributes().await, Err(Error::NoEntry)),
+        assert_matches!(
+            entry.get_attributes().await,
+            Err(Error::NoEntry),
             "Read missing credential in attribute test",
         );
         let mut map: HashMap<&str, &str> = HashMap::new();
         map.insert("test attribute name", "test attribute value");
-        assert!(
-            matches!(entry.update_attributes(&map).await, Err(Error::NoEntry)),
+        assert_matches!(
+            entry.update_attributes(&map).await,
+            Err(Error::NoEntry),
             "Updated missing credential in attribute test",
         );
         // create the credential and test again
@@ -539,8 +546,9 @@ mod tests {
             Ok(attrs) if attrs.is_empty() => {}
             Ok(attrs) => panic!("Unexpected attributes: {attrs:?}"),
         }
-        assert!(
-            matches!(entry.update_attributes(&map).await, Ok(())),
+        assert_matches!(
+            entry.update_attributes(&map).await,
+            Ok(()),
             "Couldn't update attributes in attribute test",
         );
         match entry.get_attributes().await {
@@ -552,8 +560,9 @@ mod tests {
             .delete_credential()
             .await
             .unwrap_or_else(|err| panic!("Can't delete credential for attribute test: {err:?}"));
-        assert!(
-            matches!(entry.get_attributes().await, Err(Error::NoEntry)),
+        assert_matches!(
+            entry.get_attributes().await,
+            Err(Error::NoEntry),
             "Read deleted credential in attribute test",
         );
     }

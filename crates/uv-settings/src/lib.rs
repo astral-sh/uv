@@ -7,7 +7,7 @@ use tracing::info_span;
 use uv_client::{DEFAULT_CONNECT_TIMEOUT, DEFAULT_READ_TIMEOUT, DEFAULT_READ_TIMEOUT_UPLOAD};
 use uv_configuration::RequiredVersion;
 use uv_dirs::{system_config_file, user_config_dir};
-use uv_distribution_types::Origin;
+use uv_distribution_types::{IndexUrlError, Origin};
 use uv_flags::EnvironmentFlags;
 use uv_fs::Simplified;
 use uv_normalize::{GroupName, PackageName};
@@ -31,6 +31,11 @@ impl FilesystemOptions {
     /// Convert the [`FilesystemOptions`] into [`Options`].
     pub fn into_options(self) -> Options {
         self.0
+    }
+
+    /// Resolve the [`FilesystemOptions`] relative to the given root directory.
+    pub fn relative_to(self, root_dir: &Path) -> Result<Self, IndexUrlError> {
+        Ok(Self(self.0.relative_to(root_dir)?))
     }
 }
 
@@ -404,6 +409,7 @@ fn warn_uv_toml_masked_fields(options: &Options) {
                 keyring_provider,
                 resolution,
                 prerelease,
+                prerelease_package,
                 fork_strategy,
                 dependency_metadata,
                 config_settings,
@@ -539,6 +545,9 @@ fn warn_uv_toml_masked_fields(options: &Options) {
     }
     if prerelease.is_some() {
         masked_fields.push("prerelease");
+    }
+    if prerelease_package.is_some() {
+        masked_fields.push("prerelease-package");
     }
     if fork_strategy.is_some() {
         masked_fields.push("fork-strategy");
@@ -689,6 +698,7 @@ pub struct Concurrency {
     pub downloads: Option<NonZeroUsize>,
     pub builds: Option<NonZeroUsize>,
     pub installs: Option<NonZeroUsize>,
+    pub cache_reads: Option<NonZeroUsize>,
 }
 
 /// A boolean flag parsed from an environment variable.
@@ -719,6 +729,7 @@ pub struct EnvironmentOptions {
     pub ruff_path: Option<PathBuf>,
     pub ty_path: Option<PathBuf>,
     pub skip_wheel_filename_check: Option<bool>,
+    pub require_metadata_range_requests: Option<bool>,
     pub hide_build_output: Option<bool>,
     pub python_install_bin: Option<bool>,
     pub python_install_registry: Option<bool>,
@@ -770,6 +781,8 @@ pub struct EnvironmentOptions {
     pub init_bare: EnvFlag,
     pub malware_check: EnvFlag,
     pub malware_check_url: Option<DisplaySafeUrl>,
+    #[cfg(unix)]
+    pub run_rlimit_nofile: Option<u32>,
 }
 
 impl EnvironmentOptions {
@@ -797,6 +810,9 @@ impl EnvironmentOptions {
             skip_wheel_filename_check: parse_boolish_environment_variable(
                 EnvVars::UV_SKIP_WHEEL_FILENAME_CHECK,
             )?,
+            require_metadata_range_requests: parse_boolish_environment_variable(
+                EnvVars::UV_REQUIRE_METADATA_RANGE_REQUESTS,
+            )?,
             hide_build_output: parse_boolish_environment_variable(EnvVars::UV_HIDE_BUILD_OUTPUT)?,
             python_install_bin: parse_boolish_environment_variable(EnvVars::UV_PYTHON_INSTALL_BIN)?,
             python_install_registry: parse_boolish_environment_variable(
@@ -811,6 +827,10 @@ impl EnvironmentOptions {
                 builds: parse_integer_environment_variable(EnvVars::UV_CONCURRENT_BUILDS, None)?,
                 installs: parse_integer_environment_variable(
                     EnvVars::UV_CONCURRENT_INSTALLS,
+                    None,
+                )?,
+                cache_reads: parse_integer_environment_variable(
+                    EnvVars::UV_CONCURRENT_CACHE_READS,
                     None,
                 )?,
             },
@@ -900,6 +920,11 @@ impl EnvironmentOptions {
                     })
                 })
                 .transpose()?,
+            #[cfg(unix)]
+            run_rlimit_nofile: parse_integer_environment_variable(
+                EnvVars::UV_RUN_RLIMIT_NOFILE,
+                None,
+            )?,
         })
     }
 }

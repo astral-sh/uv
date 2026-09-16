@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use std::collections::BTreeMap;
@@ -7,12 +7,12 @@ use std::str::FromStr;
 use tracing::{debug, trace};
 
 use uv_cache::Cache;
+use uv_cache_key::CanonicalUrl;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, Constraints, DryRun, HashCheckingMode, TargetTriple};
 use uv_distribution::LoweredExtraBuildDependencies;
-use uv_distribution_types::{ExtraBuildRequires, Name, Requirement, RequirementSource};
-use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
-use uv_fs::CWD;
+use uv_distribution_types::{ExtraBuildRequires, Index, Name, Requirement, RequirementSource};
+use uv_fs::{CWD, Simplified};
 use uv_installer::{InstallationStrategy, Planner, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version};
@@ -24,10 +24,7 @@ use uv_python::{
 use uv_requirements::RequirementsSpecification;
 use uv_settings::{Combine, PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_tool::{InstalledTools, Tool};
-use uv_types::{
-    HashStrategy, LockedBuildResolutions, SourceTreeEditablePolicy, UnlockedBuildInputs,
-    unlocked_build_cache_key,
-};
+use uv_types::{HashStrategy, SourceTreeEditablePolicy};
 use uv_workspace::WorkspaceCache;
 
 use crate::commands::pip::loggers::{
@@ -39,9 +36,7 @@ use crate::commands::project::{
     update_environment,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::tool::common::{
-    ToolLock, remove_entrypoints, tool_environment_spec, validate_tool_lock_build_dependencies,
-};
+use crate::commands::tool::common::{ToolLock, remove_entrypoints, tool_environment_spec};
 use crate::commands::{ExitStatus, conjunction, tool::common::finalize_tool_install};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -72,7 +67,12 @@ pub(crate) async fn upgrade(
         if names.is_empty() {
             installed_tools
                 .tools()
-                .unwrap_or_default()
+                .with_context(|| {
+                    format!(
+                        "Failed to inspect installed tools in `{}`",
+                        installed_tools.root().user_display()
+                    )
+                })?
                 .into_iter()
                 .map(|(name, _)| (name, Vec::new()))
                 .collect()
@@ -178,11 +178,9 @@ pub(crate) async fn upgrade(
             .sorted_unstable_by(|(name_a, _), (name_b, _)| name_a.cmp(name_b))
         {
             trace!("Error trace: {err:?}");
-            write_error_chain_with_options(
-                err.context(format!("Failed to upgrade {}", name.green()))
-                    .as_ref(),
-                Hints::none(),
-                ErrorOptions::default().with_stream(printer.stderr()),
+            crate::commands::diagnostics::write_error_chain(
+                &err.context(format!("Failed to upgrade {}", name.green())),
+                printer,
             )?;
         }
         return Ok(ExitStatus::Failure);
@@ -323,16 +321,32 @@ async fn upgrade_tool(
         }
     };
 
+    // Restore credentials from user configuration when the receipt refers to the same index.
+    // Receipts intentionally omit credentials, including usernames needed for keyring lookups.
+    let mut receipt = ResolverInstallerOptions::from(existing_tool_receipt.options().clone());
+    if let (Some(stored), Some(configured)) = (
+        receipt.indexes.index_url.as_ref(),
+        filesystem.indexes.index_url.as_ref(),
+    ) {
+        let stored = Index::from(stored.clone());
+        let configured = Index::from(configured.clone());
+
+        if stored.raw_url().username().is_empty()
+            && stored.raw_url().password().is_none()
+            && (!configured.raw_url().username().is_empty()
+                || configured.raw_url().password().is_some())
+            && CanonicalUrl::new(stored.raw_url().clone())
+                == CanonicalUrl::new(configured.raw_url().clone())
+        {
+            receipt.indexes.index_url = Some(configured.into());
+        }
+    }
+
     // Resolve the appropriate settings, preferring: CLI > receipt > user.
-    let options = args.clone().combine(
-        ResolverInstallerOptions::from(existing_tool_receipt.options().clone())
-            .combine(filesystem.clone()),
-    );
+    let options = args.clone().combine(receipt.combine(filesystem.clone()));
     let settings = ResolverInstallerSettings::from(options.clone());
 
-    let build_constraint_requirements = existing_tool_receipt.build_constraints().to_vec();
-    let build_constraints =
-        Constraints::from_requirements(build_constraint_requirements.iter().cloned());
+    let build_constraints = existing_tool_receipt.build_constraints().to_vec();
     let manifest_constraints = existing_tool_receipt
         .constraints()
         .iter()
@@ -346,9 +360,10 @@ async fn upgrade_tool(
         &manifest_constraints,
         &manifest_overrides,
         &manifest_excludes,
-        &build_constraint_requirements,
+        &build_constraints,
         &settings.resolver.dependency_metadata,
     );
+    let build_constraints = Constraints::from_specifications(build_constraints);
 
     // Resolve the requirements.
     let spec = RequirementsSpecification::from_excludes(
@@ -388,15 +403,18 @@ async fn upgrade_tool(
             preview,
         )
         .await?;
-        let tool_lock =
-            ToolLock::from_resolution(&tool_dir, &universal_resolution, &lock_manifest)?;
+        let tool_lock = ToolLock::from_resolution(
+            &tool_dir,
+            &universal_resolution,
+            &lock_manifest,
+            &settings.resolver.index_locations,
+        )?;
         let resolution = tool_lock.to_resolution(
             Some(name),
             target_interpreter,
             python_platform,
             &settings.resolver.build_options,
         )?;
-        validate_tool_lock_build_dependencies(&resolution, preview)?;
         let hash_strategy = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?;
 
         if requested_interpreter.is_some() {
@@ -407,9 +425,7 @@ async fn upgrade_tool(
                 &resolution,
                 hash_strategy,
                 Modifications::Exact,
-                LockedBuildResolutions::default(),
                 build_constraints,
-                SourceTreeEditablePolicy::Tool,
                 (&settings).into(),
                 client_builder,
                 &state,
@@ -441,57 +457,27 @@ async fn upgrade_tool(
             } = &settings;
             let extra_build_requires =
                 LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
-                    .into_inner()
-                    .match_runtime(&resolution)?;
+                    .into_inner();
             let tags = resolution_tags(
                 None,
                 python_platform,
                 environment.environment().interpreter(),
             )?;
-            let unlocked_build_cache_key = unlocked_build_cache_key(UnlockedBuildInputs {
-                build_constraints: &build_constraints,
-                index_locations: &settings.resolver.index_locations,
-                index_strategy: settings.resolver.index_strategy,
-                build_options: &settings.resolver.build_options,
-                dependency_metadata: &settings.resolver.dependency_metadata,
-                config_settings: config_setting,
+            let plan = Planner::new(&resolution).build(
+                site_packages,
+                InstallationStrategy::Permissive,
+                &settings.reinstall,
+                &settings.resolver.build_options,
+                &hash_strategy,
+                &settings.resolver.index_locations,
+                config_setting,
                 config_settings_package,
-                extra_build_requires: &extra_build_requires,
+                &extra_build_requires,
                 extra_build_variables,
-                build_hasher: &HashStrategy::default(),
-                exclude_newer_global: settings.resolver.exclude_newer.global.as_ref(),
-                exclude_newer_package: (&settings.resolver.exclude_newer.package)
-                    .into_iter()
-                    .collect(),
-                sources: &settings.resolver.sources,
-                source_tree_editable_policy: SourceTreeEditablePolicy::Tool,
-                non_isolated: !matches!(
-                    settings.resolver.build_isolation,
-                    uv_configuration::BuildIsolation::Isolate
-                ),
-                invocation_timestamp: cache.timestamp(),
-            });
-            let plan = Planner::new(&resolution)
-                .with_unlocked_build_cache_key(unlocked_build_cache_key.as_deref())
-                .with_source_cache(matches!(
-                    &settings.resolver.build_isolation,
-                    uv_configuration::BuildIsolation::Isolate
-                ))
-                .build(
-                    site_packages,
-                    InstallationStrategy::Permissive,
-                    &settings.reinstall,
-                    &settings.resolver.build_options,
-                    &hash_strategy,
-                    &settings.resolver.index_locations,
-                    config_setting,
-                    config_settings_package,
-                    &extra_build_requires,
-                    extra_build_variables,
-                    cache,
-                    environment.environment(),
-                    &tags,
-                )?;
+                cache,
+                environment.environment(),
+                &tags,
+            )?;
             let plan_is_empty = plan.is_empty();
             let changes_tool = plan.cached.iter().any(|dist| dist.name() == name)
                 || plan.remote.iter().any(|dist| dist.name() == name)
@@ -512,9 +498,7 @@ async fn upgrade_tool(
                     &resolution,
                     hash_strategy,
                     Modifications::Exact,
-                    LockedBuildResolutions::default(),
                     build_constraints,
-                    SourceTreeEditablePolicy::Tool,
                     (&settings).into(),
                     client_builder,
                     &state,
@@ -554,9 +538,7 @@ async fn upgrade_tool(
             &resolution.into(),
             HashStrategy::default(),
             Modifications::Exact,
-            LockedBuildResolutions::default(),
             build_constraints,
-            SourceTreeEditablePolicy::Tool,
             (&settings).into(),
             client_builder,
             &state,

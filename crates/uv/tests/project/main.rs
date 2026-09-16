@@ -6,12 +6,6 @@ use uv_test::pypi_proxy;
 #[cfg(all(feature = "test-python", feature = "test-r2"))]
 mod check;
 
-#[cfg(feature = "test-python")]
-mod check_build;
-
-#[cfg(feature = "test-python")]
-mod check_build_frozen;
-
 #[cfg(all(feature = "test-python", feature = "test-pypi"))]
 mod edit;
 

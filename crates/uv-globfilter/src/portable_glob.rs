@@ -45,7 +45,7 @@ pub enum PortableGlobError {
     TrailingEscape { glob: String, pos: usize },
 }
 
-impl uv_errors::Hint for PortableGlobError {
+impl uv_errors::Hinted for PortableGlobError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::InvalidCharacterUv { .. } => {
@@ -223,7 +223,7 @@ impl PortableGlobParser {
 mod tests {
     use super::*;
     use insta::assert_snapshot;
-    use uv_errors::{ErrorWithHints, Hint};
+    use uv_errors::{ErrorWithHints, Hinted};
 
     #[test]
     fn test_error() {

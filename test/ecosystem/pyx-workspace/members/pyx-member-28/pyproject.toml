@@ -1,0 +1,21 @@
+[project]
+name = "pyx-member-28"
+version = "0.1.0"
+requires-python = "==3.14.*"
+dependencies = [
+    "types-boto3-secretsmanager",
+]
+
+[project.optional-dependencies]
+aws = [
+    "boto3==1.42.88",
+    "botocore==1.42.88",
+]
+
+[dependency-groups]
+dev = [
+    "deptry==0.25.1",
+    "pytest==9.0.3",
+    "ruff==0.15.18",
+    "ty==0.0.51",
+]

@@ -6,12 +6,8 @@ use tracing::debug;
 
 use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
-use uv_pep508::{
-    MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
-};
-use uv_platform_tags::{
-    AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
-};
+use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
+use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagPriority, Tags};
 use uv_pypi_types::{HashDigest, Yanked};
 
 use crate::{
@@ -148,6 +144,7 @@ impl IncompatibleDist {
                 IncompatibleSource::RequiresPython(..) => {
                     format!("requires {self}")
                 }
+                IncompatibleSource::NotPep625Filename => format!("has {self}"),
             },
             Self::Unavailable => format!("has {self}"),
         }
@@ -176,6 +173,7 @@ impl IncompatibleDist {
                 IncompatibleSource::RequiresPython(..) => {
                     format!("require {self}")
                 }
+                IncompatibleSource::NotPep625Filename => format!("have {self}"),
             },
             Self::Unavailable => format!("have {self}"),
         }
@@ -281,6 +279,9 @@ impl Display for IncompatibleDist {
                 IncompatibleSource::RequiresPython(python, _) => {
                     write!(f, "Python {python}")
                 }
+                IncompatibleSource::NotPep625Filename => {
+                    f.write_str("a non-PEP 625-compliant source distribution filename")
+                }
             },
             Self::Unavailable => f.write_str("no available distributions"),
         }
@@ -331,6 +332,8 @@ pub enum IncompatibleSource {
     RequiresPython(VersionSpecifiers, PythonRequirementKind),
     Yanked(Yanked),
     NoBuild,
+    /// The source distribution's filename does not confirm to PEP 625.
+    NotPep625Filename,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -344,36 +347,6 @@ pub enum HashComparison {
 }
 
 impl PrioritizedDist {
-    /// Create a new [`PrioritizedDist`] from the given wheel distribution.
-    pub fn from_built(
-        dist: RegistryBuiltWheel,
-        hashes: Vec<HashDigest>,
-        compatibility: WheelCompatibility,
-    ) -> Self {
-        Self(Box::new(PrioritizedDistInner {
-            markers: implied_markers(&dist.filename),
-            best_wheel_index: Some(0),
-            wheels: vec![(dist, compatibility)],
-            source: None,
-            hashes,
-        }))
-    }
-
-    /// Create a new [`PrioritizedDist`] from the given source distribution.
-    pub fn from_source(
-        dist: RegistrySourceDist,
-        hashes: Vec<HashDigest>,
-        compatibility: SourceDistCompatibility,
-    ) -> Self {
-        Self(Box::new(PrioritizedDistInner {
-            markers: MarkerTree::TRUE,
-            best_wheel_index: None,
-            wheels: vec![],
-            source: Some((dist, compatibility)),
-            hashes,
-        }))
-    }
-
     /// Insert the given built distribution into the [`PrioritizedDist`].
     pub fn insert_built(
         &mut self,
@@ -384,7 +357,7 @@ impl PrioritizedDist {
         // Track the implied markers.
         if compatibility.is_compatible() {
             if !self.0.markers.is_true() {
-                self.0.markers.or(implied_markers(&dist.filename));
+                self.0.markers = self.0.markers.or(implied_markers(&dist.filename));
             }
         }
         // Track the hashes.
@@ -528,15 +501,7 @@ impl PrioritizedDist {
         let mut adjusted_wheels = Vec::with_capacity(self.0.wheels.len());
         let mut adjusted_best_index = 0;
         for (i, (wheel, compatibility)) in self.0.wheels.iter().enumerate() {
-            // Keep the chosen wheel available for metadata resolution. Installation falls back
-            // to the compatible source distribution and filters the yanked wheel there.
-            if compatibility.is_excluded()
-                || (i != best_wheel_index
-                    && matches!(
-                        compatibility,
-                        WheelCompatibility::Incompatible(IncompatibleWheel::Yanked(_))
-                    ))
-            {
+            if compatibility.is_excluded() {
                 continue;
             }
             if i == best_wheel_index {
@@ -549,14 +514,7 @@ impl PrioritizedDist {
             .0
             .source
             .as_ref()
-            .filter(|(_, compatibility)| {
-                !matches!(
-                    compatibility,
-                    SourceDistCompatibility::Incompatible(
-                        IncompatibleSource::ExcludeNewer(_) | IncompatibleSource::Yanked(_)
-                    )
-                )
-            })
+            .filter(|(_, compatibility)| !compatibility.is_excluded())
             .map(|(sdist, _)| sdist.clone());
         Some(RegistryBuiltDist {
             wheels: adjusted_wheels,
@@ -572,14 +530,7 @@ impl PrioritizedDist {
             .0
             .source
             .as_ref()
-            .filter(|(_, compatibility)| {
-                !matches!(
-                    compatibility,
-                    SourceDistCompatibility::Incompatible(
-                        IncompatibleSource::ExcludeNewer(_) | IncompatibleSource::Yanked(_)
-                    )
-                )
-            })
+            .filter(|(_, compatibility)| !compatibility.is_excluded())
             .map(|(sdist, _)| sdist.clone())?;
         assert!(
             sdist.wheels.is_empty(),
@@ -589,13 +540,7 @@ impl PrioritizedDist {
             .0
             .wheels
             .iter()
-            .filter(|(_, compatibility)| {
-                !compatibility.is_excluded()
-                    && !matches!(
-                        compatibility,
-                        WheelCompatibility::Incompatible(IncompatibleWheel::Yanked(_))
-                    )
-            })
+            .filter(|(_, compatibility)| !compatibility.is_excluded())
             .map(|(wheel, _)| wheel.clone())
             .collect();
         Some(sdist)
@@ -605,121 +550,6 @@ impl PrioritizedDist {
     /// exists.
     pub fn best_wheel(&self) -> Option<&(RegistryBuiltWheel, WheelCompatibility)> {
         self.0.best_wheel_index.map(|i| &self.0.wheels[i])
-    }
-
-    /// Returns true if a compatible source or retained wheel is available for the executor.
-    pub fn has_compatible_artifact(&self, tags: &Tags, markers: &MarkerEnvironment) -> bool {
-        let is_eligible = |file: &File| {
-            file.requires_python.as_ref().is_none_or(|requires_python| {
-                requires_python.contains(&markers.python_full_version().version)
-            })
-        };
-        self.0
-            .source
-            .as_ref()
-            .is_some_and(|(sdist, compatibility)| {
-                compatibility.is_compatible() && is_eligible(&sdist.file)
-            })
-            || self.0.wheels.iter().any(|(wheel, compatibility)| {
-                compatibility.is_compatible()
-                    && is_eligible(&wheel.file)
-                    && wheel.filename.compatibility(tags).is_compatible()
-            })
-    }
-
-    /// Prefer an artifact that can be installed by the active executor when one is available.
-    ///
-    /// Leave the original choice intact when no compatible artifact exists so that universal
-    /// resolution can still fork on a foreign Python requirement.
-    pub fn prioritize_executor_artifacts(
-        &mut self,
-        tags: &Tags,
-        markers: &MarkerEnvironment,
-        allows_yanked: bool,
-    ) {
-        let is_eligible = |file: &File| {
-            file.requires_python.as_ref().is_none_or(|requires_python| {
-                requires_python.contains(&markers.python_full_version().version)
-            }) && (allows_yanked
-                || file
-                    .yanked
-                    .as_deref()
-                    .is_none_or(|yanked| !yanked.is_yanked()))
-        };
-        let has_compatible_artifact =
-            self.0
-                .source
-                .as_ref()
-                .is_some_and(|(sdist, compatibility)| {
-                    compatibility.is_compatible() && is_eligible(&sdist.file)
-                })
-                || self.0.wheels.iter().any(|(wheel, compatibility)| {
-                    compatibility.is_compatible()
-                        && is_eligible(&wheel.file)
-                        && wheel.filename.compatibility(tags).is_compatible()
-                });
-
-        if let Some((sdist, compatibility)) = &mut self.0.source
-            && compatibility.is_compatible()
-        {
-            if !allows_yanked
-                && let Some(yanked) = sdist.file.yanked.as_deref()
-                && yanked.is_yanked()
-            {
-                *compatibility = SourceDistCompatibility::Incompatible(IncompatibleSource::Yanked(
-                    yanked.clone(),
-                ));
-            } else if has_compatible_artifact
-                && let Some(requires_python) = sdist.file.requires_python.as_deref()
-                && !requires_python.contains(&markers.python_full_version().version)
-            {
-                *compatibility =
-                    SourceDistCompatibility::Incompatible(IncompatibleSource::RequiresPython(
-                        requires_python.clone(),
-                        PythonRequirementKind::Installed,
-                    ));
-            }
-        }
-
-        for (wheel, compatibility) in &mut self.0.wheels {
-            if !compatibility.is_compatible() {
-                continue;
-            }
-            if !allows_yanked
-                && let Some(yanked) = wheel.file.yanked.as_deref()
-                && yanked.is_yanked()
-            {
-                *compatibility =
-                    WheelCompatibility::Incompatible(IncompatibleWheel::Yanked(yanked.clone()));
-                continue;
-            }
-            if !has_compatible_artifact {
-                continue;
-            }
-            if let Some(requires_python) = wheel.file.requires_python.as_deref()
-                && !requires_python.contains(&markers.python_full_version().version)
-            {
-                *compatibility =
-                    WheelCompatibility::Incompatible(IncompatibleWheel::RequiresPython(
-                        requires_python.clone(),
-                        PythonRequirementKind::Installed,
-                    ));
-                continue;
-            }
-            if let TagCompatibility::Incompatible(tag) = wheel.filename.compatibility(tags) {
-                *compatibility = WheelCompatibility::Incompatible(IncompatibleWheel::Tag(tag));
-            }
-        }
-
-        let mut best_wheel_index: Option<usize> = None;
-        for (index, (_, compatibility)) in self.0.wheels.iter().enumerate() {
-            if best_wheel_index
-                .is_none_or(|best| compatibility.is_more_compatible(&self.0.wheels[best].1))
-            {
-                best_wheel_index = Some(index);
-            }
-        }
-        self.0.best_wheel_index = best_wheel_index;
     }
 
     /// Returns an iterator of all wheels and the source distribution, if any.
@@ -890,21 +720,26 @@ impl IncompatibleSource {
             Self::ExcludeNewer(timestamp_self) => match other {
                 // Smaller timestamps are closer to the cut-off time
                 Self::ExcludeNewer(timestamp_other) => timestamp_other < timestamp_self,
-                Self::NoBuild | Self::RequiresPython(_, _) | Self::Yanked(_) => true,
+                Self::NoBuild
+                | Self::RequiresPython(_, _)
+                | Self::Yanked(_)
+                | Self::NotPep625Filename => true,
             },
             Self::RequiresPython(_, _) => match other {
                 Self::ExcludeNewer(_) => false,
                 // Version specifiers cannot be reasonably compared
                 Self::RequiresPython(_, _) => false,
-                Self::NoBuild | Self::Yanked(_) => true,
+                Self::NoBuild | Self::Yanked(_) | Self::NotPep625Filename => true,
             },
             Self::Yanked(_) => match other {
-                Self::ExcludeNewer(_) | Self::RequiresPython(_, _) => false,
+                Self::ExcludeNewer(_) | Self::RequiresPython(_, _) | Self::NotPep625Filename => {
+                    false
+                }
                 // Yanks with a reason are more helpful for errors
                 Self::Yanked(yanked_other) => matches!(yanked_other, Yanked::Reason(_)),
                 Self::NoBuild => true,
             },
-            Self::NoBuild => false,
+            Self::NoBuild | Self::NotPep625Filename => false,
         }
     }
 }
@@ -962,10 +797,7 @@ impl IncompatibleWheel {
 
 /// Given a wheel filename, determine the set of supported markers.
 pub fn implied_markers(filename: &WheelFilename) -> MarkerTree {
-    let mut marker = implied_platform_markers(filename);
-    marker.and(implied_python_markers(filename));
-
-    marker
+    implied_platform_markers(filename).and(implied_python_markers(filename))
 }
 
 /// Given a wheel filename, determine the set of supported platforms, in terms of their markers.
@@ -987,12 +819,12 @@ fn implied_platform_markers(filename: &WheelFilename) -> MarkerTree {
                     operator: MarkerOperator::Equal,
                     value: arcstr::literal!("win32"),
                 });
-                tag_marker.and(MarkerTree::expression(MarkerExpression::String {
+                tag_marker = tag_marker.and(MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::PlatformMachine,
                     operator: MarkerOperator::Equal,
                     value: arcstr::literal!("x86"),
                 }));
-                marker.or(tag_marker);
+                marker = marker.or(tag_marker);
             }
             PlatformTag::WinAmd64 => {
                 let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
@@ -1000,12 +832,12 @@ fn implied_platform_markers(filename: &WheelFilename) -> MarkerTree {
                     operator: MarkerOperator::Equal,
                     value: arcstr::literal!("win32"),
                 });
-                tag_marker.and(MarkerTree::expression(MarkerExpression::String {
+                tag_marker = tag_marker.and(MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::PlatformMachine,
                     operator: MarkerOperator::Equal,
                     value: arcstr::literal!("AMD64"),
                 }));
-                marker.or(tag_marker);
+                marker = marker.or(tag_marker);
             }
             PlatformTag::WinArm64 => {
                 let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
@@ -1013,12 +845,12 @@ fn implied_platform_markers(filename: &WheelFilename) -> MarkerTree {
                     operator: MarkerOperator::Equal,
                     value: arcstr::literal!("win32"),
                 });
-                tag_marker.and(MarkerTree::expression(MarkerExpression::String {
+                tag_marker = tag_marker.and(MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::PlatformMachine,
                     operator: MarkerOperator::Equal,
                     value: arcstr::literal!("ARM64"),
                 }));
-                marker.or(tag_marker);
+                marker = marker.or(tag_marker);
             }
 
             // macOS
@@ -1032,15 +864,16 @@ fn implied_platform_markers(filename: &WheelFilename) -> MarkerTree {
                 // Extract the architecture from the end of the tag.
                 let mut arch_marker = MarkerTree::FALSE;
                 for arch in binary_format.platform_machine() {
-                    arch_marker.or(MarkerTree::expression(MarkerExpression::String {
-                        key: MarkerValueString::PlatformMachine,
-                        operator: MarkerOperator::Equal,
-                        value: ArcStr::from(arch.name()),
-                    }));
+                    arch_marker =
+                        arch_marker.or(MarkerTree::expression(MarkerExpression::String {
+                            key: MarkerValueString::PlatformMachine,
+                            operator: MarkerOperator::Equal,
+                            value: ArcStr::from(arch.name()),
+                        }));
                 }
-                tag_marker.and(arch_marker);
+                tag_marker = tag_marker.and(arch_marker);
 
-                marker.or(tag_marker);
+                marker = marker.or(tag_marker);
             }
 
             // Linux
@@ -1055,12 +888,12 @@ fn implied_platform_markers(filename: &WheelFilename) -> MarkerTree {
                     operator: MarkerOperator::Equal,
                     value: arcstr::literal!("linux"),
                 });
-                tag_marker.and(MarkerTree::expression(MarkerExpression::String {
+                tag_marker = tag_marker.and(MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::PlatformMachine,
                     operator: MarkerOperator::Equal,
                     value: ArcStr::from(arch.name()),
                 }));
-                marker.or(tag_marker);
+                marker = marker.or(tag_marker);
             }
 
             tag => {
@@ -1150,28 +983,28 @@ fn implied_python_markers(filename: &WheelFilename) -> MarkerTree {
                 // No implementation marker needed
             }
             LanguageTag::CPython { .. } | LanguageTag::CPythonMajor { .. } => {
-                tree.and(MarkerTree::expression(MarkerExpression::String {
+                tree = tree.and(MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::PlatformPythonImplementation,
                     operator: MarkerOperator::Equal,
                     value: arcstr::literal!("CPython"),
                 }));
             }
             LanguageTag::PyPy { .. } => {
-                tree.and(MarkerTree::expression(MarkerExpression::String {
+                tree = tree.and(MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::PlatformPythonImplementation,
                     operator: MarkerOperator::Equal,
                     value: arcstr::literal!("PyPy"),
                 }));
             }
             LanguageTag::GraalPy { .. } => {
-                tree.and(MarkerTree::expression(MarkerExpression::String {
+                tree = tree.and(MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::PlatformPythonImplementation,
                     operator: MarkerOperator::Equal,
                     value: arcstr::literal!("GraalPy"),
                 }));
             }
             LanguageTag::Pyston { .. } => {
-                tree.and(MarkerTree::expression(MarkerExpression::String {
+                tree = tree.and(MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::PlatformPythonImplementation,
                     operator: MarkerOperator::Equal,
                     value: arcstr::literal!("Pyston"),
@@ -1179,7 +1012,7 @@ fn implied_python_markers(filename: &WheelFilename) -> MarkerTree {
             }
         }
 
-        marker.or(tree);
+        marker = marker.or(tree);
     }
 
     marker

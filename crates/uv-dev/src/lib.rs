@@ -10,9 +10,11 @@ use crate::clear_compile::ClearCompileArgs;
 use crate::compile::CompileArgs;
 use crate::generate_all::Args as GenerateAllArgs;
 use crate::generate_cli_reference::Args as GenerateCliReferenceArgs;
+use crate::generate_dirhash_test_vectors::Args as GenerateDirhashTestVectorsArgs;
 use crate::generate_env_vars_reference::Args as GenerateEnvVarsReferenceArgs;
 use crate::generate_json_schema::Args as GenerateJsonSchemaArgs;
 use crate::generate_options_reference::Args as GenerateOptionsReferenceArgs;
+use crate::generate_preview_features_reference::Args as GeneratePreviewFeaturesReferenceArgs;
 use crate::generate_scenarios::Args as GenerateScenarioTestsArgs;
 use crate::generate_sysconfig_mappings::Args as GenerateSysconfigMetadataArgs;
 use crate::list_packages::ListPackagesArgs;
@@ -25,9 +27,11 @@ mod clear_compile;
 mod compile;
 mod generate_all;
 mod generate_cli_reference;
+mod generate_dirhash_test_vectors;
 mod generate_env_vars_reference;
 mod generate_json_schema;
 mod generate_options_reference;
+mod generate_preview_features_reference;
 mod generate_scenarios;
 mod generate_sysconfig_mappings;
 mod list_packages;
@@ -57,8 +61,12 @@ enum Cli {
     GenerateOptionsReference(GenerateOptionsReferenceArgs),
     /// Generate the CLI reference for the documentation.
     GenerateCliReference(GenerateCliReferenceArgs),
+    /// Generate the uv-extract dirhash test vectors.
+    GenerateDirhashTestVectors(GenerateDirhashTestVectorsArgs),
     /// Generate the environment variables reference for the documentation.
     GenerateEnvVarsReference(GenerateEnvVarsReferenceArgs),
+    /// Generate the available preview features reference for the documentation.
+    GeneratePreviewFeaturesReference(GeneratePreviewFeaturesReferenceArgs),
     /// Generate the Packse scenario integration tests.
     GenerateScenarioTests(GenerateScenarioTestsArgs),
     /// Generate the sysconfig metadata from derived targets.
@@ -85,7 +93,11 @@ pub async fn run() -> Result<()> {
         Cli::GenerateJSONSchema(args) => generate_json_schema::main(&args)?,
         Cli::GenerateOptionsReference(args) => generate_options_reference::main(&args)?,
         Cli::GenerateCliReference(args) => generate_cli_reference::main(&args)?,
+        Cli::GenerateDirhashTestVectors(args) => generate_dirhash_test_vectors::main(&args)?,
         Cli::GenerateEnvVarsReference(args) => generate_env_vars_reference::main(&args)?,
+        Cli::GeneratePreviewFeaturesReference(args) => {
+            generate_preview_features_reference::main(&args)?;
+        }
         Cli::GenerateScenarioTests(args) => generate_scenarios::main(&args)?,
         Cli::GenerateSysconfigMetadata(args) => generate_sysconfig_mappings::main(&args).await?,
         #[cfg(feature = "render")]

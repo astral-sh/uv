@@ -1,0 +1,3 @@
+# Integration tests run uv from this crate and exercise source builds.
+[tool.uv]
+no-build = false

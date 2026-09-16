@@ -21,8 +21,16 @@ mod network;
 #[cfg(feature = "test-pypi")]
 mod publish;
 
+mod requirements;
+
+#[cfg(unix)]
+mod resource_limits;
+
 #[cfg(feature = "self-update")]
 mod self_update;
+
+#[cfg(not(windows))]
+mod update_shell;
 
 mod upgrade;
 

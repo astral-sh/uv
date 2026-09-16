@@ -18,7 +18,7 @@ use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use crate::{IndexMetadata, IndexUrl};
 
 use uv_pypi_types::{
-    ConflictItem, Hashes, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitDirectoryUrl,
+    ConflictItem, HashError, Hashes, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitDirectoryUrl,
     ParsedGitPathUrl, ParsedPathUrl, ParsedUrl, ParsedUrlError, VerbatimParsedUrl,
 };
 
@@ -83,26 +83,36 @@ impl Requirement {
 
     /// Convert to a [`Requirement`] with an absolute path based on the given root.
     #[must_use]
-    pub fn to_absolute(self, path: &Path) -> Self {
+    pub(crate) fn into_absolute(self, path: &Path) -> Self {
         Self {
             source: self.source.into_absolute(path),
             ..self
         }
     }
 
+    /// Set whether this requirement's local source should be represented by a relative path.
+    ///
+    /// When `false`, preserve the original input's path preference. Non-local sources are unchanged.
+    pub fn set_force_relative(&mut self, force_relative: bool) {
+        if let RequirementSource::Path { url, .. } | RequirementSource::Directory { url, .. } =
+            &mut self.source
+            && url.force_relative() != force_relative
+        {
+            *url = url.clone().with_force_relative(force_relative);
+        }
+    }
+
     /// Return the hashes of the requirement, as specified in the URL fragment.
-    pub fn hashes(&self) -> Option<Hashes> {
-        let url = match &self.source {
-            RequirementSource::Url { url, .. } | RequirementSource::Path { url, .. } => url,
-            RequirementSource::Registry { .. }
-            | RequirementSource::GitDirectory { .. }
-            | RequirementSource::GitPath { .. }
-            | RequirementSource::Directory { .. } => return None,
+    pub fn hashes(&self) -> Result<Option<Hashes>, HashError> {
+        let (RequirementSource::Url { ref url, .. } | RequirementSource::Path { ref url, .. }) =
+            self.source
+        else {
+            return Ok(None);
         };
-        let fragment = url.fragment()?;
-        fragment
-            .split('&')
-            .find_map(|fragment| Hashes::parse_fragment(fragment).ok())
+        let Some(fragment) = url.fragment() else {
+            return Ok(None);
+        };
+        Hashes::parse_url_fragment(fragment)
     }
 
     /// Set the source file containing the requirement.
@@ -749,7 +759,7 @@ impl RequirementSource {
                 ext,
                 url,
             } => Ok(Self::Path {
-                install_path: try_relative_to_if(&install_path, path, !url.was_given_absolute())?
+                install_path: try_relative_to_if(&install_path, path, url.prefers_relative())?
                     .into_boxed_path(),
                 ext,
                 url,
@@ -761,7 +771,7 @@ impl RequirementSource {
                 url,
                 ..
             } => Ok(Self::Directory {
-                install_path: try_relative_to_if(&install_path, path, !url.was_given_absolute())?
+                install_path: try_relative_to_if(&install_path, path, url.prefers_relative())?
                     .into_boxed_path(),
                 editable,
                 r#virtual,
@@ -1216,10 +1226,8 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
-    use std::str::FromStr;
 
     use uv_pep508::{MarkerTree, VerbatimUrl};
-    use uv_pypi_types::{Hashes, VerbatimParsedUrl};
 
     use crate::{Requirement, RequirementSource};
 
@@ -1264,49 +1272,6 @@ mod tests {
         let raw = toml::to_string(&requirement).unwrap();
         let deserialized: Requirement = toml::from_str(&raw).unwrap();
         assert_eq!(requirement, deserialized);
-    }
-
-    #[test]
-    fn hashes_from_compound_archive_fragment() {
-        let requirement = Requirement::from(
-            uv_pep508::Requirement::<VerbatimParsedUrl>::from_str(
-                "foo @ https://example.com/foo-1.0.0.tar.gz#subdirectory=packages/foo&sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            )
-            .expect("valid archive requirement"),
-        );
-
-        assert!(matches!(&requirement.source, RequirementSource::Url { .. }));
-        assert_eq!(
-            requirement.hashes(),
-            Some(
-                "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-                    .parse::<Hashes>()
-                    .expect("valid archive hash")
-            )
-        );
-    }
-
-    #[test]
-    fn hashes_from_compound_path_fragment() {
-        let requirement = Requirement::from(
-            uv_pep508::Requirement::<VerbatimParsedUrl>::from_str(
-                "foo @ file:///C:/home/ferris/foo-1.0.0.tar.gz#sha256=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb&subdirectory=packages/foo",
-            )
-            .expect("valid path requirement"),
-        );
-
-        assert!(matches!(
-            &requirement.source,
-            RequirementSource::Path { .. }
-        ));
-        assert_eq!(
-            requirement.hashes(),
-            Some(
-                "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-                    .parse::<Hashes>()
-                    .expect("valid path hash")
-            )
-        );
     }
 
     #[test]

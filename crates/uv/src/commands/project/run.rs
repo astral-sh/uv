@@ -21,36 +21,36 @@ use uv_cache::Cache;
 use uv_cli::{ExternalCommand, GlobalArgs};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroups, DryRun, EditableMode, EnvFile, ExtrasSpecification,
-    InstallOptions, TargetTriple,
+    ActiveEnvironment, Concurrency, Constraints, DependencyGroups, DryRun, EditableMode, EnvFile,
+    ExtrasSpecification, InstallOptions, TargetTriple,
 };
 use uv_distribution::LoweredExtraBuildDependencies;
-use uv_distribution_types::Requirement;
+use uv_distribution_types::NameRequirementSpecification;
 use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified, create_symlink};
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
+use uv_lock::{Installable, Lock};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
 use uv_python::{
-    EnvironmentPreference, Interpreter, PyVenvConfiguration, PythonDownloads, PythonEnvironment,
-    PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
+    ConfigDiscovery, EnvironmentPreference, Interpreter, PyVenvConfiguration, PythonDownloads,
+    PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
     VersionFileDiscoveryOptions,
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
-use uv_resolver::{Installable, Lock, Preference};
+use uv_resolver::{DependencyMode, Preference};
 use uv_scripts::{Pep723Error, Pep723Item, Pep723Metadata, Pep723Script};
 use uv_settings::{
     EnvironmentOptions, FilesystemOptions, MalwareCheckSettings, PythonInstallMirrors,
 };
 use uv_shell::WindowsRunnable;
 use uv_static::EnvVars;
-use uv_types::{
-    HashStrategy, SourceTreeEditablePolicy, UnlockedBuildInputs, unlocked_build_cache_key,
-};
+use uv_types::SourceTreeEditablePolicy;
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
+use crate::base_client_builder;
 use crate::child::run_to_completion;
 
 /// GitHub Gist API response structure
@@ -74,14 +74,14 @@ use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     EnvironmentSpecification, LinkErrorReporting, PreferenceLocation, ProjectEnvironment,
     ProjectError, ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
-    default_dependency_groups, script_extra_build_requires, script_specification,
-    update_environment, validate_project_requires_python,
+    script_extra_build_requires, script_specification, update_environment,
+    validate_project_requires_python,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{ExitStatus, diagnostics, project, read_env_files};
+use crate::commands::{ExitStatus, UvError, project, read_env_files};
 use crate::printer::Printer;
 use crate::settings::{
-    FrozenSource, GlobalSettings, LockCheck, LockCheckSource, ResolverInstallerSettings,
+    FrozenSource, GlobalSettings, LockCheck, LockedSource, ResolverInstallerSettings,
     ResolverSettings,
 };
 
@@ -95,13 +95,13 @@ pub(crate) async fn run(
     show_resolution: bool,
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,
-    active: Option<bool>,
+    active: ActiveEnvironment,
     no_sync: bool,
     isolated: bool,
     all_packages: bool,
     package: Option<PackageName>,
     no_project: bool,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     extras: ExtrasSpecification,
     groups: DependencyGroups,
     editable: Option<EditableMode>,
@@ -122,6 +122,7 @@ pub(crate) async fn run(
     preview: Preview,
     max_recursion_depth: u32,
     malware_settings: MalwareCheckSettings,
+    #[cfg(unix)] run_rlimit_nofile: Option<u32>,
 ) -> anyhow::Result<ExitStatus> {
     // Check if max recursion depth was exceeded. This most commonly happens
     // for scripts with a shebang line like `#!/usr/bin/env -S uv run`, so try
@@ -176,6 +177,7 @@ pub(crate) async fn run(
 
     // The lockfile used for the base environment.
     let mut base_lock: Option<(Lock, PathBuf)> = None;
+    let mut unlocked_build_constraints = Constraints::default();
 
     // Determine whether the command to execute is a PEP 723 script.
     let temp_dir;
@@ -215,8 +217,8 @@ pub(crate) async fn run(
                 python_downloads,
                 &install_mirrors,
                 no_sync,
-                no_config,
-                active.map_or(Some(false), Some),
+                config_discovery,
+                active.without_warning(),
                 &cache,
                 DryRun::Disabled,
                 printer,
@@ -265,12 +267,9 @@ pub(crate) async fn run(
             {
                 Ok(result) => result.into_lock(),
                 Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::default()
-                        .with_context("script")
-                        .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    return Err(UvError::from(err.with_resolution_context("script")).into());
                 }
-                Err(err) => return Err(err.into()),
+                Err(err) => return Err(UvError::from(err).into()),
             };
 
             // Sync the environment.
@@ -311,12 +310,9 @@ pub(crate) async fn run(
             {
                 Ok(_) => {}
                 Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::default()
-                        .with_context("script")
-                        .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    return Err(UvError::from(err.with_resolution_context("script")).into());
                 }
-                Err(err) => return Err(err.into()),
+                Err(err) => return Err(UvError::from(err).into()),
             }
 
             // Respect any locked preferences when resolving `--with` dependencies downstream.
@@ -326,17 +322,17 @@ pub(crate) async fn run(
             Some(environment.into_interpreter())
         } else {
             // If no lockfile is found, error for `--locked` and `--frozen` when provided
-            // via CLI. For environment variables and configuration, warn instead to avoid
+            // via CLI. For environment variables, warn instead to avoid
             // breaking users who set `UV_LOCKED=1` globally.
             if let LockCheck::Enabled(lock_check) = lock_check {
                 match lock_check {
-                    LockCheckSource::LockedCli | LockCheckSource::Check => {
+                    LockedSource::Cli(_) => {
                         bail!(
                             "Unable to find lockfile for Python script, but `{lock_check}` was provided. To create a lockfile, run `{}`.",
                             "uv lock --script".green(),
                         );
                     }
-                    LockCheckSource::LockedEnv | LockCheckSource::LockedConfiguration => {
+                    LockedSource::Env => {
                         warn_user!(
                             "No lockfile found for Python script (ignoring `{lock_check}`); run `{}` to generate a lockfile",
                             "uv lock --script".green(),
@@ -346,13 +342,13 @@ pub(crate) async fn run(
             }
             if let Some(frozen_source) = frozen {
                 match frozen_source {
-                    FrozenSource::Cli => {
+                    FrozenSource::Cli(_) => {
                         bail!(
-                            "Unable to find lockfile for Python script, but `--frozen` was provided. To create a lockfile, run `{}`.",
+                            "Unable to find lockfile for Python script, but `{frozen_source}` was provided. To create a lockfile, run `{}`.",
                             "uv lock --script".green(),
                         );
                     }
-                    FrozenSource::Env | FrozenSource::Configuration => {
+                    FrozenSource::Env => {
                         warn_user!(
                             "No lockfile found for Python script (ignoring `--frozen`); run `{}` to generate a lockfile",
                             "uv lock --script".green(),
@@ -361,17 +357,44 @@ pub(crate) async fn run(
                 }
             }
 
+            // Preserve constraints for `--with` even when the script omits `dependencies`.
+            unlocked_build_constraints = script
+                .metadata()
+                .tool
+                .as_ref()
+                .and_then(|tool| {
+                    tool.uv
+                        .as_ref()
+                        .and_then(|uv| uv.build_constraint_dependencies.as_ref())
+                })
+                .map(|constraints| {
+                    Constraints::from_specifications(
+                        constraints
+                            .iter()
+                            .cloned()
+                            .map(NameRequirementSpecification::from),
+                    )
+                })
+                .unwrap_or_default();
+
             // Install the script requirements, if necessary. Otherwise, use an isolated environment.
             if let Some(spec) = script_specification(
                 (&script).into(),
                 &settings.resolver,
+                &cache,
+                workspace_cache,
                 client_builder.credentials_cache(),
-            )? {
+            )
+            .await?
+            {
                 let script_extra_build_requires = script_extra_build_requires(
                     (&script).into(),
                     &settings.resolver,
+                    &cache,
+                    workspace_cache,
                     client_builder.credentials_cache(),
-                )?
+                )
+                .await?
                 .into_inner();
                 let environment = ScriptEnvironment::get_or_init(
                     (&script).into(),
@@ -381,31 +404,14 @@ pub(crate) async fn run(
                     python_downloads,
                     &install_mirrors,
                     no_sync,
-                    no_config,
-                    active.map_or(Some(false), Some),
+                    config_discovery,
+                    active.without_warning(),
                     &cache,
                     DryRun::Disabled,
                     printer,
                 )
                 .await?
                 .into_environment()?;
-
-                let build_constraints = script
-                    .metadata()
-                    .tool
-                    .as_ref()
-                    .and_then(|tool| {
-                        tool.uv
-                            .as_ref()
-                            .and_then(|uv| uv.build_constraint_dependencies.as_ref())
-                    })
-                    .map(|constraints| {
-                        Constraints::from_requirements(
-                            constraints
-                                .iter()
-                                .map(|constraint| Requirement::from(constraint.clone())),
-                        )
-                    });
 
                 let _lock = environment
                     .lock()
@@ -421,7 +427,7 @@ pub(crate) async fn run(
                     modifications,
                     python_platform.as_ref(),
                     SourceTreeEditablePolicy::Project,
-                    build_constraints.unwrap_or_default(),
+                    unlocked_build_constraints.clone(),
                     script_extra_build_requires,
                     &settings,
                     &client_builder,
@@ -448,12 +454,9 @@ pub(crate) async fn run(
                 {
                     Ok(update) => Some(update.into_environment().into_interpreter()),
                     Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::default()
-                            .with_context("script")
-                            .report(err)
-                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                        return Err(UvError::from(err.with_resolution_context("script")).into());
                     }
-                    Err(err) => return Err(err.into()),
+                    Err(err) => return Err(UvError::from(err).into()),
                 }
             } else {
                 // Create a virtual environment.
@@ -465,8 +468,8 @@ pub(crate) async fn run(
                     python_downloads,
                     &install_mirrors,
                     no_sync,
-                    no_config,
-                    active.map_or(Some(false), Some),
+                    config_discovery,
+                    active.without_warning(),
                     &cache,
                     printer,
                 )
@@ -483,7 +486,7 @@ pub(crate) async fn run(
                         uv_virtualenv::RemovalReason::TemporaryEnvironment,
                     ),
                     false,
-                    false,
+                    uv_virtualenv::Seed::Disabled,
                     false,
                 )?;
 
@@ -495,6 +498,7 @@ pub(crate) async fn run(
     };
 
     // Discover and sync the base environment.
+    let is_script = script_interpreter.is_some();
     let temp_dir;
     let base_interpreter = if let Some(script_interpreter) = script_interpreter {
         // If we found a PEP 723 script and the user provided a project-only setting, warn.
@@ -630,7 +634,7 @@ pub(crate) async fn run(
                 );
             }
             // Determine the groups and extras to include.
-            let default_groups = default_dependency_groups(project.pyproject_toml())?;
+            let default_groups = project.default_groups()?;
             let default_extras = DefaultExtras::default();
             let groups = groups.with_defaults(default_groups);
             let extras = extras.with_defaults(default_extras);
@@ -651,7 +655,7 @@ pub(crate) async fn run(
                     Some(project.workspace()),
                     &groups,
                     project_dir,
-                    no_config,
+                    config_discovery,
                 )
                 .await?;
 
@@ -691,7 +695,7 @@ pub(crate) async fn run(
                         uv_virtualenv::RemovalReason::TemporaryEnvironment,
                     ),
                     false,
-                    false,
+                    uv_virtualenv::Seed::Disabled,
                     false,
                 )?
             } else {
@@ -706,7 +710,7 @@ pub(crate) async fn run(
                     python_preference,
                     python_downloads,
                     no_sync,
-                    no_config,
+                    config_discovery,
                     active,
                     &cache,
                     DryRun::Disabled,
@@ -729,6 +733,19 @@ pub(crate) async fn run(
                         .ok()
                         .flatten()
                         .map(|lock| (lock, project.workspace().install_path().to_owned()));
+                }
+                // `--with` may still build an overlay under `--no-sync`. Unless explicitly frozen,
+                // use the current project build constraints, not those recorded in `uv.lock`.
+                if frozen.is_none() && !requirements.is_empty() {
+                    unlocked_build_constraints = LockTarget::from(project.workspace())
+                        .lower_build_constraints(
+                            &settings.resolver.index_locations,
+                            &settings.resolver.sources,
+                            &cache,
+                            workspace_cache,
+                            client_builder.credentials_cache(),
+                        )
+                        .await?;
                 }
             } else {
                 let _lock = venv
@@ -772,12 +789,7 @@ pub(crate) async fn run(
                 .await
                 {
                     Ok(result) => result,
-                    Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::default()
-                            .report(err)
-                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-                    }
-                    Err(err) => return Err(err.into()),
+                    Err(err) => return Err(UvError::from(err).into()),
                 };
 
                 // Identify the installation target.
@@ -859,12 +871,7 @@ pub(crate) async fn run(
                 .await
                 {
                     Ok(_) => {}
-                    Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::default()
-                            .report(err)
-                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-                    }
-                    Err(err) => return Err(err.into()),
+                    Err(err) => return Err(UvError::from(err).into()),
                 }
 
                 base_lock = Some((
@@ -885,7 +892,8 @@ pub(crate) async fn run(
                 } else {
                     PythonVersionFile::discover(
                         &project_dir,
-                        &VersionFileDiscoveryOptions::default().with_no_config(no_config),
+                        &VersionFileDiscoveryOptions::default()
+                            .with_config_discovery(config_discovery),
                     )
                     .await?
                     .and_then(PythonVersionFile::into_version)
@@ -923,7 +931,7 @@ pub(crate) async fn run(
                         uv_virtualenv::RemovalReason::TemporaryEnvironment,
                     ),
                     false,
-                    false,
+                    uv_virtualenv::Seed::Disabled,
                     false,
                 )?;
                 venv.into_interpreter()
@@ -951,26 +959,28 @@ pub(crate) async fn run(
 
     // If necessary, create an environment for the ephemeral requirements or command.
     let base_site_packages = SitePackages::from_interpreter(&base_interpreter)?;
-    let build_constraints = base_lock
-        .as_ref()
-        .map(|(lock, path)| lock.build_constraints(path))
-        .unwrap_or_default();
     let requirements_env = match spec {
         None => None,
         Some(spec)
-            if can_skip_ephemeral(
-                &spec,
-                &base_interpreter,
-                &base_site_packages,
-                &build_constraints,
-                &settings,
-                &cache,
-            ) =>
+            if can_skip_ephemeral(&spec, &base_interpreter, &base_site_packages, &settings) =>
         {
             None
         }
         Some(spec) => {
             debug!("Syncing `--with` requirements to cached environment");
+
+            // Project `--no-sync` skips updating the base environment, but `--with` may still build
+            // packages in a separate environment. In these cases, unless frozen, use current project
+            // constraints; any existing lockfile supplies only version preferences. Frozen runs and
+            // scripts use the recorded constraints when using a lockfile.
+            let build_constraints = if no_sync && frozen.is_none() && !is_script {
+                unlocked_build_constraints
+            } else {
+                base_lock
+                    .as_ref()
+                    .map(|(lock, path)| lock.build_constraints(path))
+                    .unwrap_or(unlocked_build_constraints)
+            };
 
             // Read the preferences.
             let spec = EnvironmentSpecification::from(spec).with_preferences(
@@ -988,16 +998,14 @@ pub(crate) async fn run(
                 },
             );
 
-            let with_state = lock_state.fork();
             let result = CachedEnvironment::from_spec(
                 spec,
                 build_constraints,
                 &base_interpreter,
                 python_platform.as_ref(),
-                SourceTreeEditablePolicy::Project,
                 &settings,
                 &client_builder,
-                &with_state,
+                &sync_state,
                 if show_resolution {
                     Box::new(DefaultResolveLogger)
                 } else {
@@ -1020,12 +1028,9 @@ pub(crate) async fn run(
             let environment = match result {
                 Ok(resolution) => resolution,
                 Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::default()
-                        .with_context("`--with`")
-                        .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    return Err(UvError::from(err.with_resolution_context("`--with`")).into());
                 }
-                Err(err) => return Err(err.into()),
+                Err(err) => return Err(UvError::from(err).into()),
             };
 
             Some(PythonEnvironment::from(environment))
@@ -1057,7 +1062,7 @@ pub(crate) async fn run(
                     uv_virtualenv::RemovalReason::TemporaryEnvironment,
                 ),
                 false,
-                false,
+                uv_virtualenv::Seed::Disabled,
                 false,
             )
         })
@@ -1092,7 +1097,7 @@ pub(crate) async fn run(
                     .chain(base_site_packages)
                     .dedup()
                     .inspect(|path| debug!("Adding `{}` to site packages", path.display()))
-                    .map(|path| format!("site.addsitedir(\"{}\")", path.escape_for_python()))
+                    .map(|path| format!("site.addsitedir({})", path.escape_for_python()))
                     .collect::<Vec<_>>()
                     .join("; ")
             );
@@ -1304,6 +1309,16 @@ pub(crate) async fn run(
         process.env(EnvVars::VIRTUAL_ENV, interpreter.sys_prefix().as_os_str());
     }
 
+    #[cfg(unix)]
+    if let Some(limit) = run_rlimit_nofile {
+        uv_unix::set_open_file_limit(limit).with_context(|| {
+            format!(
+                "Failed to apply `{}` value `{limit}`",
+                EnvVars::UV_RUN_RLIMIT_NOFILE
+            )
+        })?;
+    }
+
     // Spawn and wait for completion
     // Standard input, output, and error streams are all inherited
     // TODO(zanieb): Throw a nicer error message if the command is not found
@@ -1319,25 +1334,16 @@ fn can_skip_ephemeral(
     spec: &RequirementsSpecification,
     interpreter: &Interpreter,
     site_packages: &SitePackages,
-    build_constraints: &Constraints,
     settings: &ResolverInstallerSettings,
-    cache: &Cache,
 ) -> bool {
     // Extract the build settings.
     let ResolverInstallerSettings {
         resolver:
             ResolverSettings {
-                build_options,
                 config_setting,
                 config_settings_package,
-                dependency_metadata,
-                exclude_newer,
-                index_locations,
-                index_strategy,
-                build_isolation,
                 extra_build_dependencies,
                 extra_build_variables,
-                sources,
                 ..
             },
         reinstall,
@@ -1360,44 +1366,13 @@ fn can_skip_ephemeral(
         LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
             .into_inner();
 
-    // Build metadata records resolved runtime requirements, which aren't available yet.
-    if extra_build_requires.iter().any(|(name, requirements)| {
-        site_packages
-            .get_packages(name)
-            .iter()
-            .any(|distribution| distribution.build_info().is_some())
-            && requirements
-                .iter()
-                .any(|requirement| requirement.match_runtime)
-    }) {
-        return false;
-    }
-
-    let unlocked_build_cache_key = unlocked_build_cache_key(UnlockedBuildInputs {
-        build_constraints,
-        index_locations,
-        index_strategy: *index_strategy,
-        build_options,
-        dependency_metadata,
-        config_settings: config_setting,
-        config_settings_package,
-        extra_build_requires: &extra_build_requires,
-        extra_build_variables,
-        build_hasher: &HashStrategy::default(),
-        exclude_newer_global: exclude_newer.global.as_ref(),
-        exclude_newer_package: (&exclude_newer.package).into_iter().collect(),
-        sources,
-        source_tree_editable_policy: SourceTreeEditablePolicy::Project,
-        non_isolated: !matches!(build_isolation, uv_configuration::BuildIsolation::Isolate),
-        invocation_timestamp: cache.timestamp(),
-    });
-
     match site_packages.satisfies_spec(
         &spec.requirements,
         &spec.constraints,
         &spec.overrides,
         &spec.override_dependencies,
         &spec.excludes,
+        DependencyMode::Transitive,
         InstallationStrategy::Permissive,
         &markers,
         tags,
@@ -1405,7 +1380,6 @@ fn can_skip_ephemeral(
         config_settings_package,
         &extra_build_requires,
         extra_build_variables,
-        unlocked_build_cache_key.as_deref(),
     ) {
         // If the requirements are already satisfied, we're done.
         Ok(SatisfiesResult::Fresh {
@@ -1516,19 +1490,8 @@ impl ParsedRunCommand {
                 Ok((script, run_command))
             }
             Self::PendingRemote(remote_command) => {
-                let settings = GlobalSettings::resolve(global_args, filesystem, environment);
-                let client_builder = BaseClientBuilder::new(
-                    settings.network_settings.connectivity,
-                    settings.network_settings.system_certs,
-                    settings.network_settings.allow_insecure_host,
-                    settings.preview,
-                    settings.network_settings.read_timeout,
-                    settings.network_settings.connect_timeout,
-                    settings.network_settings.retries,
-                )
-                .http_proxy(settings.network_settings.http_proxy)
-                .https_proxy(settings.network_settings.https_proxy)
-                .no_proxy(settings.network_settings.no_proxy);
+                let settings = GlobalSettings::resolve(global_args, filesystem, environment, None)?;
+                let client_builder = base_client_builder(&settings);
 
                 let (url, downloaded_script, args) =
                     remote_command.download(&client_builder).await?;
@@ -2208,7 +2171,7 @@ pub(crate) struct RecursionLimitError {
     max: u32,
 }
 
-impl uv_errors::Hint for RecursionLimitError {
+impl uv_errors::Hinted for RecursionLimitError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         uv_errors::Hints::from(format!(
             "If you are running a script with `{}` in the shebang, you may need to include the `{}` flag",

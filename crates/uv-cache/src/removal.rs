@@ -2,21 +2,32 @@
 //! Cargo is dual-licensed under either Apache 2.0 or MIT, at the user's choice.
 //! Source: <https://github.com/rust-lang/cargo/blob/e1ebce1035f9b53bb46a55bd4b0ecf51e24c6458/src/cargo/ops/cargo_clean.rs#L324>
 
+use std::fs::Metadata;
 use std::io;
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
 use std::path::Path;
+
+use tracing::debug;
+use uv_fs::PhysicalSpaceError;
 
 use crate::CleanReporter;
 
-/// Remove a file or directory and all its contents, returning a [`Removal`] with
-/// the number of files and directories removed, along with a total byte count.
-pub fn rm_rf(path: impl AsRef<Path>) -> io::Result<Removal> {
-    Remover::default().rm_rf(path, false)
+/// How to estimate reclaimed storage when removing cache entries.
+#[derive(Debug, Clone, Copy, Default)]
+pub enum RemovalAccounting {
+    /// Estimate reclaimed storage from ordinary filesystem metadata.
+    #[default]
+    Coarse,
+    /// Inspect filesystem allocation and sharing where supported.
+    Fine,
 }
 
 /// A builder for a [`Remover`] that can remove files and directories.
 #[derive(Default)]
 pub(crate) struct Remover {
     reporter: Option<Box<dyn CleanReporter>>,
+    removal_accounting: RemovalAccounting,
 }
 
 impl Remover {
@@ -24,7 +35,14 @@ impl Remover {
     pub(crate) fn new(reporter: Box<dyn CleanReporter>) -> Self {
         Self {
             reporter: Some(reporter),
+            ..Self::default()
         }
+    }
+
+    /// Set the storage accounting used before each file is removed.
+    pub(crate) fn with_removal_accounting(mut self, removal_accounting: RemovalAccounting) -> Self {
+        self.removal_accounting = removal_accounting;
+        self
     }
 
     /// Remove a file or directory and all its contents, returning a [`Removal`] with
@@ -34,10 +52,26 @@ impl Remover {
         path: impl AsRef<Path>,
         skip_locked_file: bool,
     ) -> io::Result<Removal> {
-        let mut removal = Removal::default();
+        let mut removal = Removal::new(self.removal_accounting);
         removal.rm_rf(path.as_ref(), self.reporter.as_deref(), skip_locked_file)?;
         Ok(removal)
     }
+}
+
+/// Estimate the storage reclaimed by removing a non-directory entry.
+#[cfg(unix)]
+fn file_size(metadata: &Metadata) -> u64 {
+    if metadata.nlink() == 1 {
+        metadata.blocks().saturating_mul(512)
+    } else {
+        0
+    }
+}
+
+/// Estimate the storage reclaimed by removing a non-directory entry.
+#[cfg(not(unix))]
+fn file_size(metadata: &Metadata) -> u64 {
+    metadata.len()
 }
 
 /// A removal operation with statistics on the number of files and directories removed.
@@ -47,14 +81,54 @@ pub struct Removal {
     pub num_files: u64,
     /// The number of directories removed.
     pub num_dirs: u64,
-    /// The total number of bytes removed.
-    ///
-    /// Note: this will both over-count bytes removed for hard-linked files, and under-count
-    /// bytes in general since it's a measure of the exact byte size (as opposed to the block size).
-    pub total_bytes: u64,
+    /// The coarse estimate of the number of bytes occupied by the removed files.
+    pub coarse_bytes: u64,
+    /// The fine-grained estimate of reclaimed physical file data, when available.
+    pub fine_bytes: Option<u64>,
+    /// Whether any removed entries could not be measured, making the fine-grained count a lower bound.
+    pub fine_bytes_incomplete: bool,
 }
 
 impl Removal {
+    /// Create an empty removal summary with the requested storage accounting.
+    pub(crate) fn new(removal_accounting: RemovalAccounting) -> Self {
+        Self {
+            fine_bytes: match removal_accounting {
+                RemovalAccounting::Coarse => None,
+                RemovalAccounting::Fine => Some(0),
+            },
+            ..Self::default()
+        }
+    }
+
+    /// Account for a file while its current sharing state can still be inspected.
+    fn add_file(&mut self, path: &Path, metadata: &Metadata) {
+        self.coarse_bytes += file_size(metadata);
+
+        if let Some(fine_bytes) = self.fine_bytes {
+            match uv_fs::physical_space(path, metadata) {
+                Ok(bytes) => {
+                    self.fine_bytes = Some(fine_bytes.saturating_add(bytes));
+                }
+                Err(PhysicalSpaceError::UnsupportedFilesystem) => {
+                    debug!(
+                        "Fine-grained space accounting is unsupported for {}; falling back to coarse accounting",
+                        path.display()
+                    );
+                    self.fine_bytes = None;
+                    self.fine_bytes_incomplete = false;
+                }
+                Err(PhysicalSpaceError::UnmeasurableFile(error)) => {
+                    debug!(
+                        "Failed to measure physical space for {}: {error}",
+                        path.display()
+                    );
+                    self.fine_bytes_incomplete = true;
+                }
+            }
+        }
+    }
+
     /// Recursively remove a file or directory and all its contents.
     fn rm_rf(
         &mut self,
@@ -74,7 +148,7 @@ impl Removal {
             self.num_files += 1;
 
             // Remove the file.
-            self.total_bytes += metadata.len();
+            self.add_file(&path, &metadata);
             if metadata.is_symlink() {
                 cfg_select! {
                     windows => {
@@ -158,8 +232,10 @@ impl Removal {
                 self.num_files += 1;
 
                 // Remove the file.
-                if let Ok(meta) = entry.metadata() {
-                    self.total_bytes += meta.len();
+                if let Ok(metadata) = entry.metadata() {
+                    self.add_file(entry.path(), &metadata);
+                } else if self.fine_bytes.is_some() {
+                    self.fine_bytes_incomplete = true;
                 }
                 remove_file(entry.path())?;
             }
@@ -177,7 +253,13 @@ impl std::ops::AddAssign for Removal {
     fn add_assign(&mut self, other: Self) {
         self.num_files += other.num_files;
         self.num_dirs += other.num_dirs;
-        self.total_bytes += other.total_bytes;
+        self.coarse_bytes += other.coarse_bytes;
+        self.fine_bytes = self
+            .fine_bytes
+            .zip(other.fine_bytes)
+            .map(|(left, right)| left.saturating_add(right));
+        self.fine_bytes_incomplete = self.fine_bytes.is_some()
+            && (self.fine_bytes_incomplete || other.fine_bytes_incomplete);
     }
 }
 

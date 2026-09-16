@@ -6,7 +6,7 @@ use owo_colors::OwoColorize;
 use tracing::{debug, warn};
 
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, Constraints, DryRun, ExtrasSpecification,
     HashCheckingMode, IndexStrategy, NoSources, Reinstall, Upgrade,
@@ -15,7 +15,7 @@ use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, Origin,
+    ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, Name, Origin,
     PackageConfigSettings, Resolution,
 };
 use uv_fs::Simplified;
@@ -31,11 +31,11 @@ use uv_python::{
 };
 use uv_requirements::{GroupsSpecification, RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
-    DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PrereleaseMode, PythonRequirement,
+    DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, Prerelease, PythonRequirement,
     ResolutionMode, ResolverEnvironment,
 };
 use uv_settings::PythonInstallMirrors;
-use uv_torch::{AmdGpuArchitecture, TorchMode, TorchSource, TorchStrategy};
+use uv_torch::{AmdGpuArchitecture, TorchMode, TorchStrategy};
 use uv_types::{HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
@@ -47,7 +47,7 @@ use crate::commands::pip::operations::{report_interpreter, report_target_environ
 use crate::commands::pip::{operations, resolution_markers, resolution_tags};
 use crate::commands::pylock::{read_pylock_toml, resolve_pylock_toml};
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{ExitStatus, diagnostics};
+use crate::commands::{ExitStatus, UvError};
 use crate::printer::Printer;
 
 /// Install a set of locked requirements into the current Python environment.
@@ -105,7 +105,7 @@ pub(crate) async fn pip_sync(
     let excludes = &[];
     let upgrade = Upgrade::default();
     let resolution_mode = ResolutionMode::default();
-    let prerelease_mode = PrereleaseMode::default();
+    let prerelease = Prerelease::default();
     let dependency_mode = DependencyMode::Direct;
 
     // Read all requirements from the provided sources.
@@ -122,6 +122,7 @@ pub(crate) async fn pip_sync(
         index_url,
         extra_index_urls,
         no_index,
+        require_hashes,
         find_links,
         no_binary,
         no_build,
@@ -137,6 +138,8 @@ pub(crate) async fn pip_sync(
     )
     .await?;
 
+    let hash_checking = HashCheckingMode::from_requirements_txt(hash_checking, require_hashes);
+
     if pylock.is_some() {
         if !preview.is_enabled(PreviewFeature::Pylock) {
             warn_user!(
@@ -147,8 +150,9 @@ pub(crate) async fn pip_sync(
     }
 
     // Read build constraints.
-    let build_constraints =
-        operations::read_constraints(build_constraints, &client_builder).await?;
+    let build_constraints = Constraints::from_specifications(
+        operations::read_constraints(build_constraints, &client_builder).await?,
+    );
 
     // Validate that the requirements are non-empty.
     if !allow_empty_requirements {
@@ -276,7 +280,7 @@ pub(crate) async fn pip_sync(
             hash_checking,
         )?
     } else {
-        HashStrategy::None
+        HashStrategy::default()
     };
 
     // Incorporate any index locations from the provided sources.
@@ -298,16 +302,8 @@ pub(crate) async fn pip_sync(
     // Determine the PyTorch backend.
     let torch_backend = torch_backend
         .map(|mode| {
-            let source = if uv_auth::PyxTokenStore::from_settings()
-                .is_ok_and(|store| store.has_credentials())
-            {
-                TorchSource::Pyx
-            } else {
-                TorchSource::default()
-            };
             TorchStrategy::from_mode(
                 mode,
-                source,
                 python_platform
                     .map(TargetTriple::platform)
                     .as_ref()
@@ -332,13 +328,7 @@ pub(crate) async fn pip_sync(
     let build_options = build_options.combine(no_binary, no_build);
 
     // Resolve the flat indexes from `--find-links`.
-    let flat_index = {
-        let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), &cache);
-        let entries = client
-            .fetch_all(index_locations.flat_indexes().map(Index::url))
-            .await?;
-        FlatIndex::from_entries(entries, Some(&tags), &hasher, &build_options)
-    };
+    let flat_index = FlatIndex::load(&client, &cache, &index_locations).await?;
 
     // Determine whether to enable build isolation.
     let types_build_isolation = match build_isolation {
@@ -349,26 +339,16 @@ pub(crate) async fn pip_sync(
         }
     };
 
-    // Enforce (but never require) the build constraints, if `--require-hashes` or `--verify-hashes`
-    // is provided. _Requiring_ hashes would be too strict, and would break with pip.
+    // Verify supplied build hashes unless hash verification was explicitly disabled.
     let build_hasher = if hash_checking.is_some() {
-        HashStrategy::from_requirements(
-            std::iter::empty(),
-            build_constraints
-                .iter()
-                .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
+        HashStrategy::from_constraints(
+            &build_constraints,
             Some(&marker_env),
             HashCheckingMode::Verify,
         )?
     } else {
-        HashStrategy::None
+        HashStrategy::default()
     };
-    let build_constraints = Constraints::from_requirements(
-        build_constraints
-            .iter()
-            .map(|constraint| constraint.requirement.clone()),
-    );
-
     // Initialize any shared state.
     let state = SharedState::default();
 
@@ -376,6 +356,7 @@ pub(crate) async fn pip_sync(
     let extra_build_requires =
         LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
             .into_inner();
+
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -443,7 +424,7 @@ pub(crate) async fn pip_sync(
 
         let options = OptionsBuilder::new()
             .resolution_mode(resolution_mode)
-            .prerelease_mode(prerelease_mode)
+            .prerelease(prerelease)
             .dependency_mode(dependency_mode)
             .exclude_newer(exclude_newer.clone())
             .index_strategy(index_strategy)
@@ -451,13 +432,6 @@ pub(crate) async fn pip_sync(
             .build_options(build_options.clone())
             .build();
 
-        // Exclude installed distributions for non-isolated builds, since any source can depend
-        // transitively on the shared environment.
-        let resolution_reinstall = if matches!(&build_isolation, BuildIsolation::Isolate) {
-            reinstall.clone()
-        } else {
-            Reinstall::All
-        };
         let (resolution, hasher) = match operations::resolve(
             requirements,
             constraints,
@@ -472,7 +446,7 @@ pub(crate) async fn pip_sync(
             preferences,
             site_packages.clone(),
             &hasher,
-            &resolution_reinstall,
+            &reinstall,
             &upgrade,
             Some(&tags),
             ResolverEnvironment::specific(marker_env.clone()),
@@ -492,9 +466,7 @@ pub(crate) async fn pip_sync(
         {
             Ok((resolution, hasher)) => (Resolution::from(resolution), hasher),
             Err(err) => {
-                return diagnostics::OperationDiagnostic::default()
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                return Err(UvError::from(err).into());
             }
         };
 
@@ -502,13 +474,8 @@ pub(crate) async fn pip_sync(
     };
 
     // Constrain any build requirements marked as `match-runtime = true`.
-    let match_runtime = extra_build_requires.has_match_runtime_source(&resolution);
     let extra_build_requires = extra_build_requires.match_runtime(&resolution)?;
-    let install_state = if match_runtime {
-        state.fork()
-    } else {
-        state.clone()
-    };
+
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -518,7 +485,7 @@ pub(crate) async fn pip_sync(
         &index_locations,
         &flat_index,
         &dependency_metadata,
-        install_state.clone(),
+        state.clone(),
         index_strategy,
         config_settings,
         config_settings_package,
@@ -549,7 +516,7 @@ pub(crate) async fn pip_sync(
         &hasher,
         &tags,
         &client,
-        install_state.in_flight(),
+        state.in_flight(),
         &concurrency,
         &build_dispatch,
         &cache,
@@ -564,9 +531,7 @@ pub(crate) async fn pip_sync(
     {
         Ok(_) => {}
         Err(err) => {
-            return diagnostics::OperationDiagnostic::default()
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return Err(UvError::from(err).into());
         }
     }
 
@@ -576,7 +541,7 @@ pub(crate) async fn pip_sync(
     // Notify the user of any environment diagnostics.
     if strict && !dry_run.enabled() {
         operations::diagnose_environment(
-            &resolution,
+            resolution.distributions().map(Name::name),
             &environment,
             &marker_env,
             &tags,

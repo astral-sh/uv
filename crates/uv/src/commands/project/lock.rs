@@ -1,72 +1,64 @@
 #![expect(clippy::single_match_else)]
 
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::path::Path;
-use std::str::FromStr;
 use std::sync::Arc;
 
 use owo_colors::OwoColorize;
-use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
+use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
 
 use uv_cache::{Cache, Refresh};
-use uv_cache_key::cache_digest;
-use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun,
-    ExcludeDependency, ExtrasSpecification, IndexStrategy, NoBinary, NoBuild, NoSources, Override,
-    PackageOverride, Reinstall, Upgrade,
+    ActiveEnvironment, Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun,
+    ExcludeDependency, ExtrasSpecification, Override, PackageOverride, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
-    BuiltDist, DependencyMetadata, Dist, ExcludeNewerOverride, ExtraBuildRequires, HashGeneration,
-    Index, IndexFormat, IndexLocations, IndexUrl, Name, NameRequirementSpecification,
-    PackageConfigSettings, Requirement, RequiresPython, ResolvedDist, SourceDist,
-    UnresolvedRequirementSpecification, implied_markers,
+    DependencyMetadata, HashCollection, IndexLocations, NameRequirementSpecification, Requirement,
+    RequiresPython, UnresolvedRequirementSpecification,
 };
-use uv_fs::{PortablePath, try_relative_to_if};
 use uv_git::ResolvedRepositoryReference;
 use uv_git_types::GitOid;
+use uv_lock::{Lock, Package, ResolverManifest, SatisfiesResult};
 use uv_normalize::{GroupName, PackageName};
-use uv_pep440::{Version, VersionSpecifier};
-use uv_pep508::{
-    MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
-    MarkerValueVersion,
-};
-use uv_platform_tags::{AbiTag, PlatformTag};
+use uv_pep440::Version;
 use uv_preview::{Preview, PreviewFeature};
-use uv_pypi_types::{ConflictKind, Conflicts, SupportedEnvironments, Yanked};
-use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
-use uv_requirements::{ExtrasResolver, LockedRequirements, read_lock_requirements};
+use uv_pypi_types::{ConflictKind, Conflicts, SupportedEnvironments};
+use uv_python::{
+    ConfigDiscovery, Interpreter, PythonDownloads, PythonEnvironment, PythonPreference,
+    PythonRequest,
+};
+use uv_requirements::ExtrasResolver;
 use uv_resolver::{
-    FlatIndex, InMemoryIndex, Lock, Options, OptionsBuilder, Package, PythonRequirement,
-    ResolverEnvironment, ResolverManifest, SatisfiesResult, UniversalMarker, UpgradePackages,
+    FlatIndex, InMemoryIndex, Options, OptionsBuilder, PythonRequirement, ResolverEnvironment,
+    UniversalMarker,
 };
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_types::{
-    BuildContext, BuildIsolation, BuildPackageKey, BuildPreferences, BuildResolutionGraph,
-    BuildResolutionGraphKey, BuildResolutionGraphMap, BuildResolutionOperation,
-    BuildResolutionStage, BuildStack, EmptyInstalledPackages, HashStrategy,
-    SourceTreeEditablePolicy,
+    BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy,
 };
-use uv_warnings::{warn_user, warn_user_once};
+use uv_warnings::{warn_user, warn_user_once, warn_user_with_chain};
 use uv_workspace::{
     DiscoveryOptions, Editability, VirtualProject, WorkspaceCache, WorkspaceMember,
 };
 
+use crate::commands::locked_requirements::{LockedRequirements, read_lock_requirements};
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
-use crate::commands::project::lock_target::LockTarget;
+use crate::commands::project::lock_target::{LockTarget, find_lock_format_error};
 use crate::commands::project::{
-    MissingLockfileSource, ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
-    WorkspacePython, init_script_python_requirement, script_extra_build_requires,
+    MissingLockfileSource, ProjectEnvironmentPolicy, ProjectError, ProjectInterpreter,
+    ScriptInterpreter, UniversalState, WorkspacePython, init_script_python_requirement,
+    script_extra_build_requires,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
-use crate::commands::{ExitStatus, ScriptPath, UvError, diagnostics, pip};
+use crate::commands::{ExitStatus, ScriptPath, UvError, pip};
 use crate::printer::Printer;
-use crate::settings::{FrozenSource, LockCheck, LockCheckSource, ResolverSettings};
+use crate::settings::{FrozenSource, LockCheck, LockedSource, ResolverSettings};
 
 /// The result of running a lock operation.
 #[derive(Debug, Clone)]
@@ -109,7 +101,7 @@ pub(crate) async fn lock(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
     printer: Printer,
@@ -126,7 +118,7 @@ pub(crate) async fn lock(
                 false,
                 python_preference,
                 python_downloads,
-                no_config,
+                config_discovery,
                 &client_builder,
                 cache,
                 &reporter,
@@ -167,7 +159,7 @@ pub(crate) async fn lock(
                     Some(workspace),
                     &groups,
                     project_dir,
-                    no_config,
+                    config_discovery,
                 )
                 .await?;
                 ProjectInterpreter::discover(
@@ -178,8 +170,8 @@ pub(crate) async fn lock(
                     python_preference,
                     python_downloads,
                     &install_mirrors,
-                    false,
-                    Some(false),
+                    ProjectEnvironmentPolicy::Optional,
+                    ActiveEnvironment::Ignore,
                     cache,
                     printer,
                 )
@@ -194,8 +186,8 @@ pub(crate) async fn lock(
                 python_downloads,
                 &install_mirrors,
                 false,
-                no_config,
-                Some(false),
+                config_discovery,
+                ActiveEnvironment::Ignore,
                 cache,
                 printer,
             )
@@ -230,25 +222,20 @@ pub(crate) async fn lock(
             preview,
         )
         .with_refresh(&refresh)
+        .with_lockfile_contents_check(
+            matches!(&refresh, Refresh::All(..))
+                && preview.is_enabled(PreviewFeature::LockfileFormatCheck),
+        )
         .execute(target),
     )
     .await
     {
         Ok(lock) => {
             if let Some(frozen_source) = frozen {
-                match frozen_source {
-                    FrozenSource::Cli => {
-                        warn_user!(
-                            "The lockfile at `uv.lock` was only checked for validity, not whether it is up-to-date, because `--frozen` was provided; use `--check` instead"
-                        );
-                    }
-                    FrozenSource::Env | FrozenSource::Configuration => {
-                        warn_user!(
-                            "The lockfile at `uv.lock` was only checked for validity, not whether it is up-to-date, because {} was provided; use `--check` instead",
-                            MissingLockfileSource::from(frozen_source)
-                        );
-                    }
-                }
+                warn_user!(
+                    "The lockfile at `uv.lock` was only checked for validity, not whether it is up-to-date, because {} was provided; use `--check` instead",
+                    MissingLockfileSource::from(frozen_source)
+                );
             }
 
             if dry_run.enabled() {
@@ -282,11 +269,10 @@ pub(crate) async fn lock(
             Ok(ExitStatus::Success)
         }
         // Lock mismatches from `--check`/`--locked` are expected validation failures.
-        Err(err @ ProjectError::LockMismatch(..)) => Err(UvError::user(err).into()),
-        Err(ProjectError::Operation(err)) => diagnostics::OperationDiagnostic::default()
-            .report(err)
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into())),
-        Err(err) => Err(err.into()),
+        Err(err @ (ProjectError::LockMismatch(..) | ProjectError::LockFormat(..))) => {
+            Err(UvError::user(err).into())
+        }
+        Err(err) => Err(UvError::from(err).into()),
     }
 }
 
@@ -297,7 +283,7 @@ pub(crate) enum LockMode<'env> {
     /// Perform a resolution, but don't write the lockfile to disk.
     DryRun(&'env Interpreter),
     /// Error if the lockfile is not up-to-date with the project requirements.
-    Locked(&'env Interpreter, LockCheckSource),
+    Locked(&'env Interpreter, LockedSource),
     /// Use the existing lockfile without performing a resolution.
     Frozen(MissingLockfileSource),
 }
@@ -307,6 +293,7 @@ pub(crate) struct LockOperation<'env> {
     mode: LockMode<'env>,
     constraints: Vec<NameRequirementSpecification>,
     refresh: Option<&'env Refresh>,
+    check_lockfile_contents: bool,
     settings: &'env ResolverSettings,
     client_builder: &'env BaseClientBuilder<'env>,
     state: &'env UniversalState,
@@ -336,6 +323,7 @@ impl<'env> LockOperation<'env> {
             mode,
             constraints: vec![],
             refresh: None,
+            check_lockfile_contents: false,
             settings,
             client_builder,
             state,
@@ -365,43 +353,53 @@ impl<'env> LockOperation<'env> {
         self
     }
 
+    /// Compare the serialized lock against the existing lockfile contents.
+    #[must_use]
+    fn with_lockfile_contents_check(mut self, enabled: bool) -> Self {
+        self.check_lockfile_contents = enabled;
+        self
+    }
+
     /// Perform a [`LockOperation`].
     pub(crate) async fn execute(self, target: LockTarget<'_>) -> Result<LockResult, ProjectError> {
+        if !matches!(&self.mode, LockMode::Frozen(_)) {
+            target.validate_upgrade_groups(&self.settings.upgrade)?;
+        }
+
         match self.mode {
             LockMode::Frozen(source) => {
                 // Read the existing lockfile, but don't attempt to lock the project.
-                let lock_filename = target.lock_filename();
-                let existing = target
-                    .read()
-                    .await?
-                    .ok_or(ProjectError::MissingLockfile(source, lock_filename))?;
-
-                // Check if the discovered workspace members match the locked workspace members.
-                if let LockTarget::Workspace(workspace) = target {
-                    for package_name in workspace.packages().keys() {
-                        existing
-                            .find_by_name(package_name)
-                            .map_err(|_| ProjectError::LockWorkspaceMismatch(package_name.clone()))?
-                            .ok_or_else(|| {
-                                ProjectError::LockWorkspaceMismatch(package_name.clone())
-                            })?;
-                    }
-                }
-                Ok(LockResult::Unchanged(existing))
+                Ok(LockResult::Unchanged(target.read_frozen(source).await?))
             }
             LockMode::Locked(interpreter, lock_source) => {
                 // Read the existing lockfile.
                 let lock_filename = target.lock_filename();
-                let existing = target.read().await?.ok_or(ProjectError::MissingLockfile(
-                    lock_source.into(),
-                    lock_filename,
-                ))?;
+                let Some((existing, existing_contents)) = target.read_with_contents().await? else {
+                    return Err(ProjectError::MissingLockfile(
+                        lock_source.into(),
+                        lock_filename,
+                    ));
+                };
+
+                if self.preview.is_enabled(PreviewFeature::LockfileFormatCheck)
+                    && let Some(line) = find_lock_format_error(&existing_contents)
+                {
+                    return Err(ProjectError::LockFormat(lock_filename, line, lock_source));
+                }
+
+                let check_lockfile_contents = if self.check_lockfile_contents {
+                    Some(existing_contents)
+                } else {
+                    None
+                };
 
                 // Perform the lock operation, but don't write the lockfile to disk.
                 let result = Box::pin(do_lock(
                     target,
                     interpreter,
                     Some(existing),
+                    self.mode,
+                    check_lockfile_contents,
                     self.constraints,
                     self.refresh,
                     self.settings,
@@ -429,16 +427,24 @@ impl<'env> LockOperation<'env> {
             }
             LockMode::Write(interpreter) | LockMode::DryRun(interpreter) => {
                 // Read the existing lockfile.
-                let existing = match target.read().await {
-                    Ok(Some(existing)) => Some(existing),
-                    Ok(None) => None,
+                let (existing, existing_contents) = match target.read_with_contents().await {
+                    Ok(Some((existing, existing_contents))) => {
+                        (Some(existing), Some(existing_contents))
+                    }
+                    Ok(None) => (None, None),
                     Err(ProjectError::Lock(err)) => {
                         warn_user!(
                             "Failed to read existing lockfile; ignoring locked requirements: {err}"
                         );
-                        None
+                        (None, None)
                     }
                     Err(err) => return Err(err),
+                };
+
+                let check_lockfile_contents = if self.check_lockfile_contents {
+                    existing_contents
+                } else {
+                    None
                 };
 
                 // Perform the lock operation.
@@ -446,6 +452,8 @@ impl<'env> LockOperation<'env> {
                     target,
                     interpreter,
                     existing,
+                    self.mode,
+                    check_lockfile_contents,
                     self.constraints,
                     self.refresh,
                     self.settings,
@@ -478,6 +486,8 @@ async fn do_lock(
     target: LockTarget<'_>,
     interpreter: &Interpreter,
     existing_lock: Option<Lock>,
+    mode: LockMode<'_>,
+    check_lockfile_contents: Option<String>,
     external: Vec<NameRequirementSpecification>,
     refresh: Option<&Refresh>,
     settings: &ResolverSettings,
@@ -524,17 +534,20 @@ async fn do_lock(
     let overrides = target.overrides();
     let excludes = target.exclude_dependencies();
     let constraints = target.constraints();
-    let build_constraints = target.build_constraints();
     let dependency_groups = target.dependency_groups()?;
     let source_trees = vec![];
 
     // If necessary, lower the overrides and constraints.
-    let requirements = target.lower(
-        requirements,
-        index_locations,
-        sources,
-        client_builder.credentials_cache(),
-    )?;
+    let requirements = target
+        .lower(
+            requirements,
+            index_locations,
+            sources,
+            cache,
+            workspace_cache,
+            client_builder.credentials_cache(),
+        )
+        .await?;
     let overrides = {
         let mut lowered_overrides = Vec::new();
         for entry in overrides {
@@ -546,8 +559,11 @@ async fn do_lock(
                                 vec![requirement],
                                 index_locations,
                                 sources,
+                                cache,
+                                workspace_cache,
                                 client_builder.credentials_cache(),
-                            )?
+                            )
+                            .await?
                             .into_iter()
                             .map(Override::Requirement),
                     );
@@ -560,8 +576,11 @@ async fn do_lock(
                                 package.dependencies.into_vec(),
                                 index_locations,
                                 sources,
+                                cache,
+                                workspace_cache,
                                 client_builder.credentials_cache(),
-                            )?
+                            )
+                            .await?
                             .into_boxed_slice(),
                     }));
                 }
@@ -569,30 +588,40 @@ async fn do_lock(
         }
         lowered_overrides
     };
-    let constraints = target.lower(
-        constraints,
-        index_locations,
-        sources,
-        client_builder.credentials_cache(),
-    )?;
-    let build_constraints = target.lower(
-        build_constraints,
-        index_locations,
-        sources,
-        client_builder.credentials_cache(),
-    )?;
-    let dependency_groups = dependency_groups
-        .into_iter()
-        .map(|(name, group)| {
-            let requirements = target.lower(
+    let constraints = target
+        .lower(
+            constraints,
+            index_locations,
+            sources,
+            cache,
+            workspace_cache,
+            client_builder.credentials_cache(),
+        )
+        .await?;
+    let build_constraints = target
+        .lower_build_constraints(
+            index_locations,
+            sources,
+            cache,
+            workspace_cache,
+            client_builder.credentials_cache(),
+        )
+        .await?;
+    let mut lowered_dependency_groups = BTreeMap::new();
+    for (name, group) in dependency_groups {
+        let requirements = target
+            .lower(
                 group.requirements,
                 index_locations,
                 sources,
+                cache,
+                workspace_cache,
                 client_builder.credentials_cache(),
-            )?;
-            Ok((name, requirements))
-        })
-        .collect::<Result<BTreeMap<_, _>, ProjectError>>()?;
+            )
+            .await?;
+        lowered_dependency_groups.insert(name, requirements);
+    }
+    let dependency_groups = lowered_dependency_groups;
 
     // Collect the conflicts.
     let mut conflicts = target.conflicts()?;
@@ -625,8 +654,7 @@ async fn do_lock(
         if let Some(environments) = &environments {
             for [lhs, rhs] in environments.as_markers().array_windows() {
                 if !lhs.is_disjoint(*rhs) {
-                    let mut hint = lhs.negate();
-                    hint.and(*rhs);
+                    let hint = lhs.negate().and(*rhs);
 
                     let lhs = lhs
                         .contents()
@@ -655,8 +683,7 @@ async fn do_lock(
         // Ensure that the environments are disjoint.
         for [lhs, rhs] in required_environments.as_markers().array_windows() {
             if !lhs.is_disjoint(*rhs) {
-                let mut hint = lhs.negate();
-                hint.and(*rhs);
+                let hint = lhs.negate().and(*rhs);
 
                 let lhs = lhs
                     .contents()
@@ -749,14 +776,6 @@ async fn do_lock(
         .platform(interpreter.platform())
         .build()?;
 
-    let build_isolation_settings: Option<Option<BTreeSet<String>>> = match build_isolation {
-        uv_configuration::BuildIsolation::Isolate => None,
-        uv_configuration::BuildIsolation::Shared => Some(None),
-        uv_configuration::BuildIsolation::SharedPackage(packages) => {
-            Some(Some(packages.iter().map(ToString::to_string).collect()))
-        }
-    };
-
     // Determine whether to enable build isolation.
     let environment;
     let build_isolation = match build_isolation {
@@ -783,291 +802,122 @@ async fn do_lock(
 
     let options = OptionsBuilder::new()
         .resolution_mode(*resolution)
-        .prerelease_mode(*prerelease)
+        .prerelease(prerelease.clone())
         .fork_strategy(*fork_strategy)
         .exclude_newer(exclude_newer.clone())
         .index_strategy(*index_strategy)
         .build_options(build_options.clone())
         .artifact_environments(artifact_environments.clone())
         .build();
-    let hasher = HashStrategy::Generate(HashGeneration::Url);
+    // Checking an existing lockfile may build metadata and install build dependencies. Verify any
+    // artifacts recorded in that lockfile, including for an ordinary unlocked command.
+    let (locked_hasher, locked_build_hasher) = if let Some(existing_lock) = existing_lock.as_ref() {
+        let locked_hasher = existing_lock.hash_strategy(target.install_path())?;
+        let build_hasher = HashStrategy::from_constraints(
+            &existing_lock.build_constraints(target.install_path()),
+            Some(&interpreter.to_resolver_marker_environment()),
+            uv_configuration::HashCheckingMode::Verify,
+        )?;
+        let locked_build_hasher = locked_hasher
+            .clone()
+            .with_constraint_hashes(&build_hasher)?;
+        (locked_hasher, locked_build_hasher)
+    } else {
+        (HashStrategy::default(), HashStrategy::default())
+    };
+    // A fresh resolution retains those hashes under `--locked`, but an explicitly unlocked update
+    // must be able to replace them. Build dependencies follow the same choice without generating
+    // hashes for artifacts absent from the lockfile.
+    let resolution_hasher = match mode {
+        LockMode::Locked(..) => &locked_hasher,
+        LockMode::Write(_) | LockMode::DryRun(_) | LockMode::Frozen(_) => &HashStrategy::default(),
+    };
+    let hasher = HashStrategy::collect(HashCollection::Url)
+        .with_verification(resolution_hasher.verification().clone());
+
+    let build_hasher = HashStrategy::from_constraints(
+        &build_constraints,
+        Some(&interpreter.to_resolver_marker_environment()),
+        uv_configuration::HashCheckingMode::Verify,
+    )?;
+    // Explicit build constraints apply even when fresh resolution can replace lockfile hashes.
+    let resolution_build_hasher = match mode {
+        LockMode::Locked(..) => locked_hasher.with_constraint_hashes(&build_hasher)?,
+        LockMode::Write(_) | LockMode::DryRun(_) | LockMode::Frozen(_) => build_hasher,
+    };
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
-    let build_hasher = HashStrategy::default();
     let extras = ExtrasSpecification::default();
     let groups = BTreeMap::new();
 
     // Resolve the flat indexes from `--find-links`.
-    let flat_index = {
-        let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
-        let entries = client
-            .fetch_all(index_locations.flat_indexes().map(Index::url))
-            .await?;
-        FlatIndex::from_entries(entries, None, &hasher, build_options)
-    };
+    let flat_index = FlatIndex::load(&client, cache, index_locations).await?;
 
     // Lower the extra build dependencies.
     let extra_build_requires = match &target {
-        LockTarget::Workspace(workspace) => LoweredExtraBuildDependencies::from_workspace(
-            extra_build_dependencies.clone(),
-            workspace,
-            index_locations,
-            sources,
-            client.credentials_cache(),
-        )?,
+        LockTarget::Workspace(workspace) => {
+            LoweredExtraBuildDependencies::from_workspace(
+                extra_build_dependencies.clone(),
+                workspace,
+                index_locations,
+                sources,
+                cache,
+                workspace_cache,
+                client.credentials_cache(),
+            )
+            .await?
+        }
         LockTarget::Script(script) => {
             // Try to get extra build dependencies from the script metadata
-            script_extra_build_requires((*script).into(), settings, client.credentials_cache())?
+            script_extra_build_requires(
+                (*script).into(),
+                settings,
+                cache,
+                workspace_cache,
+                client.credentials_cache(),
+            )
+            .await?
         }
     }
     .into_inner();
 
-    // Convert to the `Constraints` format.
-    let dispatch_constraints = Constraints::from_requirements(build_constraints.iter().cloned());
-
-    // Extract build dependency preferences from the existing lock file so the
-    // resolver prefers previously locked build dependency versions.
-    let build_preferences = existing_lock
-        .as_ref()
-        .map(|lock| {
-            let mut build_preferences = lock.build_dependency_preferences(target.install_path());
-            if !upgrade.is_none() {
-                let upgrade_packages = UpgradePackages::for_workspace(lock, upgrade);
-                for preferences in build_preferences.values_mut() {
-                    preferences.retain(|(name, _)| !upgrade_packages.contains(name));
-                }
-                build_preferences.retain(|_, preferences| !preferences.is_empty());
-            }
-            BuildPreferences::new(build_preferences)
-        })
-        .unwrap_or_default();
-
-    let no_build_packages = match build_options.no_build() {
-        NoBuild::Packages(packages) => packages.iter().map(ToString::to_string).collect(),
-        NoBuild::None | NoBuild::All => BTreeSet::new(),
-    };
-    let no_build_all = matches!(build_options.no_build(), NoBuild::All);
-    let no_binary_settings: Option<(&str, BTreeSet<String>)> = match build_options.no_binary() {
-        NoBinary::None => None,
-        NoBinary::All => Some(("all", BTreeSet::new())),
-        NoBinary::Packages(packages) => Some((
-            "packages",
-            packages.iter().map(ToString::to_string).collect(),
-        )),
-    };
-    let has_build_settings = !config_setting.is_empty()
-        || *config_settings_package != PackageConfigSettings::default()
-        || !extra_build_variables.is_empty()
-        || !no_build_packages.is_empty();
-    let source_settings = match sources {
-        NoSources::None => None,
-        NoSources::All => Some(("all", Vec::new())),
-        NoSources::Packages(packages) => Some((
-            "packages",
-            packages.iter().map(PackageName::as_ref).collect(),
-        )),
-    };
-    let build_settings = if let Some(build_isolation_settings) = build_isolation_settings.as_ref()
-        && let Some(source_settings) = &source_settings
-    {
-        Some(cache_digest(&(
-            config_setting,
-            config_settings_package,
-            extra_build_variables,
-            &no_build_packages,
-            build_isolation_settings,
-            source_settings,
-        )))
-    } else if let Some(build_isolation_settings) = build_isolation_settings.as_ref() {
-        Some(cache_digest(&(
-            config_setting,
-            config_settings_package,
-            extra_build_variables,
-            &no_build_packages,
-            build_isolation_settings,
-        )))
-    } else if let Some(source_settings) = &source_settings {
-        Some(cache_digest(&(
-            config_setting,
-            config_settings_package,
-            extra_build_variables,
-            &no_build_packages,
-            source_settings,
-        )))
-    } else if has_build_settings {
-        Some(cache_digest(&(
-            config_setting,
-            config_settings_package,
-            extra_build_variables,
-            &no_build_packages,
-        )))
-    } else {
-        None
-    };
-    let build_settings = if let Some(no_binary_settings) = &no_binary_settings {
-        Some(cache_digest(&(
-            build_settings.as_deref(),
-            no_build_all,
-            no_binary_settings,
-        )))
-    } else {
-        build_settings
-    };
-    let build_settings = if index_locations.is_none() && *index_strategy == IndexStrategy::default()
-    {
-        build_settings
-    } else {
-        // Preserve effective index precedence and policy in the build-lock fingerprint. Local
-        // paths use the same relative form as the lock, and remote URLs omit credentials.
-        let indexes = index_locations
-            .allowed_indexes()
-            .into_iter()
-            .map(|index| {
-                let format = match index.format {
-                    IndexFormat::Simple => "simple",
-                    IndexFormat::Flat => "flat",
-                };
-                let url = match index.url() {
-                    IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
-                        index.url().without_credentials().as_str().to_string()
-                    }
-                    IndexUrl::Path(url) => url
-                        .to_file_path()
-                        .ok()
-                        .and_then(|path| {
-                            try_relative_to_if(
-                                &path,
-                                target.install_path(),
-                                !url.was_given_absolute(),
-                            )
-                            .ok()
-                        })
-                        .map_or_else(
-                            || index.url().without_credentials().as_str().to_string(),
-                            |path| PortablePath::from(&path).to_string(),
-                        ),
-                };
-                let mut ignore_error_codes = index
-                    .ignore_error_codes
-                    .as_deref()
-                    .unwrap_or_default()
-                    .iter()
-                    .map(|status| status.as_u16())
-                    .collect::<Vec<_>>();
-                ignore_error_codes.sort_unstable();
-                ignore_error_codes.dedup();
-                let exclude_newer =
-                    index
-                        .exclude_newer
-                        .as_ref()
-                        .map(|exclude_newer| match exclude_newer {
-                            ExcludeNewerOverride::Disabled => ("disabled", String::new()),
-                            ExcludeNewerOverride::Enabled(value) => value.span().map_or_else(
-                                || ("absolute", value.timestamp().to_string()),
-                                |span| ("relative", span.to_string()),
-                            ),
-                        });
-                let cache_control = index
-                    .cache_control
-                    .as_ref()
-                    .and_then(|cache_control| serde_json::to_string(cache_control).ok());
-                (
-                    format,
-                    url,
-                    index.name.as_ref().map(ToString::to_string),
-                    index.explicit,
-                    index.default,
-                    index.authenticate.to_string(),
-                    ignore_error_codes,
-                    exclude_newer,
-                    cache_control,
-                )
-            })
-            .collect::<Vec<_>>();
-        let index_strategy = match index_strategy {
-            IndexStrategy::FirstIndex => "first-index",
-            IndexStrategy::UnsafeFirstMatch => "unsafe-first-match",
-            IndexStrategy::UnsafeBestMatch => "unsafe-best-match",
-        };
-
-        Some(cache_digest(&(
-            build_settings.as_deref(),
-            index_locations.no_index(),
-            indexes,
-            index_strategy,
-        )))
-    };
-    let extra_build_settings = extra_build_requires
-        .iter()
-        .filter(|(_, requirements)| !requirements.is_empty())
-        .map(|(name, requirements)| {
-            let requirements = requirements
-                .iter()
-                .map(|requirement| {
-                    Ok::<_, std::io::Error>((
-                        requirement
-                            .requirement
-                            .clone()
-                            .relative_to(target.install_path())?,
-                        requirement.match_runtime,
-                    ))
-                })
-                .collect::<Result<BTreeSet<_>, _>>()?;
-            Ok::<_, std::io::Error>((name.as_str(), requirements))
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    let build_settings = if extra_build_settings.is_empty() {
-        build_settings
-    } else {
-        Some(cache_digest(&(
-            build_settings.as_deref(),
-            extra_build_settings,
-        )))
-    };
-
-    let make_build_dispatch = |build_preferences, extra_build_requires| {
-        BuildDispatch::new(
-            &client,
-            cache,
-            &dispatch_constraints,
-            interpreter,
-            index_locations,
-            &flat_index,
-            dependency_metadata,
-            state.fork().into_inner(),
-            *index_strategy,
-            config_setting,
-            config_settings_package,
-            build_isolation,
-            extra_build_requires,
-            extra_build_variables,
-            *link_mode,
-            build_options,
-            &build_hasher,
-            exclude_newer.clone(),
-            sources.clone(),
-            SourceTreeEditablePolicy::Project,
-            workspace_cache.clone(),
-            concurrency.clone(),
-            preview,
-        )
-        .with_build_preferences(build_preferences)
-    };
-
-    // Runtime metadata builds use the active interpreter. Universal build dependency
-    // locking runs after the runtime resolution can provide source reachability markers.
-    let build_dispatch = make_build_dispatch(build_preferences.clone(), &extra_build_requires);
-
-    let database = DistributionDatabase::new(
+    // Create a build dispatch for fresh resolution.
+    let build_dispatch = BuildDispatch::new(
         &client,
-        &build_dispatch,
-        concurrency.downloads_semaphore.clone(),
+        cache,
+        &build_constraints,
+        interpreter,
+        index_locations,
+        &flat_index,
+        dependency_metadata,
+        state.fork().into_inner(),
+        *index_strategy,
+        config_setting,
+        config_settings_package,
+        build_isolation,
+        &extra_build_requires,
+        extra_build_variables,
+        *link_mode,
+        build_options,
+        &resolution_build_hasher,
+        exclude_newer.clone(),
+        sources.clone(),
+        SourceTreeEditablePolicy::Project,
+        workspace_cache.clone(),
+        concurrency.clone(),
+        preview,
     );
 
     // If any of the resolution-determining settings changed, invalidate the lock.
     let existing_lock = if let Some(existing_lock) = existing_lock {
-        match ValidatedLock::validate(
+        let validation_build_dispatch = build_dispatch.fork(&locked_build_hasher);
+        let database = DistributionDatabase::new(
+            &client,
+            &validation_build_dispatch,
+            concurrency.downloads_semaphore.clone(),
+        );
+        match Box::pin(ValidatedLock::validate(
             existing_lock,
             target.install_path(),
             packages,
@@ -1079,8 +929,6 @@ async fn do_lock(
             &overrides,
             &excludes,
             &build_constraints,
-            &extra_build_requires,
-            build_settings.as_deref(),
             &conflicts,
             environments,
             required_environments,
@@ -1094,8 +942,9 @@ async fn do_lock(
             &hasher,
             state.index(),
             &database,
+            preview,
             printer,
-        )
+        ))
         .await
         {
             Ok(result) => Some(result),
@@ -1108,8 +957,17 @@ async fn do_lock(
                 // metadata that cannot be obtained under `--no-build`.
                 return Err(ProjectError::Lock(err));
             }
+            Err(ProjectError::Lock(err)) if err.is_not_pep625() => {
+                // A non-PEP 625-compliant sdist in the lockfile will also be rejected by a fresh
+                // resolve, so short-circuit rather than doing the extra work.
+                return Err(ProjectError::Lock(err));
+            }
             Err(err) => {
-                warn_user!("Failed to validate existing lockfile: {err}");
+                warn_user_with_chain!(
+                    anyhow::Error::from(err)
+                        .context("Failed to validate existing lockfile")
+                        .as_ref()
+                );
                 None
             }
         }
@@ -1117,37 +975,11 @@ async fn do_lock(
         None
     };
 
-    let existing_lock = if preview.is_enabled(PreviewFeature::LockBuildDependencies) {
-        match existing_lock {
-            Some(ValidatedLock::Satisfies(lock)) => {
-                if lock_missing_build_dependencies(
-                    &lock,
-                    target.install_path(),
-                    build_options,
-                    &extra_build_requires,
-                    build_isolation,
-                )
-                .map_err(ProjectError::from)?
-                {
-                    debug!(
-                        "Resolving despite existing lockfile because build-dependency locking is enabled and the lockfile is missing build dependencies"
-                    );
-                    Some(ValidatedLock::Preferable(lock))
-                } else {
-                    Some(ValidatedLock::Satisfies(lock))
-                }
-            }
-            lock => lock,
-        }
-    } else {
-        existing_lock
-    };
-
     match existing_lock {
         // Resolution from the lockfile succeeded.
         Some(ValidatedLock::Satisfies(lock)) => {
             // Print the success message after completing resolution.
-            logger.on_complete(lock.runtime_packages().count(), start, printer)?;
+            logger.on_complete(lock.len(), start, printer)?;
 
             Ok(LockResult::Unchanged(lock))
         }
@@ -1155,6 +987,12 @@ async fn do_lock(
         // The lockfile did not contain enough information to obtain a resolution, fallback
         // to a fresh resolve.
         _ => {
+            let database = DistributionDatabase::new(
+                &client,
+                &build_dispatch,
+                concurrency.downloads_semaphore.clone(),
+            );
+
             // Determine whether we can reuse the existing package versions.
             let versions_lock = existing_lock.as_ref().and_then(|lock| match &lock {
                 ValidatedLock::Satisfies(lock) => Some(lock),
@@ -1264,820 +1102,49 @@ async fn do_lock(
             // Notify the user of any resolution diagnostics.
             pip::operations::diagnose_resolution(resolution.diagnostics(), printer)?;
 
-            let mut manifest = ResolverManifest::new(
+            let manifest = ResolverManifest::new(
                 members,
                 requirements,
                 constraints,
                 overrides,
                 excludes.clone(),
-                build_constraints,
+                build_constraints.specifications().cloned(),
                 dependency_groups,
                 dependency_metadata.values().cloned(),
             )
             .relative_to(target.install_path())?;
-            if preview.is_enabled(PreviewFeature::LockBuildDependencies)
-                && build_options.allows_package_builds()
-            {
-                manifest = manifest.with_build_settings(build_settings.clone());
-            }
 
             let previous = existing_lock.map(ValidatedLock::into_lock);
-            let (lock, mut build_markers) = Lock::from_resolution_with_build_markers(
+            let lock = Lock::from_resolution(
                 &resolution,
+                manifest,
                 target.install_path(),
                 lock_supported_environments.clone().into_markers(),
-            )?;
-            let mut lock = lock
-                .with_manifest(manifest)
-                .with_conflicts(conflicts)
-                .with_required_environments(lock_required_environments.into_markers());
+                index_locations,
+                preview.is_enabled(PreviewFeature::LockWithoutMetadata),
+            )?
+            .with_conflicts(conflicts)
+            .with_required_environments(lock_required_environments.into_markers());
 
-            // Workspace members are selectable runtime roots, so their source builds cannot be
-            // restricted to the marker of an incoming dependency edge.
-            let root = lock.root().map(Package::name);
-            for (package, marker) in &mut build_markers {
-                if lock.members().contains(&package.name) || root == Some(&package.name) {
-                    *marker = UniversalMarker::default();
-                }
-            }
+            let lock = if preview.is_enabled(PreviewFeature::MissingExcludeNewerPackageLock) {
+                lock.without_unused_exclude_newer_packages()
+            } else {
+                lock
+            };
 
-            // Only record build dependencies in the lock file when the preview feature is enabled.
-            if preview.is_enabled(PreviewFeature::LockBuildDependencies) {
-                if build_options.allows_package_builds() {
-                    let match_runtime_packages = extra_build_requires
-                        .iter()
-                        .filter(|(_, requirements)| {
-                            requirements
-                                .iter()
-                                .any(|requirement| requirement.match_runtime)
-                        })
-                        .map(|(name, _)| name.clone())
-                        .collect::<BTreeSet<_>>();
-                    let mut general_extra_build_requires = extra_build_requires.clone();
-                    general_extra_build_requires
-                        .retain(|name, _| !match_runtime_packages.contains(name));
-                    let mut build_resolutions = BuildResolutionGraphMap::new();
-                    let executor_artifact_environments =
-                        executor_artifact_environments(interpreter.markers());
+            let unchanged = if let Some(check_lockfile_contents) = check_lockfile_contents {
+                previous.is_some() && check_lockfile_contents == lock.to_toml()?.as_str()
+            } else {
+                previous.as_ref().is_some_and(|previous| *previous == lock)
+            };
 
-                    // Build backend hooks are assumed to return the same requirements for every
-                    // executor, except for variation expressed by PEP 508 environment markers on
-                    // those requirements. Discovering arbitrary executor-dependent hook results
-                    // would require running the backend in every possible environment, so resolve
-                    // the returned requirements universally and evaluate their markers on replay.
-                    {
-                        let build_dispatch = BuildDispatch::new(
-                            &client,
-                            cache,
-                            &dispatch_constraints,
-                            interpreter,
-                            index_locations,
-                            &flat_index,
-                            dependency_metadata,
-                            state.fork().into_inner(),
-                            *index_strategy,
-                            config_setting,
-                            config_settings_package,
-                            build_isolation,
-                            &general_extra_build_requires,
-                            extra_build_variables,
-                            *link_mode,
-                            build_options,
-                            &build_hasher,
-                            exclude_newer.clone(),
-                            sources.clone(),
-                            SourceTreeEditablePolicy::Project,
-                            workspace_cache.clone(),
-                            concurrency.clone(),
-                            preview,
-                        )
-                        .with_build_preferences(build_preferences.clone())
-                        .with_universal_build_resolution(
-                            requires_python.clone(),
-                            SupportedEnvironments::default(),
-                            executor_artifact_environments.clone(),
-                        );
-                        let build_database = DistributionDatabase::new(
-                            &client,
-                            &build_dispatch,
-                            concurrency.downloads_semaphore.clone(),
-                        );
-                        resolve_all_possible_builds(
-                            &lock,
-                            target.install_path(),
-                            build_options,
-                            &build_dispatch,
-                            &build_database,
-                            &build_hasher,
-                            &build_markers,
-                            None,
-                            None,
-                            &match_runtime_packages,
-                        )
-                        .await
-                        .map_err(ProjectError::from)?;
-                        build_resolutions
-                            .extend(build_dispatch.build_resolutions().snapshot_contexts());
-                    }
-
-                    if !match_runtime_packages.is_empty() {
-                        let matched_extra_build_requires = resolution
-                            .match_runtime_extra_build_requires_by_fork(&extra_build_requires)?;
-                        let no_excluded_packages = BTreeSet::new();
-                        for (runtime_marker, matched_extra_build_requires) in
-                            matched_extra_build_requires
-                        {
-                            let included_root_packages = matched_extra_build_requires
-                                .keys()
-                                .filter(|name| match_runtime_packages.contains(*name))
-                                .cloned()
-                                .collect::<BTreeSet<_>>();
-                            if included_root_packages.is_empty() {
-                                continue;
-                            }
-
-                            let build_dispatch = BuildDispatch::new(
-                                &client,
-                                cache,
-                                &dispatch_constraints,
-                                interpreter,
-                                index_locations,
-                                &flat_index,
-                                dependency_metadata,
-                                state.fork().into_inner(),
-                                *index_strategy,
-                                config_setting,
-                                config_settings_package,
-                                build_isolation,
-                                &matched_extra_build_requires,
-                                extra_build_variables,
-                                *link_mode,
-                                build_options,
-                                &build_hasher,
-                                exclude_newer.clone(),
-                                sources.clone(),
-                                SourceTreeEditablePolicy::Project,
-                                workspace_cache.clone(),
-                                concurrency.clone(),
-                                preview,
-                            )
-                            .with_build_preferences(build_preferences.clone())
-                            .with_universal_build_resolution(
-                                requires_python.clone(),
-                                SupportedEnvironments::default(),
-                                executor_artifact_environments.clone(),
-                            );
-                            let build_database = DistributionDatabase::new(
-                                &client,
-                                &build_dispatch,
-                                concurrency.downloads_semaphore.clone(),
-                            );
-                            resolve_all_possible_builds(
-                                &lock,
-                                target.install_path(),
-                                build_options,
-                                &build_dispatch,
-                                &build_database,
-                                &build_hasher,
-                                &build_markers,
-                                runtime_marker,
-                                Some(&included_root_packages),
-                                &no_excluded_packages,
-                            )
-                            .await
-                            .map_err(ProjectError::from)?;
-                            build_resolutions
-                                .extend(build_dispatch.build_resolutions().snapshot_contexts());
-                        }
-                    }
-
-                    let build_metadata_dispatch =
-                        make_build_dispatch(build_preferences.clone(), &extra_build_requires);
-                    let build_metadata_database = DistributionDatabase::new(
-                        &client,
-                        &build_metadata_dispatch,
-                        concurrency.downloads_semaphore.clone(),
-                    );
-                    lock = lock
-                        .with_build_resolutions(
-                            &build_resolutions,
-                            &extra_build_requires,
-                            &build_markers,
-                            target.install_path(),
-                            &build_metadata_database,
-                            &build_hasher,
-                        )
-                        .await?;
-                } else {
-                    debug!(
-                        "Skipping lock build dependency resolution because `--no-build` is enabled"
-                    );
-                }
-            }
-
-            lock.normalize_legacy_artifact_eligibility();
-            if previous.as_ref().is_some_and(|previous| *previous == lock) {
+            if unchanged {
                 Ok(LockResult::Unchanged(lock))
             } else {
                 Ok(LockResult::Changed(previous, lock))
             }
         }
     }
-}
-
-fn source_dist_from_resolved_dist(resolved_dist: &ResolvedDist) -> Option<SourceDist> {
-    let ResolvedDist::Installable { dist, .. } = resolved_dist else {
-        return None;
-    };
-
-    match dist.as_ref() {
-        Dist::Source(SourceDist::Registry(source_dist)) => {
-            // A selected source distribution proves none of its available wheels were usable.
-            let mut source_dist = source_dist.clone();
-            source_dist.wheels.clear();
-            Some(SourceDist::Registry(source_dist))
-        }
-        Dist::Source(source_dist) => Some(source_dist.clone()),
-        Dist::Built(BuiltDist::Registry(built_dist)) => {
-            let sdist = built_dist.sdist.as_ref()?;
-            let index = &built_dist.best_wheel().index;
-            if sdist.index != *index {
-                return None;
-            }
-
-            let mut sdist = sdist.clone();
-            // Keep only wheels that will be retained in the lock so target coverage cannot count
-            // artifacts from a different index.
-            sdist.wheels = built_dist
-                .wheels
-                .iter()
-                .filter(|wheel| wheel.index == *index)
-                .cloned()
-                .collect();
-            Some(SourceDist::Registry(sdist))
-        }
-        Dist::Built(BuiltDist::DirectUrl(_) | BuiltDist::Path(_) | BuiltDist::GitPath(_)) => None,
-    }
-}
-
-fn lock_missing_build_dependencies(
-    lock: &Lock,
-    workspace_root: &Path,
-    build_options: &BuildOptions,
-    extra_build_requires: &ExtraBuildRequires,
-    build_isolation: BuildIsolation<'_>,
-) -> anyhow::Result<bool> {
-    if !build_options.allows_package_builds() {
-        return Ok(false);
-    }
-
-    Ok(lock
-        .source_distributions_missing_build_dependencies(
-            workspace_root,
-            build_options,
-            extra_build_requires,
-        )?
-        .into_iter()
-        .any(|(key, _)| build_isolation.is_isolated(Some(&key.name))))
-}
-
-async fn resolve_all_possible_builds(
-    lock: &Lock,
-    workspace_root: &Path,
-    build_options: &BuildOptions,
-    build_dispatch: &BuildDispatch<'_>,
-    database: &DistributionDatabase<'_, BuildDispatch<'_>>,
-    build_hasher: &HashStrategy,
-    build_markers: &BTreeMap<BuildPackageKey, UniversalMarker>,
-    runtime_marker: Option<UniversalMarker>,
-    included_root_packages: Option<&BTreeSet<PackageName>>,
-    excluded_packages: &BTreeSet<PackageName>,
-) -> anyhow::Result<()> {
-    struct BuildResolutionRequest {
-        key: BuildPackageKey,
-        dispatch_key: BuildPackageKey,
-        source_dist: SourceDist,
-        operation: BuildResolutionOperation,
-        solve_marker: Option<MarkerTree>,
-        context_marker: Option<MarkerTree>,
-        allows_yanked: bool,
-    }
-
-    fn build_resolution_requests(
-        key: BuildPackageKey,
-        source_dist: SourceDist,
-        solve_marker: Option<MarkerTree>,
-        context_marker: Option<MarkerTree>,
-        allows_yanked: bool,
-    ) -> Vec<BuildResolutionRequest> {
-        if solve_marker.is_some_and(MarkerTree::is_false)
-            || context_marker.is_some_and(MarkerTree::is_false)
-        {
-            return Vec::new();
-        }
-        let mut requests = Vec::with_capacity(if source_dist.is_editable() { 2 } else { 1 });
-        if source_dist.is_editable() {
-            requests.push(BuildResolutionRequest {
-                dispatch_key: key.clone(),
-                key: key.clone(),
-                source_dist: source_dist.clone(),
-                operation: BuildResolutionOperation::Editable,
-                solve_marker,
-                context_marker,
-                allows_yanked,
-            });
-
-            let SourceDist::Directory(mut wheel_source_dist) = source_dist else {
-                return requests;
-            };
-            wheel_source_dist.editable = Some(false);
-            let source_dist = SourceDist::Directory(wheel_source_dist);
-            requests.push(BuildResolutionRequest {
-                dispatch_key: BuildPackageKey::from_source_dist(
-                    key.name.clone(),
-                    key.version.clone(),
-                    Some(&source_dist),
-                ),
-                key,
-                source_dist,
-                operation: BuildResolutionOperation::Wheel,
-                solve_marker,
-                context_marker,
-                allows_yanked,
-            });
-        } else {
-            requests.push(BuildResolutionRequest {
-                dispatch_key: key.clone(),
-                key,
-                source_dist,
-                operation: BuildResolutionOperation::Wheel,
-                solve_marker,
-                context_marker,
-                allows_yanked,
-            });
-        }
-        requests
-    }
-
-    fn should_resolve_backend_hook_requirements(
-        lock: &Lock,
-        build_options: &BuildOptions,
-        build_markers: &BTreeMap<BuildPackageKey, UniversalMarker>,
-        key: &BuildPackageKey,
-        source_dist: &SourceDist,
-        solve_marker: Option<MarkerTree>,
-        allows_yanked: bool,
-    ) -> bool {
-        let SourceDist::Registry(source_dist) = source_dist else {
-            return true;
-        };
-
-        let mut wheel_coverage = MarkerTree::FALSE;
-        for wheel in &source_dist.wheels {
-            if (allows_yanked
-                || wheel
-                    .file
-                    .yanked
-                    .as_deref()
-                    .is_none_or(|yanked| !yanked.is_yanked()))
-                && wheel.filename.abi_tags().contains(&AbiTag::None)
-                && lock.requires_python().matches_wheel_tag(&wheel.filename)
-                && wheel.filename.platform_tags().iter().all(|platform| {
-                    matches!(
-                        platform,
-                        PlatformTag::Any
-                            | PlatformTag::Linux { .. }
-                            | PlatformTag::Win32
-                            | PlatformTag::WinAmd64
-                            | PlatformTag::WinArm64
-                    )
-                })
-            {
-                let mut wheel_targets = implied_markers(&wheel.filename);
-                if let Some(requires_python) = &wheel.file.requires_python {
-                    for specifier in requires_python.iter() {
-                        wheel_targets.and(MarkerTree::expression(MarkerExpression::Version {
-                            key: MarkerValueVersion::PythonFullVersion,
-                            specifier: specifier.clone(),
-                        }));
-                    }
-                }
-                wheel_coverage.or(wheel_targets);
-            }
-        }
-
-        let mut uncovered = MarkerTree::TRUE;
-        for specifier in lock.requires_python().specifiers().iter() {
-            uncovered.and(MarkerTree::expression(MarkerExpression::Version {
-                key: MarkerValueVersion::PythonFullVersion,
-                specifier: specifier.clone(),
-            }));
-        }
-        if let Some(solve_marker) = solve_marker {
-            uncovered.and(solve_marker);
-        }
-        if !lock.supported_environments().is_empty() {
-            let mut supported = MarkerTree::FALSE;
-            for environment in lock.supported_environments() {
-                supported.or(*environment);
-            }
-            uncovered.and(supported);
-        }
-        uncovered.and(wheel_coverage.negate());
-
-        build_options.no_binary_package(&source_dist.name)
-            || build_markers.contains_key(key)
-            || !uncovered.is_false()
-    }
-
-    let mut queue: VecDeque<BuildResolutionRequest> = lock
-        .source_distributions_for_build(workspace_root)?
-        .into_iter()
-        .filter(|(key, _)| {
-            !build_options.no_build_package(&key.name)
-                && !excluded_packages.contains(&key.name)
-                && build_dispatch
-                    .build_isolation()
-                    .is_isolated(Some(&key.name))
-                && included_root_packages.is_none_or(|packages| packages.contains(&key.name))
-        })
-        .flat_map(|(key, source_dist)| {
-            let build_marker = build_markers.get(&key).copied();
-            let solve_marker = match (build_marker, runtime_marker) {
-                (Some(build_marker), Some(runtime_marker)) => {
-                    let mut marker = source_python_marker(build_marker.combined());
-                    marker.and(source_python_marker(runtime_marker.combined()));
-                    Some(marker)
-                }
-                (Some(build_marker), None) => Some(source_python_marker(build_marker.combined())),
-                (None, Some(runtime_marker)) => {
-                    Some(source_python_marker(runtime_marker.combined()))
-                }
-                (None, None) => None,
-            };
-            let context_marker = runtime_marker.map(|runtime_marker| {
-                let mut marker = build_marker
-                    .map(UniversalMarker::combined)
-                    .unwrap_or(MarkerTree::TRUE);
-                marker.and(runtime_marker.combined());
-                marker
-            });
-            build_resolution_requests(key, source_dist, solve_marker, context_marker, true)
-        })
-        .collect();
-
-    let mut seen: FxHashSet<BuildResolutionGraphKey> = FxHashSet::default();
-    let interpreter = build_dispatch.interpreter().await;
-    let build_python_version = &interpreter.python_full_version().version;
-
-    while let Some(BuildResolutionRequest {
-        key,
-        dispatch_key,
-        source_dist,
-        operation,
-        solve_marker,
-        context_marker,
-        allows_yanked,
-    }) = queue.pop_front()
-    {
-        // A registry source distribution can be selected as a fallback on a target where none of
-        // the locked wheels are compatible, even if the runtime resolution selected a wheel in
-        // every environment it considered.
-        let resolve_backend_hook_requirements = should_resolve_backend_hook_requirements(
-            lock,
-            build_options,
-            build_markers,
-            &key,
-            &source_dist,
-            solve_marker,
-            allows_yanked,
-        );
-        if resolve_backend_hook_requirements
-            && let SourceDist::Registry(source_dist) = &source_dist
-            && let Some(requires_python) = &source_dist.file.requires_python
-        {
-            if !requires_python.contains(build_python_version) {
-                anyhow::bail!(
-                    "Cannot lock build dependencies for `{}=={}`: the source distribution requires Python `{requires_python}`, but the build executor is Python {build_python_version}",
-                    source_dist.name,
-                    source_dist.version,
-                );
-            }
-        }
-        let target_marker = context_marker.filter(|marker| !marker.is_true());
-        let nested_context_marker = match (build_markers.get(&key).copied(), context_marker) {
-            (Some(build_marker), Some(context_marker)) => {
-                let mut marker = build_marker.combined();
-                marker.and(context_marker);
-                Some(marker)
-            }
-            (Some(build_marker), None) => Some(build_marker.combined()),
-            (None, context_marker) => context_marker,
-        }
-        .filter(|marker| !marker.is_true());
-        let bootstrap_context = if context_marker.is_none() && build_markers.contains_key(&key) {
-            lock.build_resolution_context_id_for(
-                &key,
-                operation,
-                BuildResolutionStage::Bootstrap,
-                build_markers,
-                workspace_root,
-            )?
-        } else {
-            lock.build_resolution_context_id_for_marker(
-                &key,
-                operation,
-                BuildResolutionStage::Bootstrap,
-                target_marker,
-                workspace_root,
-            )?
-        };
-        let build_context = if context_marker.is_none() && build_markers.contains_key(&key) {
-            lock.build_resolution_context_id_for(
-                &key,
-                operation,
-                BuildResolutionStage::Build,
-                build_markers,
-                workspace_root,
-            )?
-        } else {
-            lock.build_resolution_context_id_for_marker(
-                &key,
-                operation,
-                BuildResolutionStage::Build,
-                target_marker,
-                workspace_root,
-            )?
-        };
-        let bootstrap_graph_key = BuildResolutionGraphKey::context_with_marker_and_operation(
-            key.clone(),
-            operation,
-            bootstrap_context,
-            BuildResolutionStage::Bootstrap,
-            target_marker,
-        );
-        let build_graph_key = BuildResolutionGraphKey::context_with_marker_and_operation(
-            key.clone(),
-            operation,
-            build_context,
-            BuildResolutionStage::Build,
-            target_marker,
-        );
-        build_dispatch.set_build_resolution_stage_contexts(
-            dispatch_key.clone(),
-            bootstrap_graph_key.clone(),
-            build_graph_key.clone(),
-        );
-        let marker_widened = solve_marker.is_some_and(|marker| {
-            let bootstrap_widened = build_dispatch
-                .add_universal_build_context_marker(bootstrap_graph_key.clone(), marker);
-            let build_widened =
-                build_dispatch.add_universal_build_context_marker(build_graph_key.clone(), marker);
-            bootstrap_widened || build_widened
-        });
-        let seen_before = !seen.insert(build_graph_key.clone());
-        if seen_before && !marker_widened {
-            continue;
-        }
-        let re_resolve_build_requirements = seen_before && marker_widened;
-
-        let dist = Dist::Source(source_dist.clone());
-        let extra_build_dependencies = build_dispatch
-            .extra_build_requires()
-            .get(&key.name)
-            .cloned()
-            .unwrap_or_default();
-        let direct_build = extra_build_dependencies.is_empty()
-            && database
-                .is_direct_build(&source_dist, build_hasher.get(&dist), uv_version::version())
-                .await?;
-
-        if !direct_build && resolve_backend_hook_requirements {
-            database
-                .resolve_static_build_requirements(&source_dist, build_hasher.get(&dist))
-                .await?;
-        } else if direct_build || !matches!(&source_dist, SourceDist::Registry(_)) {
-            // Dynamic registry metadata can execute backend hooks even when the source is
-            // unreachable; its static build system is captured below without building metadata.
-            database
-                .get_or_build_wheel_metadata(&dist, build_hasher.get(&dist))
-                .await?;
-        }
-
-        let build_resolutions = build_dispatch.build_resolutions();
-        let mut graph = if re_resolve_build_requirements {
-            None
-        } else {
-            build_resolutions
-                .get(&build_graph_key)
-                .or_else(|| build_resolutions.get(&bootstrap_graph_key))
-        };
-        let mut has_explicit_build_system = false;
-        if graph.is_none() {
-            let build_system = if direct_build {
-                None
-            } else {
-                database
-                    .get_static_build_system(&source_dist, build_hasher.get(&dist))
-                    .await?
-            };
-            has_explicit_build_system = build_system.is_some();
-            let build_requirements = build_system.map(|build_system| build_system.requires);
-
-            if graph.is_none()
-                && let Some(mut requirements) = build_requirements
-            {
-                requirements.extend(
-                    extra_build_dependencies
-                        .clone()
-                        .into_iter()
-                        .map(Requirement::from),
-                );
-                if !requirements.is_empty() {
-                    let build_stack = BuildStack::default();
-                    let _ = build_dispatch
-                        .resolve(&requirements, Some(&dispatch_key), &build_stack, None)
-                        .await?;
-                    graph = build_resolutions
-                        .get(&build_graph_key)
-                        .or_else(|| build_resolutions.get(&bootstrap_graph_key));
-                }
-            }
-
-            if graph.is_none()
-                && !source_dist.is_virtual()
-                && !direct_build
-                && !has_explicit_build_system
-            {
-                let mut requirements = vec![Requirement::from(uv_pep508::Requirement::from_str(
-                    "setuptools >= 40.8.0",
-                )?)];
-                requirements.extend(extra_build_dependencies.into_iter().map(Requirement::from));
-                let build_stack = BuildStack::default();
-                let _ = build_dispatch
-                    .resolve(&requirements, Some(&dispatch_key), &build_stack, None)
-                    .await?;
-                graph = build_resolutions
-                    .get(&build_graph_key)
-                    .or_else(|| build_resolutions.get(&bootstrap_graph_key));
-            }
-        }
-
-        // Capture empty stages so a frozen source build cannot fall back to a live PEP 517 solve.
-        if (direct_build
-            || resolve_backend_hook_requirements
-            || !matches!(source_dist, SourceDist::Registry(_)) && has_explicit_build_system)
-            && graph.is_none()
-        {
-            build_resolutions
-                .insert_key(bootstrap_graph_key.clone(), BuildResolutionGraph::default());
-            build_resolutions.insert_key(build_graph_key.clone(), BuildResolutionGraph::default());
-        }
-
-        let graphs = [
-            build_resolutions.get(&bootstrap_graph_key),
-            build_resolutions.get(&build_graph_key),
-            graph,
-        ];
-        for package in graphs
-            .into_iter()
-            .flatten()
-            .flat_map(|graph| graph.packages)
-        {
-            let Some(source_dist) = source_dist_from_resolved_dist(&package.dist) else {
-                continue;
-            };
-
-            let name = package.dist.name().clone();
-            if build_options.no_build_package(&name)
-                || excluded_packages.contains(&name)
-                || !build_dispatch.build_isolation().is_isolated(Some(&name))
-            {
-                continue;
-            }
-
-            let dep_key = BuildPackageKey::from_source_dist(
-                name,
-                package.dist.version().cloned(),
-                Some(&source_dist),
-            );
-            let nested_solve_marker = resolve_backend_hook_requirements.then_some(package.marker);
-
-            if let SourceDist::Registry(registry_source) = &source_dist {
-                let source_is_yanked = !package.allows_yanked
-                    && registry_source
-                        .file
-                        .yanked
-                        .as_deref()
-                        .is_some_and(Yanked::is_yanked);
-                let source_requires_python = registry_source
-                    .file
-                    .requires_python
-                    .as_ref()
-                    .filter(|requires_python| !requires_python.contains(build_python_version));
-                if source_is_yanked || source_requires_python.is_some() {
-                    if !should_resolve_backend_hook_requirements(
-                        lock,
-                        build_options,
-                        build_markers,
-                        &dep_key,
-                        &source_dist,
-                        nested_solve_marker,
-                        package.allows_yanked,
-                    ) {
-                        debug!(
-                            "Skipping ineligible source distribution for `{}` when capturing build dependencies",
-                            package.dist.name()
-                        );
-                        continue;
-                    }
-                    if source_is_yanked {
-                        anyhow::bail!(
-                            "Cannot lock build dependencies for `{}=={}`: the source distribution is yanked",
-                            registry_source.name,
-                            registry_source.version,
-                        );
-                    }
-                    if let Some(requires_python) = source_requires_python {
-                        anyhow::bail!(
-                            "Cannot lock build dependencies for `{}=={}`: the source distribution requires Python `{requires_python}`, but the build executor is Python {build_python_version}",
-                            registry_source.name,
-                            registry_source.version,
-                        );
-                    }
-                }
-            }
-
-            queue.extend(build_resolution_requests(
-                dep_key,
-                source_dist,
-                nested_solve_marker,
-                nested_context_marker,
-                package.allows_yanked,
-            ));
-        }
-    }
-
-    Ok(())
-}
-
-/// Restrict a source build solve to Python versions where the source can be
-/// selected without applying target platform markers to the build host.
-fn source_python_marker(marker: MarkerTree) -> MarkerTree {
-    if marker.is_true() || marker.is_false() {
-        return marker;
-    }
-
-    let mut python_marker = MarkerTree::FALSE;
-    for clause in marker.to_dnf() {
-        let mut python_clause = MarkerTree::TRUE;
-        for expression in clause {
-            if matches!(
-                &expression,
-                MarkerExpression::Version {
-                    key: MarkerValueVersion::PythonVersion | MarkerValueVersion::PythonFullVersion,
-                    ..
-                } | MarkerExpression::VersionIn {
-                    key: MarkerValueVersion::PythonVersion | MarkerValueVersion::PythonFullVersion,
-                    ..
-                }
-            ) {
-                python_clause.and(MarkerTree::expression(expression));
-            }
-        }
-        python_marker.or(python_clause);
-    }
-    python_marker
-}
-
-/// Return the marker environment used to require artifact coverage for dependencies installed into
-/// the build environment.
-///
-/// Build requirement markers are resolved universally, but an artifact selected during capture
-/// must be installable by the executor performing the build.
-fn executor_artifact_environments(markers: &MarkerEnvironment) -> SupportedEnvironments {
-    let mut marker = MarkerTree::expression(MarkerExpression::String {
-        key: MarkerValueString::SysPlatform,
-        operator: MarkerOperator::Equal,
-        value: markers.sys_platform().into(),
-    });
-    if !markers.platform_machine().is_empty() {
-        marker.and(MarkerTree::expression(MarkerExpression::String {
-            key: MarkerValueString::PlatformMachine,
-            operator: MarkerOperator::Equal,
-            value: markers.platform_machine().into(),
-        }));
-    }
-    marker.and(MarkerTree::expression(MarkerExpression::String {
-        key: MarkerValueString::PlatformPythonImplementation,
-        operator: MarkerOperator::Equal,
-        value: markers.platform_python_implementation().into(),
-    }));
-    marker.and(MarkerTree::expression(MarkerExpression::Version {
-        key: MarkerValueVersion::PythonVersion,
-        specifier: VersionSpecifier::equals_version(markers.python_version().version.clone()),
-    }));
-    SupportedEnvironments::from_markers(vec![marker])
 }
 
 #[derive(Debug)]
@@ -2107,9 +1174,7 @@ impl ValidatedLock {
         constraints: &[Requirement],
         overrides: &[Override<Requirement>],
         excludes: &[ExcludeDependency],
-        build_constraints: &[Requirement],
-        extra_build_requires: &uv_distribution_types::ExtraBuildRequires,
-        build_settings: Option<&str>,
+        build_constraints: &Constraints,
         conflicts: &Conflicts,
         environments: Option<&SupportedEnvironments>,
         required_environments: Option<&SupportedEnvironments>,
@@ -2123,6 +1188,7 @@ impl ValidatedLock {
         hasher: &HashStrategy,
         index: &InMemoryIndex,
         database: &DistributionDatabase<'_, Context>,
+        preview: Preview,
         printer: Printer,
     ) -> Result<Self, ProjectError> {
         // Perform checks in a deliberate order, such that the most extreme conditions are tested
@@ -2147,7 +1213,18 @@ impl ValidatedLock {
             );
             return Ok(Self::Unusable(lock));
         }
-        if let Some(change) = lock.exclude_newer().compare(&options.exclude_newer) {
+        // Ignore package-specific settings that cannot affect the existing resolution. If the
+        // package is added to the requirements, the requirement checks below will invalidate the
+        // lockfile instead.
+        let locked_exclude_newer = lock
+            .exclude_newer()
+            .clone()
+            .filter_packages(lock.packages().iter().map(Package::name));
+        let exclude_newer = options
+            .exclude_newer
+            .clone()
+            .filter_packages(lock.packages().iter().map(Package::name));
+        if let Some(change) = locked_exclude_newer.compare(&exclude_newer) {
             // If a relative value is used, we won't invalidate on every tick of the clock unless
             // the span duration changed or some other operation causes a new resolution
             if !change.is_relative_timestamp_change() {
@@ -2264,13 +1341,19 @@ impl ValidatedLock {
 
         // If the pre-release mode has changed, we have to re-resolve, but can retain the existing
         // versions and forks.
-        if lock.prerelease_mode() != options.prerelease_mode {
-            let _ = writeln!(
-                printer.stderr(),
-                "Resolving despite existing lockfile due to change in pre-release mode: `{}` vs. `{}`",
-                lock.prerelease_mode().cyan(),
-                options.prerelease_mode.cyan()
-            );
+        if lock.prerelease() != &options.prerelease {
+            if lock.prerelease_mode() != options.prerelease.global {
+                let _ = writeln!(
+                    printer.stderr(),
+                    "Resolving despite existing lockfile due to change in pre-release mode: `{}` vs. `{}`",
+                    lock.prerelease_mode().cyan(),
+                    options.prerelease.global.cyan()
+                );
+            } else {
+                debug!(
+                    "Resolving despite existing lockfile due to change in package-specific pre-release modes"
+                );
+            }
             return Ok(Self::Preferable(lock));
         }
 
@@ -2280,6 +1363,11 @@ impl ValidatedLock {
             debug!(
                 "Resolving despite existing lockfile due to `--upgrade-package` or `--upgrade-group`"
             );
+            return Ok(Self::Preferable(lock));
+        }
+
+        if !lock.satisfies_hash_algorithms(install_path, index_locations)? {
+            debug!("Resolving despite existing lockfile due to mismatched hash algorithm");
             return Ok(Self::Preferable(lock));
         }
 
@@ -2314,8 +1402,6 @@ impl ValidatedLock {
                 overrides,
                 excludes,
                 build_constraints,
-                extra_build_requires,
-                build_settings,
                 dependency_groups,
                 dependency_metadata,
                 indexes,
@@ -2323,8 +1409,9 @@ impl ValidatedLock {
                 interpreter.markers(),
                 &options.build_options,
                 hasher,
-                index,
+                index.distributions(),
                 database,
+                preview.is_enabled(PreviewFeature::LockWithoutMetadata),
             )
             .await?
         {
@@ -2467,6 +1554,20 @@ impl ValidatedLock {
                 }
                 Ok(Self::Preferable(lock))
             }
+            SatisfiesResult::MismatchedPackageDependencies(name, version, expected, actual) => {
+                if let Some(version) = version {
+                    debug!(
+                        "Resolving despite existing lockfile due to mismatched resolved dependencies for: `{name}=={version}`\n  Requested: {:?}\n  Existing: {:?}",
+                        expected, actual
+                    );
+                } else {
+                    debug!(
+                        "Resolving despite existing lockfile due to mismatched resolved dependencies for: `{name}`\n  Requested: {:?}\n  Existing: {:?}",
+                        expected, actual
+                    );
+                }
+                Ok(Self::Preferable(lock))
+            }
             SatisfiesResult::MismatchedPackageDependencyGroups(name, version, expected, actual) => {
                 if let Some(version) = version {
                     debug!(
@@ -2493,24 +1594,6 @@ impl ValidatedLock {
                         expected, actual
                     );
                 }
-                Ok(Self::Preferable(lock))
-            }
-            SatisfiesResult::MismatchedBuildSystem(name, version) => {
-                if let Some(version) = version {
-                    debug!(
-                        "Resolving despite existing lockfile due to mismatched `build-system` for: `{name}=={version}`"
-                    );
-                } else {
-                    debug!(
-                        "Resolving despite existing lockfile due to mismatched `build-system` for: `{name}`"
-                    );
-                }
-                Ok(Self::Preferable(lock))
-            }
-            SatisfiesResult::MismatchedBuildSettings => {
-                debug!(
-                    "Resolving despite existing lockfile due to changed build configuration settings, variables, index locations, or policies"
-                );
                 Ok(Self::Preferable(lock))
             }
             SatisfiesResult::MissingVersion(name) => {
