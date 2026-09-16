@@ -20,14 +20,14 @@ use thiserror::Error;
 use tokio::io::{AsyncRead, ReadBuf};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use url::Url;
-use uv_client::retryable_on_request_failure;
 use uv_distribution_filename::LegacySourceDistExtension;
 use uv_distribution_filename::SourceDistExtension;
+use uv_http::retryable_on_request_failure;
 use uv_static::{astral_mirror_base_url, astral_mirror_url_from_env, custom_astral_mirror_url};
 
 use uv_cache::{Cache, CacheBucket, CacheEntry, Error as CacheError};
-use uv_client::{BaseClient, RetriableError, fetch_with_url_fallback};
 use uv_extract::{Error as ExtractError, stream};
+use uv_http::{BaseClient, RetriableError, fetch_with_url_fallback};
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_platform::Platform;
 use uv_redacted::DisplaySafeUrl;
@@ -926,7 +926,7 @@ mod tests {
 
     use serde_json::json;
     use std::io::Write;
-    use uv_client::{BaseClientBuilder, fetch_with_url_fallback, retryable_on_request_failure};
+    use uv_http::{BaseClientBuilder, fetch_with_url_fallback, retryable_on_request_failure};
     use uv_redacted::DisplaySafeUrl;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};

@@ -18,12 +18,12 @@ workspace = true
 
 [dependencies]
 uv-cache-info = { workspace = true }
-uv-client = { workspace = true }
 uv-configuration = { workspace = true, features = ["clap"] }
 uv-dirs = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-flags = { workspace = true }
 uv-fs = { workspace = true }
+uv-http = { workspace = true }
 uv-install-wheel = { workspace = true, features = ["clap"] }
 uv-macros = { workspace = true }
 uv-normalize = { workspace = true }

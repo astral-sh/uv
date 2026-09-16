@@ -9,11 +9,11 @@ use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{File, FileLocation, IndexUrl, UrlString};
+use uv_http::{CacheControl, CachedClientError};
 use uv_pypi_types::HashDigests;
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 
-use crate::cached_client::{CacheControl, CachedClientError};
 use crate::html::SimpleDetailHTML;
 use crate::{CachedClient, Connectivity, Error, ErrorKind, OwnedArchive, RetryState};
 
@@ -238,7 +238,7 @@ impl<'a> FlatIndexClient<'a> {
                 })?;
                 let unarchived = Self::parse_html(&text, &url)
                     .map_err(|err| Error::from_html_err(err, url.clone()))?;
-                OwnedArchive::from_unarchived(&unarchived)
+                OwnedArchive::from_unarchived(&unarchived).map_err(Error::from)
             }
             .boxed_local()
             .instrument(info_span!("parse_flat_index_html", url = % url))

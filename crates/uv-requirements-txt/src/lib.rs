@@ -45,14 +45,14 @@ use tracing::instrument;
 use unscanny::{Pattern, Scanner};
 use url::Url;
 
-#[cfg(feature = "http")]
-use uv_client::{BaseClient, ClientBuildError};
-use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{NoBinary, NoBuild, PackageNameSpecifier};
 use uv_distribution_types::{
     Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_fs::{Simplified, normalize_path};
+#[cfg(feature = "http")]
+use uv_http::{BaseClient, ClientBuildError};
+use uv_http::{BaseClientBuilder, Connectivity};
 use uv_pep508::{Pep508Error, RequirementOrigin, VerbatimUrl, expand_env_vars};
 use uv_pypi_types::VerbatimParsedUrl;
 #[cfg(feature = "http")]

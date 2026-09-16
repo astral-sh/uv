@@ -16,11 +16,11 @@ doctest = false
 workspace = true
 
 [dependencies]
-uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-errors = { workspace = true }
 uv-fs = { workspace = true }
+uv-http = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-pypi-types = { workspace = true }

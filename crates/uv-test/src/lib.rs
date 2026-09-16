@@ -2563,7 +2563,7 @@ pub async fn download_to_disk(url: &str, path: &Path) {
         .map(|h| uv_configuration::TrustedHost::from_str(h).unwrap())
         .collect();
 
-    let client = uv_client::BaseClientBuilder::default()
+    let client = uv_http::BaseClientBuilder::default()
         .allow_insecure_host(trusted_hosts)
         .build()
         .expect("failed to build base client");

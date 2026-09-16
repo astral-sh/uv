@@ -23,10 +23,10 @@ tracing-durations-export = []
 
 [dependencies]
 uv-cache = { workspace = true, features = ["clap"] }
-uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-distribution-filename = { workspace = true }
 uv-fs = { workspace = true, features = ["tokio"] }
+uv-http = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }

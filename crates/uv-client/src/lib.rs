@@ -1,31 +1,21 @@
-pub use base_client::{
-    AuthIntegration, BaseClient, BaseClientBuilder, ClientBuildError, DEFAULT_CONNECT_TIMEOUT,
-    DEFAULT_MAX_REDIRECTS, DEFAULT_READ_TIMEOUT, DEFAULT_READ_TIMEOUT_UPLOAD, DEFAULT_RETRIES,
-    ExtraMiddleware, RedirectClientWithMiddleware, RedirectPolicy, RequestBuilder,
-    RetryParsingError, fetch_with_url_fallback,
-};
-pub use cached_client::{CacheControl, CachedClient, CachedClientError, DataWithCachePolicy};
-pub use error::{Error, ErrorKind, ProblemDetails, WrappedReqwestError};
+pub use error::{Error, ErrorKind};
 pub use flat_index::{FlatIndexClient, FlatIndexEntries, FlatIndexEntry, FlatIndexError};
 pub use registry_client::{
-    Connectivity, MetadataFormat, MetadataRangeRequest, RegistryClient, RegistryClientBuilder,
-    SimpleDetailMetadata, SimpleDetailMetadatum, SimpleIndexMetadata, VersionFiles,
+    MetadataFormat, RegistryClient, RegistryClientBuilder, SimpleDetailMetadata,
+    SimpleDetailMetadatum, SimpleIndexMetadata, VersionFiles,
 };
-pub(crate) use retry::UvRetryableStrategy;
-pub use retry::{RetriableError, RetryState, retryable_on_request_failure};
-pub use rkyvutil::OwnedArchive;
-pub use tls::{CertificateFileError, Certificates};
+pub use uv_http::{
+    AuthIntegration, BaseClient, BaseClientBuilder, CacheControl, CachedClient, CachedClientError,
+    CertificateFileError, Certificates, ClientBuildError, Connectivity, DEFAULT_CONNECT_TIMEOUT,
+    DEFAULT_MAX_REDIRECTS, DEFAULT_READ_TIMEOUT, DEFAULT_READ_TIMEOUT_UPLOAD, DEFAULT_RETRIES,
+    DataWithCachePolicy, ExtraMiddleware, MetadataRangeRequest, OwnedArchive, ProblemDetails,
+    RedirectClientWithMiddleware, RedirectPolicy, RequestBuilder, RetriableError,
+    RetryParsingError, RetryState, WrappedReqwestError, fetch_with_url_fallback,
+    retryable_on_request_failure,
+};
 
-mod base_client;
-mod cached_client;
 mod error;
 mod flat_index;
 mod html;
-mod httpcache;
-mod linehaul;
-mod middleware;
 mod registry_client;
 mod remote_metadata;
-mod retry;
-mod rkyvutil;
-mod tls;

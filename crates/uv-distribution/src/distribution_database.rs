@@ -20,8 +20,8 @@ use url::Url;
 use uv_cache::{ArchiveFileId, ArchiveId, Cache, CacheBucket, CacheEntry, WheelCache};
 use uv_cache_info::{CacheInfo, Timestamp};
 use uv_client::{
-    CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
-    RequestBuilder, RetryState,
+    CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, Error as ClientError,
+    RegistryClient, RequestBuilder, RetryState,
 };
 use uv_configuration::initialize_rayon_once;
 use uv_distribution_filename::WheelFilename;
@@ -877,7 +877,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .await
             .map_err(|err| match err {
                 CachedClientError::Callback { err, .. } => err,
-                CachedClientError::Client(err) => Error::Client(err),
+                CachedClientError::Client(err) => Error::Client(err.into()),
             })?;
 
         if let (Some(expected), Some(actual)) = (expected_size, archive.size)
@@ -912,7 +912,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         .await
                         .map_err(|err| match err {
                             CachedClientError::Callback { err, .. } => err,
-                            CachedClientError::Client(err) => Error::Client(err),
+                            CachedClientError::Client(err) => Error::Client(err.into()),
                         })
                 })
                 .await?
@@ -1005,7 +1005,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .await
             .map_err(|err| match err {
                 CachedClientError::Callback { err, .. } => err,
-                CachedClientError::Client(err) => Error::Client(err),
+                CachedClientError::Client(err) => Error::Client(err.into()),
             })?;
 
         if let (Some(expected), Some(actual)) = (expected_size, archive.size)
@@ -1040,7 +1040,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         .await
                         .map_err(|err| match err {
                             CachedClientError::Callback { err, .. } => err,
-                            CachedClientError::Client(err) => Error::Client(err),
+                            CachedClientError::Client(err) => Error::Client(err.into()),
                         })
                 })
                 .await?
@@ -1795,7 +1795,9 @@ impl HttpArchivePointer {
     pub fn read_from(path: impl AsRef<Path>) -> Result<Option<Self>, Error> {
         match fs_err::File::open(path.as_ref()) {
             Ok(file) => {
-                let data = DataWithCachePolicy::from_reader(file)?.data;
+                let data = DataWithCachePolicy::from_reader(file)
+                    .map_err(ClientError::from)?
+                    .data;
                 let archive = rmp_serde::from_slice::<Archive>(&data)?;
                 Ok(Some(Self { archive }))
             }

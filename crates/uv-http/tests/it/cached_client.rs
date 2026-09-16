@@ -8,7 +8,7 @@ use wiremock::matchers::{any, header, method, path};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
 use uv_cache::CacheEntry;
-use uv_client::{
+use uv_http::{
     BaseClientBuilder, CacheControl, CachedClient, CachedClientError, DataWithCachePolicy,
     ErrorKind, RetryState,
 };
@@ -17,7 +17,7 @@ use uv_client::{
 fn reject_overflowing_cache_policy_length() {
     let error = DataWithCachePolicy::from_reader(&[u8::MAX; 8][..]).unwrap_err();
 
-    assert_matches!(error.kind(), ErrorKind::ArchiveRead(_));
+    assert_matches!(error.into_kind(), ErrorKind::ArchiveRead(_));
 }
 
 /// Exercise the shared budget through both cached and forced-refresh requests.

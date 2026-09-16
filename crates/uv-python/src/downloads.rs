@@ -25,14 +25,14 @@ use url::Url;
 
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
-use uv_client::{
+use uv_distribution_filename::{ExtensionError, SourceDistExtension};
+use uv_extract::hash::Hasher;
+use uv_fs::{Simplified, rename_with_retry};
+use uv_http::{
     BaseClient, BaseClientBuilder, CacheControl, CachedClient, CachedClientError, ClientBuildError,
     Connectivity, RetriableError, RetryState, WrappedReqwestError, fetch_with_url_fallback,
     retryable_on_request_failure,
 };
-use uv_distribution_filename::{ExtensionError, SourceDistExtension};
-use uv_extract::hash::Hasher;
-use uv_fs::{Simplified, rename_with_retry};
 use uv_platform::{self as platform, Arch, Libc, Os, Platform};
 use uv_pypi_types::{HashAlgorithm, HashDigest};
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
@@ -123,7 +123,7 @@ pub enum Error {
     #[error("Error while fetching remote python downloads json from '{0}'")]
     FetchingPythonDownloadsJSONError(String, #[source] Box<Self>),
     #[error(transparent)]
-    RemotePythonDownloadsJSONClient(Box<uv_client::Error>),
+    RemotePythonDownloadsJSONClient(Box<uv_http::Error>),
     #[error(transparent)]
     ClientBuild(Box<ClientBuildError>),
     #[error("An offline Python installation was requested, but {file} (from {url}) is missing in {}", python_builds_dir.user_display())]
@@ -2083,7 +2083,7 @@ mod tests {
             .with_implementation(ImplementationName::CPython);
         request.build = Some("20240814".to_string());
 
-        let client_builder = uv_client::BaseClientBuilder::default();
+        let client_builder = uv_http::BaseClientBuilder::default();
         let cache = uv_cache::Cache::temp().expect("failed to create temp cache");
         let download_list = ManagedPythonDownloadList::new(&client_builder, &cache, None)
             .await
@@ -2112,7 +2112,7 @@ mod tests {
             .with_implementation(ImplementationName::CPython);
         request.build = Some("99999999".to_string());
 
-        let client_builder = uv_client::BaseClientBuilder::default();
+        let client_builder = uv_http::BaseClientBuilder::default();
         let cache = uv_cache::Cache::temp().expect("failed to create temp cache");
         let download_list = ManagedPythonDownloadList::new(&client_builder, &cache, None)
             .await

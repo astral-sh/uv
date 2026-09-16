@@ -18,8 +18,8 @@ use futures::{StreamExt as _, TryStreamExt as _};
 use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 use uv_cache::{Cache, CacheBucket, CacheEntry};
-use uv_client::{CacheControl, CachedClient, CachedClientError};
 use uv_configuration::Concurrency;
+use uv_http::{CacheControl, CachedClient, CachedClientError};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
@@ -33,7 +33,7 @@ pub static API_BASE: LazyLock<DisplaySafeUrl> = LazyLock::new(|| {
 pub enum Error {
     /// An error from the cached HTTP client.
     #[error(transparent)]
-    Client(#[from] uv_client::Error),
+    Client(#[from] uv_http::Error),
     /// An error during an HTTP request, including middleware errors.
     #[error(transparent)]
     ReqwestMiddleware(#[from] reqwest_middleware::Error),
@@ -517,8 +517,8 @@ mod tests {
 
     use serde_json::json;
     use uv_cache::Cache;
-    use uv_client::{BaseClientBuilder, CachedClient};
     use uv_configuration::Concurrency;
+    use uv_http::{BaseClientBuilder, CachedClient};
     use uv_normalize::PackageName;
     use uv_pep440::Version;
     use uv_redacted::DisplaySafeUrl;

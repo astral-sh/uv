@@ -12,7 +12,7 @@ use uv_warnings::warn_user;
 
 use uv_cache::Cache;
 use uv_cache_key::{CacheKey, CacheKeyHasher};
-use uv_client::{BaseClient, BaseClientBuilder};
+use uv_http::{BaseClient, BaseClientBuilder};
 use uv_pep440::{Prerelease, Version};
 use uv_platform::{Arch, Libc, Os, Platform};
 

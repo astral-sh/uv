@@ -28,6 +28,10 @@ use uv_distribution_types::{
 };
 use uv_extract::hash::Hasher;
 use uv_git::{GIT_LFS, GitError, GitHttpSettings, GitResolver, Reporter};
+use uv_http::{
+    BaseClientBuilder, CacheControl, ClientBuildError, ExtraMiddleware, OwnedArchive,
+    RedirectPolicy,
+};
 use uv_metadata::{read_archive_metadata, read_metadata_async_stream};
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
@@ -39,15 +43,12 @@ use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 use uv_torch::TorchStrategy;
 
-use crate::base_client::{BaseClientBuilder, ClientBuildError, ExtraMiddleware, RedirectPolicy};
-use crate::cached_client::CacheControl;
 use crate::flat_index::FlatIndexEntry;
 use crate::html::SimpleDetailHTML;
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
-use crate::rkyvutil::OwnedArchive;
 use crate::{
-    BaseClient, CachedClient, Error, ErrorKind, FlatIndexClient, RedirectClientWithMiddleware,
-    RetryState,
+    BaseClient, CachedClient, Connectivity, Error, ErrorKind, FlatIndexClient,
+    MetadataRangeRequest, RedirectClientWithMiddleware, RetryState,
 };
 
 /// A builder for an [`RegistryClient`].
@@ -243,26 +244,6 @@ pub struct RegistryClient {
     parse_memory: Arc<Semaphore>,
     /// The behavior when metadata range requests are unsupported.
     metadata_range_request: MetadataRangeRequest,
-}
-
-/// The behavior when wheel metadata cannot be fetched with HTTP range requests.
-#[derive(Debug, Default, Clone, Copy, Eq, PartialEq)]
-pub enum MetadataRangeRequest {
-    /// Download the entire wheel to read the metadata.
-    #[default]
-    Fallback,
-    /// Fail instead of downloading the entire wheel.
-    Require,
-}
-
-impl From<bool> for MetadataRangeRequest {
-    fn from(require: bool) -> Self {
-        if require {
-            Self::Require
-        } else {
-            Self::Fallback
-        }
-    }
 }
 
 /// The format of the package metadata returned by querying an index.
@@ -676,7 +657,7 @@ impl RegistryClient {
                                 data.project_status,
                                 &url,
                             );
-                            OwnedArchive::from_unarchived(&unarchived)
+                            OwnedArchive::from_unarchived(&unarchived).map_err(Error::from)
                         })
                         .await
                     }
@@ -691,7 +672,7 @@ impl RegistryClient {
                         self.parse_simple_body(text.len(), move || {
                             let unarchived =
                                 SimpleDetailMetadata::from_html(&text, &package_name, &url)?;
-                            OwnedArchive::from_unarchived(&unarchived)
+                            OwnedArchive::from_unarchived(&unarchived).map_err(Error::from)
                         })
                         .await
                     }
@@ -773,7 +754,7 @@ impl RegistryClient {
             }
         };
         let metadata = SimpleDetailMetadata::from_html(&text, package_name, url)?;
-        OwnedArchive::from_unarchived(&metadata)
+        OwnedArchive::from_unarchived(&metadata).map_err(Error::from)
     }
 
     /// Fetch the list of projects from a Simple API index at a remote URL.
@@ -873,7 +854,7 @@ impl RegistryClient {
                     }
                 };
 
-                OwnedArchive::from_unarchived(&metadata)
+                OwnedArchive::from_unarchived(&metadata).map_err(Error::from)
             }
         };
 
@@ -919,7 +900,7 @@ impl RegistryClient {
             }
         };
         let metadata = SimpleIndexMetadata::from_html(&text, url)?;
-        OwnedArchive::from_unarchived(&metadata)
+        OwnedArchive::from_unarchived(&metadata).map_err(Error::from)
     }
 
     /// Fetch the metadata for a remote wheel file.
@@ -1831,26 +1812,6 @@ impl std::fmt::Display for MediaType {
             Self::PypiV1Html => write!(f, "application/vnd.pypi.simple.v1+html"),
             Self::TextHtml => write!(f, "text/html"),
         }
-    }
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Default)]
-pub enum Connectivity {
-    /// Allow access to the network.
-    #[default]
-    Online,
-
-    /// Do not allow access to the network.
-    Offline,
-}
-
-impl Connectivity {
-    pub fn is_online(&self) -> bool {
-        matches!(self, Self::Online)
-    }
-
-    pub fn is_offline(&self) -> bool {
-        matches!(self, Self::Offline)
     }
 }
 

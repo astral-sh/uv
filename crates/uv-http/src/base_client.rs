@@ -313,7 +313,7 @@ impl<'a> BaseClientBuilder<'a> {
         self
     }
 
-    pub(crate) fn configured_metadata_range_request(&self) -> MetadataRangeRequest {
+    pub fn configured_metadata_range_request(&self) -> MetadataRangeRequest {
         self.metadata_range_request
     }
 
@@ -338,13 +338,13 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     #[must_use]
-    pub(crate) fn markers(mut self, markers: &'a MarkerEnvironment) -> Self {
+    pub fn markers(mut self, markers: &'a MarkerEnvironment) -> Self {
         self.markers = Some(markers);
         self
     }
 
     #[must_use]
-    pub(crate) fn platform(mut self, platform: &'a Platform) -> Self {
+    pub fn platform(mut self, platform: &'a Platform) -> Self {
         self.platform = Some(platform);
         self
     }
@@ -356,7 +356,7 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     #[must_use]
-    pub(crate) fn indexes(mut self, indexes: Indexes) -> Self {
+    pub fn indexes(mut self, indexes: Indexes) -> Self {
         self.indexes = indexes;
         self
     }
@@ -414,9 +414,9 @@ impl<'a> BaseClientBuilder<'a> {
     /// WARNING: This should only be available for tests. In production code, propagating credentials
     /// during cross-origin redirects can lead to security vulnerabilities including credential
     /// leakage to untrusted domains.
-    #[cfg(test)]
+    #[cfg(any(test, feature = "testing"))]
     #[must_use]
-    pub(crate) fn allow_cross_origin_credentials(mut self) -> Self {
+    pub fn allow_cross_origin_credentials(mut self) -> Self {
         self.cross_origin_credential_policy = CrossOriginCredentialsPolicy::Insecure;
         self
     }
@@ -513,7 +513,7 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     /// Share the underlying client between two different middleware configurations.
-    pub(crate) fn wrap_existing(&self, existing: &BaseClient) -> BaseClient {
+    pub fn wrap_existing(&self, existing: &BaseClient) -> BaseClient {
         // Wrap in any relevant middleware and handle connectivity.
         let client = RedirectClientWithMiddleware {
             client: self.apply_middleware(existing.raw_client.clone()),
@@ -765,7 +765,7 @@ pub struct BaseClient {
 
 /// The certificate roots used by a [`BaseClient`].
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub(crate) enum CertificateSource {
+pub enum CertificateSource {
     /// The system certificate roots.
     System,
     /// The bundled `WebPKI` certificate roots.
@@ -819,7 +819,7 @@ impl BaseClient {
     }
 
     /// The configured client read timeout.
-    pub(crate) fn read_timeout(&self) -> Duration {
+    pub fn read_timeout(&self) -> Duration {
         self.read_timeout
     }
 
@@ -833,7 +833,7 @@ impl BaseClient {
         retry_policy(self.retries, self.no_retry_delay)
     }
 
-    pub(crate) fn credentials_cache(&self) -> &CredentialsCache {
+    pub fn credentials_cache(&self) -> &CredentialsCache {
         &self.credentials_cache
     }
 
@@ -875,7 +875,7 @@ impl RedirectClientWithMiddleware {
     }
 
     /// Convenience method to make a `HEAD` request to a URL.
-    pub(crate) fn head<U: IntoUrl>(&self, url: U) -> RequestBuilder<'_> {
+    pub fn head<U: IntoUrl>(&self, url: U) -> RequestBuilder<'_> {
         RequestBuilder::new(self.client.head(url), self)
     }
 
@@ -1106,7 +1106,7 @@ pub(crate) enum CrossOriginCredentialsPolicy {
     /// WARNING: This should only be available for tests. In production code, preserving credentials
     /// during cross-origin redirects can lead to security vulnerabilities including credential
     /// leakage to untrusted domains.
-    #[cfg(test)]
+    #[cfg(any(test, feature = "testing"))]
     Insecure,
 }
 

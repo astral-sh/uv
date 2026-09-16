@@ -204,7 +204,7 @@ async fn ensure_cached_artifact(artifact: &VendorArtifact, path: &Path) -> Resul
         .filter(|host| !host.is_empty())
         .map(TrustedHost::from_str)
         .collect::<std::result::Result<Vec<_>, _>>()?;
-    let client = uv_client::BaseClientBuilder::default()
+    let client = uv_http::BaseClientBuilder::default()
         .allow_insecure_host(trusted_hosts)
         .build()
         .context("failed to build vendor artifact client")?;

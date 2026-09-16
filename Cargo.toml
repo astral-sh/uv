@@ -45,6 +45,7 @@ uv-fs = { version = "0.0.82", path = "crates/uv-fs", features = [
 uv-git = { version = "0.0.82", path = "crates/uv-git" }
 uv-git-types = { version = "0.0.82", path = "crates/uv-git-types" }
 uv-globfilter = { version = "0.0.82", path = "crates/uv-globfilter" }
+uv-http = { version = "0.0.82", path = "crates/uv-http" }
 uv-install-wheel = { version = "0.0.82", path = "crates/uv-install-wheel", default-features = false }
 uv-installer = { version = "0.0.82", path = "crates/uv-installer" }
 uv-keyring = { version = "0.0.82", path = "crates/uv-keyring" }

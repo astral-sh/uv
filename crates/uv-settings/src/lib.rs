@@ -4,12 +4,12 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Duration;
 use tracing::info_span;
-use uv_client::{DEFAULT_CONNECT_TIMEOUT, DEFAULT_READ_TIMEOUT, DEFAULT_READ_TIMEOUT_UPLOAD};
 use uv_configuration::RequiredVersion;
 use uv_dirs::{system_config_file, user_config_dir};
 use uv_distribution_types::{IndexUrlError, Origin};
 use uv_flags::EnvironmentFlags;
 use uv_fs::Simplified;
+use uv_http::{DEFAULT_CONNECT_TIMEOUT, DEFAULT_READ_TIMEOUT, DEFAULT_READ_TIMEOUT_UPLOAD};
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::Version;
 use uv_redacted::DisplaySafeUrl;
@@ -870,7 +870,7 @@ impl EnvironmentOptions {
             .map(Duration::from_secs)
             .unwrap_or(DEFAULT_CONNECT_TIMEOUT),
             http_retries: parse_integer_environment_variable(EnvVars::UV_HTTP_RETRIES, None)?
-                .unwrap_or(uv_client::DEFAULT_RETRIES),
+                .unwrap_or(uv_http::DEFAULT_RETRIES),
             #[cfg(feature = "tracing-durations-export")]
             tracing_durations_file: parse_path_environment_variable(
                 EnvVars::TRACING_DURATIONS_FILE,
