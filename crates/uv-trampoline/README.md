@@ -11,6 +11,9 @@ The trampolines checked into the repo use a reproducible dockerfile for auditing
 scripts/build-trampolines.sh
 ```
 
+The image's `cargo-xwin` dependency is pinned independently in
+[`toolchain/pyproject.toml`](toolchain/pyproject.toml).
+
 The other build options exist for local development. Run the following commands from the trampoline
 crate so Rust uses the toolchain declared in `rust-toolchain.toml`:
 
