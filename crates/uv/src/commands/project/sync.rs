@@ -25,6 +25,7 @@ use uv_distribution_types::{
 };
 use uv_fs::{PortablePathBuf, Simplified};
 use uv_installer::{InstallationStrategy, SitePackages};
+use uv_lock::{Installable, Lock, PythonReport};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_preview::{Preview, PreviewFeature};
@@ -33,9 +34,7 @@ use uv_python::{
     ConfigDiscovery, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest,
 };
 use uv_redacted::DisplaySafeUrl;
-use uv_resolver::{
-    FlatIndex, ForkStrategy, Installable, Lock, Prerelease, PythonReport, ResolutionMode,
-};
+use uv_resolver::{FlatIndex, ForkStrategy, Prerelease, ResolutionMode};
 use uv_scripts::Pep723Script;
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
@@ -1079,7 +1078,7 @@ async fn check_malware(
     let auditable = target.lock().auditable(
         &all_extras,
         &all_groups,
-        uv_resolver::Package::is_from_pypi_registry,
+        uv_lock::Package::is_from_pypi_registry,
     );
     if auditable.is_empty() {
         return Ok(());

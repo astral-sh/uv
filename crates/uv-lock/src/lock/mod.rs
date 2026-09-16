@@ -21,9 +21,10 @@ use url::Url;
 
 use uv_cache_key::RepositoryUrl;
 use uv_configuration::{
-    BuildOptions, Constraints, DependencyGroupsWithDefaults, ExcludeDependency, Excludes,
-    ExtrasSpecificationWithDefaults, InstallTarget, Override, Overrides, PackageOverride,
-    ScopedOverrideSourceError,
+    BuildOptions, Constraints, DependencyGroupsWithDefaults, ExcludeDependency, ExcludeNewer,
+    ExcludeNewerPackage, Excludes, ExtrasSpecificationWithDefaults, ForkStrategy, InstallTarget,
+    Override, Overrides, PackageOverride, Prerelease, PrereleaseMode, PrereleasePackage,
+    ResolutionMode, ScopedOverrideSourceError,
 };
 use uv_distribution::{
     DistributionDatabase, FlatRequiresDist, Metadata as DistributionMetadata, RequiresDist,
@@ -33,12 +34,13 @@ use uv_distribution_filename::{
 };
 use uv_distribution_types::{
     ArchiveHashPolicy, BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist,
-    DirectorySourceDist, Dist, FileLocation, FirstParty, GitDirectorySourceDist, GitPathBuiltDist,
-    GitPathSourceDist, HashValidation, Identifier, IndexLocations, IndexMetadata, IndexUrl,
-    MetadataHashPolicy, Name, NameRequirementSpecification, PYPI_URL, PathBuiltDist,
-    PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource,
-    Requirement, RequirementSource, RequiresPython, ResolvedDist, SimplifiedMarkerTree,
-    StaticMetadata, ToUrlError, UrlString, VersionId,
+    DirectorySourceDist, Dist, ExcludeNewerOverride, ExcludeNewerSpan, ExcludeNewerValue,
+    FileLocation, FirstParty, GitDirectorySourceDist, GitPathBuiltDist, GitPathSourceDist,
+    HashValidation, Identifier, IndexLocations, IndexMetadata, IndexUrl, MetadataHashPolicy, Name,
+    NameRequirementSpecification, PYPI_URL, PathBuiltDist, PathSourceDist, RegistryBuiltDist,
+    RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Requirement, RequirementSource,
+    RequiresPython, ResolvedDist, SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString,
+    VersionId,
 };
 use uv_fs::{PortablePath, PortablePathBuf, Simplified, normalize_path, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
@@ -57,13 +59,16 @@ use uv_pypi_types::{
     Hashes, ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml,
 };
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
+use uv_resolver_types::{
+    AnnotatedDist, ConflictMarker, DistributionMetadataIndex, MetadataResponse,
+    ResolutionGraphNode, ResolverOutput, UniversalMarker,
+};
 use uv_small_str::SmallString;
 use uv_types::{BuildContext, HashStrategy};
 use uv_warnings::warn_user_once;
 use uv_workspace::{Editability, WorkspaceMember};
 
 pub use crate::lock::deserialize::Error as CanonicalLockError;
-pub(crate) use crate::lock::export::PylockTomlPackage;
 pub use crate::lock::export::RequirementsTxtExport;
 pub use crate::lock::export::{
     Metadata, PylockToml, PylockTomlError, PylockTomlErrorKind, PythonReport, cyclonedx_json,
@@ -71,14 +76,6 @@ pub use crate::lock::export::{
 pub use crate::lock::installable::{Installable, InstallableRootKind};
 pub use crate::lock::map::PackageMap;
 pub use crate::lock::tree::{TreeDisplay, TreeJsonTarget};
-use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
-use crate::universal_marker::{ConflictMarker, UniversalMarker};
-use crate::{
-    ExcludeNewer, ExcludeNewerOverride, ExcludeNewerPackage, ExcludeNewerSpan, ExcludeNewerValue,
-    InMemoryIndex, MetadataResponse, Prerelease, PrereleaseMode, PrereleasePackage, ResolutionMode,
-    ResolverOutput,
-};
-use uv_configuration::ForkStrategy;
 
 mod deserialize;
 pub(crate) mod export;
@@ -3027,7 +3024,7 @@ impl Lock {
     }
 
     /// Returns the dependency groups that were used to generate this lock.
-    pub(crate) fn dependency_groups(&self) -> &BTreeMap<GroupName, BTreeSet<Requirement>> {
+    pub fn dependency_groups(&self) -> &BTreeMap<GroupName, BTreeSet<Requirement>> {
         &self.manifest.dependency_groups
     }
 
@@ -4007,7 +4004,7 @@ impl Lock {
         markers: &MarkerEnvironment,
         build_options: &BuildOptions,
         hasher: &HashStrategy,
-        index: &InMemoryIndex,
+        index: &DistributionMetadataIndex,
         database: &DistributionDatabase<'_, Context>,
         allow_missing_package_metadata: bool,
     ) -> Result<SatisfiesResult<'_>, LockError> {
@@ -4952,7 +4949,7 @@ impl Lock {
         markers: &MarkerEnvironment,
         build_options: &BuildOptions,
         hasher: &HashStrategy,
-        index: &InMemoryIndex,
+        index: &DistributionMetadataIndex,
         database: &DistributionDatabase<'_, Context>,
         source_tree_metadata: &mut FxHashMap<PackageId, Option<SourceTreeRequiresDist>>,
     ) -> Result<DependencySourceChanges<'lock>, LockError> {
@@ -5279,7 +5276,7 @@ impl Lock {
         markers: &MarkerEnvironment,
         build_options: &BuildOptions,
         hasher: &HashStrategy,
-        index: &InMemoryIndex,
+        index: &DistributionMetadataIndex,
         database: &DistributionDatabase<'_, Context>,
         source_tree_metadata: &mut FxHashMap<PackageId, Option<SourceTreeRequiresDist>>,
     ) -> Result<DependencySources<'_>, LockError> {
@@ -5664,7 +5661,7 @@ impl Lock {
         markers: &MarkerEnvironment,
         build_options: &BuildOptions,
         hasher: &HashStrategy,
-        index: &InMemoryIndex,
+        index: &DistributionMetadataIndex,
         database: &DistributionDatabase<'_, Context>,
     ) -> Result<DistributionMetadata, LockError> {
         let HashedDist { dist, hashes } = package.to_dist(
@@ -5684,21 +5681,15 @@ impl Lock {
             _ => None,
         };
         let id = dist.distribution_id();
-        if let Some(archive) = index
-            .distributions()
-            .get(&id)
-            .as_deref()
-            .and_then(|response| {
-                if let MetadataResponse::Found(archive, ..) = response {
-                    Some(archive)
-                } else {
-                    None
-                }
-            })
-            && locked_hashes.is_none_or(|validation| {
-                ArchiveHashPolicy::from(validation).matches(archive.hashes.as_slice())
-            })
-        {
+        if let Some(archive) = index.get(&id).as_deref().and_then(|response| {
+            if let MetadataResponse::Found(archive, ..) = response {
+                Some(archive)
+            } else {
+                None
+            }
+        }) && locked_hashes.is_none_or(|validation| {
+            ArchiveHashPolicy::from(validation).matches(archive.hashes.as_slice())
+        }) {
             return Ok(archive.metadata.clone());
         }
 
@@ -5718,9 +5709,7 @@ impl Lock {
                 err,
             })?;
         let metadata = archive.metadata.clone();
-        index
-            .distributions()
-            .done(id, Arc::new(MetadataResponse::Found(archive)));
+        index.done(id, Arc::new(MetadataResponse::Found(archive)));
         Ok(metadata)
     }
 
@@ -6932,7 +6921,7 @@ impl Package {
     }
 
     /// Return the fork markers for this package, if any.
-    pub(crate) fn fork_markers(&self) -> &[UniversalMarker] {
+    pub fn fork_markers(&self) -> &[UniversalMarker] {
         self.fork_markers.as_slice()
     }
 

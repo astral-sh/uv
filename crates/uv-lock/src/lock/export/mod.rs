@@ -15,17 +15,17 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::MarkerTree;
 use uv_pypi_types::ConflictItem;
 
-use crate::graph_ops::Reachable;
+use uv_resolver_types::graph_ops::Reachable;
+use uv_resolver_types::universal_marker::resolve_activated_extras;
+
 pub use crate::lock::export::metadata::{Metadata, PythonReport};
 pub(crate) use crate::lock::export::metadata::{
     MetadataNode, MetadataNodeId, MetadataNodeKind, MetadataScript, MetadataWorkspace,
     MetadataWorkspaceMember,
 };
-pub(crate) use crate::lock::export::pylock_toml::PylockTomlPackage;
 pub use crate::lock::export::pylock_toml::{PylockToml, PylockTomlError, PylockTomlErrorKind};
 pub use crate::lock::export::requirements_txt::RequirementsTxtExport;
 use crate::lock::{LockErrorKind, PackageIndex};
-use crate::universal_marker::resolve_activated_extras;
 use crate::{Installable, InstallableRootKind, LockError, Package};
 
 pub mod cyclonedx_json;

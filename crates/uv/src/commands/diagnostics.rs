@@ -59,7 +59,7 @@ pub(crate) fn hints_for_error(err: &anyhow::Error) -> Hints<'static> {
         collect_hint::<Box<uv_resolver::NoSolutionError>>(cause, &mut hints);
         collect_hint::<uv_resolver::NoSolutionError>(cause, &mut hints);
         collect_hint::<uv_resolver::ResolveError>(cause, &mut hints);
-        collect_hint::<uv_resolver::LockError>(cause, &mut hints);
+        collect_hint::<uv_lock::LockError>(cause, &mut hints);
         collect_hint::<pip::operations::Error>(cause, &mut hints);
         collect_hint::<ToolRunScriptError>(cause, &mut hints);
         collect_hint::<RecursionLimitError>(cause, &mut hints);
@@ -77,7 +77,7 @@ pub(crate) fn hints_for_error(err: &anyhow::Error) -> Hints<'static> {
         collect_hint::<uv_installer::IncompatibleWheelError>(cause, &mut hints);
         collect_hint::<uv_distribution::Error>(cause, &mut hints);
         collect_hint::<uv_python::BrokenLink>(cause, &mut hints);
-        collect_hint::<uv_resolver::PylockTomlError>(cause, &mut hints);
+        collect_hint::<uv_lock::PylockTomlError>(cause, &mut hints);
         collect_hint::<uv_requirements_txt::MakeEditableError>(cause, &mut hints);
         collect_hint::<uv_python::InterpreterError>(cause, &mut hints);
         collect_hint::<uv_workspace::pyproject::SourceError>(cause, &mut hints);

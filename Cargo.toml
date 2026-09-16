@@ -48,6 +48,7 @@ uv-globfilter = { version = "0.0.82", path = "crates/uv-globfilter" }
 uv-install-wheel = { version = "0.0.82", path = "crates/uv-install-wheel", default-features = false }
 uv-installer = { version = "0.0.82", path = "crates/uv-installer" }
 uv-keyring = { version = "0.0.82", path = "crates/uv-keyring" }
+uv-lock = { version = "0.0.82", path = "crates/uv-lock" }
 uv-logging = { version = "0.0.82", path = "crates/uv-logging" }
 uv-macros = { version = "0.0.82", path = "crates/uv-macros" }
 uv-metadata = { version = "0.0.82", path = "crates/uv-metadata" }
@@ -74,6 +75,7 @@ uv-redacted = { version = "0.0.82", path = "crates/uv-redacted" }
 uv-requirements = { version = "0.0.82", path = "crates/uv-requirements" }
 uv-requirements-txt = { version = "0.0.82", path = "crates/uv-requirements-txt" }
 uv-resolver = { version = "0.0.82", path = "crates/uv-resolver" }
+uv-resolver-types = { version = "0.0.82", path = "crates/uv-resolver-types" }
 uv-scripts = { version = "0.0.82", path = "crates/uv-scripts" }
 uv-settings = { version = "0.0.82", path = "crates/uv-settings" }
 uv-shell = { version = "0.0.82", path = "crates/uv-shell" }

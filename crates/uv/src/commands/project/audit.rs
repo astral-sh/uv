@@ -33,11 +33,11 @@ use uv_configuration::{
 };
 use uv_distribution_types::{IndexCapabilities, IndexUrl};
 use uv_fs::{CWD, find_git_repository_root, relative_to};
+use uv_lock::Lock;
 use uv_normalize::{DefaultExtras, DefaultGroups};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{ConfigDiscovery, PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
-use uv_resolver::Lock;
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user;

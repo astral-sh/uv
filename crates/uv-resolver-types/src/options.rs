@@ -2,8 +2,8 @@ use uv_configuration::{BuildOptions, IndexStrategy};
 use uv_pypi_types::SupportedEnvironments;
 use uv_torch::TorchStrategy;
 
-use crate::{DependencyMode, ExcludeNewer, Prerelease, ResolutionMode};
 use uv_configuration::ForkStrategy;
+use uv_configuration::{DependencyMode, ExcludeNewer, Prerelease, ResolutionMode};
 
 /// Options for resolving a manifest.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]

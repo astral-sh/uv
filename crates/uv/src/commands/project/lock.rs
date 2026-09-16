@@ -23,6 +23,7 @@ use uv_distribution_types::{
 };
 use uv_git::ResolvedRepositoryReference;
 use uv_git_types::GitOid;
+use uv_lock::{Lock, Package, ResolverManifest, SatisfiesResult};
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::Version;
 use uv_preview::{Preview, PreviewFeature};
@@ -33,8 +34,8 @@ use uv_python::{
 };
 use uv_requirements::{ExtrasResolver, LockedRequirements, read_lock_requirements};
 use uv_resolver::{
-    FlatIndex, InMemoryIndex, Lock, Options, OptionsBuilder, Package, PythonRequirement,
-    ResolverEnvironment, ResolverManifest, SatisfiesResult, UniversalMarker,
+    FlatIndex, InMemoryIndex, Options, OptionsBuilder, PythonRequirement, ResolverEnvironment,
+    UniversalMarker,
 };
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
@@ -1407,7 +1408,7 @@ impl ValidatedLock {
                 interpreter.markers(),
                 &options.build_options,
                 hasher,
-                index,
+                index.distributions(),
                 database,
                 preview.is_enabled(PreviewFeature::LockWithoutMetadata),
             )

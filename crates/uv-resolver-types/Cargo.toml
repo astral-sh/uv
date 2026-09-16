@@ -1,0 +1,35 @@
+[package]
+name = "uv-resolver-types"
+version = "0.0.82"
+description = "This is an internal component crate of uv"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+uv-configuration = { workspace = true }
+uv-distribution = { workspace = true }
+uv-distribution-types = { workspace = true }
+uv-metadata = { workspace = true }
+uv-normalize = { workspace = true }
+uv-once-map = { workspace = true }
+uv-pep440 = { workspace = true }
+uv-pep508 = { workspace = true }
+uv-pypi-types = { workspace = true }
+uv-torch = { workspace = true }
+
+indexmap = { workspace = true }
+itertools = { workspace = true }
+petgraph = { workspace = true }
+reqwest = { workspace = true }
+rustc-hash = { workspace = true }
+thiserror = { workspace = true }

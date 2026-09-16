@@ -5,11 +5,25 @@ use std::str::FromStr;
 use itertools::Itertools;
 use rustc_hash::FxHashMap;
 
-use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_normalize::{ExtraName, GroupName, InvalidNameError, PackageName};
 use uv_pep508::{ExtraOperator, MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree};
 use uv_pypi_types::{ConflictItem, ConflictKind, Conflicts, Inference};
 
-use crate::ResolveError;
+#[derive(Debug, thiserror::Error)]
+pub enum ConflictMarkerError {
+    #[error("Invalid extra value in conflict marker: {reason}: {raw_extra}")]
+    InvalidExtraInConflictMarker {
+        reason: String,
+        raw_extra: ExtraName,
+    },
+
+    #[error("Invalid {kind} value in conflict marker: {name_error}")]
+    InvalidValueInConflictMarker {
+        kind: &'static str,
+        #[source]
+        name_error: InvalidNameError,
+    },
+}
 
 /// A representation of a marker for use in universal resolution.
 ///
@@ -84,13 +98,13 @@ pub struct UniversalMarker {
 /// An activated set of projects, extras, and groups, encoded once for repeated
 /// [`UniversalMarker::evaluate_activated`] calls.
 #[derive(Debug)]
-pub(crate) struct ActivatedConflictItems(Vec<ExtraName>);
+pub struct ActivatedConflictItems(Vec<ExtraName>);
 
 impl ActivatedConflictItems {
     /// Encodes the given activated projects, extras, and groups.
     ///
     /// Each extra and group must be scoped to the particular package that it's enabled for.
-    pub(crate) fn new<P, E, G>(
+    pub fn new<P, E, G>(
         projects: impl Iterator<Item = P>,
         extras: impl Iterator<Item = (P, E)>,
         groups: impl Iterator<Item = (P, G)>,
@@ -111,26 +125,26 @@ impl ActivatedConflictItems {
 
 impl UniversalMarker {
     /// A constant universal marker that always evaluates to `true`.
-    pub(crate) const TRUE: Self = Self {
+    pub const TRUE: Self = Self {
         marker: MarkerTree::TRUE,
         pep508: MarkerTree::TRUE,
     };
 
     /// A constant universal marker that always evaluates to `false`.
-    pub(crate) const FALSE: Self = Self {
+    pub const FALSE: Self = Self {
         marker: MarkerTree::FALSE,
         pep508: MarkerTree::FALSE,
     };
 
     /// Creates a new universal marker from its constituent pieces.
-    pub(crate) fn new(mut pep508_marker: MarkerTree, conflict_marker: ConflictMarker) -> Self {
+    pub fn new(mut pep508_marker: MarkerTree, conflict_marker: ConflictMarker) -> Self {
         pep508_marker = pep508_marker.and(conflict_marker.marker);
         Self::from_combined(pep508_marker)
     }
 
     /// Creates a new universal marker from a marker that has already been
     /// combined from a PEP 508 and conflict marker.
-    pub(crate) fn from_combined(marker: MarkerTree) -> Self {
+    pub fn from_combined(marker: MarkerTree) -> Self {
         Self {
             marker,
             pep508: marker.without_extras(),
@@ -140,7 +154,7 @@ impl UniversalMarker {
     /// Combine this universal marker with the one given in a way that unions
     /// them. That is, the updated marker will evaluate to `true` if `self` or
     /// `other` evaluate to `true`.
-    pub(crate) fn or(&mut self, other: Self) {
+    pub fn or(&mut self, other: Self) {
         self.marker = self.marker.or(other.marker);
         self.pep508 = self.pep508.or(other.pep508);
     }
@@ -148,7 +162,7 @@ impl UniversalMarker {
     /// Combine this universal marker with the one given in a way that
     /// intersects them. That is, the updated marker will evaluate to `true` if
     /// `self` and `other` evaluate to `true`.
-    pub(crate) fn and(&mut self, other: Self) {
+    pub fn and(&mut self, other: Self) {
         self.marker = self.marker.and(other.marker);
         self.pep508 = self.pep508.and(other.pep508);
     }
@@ -159,7 +173,7 @@ impl UniversalMarker {
     /// marker. In particular, it enables simplifying based on the fact that no
     /// two items from the same set in the given conflicts can be active at a
     /// given time.
-    pub(crate) fn imbibe(&mut self, conflicts: ConflictMarker) {
+    pub fn imbibe(&mut self, conflicts: ConflictMarker) {
         if conflicts.marker.is_true() {
             return;
         }
@@ -170,7 +184,7 @@ impl UniversalMarker {
     }
 
     /// If all inference sets reduce to the same marker, simplify the marker using that knowledge.
-    pub(crate) fn unify_inference_sets(&mut self, conflict_sets: &[BTreeSet<Inference>]) {
+    pub fn unify_inference_sets(&mut self, conflict_sets: &[BTreeSet<Inference>]) {
         let mut previous_marker = None;
 
         for conflict_set in conflict_sets {
@@ -203,7 +217,7 @@ impl UniversalMarker {
     ///
     /// This may simplify the conflicting marker component of this universal
     /// marker.
-    pub(crate) fn assume_conflict_item(&mut self, item: &ConflictItem) {
+    pub fn assume_conflict_item(&mut self, item: &ConflictItem) {
         match *item.kind() {
             ConflictKind::Extra(ref extra) => self.assume_extra(item.package(), extra),
             ConflictKind::Group(ref group) => self.assume_group(item.package(), group),
@@ -216,7 +230,7 @@ impl UniversalMarker {
     ///
     /// This may simplify the conflicting marker component of this universal
     /// marker.
-    pub(crate) fn assume_not_conflict_item(&mut self, item: &ConflictItem) {
+    pub fn assume_not_conflict_item(&mut self, item: &ConflictItem) {
         match *item.kind() {
             ConflictKind::Extra(ref extra) => self.assume_not_extra(item.package(), extra),
             ConflictKind::Group(ref group) => self.assume_not_group(item.package(), group),
@@ -299,12 +313,12 @@ impl UniversalMarker {
     }
 
     /// Returns true if this universal marker will always evaluate to `true`.
-    pub(crate) fn is_true(self) -> bool {
+    pub fn is_true(self) -> bool {
         self.marker.is_true()
     }
 
     /// Returns true if this universal marker will always evaluate to `false`.
-    pub(crate) fn is_false(self) -> bool {
+    pub fn is_false(self) -> bool {
         self.marker.is_false()
     }
 
@@ -313,7 +327,7 @@ impl UniversalMarker {
     /// Conflict items are encoded as `extra` expressions in `marker`, while `pep508` is the same
     /// canonical marker with all `extra` expressions removed. Since [`MarkerTree`] equality is
     /// semantic, the trees differ exactly when the marker depends on a conflict item.
-    pub(crate) fn has_conflict_marker(self) -> bool {
+    pub fn has_conflict_marker(self) -> bool {
         self.marker != self.pep508
     }
 
@@ -321,7 +335,7 @@ impl UniversalMarker {
     ///
     /// Two universal markers are disjoint when it is impossible for them both
     /// to evaluate to `true` simultaneously.
-    pub(crate) fn is_disjoint(self, other: Self) -> bool {
+    pub fn is_disjoint(self, other: Self) -> bool {
         self.marker.is_disjoint(other.marker)
     }
 
@@ -330,7 +344,7 @@ impl UniversalMarker {
     ///
     /// This should only be used when evaluating a marker that is known not to
     /// have any extras. For example, the PEP 508 markers on a fork.
-    pub(crate) fn evaluate_no_extras(self, env: &MarkerEnvironment) -> bool {
+    pub fn evaluate_no_extras(self, env: &MarkerEnvironment) -> bool {
         self.marker.evaluate(env, &[])
     }
 
@@ -340,7 +354,7 @@ impl UniversalMarker {
     /// The activated extras and groups should be the complete set activated
     /// for a particular context. And each extra and group must be scoped to
     /// the particular package that it's enabled for.
-    pub(crate) fn evaluate<P, E, G>(
+    pub fn evaluate<P, E, G>(
         self,
         env: &MarkerEnvironment,
         projects: impl Iterator<Item = P>,
@@ -357,7 +371,7 @@ impl UniversalMarker {
     }
 
     /// Returns true if this universal marker is satisfied by an already encoded activated set.
-    pub(crate) fn evaluate_activated(
+    pub fn evaluate_activated(
         self,
         env: &MarkerEnvironment,
         activated: &ActivatedConflictItems,
@@ -366,7 +380,7 @@ impl UniversalMarker {
     }
 
     /// Returns true if the marker always evaluates to true if the given set of extras is activated.
-    pub(crate) fn evaluate_only_extras<P, E, G>(self, extras: &[(P, E)], groups: &[(P, G)]) -> bool
+    pub fn evaluate_only_extras<P, E, G>(self, extras: &[(P, E)], groups: &[(P, G)]) -> bool
     where
         P: Borrow<PackageName>,
         E: Borrow<ExtraName>,
@@ -396,7 +410,7 @@ impl UniversalMarker {
     /// producing different versions of the same package), then one should
     /// always use a universal marker since it accounts for all possible ways
     /// for a package to be installed.
-    pub(crate) fn pep508(self) -> MarkerTree {
+    pub fn pep508(self) -> MarkerTree {
         self.pep508
     }
 
@@ -411,7 +425,7 @@ impl UniversalMarker {
     /// of non-trivial conflict markers and fails if any are found. (Because
     /// conflict markers cannot be represented in the `requirements.txt`
     /// format.)
-    pub(crate) fn conflict(self) -> ConflictMarker {
+    pub fn conflict(self) -> ConflictMarker {
         ConflictMarker {
             marker: self.marker.only_extras(),
         }
@@ -423,7 +437,7 @@ impl UniversalMarker {
     /// Unlike [`UniversalMarker::conflict`], this preserves the relationship between PEP 508 and
     /// conflict expressions. For example, given `sys_platform == 'linux' or extra == 'foo'`, the
     /// conflict marker is always true on Linux but still depends on `foo` elsewhere.
-    pub(crate) fn conflict_for_environment(self, env: &MarkerEnvironment) -> ConflictMarker {
+    pub fn conflict_for_environment(self, env: &MarkerEnvironment) -> ConflictMarker {
         let mut remaining = MarkerTree::FALSE;
 
         'conjunctions: for conjunction in self.marker.to_dnf() {
@@ -458,18 +472,18 @@ impl std::fmt::Debug for UniversalMarker {
 /// This encapsulates the encoding of extras and groups into PEP 508
 /// markers.
 #[derive(Default, Clone, Copy, Eq, Hash, PartialEq, PartialOrd, Ord)]
-pub(crate) struct ConflictMarker {
+pub struct ConflictMarker {
     marker: MarkerTree,
 }
 
 impl ConflictMarker {
     /// A constant conflict marker that always evaluates to `true`.
-    pub(crate) const TRUE: Self = Self {
+    pub const TRUE: Self = Self {
         marker: MarkerTree::TRUE,
     };
 
     /// Creates a new conflict marker from the declared conflicts provided.
-    pub(crate) fn from_conflicts(conflicts: &Conflicts) -> Self {
+    pub fn from_conflicts(conflicts: &Conflicts) -> Self {
         if conflicts.is_empty() {
             return Self::TRUE;
         }
@@ -489,7 +503,7 @@ impl ConflictMarker {
     ///
     /// An unreferenced item can always be disabled, so its conflict pairs cannot affect the
     /// markers. Comparisons must provide both sides to project them into the same conflict world.
-    pub(crate) fn from_relevant_conflicts(
+    pub fn from_relevant_conflicts(
         conflicts: &Conflicts,
         markers: impl IntoIterator<Item = UniversalMarker>,
     ) -> Self {
@@ -518,7 +532,7 @@ impl ConflictMarker {
 
     /// Create a conflict marker that is true only when the given extra or
     /// group (for a specific package) is activated.
-    pub(crate) fn from_conflict_item(item: &ConflictItem) -> Self {
+    pub fn from_conflict_item(item: &ConflictItem) -> Self {
         match *item.kind() {
             ConflictKind::Extra(ref extra) => Self::extra(item.package(), extra),
             ConflictKind::Group(ref group) => Self::group(item.package(), group),
@@ -558,7 +572,7 @@ impl ConflictMarker {
 
     /// Returns a new conflict marker that is the negation of this one.
     #[must_use]
-    pub(crate) fn negate(self) -> Self {
+    pub fn negate(self) -> Self {
         Self {
             marker: self.marker.negate(),
         }
@@ -576,19 +590,19 @@ impl ConflictMarker {
     /// Returns a new conflict marker corresponding to the intersection of
     /// `self` and `other`.
     #[must_use]
-    pub(crate) fn and(self, other: Self) -> Self {
+    pub fn and(self, other: Self) -> Self {
         Self {
             marker: self.marker.and(other.marker),
         }
     }
 
     /// Returns true if this conflict marker will always evaluate to `true`.
-    pub(crate) fn is_true(self) -> bool {
+    pub fn is_true(self) -> bool {
         self.marker.is_true()
     }
 
     /// Returns true if this conflict marker always evaluates to the same value.
-    pub(crate) fn is_constant(self) -> bool {
+    pub fn is_constant(self) -> bool {
         self.marker.is_true() || self.marker.is_false()
     }
 
@@ -597,9 +611,9 @@ impl ConflictMarker {
     ///
     /// This returns an error if any `extra` could not be parsed as a valid
     /// encoded conflict extra.
-    pub(crate) fn filter_rules(
+    pub fn filter_rules(
         self,
-    ) -> Result<(Vec<ConflictItem>, Vec<ConflictItem>), ResolveError> {
+    ) -> Result<(Vec<ConflictItem>, Vec<ConflictItem>), ConflictMarkerError> {
         let (mut raw_include, mut raw_exclude) = (vec![], vec![]);
         self.marker.visit_extras(|op, extra| {
             match op {
@@ -678,11 +692,11 @@ enum ParsedRawExtra<'a> {
 }
 
 impl<'a> ParsedRawExtra<'a> {
-    fn parse(raw_extra: &'a ExtraName) -> Result<Self, ResolveError> {
-        fn mkerr(raw_extra: &ExtraName, reason: impl Into<String>) -> ResolveError {
+    fn parse(raw_extra: &'a ExtraName) -> Result<Self, ConflictMarkerError> {
+        fn mkerr(raw_extra: &ExtraName, reason: impl Into<String>) -> ConflictMarkerError {
             let raw_extra = raw_extra.to_owned();
             let reason = reason.into();
-            ResolveError::InvalidExtraInConflictMarker { reason, raw_extra }
+            ConflictMarkerError::InvalidExtraInConflictMarker { reason, raw_extra }
         }
 
         let raw = raw_extra.as_str();
@@ -742,9 +756,9 @@ impl<'a> ParsedRawExtra<'a> {
         }
     }
 
-    fn to_conflict_item(&self) -> Result<ConflictItem, ResolveError> {
+    fn to_conflict_item(&self) -> Result<ConflictItem, ConflictMarkerError> {
         let package = PackageName::from_str(self.package()).map_err(|name_error| {
-            ResolveError::InvalidValueInConflictMarker {
+            ConflictMarkerError::InvalidValueInConflictMarker {
                 kind: "package",
                 name_error,
             }
@@ -753,7 +767,7 @@ impl<'a> ParsedRawExtra<'a> {
             Self::Project { .. } => Ok(ConflictItem::from(package)),
             Self::Extra { extra, .. } => {
                 let extra = ExtraName::from_str(extra).map_err(|name_error| {
-                    ResolveError::InvalidValueInConflictMarker {
+                    ConflictMarkerError::InvalidValueInConflictMarker {
                         kind: "extra",
                         name_error,
                     }
@@ -762,7 +776,7 @@ impl<'a> ParsedRawExtra<'a> {
             }
             Self::Group { group, .. } => {
                 let group = GroupName::from_str(group).map_err(|name_error| {
-                    ResolveError::InvalidValueInConflictMarker {
+                    ConflictMarkerError::InvalidValueInConflictMarker {
                         kind: "group",
                         name_error,
                     }
@@ -796,7 +810,7 @@ impl<'a> ParsedRawExtra<'a> {
 /// When `scope_package` is set, unencoded package extras like `extra == 'cpu'` are interpreted
 /// relative to that package. Conflict-encoded extras and groups are resolved independent of
 /// `scope_package`.
-pub(crate) fn resolve_activated_extras(
+pub fn resolve_activated_extras(
     marker: MarkerTree,
     scope_package: Option<&PackageName>,
     known_conflicts: &FxHashMap<ConflictItem, MarkerTree>,

@@ -10,9 +10,9 @@ use uv_client::BaseClientBuilder;
 use uv_configuration::{BuildOptions, HashCheckingMode, TargetTriple};
 use uv_distribution_types::Resolution;
 use uv_fs::Simplified;
+use uv_lock::PylockToml;
 use uv_normalize::{ExtraName, GroupName};
 use uv_python::{Interpreter, PythonVersion};
-use uv_resolver::PylockToml;
 use uv_types::HashStrategy;
 
 use crate::commands::pip::{resolution_markers, resolution_tags};

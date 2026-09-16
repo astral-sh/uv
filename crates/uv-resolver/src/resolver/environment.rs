@@ -371,7 +371,7 @@ impl ResolverEnvironment {
                 let combined = UniversalMarker::from_combined(initial_fork);
                 let (include, exclude) = match combined.conflict().filter_rules() {
                     Ok(rules) => rules,
-                    Err(err) => return Some(Err(err)),
+                    Err(err) => return Some(Err(err.into())),
                 };
                 let mut env = self.filter_by_group(
                     include
