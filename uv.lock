@@ -1834,6 +1834,7 @@ dev = [
     { name = "astral-dev-toolchain-cargo-deny" },
     { name = "astral-dev-toolchain-cargo-dist" },
     { name = "astral-dev-toolchain-cargo-nextest" },
+    { name = "astral-dev-toolchain-cargo-xwin" },
 ]
 docker = [
     { name = "cargo-zigbuild", marker = "python_full_version >= '3.12'" },
@@ -1852,9 +1853,6 @@ docs = [
 release = [
     { name = "rooster", marker = "python_full_version >= '3.12'" },
 ]
-xwin = [
-    { name = "astral-dev-toolchain-cargo-xwin" },
-]
 
 [package.metadata]
 
@@ -1872,6 +1870,7 @@ dev = [
     { name = "astral-dev-toolchain-cargo-deny", specifier = ">=0.20.2" },
     { name = "astral-dev-toolchain-cargo-dist", specifier = ">=0.32.0" },
     { name = "astral-dev-toolchain-cargo-nextest", specifier = ">=0.9.143" },
+    { name = "astral-dev-toolchain-cargo-xwin", specifier = ">=0.23.1" },
 ]
 docker = [{ name = "cargo-zigbuild", marker = "python_full_version >= '3.12'", specifier = ">=0.23.0" }]
 docs = [
@@ -1886,7 +1885,6 @@ docs = [
     { name = "mkdocs-redirects", marker = "python_full_version >= '3.12'", specifier = ">=1.2.2" },
 ]
 release = [{ name = "rooster", marker = "python_full_version >= '3.12'", specifier = "==0.1.1" }]
-xwin = [{ name = "astral-dev-toolchain-cargo-xwin", specifier = ">=0.23.1" }]
 
 [[package]]
 name = "validate-pyproject"

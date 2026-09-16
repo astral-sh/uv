@@ -29,9 +29,9 @@ rustup target add --toolchain nightly-2026-03-11 aarch64-pc-windows-msvc
 Then, build the trampolines for all supported architectures:
 
 ```shell
-uv run --only-group=xwin cargo +nightly-2026-03-11 xwin build --xwin-arch x86 --release --target i686-pc-windows-msvc
-uv run --only-group=xwin cargo +nightly-2026-03-11 xwin build --release --target x86_64-pc-windows-msvc
-uv run --only-group=xwin cargo +nightly-2026-03-11 xwin build --release --target aarch64-pc-windows-msvc
+uv run --only-dev cargo +nightly-2026-03-11 xwin build --xwin-arch x86 --release --target i686-pc-windows-msvc
+uv run --only-dev cargo +nightly-2026-03-11 xwin build --release --target x86_64-pc-windows-msvc
+uv run --only-dev cargo +nightly-2026-03-11 xwin build --release --target aarch64-pc-windows-msvc
 ```
 
 ### Cross-compiling from macOS
@@ -50,9 +50,9 @@ rustup target add --toolchain nightly-2026-03-11 aarch64-pc-windows-msvc
 Then, build the trampolines for all supported architectures:
 
 ```shell
-uv run --only-group=xwin cargo +nightly-2026-03-11 xwin build --xwin-arch x86 --release --target i686-pc-windows-msvc
-uv run --only-group=xwin cargo +nightly-2026-03-11 xwin build --release --target x86_64-pc-windows-msvc
-uv run --only-group=xwin cargo +nightly-2026-03-11 xwin build --release --target aarch64-pc-windows-msvc
+uv run --only-dev cargo +nightly-2026-03-11 xwin build --xwin-arch x86 --release --target i686-pc-windows-msvc
+uv run --only-dev cargo +nightly-2026-03-11 xwin build --release --target x86_64-pc-windows-msvc
+uv run --only-dev cargo +nightly-2026-03-11 xwin build --release --target aarch64-pc-windows-msvc
 ```
 
 ### Updating the prebuilt executables

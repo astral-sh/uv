@@ -197,7 +197,7 @@ targets:
 rustup target add x86_64-pc-windows-msvc
 
 # Run clippy for Windows
-uv run --only-group=xwin cargo xwin clippy --workspace --all-targets --all-features --locked -- -D warnings
+uv run --only-dev cargo xwin clippy --workspace --all-targets --all-features --locked -- -D warnings
 ```
 
 ## Crate structure

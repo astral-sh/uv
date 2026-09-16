@@ -131,8 +131,6 @@ dev = [
     "astral-dev-toolchain-cargo-deny>=0.20.2",
     "astral-dev-toolchain-cargo-dist>=0.32.0",
     "astral-dev-toolchain-cargo-nextest>=0.9.143",
-]
-xwin = [
     "astral-dev-toolchain-cargo-xwin>=0.23.1",
 ]
 
