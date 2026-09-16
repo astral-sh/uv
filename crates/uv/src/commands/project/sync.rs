@@ -809,6 +809,12 @@ pub(crate) async fn do_sync<'a>(
         {
             return Err(anyhow::anyhow!("Build dependency locking does not yet support config settings, extra build dependencies, or extra build variables").into());
         }
+        if !sources.is_none() {
+            return Err(anyhow::anyhow!(
+                "Build dependency locking does not yet support disabling package sources"
+            )
+            .into());
+        }
     }
 
     // Extract the hashes from the lockfile.

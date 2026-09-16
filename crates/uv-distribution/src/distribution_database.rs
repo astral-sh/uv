@@ -176,13 +176,13 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         &self,
         source: &SourceDist,
         hashes: ArchiveHashPolicy<'_>,
-    ) -> Result<(), Error> {
-        SourceDistributionBuilder::new(self.build_context)
+    ) -> Result<HashDigests, Error> {
+        let metadata = SourceDistributionBuilder::new(self.build_context)
             .with_build_requirements()
             .download_and_build_metadata(&BuildableSource::Dist(source), hashes, &self.client)
             .boxed_local()
             .await?;
-        Ok(())
+        Ok(metadata.hashes)
     }
 
     /// Either fetch the wheel or fetch and build the source distribution

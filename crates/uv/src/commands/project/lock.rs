@@ -10,6 +10,7 @@ use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
 
 use uv_cache::{Cache, Refresh};
+use uv_cache_key::cache_digest;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun,
@@ -21,6 +22,7 @@ use uv_distribution_types::{
     DependencyMetadata, HashCollection, IndexLocations, NameRequirementSpecification, Requirement,
     RequiresPython, UnresolvedRequirementSpecification,
 };
+use uv_fs::{LockedFile, LockedFileMode, Simplified};
 use uv_git::ResolvedRepositoryReference;
 use uv_git_types::GitOid;
 use uv_lock::{BuildExecutor, BuildLockError, Lock, Package, ResolverManifest, SatisfiesResult};
@@ -157,6 +159,9 @@ pub(crate) async fn lock(
         .await?;
         LockTarget::Workspace(workspace.workspace())
     };
+    if build_dependencies == Some(true) && matches!(target, LockTarget::Script(_)) {
+        anyhow::bail!("Build dependency locking is not yet supported for scripts");
+    }
 
     // Determine the lock mode.
     let interpreter;
@@ -389,6 +394,23 @@ impl<'env> LockOperation<'env> {
             target.validate_upgrade_groups(&self.settings.upgrade)?;
         }
 
+        // Serialize current-version writers across caches, including the first migration to a
+        // required build contract. Readers see either complete lockfile through atomic replacement.
+        let _write_guard = if matches!(self.mode, LockMode::Write(_)) {
+            let path = target.lock_path();
+            Some(
+                LockedFile::acquire(
+                    std::env::temp_dir().join(format!("uv-lockfile-{}.lock", cache_digest(&path))),
+                    LockedFileMode::Exclusive,
+                    path.simplified_display(),
+                )
+                .await
+                .map_err(anyhow::Error::from)?,
+            )
+        } else {
+            None
+        };
+
         match self.mode {
             LockMode::Frozen(source) => {
                 // Read the existing lockfile, but don't attempt to lock the project.
@@ -451,22 +473,25 @@ impl<'env> LockOperation<'env> {
             }
             LockMode::Write(interpreter) | LockMode::DryRun(interpreter) => {
                 // Read the existing lockfile.
-                let (existing, existing_contents) = match target.read_with_contents().await {
-                    Ok(Some((existing, existing_contents))) => {
-                        (Some(existing), Some(existing_contents))
-                    }
-                    Ok(None) => (None, None),
+                let existing_contents = target.read_contents().await?;
+                let existing = match existing_contents
+                    .as_deref()
+                    .map(Lock::from_toml)
+                    .transpose()
+                    .map_err(ProjectError::from)
+                {
+                    Ok(existing) => existing,
                     Err(ProjectError::Lock(err)) => {
                         warn_user!(
                             "Failed to read existing lockfile; ignoring locked requirements: {err}"
                         );
-                        (None, None)
+                        None
                     }
                     Err(err) => return Err(err),
                 };
 
                 let check_lockfile_contents = if self.check_lockfile_contents {
-                    existing_contents
+                    existing_contents.clone()
                 } else {
                     None
                 };
@@ -496,6 +521,12 @@ impl<'env> LockOperation<'env> {
                 // If the lockfile changed, write it to disk.
                 if !matches!(self.mode, LockMode::DryRun(_)) {
                     if let LockResult::Changed(_, lock) = &result {
+                        if target.read_contents().await? != existing_contents {
+                            return Err(anyhow::anyhow!(
+                                "The lockfile changed while resolving; retry the command"
+                            )
+                            .into());
+                        }
                         target.commit(lock).await?;
                     }
                 }
@@ -1022,7 +1053,7 @@ async fn do_lock(
 
     match existing_lock {
         // Resolution from the lockfile succeeded.
-        Some(ValidatedLock::Satisfies(lock)) => {
+        Some(ValidatedLock::Satisfies(mut lock)) => {
             let needs_build_update = if require_build_lock {
                 if build_dependencies == Some(true) || lock.build_lock().is_none() {
                     true
@@ -1056,7 +1087,7 @@ async fn do_lock(
                 let lock = if require_build_lock {
                     let builds = build_dispatch
                         .capture_build_lock(
-                            &lock,
+                            &mut lock,
                             target.install_path(),
                             previous_build_lock.as_ref(),
                             upgrade,
@@ -1229,10 +1260,11 @@ async fn do_lock(
                 lock
             };
 
+            let mut lock = lock;
             let lock = if require_build_lock {
                 let builds = build_dispatch
                     .capture_build_lock(
-                        &lock,
+                        &mut lock,
                         target.install_path(),
                         previous_build_lock.as_ref(),
                         upgrade,

@@ -262,6 +262,7 @@ impl<'a> BuildDispatch<'a> {
             build_stack,
             build_context,
             Vec::new(),
+            self.constraints,
         )
         .await
     }
@@ -272,6 +273,7 @@ impl<'a> BuildDispatch<'a> {
         build_stack: &BuildStack,
         build_context: &impl BuildContext,
         preferences: Vec<Preference>,
+        constraints: &Constraints,
     ) -> Result<(ResolverOutput, HashStrategy), BuildDispatchError> {
         let python_requirement = PythonRequirement::from_interpreter(self.interpreter);
         let marker_env = self.interpreter.to_resolver_marker_environment();
@@ -283,13 +285,13 @@ impl<'a> BuildDispatch<'a> {
         let hasher = self
             .hasher
             .clone()
-            .augment_with_requirements(requirements.iter())
+            .augment_with_requirements(requirements.iter().chain(constraints.requirements()))
             .map_err(uv_requirements::Error::from)?;
         let overrides = Overrides::default();
         let excludes = Excludes::default();
         let (lookaheads, hasher) = LookaheadResolver::new(
             requirements,
-            self.constraints,
+            constraints,
             &overrides,
             &excludes,
             self.dependency_metadata,
@@ -306,7 +308,7 @@ impl<'a> BuildDispatch<'a> {
         .await?;
 
         let manifest = Manifest::simple(requirements.to_vec())
-            .with_constraints(self.constraints.clone())
+            .with_constraints(constraints.clone())
             .with_preferences(Preferences::from_iter(preferences, &resolver_env))
             .with_lookaheads(lookaheads);
 

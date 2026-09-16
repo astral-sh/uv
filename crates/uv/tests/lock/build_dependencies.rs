@@ -1,14 +1,20 @@
 use std::collections::BTreeMap;
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 use std::str::FromStr;
+use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
+use sha2::{Digest, Sha256};
 use uv_lock::{BuildOperation, BuildStage, Lock};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_test::packse::generate_wheel_with_files;
+use uv_test::packse::{generate_sdist_with_files, generate_wheel_with_files};
+use wiremock::matchers::path;
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 const BACKEND: &str = r#"
 import importlib.util
@@ -127,9 +133,9 @@ second = { path = "second" }
     Ok(files)
 }
 
-fn capture(context: &uv_test::TestContext, files: &Path) {
-    context
-        .lock()
+fn capture_command(context: &uv_test::TestContext, files: &Path) -> Command {
+    let mut command = context.lock();
+    command
         .args([
             "--build-dependencies",
             "--preview-features",
@@ -138,9 +144,12 @@ fn capture(context: &uv_test::TestContext, files: &Path) {
             "--no-index",
             "--find-links",
         ])
-        .arg(files)
-        .assert()
-        .success();
+        .arg(files);
+    command
+}
+
+fn capture(context: &uv_test::TestContext, files: &Path) {
+    capture_command(context, files).assert().success();
 }
 
 #[test]
@@ -385,6 +394,19 @@ fn build_dependencies_missing_coverage_fails_before_reuse() -> Result<()> {
         .args(["--frozen", "--offline"])
         .assert()
         .failure();
+    for flags in [
+        vec!["--frozen"],
+        vec!["--no-sync"],
+        vec!["--no-sync", "--isolated"],
+    ] {
+        let output = context
+            .run()
+            .args(flags)
+            .args(["--with", "runtime-only==1.0.0", "python", "-c", "pass"])
+            .output()?;
+        assert!(!output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).contains("ephemeral `--with`"));
+    }
     Ok(())
 }
 
@@ -415,5 +437,510 @@ fn build_dependencies_replaced_wheel_fails_hash_verification() -> Result<()> {
     assert!(stderr.contains("Hash mismatch"), "{stderr}");
     assert!(!stderr.contains("replaced backend executed"), "{stderr}");
     assert_eq!(fs_err::read_to_string(lockfile)?, encoded);
+    Ok(())
+}
+
+#[test]
+fn build_dependencies_build_wheel() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let files = fixtures(context.temp_dir.path())?;
+    source(context.temp_dir.path(), "project", "1.0.0")?;
+    capture(&context, &files);
+    let lockfile = context.temp_dir.child("uv.lock");
+    let encoded = fs_err::read_to_string(&lockfile)?;
+
+    // Neither build dependencies nor a populated build cache are required at replay time.
+    let context = context.with_cache_dir("fresh-build-cache");
+    context
+        .build()
+        .args(["--wheel", "--offline", "--no-index"])
+        .assert()
+        .success();
+    let wheel = context
+        .temp_dir
+        .child("dist/project-0.1.0-py3-none-any.whl");
+    let built = fs_err::read(&wheel)?;
+    assert!(!built.is_empty());
+
+    for args in [
+        vec!["--clear"],
+        vec!["--sdist", "--clear"],
+        vec!["--wheel", "--list", "--clear"],
+        vec!["--wheel", "--no-build-isolation", "--clear"],
+    ] {
+        context.build().args(args).assert().failure();
+        assert_eq!(fs_err::read(&wheel)?, built);
+    }
+
+    source(context.temp_dir.path(), "project", "2.0.0")?;
+    let output = context
+        .build()
+        .args(["--wheel", "--offline", "--no-index", "--clear"])
+        .output()?;
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("build declarations"));
+    assert_eq!(fs_err::read(&wheel)?, built);
+    fs_err::remove_file(context.temp_dir.join("pyproject.toml"))?;
+    context
+        .temp_dir
+        .child("setup.py")
+        .write_str("raise RuntimeError('unlocked legacy build')\n")?;
+    let output = context
+        .build()
+        .args(["--wheel", "--offline", "--no-index", "--clear"])
+        .output()?;
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("required build lock"));
+    assert!(!String::from_utf8_lossy(&output.stderr).contains("unlocked legacy build"));
+    assert_eq!(fs_err::read(&wheel)?, built);
+    assert_eq!(fs_err::read_to_string(lockfile)?, encoded);
+    Ok(())
+}
+
+#[test]
+fn build_dependencies_upgrade_constraints_and_preferences() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let files = fixtures(context.temp_dir.path())?;
+    source(context.temp_dir.path(), "project", "1.0.0")?;
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    let contents = fs_err::read_to_string(&pyproject)?;
+    fs_err::write(
+        &pyproject,
+        contents.replace("helper==1.0.0", "helper>=1,<3"),
+    )?;
+    capture_command(&context, &files)
+        .args(["--upgrade-package", "helper==1.0.0"])
+        .assert()
+        .success();
+    let lockfile = context.temp_dir.child("uv.lock");
+    let first = fs_err::read_to_string(&lockfile)?;
+    capture(&context, &files);
+    assert_eq!(fs_err::read_to_string(&lockfile)?, first);
+
+    context
+        .lock()
+        .args([
+            "--upgrade-package",
+            "helper==2.0.0",
+            "--offline",
+            "--no-index",
+            "--find-links",
+        ])
+        .arg(&files)
+        .assert()
+        .success();
+    let second = fs_err::read_to_string(&lockfile)?;
+    let lock = Lock::from_toml(&second)?;
+    for build in lock.build_lock().expect("build contract").resolutions() {
+        let graph = build.graph(BuildStage::Final).expect("final graph");
+        assert_eq!(
+            graph
+                .packages()
+                .iter()
+                .find(|package| package.name().as_ref() == "helper")
+                .and_then(|package| package.version())
+                .map(ToString::to_string)
+                .as_deref(),
+            Some("2.0.0")
+        );
+    }
+    context
+        .lock()
+        .args([
+            "--upgrade-package",
+            "helper==3.0.0",
+            "--offline",
+            "--no-index",
+            "--find-links",
+        ])
+        .arg(&files)
+        .assert()
+        .failure();
+    assert_eq!(fs_err::read_to_string(&lockfile)?, second);
+    Ok(())
+}
+
+#[test]
+fn build_dependencies_reject_nested_source_without_publishing() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let files = fixtures(context.temp_dir.path())?;
+    source(context.temp_dir.path(), "project", "1.0.0")?;
+    write_wheel(
+        &files,
+        "builder",
+        "1.0.0",
+        &["helper>=1,<3", "nested==1.0.0"],
+        &[("builder/backend.py", BACKEND)],
+    )?;
+    let (filename, archive) = generate_sdist_with_files(
+        &PackageName::from_str("nested")?,
+        &Version::from_str("1.0.0")?,
+        &[
+            (
+                "pyproject.toml",
+                "[build-system]\nrequires = []\nbuild-backend = 'backend'\nbackend-path = ['.']\n",
+            ),
+            (
+                "backend.py",
+                "raise RuntimeError('nested source executed')\n",
+            ),
+            (
+                "PKG-INFO",
+                "Metadata-Version: 2.3\nName: nested\nVersion: 1.0.0\n",
+            ),
+        ],
+    );
+    fs_err::write(files.join(filename), archive)?;
+    context
+        .lock()
+        .args(["--offline", "--no-index", "--find-links"])
+        .arg(&files)
+        .assert()
+        .success();
+    let lockfile = context.temp_dir.child("uv.lock");
+    let original = fs_err::read_to_string(&lockfile)?;
+    let output = capture_command(&context, &files).output()?;
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!stderr.contains("nested source executed"), "{stderr}");
+    assert!(
+        stderr.contains("no usable wheels") || stderr.contains("source builds"),
+        "{stderr}"
+    );
+    assert_eq!(fs_err::read_to_string(lockfile)?, original);
+    Ok(())
+}
+
+#[cfg(feature = "test-git")]
+#[test]
+fn build_dependencies_path_archive_and_git_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let files = fixtures(context.temp_dir.path())?;
+    let tree = context.temp_dir.join("archive-tree");
+    source(&tree, "archive", "1.0.0")?;
+    let pyproject = fs_err::read_to_string(tree.join("pyproject.toml"))?;
+    let (filename, archive) = generate_sdist_with_files(
+        &PackageName::from_str("archive")?,
+        &Version::from_str("0.1.0")?,
+        &[("pyproject.toml", &pyproject)],
+    );
+    fs_err::write(context.temp_dir.join(&filename), archive)?;
+
+    let repository = context.temp_dir.join("repository");
+    source(&repository.join("package"), "git-source", "2.0.0")?;
+    Command::new("git")
+        .arg("init")
+        .arg(&repository)
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(&repository)
+        .args(["add", "."])
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(&repository)
+        .args([
+            "-c",
+            "user.name=Example",
+            "-c",
+            "user.email=example@example.com",
+            "commit",
+            "-m",
+            "Initial commit",
+        ])
+        .env("GIT_AUTHOR_DATE", "2000-01-01T00:00:00Z")
+        .env("GIT_COMMITTER_DATE", "2000-01-01T00:00:00Z")
+        .assert()
+        .success();
+    let repository_url = url::Url::from_directory_path(&repository)
+        .map_err(|()| anyhow::anyhow!("invalid repository path"))?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&format!(
+            r#"
+[project]
+name = "project"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["archive", "git-source"]
+
+[tool.uv.sources]
+archive = {{ path = "{filename}" }}
+git-source = {{ git = "{repository_url}", subdirectory = "package" }}
+"#
+        ))?;
+    capture(&context, &files);
+    let encoded = fs_err::read_to_string(context.temp_dir.child("uv.lock"))?;
+    let lock = Lock::from_toml(&encoded)?;
+    assert_eq!(
+        lock.build_lock()
+            .expect("build contract")
+            .resolutions()
+            .len(),
+        2
+    );
+    let context = context.with_cache_dir("fresh-git-cache");
+    context
+        .sync()
+        .args(["--frozen", "--offline", "--no-index", "--no-editable"])
+        .assert()
+        .success();
+    context.run().args(["--no-sync", "python", "-c", "import archive, git_source; assert archive.selected == '1.0.0'; assert git_source.selected == '2.0.0'"]).assert().success();
+    Ok(())
+}
+
+#[tokio::test]
+async fn build_dependencies_hashless_source_archive() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let files = fixtures(context.temp_dir.path())?;
+    let tree = context.temp_dir.join("archive");
+    source(&tree, "archive", "1.0.0")?;
+    let pyproject = fs_err::read_to_string(tree.join("pyproject.toml"))?;
+    let (filename, archive) = generate_sdist_with_files(
+        &PackageName::from_str("archive")?,
+        &Version::from_str("0.1.0")?,
+        &[
+            ("pyproject.toml", &pyproject),
+            (
+                "PKG-INFO",
+                "Metadata-Version: 2.3\nName: archive\nVersion: 0.1.0\nRequires-Python: >=3.12\nRequires-Dist: runtime-only==1.0.0\n",
+            ),
+        ],
+    );
+    let hash = format!("sha256:{}", hex::encode(Sha256::digest(&archive)));
+    let server = MockServer::start().await;
+    let archive_path = format!("/files/{filename}");
+    Mock::given(path("/simple/archive/"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw(
+                serde_json::json!({
+                    "meta": {"api-version": "1.0"},
+                    "name": "archive",
+                    "files": [{"filename": filename, "url": archive_path, "hashes": {}, "upload-time": "2024-01-01T00:00:00Z"}]
+                })
+                .to_string(),
+                "application/vnd.pypi.simple.v1+json",
+            ),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(path(&archive_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(archive))
+        .mount(&server)
+        .await;
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+[project]
+name = "project"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["archive==0.1.0"]
+"#,
+    )?;
+    context
+        .lock()
+        .args([
+            "--build-dependencies",
+            "--preview-features",
+            "build-dependency-locking",
+            "--index-url",
+        ])
+        .arg(format!("{}/simple", server.uri()))
+        .arg("--find-links")
+        .arg(&files)
+        .assert()
+        .success();
+    let lockfile = context.temp_dir.child("uv.lock");
+    let encoded = fs_err::read_to_string(&lockfile)?;
+    let value = toml::from_str::<toml::Value>(&encoded)?;
+    let package = value["package"]
+        .as_array()
+        .expect("packages")
+        .iter()
+        .find(|package| package["name"].as_str() == Some("archive"))
+        .expect("source package");
+    assert_eq!(package["sdist"]["hash"].as_str(), Some(hash.as_str()));
+
+    // A required contract cannot be read after its source artifact hash is removed.
+    let mut missing_hash = value;
+    missing_hash["package"]
+        .as_array_mut()
+        .expect("packages")
+        .iter_mut()
+        .find(|package| package["name"].as_str() == Some("archive"))
+        .expect("source package")["sdist"]
+        .as_table_mut()
+        .expect("sdist")
+        .remove("hash");
+    assert!(Lock::from_toml(&toml::to_string(&missing_hash)?).is_err());
+
+    context
+        .sync()
+        .args(["--frozen", "--no-index"])
+        .assert()
+        .success();
+    let (_, replaced) = generate_sdist_with_files(
+        &PackageName::from_str("archive")?,
+        &Version::from_str("0.1.0")?,
+        &[
+            (
+                "pyproject.toml",
+                "[build-system]\nrequires = []\nbuild-backend = 'backend'\nbackend-path = ['.']\n",
+            ),
+            (
+                "backend.py",
+                "raise RuntimeError('replaced source executed')\n",
+            ),
+        ],
+    );
+    server.reset().await;
+    Mock::given(path(&archive_path))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(replaced))
+        .mount(&server)
+        .await;
+    let context = context.with_cache_dir("replaced-source-cache");
+    let output = context
+        .sync()
+        .args(["--frozen", "--no-index", "--reinstall"])
+        .output()?;
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("Hash mismatch"), "{stderr}");
+    assert!(!stderr.contains("replaced source executed"), "{stderr}");
+    assert_eq!(fs_err::read_to_string(lockfile)?, encoded);
+    Ok(())
+}
+
+fn wait_for_file(path: &Path) -> Result<()> {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while !path.exists() {
+        anyhow::ensure!(
+            Instant::now() < deadline,
+            "Timed out waiting for {}",
+            path.display()
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    Ok(())
+}
+
+#[test]
+fn build_dependencies_atomic_capture_and_concurrent_writers() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let files = fixtures(context.temp_dir.path())?;
+    source(context.temp_dir.path(), "project", "1.0.0")?;
+    let gated = BACKEND.replace(
+        "def get_requires_for_build_wheel(config_settings=None):\n",
+        r#"def get_requires_for_build_wheel(config_settings=None):
+    import os, time
+    if gate := os.environ.get("UV_BUILD_LOCK_TEST_GATE"):
+        Path(gate + ".ready").touch()
+        deadline = time.monotonic() + 45
+        while not Path(gate + ".release").exists():
+            assert time.monotonic() < deadline, "build lock test gate timed out"
+            time.sleep(0.01)
+"#,
+    );
+    write_wheel(
+        &files,
+        "builder",
+        "1.0.0",
+        &["helper>=1,<3"],
+        &[("builder/backend.py", &gated)],
+    )?;
+    context
+        .lock()
+        .args(["--offline", "--no-index", "--find-links"])
+        .arg(&files)
+        .assert()
+        .success();
+    let lockfile = context.temp_dir.child("uv.lock");
+    let original = fs_err::read_to_string(&lockfile)?;
+
+    // An external edit made during backend discovery must not be overwritten.
+    let gate = context.temp_dir.join("external-edit");
+    let child = capture_command(&context, &files)
+        .env("UV_BUILD_LOCK_TEST_GATE", &gate)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    wait_for_file(&gate.with_extension("ready"))?;
+    let edited = format!("{original}\n# concurrent edit\n");
+    fs_err::write(&lockfile, &edited)?;
+    fs_err::write(gate.with_extension("release"), "")?;
+    let output = child.wait_with_output()?;
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("lockfile changed while resolving"));
+    assert_eq!(fs_err::read_to_string(&lockfile)?, edited);
+
+    // Termination leaves the old file intact and releases the writer lock.
+    let gate = context.temp_dir.join("interruption");
+    let mut child = capture_command(&context, &files)
+        .env("UV_BUILD_LOCK_TEST_GATE", &gate)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    wait_for_file(&gate.with_extension("ready"))?;
+    child.kill()?;
+    fs_err::write(gate.with_extension("release"), "")?;
+    assert!(!child.wait()?.success());
+    assert_eq!(fs_err::read_to_string(&lockfile)?, edited);
+    capture(&context, &files);
+
+    // The removal command must read the result of the preceding capture, even with a separate
+    // cache. Its diagnostic provides a deterministic synchronization point for this test.
+    let gate = context.temp_dir.join("concurrent-writers");
+    let capture = capture_command(&context, &files)
+        .env("UV_BUILD_LOCK_TEST_GATE", &gate)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    wait_for_file(&gate.with_extension("ready"))?;
+    let other = context.with_cache_dir("concurrent-cache");
+    let mut removal = other
+        .lock()
+        .args([
+            "--no-build-dependencies",
+            "--offline",
+            "--no-index",
+            "--find-links",
+        ])
+        .arg(&files)
+        .arg("--verbose")
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    let stderr = removal.stderr.take().expect("piped stderr");
+    let (send, receive) = std::sync::mpsc::channel();
+    let reader = std::thread::spawn(move || {
+        let mut output = String::new();
+        for line in BufReader::new(stderr).lines() {
+            let line = line.expect("read child stderr");
+            if line.contains("Waiting to acquire exclusive lock") && line.contains("uv-lockfile-") {
+                let _ = send.send(());
+            }
+            output.push_str(&line);
+            output.push('\n');
+        }
+        output
+    });
+    receive.recv_timeout(Duration::from_secs(30))?;
+    fs_err::write(gate.with_extension("release"), "")?;
+    let output = capture.wait_with_output()?;
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let status = removal.wait()?;
+    let stderr = reader.join().expect("stderr reader");
+    assert!(status.success(), "{stderr}");
+    let encoded = fs_err::read_to_string(&lockfile)?;
+    assert!(encoded.starts_with("version = 1\n"));
+    assert!(Lock::from_toml(&encoded)?.build_lock().is_none());
     Ok(())
 }

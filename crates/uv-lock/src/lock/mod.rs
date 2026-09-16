@@ -3033,6 +3033,26 @@ impl Lock {
                 "build coverage refers to a source outside the runtime lock",
             ));
         }
+        for package in &self.packages {
+            let id = BuildSourceId::normalize(package.id.clone());
+            if !build_lock
+                .resolutions
+                .iter()
+                .any(|build| build.source() == &id)
+            {
+                continue;
+            }
+            let archive = match &package.id.source {
+                Source::Registry(_) | Source::Direct(..) | Source::Path(_) => true,
+                Source::Git(_, git) => git.path.is_some(),
+                Source::Directory(_) | Source::Editable(_) | Source::Virtual(_) => false,
+            };
+            if archive && package.sdist.as_ref().and_then(SourceDist::hash).is_none() {
+                return Err(BuildLockError::Invalid(
+                    "a covered source archive is missing its hash",
+                ));
+            }
+        }
         self.version = BUILD_LOCK_VERSION;
         self.builds = Some(build_lock);
         Ok(self)
@@ -3044,6 +3064,81 @@ impl Lock {
         self.version = VERSION;
         self.builds = None;
         self
+    }
+
+    /// Record hashes measured while probing the exact source archive selected from this lock.
+    ///
+    /// Package-level resolver hashes are not evidence about an individual registry artifact.
+    /// Reconstructing the selected source also prevents a digest from being assigned to a
+    /// different archive with the same package identity.
+    pub fn record_build_source_hash(
+        &mut self,
+        source: &uv_distribution_types::SourceDist,
+        root: &Path,
+        hashes: &HashDigests,
+        index_locations: &IndexLocations,
+    ) -> Result<(), LockError> {
+        let hash = match source {
+            uv_distribution_types::SourceDist::Registry(source) => select_registry_hash(
+                hashes,
+                &source.index,
+                index_locations,
+                source.file.filename.as_ref(),
+            )?,
+            uv_distribution_types::SourceDist::DirectUrl(_)
+            | uv_distribution_types::SourceDist::Path(_)
+            | uv_distribution_types::SourceDist::GitPath(_) => {
+                hashes.iter().max().cloned().map(Hash::from)
+            }
+            uv_distribution_types::SourceDist::Directory(_)
+            | uv_distribution_types::SourceDist::GitDirectory(_) => return Ok(()),
+        }
+        .ok_or(BuildLockError::Invalid(
+            "a source archive was captured without a measured hash",
+        ))?;
+        let id = BuildSourceId::from_source_dist(source, root)?;
+        let mut matched = false;
+        for index in 0..self.packages.len() {
+            let package = &self.packages[index];
+            if BuildSourceId::normalize(package.id.clone()) != id {
+                continue;
+            }
+            let first_party = if self.is_workspace_member(package) {
+                FirstParty::Yes
+            } else {
+                FirstParty::No
+            };
+            if package.to_source_dist(root, first_party)?.as_ref() != Some(source) {
+                continue;
+            }
+            let Some(sdist) = self.packages[index].sdist.as_mut() else {
+                continue;
+            };
+            let metadata = match sdist {
+                SourceDist::Url { metadata, .. }
+                | SourceDist::Path { metadata, .. }
+                | SourceDist::Metadata { metadata } => metadata,
+            };
+            if metadata
+                .hash
+                .as_ref()
+                .is_some_and(|expected| !hashes.as_slice().contains(&expected.0))
+            {
+                return Err(BuildLockError::Invalid(
+                    "the measured source archive does not match its locked hash",
+                )
+                .into());
+            }
+            metadata.hash = Some(hash.clone());
+            matched = true;
+        }
+        if !matched {
+            return Err(BuildLockError::Invalid(
+                "the measured source archive is not present in the runtime lock",
+            )
+            .into());
+        }
+        Ok(())
     }
 
     /// Identify sources reachable under any valid project, extra, or group selection on this
@@ -3770,6 +3865,24 @@ impl Lock {
         }
 
         Ok(lock)
+    }
+
+    /// Read a required build contract for a command that does not otherwise consume runtime
+    /// locks. Valid version-1 TOML without build coverage does not need full lock validation.
+    /// Unknown versions and a build table hidden in version 1 must still be checked strictly.
+    pub fn from_toml_if_build_locked(input: &str) -> Result<Option<Self>, LockParseError> {
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "kebab-case")]
+        struct Header {
+            version: u32,
+            build_lock: Option<serde::de::IgnoredAny>,
+        }
+        let header: Header = toml::from_str(input)?;
+        if header.version == VERSION && header.build_lock.is_none() {
+            Ok(None)
+        } else {
+            Self::from_toml(input).map(Some)
+        }
     }
 
     /// Returns the TOML representation of this lockfile.

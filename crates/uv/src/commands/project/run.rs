@@ -622,6 +622,14 @@ pub(crate) async fn run(
         }
 
         if let Some(project) = project {
+            if !requirements.is_empty()
+                && LockTarget::from(project.workspace())
+                    .read_build_lock()
+                    .await?
+                    .is_some()
+            {
+                bail!("A project build lock does not yet support ephemeral `--with` requirements");
+            }
             if let Some(project_name) = project.project_name() {
                 debug!(
                     "Discovered project `{project_name}` at: {}",
@@ -956,6 +964,14 @@ pub(crate) async fn run(
 
         Some(spec)
     };
+
+    if spec.is_some()
+        && base_lock
+            .as_ref()
+            .is_some_and(|(lock, _)| lock.build_lock().is_some())
+    {
+        anyhow::bail!("A project build lock does not yet support ephemeral `--with` requirements");
+    }
 
     // If necessary, create an environment for the ephemeral requirements or command.
     let base_site_packages = SitePackages::from_interpreter(&base_interpreter)?;

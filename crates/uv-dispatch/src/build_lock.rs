@@ -10,7 +10,8 @@ use tokio::sync::Mutex;
 use uv_build_frontend::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_configuration::{
-    BuildKind, BuildOptions, BuildOutput, HashCheckingMode, NoBuild, NoSources, Upgrade,
+    BuildKind, BuildOptions, BuildOutput, Constraints, HashCheckingMode, NoBuild, NoSources,
+    Upgrade,
 };
 use uv_distribution::DistributionDatabase;
 use uv_distribution_filename::DistFilename;
@@ -46,7 +47,7 @@ pub(super) enum BuildLocking {
         root: Arc<Path>,
         captured: Arc<Mutex<CapturedBuilds>>,
         previous: Option<Arc<LockedBuild>>,
-        upgrades: UpgradePackages,
+        upgrades: Upgrade,
     },
     Replay {
         root: Arc<Path>,
@@ -67,14 +68,13 @@ impl BuildDispatch<'_> {
     /// Capture build environments for sources selected from the runtime lock on this executor.
     pub async fn capture_build_lock(
         &self,
-        lock: &Lock,
+        lock: &mut Lock,
         root: &Path,
         previous: Option<&LockedBuilds>,
         upgrade: &Upgrade,
     ) -> Result<LockedBuilds> {
         self.validate_build_lock_settings()?;
         let executor = BuildExecutor::from_interpreter(self.interpreter)?;
-        let upgrades = UpgradePackages::for_non_project(upgrade);
         let mut captured = BTreeMap::new();
         for (source, hashes) in lock.build_sources(
             root,
@@ -83,7 +83,7 @@ impl BuildDispatch<'_> {
             self.build_options,
         )? {
             let policy = if hashes.is_empty() {
-                ArchiveHashPolicy::None
+                ArchiveHashPolicy::Generate
             } else {
                 ArchiveHashPolicy::Any(hashes.as_slice())
             };
@@ -107,10 +107,11 @@ impl BuildDispatch<'_> {
                     let previous = previous.and_then(|previous| {
                         previous.get(&entry.key().0, operation, &executor).ok()
                     });
-                    entry.insert(
-                        self.capture_build(&source, root, policy, previous, &upgrades)
-                            .await?,
-                    );
+                    let (build, hashes) = self
+                        .capture_build(&source, root, policy, previous, upgrade)
+                        .await?;
+                    lock.record_build_source_hash(&source, root, &hashes, self.index_locations)?;
+                    entry.insert(build);
                 }
             }
         }
@@ -142,8 +143,8 @@ impl BuildDispatch<'_> {
         root: &Path,
         hashes: ArchiveHashPolicy<'_>,
         previous: Option<&LockedBuild>,
-        upgrades: &UpgradePackages,
-    ) -> Result<LockedBuild> {
+        upgrades: &Upgrade,
+    ) -> Result<(LockedBuild, HashDigests)> {
         self.validate_build_lock_settings()?;
         let id = BuildSourceId::from_source_dist(source, root)?;
         let operation = if source.is_editable() {
@@ -161,7 +162,7 @@ impl BuildDispatch<'_> {
             previous: previous.cloned().map(Arc::new),
             upgrades: upgrades.clone(),
         });
-        DistributionDatabase::new(
+        let hashes = DistributionDatabase::new(
             self.client,
             &dispatch,
             self.concurrency.downloads_semaphore.clone(),
@@ -173,9 +174,10 @@ impl BuildDispatch<'_> {
             captured.len() == 1,
             "Expected one captured build environment for `{source}`"
         );
-        captured
+        let build = captured
             .remove(&(id, operation))
-            .context("The selected source build was not captured")
+            .context("The selected source build was not captured")?;
+        Ok((build, hashes))
     }
 
     /// The initial public contract does not infer how unrecorded build settings affect hooks.
@@ -196,6 +198,10 @@ impl BuildDispatch<'_> {
         ensure!(
             self.extra_build_variables.is_empty() && self.build_extra_env_vars.is_empty(),
             "Build dependency locking does not yet support extra build variables"
+        );
+        ensure!(
+            self.sources.is_none(),
+            "Build dependency locking does not yet support disabling package sources"
         );
         Ok(())
     }
@@ -239,7 +245,7 @@ impl BuildDispatch<'_> {
             BuildLocking::Capture {
                 previous, upgrades, ..
             } => (previous.as_deref(), upgrades.clone()),
-            BuildLocking::Replay { .. } => (None, UpgradePackages::default()),
+            BuildLocking::Replay { .. } => (None, Upgrade::default()),
         };
         let scoped = ScopedBuild::new(self, root, replay, previous, upgrades);
         let builder = self
@@ -289,7 +295,7 @@ struct ScopedBuild<'a> {
     root: &'a Path,
     replay: Option<&'a LockedBuild>,
     previous: Option<&'a LockedBuild>,
-    upgrades: UpgradePackages,
+    upgrades: Upgrade,
     build_options: BuildOptions,
     state: Mutex<ScopeState>,
 }
@@ -308,7 +314,7 @@ impl<'a> ScopedBuild<'a> {
         root: &'a Path,
         replay: Option<&'a LockedBuild>,
         previous: Option<&'a LockedBuild>,
-        upgrades: UpgradePackages,
+        upgrades: Upgrade,
     ) -> Self {
         let mut dispatch = dispatch.clone();
         dispatch.build_locking = None;
@@ -541,12 +547,13 @@ impl BuildContext for ScopedBuild<'_> {
                 )
                 .map_err(anyhow::Error::from)?
         } else {
+            let upgrades = UpgradePackages::for_non_project(&self.upgrades);
             let preferences = self
                 .previous
                 .and_then(|previous| previous.graph(stage))
                 .into_iter()
                 .flat_map(Lock::packages)
-                .filter(|package| !self.upgrades.contains(package.name()))
+                .filter(|package| !upgrades.contains(package.name()))
                 .filter_map(|package| package.version().map(|version| (package, version)))
                 .map(|(package, version)| {
                     Ok(Preference::from_locked(
@@ -558,15 +565,28 @@ impl BuildContext for ScopedBuild<'_> {
                 })
                 .collect::<Result<Vec<_>, uv_lock::LockError>>()
                 .map_err(anyhow::Error::from)?;
+            let constraints = Constraints::from_specifications(
+                self.dispatch
+                    .constraints
+                    .specifications()
+                    .cloned()
+                    .chain(self.upgrades.constraints().cloned().map(Into::into)),
+            );
             let (mut output, hasher) = self
                 .dispatch
-                .resolve_build_graph_with_preferences(requirements, build_stack, self, preferences)
+                .resolve_build_graph_with_preferences(
+                    requirements,
+                    build_stack,
+                    self,
+                    preferences,
+                    &constraints,
+                )
                 .await?;
             self.observe_wheels(&mut output, &hasher).await?;
             let manifest = ResolverManifest::new(
                 [],
                 requirements.to_vec(),
-                output.constraints.requirements().cloned(),
+                self.dispatch.constraints.requirements().cloned(),
                 [],
                 [],
                 [],

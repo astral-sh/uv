@@ -726,10 +726,18 @@ source = { directory = "impossible" }
         let lock = runtime()?.with_build_lock(LockedBuilds::new(executor()?, vec![])?)?;
         let serialized = lock.to_toml()?;
         assert_eq!(Lock::from_toml(&serialized)?, lock);
+        assert_eq!(Lock::from_toml_if_build_locked(&serialized)?, Some(lock));
         let unfenced = serialized.replacen("version = 2", "version = 1", 1);
         assert!(Lock::from_toml(&unfenced).is_err());
+        assert!(Lock::from_toml_if_build_locked(&unfenced).is_err());
         let missing = "version = 2\nrequires-python = \">=3.12\"\n";
         assert!(Lock::from_toml(missing).is_err());
+        assert!(Lock::from_toml_if_build_locked(missing).is_err());
+        assert!(Lock::from_toml_if_build_locked("version = 3\n").is_err());
+        assert_eq!(
+            Lock::from_toml_if_build_locked("version = 1\npackage = 'not a runtime lock'\n")?,
+            None
+        );
         Ok(())
     }
 }

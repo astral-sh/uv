@@ -196,6 +196,25 @@ pub fn generate_sdist(
     (filename, bytes)
 }
 
+/// Generate a source archive with exactly the supplied files beneath its distribution directory.
+pub fn generate_sdist_with_files(
+    name: &PackageName,
+    version: &Version,
+    files: &[(&str, &str)],
+) -> (String, Vec<u8>) {
+    let prefix = format!("{}-{version}", name.as_dist_info_name());
+    let mut encoder = GzEncoder::new(Vec::new(), Compression::fast());
+    let mut tar = TarEncoder::new(AllowStdIo::new(&mut encoder).compat_write()).builder();
+    for (path, contents) in files {
+        add_tar_file(&mut tar, &format!("{prefix}/{path}"), contents.as_bytes());
+    }
+    block_on(tar.finish()).expect("failed to finish in-memory source archive");
+    let bytes = encoder
+        .finish()
+        .expect("failed to finish in-memory gzip stream");
+    (format!("{prefix}.tar.gz"), bytes)
+}
+
 /// Build the callable module used by generated console scripts.
 fn build_cli_module(name: &PackageName) -> String {
     format!("def main():\n    print('Hello from {name}!')\n")
