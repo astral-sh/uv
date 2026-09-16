@@ -15,8 +15,8 @@ use uv_cache_key::{cache_digest, cache_name};
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun,
-    ExtrasSpecification, GitLfsSetting, HashCheckingMode, Override, PackageOverride, Reinstall,
-    TargetTriple, Upgrade,
+    ExtrasSpecification, GitLfsSetting, Override, PackageOverride, Reinstall, TargetTriple,
+    Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
@@ -2323,6 +2323,7 @@ pub(crate) async fn resolve_names(
                 keyring_provider,
                 link_mode,
                 build_isolation,
+                build_hash_checking,
                 extra_build_dependencies,
                 extra_build_variables,
                 prerelease: _,
@@ -2383,7 +2384,7 @@ pub(crate) async fn resolve_names(
     let build_hasher = HashStrategy::from_constraints(
         build_constraints,
         Some(&interpreter.to_resolver_marker_environment()),
-        HashCheckingMode::Verify,
+        *build_hash_checking,
     )?;
     let flat_index = FlatIndex::load(&client, cache, index_locations)
         .await
@@ -2516,6 +2517,7 @@ pub(crate) async fn resolve_environment(
         config_setting,
         config_settings_package,
         build_isolation,
+        build_hash_checking,
         extra_build_dependencies,
         extra_build_variables,
         exclude_newer,
@@ -2626,7 +2628,7 @@ pub(crate) async fn resolve_environment(
     let build_hasher = HashStrategy::from_constraints(
         &build_constraints,
         Some(&interpreter.to_resolver_marker_environment()),
-        HashCheckingMode::Verify,
+        *build_hash_checking,
     )?;
 
     // When resolving from an interpreter, we assume an empty environment, so reinstalls aren't
@@ -2751,6 +2753,7 @@ pub(crate) async fn sync_environment(
         config_setting,
         config_settings_package,
         build_isolation,
+        build_hash_checking,
         extra_build_dependencies,
         extra_build_variables,
         exclude_newer,
@@ -2789,7 +2792,7 @@ pub(crate) async fn sync_environment(
     let build_hasher = HashStrategy::from_constraints(
         &build_constraints,
         Some(&interpreter.to_resolver_marker_environment()),
-        HashCheckingMode::Verify,
+        build_hash_checking,
     )?;
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
@@ -2917,6 +2920,7 @@ pub(crate) async fn update_environment(
                 keyring_provider,
                 link_mode,
                 build_isolation,
+                build_hash_checking,
                 extra_build_dependencies: _,
                 extra_build_variables,
                 prerelease,
@@ -3045,7 +3049,7 @@ pub(crate) async fn update_environment(
     let build_hasher = HashStrategy::from_constraints(
         &build_constraints,
         Some(&interpreter.to_resolver_marker_environment()),
-        HashCheckingMode::Verify,
+        *build_hash_checking,
     )?;
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
