@@ -359,7 +359,7 @@ impl<'env> LockOperation<'env> {
 
     /// Set an explicit request to create or remove the build-dependency contract.
     #[must_use]
-    pub(crate) fn with_build_dependencies(mut self, build_dependencies: Option<bool>) -> Self {
+    fn with_build_dependencies(mut self, build_dependencies: Option<bool>) -> Self {
         self.build_dependencies = build_dependencies;
         self
     }

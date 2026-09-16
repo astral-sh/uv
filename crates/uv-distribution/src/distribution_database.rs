@@ -170,21 +170,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         Ok(computed_hashes)
     }
 
-    /// Resolve the complete build environment for a source distribution, including backend hooks.
-    #[instrument(skip_all, fields(%source))]
-    pub async fn resolve_build_requirements(
-        &self,
-        source: &SourceDist,
-        hashes: ArchiveHashPolicy<'_>,
-    ) -> Result<HashDigests, Error> {
-        let metadata = SourceDistributionBuilder::new(self.build_context)
-            .with_build_requirements()
-            .download_and_build_metadata(&BuildableSource::Dist(source), hashes, &self.client)
-            .boxed_local()
-            .await?;
-        Ok(metadata.hashes)
-    }
-
     /// Resolve build requirements only when the source's runtime metadata is static.
     ///
     /// This allows an independent build graph to be captured after runtime resolution without

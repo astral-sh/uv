@@ -219,7 +219,6 @@ pub(crate) struct SourceDistributionBuilder<'a, T: BuildContext> {
 enum BuildRequirementDiscovery {
     #[default]
     None,
-    AnyMetadata,
     StaticMetadata,
 }
 
@@ -246,16 +245,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             build_stack: None,
             reporter: None,
             build_requirements: BuildRequirementDiscovery::None,
-        }
-    }
-
-    /// Run build setup and backend requirement hooks even when source metadata is static or
-    /// cached.
-    #[must_use]
-    pub(crate) fn with_build_requirements(self) -> Self {
-        Self {
-            build_requirements: BuildRequirementDiscovery::AnyMetadata,
-            ..self
         }
     }
 

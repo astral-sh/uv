@@ -137,7 +137,7 @@ impl BuildDispatch<'_> {
     }
 
     /// Capture the actual isolated environment used by one selected source and operation.
-    pub async fn capture_build(
+    async fn capture_build(
         &self,
         source: &SourceDist,
         root: &Path,

@@ -3006,7 +3006,7 @@ impl Lock {
     }
 
     /// Returns the root requirements that were used to generate this lock.
-    pub fn requirements(&self) -> &BTreeSet<Requirement> {
+    fn requirements(&self) -> &BTreeSet<Requirement> {
         &self.manifest.requirements
     }
 

@@ -251,7 +251,7 @@ impl<'a> BuildDispatch<'a> {
     ///
     /// `build_context` controls nested source builds. Callers that capture a bounded build
     /// environment can reject unsupported nested builds before executing their backends.
-    pub async fn resolve_build_graph(
+    async fn resolve_build_graph(
         &self,
         requirements: &[Requirement],
         build_stack: &BuildStack,
