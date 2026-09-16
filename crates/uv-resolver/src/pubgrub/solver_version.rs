@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{self, Display};
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use pubgrub::{DerivationTree, Derived, External, SetRelation, Term, VersionSet};
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -66,20 +66,39 @@ impl Display for SolverVersion {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct CandidateSet {
     registry: Range<Version>,
+    sources: OtherSources,
+}
+
+/// Ordinary registry constraints either exclude all other sources or include them all after
+/// complementation. Keep those cases compact; only source-bearing solves need separate ranges.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum OtherSources {
+    Empty,
+    Full,
+    Custom(Arc<SourceRanges>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct SourceRanges {
     indexed: Range<Version>,
     indexes: BTreeMap<IndexId, Range<Version>>,
     direct: Range<Version>,
     urls: BTreeMap<SourceId, Range<Version>>,
 }
 
+static EMPTY_SOURCE_RANGE: LazyLock<Range<Version>> = LazyLock::new(Range::empty);
+static FULL_SOURCE_RANGE: LazyLock<Range<Version>> = LazyLock::new(Range::full);
+
 impl CandidateSet {
     pub(crate) fn all(versions: Range<Version>) -> Self {
         Self {
             registry: versions.clone(),
-            indexed: versions.clone(),
-            indexes: BTreeMap::new(),
-            direct: versions,
-            urls: BTreeMap::new(),
+            sources: OtherSources::new(SourceRanges {
+                indexed: versions.clone(),
+                indexes: BTreeMap::new(),
+                direct: versions,
+                urls: BTreeMap::new(),
+            }),
         }
     }
 
@@ -87,33 +106,38 @@ impl CandidateSet {
         match source {
             SolverSource::Registry => Self {
                 registry: versions,
-                indexed: Range::empty(),
-                indexes: BTreeMap::new(),
-                direct: Range::empty(),
-                urls: BTreeMap::new(),
+                sources: OtherSources::Empty,
             },
-            SolverSource::Index(index) => Self {
-                registry: Range::empty(),
-                indexed: Range::empty(),
-                indexes: if versions == Range::empty() {
-                    BTreeMap::new()
+            SolverSource::Index(index) => {
+                if versions == Range::empty() {
+                    Self::empty()
                 } else {
-                    BTreeMap::from([(index, versions)])
-                },
-                direct: Range::empty(),
-                urls: BTreeMap::new(),
-            },
-            SolverSource::Url(source) => Self {
-                registry: Range::empty(),
-                indexed: Range::empty(),
-                indexes: BTreeMap::new(),
-                direct: Range::empty(),
-                urls: if versions == Range::empty() {
-                    BTreeMap::new()
+                    Self {
+                        registry: Range::empty(),
+                        sources: OtherSources::new(SourceRanges {
+                            indexed: Range::empty(),
+                            indexes: BTreeMap::from([(index, versions)]),
+                            direct: Range::empty(),
+                            urls: BTreeMap::new(),
+                        }),
+                    }
+                }
+            }
+            SolverSource::Url(source) => {
+                if versions == Range::empty() {
+                    Self::empty()
                 } else {
-                    BTreeMap::from([(source, versions)])
-                },
-            },
+                    Self {
+                        registry: Range::empty(),
+                        sources: OtherSources::new(SourceRanges {
+                            indexed: Range::empty(),
+                            indexes: BTreeMap::new(),
+                            direct: Range::empty(),
+                            urls: BTreeMap::from([(source, versions)]),
+                        }),
+                    }
+                }
+            }
         }
     }
 
@@ -121,10 +145,12 @@ impl CandidateSet {
     pub(crate) fn registries(versions: Range<Version>) -> Self {
         Self {
             registry: versions.clone(),
-            indexed: versions,
-            indexes: BTreeMap::new(),
-            direct: Range::empty(),
-            urls: BTreeMap::new(),
+            sources: OtherSources::new(SourceRanges {
+                indexed: versions,
+                indexes: BTreeMap::new(),
+                direct: Range::empty(),
+                urls: BTreeMap::new(),
+            }),
         }
     }
 
@@ -132,76 +158,130 @@ impl CandidateSet {
     pub(crate) fn urls(versions: Range<Version>) -> Self {
         Self {
             registry: Range::empty(),
-            indexed: Range::empty(),
-            indexes: BTreeMap::new(),
-            direct: versions,
-            urls: BTreeMap::new(),
+            sources: OtherSources::new(SourceRanges {
+                indexed: Range::empty(),
+                indexes: BTreeMap::new(),
+                direct: versions,
+                urls: BTreeMap::new(),
+            }),
         }
     }
 
     /// An explicit index constrains registry selection; an independently declared URL can take precedence.
     pub(crate) fn index_or_url(index: IndexId, versions: Range<Version>) -> Self {
-        let mut candidates = Self::source(SolverSource::Index(index), versions.clone());
-        candidates.direct = versions;
-        candidates
+        if versions == Range::empty() {
+            return Self::empty();
+        }
+        Self {
+            registry: Range::empty(),
+            sources: OtherSources::new(SourceRanges {
+                indexed: Range::empty(),
+                indexes: BTreeMap::from([(index, versions.clone())]),
+                direct: versions,
+                urls: BTreeMap::new(),
+            }),
+        }
     }
 
+    #[inline]
     pub(crate) fn for_source(&self, source: SolverSource) -> &Range<Version> {
         match source {
             SolverSource::Registry => &self.registry,
-            SolverSource::Index(index) => self.indexes.get(&index).unwrap_or(&self.indexed),
-            SolverSource::Url(source) => self.urls.get(&source).unwrap_or(&self.direct),
+            SolverSource::Index(index) => match &self.sources {
+                OtherSources::Empty => &EMPTY_SOURCE_RANGE,
+                OtherSources::Full => &FULL_SOURCE_RANGE,
+                OtherSources::Custom(sources) => sources.for_index(index),
+            },
+            SolverSource::Url(source) => match &self.sources {
+                OtherSources::Empty => &EMPTY_SOURCE_RANGE,
+                OtherSources::Full => &FULL_SOURCE_RANGE,
+                OtherSources::Custom(sources) => sources.for_url(source),
+            },
         }
     }
 
     /// Select a concrete index constrained by a dependency edge; never speculate on an unseen index.
     pub(crate) fn index(&self) -> Option<IndexId> {
-        self.indexes.iter().find_map(|(index, versions)| {
-            (*versions != Range::empty() && self.indexed == Range::empty()).then_some(*index)
+        let sources = self.sources.custom()?;
+        sources.indexes.iter().find_map(|(index, versions)| {
+            (*versions != Range::empty() && sources.indexed == Range::empty()).then_some(*index)
         })
     }
 
     pub(crate) fn has_indexes(&self) -> bool {
-        self.indexed != Range::empty()
-            || self.indexes.values().any(|range| *range != Range::empty())
+        match &self.sources {
+            OtherSources::Empty => false,
+            OtherSources::Full => true,
+            OtherSources::Custom(sources) => {
+                sources.indexed != Range::empty()
+                    || sources
+                        .indexes
+                        .values()
+                        .any(|range| *range != Range::empty())
+            }
+        }
     }
 
     pub(crate) fn has_urls(&self) -> bool {
-        self.direct != Range::empty() || self.urls.values().any(|range| *range != Range::empty())
+        match &self.sources {
+            OtherSources::Empty => false,
+            OtherSources::Full => true,
+            OtherSources::Custom(sources) => {
+                sources.direct != Range::empty()
+                    || sources.urls.values().any(|range| *range != Range::empty())
+            }
+        }
     }
 
     pub(crate) fn allows_unseen_url(&self) -> bool {
-        self.direct != Range::empty()
+        match &self.sources {
+            OtherSources::Empty => false,
+            OtherSources::Full => true,
+            OtherSources::Custom(sources) => sources.direct != Range::empty(),
+        }
     }
 
     /// Return the direct identities when this set excludes the registry and all other URLs.
     pub(crate) fn only_urls(&self) -> impl Iterator<Item = SourceId> + '_ {
-        self.urls.iter().filter_map(|(source, versions)| {
-            (self.registry == Range::empty()
-                && self.indexed == Range::empty()
-                && self.indexes.values().all(|range| *range == Range::empty())
-                && self.direct == Range::empty()
-                && *versions != Range::empty())
-            .then_some(*source)
+        self.sources.custom().into_iter().flat_map(|sources| {
+            sources.urls.iter().filter_map(|(source, versions)| {
+                (self.registry == Range::empty()
+                    && sources.indexed == Range::empty()
+                    && sources
+                        .indexes
+                        .values()
+                        .all(|range| *range == Range::empty())
+                    && sources.direct == Range::empty()
+                    && *versions != Range::empty())
+                .then_some(*source)
+            })
         })
     }
 
     /// Return the explicit registries when the normal search and other indexes are excluded.
     pub(crate) fn only_indexes(&self) -> impl Iterator<Item = IndexId> + '_ {
-        self.indexes.iter().filter_map(|(index, versions)| {
-            (self.registry == Range::empty()
-                && self.indexed == Range::empty()
-                && *versions != Range::empty())
-            .then_some(*index)
+        self.sources.custom().into_iter().flat_map(|sources| {
+            sources.indexes.iter().filter_map(|(index, versions)| {
+                (self.registry == Range::empty()
+                    && sources.indexed == Range::empty()
+                    && *versions != Range::empty())
+                .then_some(*index)
+            })
         })
     }
 
     /// Remove source identity for the existing PEP 440 diagnostic formatter.
     pub(crate) fn project(&self) -> Range<Version> {
-        self.indexes.values().chain(self.urls.values()).fold(
-            self.registry.union(&self.indexed).union(&self.direct),
-            |range, versions| range.union(versions),
-        )
+        match &self.sources {
+            OtherSources::Empty => self.registry.clone(),
+            OtherSources::Full => Range::full(),
+            OtherSources::Custom(sources) => {
+                sources.indexes.values().chain(sources.urls.values()).fold(
+                    self.registry.union(&sources.indexed).union(&sources.direct),
+                    |range, versions| range.union(versions),
+                )
+            }
+        }
     }
 
     /// The concrete source required by a declaration or supplying a candidate's metadata. A
@@ -210,17 +290,124 @@ impl CandidateSet {
         if self.registry != Range::empty() {
             return None;
         }
-        let indexes = self.indexes.iter().filter_map(|(index, versions)| {
-            (self.indexed == Range::empty() && *versions != Range::empty())
+        let sources = self.sources.custom()?;
+        let indexes = sources.indexes.iter().filter_map(|(index, versions)| {
+            (sources.indexed == Range::empty() && *versions != Range::empty())
                 .then_some(SolverSource::Index(*index))
         });
-        let urls = self.urls.iter().filter_map(|(source, versions)| {
-            (self.direct == Range::empty() && *versions != Range::empty())
+        let urls = sources.urls.iter().filter_map(|(source, versions)| {
+            (sources.direct == Range::empty() && *versions != Range::empty())
                 .then_some(SolverSource::Url(*source))
         });
         let mut sources = indexes.chain(urls);
         let source = sources.next()?;
         sources.next().is_none().then_some(source)
+    }
+}
+
+impl OtherSources {
+    fn new(sources: SourceRanges) -> Self {
+        if sources.indexes.is_empty() && sources.urls.is_empty() {
+            if sources.indexed == Range::empty() && sources.direct == Range::empty() {
+                return Self::Empty;
+            }
+            if sources.indexed == Range::full() && sources.direct == Range::full() {
+                return Self::Full;
+            }
+        }
+        Self::Custom(Arc::new(sources))
+    }
+
+    fn custom(&self) -> Option<&SourceRanges> {
+        match self {
+            Self::Empty | Self::Full => None,
+            Self::Custom(sources) => Some(sources),
+        }
+    }
+
+    fn complement(&self) -> Self {
+        match self {
+            Self::Empty => Self::Full,
+            Self::Full => Self::Empty,
+            Self::Custom(sources) => Self::new(SourceRanges {
+                indexed: sources.indexed.complement(),
+                indexes: sources
+                    .indexes
+                    .iter()
+                    .map(|(index, versions)| (*index, versions.complement()))
+                    .collect(),
+                direct: sources.direct.complement(),
+                urls: sources
+                    .urls
+                    .iter()
+                    .map(|(source, versions)| (*source, versions.complement()))
+                    .collect(),
+            }),
+        }
+    }
+
+    fn intersection(&self, other: &Self) -> Self {
+        match (self, other) {
+            (Self::Empty, Self::Empty | Self::Full | Self::Custom(_))
+            | (Self::Full | Self::Custom(_), Self::Empty) => Self::Empty,
+            (Self::Full, sources) | (sources, Self::Full) => sources.clone(),
+            (Self::Custom(a), Self::Custom(b)) => Self::new(a.combine(b, Range::intersection)),
+        }
+    }
+
+    fn union(&self, other: &Self) -> Self {
+        match (self, other) {
+            (Self::Full, Self::Empty | Self::Full | Self::Custom(_))
+            | (Self::Empty | Self::Custom(_), Self::Full) => Self::Full,
+            (Self::Empty, sources) | (sources, Self::Empty) => sources.clone(),
+            (Self::Custom(a), Self::Custom(b)) => Self::new(a.combine(b, Range::union)),
+        }
+    }
+
+    fn difference(&self, other: &Self) -> Self {
+        match (self, other) {
+            (Self::Empty, Self::Empty | Self::Full | Self::Custom(_))
+            | (Self::Full | Self::Custom(_), Self::Full) => Self::Empty,
+            (sources, Self::Empty) => sources.clone(),
+            (Self::Full, Self::Custom(_)) => other.complement(),
+            (Self::Custom(a), Self::Custom(b)) => Self::new(a.combine(b, Range::difference)),
+        }
+    }
+
+    /// Return subset and disjointness directly whenever an operand is the empty or full set.
+    #[inline]
+    fn simple_relation(&self, other: &Self) -> Option<(bool, bool)> {
+        match (self, other) {
+            (Self::Empty, Self::Empty | Self::Full | Self::Custom(_)) => Some((true, true)),
+            (Self::Full | Self::Custom(_), Self::Full) => Some((true, false)),
+            (Self::Full | Self::Custom(_), Self::Empty) => Some((false, true)),
+            (Self::Full, Self::Custom(_)) => Some((false, false)),
+            (Self::Custom(_), Self::Custom(_)) => None,
+        }
+    }
+
+    /// Compare custom source sets without materializing a result.
+    #[inline]
+    fn all_custom_sources_match(
+        &self,
+        other: &Self,
+        matches: impl FnMut(&Range<Version>, &Range<Version>) -> bool,
+    ) -> bool {
+        if let (Self::Custom(a), Self::Custom(b)) = (self, other) {
+            a.all_sources_match(b, matches)
+        } else {
+            true
+        }
+    }
+}
+
+impl SourceRanges {
+    fn for_index(&self, index: IndexId) -> &Range<Version> {
+        self.indexes.get(&index).unwrap_or(&self.indexed)
+    }
+
+    fn for_url(&self, source: SourceId) -> &Range<Version> {
+        self.urls.get(&source).unwrap_or(&self.direct)
     }
 
     fn combine(
@@ -228,7 +415,6 @@ impl CandidateSet {
         other: &Self,
         operation: impl Fn(&Range<Version>, &Range<Version>) -> Range<Version>,
     ) -> Self {
-        let registry = operation(&self.registry, &other.registry);
         let indexed = operation(&self.indexed, &other.indexed);
         let direct = operation(&self.direct, &other.direct);
         let index_sources: BTreeSet<_> = self
@@ -240,10 +426,7 @@ impl CandidateSet {
         let indexes = index_sources
             .into_iter()
             .filter_map(|index| {
-                let versions = operation(
-                    self.for_source(SolverSource::Index(index)),
-                    other.for_source(SolverSource::Index(index)),
-                );
+                let versions = operation(self.for_index(index), other.for_index(index));
                 (versions != indexed).then_some((index, versions))
             })
             .collect();
@@ -251,15 +434,11 @@ impl CandidateSet {
         let urls = sources
             .into_iter()
             .filter_map(|source| {
-                let versions = operation(
-                    self.for_source(SolverSource::Url(source)),
-                    other.for_source(SolverSource::Url(source)),
-                );
+                let versions = operation(self.for_url(source), other.for_url(source));
                 (versions != direct).then_some((source, versions))
             })
             .collect();
         Self {
-            registry,
             indexed,
             indexes,
             direct,
@@ -275,18 +454,19 @@ impl CandidateSet {
         other: &Self,
         mut matches: impl FnMut(&Range<Version>, &Range<Version>) -> bool,
     ) -> bool {
-        matches(&self.registry, &other.registry)
-            && matches(&self.indexed, &other.indexed)
+        matches(&self.indexed, &other.indexed)
             && matches(&self.direct, &other.direct)
-            && self.indexes.iter().all(|(index, versions)| {
-                matches(versions, other.for_source(SolverSource::Index(*index)))
-            })
+            && self
+                .indexes
+                .iter()
+                .all(|(index, versions)| matches(versions, other.for_index(*index)))
             && other.indexes.iter().all(|(index, versions)| {
                 self.indexes.contains_key(index) || matches(&self.indexed, versions)
             })
-            && self.urls.iter().all(|(source, versions)| {
-                matches(versions, other.for_source(SolverSource::Url(*source)))
-            })
+            && self
+                .urls
+                .iter()
+                .all(|(source, versions)| matches(versions, other.for_url(*source)))
             && other.urls.iter().all(|(source, versions)| {
                 self.urls.contains_key(source) || matches(&self.direct, versions)
             })
@@ -297,11 +477,17 @@ impl VersionSet for CandidateSet {
     type V = SolverVersion;
 
     fn empty() -> Self {
-        Self::all(Range::empty())
+        Self {
+            registry: Range::empty(),
+            sources: OtherSources::Empty,
+        }
     }
 
     fn full() -> Self {
-        Self::all(Range::full())
+        Self {
+            registry: Range::full(),
+            sources: OtherSources::Full,
+        }
     }
 
     fn singleton(candidate: Self::V) -> Self {
@@ -311,31 +497,29 @@ impl VersionSet for CandidateSet {
     fn complement(&self) -> Self {
         Self {
             registry: self.registry.complement(),
-            indexed: self.indexed.complement(),
-            indexes: self
-                .indexes
-                .iter()
-                .map(|(index, versions)| (*index, versions.complement()))
-                .collect(),
-            direct: self.direct.complement(),
-            urls: self
-                .urls
-                .iter()
-                .map(|(source, versions)| (*source, versions.complement()))
-                .collect(),
+            sources: self.sources.complement(),
         }
     }
 
     fn intersection(&self, other: &Self) -> Self {
-        self.combine(other, Range::intersection)
+        Self {
+            registry: self.registry.intersection(&other.registry),
+            sources: self.sources.intersection(&other.sources),
+        }
     }
 
     fn union(&self, other: &Self) -> Self {
-        self.combine(other, Range::union)
+        Self {
+            registry: self.registry.union(&other.registry),
+            sources: self.sources.union(&other.sources),
+        }
     }
 
     fn difference(&self, other: &Self) -> Self {
-        self.combine(other, Range::difference)
+        Self {
+            registry: self.registry.difference(&other.registry),
+            sources: self.sources.difference(&other.sources),
+        }
     }
 
     fn contains(&self, candidate: &Self::V) -> bool {
@@ -345,19 +529,33 @@ impl VersionSet for CandidateSet {
 
     #[inline]
     fn is_disjoint(&self, other: &Self) -> bool {
-        self.all_sources_match(other, VersionSet::is_disjoint)
+        self.registry.is_disjoint(&other.registry)
+            && self.sources.simple_relation(&other.sources).map_or_else(
+                || {
+                    self.sources
+                        .all_custom_sources_match(&other.sources, VersionSet::is_disjoint)
+                },
+                |(_, disjoint)| disjoint,
+            )
     }
 
     #[inline]
     fn subset_of(&self, other: &Self) -> bool {
-        self.all_sources_match(other, VersionSet::subset_of)
+        self.registry.subset_of(&other.registry)
+            && self.sources.simple_relation(&other.sources).map_or_else(
+                || {
+                    self.sources
+                        .all_custom_sources_match(&other.sources, VersionSet::subset_of)
+                },
+                |(subset, _)| subset,
+            )
     }
 
     #[inline]
     fn relation(&self, other: &Self) -> SetRelation {
         let mut subset = true;
         let mut disjoint = true;
-        self.all_sources_match(other, |versions, other_versions| {
+        let mut observe = |versions: &Range<Version>, other_versions: &Range<Version>| {
             // An empty component is both a subset and disjoint; it cannot determine the result.
             if *versions != Range::empty() {
                 match versions.relation(other_versions) {
@@ -370,7 +568,18 @@ impl VersionSet for CandidateSet {
                 }
             }
             subset || disjoint
-        });
+        };
+        if observe(&self.registry, &other.registry) {
+            if let Some((source_subset, source_disjoint)) =
+                self.sources.simple_relation(&other.sources)
+            {
+                subset &= source_subset;
+                disjoint &= source_disjoint;
+            } else {
+                self.sources
+                    .all_custom_sources_match(&other.sources, observe);
+            }
+        }
         if subset {
             SetRelation::Subset
         } else if disjoint {
@@ -654,9 +863,32 @@ mod tests {
                 .union(&CandidateSet::source(second_url, two.clone())),
         ];
         sets.extend(sets.clone().iter().map(CandidateSet::complement));
+        let sources = [
+            SolverSource::Registry,
+            index,
+            second_index,
+            SolverSource::Index(IndexId(99)),
+            url,
+            second_url,
+            SolverSource::Url(SourceId(99)),
+        ];
         for left in &sets {
             for right in &sets {
                 let intersection = left.intersection(right);
+                let union = left.union(right);
+                let difference = left.difference(right);
+                let complement = left.complement();
+                for source in sources {
+                    for version in 0..=3 {
+                        let candidate = SolverVersion::new(source, Version::new([version]));
+                        let in_left = left.contains(&candidate);
+                        let in_right = right.contains(&candidate);
+                        assert_eq!(intersection.contains(&candidate), in_left && in_right);
+                        assert_eq!(union.contains(&candidate), in_left || in_right);
+                        assert_eq!(difference.contains(&candidate), in_left && !in_right);
+                        assert_eq!(complement.contains(&candidate), !in_left);
+                    }
+                }
                 let disjoint = intersection == CandidateSet::empty();
                 let subset = intersection == *left;
                 let relation = if subset {
