@@ -2662,6 +2662,8 @@ pub struct PipFreezeArgs {
     pub exclude_editable: bool,
 
     /// Exclude the specified package(s) from the output.
+    ///
+    /// May be provided multiple times.
     #[arg(long)]
     pub r#exclude: Vec<PackageName>,
 
@@ -2733,6 +2735,8 @@ pub struct PipListArgs {
     pub exclude_editable: bool,
 
     /// Exclude the specified package(s) from the output.
+    ///
+    /// May be provided multiple times.
     #[arg(long, value_hint = ValueHint::Other)]
     pub r#exclude: Vec<PackageName>,
 
