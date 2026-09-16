@@ -7,9 +7,8 @@ use std::fmt::{Display, Formatter};
 use std::ops::Bound;
 use std::sync::Arc;
 use std::time::Instant;
-use std::{iter, mem, slice, thread};
+use std::{mem, thread};
 
-use either::Either;
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
 use papaya::{HashMap, ResizeMode};
@@ -29,7 +28,7 @@ use uv_distribution_types::{
     ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
 };
 use uv_git::GitResolver;
-use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_normalize::PackageName;
 use uv_pep440::{MIN_VERSION, Version, VersionSpecifiers, release_specifiers_to_ranges};
 use uv_pep508::{
     MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
@@ -75,6 +74,7 @@ pub use crate::resolver::provider::{
 };
 pub use crate::resolver::reporter::Reporter;
 use crate::resolver::requests::MetadataRequests;
+use crate::resolver::requirements::{RequirementContext, RequirementExpander};
 use crate::resolver::system::SystemDependency;
 pub(crate) use crate::resolver::urls::Urls;
 use crate::universal_marker::UniversalMarker;
@@ -94,6 +94,7 @@ mod indexes;
 mod provider;
 mod reporter;
 mod requests;
+mod requirements;
 mod resolution;
 mod system;
 mod urls;
@@ -1794,19 +1795,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         pubgrub: &State<UvDependencyProvider>,
         requests: &MetadataRequests,
     ) -> Result<Dependencies, ResolveError> {
+        let expander = RequirementExpander::new(
+            &self.constraints,
+            &self.overrides,
+            &self.excludes,
+            env,
+            python_requirement,
+        );
         let dependencies = match &**package {
             PubGrubPackageInner::Root(_) => {
-                let no_dev_deps = BTreeMap::default();
-                let requirements = self.flatten_requirements(
-                    &self.requirements,
-                    &no_dev_deps,
-                    None,
-                    None,
-                    None,
-                    None,
-                    env,
-                    python_requirement,
-                );
+                let requirements = expander.expand(&self.requirements, RequirementContext::Root);
 
                 PubGrubDependency::from_requirements(
                     &self.conflicts,
@@ -1919,16 +1917,31 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     })
                     .map(PubGrubDependency::from);
 
-                let requirements = self.flatten_requirements(
-                    &metadata.requires_dist,
-                    &metadata.dependency_groups,
-                    extra.as_ref(),
-                    group.as_ref(),
-                    Some(name),
-                    Some(version),
-                    env,
-                    python_requirement,
-                );
+                let (requirements, context) = if let Some(group) = group {
+                    debug_assert!(extra.is_none());
+                    (
+                        metadata
+                            .dependency_groups
+                            .get(group)
+                            .map_or(&[][..], AsRef::as_ref),
+                        RequirementContext::Group { name, version },
+                    )
+                } else if let Some(extra) = extra {
+                    (
+                        metadata.requires_dist.as_ref(),
+                        RequirementContext::Extra {
+                            name,
+                            version,
+                            extra,
+                        },
+                    )
+                } else {
+                    (
+                        metadata.requires_dist.as_ref(),
+                        RequirementContext::Package { name, version },
+                    )
+                };
+                let requirements = expander.expand(requirements, context);
 
                 PubGrubDependency::from_requirements(
                     &self.conflicts,
@@ -2026,389 +2039,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 Dependencies::Unavailable(UnavailableVersion::UnsatisfiableDependency(requirement))
             }
         })
-    }
-
-    /// The regular and dev dependencies filtered by Python version and the markers of this fork,
-    /// plus the extras dependencies of the current package (e.g., `black` depending on
-    /// `black[colorama]`).
-    fn flatten_requirements<'a>(
-        &'a self,
-        dependencies: &'a [Requirement],
-        dev_dependencies: &'a BTreeMap<GroupName, Box<[Requirement]>>,
-        extra: Option<&'a ExtraName>,
-        dev: Option<&'a GroupName>,
-        name: Option<&'a PackageName>,
-        version: Option<&'a Version>,
-        env: &'a ResolverEnvironment,
-        python_requirement: &'a PythonRequirement,
-    ) -> impl Iterator<Item = Cow<'a, Requirement>> {
-        let python_marker = python_requirement.to_marker_tree();
-
-        if let Some(dev) = dev {
-            // Dependency groups can include the project itself, so no need to flatten recursive
-            // dependencies.
-            Either::Left(Either::Left(self.requirements_for_extra(
-                dev_dependencies.get(dev).into_iter().flatten(),
-                extra,
-                None,
-                name.zip(version),
-                env,
-                python_marker,
-                python_requirement,
-            )))
-        } else if !dependencies
-            .iter()
-            .any(|req| name == Some(&req.name) && !req.extras.is_empty())
-        {
-            // If the project doesn't define any recursive dependencies, take the fast path.
-            Either::Left(Either::Right(self.requirements_for_extra(
-                dependencies.iter(),
-                extra,
-                name.zip(version),
-                name.zip(version),
-                env,
-                python_marker,
-                python_requirement,
-            )))
-        } else {
-            let mut requirements = self
-                .requirements_for_extra(
-                    dependencies.iter(),
-                    extra,
-                    name.zip(version),
-                    name.zip(version),
-                    env,
-                    python_marker,
-                    python_requirement,
-                )
-                .collect::<Vec<_>>();
-
-            // Transitively process all extras that are recursively included, starting with the current
-            // extra.
-            let mut seen = FxHashSet::<(ExtraName, MarkerTree)>::default();
-            let mut queue: VecDeque<_> = requirements
-                .iter()
-                .filter(|req| name == Some(&req.name))
-                .flat_map(|req| req.extras.iter().cloned().map(|extra| (extra, req.marker)))
-                .collect();
-            while let Some((extra, marker)) = queue.pop_front() {
-                if !seen.insert((extra.clone(), marker)) {
-                    continue;
-                }
-                for requirement in self.requirements_for_extra(
-                    dependencies,
-                    Some(&extra),
-                    name.zip(version),
-                    name.zip(version),
-                    env,
-                    python_marker,
-                    python_requirement,
-                ) {
-                    let requirement = match requirement {
-                        Cow::Owned(mut requirement) => {
-                            requirement.marker = requirement.marker.and(marker);
-                            requirement
-                        }
-                        Cow::Borrowed(requirement) => {
-                            let mut marker = marker;
-                            marker = marker.and(requirement.marker);
-                            Requirement {
-                                name: requirement.name.clone(),
-                                extras: requirement.extras.clone(),
-                                groups: requirement.groups.clone(),
-                                source: requirement.source.clone(),
-                                origin: requirement.origin.clone(),
-                                marker: marker.simplify_extras(slice::from_ref(&extra)),
-                            }
-                        }
-                    };
-                    // Filter out unreachable unsatisfiable requirements before they reach the
-                    // unsatisfiability check.
-                    let applicable_marker = requirement
-                        .marker
-                        .simplify_extras(slice::from_ref(&extra))
-                        .simplify_not_extras_with(|candidate| candidate != &extra);
-                    if python_marker.is_disjoint(applicable_marker)
-                        || !env.included_by_marker(applicable_marker)
-                    {
-                        continue;
-                    }
-                    if name == Some(&requirement.name) {
-                        // Add each transitively included extra.
-                        queue.extend(
-                            requirement
-                                .extras
-                                .iter()
-                                .cloned()
-                                .map(|extra| (extra, requirement.marker)),
-                        );
-                    }
-
-                    // Retain the requirement, including any recursively reached self-constraint.
-                    requirements.push(Cow::Owned(requirement));
-                }
-            }
-
-            // Retain any self-constraints for that extra, e.g., if `project[foo]` includes
-            // `project[bar]>1.0`, as a dependency, we need to propagate `project>1.0`, in addition to
-            // transitively expanding `project[bar]`.
-            let mut self_constraints = vec![];
-            for req in &requirements {
-                if name == Some(&req.name) && !req.extras.is_empty() && !req.source.is_empty() {
-                    self_constraints.push(Requirement {
-                        name: req.name.clone(),
-                        extras: Box::new([]),
-                        groups: req.groups.clone(),
-                        source: req.source.clone(),
-                        origin: req.origin.clone(),
-                        marker: req.marker,
-                    });
-                }
-            }
-
-            // Drop all the self-requirements now that we flattened them out.
-            requirements.retain(|req| name != Some(&req.name) || req.extras.is_empty());
-            requirements.extend(self_constraints.into_iter().map(Cow::Owned));
-
-            Either::Right(requirements.into_iter())
-        }
-    }
-
-    /// The set of the regular and dev dependencies, filtered by Python version,
-    /// the markers of this fork and the requested extra.
-    fn requirements_for_extra<'data, 'parameters>(
-        &'data self,
-        dependencies: impl IntoIterator<Item = &'data Requirement> + 'parameters,
-        extra: Option<&'parameters ExtraName>,
-        override_package: Option<(&'parameters PackageName, &'parameters Version)>,
-        exclusion_package: Option<(&'parameters PackageName, &'parameters Version)>,
-        env: &'parameters ResolverEnvironment,
-        python_marker: MarkerTree,
-        python_requirement: &'parameters PythonRequirement,
-    ) -> impl Iterator<Item = Cow<'data, Requirement>> + 'parameters
-    where
-        'data: 'parameters,
-    {
-        self.overrides
-            .apply_for_package(override_package, dependencies)
-            .filter(move |requirement| {
-                !self
-                    .excludes
-                    .contains_for_package(exclusion_package, &requirement.name)
-            })
-            .map(move |mut requirement| {
-                // Split the marker into production and optional components. If we have e.g.
-                // `foo; sys_platform == 'win32' or extra == 'feature'`
-                // we split it into
-                // `foo; sys_platform == 'win32'` (production) when `extra` is `None`,
-                // `foo; extra == 'feature'` (optional) when `extra` is `Some("feature")`.
-                // The requirements are then separately tracked in production and optional
-                // dependencies respectively.
-
-                let marker = match extra {
-                    Some(extra) => requirement
-                        .marker
-                        .simplify_extras(slice::from_ref(extra))
-                        .simplify_not_extras_with(|candidate| candidate != extra)
-                        .and(
-                            requirement
-                                .marker
-                                .simplify_not_extras_with(|_| true)
-                                .negate(),
-                        ),
-                    None => requirement.marker.simplify_not_extras_with(|_| true),
-                };
-
-                if requirement.marker != marker {
-                    requirement.to_mut().marker = marker;
-                }
-
-                requirement
-            })
-            .filter(move |requirement| {
-                Self::is_requirement_applicable(
-                    requirement,
-                    extra,
-                    env,
-                    python_marker,
-                    python_requirement,
-                )
-            })
-            .flat_map(move |requirement| {
-                iter::once(requirement.clone()).chain(self.constraints_for_requirement(
-                    requirement,
-                    extra,
-                    env,
-                    python_marker,
-                    python_requirement,
-                ))
-            })
-    }
-
-    /// Whether a requirement is applicable for the Python version, the markers of this fork and the
-    /// requested extra.
-    fn is_requirement_applicable(
-        requirement: &Requirement,
-        extra: Option<&ExtraName>,
-        env: &ResolverEnvironment,
-        python_marker: MarkerTree,
-        python_requirement: &PythonRequirement,
-    ) -> bool {
-        // If the requirement isn't relevant for the current platform, skip it.
-        match extra {
-            Some(source_extra) => {
-                if !requirement.evaluate_markers(env.marker_environment(), &[]) {
-                    return false;
-                }
-
-                if !env.included_by_group(ConflictItemRef::from((&requirement.name, source_extra)))
-                {
-                    return false;
-                }
-            }
-            None => {
-                if !requirement.evaluate_markers(env.marker_environment(), &[]) {
-                    return false;
-                }
-            }
-        }
-
-        // If the requirement would not be selected with any Python version
-        // supported by the root, skip it.
-        if python_marker.is_disjoint(requirement.marker) {
-            trace!(
-                "Skipping {requirement} because of Requires-Python: {requires_python}",
-                requires_python = python_requirement.target(),
-            );
-            return false;
-        }
-
-        // If we're in a fork in universal mode, ignore any dependency that isn't part of
-        // this fork (but will be part of another fork).
-        if !env.included_by_marker(requirement.marker) {
-            trace!("Skipping {requirement} because of {env}");
-            return false;
-        }
-
-        true
-    }
-
-    /// The constraints applicable to the requirement, filtered by Python version, the markers of
-    /// this fork and the requested extra.
-    fn constraints_for_requirement<'data, 'parameters>(
-        &'data self,
-        requirement: Cow<'data, Requirement>,
-        extra: Option<&'parameters ExtraName>,
-        env: &'parameters ResolverEnvironment,
-        python_marker: MarkerTree,
-        python_requirement: &'parameters PythonRequirement,
-    ) -> impl Iterator<Item = Cow<'data, Requirement>> + 'parameters
-    where
-        'data: 'parameters,
-    {
-        self.constraints
-            .get(&requirement.name)
-            .into_iter()
-            .flatten()
-            .filter_map(move |constraint| {
-                // If the requirement would not be selected with any Python version
-                // supported by the root, skip it.
-                let constraint = if constraint.marker.is_true() {
-                    // Additionally, if the requirement is `requests ; sys_platform == 'darwin'`
-                    // and the constraint is `requests ; python_version == '3.6'`, the
-                    // constraint should only apply when _both_ markers are true.
-                    if requirement.marker.is_true() {
-                        Cow::Borrowed(constraint)
-                    } else {
-                        let mut marker = constraint.marker;
-                        marker = marker.and(requirement.marker);
-
-                        if marker.is_false() {
-                            trace!(
-                                "Skipping {constraint} because of disjoint markers: `{}` vs. `{}`",
-                                constraint.marker.try_to_string().unwrap(),
-                                requirement.marker.try_to_string().unwrap(),
-                            );
-                            return None;
-                        }
-
-                        Cow::Owned(Requirement {
-                            name: constraint.name.clone(),
-                            extras: constraint.extras.clone(),
-                            groups: constraint.groups.clone(),
-                            source: constraint.source.clone(),
-                            origin: constraint.origin.clone(),
-                            marker,
-                        })
-                    }
-                } else {
-                    let requires_python = python_requirement.target();
-
-                    let mut marker = constraint.marker;
-                    marker = marker.and(requirement.marker);
-
-                    if marker.is_false() {
-                        trace!(
-                            "Skipping {constraint} because of disjoint markers: `{}` vs. `{}`",
-                            constraint.marker.try_to_string().unwrap(),
-                            requirement.marker.try_to_string().unwrap(),
-                        );
-                        return None;
-                    }
-
-                    // Additionally, if the requirement is `requests ; sys_platform == 'darwin'`
-                    // and the constraint is `requests ; python_version == '3.6'`, the
-                    // constraint should only apply when _both_ markers are true.
-                    if python_marker.is_disjoint(marker) {
-                        trace!(
-                            "Skipping constraint {requirement} because of Requires-Python: {requires_python}"
-                        );
-                        return None;
-                    }
-
-                    if marker == constraint.marker {
-                        Cow::Borrowed(constraint)
-                    } else {
-                        Cow::Owned(Requirement {
-                            name: constraint.name.clone(),
-                            extras: constraint.extras.clone(),
-                            groups: constraint.groups.clone(),
-                            source: constraint.source.clone(),
-                            origin: constraint.origin.clone(),
-                            marker,
-                        })
-                    }
-                };
-
-                // If we're in a fork in universal mode, ignore any dependency that isn't part of
-                // this fork (but will be part of another fork).
-                if !env.included_by_marker(constraint.marker) {
-                    trace!("Skipping {constraint} because of {env}");
-                    return None;
-                }
-
-                // If the constraint isn't relevant for the current platform, skip it.
-                match extra {
-                    Some(source_extra) => {
-                        if !constraint
-                            .evaluate_markers(env.marker_environment(), slice::from_ref(source_extra))
-                        {
-                            return None;
-                        }
-                        if !env.included_by_group(ConflictItemRef::from((&requirement.name, source_extra)))
-                        {
-                            return None;
-                        }
-                    }
-                    None => {
-                        if !constraint.evaluate_markers(env.marker_environment(), &[]) {
-                            return None;
-                        }
-                    }
-                }
-
-                Some(constraint)
-            })
     }
 
     /// Fetch the metadata for a stream of packages and versions.
