@@ -63,6 +63,93 @@ fn check_project() -> Result<()> {
     Ok(())
 }
 
+/// Forward explicit Python requests to ty without overriding its inference by default.
+#[test]
+fn check_python_version() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+    "#})?;
+    context
+        .temp_dir
+        .child(".python-version")
+        .write_str("3.12\n")?;
+    context.temp_dir.child("main.py").write_str("value = 1\n")?;
+
+    let check = || {
+        let mut command = context.check();
+        command
+            .arg("--preview-features")
+            .arg("check-command")
+            .arg("--ty-version")
+            .arg("0.0.17")
+            .arg("--show-command")
+            .env_remove(EnvVars::RUST_LOG);
+        command
+    };
+
+    uv_snapshot!(context.filters(), check(), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    Running `ty check --color auto -- ''`
+    ");
+
+    uv_snapshot!(context.filters(), check().arg("--python").arg("cpython@3.12"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    Running `ty check --color auto --python-version 3.12 -- ''`
+    ");
+
+    uv_snapshot!(context.filters(), check().env(EnvVars::UV_PYTHON, context.interpreter()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    Running `ty check --color auto --python-version 3.12 -- ''`
+    ");
+
+    uv_snapshot!(context.filters(), check().arg("--no-project").arg("--python").arg("3.12"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    Running `ty check --color auto --python-version 3.12`
+    ");
+
+    context.temp_dir.child("script.py").write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+        value = 1
+    "#})?;
+
+    uv_snapshot!(context.filters(), check().arg("--script").arg("script.py").arg("--python").arg("3.12"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    Running `ty check --color auto --python-version 3.12 -- script.py`
+    ");
+
+    Ok(())
+}
+
 /// Forward uv's terminal settings to the ty subprocess, including quiet-mode progress suppression.
 #[test]
 fn check_propagates_terminal_settings() -> Result<()> {
@@ -1301,7 +1388,9 @@ fn check_no_sync_uses_compatible_lock_interpreter() -> Result<()> {
             .arg("--python")
             .arg("3.11")
             .arg("--ty-version")
-            .arg("0.0.17"),
+            .arg("0.0.17")
+            .arg("--show-command")
+            .env_remove(EnvVars::RUST_LOG),
         @"
     exit_code: 0 (success)
     ----- stdout -----
@@ -1311,10 +1400,36 @@ fn check_no_sync_uses_compatible_lock_interpreter() -> Result<()> {
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     warning: Using incompatible environment (`.venv`) due to `--no-sync` (The project environment's Python version does not satisfy the request: `Python 3.11`)
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Running `ty check --color auto --python-version 3.11 -- ''`
     "
     );
 
     assert!(context.temp_dir.child("uv.lock").exists());
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--no-sync")
+            .arg("--frozen")
+            .arg("--python")
+            .arg("3.11")
+            .arg("--ty-version")
+            .arg("0.0.17")
+            .arg("--show-command")
+            .env_remove(EnvVars::RUST_LOG),
+        @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    warning: Using incompatible environment (`.venv`) due to `--no-sync` (The project environment's Python version does not satisfy the request: `Python 3.11`)
+    Running `ty check --color auto --python-version 3.11 -- ''`
+    "
+    );
+
     context
         .assert_command("import sys; assert sys.version_info[:2] == (3, 12)")
         .success();
