@@ -8629,10 +8629,10 @@ fn require_hashes_build_dependencies() -> Result<()> {
     ----- stderr -----
     warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
     Resolved 1 package in [TIME]
-      × Failed to download and build `a==1.0.0`
-      ├─▶ Failed to resolve requirements from `build-system.requires`
-      ├─▶ No solution found when resolving: `hatchling`
-      ╰─▶ In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `hatchling`
+    error: Failed to download and build `a==1.0.0`
+      cause: Failed to resolve requirements from `build-system.requires`
+      cause: No solution found when resolving: `hatchling`
+      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `hatchling`
     "
     );
 
@@ -8647,10 +8647,10 @@ fn require_hashes_build_dependencies() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download and build `a==1.0.0`
-      ├─▶ Failed to resolve requirements from `build-system.requires`
-      ├─▶ No solution found when resolving: `hatchling`
-      ╰─▶ In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `hatchling`
+    error: Failed to download and build `a==1.0.0`
+      cause: Failed to resolve requirements from `build-system.requires`
+      cause: No solution found when resolving: `hatchling`
+      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `hatchling`
     "
     );
 
