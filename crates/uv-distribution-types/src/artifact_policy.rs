@@ -234,6 +234,16 @@ impl ArtifactCoverage {
 
     /// Union each wheel's complete platform-and-Python coverage before combining libc families.
     pub(crate) fn insert_wheel(&mut self, policy: &ArtifactPolicy, filename: &WheelFilename) {
+        // Further wheels cannot extend coverage once every environment is covered.
+        if self.ordinary.is_true()
+            && self
+                .environments
+                .iter()
+                .all(|coverage| coverage.glibc.is_true() && coverage.musl.is_true())
+        {
+            return;
+        }
+
         let python = implied_python_markers(filename);
         let ordinary = implied_platform_markers(filename.platform_tags()).and(python);
         self.ordinary = self.ordinary.or(ordinary);
