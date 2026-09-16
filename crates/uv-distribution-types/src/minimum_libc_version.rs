@@ -35,7 +35,7 @@ impl Display for MinimumLibcVersion {
 
 impl MinimumLibcVersion {
     /// Retain wheels unless every platform tag uses an explicitly excluded libc.
-    pub fn allows_wheel(self, filename: &WheelFilename) -> bool {
+    pub(crate) fn allows_wheel(self, filename: &WheelFilename) -> bool {
         filename.platform_tags().iter().any(|tag| {
             self.constraint(tag)
                 .is_none_or(|(constraint, _)| match constraint {
