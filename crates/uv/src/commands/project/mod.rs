@@ -148,6 +148,9 @@ pub(crate) enum ProjectError {
     #[error("Failed to serialize `uv.lock`")]
     LockSerialization(#[from] toml_edit::ser::Error),
 
+    #[error("Failed to write lockfile at `{}`", _0.user_display())]
+    LockWrite(PathBuf, #[source] std::io::Error),
+
     #[error(
         "The current Python version ({0}) is not compatible with the locked Python requirement: `{1}`"
     )]
