@@ -26,9 +26,9 @@ use uv_client::{
 use uv_configuration::initialize_rayon_once;
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
-    ArchiveHashPolicy, BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, HashCollection,
-    HashValidation, Hashed, IndexUrl, InstalledDist, MetadataHashPolicy, Name, SourceDist,
-    SourceUrl, parse_url_hashes,
+    ArchiveHashPolicy, BuildInfo, BuildLockFingerprint, BuildableSource, BuiltDist, Dist, DistRef,
+    HashCollection, HashValidation, Hashed, IndexUrl, InstalledDist, MetadataHashPolicy, Name,
+    SourceDist, SourceUrl, parse_url_hashes,
 };
 use uv_extract::dirhash::{DirectoryDigest, HashedFile};
 use uv_extract::hash::Hasher;
@@ -106,6 +106,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             reporter: Some(reporter),
             ..self
         }
+    }
+
+    pub fn build_lock_fingerprint(&self) -> Option<&BuildLockFingerprint> {
+        self.build_context.build_lock_fingerprint()
     }
 
     /// Handle a specific `reqwest` error, and convert it to [`io::Error`].

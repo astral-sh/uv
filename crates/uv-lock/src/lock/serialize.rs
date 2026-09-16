@@ -146,7 +146,7 @@ fn write_lock(writer: &mut LockWriter, lock: &Lock) -> Result<(), WriteError> {
         )?;
     }
 
-    if let Some(build_lock) = &lock.build_lock {
+    if let Some(build_lock) = &lock.builds {
         write_build_lock(writer, build_lock)?;
     }
 

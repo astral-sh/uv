@@ -339,7 +339,7 @@ pub struct Lock {
     /// The input requirements to the resolution.
     manifest: ResolverManifest,
     /// Independent, mandatory build resolutions. Ordinary runtime-only locks omit this field.
-    build_lock: Option<LockedBuilds>,
+    builds: Option<LockedBuilds>,
 }
 
 /// Return the marker domain covered by the supported environments and `requires-python`.
@@ -429,7 +429,7 @@ impl<'lock> DependencySelectionContext<'lock> {
 }
 
 /// The dependency section in which a locked edge is stored.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 enum DependencyContext<'a> {
     Production,
     Extra(&'a ExtraName),
@@ -2759,7 +2759,7 @@ impl Lock {
             packages,
             by_id,
             manifest,
-            build_lock: None,
+            builds: None,
         };
         Ok(lock)
     }
@@ -3012,11 +3012,12 @@ impl Lock {
 
     /// Return the mandatory build coverage, if present.
     pub fn build_lock(&self) -> Option<&LockedBuilds> {
-        self.build_lock.as_ref()
+        self.builds.as_ref()
     }
 
     /// Attach independently validated build resolutions and fence older lockfile readers.
-    pub fn with_build_lock(mut self, build_lock: LockedBuilds) -> Result<Self, BuildLockError> {
+    pub fn with_build_lock(mut self, mut build_lock: LockedBuilds) -> Result<Self, BuildLockError> {
+        build_lock.canonicalize();
         build_lock.validate()?;
         let sources = self
             .packages
@@ -3033,7 +3034,7 @@ impl Lock {
             ));
         }
         self.version = BUILD_LOCK_VERSION;
-        self.build_lock = Some(build_lock);
+        self.builds = Some(build_lock);
         Ok(self)
     }
 
@@ -3041,11 +3042,12 @@ impl Lock {
     #[must_use]
     pub fn without_build_lock(mut self) -> Self {
         self.version = VERSION;
-        self.build_lock = None;
+        self.builds = None;
         self
     }
 
-    /// Identify all non-virtual sources selected from the locked packages on this executor.
+    /// Identify sources reachable under any valid project, extra, or group selection on this
+    /// executor. Artifact compatibility and dependency applicability remain separate decisions.
     pub fn build_sources(
         &self,
         root: &Path,
@@ -3053,14 +3055,10 @@ impl Lock {
         markers: &MarkerEnvironment,
         build_options: &BuildOptions,
     ) -> Result<Vec<(uv_distribution_types::SourceDist, HashDigests)>, LockError> {
+        let reachable = self.build_reachability(markers);
         let mut sources = Vec::new();
-        for package in &self.packages {
-            if !package.fork_markers.is_empty()
-                && !package
-                    .fork_markers
-                    .iter()
-                    .any(|marker| marker.pep508().evaluate(markers, &[]))
-            {
+        for (index, package) in self.packages.iter().enumerate() {
+            if !reachable.contains(&PackageIndex(index)) {
                 continue;
             }
             if build_options.no_build_package(package.name()) && !self.is_workspace_member(package)
@@ -3085,6 +3083,129 @@ impl Lock {
             }
         }
         Ok(sources)
+    }
+
+    /// Project the ordinary lock graph onto one marker environment while retaining all valid
+    /// conflict choices. The fixed point tracks activation of transitive extras separately.
+    fn build_reachability(&self, markers: &MarkerEnvironment) -> FxHashSet<PackageIndex> {
+        fn enqueue<'lock>(
+            lock: &'lock Lock,
+            markers: &MarkerEnvironment,
+            index: PackageIndex,
+            context: DependencyContext<'lock>,
+            mut marker: UniversalMarker,
+            reached: &mut FxHashMap<(PackageIndex, DependencyContext<'lock>), UniversalMarker>,
+            queue: &mut VecDeque<(PackageIndex, DependencyContext<'lock>)>,
+        ) {
+            marker.and(UniversalMarker::from_combined(
+                context.conflict_marker(lock.package(index).name(), &lock.conflicts),
+            ));
+            let marker =
+                UniversalMarker::new(MarkerTree::TRUE, marker.conflict_for_environment(markers));
+            if marker.is_false() {
+                return;
+            }
+            let key = (index, context);
+            let previous = reached.entry(key).or_insert(UniversalMarker::FALSE);
+            let before = *previous;
+            previous.or(marker);
+            if *previous != before {
+                queue.push_back(key);
+            }
+        }
+
+        let world = UniversalMarker::new(
+            MarkerTree::TRUE,
+            ConflictMarker::from_conflicts(&self.conflicts),
+        );
+        let mut reached = FxHashMap::default();
+        let mut queue = VecDeque::new();
+        for (index, package) in self.packages.iter().enumerate() {
+            if !self.is_workspace_member(package) {
+                continue;
+            }
+            for context in iter::once(DependencyContext::Production)
+                .chain(
+                    package
+                        .optional_dependencies
+                        .keys()
+                        .map(DependencyContext::Extra),
+                )
+                .chain(
+                    package
+                        .dependency_groups
+                        .keys()
+                        .map(DependencyContext::Group),
+                )
+            {
+                enqueue(
+                    self,
+                    markers,
+                    PackageIndex(index),
+                    context,
+                    world,
+                    &mut reached,
+                    &mut queue,
+                );
+            }
+        }
+        for requirement in self
+            .manifest
+            .requirements
+            .iter()
+            .chain(self.manifest.dependency_groups.values().flatten())
+        {
+            for (index, package) in self
+                .packages
+                .iter()
+                .enumerate()
+                .filter(|(_, package)| package.name() == &requirement.name)
+            {
+                let mut marker = world;
+                marker.and(UniversalMarker::from_combined(requirement.marker));
+                if !package.fork_markers.is_empty() {
+                    let mut forks = UniversalMarker::FALSE;
+                    for fork in &package.fork_markers {
+                        forks.or(*fork);
+                    }
+                    marker.and(forks);
+                }
+                for context in iter::once(DependencyContext::Production)
+                    .chain(requirement.extras.iter().map(DependencyContext::Extra))
+                {
+                    enqueue(
+                        self,
+                        markers,
+                        PackageIndex(index),
+                        context,
+                        marker,
+                        &mut reached,
+                        &mut queue,
+                    );
+                }
+            }
+        }
+        while let Some((index, context)) = queue.pop_front() {
+            let parent = reached[&(index, context)];
+            for dependency in context.dependencies(self.package(index)) {
+                let mut marker = parent;
+                marker.and(dependency.complexified_marker);
+                for context in iter::once(DependencyContext::Production)
+                    .chain(dependency.extra.iter().map(DependencyContext::Extra))
+                {
+                    enqueue(
+                        self,
+                        markers,
+                        dependency.index,
+                        context,
+                        marker,
+                        &mut reached,
+                        &mut queue,
+                    );
+                }
+            }
+        }
+        reached.into_keys().map(|(index, _)| index).collect()
     }
 
     /// Intersect a requirement marker with the forks that contain a package, then simplify it

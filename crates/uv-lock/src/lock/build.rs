@@ -9,7 +9,9 @@ use uv_configuration::{
     BuildKind, BuildOptions, DependencyGroupsWithDefaults, ExtrasSpecification, HashCheckingMode,
     InstallOptions,
 };
-use uv_distribution_types::{Dist, Name, Requirement, Resolution, ResolvedDist, SourceDist};
+use uv_distribution_types::{
+    BuildLockFingerprint, Dist, Name, Requirement, Resolution, ResolvedDist, SourceDist,
+};
 use uv_normalize::{DefaultExtras, PackageName};
 use uv_pep508::MarkerEnvironment;
 use uv_pypi_types::{Digest, HashDigest};
@@ -63,6 +65,10 @@ impl Display for BuildOperation {
 pub struct BuildSourceId(pub(super) PackageId);
 
 impl BuildSourceId {
+    pub fn name(&self) -> &PackageName {
+        &self.0.name
+    }
+
     pub fn from_source_dist(source: &SourceDist, root: &Path) -> Result<Self, LockError> {
         let version = match source {
             SourceDist::Registry(source) => Some(source.version.clone()),
@@ -161,11 +167,15 @@ impl LockedBuild {
         source: BuildSourceId,
         operation: BuildOperation,
         input: BuildSourceInput,
-        declared_requirements: Vec<Requirement>,
-        backend_requirements: Vec<Requirement>,
+        mut declared_requirements: Vec<Requirement>,
+        mut backend_requirements: Vec<Requirement>,
         bootstrap: Lock,
         final_resolution: Option<Lock>,
     ) -> Result<Self, BuildLockError> {
+        declared_requirements.sort();
+        declared_requirements.dedup();
+        backend_requirements.sort();
+        backend_requirements.dedup();
         let build = Self {
             source,
             operation,
@@ -209,7 +219,7 @@ impl LockedBuild {
             Some(_) | None => {}
         }
         for graph in std::iter::once(&self.bootstrap).chain(self.final_resolution.iter()) {
-            if graph.version != VERSION || graph.build_lock.is_some() {
+            if graph.version != VERSION || graph.builds.is_some() {
                 return Err(BuildLockError::Invalid(
                     "a build graph must be an ordinary lock resolution",
                 ));
@@ -251,6 +261,13 @@ impl LockedBuild {
         self.final_resolution.is_some()
     }
 
+    pub fn graph(&self, stage: BuildStage) -> Option<&Lock> {
+        match stage {
+            BuildStage::Bootstrap => Some(&self.bootstrap),
+            BuildStage::Final => self.final_resolution.as_ref(),
+        }
+    }
+
     pub fn materialize(
         &self,
         stage: BuildStage,
@@ -259,13 +276,7 @@ impl LockedBuild {
         interpreter: &Interpreter,
         build_options: &BuildOptions,
     ) -> Result<ResolvedRequirements, BuildLockError> {
-        let graph = match stage {
-            BuildStage::Final => self
-                .final_resolution
-                .as_ref()
-                .ok_or(BuildLockError::MissingStage)?,
-            BuildStage::Bootstrap => &self.bootstrap,
-        };
+        let graph = self.graph(stage).ok_or(BuildLockError::MissingStage)?;
         let requested = requirements
             .iter()
             .cloned()
@@ -298,19 +309,33 @@ pub struct LockedBuilds {
 }
 
 impl LockedBuilds {
+    pub fn resolutions(&self) -> &[LockedBuild] {
+        &self.resolutions
+    }
+
     pub fn new(
         executor: BuildExecutor,
-        mut resolutions: Vec<LockedBuild>,
+        resolutions: Vec<LockedBuild>,
     ) -> Result<Self, BuildLockError> {
-        resolutions.sort_by(|left, right| {
-            (&left.source, left.operation).cmp(&(&right.source, right.operation))
-        });
-        let builds = Self {
+        let mut builds = Self {
             executor,
             resolutions,
         };
+        builds.canonicalize();
         builds.validate()?;
         Ok(builds)
+    }
+
+    pub(super) fn canonicalize(&mut self) {
+        for build in &mut self.resolutions {
+            build.declared_requirements.sort();
+            build.declared_requirements.dedup();
+            build.backend_requirements.sort();
+            build.backend_requirements.dedup();
+        }
+        self.resolutions.sort_by(|left, right| {
+            (&left.source, left.operation).cmp(&(&right.source, right.operation))
+        });
     }
 
     pub(super) fn validate(&self) -> Result<(), BuildLockError> {
@@ -332,22 +357,97 @@ impl LockedBuilds {
         operation: BuildOperation,
         executor: &BuildExecutor,
     ) -> Result<&LockedBuild, BuildLockError> {
-        if executor != &self.executor {
-            return Err(BuildLockError::UncoveredExecutor);
-        }
+        self.validate_executor(executor)?;
         self.resolutions
             .iter()
             .find(|resolution| &resolution.source == source && resolution.operation == operation)
             .ok_or_else(|| BuildLockError::UncoveredSource {
-                package: source.clone(),
+                package: Box::new(source.clone()),
                 operation,
             })
     }
 
+    pub fn validate_executor(&self, executor: &BuildExecutor) -> Result<(), BuildLockError> {
+        if executor != &self.executor {
+            return Err(BuildLockError::UncoveredExecutor);
+        }
+        Ok(())
+    }
+
+    pub fn validate_source(
+        &self,
+        source: &SourceDist,
+        root: &Path,
+        executor: &BuildExecutor,
+    ) -> Result<(), BuildLockError> {
+        let id = BuildSourceId::from_source_dist(source, root)?;
+        let operation = if source.is_editable() {
+            BuildOperation::Editable
+        } else {
+            BuildOperation::Wheel
+        };
+        let locked = self.get(&id, operation, executor)?;
+        if let SourceDist::Directory(source) = source
+            && BuildSourceInput::read(&source.install_path)? != locked.input
+        {
+            return Err(BuildLockError::ChangedSourceInput(Box::new(id)));
+        }
+        Ok(())
+    }
+
+    /// Check selected source builds before installed-state or built-wheel cache shortcuts.
+    pub fn validate_resolution(
+        &self,
+        resolution: &Resolution,
+        root: &Path,
+        interpreter: &Interpreter,
+    ) -> Result<(), BuildLockError> {
+        let executor = BuildExecutor::from_interpreter(interpreter)?;
+        for distribution in resolution.distributions() {
+            let ResolvedDist::Installable { dist, .. } = distribution else {
+                return Err(BuildLockError::Invalid(
+                    "a locked project selection contains an installed candidate",
+                ));
+            };
+            let Dist::Source(source) = dist.as_ref() else {
+                continue;
+            };
+            self.validate_source(source, root, &executor)?;
+        }
+        Ok(())
+    }
+
+    /// Validate the source coverage required by any supported selection from the runtime lock.
+    pub fn validate_lock_sources(
+        &self,
+        lock: &Lock,
+        root: &Path,
+        interpreter: &Interpreter,
+        build_options: &BuildOptions,
+    ) -> Result<(), BuildLockError> {
+        let executor = BuildExecutor::from_interpreter(interpreter)?;
+        self.validate_executor(&executor)?;
+        for (source, _) in lock.build_sources(
+            root,
+            interpreter.tags()?,
+            interpreter.markers(),
+            build_options,
+        )? {
+            self.validate_source(&source, root, &executor)?;
+            if let SourceDist::Directory(mut directory) = source {
+                directory.editable = Some(!directory.editable.unwrap_or(false));
+                self.validate_source(&SourceDist::Directory(directory), root, &executor)?;
+            }
+        }
+        Ok(())
+    }
+
     /// Return a content-derived identity for caches and installed-build provenance.
-    pub fn fingerprint(&self) -> Result<String, toml_edit::ser::Error> {
+    pub fn fingerprint(&self) -> Result<BuildLockFingerprint, toml_edit::ser::Error> {
         let contents = super::serialize::build_lock_to_toml(self)?;
-        Ok(HashDigest::Sha256(Digest::from_bytes(Sha256::digest(contents).into())).to_string())
+        Ok(BuildLockFingerprint::new(HashDigest::Sha256(
+            Digest::from_bytes(Sha256::digest(contents).into()),
+        )))
     }
 }
 
@@ -398,13 +498,15 @@ pub enum BuildLockError {
     UncoveredExecutor,
     #[error("The build lock does not cover the {operation} build of `{package}`")]
     UncoveredSource {
-        package: BuildSourceId,
+        package: Box<BuildSourceId>,
         operation: BuildOperation,
     },
     #[error("The build lock has no coverage for this stage")]
     MissingStage,
     #[error("The requested build requirements differ from the locked graph")]
     ChangedRequirements,
+    #[error("The build declarations for `{0}` changed; update the build lock")]
+    ChangedSourceInput(Box<BuildSourceId>),
     #[error("Nested source builds are not supported by build dependency locking: {0}")]
     NestedSource(String),
     #[error("Build dependency locking does not support {0} builds")]
@@ -559,6 +661,63 @@ wheels = [{{ url = "https://example.com/helper-{helper}-py3-none-any.whl", hash 
         [[build-lock.resolution.bootstrap.package]]
         version = "2.0.0"
         "#);
+        Ok(())
+    }
+
+    #[test]
+    fn build_reachability_preserves_markers_and_conflicts() -> Result<(), Box<dyn Error>> {
+        let lock = Lock::from_toml(
+            r#"
+version = 1
+revision = 3
+requires-python = ">=3.12"
+conflicts = [[{ package = "project", extra = "left" }, { package = "project", extra = "right" }]]
+
+[[package]]
+name = "project"
+version = "1.0.0"
+source = { virtual = "." }
+dependencies = [{ name = "shared", extra = ["windows"], marker = "sys_platform == 'win32'" }]
+[package.optional-dependencies]
+left = [{ name = "shared", extra = ["linux"] }]
+right = [{ name = "right" }]
+
+[[package]]
+name = "shared"
+version = "1.0.0"
+source = { directory = "shared" }
+[package.optional-dependencies]
+windows = [{ name = "windows" }]
+linux = [{ name = "linux" }, { name = "impossible", marker = "extra == 'extra-7-project-right'" }]
+
+[[package]]
+name = "windows"
+version = "1.0.0"
+source = { directory = "windows" }
+
+[[package]]
+name = "linux"
+version = "1.0.0"
+source = { directory = "linux" }
+
+[[package]]
+name = "right"
+version = "1.0.0"
+source = { directory = "right" }
+
+[[package]]
+name = "impossible"
+version = "1.0.0"
+source = { directory = "impossible" }
+"#,
+        )?;
+        let reached = lock.build_reachability(&executor()?.marker_environment);
+        let mut names = reached
+            .into_iter()
+            .map(|index| lock.package(index).name().to_string())
+            .collect::<Vec<_>>();
+        names.sort();
+        assert_eq!(names, ["linux", "project", "right", "shared"]);
         Ok(())
     }
 

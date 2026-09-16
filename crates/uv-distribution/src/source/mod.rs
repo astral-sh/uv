@@ -680,7 +680,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             config_settings.into_owned(),
             extra_build_deps.to_vec(),
             extra_build_variables.cloned(),
-        );
+        )
+        .with_build_lock_fingerprint(self.build_context.build_lock_fingerprint());
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -918,7 +919,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             config_settings.into_owned(),
             extra_build_deps.to_vec(),
             extra_build_variables.cloned(),
-        );
+        )
+        .with_build_lock_fingerprint(self.build_context.build_lock_fingerprint());
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -1118,7 +1120,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             config_settings.into_owned(),
             extra_build_deps.to_vec(),
             extra_build_variables.cloned(),
-        );
+        )
+        .with_build_lock_fingerprint(self.build_context.build_lock_fingerprint());
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -1301,7 +1304,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             config_settings.into_owned(),
             extra_build_deps.to_vec(),
             extra_build_variables.cloned(),
-        );
+        )
+        .with_build_lock_fingerprint(self.build_context.build_lock_fingerprint());
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -1455,7 +1459,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             config_settings.into_owned(),
             extra_build_deps.to_vec(),
             extra_build_variables.cloned(),
-        );
+        )
+        .with_build_lock_fingerprint(self.build_context.build_lock_fingerprint());
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -1687,7 +1692,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             config_settings.into_owned(),
             extra_build_deps.to_vec(),
             extra_build_variables.cloned(),
-        );
+        )
+        .with_build_lock_fingerprint(self.build_context.build_lock_fingerprint());
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -1955,7 +1961,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             config_settings.into_owned(),
             extra_build_deps.to_vec(),
             extra_build_variables.cloned(),
-        );
+        )
+        .with_build_lock_fingerprint(self.build_context.build_lock_fingerprint());
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -2135,7 +2142,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             config_settings.into_owned(),
             extra_build_deps.to_vec(),
             extra_build_variables.cloned(),
-        );
+        )
+        .with_build_lock_fingerprint(self.build_context.build_lock_fingerprint());
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -2237,7 +2245,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             config_settings.into_owned(),
             extra_build_deps.to_vec(),
             extra_build_variables.cloned(),
-        );
+        )
+        .with_build_lock_fingerprint(self.build_context.build_lock_fingerprint());
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -2565,7 +2574,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             config_settings.into_owned(),
             extra_build_deps.to_vec(),
             extra_build_variables.cloned(),
-        );
+        )
+        .with_build_lock_fingerprint(self.build_context.build_lock_fingerprint());
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))

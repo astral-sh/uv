@@ -2,6 +2,8 @@
 //! [installer][`uv_installer`] and [build][`uv_build`] through [`BuildDispatch`]
 //! implementing [`BuildContext`].
 
+mod build_lock;
+
 use std::ffi::{OsStr, OsString};
 use std::future::{self, Future};
 use std::path::Path;
@@ -24,8 +26,8 @@ use uv_configuration::{BuildOutput, Concurrency, Excludes};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
-    CachedDist, ConfigSettings, DependencyMetadata, ExtraBuildRequires, ExtraBuildVariables,
-    Identifier, IndexCapabilities, IndexLocations, IsBuildBackendError, Name,
+    BuildLockFingerprint, CachedDist, ConfigSettings, DependencyMetadata, ExtraBuildRequires,
+    ExtraBuildVariables, Identifier, IndexCapabilities, IndexLocations, IsBuildBackendError, Name,
     PackageConfigSettings, Requirement, Resolution, SourceDist, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
@@ -35,14 +37,16 @@ use uv_pypi_types::Conflicts;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_requirements::LookaheadResolver;
 use uv_resolver::{
-    ExcludeNewer, FlatIndex, Flexibility, InMemoryIndex, Manifest, OptionsBuilder,
-    PythonRequirement, Resolver, ResolverEnvironment, ResolverOutput,
+    ExcludeNewer, FlatIndex, Flexibility, InMemoryIndex, Manifest, OptionsBuilder, Preference,
+    Preferences, PythonRequirement, Resolver, ResolverEnvironment, ResolverOutput,
 };
 use uv_types::{
     AnyErrorBuild, BuildArena, BuildContext, BuildIsolation, BuildStack, EmptyInstalledPackages,
     HashStrategy, InFlight, ResolvedRequirements, SourceTreeEditablePolicy,
 };
 use uv_workspace::WorkspaceCache;
+
+use self::build_lock::BuildLocking;
 
 #[derive(Debug, Error)]
 pub enum BuildDispatchError {
@@ -133,6 +137,8 @@ pub struct BuildDispatch<'a> {
     shared_state: SharedState,
     dependency_metadata: &'a DependencyMetadata,
     build_isolation: BuildIsolation<'a>,
+    build_installation: InstallationStrategy,
+    build_locking: Option<BuildLocking>,
     extra_build_requires: &'a ExtraBuildRequires,
     extra_build_variables: &'a ExtraBuildVariables,
     link_mode: uv_install_wheel::LinkMode,
@@ -189,6 +195,8 @@ impl<'a> BuildDispatch<'a> {
             config_settings,
             config_settings_package,
             build_isolation,
+            build_installation: InstallationStrategy::Permissive,
+            build_locking: None,
             extra_build_requires,
             extra_build_variables,
             link_mode,
@@ -249,6 +257,22 @@ impl<'a> BuildDispatch<'a> {
         build_stack: &BuildStack,
         build_context: &impl BuildContext,
     ) -> Result<(ResolverOutput, HashStrategy), BuildDispatchError> {
+        self.resolve_build_graph_with_preferences(
+            requirements,
+            build_stack,
+            build_context,
+            Vec::new(),
+        )
+        .await
+    }
+
+    async fn resolve_build_graph_with_preferences(
+        &self,
+        requirements: &[Requirement],
+        build_stack: &BuildStack,
+        build_context: &impl BuildContext,
+        preferences: Vec<Preference>,
+    ) -> Result<(ResolverOutput, HashStrategy), BuildDispatchError> {
         let python_requirement = PythonRequirement::from_interpreter(self.interpreter);
         let marker_env = self.interpreter.to_resolver_marker_environment();
         let resolver_env = ResolverEnvironment::specific(marker_env);
@@ -283,6 +307,7 @@ impl<'a> BuildDispatch<'a> {
 
         let manifest = Manifest::simple(requirements.to_vec())
             .with_constraints(self.constraints.clone())
+            .with_preferences(Preferences::from_iter(preferences, &resolver_env))
             .with_lookaheads(lookaheads);
 
         let resolver = Resolver::new(
@@ -290,7 +315,7 @@ impl<'a> BuildDispatch<'a> {
             OptionsBuilder::new()
                 .exclude_newer(self.exclude_newer.clone())
                 .index_strategy(self.index_strategy)
-                .build_options(self.build_options.clone())
+                .build_options(build_context.build_options().clone())
                 .flexibility(Flexibility::Fixed)
                 .build(),
             &python_requirement,
@@ -321,6 +346,86 @@ impl<'a> BuildDispatch<'a> {
             )
         })?;
         Ok((resolution, hasher))
+    }
+
+    #[instrument(skip_all, fields(version_id = version_id, subdirectory = ?subdirectory))]
+    async fn setup_build_with_context<'data>(
+        &'data self,
+        build_context: &'data impl BuildContext,
+        source_build_context: SourceBuildContext,
+        source: &'data Path,
+        subdirectory: Option<&'data Path>,
+        install_path: &'data Path,
+        stop_discovery_at: Option<&'data Path>,
+        version_id: Option<&'data str>,
+        dist: Option<&'data SourceDist>,
+        sources: &'data NoSources,
+        build_kind: BuildKind,
+        build_output: BuildOutput,
+        mut build_stack: BuildStack,
+    ) -> Result<SourceBuild, uv_build_frontend::Error> {
+        let dist_name = dist.map(uv_distribution_types::Name::name);
+        let dist_version = dist
+            .map(uv_distribution_types::DistributionMetadata::version_or_url)
+            .and_then(|version| match version {
+                VersionOrUrlRef::Version(version) => Some(version),
+                VersionOrUrlRef::Url(_) => None,
+            });
+
+        // Push the current distribution onto the build stack, to prevent cyclic dependencies.
+        if let Some(dist) = dist {
+            build_stack.insert(dist.distribution_id());
+        }
+
+        // Get package-specific config settings if available; otherwise, use global settings.
+        let config_settings = if let Some(name) = dist_name {
+            if let Some(package_settings) = self.config_settings_package.get(name) {
+                package_settings.clone().merge(self.config_settings.clone())
+            } else {
+                self.config_settings.clone()
+            }
+        } else {
+            self.config_settings.clone()
+        };
+
+        // Get package-specific environment variables if available.
+        let mut environment_variables = self.build_extra_env_vars.clone();
+        if let Some(name) = dist_name {
+            if let Some(package_vars) = self.extra_build_variables.get(name) {
+                environment_variables.extend(
+                    package_vars
+                        .iter()
+                        .map(|(key, value)| (OsString::from(key), OsString::from(value))),
+                );
+            }
+        }
+
+        let builder = SourceBuild::setup(
+            source,
+            subdirectory,
+            install_path,
+            stop_discovery_at,
+            dist_name,
+            dist_version,
+            self.interpreter,
+            build_context,
+            source_build_context,
+            version_id,
+            self.index_locations,
+            sources.clone(),
+            self.workspace_cache(),
+            config_settings,
+            self.build_isolation,
+            self.extra_build_requires,
+            &build_stack,
+            build_kind,
+            environment_variables,
+            build_output,
+            self.client.credentials_cache(),
+        )
+        .boxed_local()
+        .await?;
+        Ok(builder)
     }
 }
 
@@ -392,6 +497,13 @@ impl BuildContext for BuildDispatch<'_> {
         self.extra_build_variables
     }
 
+    fn build_lock_fingerprint(&self) -> Option<&BuildLockFingerprint> {
+        match &self.build_locking {
+            Some(BuildLocking::Replay { fingerprint, .. }) => Some(fingerprint),
+            Some(BuildLocking::Capture { .. }) | None => None,
+        }
+    }
+
     async fn resolve<'data>(
         &'data self,
         requirements: &'data [Requirement],
@@ -441,10 +553,10 @@ impl BuildContext for BuildDispatch<'_> {
             cached,
             remote,
             reinstalls,
-            extraneous: _,
+            extraneous,
         } = Planner::new(resolution).build(
             site_packages,
-            InstallationStrategy::Permissive,
+            self.build_installation,
             &Reinstall::default(),
             self.build_options,
             hasher,
@@ -457,9 +569,14 @@ impl BuildContext for BuildDispatch<'_> {
             venv,
             tags,
         )?;
+        let extraneous = match self.build_installation {
+            InstallationStrategy::Strict => extraneous,
+            InstallationStrategy::Permissive => Vec::new(),
+        };
 
         // Nothing to do.
-        if remote.is_empty() && cached.is_empty() && reinstalls.is_empty() {
+        if remote.is_empty() && cached.is_empty() && reinstalls.is_empty() && extraneous.is_empty()
+        {
             debug!("No build requirements to install for build");
             return Ok(vec![]);
         }
@@ -503,9 +620,9 @@ impl BuildContext for BuildDispatch<'_> {
         };
 
         // Remove any unnecessary packages.
-        if !reinstalls.is_empty() {
+        if !reinstalls.is_empty() || !extraneous.is_empty() {
             let layout = venv.interpreter().layout();
-            for dist_info in &reinstalls {
+            for dist_info in reinstalls.iter().chain(&extraneous) {
                 let summary = uv_installer::uninstall(dist_info, &layout)
                     .await
                     .context("Failed to uninstall build dependencies")?;
@@ -551,70 +668,43 @@ impl BuildContext for BuildDispatch<'_> {
         sources: &'data NoSources,
         build_kind: BuildKind,
         build_output: BuildOutput,
-        mut build_stack: BuildStack,
-    ) -> Result<SourceBuild, uv_build_frontend::Error> {
-        let dist_name = dist.map(uv_distribution_types::Name::name);
-        let dist_version = dist
-            .map(uv_distribution_types::DistributionMetadata::version_or_url)
-            .and_then(|version| match version {
-                VersionOrUrlRef::Version(version) => Some(version),
-                VersionOrUrlRef::Url(_) => None,
-            });
-
-        // Push the current distribution onto the build stack, to prevent cyclic dependencies.
-        if let Some(dist) = dist {
-            build_stack.insert(dist.distribution_id());
+        build_stack: BuildStack,
+    ) -> Result<SourceBuild, BuildDispatchError> {
+        if let Some(locking) = &self.build_locking {
+            return self
+                .setup_locked_build(
+                    locking,
+                    source,
+                    subdirectory,
+                    install_path,
+                    stop_discovery_at,
+                    version_id,
+                    dist,
+                    sources,
+                    build_kind,
+                    build_output,
+                    build_stack,
+                )
+                .await
+                .map_err(BuildDispatchError::from);
         }
-
-        // Get package-specific config settings if available; otherwise, use global settings.
-        let config_settings = if let Some(name) = dist_name {
-            if let Some(package_settings) = self.config_settings_package.get(name) {
-                package_settings.clone().merge(self.config_settings.clone())
-            } else {
-                self.config_settings.clone()
-            }
-        } else {
-            self.config_settings.clone()
-        };
-
-        // Get package-specific environment variables if available.
-        let mut environment_variables = self.build_extra_env_vars.clone();
-        if let Some(name) = dist_name {
-            if let Some(package_vars) = self.extra_build_variables.get(name) {
-                environment_variables.extend(
-                    package_vars
-                        .iter()
-                        .map(|(key, value)| (OsString::from(key), OsString::from(value))),
-                );
-            }
-        }
-
-        let builder = SourceBuild::setup(
-            source,
-            subdirectory,
-            install_path,
-            stop_discovery_at,
-            dist_name,
-            dist_version,
-            self.interpreter,
-            self,
-            self.source_build_context.clone(),
-            version_id,
-            self.index_locations,
-            sources.clone(),
-            self.workspace_cache(),
-            config_settings,
-            self.build_isolation,
-            self.extra_build_requires,
-            &build_stack,
-            build_kind,
-            environment_variables,
-            build_output,
-            self.client.credentials_cache(),
-        )
-        .boxed_local()
-        .await?;
-        Ok(builder)
+        Ok(self
+            .setup_build_with_context(
+                self,
+                self.source_build_context.clone(),
+                source,
+                subdirectory,
+                install_path,
+                stop_discovery_at,
+                version_id,
+                dist,
+                sources,
+                build_kind,
+                build_output,
+                build_stack,
+            )
+            .await
+            .map_err(AnyErrorBuild::from)?)
     }
 
     async fn direct_build<'data>(
@@ -626,6 +716,10 @@ impl BuildContext for BuildDispatch<'_> {
         build_kind: BuildKind,
         version_id: Option<&'data str>,
     ) -> Result<Option<DistFilename>, BuildDispatchError> {
+        // A required build graph must be replayed even when the bundled backend is compatible.
+        if self.build_locking.is_some() {
+            return Ok(None);
+        }
         let source_tree = if let Some(subdir) = subdirectory {
             source.join(subdir)
         } else {

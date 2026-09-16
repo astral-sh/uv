@@ -43,7 +43,8 @@ use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_static::EnvVars;
 use uv_types::{
-    AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, ResolvedRequirements, SourceBuildTrait,
+    AnyErrorBuild, BuildContext, BuildIsolation, BuildRequirementKind, BuildStack,
+    ResolvedRequirements, SourceBuildTrait,
 };
 use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
@@ -387,6 +388,14 @@ impl SourceBuild {
         // environment is already set up.
         if build_isolation.is_isolated(package_name.as_ref()) {
             debug!("Resolving build requirements");
+
+            build_context
+                .observe_build_requirements(
+                    BuildRequirementKind::Declared,
+                    &pep517_backend.requirements,
+                )
+                .await
+                .map_err(|err| Error::RequirementsResolve("`build-system.requires`", err))?;
 
             let dependency_sources = if extra_build_dependencies.is_empty() {
                 "`build-system.requires`"
@@ -1141,6 +1150,11 @@ async fn create_pep517_build_environment(
         .map_err(Error::Lowering)?;
         build_requires.requires_dist
     };
+
+    build_context
+        .observe_build_requirements(BuildRequirementKind::Backend, &extra_requires)
+        .await
+        .map_err(|err| Error::RequirementsResolve("build backend", err))?;
 
     // Some packages (such as tqdm 4.66.1) list only extra requires that have already been part of
     // the pyproject.toml requires (in this case, `wheel`). We can skip doing the whole resolution
