@@ -15457,6 +15457,75 @@ fn universal_required_environment() -> Result<()> {
     Ok(())
 }
 
+/// A disabled source distribution from `--find-links` cannot satisfy a required environment.
+#[cfg(feature = "test-universal")]
+#[test]
+fn universal_required_environment_find_links_no_build() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "required-environment-find-links-no-build"
+
+        [root]
+
+        [expected]
+        satisfiable = false
+
+        [packages.a.versions."1.0.0"]
+        wheel_tags = ["py3-none-manylinux_2_17_x86_64"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    context
+        .temp_dir
+        .child("links.html")
+        .write_str(&formatdoc! {r#"
+        <a href="{}">a-1.0.0.tar.gz</a>
+        <a href="{}">a-1.0.0-py3-none-manylinux_2_17_x86_64.whl</a>
+    "#,
+            server.file_url("a-1.0.0.tar.gz"),
+            server.file_url("a-1.0.0-py3-none-manylinux_2_17_x86_64.whl"),
+        })?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a"]
+
+        [tool.uv]
+        required-environments = ["sys_platform == 'win32'"]
+    "#})?;
+
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .chain([(
+            // This hint is only shown when the current platform doesn't match the target.
+            r"\nhint: The resolution failed for an environment that is not the current one[^\n]*",
+            "",
+        )])
+        .collect();
+
+    uv_snapshot!(filters, context.pip_compile()
+        .arg("pyproject.toml")
+        .arg("--universal")
+        .arg("--no-build")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg("links.html"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies for split (markers: sys_platform == 'win32')
+      cause: Because a==1.0.0 has no Windows-compatible wheels and only a==1.0.0 is available, we can conclude that all versions of a cannot be used.
+             And because project depends on a, we can conclude that your requirements are unsatisfiable.
+    ");
+
+    Ok(())
+}
+
 /// Resolve a package that has no versions that satisfy the current Python version.
 #[test]
 fn compile_enumerate_no_versions() -> Result<()> {

@@ -347,36 +347,6 @@ pub enum HashComparison {
 }
 
 impl PrioritizedDist {
-    /// Create a new [`PrioritizedDist`] from the given wheel distribution.
-    pub fn from_built(
-        dist: RegistryBuiltWheel,
-        hashes: Vec<HashDigest>,
-        compatibility: WheelCompatibility,
-    ) -> Self {
-        Self(Box::new(PrioritizedDistInner {
-            markers: implied_markers(&dist.filename),
-            best_wheel_index: Some(0),
-            wheels: vec![(dist, compatibility)],
-            source: None,
-            hashes,
-        }))
-    }
-
-    /// Create a new [`PrioritizedDist`] from the given source distribution.
-    pub fn from_source(
-        dist: RegistrySourceDist,
-        hashes: Vec<HashDigest>,
-        compatibility: SourceDistCompatibility,
-    ) -> Self {
-        Self(Box::new(PrioritizedDistInner {
-            markers: MarkerTree::TRUE,
-            best_wheel_index: None,
-            wheels: vec![],
-            source: Some((dist, compatibility)),
-            hashes,
-        }))
-    }
-
     /// Insert the given built distribution into the [`PrioritizedDist`].
     pub fn insert_built(
         &mut self,

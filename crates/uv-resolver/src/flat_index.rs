@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::collections::btree_map::Entry;
 
 use rustc_hash::FxHashMap;
 use tracing::instrument;
@@ -129,14 +128,10 @@ impl FlatDistributions {
                     index,
                     size_is_authoritative: false,
                 };
-                match self.0.entry(version) {
-                    Entry::Occupied(mut entry) => {
-                        entry.get_mut().insert_built(dist, vec![], compatibility);
-                    }
-                    Entry::Vacant(entry) => {
-                        entry.insert(PrioritizedDist::from_built(dist, vec![], compatibility));
-                    }
-                }
+                self.0
+                    .entry(version)
+                    .or_default()
+                    .insert_built(dist, vec![], compatibility);
             }
             DistFilename::SourceDistFilename(filename) => {
                 let compatibility = Self::source_dist_compatibility(
@@ -154,14 +149,11 @@ impl FlatDistributions {
                     wheels: vec![],
                     size_is_authoritative: false,
                 };
-                match self.0.entry(filename.version) {
-                    Entry::Occupied(mut entry) => {
-                        entry.get_mut().insert_source(dist, vec![], compatibility);
-                    }
-                    Entry::Vacant(entry) => {
-                        entry.insert(PrioritizedDist::from_source(dist, vec![], compatibility));
-                    }
-                }
+                self.0.entry(filename.version).or_default().insert_source(
+                    dist,
+                    vec![],
+                    compatibility,
+                );
             }
         }
     }
