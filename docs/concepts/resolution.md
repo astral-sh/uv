@@ -260,8 +260,7 @@ has no compatible wheel or usable source distribution, uv will try another versi
 ### Minimum macOS version
 
 The `minimum-macos-version` setting specifies the oldest macOS version to support in
-`required-environments`.
-For example, to require support for macOS 15 on both architectures:
+`required-environments`. For example, to require support for macOS 15 on both architectures:
 
 ```toml title="pyproject.toml"
 [tool.uv]
@@ -272,12 +271,12 @@ required-environments = [
 minimum-macos-version = "15.0"
 ```
 
-If a required environment has no compatible wheel or usable source distribution, uv will try
-another version of the package. Wheels requiring newer macOS versions remain in the lockfile and
-exported hashes for installation on newer machines. Wheels for other operating systems are unaffected.
+If a required environment has no compatible wheel or usable source distribution, uv will try another
+version of the package. Wheels requiring newer macOS versions remain in the lockfile and exported
+hashes for installation on newer machines. Wheels for other operating systems are unaffected.
 
-When unset, uv uses `MACOSX_DEPLOYMENT_TARGET`, if present. The effective version is recorded in
-the lockfile.
+When unset, uv uses `MACOSX_DEPLOYMENT_TARGET`, if present. The effective version is recorded in the
+lockfile.
 
 ## Common marker values
 
