@@ -12,11 +12,13 @@ multiple-versions = "allow"
 # default features here.
 # See: https://github.com/EmbarkStudios/cargo-deny/issues/699
 #
-# For now, we work around this with our own `check-cargo-default-features.py`
+# For now, we work around this with our own `check-cargo-bans.py`
 # script.
 external-default-features = "allow"
 
 [bans.build]
+# Keep this list of crate names free of stale entries with
+# `scripts/check-cargo-bans.py`.
 allow-build-scripts = [
     "anyhow",
     "assert_cmd",
