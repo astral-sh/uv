@@ -36,7 +36,7 @@ use uv_python::{Interpreter, PythonEnvironment};
 use uv_requirements::LookaheadResolver;
 use uv_resolver::{
     ExcludeNewer, FlatIndex, Flexibility, InMemoryIndex, Manifest, OptionsBuilder,
-    PythonRequirement, Resolver, ResolverEnvironment,
+    PythonRequirement, Resolver, ResolverEnvironment, ResolverOutput,
 };
 use uv_types::{
     AnyErrorBuild, BuildArena, BuildContext, BuildIsolation, BuildStack, EmptyInstalledPackages,
@@ -238,6 +238,90 @@ impl<'a> BuildDispatch<'a> {
             .collect();
         self
     }
+
+    /// Resolve build requirements while retaining the complete graph for lockfile creation.
+    ///
+    /// `build_context` controls nested source builds. Callers that capture a bounded build
+    /// environment can reject unsupported nested builds before executing their backends.
+    pub async fn resolve_build_graph(
+        &self,
+        requirements: &[Requirement],
+        build_stack: &BuildStack,
+        build_context: &impl BuildContext,
+    ) -> Result<(ResolverOutput, HashStrategy), BuildDispatchError> {
+        let python_requirement = PythonRequirement::from_interpreter(self.interpreter);
+        let marker_env = self.interpreter.to_resolver_marker_environment();
+        let resolver_env = ResolverEnvironment::specific(marker_env);
+        let tags = self.interpreter.tags()?;
+
+        // Walk URL requirements transitively so their sub-URLs are known before the resolver's
+        // URL allow-list check. Metadata builds use the same context as the build graph itself.
+        let hasher = self
+            .hasher
+            .clone()
+            .augment_with_requirements(requirements.iter())
+            .map_err(uv_requirements::Error::from)?;
+        let overrides = Overrides::default();
+        let excludes = Excludes::default();
+        let (lookaheads, hasher) = LookaheadResolver::new(
+            requirements,
+            self.constraints,
+            &overrides,
+            &excludes,
+            self.dependency_metadata,
+            &hasher,
+            &self.shared_state.index,
+            DistributionDatabase::new(
+                self.client,
+                build_context,
+                self.concurrency.downloads_semaphore.clone(),
+            )
+            .with_build_stack(build_stack),
+        )
+        .resolve(&resolver_env)
+        .await?;
+
+        let manifest = Manifest::simple(requirements.to_vec())
+            .with_constraints(self.constraints.clone())
+            .with_lookaheads(lookaheads);
+
+        let resolver = Resolver::new(
+            manifest,
+            OptionsBuilder::new()
+                .exclude_newer(self.exclude_newer.clone())
+                .index_strategy(self.index_strategy)
+                .build_options(self.build_options.clone())
+                .flexibility(Flexibility::Fixed)
+                .build(),
+            &python_requirement,
+            resolver_env,
+            self.interpreter.markers(),
+            // Conflicting groups only make sense when doing universal resolution.
+            Conflicts::empty(),
+            Some(tags),
+            self.flat_index,
+            &self.shared_state.index,
+            &hasher,
+            build_context,
+            EmptyInstalledPackages,
+            DistributionDatabase::new(
+                self.client,
+                build_context,
+                self.concurrency.downloads_semaphore.clone(),
+            )
+            .with_build_stack(build_stack),
+        )?;
+        let resolution = resolver.resolve().boxed_local().await.with_context(|| {
+            format!(
+                "No solution found when resolving: {}",
+                requirements
+                    .iter()
+                    .map(|requirement| format!("`{requirement}`"))
+                    .join(", ")
+            )
+        })?;
+        Ok((resolution, hasher))
+    }
 }
 
 #[allow(refining_impl_trait)]
@@ -313,81 +397,13 @@ impl BuildContext for BuildDispatch<'_> {
         requirements: &'data [Requirement],
         build_stack: &'data BuildStack,
     ) -> Result<ResolvedRequirements, BuildDispatchError> {
-        let python_requirement = PythonRequirement::from_interpreter(self.interpreter);
-        let marker_env = self.interpreter.to_resolver_marker_environment();
-        let resolver_env = ResolverEnvironment::specific(marker_env);
-        let tags = self.interpreter.tags()?;
-
-        // Walk any URL requirements transitively so their sub-URLs (for example, a workspace
-        // member that depends on another workspace member) are known before the resolver runs
-        // its URL allow-list check. This mirrors what the project resolver does in
-        // `uv_requirements::LookaheadResolver` and prevents a `DisallowedUrl` error when one
-        // `build-system.requires` entry pulls in another URL dependency.
-        let hasher = self
-            .hasher
-            .clone()
-            .augment_with_requirements(requirements.iter())
-            .map_err(uv_requirements::Error::from)?;
-        let overrides = Overrides::default();
-        let excludes = Excludes::default();
-        let (lookaheads, hasher) = LookaheadResolver::new(
-            requirements,
-            self.constraints,
-            &overrides,
-            &excludes,
-            self.dependency_metadata,
-            &hasher,
-            &self.shared_state.index,
-            DistributionDatabase::new(
-                self.client,
-                self,
-                self.concurrency.downloads_semaphore.clone(),
-            )
-            .with_build_stack(build_stack),
-        )
-        .resolve(&resolver_env)
-        .await?;
-
-        let manifest = Manifest::simple(requirements.to_vec())
-            .with_constraints(self.constraints.clone())
-            .with_lookaheads(lookaheads);
-
-        let resolver = Resolver::new(
-            manifest,
-            OptionsBuilder::new()
-                .exclude_newer(self.exclude_newer.clone())
-                .index_strategy(self.index_strategy)
-                .build_options(self.build_options.clone())
-                .flexibility(Flexibility::Fixed)
-                .build(),
-            &python_requirement,
-            resolver_env,
-            self.interpreter.markers(),
-            // Conflicting groups only make sense when doing universal resolution.
-            Conflicts::empty(),
-            Some(tags),
-            self.flat_index,
-            &self.shared_state.index,
-            &hasher,
-            self,
-            EmptyInstalledPackages,
-            DistributionDatabase::new(
-                self.client,
-                self,
-                self.concurrency.downloads_semaphore.clone(),
-            )
-            .with_build_stack(build_stack),
-        )?;
-        let resolution = Resolution::from(resolver.resolve().await.with_context(|| {
-            format!(
-                "No solution found when resolving: {}",
-                requirements
-                    .iter()
-                    .map(|requirement| format!("`{requirement}`"))
-                    .join(", ")
-            )
-        })?);
-        Ok(ResolvedRequirements::new(resolution, hasher))
+        let (resolution, hasher) = self
+            .resolve_build_graph(requirements, build_stack, self)
+            .await?;
+        Ok(ResolvedRequirements::new(
+            Resolution::from(resolution),
+            hasher,
+        ))
     }
 
     #[instrument(

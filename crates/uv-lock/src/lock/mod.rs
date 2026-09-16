@@ -2998,7 +2998,7 @@ impl Lock {
     }
 
     /// Returns the root requirements that were used to generate this lock.
-    fn requirements(&self) -> &BTreeSet<Requirement> {
+    pub fn requirements(&self) -> &BTreeSet<Requirement> {
         &self.manifest.requirements
     }
 
