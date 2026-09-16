@@ -52,6 +52,8 @@ pub enum Error {
     Serialize(#[from] Box<toml::ser::Error>),
     #[error("Failed to serialize build configuration settings")]
     SerializeConfigSettings(#[source] toml_edit::ser::Error),
+    #[error("Failed to deserialize build configuration settings")]
+    DeserializeConfigSettings(#[source] Box<toml_edit::de::Error>),
     #[error("Failed to deserialize `pyproject.toml`")]
     Deserialize(#[from] Box<toml::de::Error>),
     #[error("Dependencies in `pyproject.toml` are malformed")]
@@ -459,7 +461,7 @@ impl PyProjectTomlMut {
         Ok(edit)
     }
 
-    /// Add package-specific build settings to `tool.uv.config-settings-package`.
+    /// Merge package-specific build settings into `tool.uv.config-settings-package`.
     pub fn add_config_settings_package(
         &mut self,
         package: &PackageName,
@@ -480,14 +482,22 @@ impl PyProjectTomlMut {
             .as_table_like_mut()
             .ok_or(Error::MalformedSources)?
             .entry(package.as_ref())
-            .or_insert(Item::Value(Value::InlineTable(InlineTable::default())))
+            .or_insert(Item::Value(Value::InlineTable(InlineTable::default())));
+
+        let existing = settings
+            .clone()
+            .into_table()
+            .map_err(|_| Error::MalformedSources)?;
+        let existing: ConfigSettings = toml_edit::de::from_document(DocumentMut::from(existing))
+            .map_err(|err| Error::DeserializeConfigSettings(Box::new(err)))?;
+        let merged = existing.merge(config_settings.clone());
+        let document =
+            toml_edit::ser::to_document(&merged).map_err(Error::SerializeConfigSettings)?;
+        let settings = settings
             .as_table_like_mut()
             .ok_or(Error::MalformedSources)?;
-
-        let document =
-            toml_edit::ser::to_document(config_settings).map_err(Error::SerializeConfigSettings)?;
-        for (key, value) in document.iter() {
-            settings.insert(key, value.clone());
+        for (key, _) in config_settings.iter() {
+            settings.insert(key, document[key].clone());
         }
 
         Ok(())

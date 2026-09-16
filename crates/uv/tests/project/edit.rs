@@ -5745,6 +5745,69 @@ fn add_requirements_file_config_settings() -> Result<()> {
     Ok(())
 }
 
+/// Merge imported settings consistently with the settings used by `uv add`.
+#[test]
+fn add_requirements_file_config_settings_merge() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv.config-settings-package]
+        setuptools-editable = { review-mode = "old", untouched = "value" }
+    "#})?;
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str(&format!(
+            "-e {} --config-settings=review-mode=custom --config-settings=editable_mode=compat",
+            context
+                .workspace_root
+                .join("test/packages/setuptools_editable")
+                .display()
+        ))?;
+
+    uv_snapshot!(context.filters(), context.add()
+        .arg("--dev")
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--no-workspace"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + setuptools-editable==0.1.0 (from file://[WORKSPACE]/test/packages/setuptools_editable)
+    ");
+
+    let pyproject: toml::Value = toml::from_str(&context.read("pyproject.toml"))?;
+    assert_snapshot!(
+        toml::to_string(&pyproject["tool"]["uv"]["config-settings-package"])?,
+        @r#"
+        [setuptools-editable]
+        review-mode = ["old", "custom"]
+        untouched = "value"
+        editable_mode = "compat"
+        "#
+    );
+
+    uv_snapshot!(context.filters(), context.sync(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Checked 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Preserve settings from marked requirements because project settings cannot retain markers.
 #[test]
 fn add_requirements_file_config_settings_marker() -> Result<()> {
