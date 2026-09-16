@@ -148,7 +148,9 @@
     // Keep the directly downloaded Codex release and its SHA-256 in sync.
     {
       customType: "regex",
-      managerFilePatterns: ["/^agents/scripts/install-codex-security\\.sh$/"],
+      managerFilePatterns: [
+        "/^agents/security-pr-review/scripts/install-codex-security\\.sh$/",
+      ],
       matchStrings: [
         "releases/download/rust-v(?<currentValue>\\d+\\.\\d+\\.\\d+)/codex-x86_64-unknown-linux-musl\\.tar\\.gz[\\s\\S]*?(?<currentDigest>[a-f0-9]{64})",
       ],
