@@ -82,7 +82,9 @@ use crate::universal_marker::UniversalMarker;
 use crate::yanks::AllowedYanks;
 use crate::{DependencyMode, Exclusions, FlatIndex, Options, ResolutionMode, VersionMap, marker};
 pub(crate) use provider::MetadataUnavailable;
-pub(crate) use resolution::{Resolution, ResolutionDependencyEdge, ResolutionPackage};
+pub(crate) use resolution::{
+    Resolution, ResolutionDependencyEdge, ResolutionNode, ResolutionPackage,
+};
 use uv_configuration::ForkStrategy;
 
 mod availability;
@@ -3532,169 +3534,87 @@ impl ForkState {
                     _ => continue,
                 };
 
-                let (self_url, self_index) = self_name
-                    .map(|self_name| self.source(self_name, self_version))
-                    .unwrap_or((None, None));
-
-                match **dependency_package {
+                let (name, extra, group, marker) = match &**dependency_package {
                     PubGrubPackageInner::Package {
-                        name: ref dependency_name,
-                        extra: ref dependency_extra,
-                        group: ref dependency_dev,
-                        marker: ref dependency_marker,
+                        name,
+                        extra,
+                        group,
+                        marker,
                     } => {
-                        debug_assert!(
-                            dependency_extra.is_none(),
-                            "Packages should depend on an extra proxy"
-                        );
-                        debug_assert!(
-                            dependency_dev.is_none(),
-                            "Packages should depend on a group proxy"
-                        );
+                        debug_assert!(extra.is_none(), "Packages should depend on an extra proxy");
+                        debug_assert!(group.is_none(), "Packages should depend on a group proxy");
 
                         // Ignore self-dependencies (e.g., `tensorflow-macos` depends on `tensorflow-macos`),
                         // but allow groups to depend on other groups, or on the package itself.
-                        if self_group.is_none() {
-                            if self_name == Some(dependency_name) {
-                                continue;
-                            }
+                        if self_group.is_none() && self_name == Some(name) {
+                            continue;
                         }
-
-                        let (to_url, to_index) = self.source(dependency_name, dependency_version);
-
-                        let edge = ResolutionDependencyEdge {
-                            from: self_name.cloned(),
-                            from_version: self_version.clone(),
-                            from_url: self_url.cloned(),
-                            from_index: self_index.cloned(),
-                            from_extra: self_extra.cloned(),
-                            from_group: self_group.cloned(),
-                            to: dependency_name.clone(),
-                            to_version: dependency_version.clone(),
-                            to_url: to_url.cloned(),
-                            to_index: to_index.cloned(),
-                            to_extra: dependency_extra.clone(),
-                            to_group: dependency_dev.clone(),
-                            marker: *dependency_marker,
-                        };
-                        edges.push(edge);
+                        (name, extra.as_ref(), group.as_ref(), *marker)
                     }
-
-                    PubGrubPackageInner::Marker {
-                        name: ref dependency_name,
-                        marker: ref dependency_marker,
-                    } => {
-                        // Ignore self-dependencies (e.g., `tensorflow-macos` depends on `tensorflow-macos`),
-                        // but allow groups to depend on other groups, or on the package itself.
-                        if self_group.is_none() {
-                            if self_name == Some(dependency_name) {
-                                continue;
-                            }
+                    PubGrubPackageInner::Marker { name, marker } => {
+                        if self_group.is_none() && self_name == Some(name) {
+                            continue;
                         }
-
-                        let (to_url, to_index) = self.source(dependency_name, dependency_version);
-
-                        let edge = ResolutionDependencyEdge {
-                            from: self_name.cloned(),
-                            from_version: self_version.clone(),
-                            from_url: self_url.cloned(),
-                            from_index: self_index.cloned(),
-                            from_extra: self_extra.cloned(),
-                            from_group: self_group.cloned(),
-                            to: dependency_name.clone(),
-                            to_version: dependency_version.clone(),
-                            to_url: to_url.cloned(),
-                            to_index: to_index.cloned(),
-                            to_extra: None,
-                            to_group: None,
-                            marker: *dependency_marker,
-                        };
-                        edges.push(edge);
+                        (name, None, None, *marker)
                     }
-
                     PubGrubPackageInner::Extra {
-                        name: ref dependency_name,
-                        extra: ref dependency_extra,
-                        marker: ref dependency_marker,
+                        name,
+                        extra,
+                        marker,
                     } => {
                         if self_group.is_none() {
-                            debug_assert!(
-                                self_name != Some(dependency_name),
-                                "Extras should be flattened"
-                            );
+                            debug_assert!(self_name != Some(name), "Extras should be flattened");
                         }
-                        let (to_url, to_index) = self.source(dependency_name, dependency_version);
-
-                        // Insert an edge from the dependent package to the extra package.
-                        let edge = ResolutionDependencyEdge {
-                            from: self_name.cloned(),
-                            from_version: self_version.clone(),
-                            from_url: self_url.cloned(),
-                            from_index: self_index.cloned(),
-                            from_extra: self_extra.cloned(),
-                            from_group: self_group.cloned(),
-                            to: dependency_name.clone(),
-                            to_version: dependency_version.clone(),
-                            to_url: to_url.cloned(),
-                            to_index: to_index.cloned(),
-                            to_extra: Some(dependency_extra.clone()),
-                            to_group: None,
-                            marker: *dependency_marker,
-                        };
-                        edges.push(edge);
-
-                        // Insert an edge from the dependent package to the base package.
-                        let edge = ResolutionDependencyEdge {
-                            from: self_name.cloned(),
-                            from_version: self_version.clone(),
-                            from_url: self_url.cloned(),
-                            from_index: self_index.cloned(),
-                            from_extra: self_extra.cloned(),
-                            from_group: self_group.cloned(),
-                            to: dependency_name.clone(),
-                            to_version: dependency_version.clone(),
-                            to_url: to_url.cloned(),
-                            to_index: to_index.cloned(),
-                            to_extra: None,
-                            to_group: None,
-                            marker: *dependency_marker,
-                        };
-                        edges.push(edge);
+                        (name, Some(extra), None, *marker)
                     }
-
                     PubGrubPackageInner::Group {
-                        name: ref dependency_name,
-                        group: ref dependency_group,
-                        marker: ref dependency_marker,
+                        name,
+                        group,
+                        marker,
                     } => {
-                        debug_assert!(
-                            self_name != Some(dependency_name),
-                            "Groups should be flattened"
-                        );
-
-                        let (to_url, to_index) = self.source(dependency_name, dependency_version);
-
-                        // Add an edge from the dependent package to the dev package, but _not_ the
-                        // base package.
-                        let edge = ResolutionDependencyEdge {
-                            from: self_name.cloned(),
-                            from_version: self_version.clone(),
-                            from_url: self_url.cloned(),
-                            from_index: self_index.cloned(),
-                            from_extra: self_extra.cloned(),
-                            from_group: self_group.cloned(),
-                            to: dependency_name.clone(),
-                            to_version: dependency_version.clone(),
-                            to_url: to_url.cloned(),
-                            to_index: to_index.cloned(),
-                            to_extra: None,
-                            to_group: Some(dependency_group.clone()),
-                            marker: *dependency_marker,
-                        };
-                        edges.push(edge);
+                        debug_assert!(self_name != Some(name), "Groups should be flattened");
+                        (name, None, Some(group), *marker)
                     }
+                    PubGrubPackageInner::Root(_)
+                    | PubGrubPackageInner::Python(_)
+                    | PubGrubPackageInner::System(_) => continue,
+                };
+                let from = self_name.map(|name| {
+                    let (url, index) = self.source(name, self_version);
+                    ResolutionNode {
+                        package: ResolutionPackage {
+                            name: name.clone(),
+                            extra: self_extra.cloned(),
+                            dev: self_group.cloned(),
+                            url: url.cloned(),
+                            index: index.cloned(),
+                        },
+                        version: self_version.clone(),
+                    }
+                });
 
-                    _ => {}
+                let (url, index) = self.source(name, dependency_version);
+                let to = ResolutionNode {
+                    package: ResolutionPackage {
+                        name: name.clone(),
+                        extra: extra.cloned(),
+                        dev: group.cloned(),
+                        url: url.cloned(),
+                        index: index.cloned(),
+                    },
+                    version: dependency_version.clone(),
+                };
+                let edge = ResolutionDependencyEdge { from, to, marker };
+
+                // An extra proxy requires both the extra and its base package. A group proxy
+                // only requires the group itself.
+                if let PubGrubPackageInner::Extra { .. } = &**dependency_package {
+                    let mut base_edge = edge.clone();
+                    base_edge.to.package.extra = None;
+                    edges.push(edge);
+                    edges.push(base_edge);
+                } else {
+                    edges.push(edge);
                 }
             }
         }
