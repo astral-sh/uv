@@ -264,10 +264,6 @@ impl VariantRequest {
         self.python == *key.variant() && self.matches_build_variant(key)
     }
 
-    fn executable_name_suffix(&self) -> String {
-        self.python.executable_suffix().to_string()
-    }
-
     fn is_freethreaded(&self) -> bool {
         self.python.is_freethreaded()
     }
@@ -2860,17 +2856,17 @@ impl EnvironmentPreference {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(crate) struct ExecutableName {
     implementation: Option<ImplementationName>,
     major: Option<u8>,
     minor: Option<u8>,
     patch: Option<u8>,
     prerelease: Option<Prerelease>,
-    variants: VariantRequest,
+    variant: PythonVariant,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct ExecutableNameComparator<'a> {
     name: ExecutableName,
     request: &'a VersionRequest,
@@ -2934,14 +2930,13 @@ impl Ord for ExecutableNameComparator<'_> {
                 ordering
             };
         }
-        if let Some(requested) = self.request.variants() {
-            let ordering =
-                (self.name.variants == requested).cmp(&(other.name.variants == requested));
+        if let Some(requested) = self.request.variant() {
+            let ordering = (self.name.variant == requested).cmp(&(other.name.variant == requested));
             if ordering != std::cmp::Ordering::Equal {
                 return ordering;
             }
         }
-        let ordering = self.name.variants.python.cmp(&other.name.variants.python);
+        let ordering = self.name.variant.cmp(&other.name.variant);
         if ordering != std::cmp::Ordering::Equal {
             return if is_default_request {
                 ordering.reverse()
@@ -2991,8 +2986,8 @@ impl ExecutableName {
     }
 
     #[must_use]
-    fn with_variants(mut self, variants: VariantRequest) -> Self {
-        self.variants = variants;
+    fn with_variant(mut self, variant: PythonVariant) -> Self {
+        self.variant = variant;
         self
     }
 
@@ -3028,7 +3023,7 @@ impl fmt::Display for ExecutableName {
         if let Some(prerelease) = &self.prerelease {
             write!(f, "{prerelease}")?;
         }
-        f.write_str(&self.variants.executable_name_suffix())?;
+        f.write_str(self.variant.executable_suffix())?;
         f.write_str(EXE_SUFFIX)?;
         Ok(())
     }
@@ -3141,7 +3136,7 @@ impl VersionRequest {
         if let Some(prerelease) = prerelease {
             // Include the prerelease version, e.g., `python3.8a`
             for i in 0..names.len() {
-                let name = names[i].clone();
+                let name = names[i];
                 if name.minor.is_none() {
                     // We don't want to include the pre-release marker here
                     // e.g. `pythonrc1` and `python3rc1` don't make sense
@@ -3154,7 +3149,7 @@ impl VersionRequest {
         // Add all the implementation-specific names
         if let Some(implementation) = implementation {
             for i in 0..names.len() {
-                let name = names[i].clone().with_implementation(*implementation);
+                let name = names[i].with_implementation(*implementation);
                 names.push(name);
             }
         } else {
@@ -3162,24 +3157,24 @@ impl VersionRequest {
             if matches!(self, Self::Any) {
                 for i in 0..names.len() {
                     for implementation in ImplementationName::iter_all() {
-                        let name = names[i].clone().with_implementation(implementation);
+                        let name = names[i].with_implementation(implementation);
                         names.push(name);
                     }
                 }
             }
         }
 
-        // Include free-threaded variants
-        if let Some(variants) = self.variants()
-            && variants != VariantRequest::default()
+        // Build variants use the runtime's ordinary executable names.
+        if let Some(variant) = self.variant()
+            && variant != PythonVariant::Default
         {
             for i in 0..names.len() {
-                let name = names[i].clone().with_variants(variants.clone());
+                let name = names[i].with_variant(variant);
                 names.push(name);
             }
         }
 
-        names.sort_unstable_by_key(|name| name.clone().into_comparator(self, implementation));
+        names.sort_unstable_by_key(|name| name.into_comparator(self, implementation));
         names.reverse();
 
         names
@@ -3610,6 +3605,20 @@ impl VersionRequest {
             | Self::MajorMinorPrerelease(_, _, _, variant)
             | Self::MajorMinorPatchPrerelease(_, _, _, _, variant)
             | Self::Range(_, variant) => variant.is_freethreaded(),
+        }
+    }
+
+    /// Return the runtime [`PythonVariant`] of the request, if any.
+    fn variant(&self) -> Option<PythonVariant> {
+        match self {
+            Self::Any => None,
+            Self::Default => Some(PythonVariant::Default),
+            Self::Major(_, variants)
+            | Self::MajorMinor(_, _, variants)
+            | Self::MajorMinorPatch(_, _, _, variants)
+            | Self::MajorMinorPrerelease(_, _, _, variants)
+            | Self::MajorMinorPatchPrerelease(_, _, _, _, variants)
+            | Self::Range(_, variants) => Some(variants.python),
         }
     }
 
@@ -5067,7 +5076,17 @@ mod tests {
 
         case("4", &["python4", "python"]);
 
-        case("3.13", &["python3.13", "python3", "python"]);
+        for request in [
+            "3.13",
+            "3.13+custom",
+            "3.13+pgo",
+            "3.13+lto",
+            "3.13+pgo+lto",
+            "3.13+noopt",
+            "3.13+custom+pgo+lto",
+        ] {
+            case(request, &["python3.13", "python3", "python"]);
+        }
 
         case("pypy", &["pypy", "pypy3", "python", "python3"]);
 
@@ -5083,17 +5102,24 @@ mod tests {
             ],
         );
 
-        case(
+        for request in [
             "3.13t",
-            &[
-                "python3.13t",
-                "python3.13",
-                "python3t",
-                "python3",
-                "pythont",
-                "python",
-            ],
-        );
+            "3.13+freethreaded+custom",
+            "3.13+freethreaded+pgo+lto",
+            "3.13+freethreaded+custom+pgo+lto",
+        ] {
+            case(
+                request,
+                &[
+                    "python3.13t",
+                    "python3.13",
+                    "python3t",
+                    "python3",
+                    "pythont",
+                    "python",
+                ],
+            );
+        }
         case("3t", &["python3t", "python3", "pythont", "python"]);
 
         case(
