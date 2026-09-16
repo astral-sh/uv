@@ -643,6 +643,7 @@ fn lock_baseline() {
         ),
     }
     LockSettings {
+        build_dependencies: None,
         lock_check: Disabled,
         frozen: None,
         dry_run: Disabled,
@@ -3766,6 +3767,7 @@ fn preview_features() {
     +            AddBounds,
     +            PackageConflicts,
     +            ExtraBuildDependencies,
+    +            BuildDependencyLocking,
     +            DetectModuleConflicts,
     +            FormatCommand,
     +            NativeAuth,
