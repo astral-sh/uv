@@ -77,34 +77,7 @@ pub(crate) fn read_lock_requirements(
         return Ok(LockedRequirements::default());
     }
 
-    // Resolve the full set of packages to upgrade, combining `--upgrade-package` and
-    // `--upgrade-group`.
-    let mut upgrade_packages = upgrade.packages().cloned().unwrap_or_default();
-    if upgrade.packages().is_some()
-        && let Some(groups) = upgrade.groups()
-    {
-        // Check package-level dependency groups (the standard case for projects with
-        // a `[project]` table).
-        for package in lock.packages() {
-            for (group_name, dependencies) in package.resolved_dependency_groups() {
-                if groups.contains(group_name) {
-                    for dependency in dependencies {
-                        upgrade_packages.insert(dependency.package_name().clone());
-                    }
-                }
-            }
-        }
-
-        // Check manifest-level dependency groups, which cover projects without a
-        // `[project]` table (e.g., virtual workspace roots or PEP 723 scripts).
-        for (group_name, requirements) in lock.dependency_groups() {
-            if groups.contains(group_name) {
-                for requirement in requirements {
-                    upgrade_packages.insert(requirement.name.clone());
-                }
-            }
-        }
-    }
+    let upgrade_packages = lock.upgrade_packages(upgrade);
 
     let mut preferences = Vec::new();
     let mut git = Vec::new();

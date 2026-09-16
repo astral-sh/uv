@@ -26,7 +26,7 @@ use uv_configuration::{
     ExtrasSpecificationWithDefaults, ForkStrategy, InstallTarget, NormalizedConstraints,
     NormalizedExcludes, NormalizedOverrideEntries, NormalizedRequirements, Override, Overrides,
     PackageOverride, Prerelease, PrereleaseMode, PrereleasePackage, ResolutionMode,
-    ScopedOverrideSourceError,
+    ScopedOverrideSourceError, Upgrade,
 };
 use uv_distribution::{
     DistributionDatabase, FlatRequiresDist, Metadata as DistributionMetadata, RequiresDist,
@@ -2902,6 +2902,48 @@ impl Lock {
     /// Returns the [`Package`] entries in this lock.
     pub fn packages(&self) -> &[Package] {
         &self.packages
+    }
+
+    /// Resolve package and dependency-group upgrade selections against this lockfile.
+    pub fn upgrade_packages(&self, upgrade: &Upgrade) -> FxHashSet<PackageName> {
+        if upgrade.is_all() {
+            return self
+                .packages
+                .iter()
+                .map(|package| package.name().clone())
+                .collect();
+        }
+
+        // Resolve the full set of packages to upgrade, combining `--upgrade-package` and
+        // `--upgrade-group`.
+        let mut upgrade_packages = upgrade.packages().cloned().unwrap_or_default();
+        if upgrade.packages().is_some()
+            && let Some(groups) = upgrade.groups()
+        {
+            // Check package-level dependency groups (the standard case for projects with
+            // a `[project]` table).
+            for package in self.packages() {
+                for (group_name, dependencies) in package.resolved_dependency_groups() {
+                    if groups.contains(group_name) {
+                        for dependency in dependencies {
+                            upgrade_packages.insert(dependency.package_name().clone());
+                        }
+                    }
+                }
+            }
+
+            // Check manifest-level dependency groups, which cover projects without a
+            // `[project]` table (e.g., virtual workspace roots or PEP 723 scripts).
+            for (group_name, requirements) in self.dependency_groups() {
+                if groups.contains(group_name) {
+                    for requirement in requirements {
+                        upgrade_packages.insert(requirement.name.clone());
+                    }
+                }
+            }
+        }
+
+        upgrade_packages
     }
 
     /// Return a [`HashStrategy`] that verifies artifacts recorded in this lockfile.
