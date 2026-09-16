@@ -51,21 +51,33 @@ provides the corresponding group node ids through `dependency_groups`.
 
 ## Installed packages
 
-When an environment exists, `module_owners` maps importable module names to the package nodes that
-provide them. Installed packages are matched by name to non-virtual packages in the selected
-resolution, even if the installed version differs from the locked version.
+When an environment exists, `environment.packages` reports every observed installed distribution,
+including packages absent from the lockfile. Each entry records the installed name, version,
+metadata path, and editable status. Its key is an opaque identifier for the metadata location.
+Multiple installations with the same name have separate entries, and their versions may differ from
+the locked version.
 
-Installed packages without a matching non-virtual package also appear in `resolution`. Their nodes
+The `module_owners` map associates importable module names with package nodes in `resolution`.
+Installed packages are matched by name to non-virtual packages in the selected resolution, even if
+the installed version differs from the locked version. The installed inventory records the actual
+version independently of this ownership association.
+
+Unmatched installed packages with discovered modules also appear in `resolution`. Their nodes
 contain the installed name and version, an empty `dependencies` array, and a `source.installed`
 field identifying the package's metadata path, such as its `.dist-info` directory. These nodes have
 no dependency edges connecting them to the workspace or script. This lets consumers identify imports
 provided by packages that remain installed after their declarations are removed. The empty
-`dependencies` array does not describe the installed package's own requirements.
+`dependencies` array does not describe the installed package's own requirements. Inventory IDs and
+resolution node IDs are separate; every `module_owners` entry references a resolution node.
+
+Unmatched packages without discoverable modules remain in the inventory without ownership entries or
+resolution nodes. This includes installations with missing or unreadable module records, stub-only
+packages, and editable installs that expose modules through `.pth` files.
 
 ## Handling multiple versions of a package
 
-Two versions of a package cannot be installed into a python environment, but the dependency graph
-may still include multiple versions of a package. This can happen for two different reasons.
+Although a resolution selects one version of each package for a Python environment, the locked graph
+may include multiple versions of a package. This can happen for two different reasons.
 
 The first way is for
 [different platforms](https://packaging.python.org/en/latest/specifications/dependency-specifiers/#dependency-specifiers)
@@ -196,6 +208,15 @@ Here is a human-readable annotated example:
       "version": "3.12.12",
       // The Python implementation name
       "implementation": "cpython"
+    },
+    // Observed distributions, keyed by opaque installed-package identifiers
+    "packages": {
+      "installed+/workspace/.venv/lib/python3.12/site-packages/idna-3.10.dist-info": {
+        "name": "idna",
+        "version": "3.10",
+        "path": "/workspace/.venv/lib/python3.12/site-packages/idna-3.10.dist-info",
+        "editable": false
+      }
     }
   },
   // Information about the script target, only present with `--script`.

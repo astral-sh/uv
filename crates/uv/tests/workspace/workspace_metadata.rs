@@ -2,7 +2,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use assert_cmd::assert::OutputAssertExt;
-use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
+use assert_fs::fixture::{ChildPath, FileWriteStr, PathChild, PathCreateDir};
 use async_zip::base::write::ZipFileWriter;
 use async_zip::{Compression, ZipEntryBuilder};
 use futures::executor::block_on;
@@ -504,6 +504,14 @@ import iniconfig
           "path": "[CACHE_DIR]/environments-v2/script-[HASH]/[BIN]/[PYTHON]",
           "version": "3.12.[X]",
           "implementation": "cpython"
+        },
+        "packages": {
+          "installed+[CACHE_DIR]/environments-v2/script-[HASH]/[PYTHON-LIB]/site-packages/iniconfig-2.0.0.dist-info": {
+            "name": "iniconfig",
+            "version": "2.0.0",
+            "path": "[CACHE_DIR]/environments-v2/script-[HASH]/[PYTHON-LIB]/site-packages/iniconfig-2.0.0.dist-info",
+            "editable": false
+          }
         }
       },
       "script": {
@@ -679,6 +687,7 @@ fn workspace_metadata_script_includes_existing_environment() -> Result<()> {
     insta::with_settings!({ filters => context.filters() }, {
         insta::assert_json_snapshot!(metadata["environment"], @r#"
         {
+          "packages": {},
           "python": {
             "implementation": "cpython",
             "path": "[CACHE_DIR]/environments-v2/script-[HASH]/[BIN]/[PYTHON]",
@@ -831,10 +840,19 @@ fn workspace_metadata_script_exact_sync_removes_extraneous_packages() -> Result<
     let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
     insta::with_settings!({ filters => context.filters() }, {
         insta::assert_json_snapshot!(serde_json::json!({
+            "installed_packages": metadata["environment"]["packages"],
             "module_owners": metadata["module_owners"],
             "resolution": metadata["resolution"],
         }), @r#"
         {
+          "installed_packages": {
+            "installed+[SITE_PACKAGES]/metadata_extra-0.1.0.dist-info": {
+              "editable": false,
+              "name": "metadata-extra",
+              "path": "[SITE_PACKAGES]/metadata_extra-0.1.0.dist-info",
+              "version": "0.1.0"
+            }
+          },
           "module_owners": {
             "extra_module": [
               {
@@ -882,10 +900,12 @@ fn workspace_metadata_script_exact_sync_removes_extraneous_packages() -> Result<
             .output()?
             .status
             .success(),
+        "installed_packages": metadata["environment"]["packages"],
         "module_owners": metadata.get("module_owners"),
     }), @r#"
     {
       "extraneous_installed": false,
+      "installed_packages": {},
       "module_owners": null
     }
     "#);
@@ -1439,6 +1459,11 @@ fn workspace_metadata_exact_sync_removes_extraneous_packages() -> Result<()> {
     insta::with_settings!({ filters => context.filters() }, {
         insta::assert_json_snapshot!(metadata["module_owners"], @r#"
         {
+          "extra_module": [
+            {
+              "package_id": "metadata-extra==0.1.0@installed+[SITE_PACKAGES]/metadata_extra-0.1.0.dist-info"
+            }
+          ],
           "required_module": [
             {
               "package_id": "metadata-required==0.1.0@path+[TEMP_DIR]/metadata_required-0.1.0-py3-none-any.whl"
@@ -1540,6 +1565,14 @@ dependencies = [
         }), @r#"
         {
           "environment": {
+            "packages": {
+              "installed+[SITE_PACKAGES]/installed_owner-0.1.0.dist-info": {
+                "editable": false,
+                "name": "installed-owner",
+                "path": "[SITE_PACKAGES]/installed_owner-0.1.0.dist-info",
+                "version": "0.1.0"
+              }
+            },
             "python": {
               "implementation": "cpython",
               "path": "[VENV]/[BIN]/[PYTHON]",
@@ -1571,6 +1604,14 @@ dependencies = [
     insta::with_settings!({ filters => context.filters() }, {
         insta::assert_json_snapshot!(lockfile_metadata["environment"], @r#"
         {
+          "packages": {
+            "installed+[SITE_PACKAGES]/installed_owner-0.1.0.dist-info": {
+              "editable": false,
+              "name": "installed-owner",
+              "path": "[SITE_PACKAGES]/installed_owner-0.1.0.dist-info",
+              "version": "0.1.0"
+            }
+          },
           "python": {
             "implementation": "cpython",
             "path": "[VENV]/[BIN]/[PYTHON]",
@@ -1603,6 +1644,7 @@ dependencies = [
     insta::with_settings!({ filters => context.filters() }, {
         insta::assert_json_snapshot!(metadata["environment"], @r#"
         {
+          "packages": {},
           "python": {
             "implementation": "cpython",
             "path": "[TEMP_DIR]/override-env/[BIN]/[PYTHON]",
@@ -1683,6 +1725,14 @@ fn workspace_metadata_lockfile_workspace_group_module_owners() -> Result<()> {
     insta::with_settings!({ filters => context.filters() }, {
         insta::assert_json_snapshot!(metadata["environment"], @r#"
         {
+          "packages": {
+            "installed+[TEMP_DIR]/metadata-env/[PYTHON-LIB]/site-packages/installed_owner-0.1.0.dist-info": {
+              "editable": false,
+              "name": "installed-owner",
+              "path": "[TEMP_DIR]/metadata-env/[PYTHON-LIB]/site-packages/installed_owner-0.1.0.dist-info",
+              "version": "0.1.0"
+            }
+          },
           "python": {
             "implementation": "cpython",
             "path": "[TEMP_DIR]/metadata-env/[BIN]/[PYTHON]",
@@ -1772,6 +1822,26 @@ dependencies = [
           "path": "[VENV]/[BIN]/[PYTHON]",
           "version": "3.12.[X]",
           "implementation": "cpython"
+        },
+        "packages": {
+          "installed+[SITE_PACKAGES]/gpu_a-0.1.0.dist-info": {
+            "name": "gpu-a",
+            "version": "0.1.0",
+            "path": "[SITE_PACKAGES]/gpu_a-0.1.0.dist-info",
+            "editable": false
+          },
+          "installed+[SITE_PACKAGES]/gpu_b-0.1.0.dist-info": {
+            "name": "gpu-b",
+            "version": "0.1.0",
+            "path": "[SITE_PACKAGES]/gpu_b-0.1.0.dist-info",
+            "editable": false
+          },
+          "installed+[SITE_PACKAGES]/typing_extensions-0.1.0.dist-info": {
+            "name": "typing-extensions",
+            "version": "0.1.0",
+            "path": "[SITE_PACKAGES]/typing_extensions-0.1.0.dist-info",
+            "editable": false
+          }
         }
       },
       "workspace": {
@@ -2100,13 +2170,26 @@ fn workspace_metadata_module_owners_after_dependency_changes() -> Result<()> {
     let assert = context.workspace_metadata().assert().success();
     let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
     insta::with_settings!({ filters => context.filters() }, {
-        insta::assert_json_snapshot!(metadata["module_owners"], @r#"
+        insta::assert_json_snapshot!(serde_json::json!({
+            "installed_packages": metadata["environment"]["packages"],
+            "module_owners": metadata["module_owners"],
+        }), @r#"
         {
-          "installed_module": [
-            {
-              "package_id": "module-owner==0.2.0@path+[TEMP_DIR]/module_owner-0.2.0-py3-none-any.whl"
+          "installed_packages": {
+            "installed+[SITE_PACKAGES]/module_owner-0.1.0.dist-info": {
+              "editable": false,
+              "name": "module-owner",
+              "path": "[SITE_PACKAGES]/module_owner-0.1.0.dist-info",
+              "version": "0.1.0"
             }
-          ]
+          },
+          "module_owners": {
+            "installed_module": [
+              {
+                "package_id": "module-owner==0.2.0@path+[TEMP_DIR]/module_owner-0.2.0-py3-none-any.whl"
+              }
+            ]
+          }
         }
         "#);
     });
@@ -2120,15 +2203,24 @@ fn workspace_metadata_module_owners_after_dependency_changes() -> Result<()> {
         "#
     })?;
 
-    // Refreshing the lockfile leaves the installed package available without declaring an edge.
+    // Refreshing metadata leaves the installed package available without declaring an edge.
     let assert = context.workspace_metadata().assert().success();
     let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
     insta::with_settings!({ filters => context.filters() }, {
         insta::assert_json_snapshot!(serde_json::json!({
+            "installed_packages": metadata["environment"]["packages"],
             "module_owners": metadata["module_owners"],
             "resolution": metadata["resolution"],
         }), @r#"
         {
+          "installed_packages": {
+            "installed+[SITE_PACKAGES]/module_owner-0.1.0.dist-info": {
+              "editable": false,
+              "name": "module-owner",
+              "path": "[SITE_PACKAGES]/module_owner-0.1.0.dist-info",
+              "version": "0.1.0"
+            }
+          },
           "module_owners": {
             "installed_module": [
               {
@@ -2165,6 +2257,7 @@ fn workspace_metadata_module_owners_after_dependency_changes() -> Result<()> {
         "#);
     });
 
+    context.lock().assert().success();
     let assert = context
         .workspace_metadata()
         .arg("--frozen")
@@ -2172,6 +2265,177 @@ fn workspace_metadata_module_owners_after_dependency_changes() -> Result<()> {
         .success();
     let frozen_metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
     assert_eq!(metadata, frozen_metadata);
+
+    Ok(())
+}
+
+#[test]
+fn workspace_metadata_installed_packages_with_duplicate_names() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "module-owner-root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#
+        })?;
+
+    let editable_source = context.temp_dir.child("editable-source");
+    editable_source.create_dir_all()?;
+    let editable_url = Url::from_directory_path(editable_source.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert source path to file URL"))?;
+    let site_packages = ChildPath::new(context.site_packages());
+    for (version, editable) in [("0.1.0", false), ("0.2.0", true)] {
+        let dist_info = site_packages.child(format!("module_owner-{version}.dist-info"));
+        dist_info.create_dir_all()?;
+        dist_info.child("METADATA").write_str(&formatdoc! {"
+            Metadata-Version: 2.1
+            Name: module-owner
+            Version: {version}
+            "
+        })?;
+        dist_info.child("RECORD").write_str("")?;
+        if editable {
+            dist_info.child("direct_url.json").write_str(
+                &serde_json::json!({
+                    "url": editable_url.as_str(),
+                    "dir_info": {"editable": true},
+                })
+                .to_string(),
+            )?;
+        }
+    }
+
+    let assert = context.workspace_metadata().assert().success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(metadata["environment"]["packages"], @r#"
+        {
+          "installed+[SITE_PACKAGES]/module_owner-0.1.0.dist-info": {
+            "editable": false,
+            "name": "module-owner",
+            "path": "[SITE_PACKAGES]/module_owner-0.1.0.dist-info",
+            "version": "0.1.0"
+          },
+          "installed+[SITE_PACKAGES]/module_owner-0.2.0.dist-info": {
+            "editable": true,
+            "name": "module-owner",
+            "path": "[SITE_PACKAGES]/module_owner-0.2.0.dist-info",
+            "version": "0.2.0"
+          }
+        }
+        "#);
+    });
+
+    Ok(())
+}
+
+#[test]
+fn workspace_metadata_installed_packages_without_modules() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_missing_file_error();
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "module-owner-root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#
+    })?;
+
+    let site_packages = ChildPath::new(context.site_packages());
+    for name in ["missing-record", "stub-only"] {
+        let dist_info = site_packages.child(format!("{}-0.1.0.dist-info", name.replace('-', "_")));
+        dist_info.create_dir_all()?;
+        dist_info.child("METADATA").write_str(&formatdoc! {"
+            Metadata-Version: 2.1
+            Name: {name}
+            Version: 0.1.0
+            "
+        })?;
+    }
+    site_packages.child("stub_only.pyi").write_str("")?;
+    site_packages
+        .child("stub_only-0.1.0.dist-info/RECORD")
+        .write_str("stub_only.pyi,,\n")?;
+
+    let assert = context.workspace_metadata().assert().success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(serde_json::json!({
+            "installed_packages": metadata["environment"]["packages"],
+            "module_owners": metadata["module_owners"],
+            "resolution": metadata["resolution"],
+        }), @r#"
+        {
+          "installed_packages": {
+            "installed+[SITE_PACKAGES]/missing_record-0.1.0.dist-info": {
+              "editable": false,
+              "name": "missing-record",
+              "path": "[SITE_PACKAGES]/missing_record-0.1.0.dist-info",
+              "version": "0.1.0"
+            },
+            "installed+[SITE_PACKAGES]/stub_only-0.1.0.dist-info": {
+              "editable": false,
+              "name": "stub-only",
+              "path": "[SITE_PACKAGES]/stub_only-0.1.0.dist-info",
+              "version": "0.1.0"
+            }
+          },
+          "module_owners": null,
+          "resolution": {
+            "module-owner-root==0.1.0@virtual+[TEMP_DIR]/": {
+              "dependencies": [],
+              "kind": "package",
+              "name": "module-owner-root",
+              "source": {
+                "virtual": "[TEMP_DIR]/"
+              },
+              "version": "0.1.0"
+            },
+            "workspace+[TEMP_DIR]/": {
+              "dependencies": [],
+              "kind": "workspace",
+              "path": "[TEMP_DIR]/"
+            }
+          }
+        }
+        "#);
+    });
+
+    // Missing module records for a declared dependency still make ownership incomplete.
+    let declared = context
+        .temp_dir
+        .child("missing_record-0.1.0-py3-none-any.whl");
+    write_wheel(
+        declared.path(),
+        "missing-record",
+        "missing_record-0.1.0",
+        &[],
+    )?;
+    let declared_url = Url::from_file_path(declared.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "module-owner-root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["missing-record @ {declared_url}"]
+        "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.workspace_metadata(), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
+    Resolved 2 packages in [TIME]
+    error: Failed to inspect environment
+      cause: failed to open file `[SITE_PACKAGES]/missing_record-0.1.0.dist-info/RECORD`: [OS ERROR 2]
+    "#);
 
     Ok(())
 }
@@ -2207,7 +2471,7 @@ dependencies = [
     exit_code: 2 (failure)
     ----- stderr -----
     warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
-    error: Failed to collect module owners
+    error: Failed to inspect environment
       cause: Failed to determine installation plan
       cause: Distribution not found at: file://[TEMP_DIR]/gpu_a-0.1.0-py3-none-any.whl
     "#);

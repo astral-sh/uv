@@ -119,6 +119,36 @@ struct MetadataEnvironment {
     root: PortablePathBuf,
     /// Information about the Python interpreter in the environment.
     python: PythonReport,
+    /// Distributions present in the environment, independently of the locked resolution.
+    packages: BTreeMap<String, MetadataInstalledPackage>,
+}
+
+/// A distribution observed in an existing Python environment.
+#[derive(Debug, serde::Serialize)]
+struct MetadataInstalledPackage {
+    /// Normalized distribution name.
+    name: PackageName,
+    /// Installed distribution version.
+    version: Version,
+    /// Absolute path to the installed distribution metadata.
+    path: PortablePathBuf,
+    /// Whether the distribution is installed in editable mode.
+    editable: bool,
+}
+
+impl MetadataInstalledPackage {
+    fn from_dist(dist: &InstalledDist) -> Self {
+        Self {
+            name: dist.name().clone(),
+            version: dist.version().clone(),
+            path: PortablePathBuf::from(dist.install_path()),
+            editable: dist.is_editable(),
+        }
+    }
+
+    fn id(&self) -> String {
+        format!("installed+{}", self.path)
+    }
 }
 
 /// Information about the Python interpreter in an existing environment.
@@ -1472,10 +1502,19 @@ impl Metadata {
     }
 
     #[must_use]
-    pub fn with_environment(mut self, environment: &PythonEnvironment) -> Self {
+    pub fn with_environment<'a>(
+        mut self,
+        environment: &PythonEnvironment,
+        packages: impl IntoIterator<Item = &'a InstalledDist>,
+    ) -> Self {
         self.environment = Some(MetadataEnvironment {
             root: PortablePathBuf::from(environment.root()),
             python: PythonReport::from(environment.interpreter()),
+            packages: packages
+                .into_iter()
+                .map(MetadataInstalledPackage::from_dist)
+                .map(|package| (package.id(), package))
+                .collect(),
         });
         self
     }
