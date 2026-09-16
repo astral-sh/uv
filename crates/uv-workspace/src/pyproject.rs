@@ -31,6 +31,7 @@ use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, ExtraName, GroupName, Packag
 use uv_options_metadata::{OptionSet, OptionsMetadata, Visit};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerTree;
+use uv_platform_tags::MacosDeploymentTarget;
 use uv_pypi_types::{
     ConflictError, Conflicts, DependencyGroups, SchemaConflicts, SupportedEnvironments,
     VerbatimParsedUrl,
@@ -738,6 +739,23 @@ pub struct ToolUv {
         "#
     )]
     pub(crate) minimum_libc_version: Option<MinimumLibcVersion>,
+
+    /// The minimum macOS version to support during universal resolution.
+    ///
+    /// Use `required-environments` to specify the macOS architectures to support. Wheels requiring
+    /// newer macOS versions cannot satisfy those environments, but remain in the lockfile for
+    /// installation on newer machines. Packages with a usable source distribution can still be
+    /// selected. Other platforms are unaffected.
+    ///
+    /// This setting is respected by `uv lock` and `uv pip compile --universal`. If unset,
+    /// `MACOSX_DEPLOYMENT_TARGET` is used when available.
+    #[cfg_attr(feature = "schemars", schemars(with = "Option<String>"))]
+    #[option(
+        default = "None",
+        value_type = "str",
+        example = r#"minimum-macos-version = "15.0""#
+    )]
+    pub(crate) minimum_macos_version: Option<MacosDeploymentTarget>,
 
     /// Declare collections of extras or dependency groups that are conflicting
     /// (i.e., mutually exclusive).

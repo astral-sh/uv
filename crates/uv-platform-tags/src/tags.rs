@@ -585,7 +585,7 @@ impl Implementation {
 ///
 /// We have two cases: Actual platform specific tags (including "merged" tags such as universal2)
 /// and "any".
-fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformError> {
+pub(crate) fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformError> {
     let os = platform.os();
     let arch = platform.arch();
 

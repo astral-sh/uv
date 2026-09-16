@@ -141,6 +141,7 @@ fn write_options(writer: &mut LockWriter, options: &ResolverOptions) -> Result<(
         || !options.prerelease.package.is_empty()
         || options.fork_strategy != ForkStrategy::default()
         || options.minimum_libc_version.is_some()
+        || options.minimum_macos_version.is_some()
         || !options.exclude_newer.is_empty();
     if !has_options {
         return Ok(());
@@ -158,6 +159,9 @@ fn write_options(writer: &mut LockWriter, options: &ResolverOptions) -> Result<(
     }
     if let Some(version) = options.minimum_libc_version {
         writer.key_value("minimum-libc-version", serialize_value(&version)?)?;
+    }
+    if let Some(version) = options.minimum_macos_version {
+        writer.key_value("minimum-macos-version", version.to_string())?;
     }
 
     let exclude_newer = &options.exclude_newer;

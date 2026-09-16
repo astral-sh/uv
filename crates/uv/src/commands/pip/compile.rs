@@ -16,7 +16,7 @@ use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, Constraints, ExcludeDependency, ExtrasSpecification,
     HashCheckingMode, IndexStrategy, NoBinary, NoBuild, NoSources, Override, PipCompileFormat,
-    Reinstall, Upgrade,
+    Reinstall, Upgrade, macos_deployment_target,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -32,6 +32,7 @@ use uv_install_wheel::LinkMode;
 use uv_lock::PylockToml;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
+use uv_platform_tags::MacosDeploymentTarget;
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{Conflicts, SupportedEnvironments};
 use uv_python::{
@@ -78,6 +79,7 @@ pub(crate) async fn pip_compile(
     environments: SupportedEnvironments,
     required_environments: SupportedEnvironments,
     minimum_libc_version: Option<MinimumLibcVersion>,
+    minimum_macos_version: Option<MacosDeploymentTarget>,
     extras: ExtrasSpecification,
     groups: GroupsSpecification,
     output_file: Option<&Path>,
@@ -561,6 +563,11 @@ pub(crate) async fn pip_compile(
         .artifact_environments(artifact_environments)
         .minimum_libc_version(if universal {
             minimum_libc_version
+        } else {
+            None
+        })
+        .minimum_macos_version(if universal {
+            minimum_macos_version.or_else(macos_deployment_target)
         } else {
             None
         })

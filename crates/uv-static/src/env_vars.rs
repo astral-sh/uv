@@ -908,7 +908,11 @@ impl EnvVars {
     /// Used with `--python-platform macos` and related variants to set the
     /// deployment target (i.e., the minimum supported macOS version).
     ///
-    /// Defaults to `13.0`, the least-recent non-EOL macOS version at time of writing.
+    /// Also sets the minimum macOS version for universal resolutions, unless
+    /// `minimum-macos-version` is configured.
+    ///
+    /// With `--python-platform`, defaults to `13.0`, the least-recent non-EOL macOS
+    /// version at time of writing. Universal resolutions have no default cutoff.
     #[attr_added_in("0.1.42")]
     pub const MACOSX_DEPLOYMENT_TARGET: &'static str = "MACOSX_DEPLOYMENT_TARGET";
 

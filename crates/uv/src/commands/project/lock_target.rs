@@ -20,6 +20,7 @@ use uv_distribution_types::{
 use uv_lock::Lock;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep508::RequirementOrigin;
+use uv_platform_tags::MacosDeploymentTarget;
 use uv_pypi_types::{Conflicts, SupportedEnvironments, VerbatimParsedUrl};
 use uv_scripts::Pep723Script;
 use uv_workspace::dependency_groups::{
@@ -264,6 +265,14 @@ impl<'lock> LockTarget<'lock> {
     pub(crate) fn minimum_libc_version(self) -> Option<MinimumLibcVersion> {
         match self {
             Self::Workspace(workspace) => workspace.minimum_libc_version(),
+            Self::Script(_) => None,
+        }
+    }
+
+    /// Returns the minimum macOS version for the workspace.
+    pub(crate) fn minimum_macos_version(self) -> Option<MacosDeploymentTarget> {
+        match self {
+            Self::Workspace(workspace) => workspace.minimum_macos_version(),
             Self::Script(_) => None,
         }
     }

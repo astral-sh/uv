@@ -11,6 +11,7 @@ use tracing::debug;
 
 use uv_cache::{Cache, Refresh};
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_configuration::macos_deployment_target;
 use uv_configuration::{
     ActiveEnvironment, Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun,
     ExcludeDependency, ExtrasSpecification, Override, PackageOverride, Reinstall, Upgrade,
@@ -817,6 +818,11 @@ async fn do_lock(
         .build_options(build_options.clone())
         .artifact_environments(artifact_environments.clone())
         .minimum_libc_version(minimum_libc_version)
+        .minimum_macos_version(
+            target
+                .minimum_macos_version()
+                .or_else(macos_deployment_target),
+        )
         .build();
     // Checking an existing lockfile may build metadata and install build dependencies. Verify any
     // artifacts recorded in that lockfile, including for an ordinary unlocked command.
@@ -1330,6 +1336,11 @@ impl ValidatedLock {
                 lock.minimum_libc_version(),
                 options.minimum_libc_version,
             );
+            return Ok(Self::Versions(lock));
+        }
+
+        if lock.minimum_macos_version() != options.minimum_macos_version {
+            debug!("Resolving despite existing lockfile due to change in minimum macOS version");
             return Ok(Self::Versions(lock));
         }
 

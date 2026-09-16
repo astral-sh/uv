@@ -761,6 +761,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 args.environments,
                 args.required_environments,
                 args.minimum_libc_version,
+                args.minimum_macos_version,
                 args.settings.extras,
                 groups,
                 args.settings.output_file.as_deref(),

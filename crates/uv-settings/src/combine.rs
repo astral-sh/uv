@@ -13,6 +13,7 @@ use uv_distribution_types::{
     MinimumLibcVersion, PackageConfigSettings, PipExtraIndex, PipFindLinks, PipIndex,
 };
 use uv_install_wheel::LinkMode;
+use uv_platform_tags::MacosDeploymentTarget;
 use uv_pypi_types::{SchemaConflicts, SupportedEnvironments};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
@@ -96,6 +97,7 @@ impl_combine_or!(ExcludeNewerValue);
 impl_combine_or!(ExportFormat);
 impl_combine_or!(ForkStrategy);
 impl_combine_or!(MinimumLibcVersion);
+impl_combine_or!(MacosDeploymentTarget);
 impl_combine_or!(Index);
 impl_combine_or!(IndexStrategy);
 impl_combine_or!(IndexUrl);

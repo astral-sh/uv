@@ -635,3 +635,6 @@ See the [resolution documentation](../resolution.md#required-environments) for m
 
 For Linux, use [`minimum-libc-version`](../resolution.md#minimum-libc-version) alongside
 `required-environments` to select the libc implementations and minimum versions to support.
+
+For macOS, use [`minimum-macos-version`](../resolution.md#minimum-macos-version) to set the minimum
+supported macOS version.

@@ -1,5 +1,6 @@
 use uv_configuration::{BuildOptions, IndexStrategy};
-use uv_distribution_types::MinimumLibcVersion;
+use uv_distribution_types::{ArtifactPolicy, MinimumLibcVersion};
+use uv_platform_tags::{MacosDeploymentTarget, PlatformError};
 use uv_pypi_types::SupportedEnvironments;
 use uv_torch::TorchStrategy;
 
@@ -17,9 +18,17 @@ pub struct Options {
     pub index_strategy: IndexStrategy,
     pub artifact_environments: SupportedEnvironments,
     pub minimum_libc_version: Option<MinimumLibcVersion>,
+    pub minimum_macos_version: Option<MacosDeploymentTarget>,
     pub flexibility: Flexibility,
     pub build_options: BuildOptions,
     pub torch_backend: Option<TorchStrategy>,
+}
+
+impl Options {
+    /// Prepare platform baselines and libc exclusions for universal resolution.
+    pub fn artifact_policy(&self) -> Result<ArtifactPolicy, PlatformError> {
+        ArtifactPolicy::new(self.minimum_libc_version, self.minimum_macos_version)
+    }
 }
 
 /// Builder for [`Options`].
@@ -33,6 +42,7 @@ pub struct OptionsBuilder {
     index_strategy: IndexStrategy,
     artifact_environments: SupportedEnvironments,
     minimum_libc_version: Option<MinimumLibcVersion>,
+    minimum_macos_version: Option<MacosDeploymentTarget>,
     flexibility: Flexibility,
     build_options: BuildOptions,
     torch_backend: Option<TorchStrategy>,
@@ -103,6 +113,13 @@ impl OptionsBuilder {
         self
     }
 
+    /// Sets the minimum macOS version to support.
+    #[must_use]
+    pub fn minimum_macos_version(mut self, version: Option<MacosDeploymentTarget>) -> Self {
+        self.minimum_macos_version = version;
+        self
+    }
+
     /// Sets the [`Flexibility`].
     #[must_use]
     pub fn flexibility(mut self, flexibility: Flexibility) -> Self {
@@ -135,6 +152,7 @@ impl OptionsBuilder {
             index_strategy: self.index_strategy,
             artifact_environments: self.artifact_environments,
             minimum_libc_version: self.minimum_libc_version,
+            minimum_macos_version: self.minimum_macos_version,
             flexibility: self.flexibility,
             build_options: self.build_options,
             torch_backend: self.torch_backend,

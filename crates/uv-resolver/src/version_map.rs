@@ -11,7 +11,7 @@ use uv_client::{FlatIndexEntry, OwnedArchive, SimpleDetailMetadata, VersionFiles
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl, MinimumLibcVersion,
+    ArtifactPolicy, HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl,
     PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, RequiresPython,
     SourceDistCompatibility, WheelCompatibility,
 };
@@ -55,7 +55,7 @@ impl VersionMap {
         available_version_cutoff: Option<Timestamp>,
         flat_index: Option<FlatDistributions>,
         build_options: &BuildOptions,
-        minimum_libc_version: Option<MinimumLibcVersion>,
+        artifact_policy: ArtifactPolicy,
     ) -> Self {
         let mut local = false;
         let mut entries = Vec::with_capacity(simple_metadata.iter().size_hint().0);
@@ -105,7 +105,7 @@ impl VersionMap {
                 requires_python,
                 included_version_cutoff,
                 available_version_cutoff,
-                minimum_libc_version,
+                artifact_policy,
             }),
         }
     }
@@ -116,16 +116,10 @@ impl VersionMap {
         tags: Option<&Tags>,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
-        minimum_libc_version: Option<MinimumLibcVersion>,
+        artifact_policy: &ArtifactPolicy,
     ) -> Self {
-        FlatDistributions::from_entries(
-            flat_metadata,
-            tags,
-            hasher,
-            build_options,
-            minimum_libc_version,
-        )
-        .into()
+        FlatDistributions::from_entries(flat_metadata, tags, hasher, build_options, artifact_policy)
+            .into()
     }
 
     /// Return the [`ResolutionMetadata`] for the given version, if any.
@@ -501,8 +495,8 @@ struct VersionMapLazy {
     hasher: HashStrategy,
     /// The `requires-python` constraint for the resolution.
     requires_python: RequiresPython,
-    /// The libc cutoff applied to Linux wheels during universal resolution.
-    minimum_libc_version: Option<MinimumLibcVersion>,
+    /// The platform baselines and libc exclusions applied during universal resolution.
+    artifact_policy: ArtifactPolicy,
 }
 
 impl VersionMapLazy {
@@ -628,7 +622,7 @@ impl VersionMapLazy {
             .expect("archived version files always deserializes");
             let mut priority_dist = init
                 .cloned()
-                .unwrap_or_else(|| PrioritizedDist::new(self.minimum_libc_version));
+                .unwrap_or_else(|| PrioritizedDist::new(self.artifact_policy.clone()));
             for (filename, file) in files.all(&self.package_name) {
                 // Support resolving as if it were an earlier timestamp, at least as long files have
                 // upload time information.
@@ -799,10 +793,10 @@ impl VersionMapLazy {
             return WheelCompatibility::Incompatible(IncompatibleWheel::ExcludeNewer(upload_time));
         }
 
-        if let Some(version) = self.minimum_libc_version
-            && !version.allows_wheel(filename)
-        {
-            return WheelCompatibility::Incompatible(IncompatibleWheel::LibcVersion(version));
+        if !self.artifact_policy.allows_wheel(filename) {
+            return WheelCompatibility::Incompatible(IncompatibleWheel::ArtifactPolicy(
+                self.artifact_policy.clone(),
+            ));
         }
 
         // Check if binaries are disabled

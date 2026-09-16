@@ -307,6 +307,7 @@ fn validate_uv_toml(path: &Path, options: &Options) -> Result<(), Error> {
         environments,
         required_environments,
         minimum_libc_version,
+        minimum_macos_version,
         conflicts,
         workspace,
         sources,
@@ -375,6 +376,12 @@ fn validate_uv_toml(path: &Path, options: &Options) -> Result<(), Error> {
         return Err(Error::PyprojectOnlyField(
             path.to_path_buf(),
             "minimum-libc-version",
+        ));
+    }
+    if minimum_macos_version.is_some() {
+        return Err(Error::PyprojectOnlyField(
+            path.to_path_buf(),
+            "minimum-macos-version",
         ));
     }
     Ok(())
@@ -464,6 +471,7 @@ fn warn_uv_toml_masked_fields(options: &Options) {
         environments: _,
         required_environments: _,
         minimum_libc_version: _,
+        minimum_macos_version: _,
         conflicts: _,
         workspace: _,
         sources: _,

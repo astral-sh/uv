@@ -11,4 +11,7 @@ use uv_test::pypi_proxy;
 mod lock;
 
 #[cfg(all(feature = "test-python", feature = "test-universal"))]
+mod macos_deployment_target;
+
+#[cfg(all(feature = "test-python", feature = "test-universal"))]
 mod minimum_libc;

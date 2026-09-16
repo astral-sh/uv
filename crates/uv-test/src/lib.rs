@@ -1301,6 +1301,7 @@ impl TestContext {
         command
             // When running the tests in a venv, ignore that venv, otherwise we'll capture warnings.
             .env_remove(EnvVars::VIRTUAL_ENV)
+            .env_remove(EnvVars::MACOSX_DEPLOYMENT_TARGET)
             // Disable wrapping of uv output for readability / determinism in snapshots.
             .env(EnvVars::UV_NO_WRAP, "1")
             // Avoid reading host system configuration unless a test opts in.

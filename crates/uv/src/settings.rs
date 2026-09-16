@@ -49,6 +49,7 @@ use uv_install_wheel::LinkMode;
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pep440::Version;
 use uv_pep508::{MarkerTree, RequirementOrigin};
+use uv_platform_tags::MacosDeploymentTarget;
 use uv_preview::Preview;
 use uv_pypi_types::SupportedEnvironments;
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
@@ -3482,6 +3483,7 @@ pub(crate) struct PipCompileSettings {
     pub(crate) environments: SupportedEnvironments,
     pub(crate) required_environments: SupportedEnvironments,
     pub(crate) minimum_libc_version: Option<MinimumLibcVersion>,
+    pub(crate) minimum_macos_version: Option<MacosDeploymentTarget>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
 }
@@ -3610,6 +3612,9 @@ impl PipCompileSettings {
         let minimum_libc_version = filesystem
             .as_ref()
             .and_then(|configuration| configuration.minimum_libc_version);
+        let minimum_macos_version = filesystem
+            .as_ref()
+            .and_then(|configuration| configuration.minimum_macos_version);
 
         Ok(Self {
             format,
@@ -3637,6 +3642,7 @@ impl PipCompileSettings {
             environments,
             required_environments,
             minimum_libc_version,
+            minimum_macos_version,
             refresh: Refresh::try_from(refresh)?,
             settings: PipSettings::combine(
                 PipOptions {

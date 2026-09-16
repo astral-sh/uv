@@ -16,7 +16,7 @@ use uv_distribution_types::{
 use uv_normalize::PackageName;
 use uv_pep440::{LowerBound, Version};
 use uv_pep508::MarkerEnvironment;
-use uv_platform_tags::Tags;
+use uv_platform_tags::{PlatformError, Tags};
 use uv_pypi_types::ParsedUrl;
 use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
@@ -39,6 +39,8 @@ use crate::{InMemoryIndex, Options};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ResolveError {
+    #[error(transparent)]
+    Platform(#[from] PlatformError),
     #[error("Failed to resolve dependencies for package `{1}=={2}`")]
     Dependencies(#[source] Box<Self>, PackageName, Version, DerivationChain),
 
@@ -159,6 +161,7 @@ impl ResolveError {
             Self::Dist(_, _, _, error) => error.is_user_failure(),
             Self::Client(error) => error.is_user_failure(),
             Self::ChannelClosed
+            | Self::Platform(_)
             | Self::UnregisteredTask(_)
             | Self::InvalidVersion(_)
             | Self::ConflictingDistribution(_) => false,

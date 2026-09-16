@@ -7334,6 +7334,7 @@ dependencies = [
  "uv-once-map",
  "uv-pep440",
  "uv-pep508",
+ "uv-platform-tags",
  "uv-pypi-types",
  "uv-torch",
 ]
@@ -7390,6 +7391,7 @@ dependencies = [
  "uv-options-metadata",
  "uv-pep440",
  "uv-pep508",
+ "uv-platform-tags",
  "uv-preview",
  "uv-pypi-types",
  "uv-python",
@@ -7681,6 +7683,7 @@ dependencies = [
  "uv-options-metadata",
  "uv-pep440",
  "uv-pep508",
+ "uv-platform-tags",
  "uv-pypi-types",
  "uv-redacted",
  "uv-static",

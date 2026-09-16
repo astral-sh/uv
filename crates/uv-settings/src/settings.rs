@@ -20,6 +20,7 @@ use uv_install_wheel::LinkMode;
 use uv_macros::{CombineOptions, OptionsMetadata};
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pep508::Requirement;
+use uv_platform_tags::MacosDeploymentTarget;
 use uv_preview::{MaybePreviewFeature, Preview};
 use uv_pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
@@ -167,6 +168,8 @@ pub struct Options {
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub minimum_libc_version: Option<MinimumLibcVersion>,
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub minimum_macos_version: Option<MacosDeploymentTarget>,
 
     // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
@@ -2642,6 +2645,7 @@ struct OptionsWire {
     environments: Option<SupportedEnvironments>,
     required_environments: Option<SupportedEnvironments>,
     minimum_libc_version: Option<MinimumLibcVersion>,
+    minimum_macos_version: Option<MacosDeploymentTarget>,
 
     // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
@@ -2726,6 +2730,7 @@ impl TryFrom<OptionsWire> for Options {
             environments,
             required_environments,
             minimum_libc_version,
+            minimum_macos_version,
             conflicts,
             publish_url,
             trusted_publishing,
@@ -2809,6 +2814,7 @@ impl TryFrom<OptionsWire> for Options {
             environments,
             required_environments,
             minimum_libc_version,
+            minimum_macos_version,
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror,
                 pypy_install_mirror,

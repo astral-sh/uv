@@ -257,6 +257,28 @@ minimum-libc-version = { glibc = "2.31", musl = "1.2" }
 Each configured libc version needs coverage in `required-environments`. If a required environment
 has no compatible wheel or usable source distribution, uv will try another version of the package.
 
+### Minimum macOS version
+
+The `minimum-macos-version` setting specifies the oldest macOS version to support in
+`required-environments`.
+For example, to require support for macOS 15 on both architectures:
+
+```toml title="pyproject.toml"
+[tool.uv]
+required-environments = [
+    "sys_platform == 'darwin' and platform_machine == 'x86_64'",
+    "sys_platform == 'darwin' and platform_machine == 'arm64'",
+]
+minimum-macos-version = "15.0"
+```
+
+If a required environment has no compatible wheel or usable source distribution, uv will try
+another version of the package. Wheels requiring newer macOS versions remain in the lockfile and
+exported hashes for installation on newer machines. Wheels for other operating systems are unaffected.
+
+When unset, uv uses `MACOSX_DEPLOYMENT_TARGET`, if present. The effective version is recorded in
+the lockfile.
+
 ## Common marker values
 
 The `environments` and `required-environments` settings accept
