@@ -119,6 +119,8 @@ impl Environments {
         self.0.iter()
     }
 
+    /// Return the marker domains used for resolution forks, discarding libc constraints.
+    /// Those constraints are enforced separately by [`crate::ArtifactPolicy`].
     pub fn into_markers(self) -> Vec<MarkerTree> {
         self.0
             .into_iter()

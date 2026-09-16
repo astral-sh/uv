@@ -40,13 +40,14 @@ struct PrioritizedDistInner {
 
 impl Default for PrioritizedDistInner {
     fn default() -> Self {
+        let artifact_policy = ArtifactPolicy::default();
         Self {
             source: None,
             best_wheel_index: None,
             wheels: Vec::new(),
             hashes: Vec::new(),
-            artifact_policy: ArtifactPolicy::default(),
-            artifact_coverage: ArtifactCoverage::new(&ArtifactPolicy::default()),
+            artifact_coverage: ArtifactCoverage::new(&artifact_policy),
+            artifact_policy,
         }
     }
 }
@@ -362,11 +363,13 @@ pub enum HashComparison {
 impl PrioritizedDist {
     /// Create an empty distribution set governed by the given artifact policy.
     pub fn new(artifact_policy: ArtifactPolicy) -> Self {
-        let artifact_coverage = ArtifactCoverage::new(&artifact_policy);
         Self(Box::new(PrioritizedDistInner {
+            source: None,
+            best_wheel_index: None,
+            wheels: Vec::new(),
+            hashes: Vec::new(),
+            artifact_coverage: ArtifactCoverage::new(&artifact_policy),
             artifact_policy,
-            artifact_coverage,
-            ..PrioritizedDistInner::default()
         }))
     }
 

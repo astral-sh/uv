@@ -128,6 +128,8 @@ impl Default for ArtifactPolicy {
 }
 
 impl ArtifactPolicy {
+    /// Build a libc policy without merging overlapping supported and required scopes.
+    /// Marker-only environments are enforced separately by the resolver.
     pub fn new(supported: &Environments, required: &Environments) -> Self {
         let constrained = |environments: &Environments| {
             environments
@@ -188,6 +190,7 @@ impl ArtifactPolicy {
 
     /// Return coverage of a single wheel under each applicable scope. Registry callers must
     /// aggregate separate wheel files before intersecting the libc families within each scope.
+    /// Eligibility is checked separately by [`Self::check_wheel`].
     pub fn wheel_coverage(&self, filename: &WheelFilename) -> MarkerTree {
         let mut coverage = ArtifactCoverage::new(self);
         coverage.insert_wheel(self, filename);

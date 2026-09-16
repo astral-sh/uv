@@ -167,6 +167,7 @@ fn write_options(writer: &mut LockWriter, options: &ResolverOptions) -> Result<(
     if options.fork_strategy != ForkStrategy::default() {
         writer.key_value("fork-strategy", options.fork_strategy.to_string())?;
     }
+
     let exclude_newer = &options.exclude_newer;
     if let Some(global) = &exclude_newer.global {
         if let Some(span) = global.span() {

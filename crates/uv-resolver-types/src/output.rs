@@ -126,10 +126,11 @@ impl ResolverOutput {
         self.base_dists().next().is_none()
     }
 
-    /// Generate registry hashes from the artifacts retained by a libc policy and build options.
+    /// Regenerate registry hashes when supported environments restrict libc compatibility.
     ///
     /// Existing requirements hashes have no artifact association. When filtering artifacts, use
     /// advertised hashes or hash the retained files instead of reusing an ambiguous subset.
+    /// Artifacts must already be filtered by the resolution's policy; build options are applied here.
     pub async fn generate_artifact_hashes(
         &mut self,
         client: &RegistryClient,
