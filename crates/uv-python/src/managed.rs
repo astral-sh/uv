@@ -336,6 +336,10 @@ impl ManagedPythonInstallation {
                 .ok_or(Error::NameError("not a valid string".to_string()))?,
         )?;
 
+        Self::from_path_and_key(path, key)
+    }
+
+    fn from_path_and_key(path: &Path, key: PythonInstallationKey) -> Result<Self, Error> {
         let path = std::path::absolute(path)
             .map_err(|err| Error::AbsolutePath(path.to_path_buf(), err))?;
 
@@ -359,27 +363,31 @@ impl ManagedPythonInstallation {
     ///
     /// Returns `None` if the interpreter is not a managed installation.
     pub fn try_from_interpreter(interpreter: &Interpreter) -> Option<Self> {
-        let path = Self::path_from_interpreter(interpreter)?;
-        Self::from_path(path).ok()
+        let (path, key) = Self::path_and_key_from_interpreter(interpreter)?;
+        Self::from_path_and_key(&path, key).ok()
     }
 
     /// Return the managed installation key for an interpreter, if it is installed in the managed
     /// Python directory.
     pub(crate) fn key_from_interpreter(interpreter: &Interpreter) -> Option<PythonInstallationKey> {
-        let path = Self::path_from_interpreter(interpreter)?;
-        PythonInstallationKey::from_str(path.file_name()?.to_str()?).ok()
+        Self::path_and_key_from_interpreter(interpreter).map(|(_, key)| key)
     }
 
-    /// Return the managed installation path for an interpreter, if it is installed in the managed
-    /// Python directory.
-    fn path_from_interpreter(interpreter: &Interpreter) -> Option<PathBuf> {
+    /// Return the managed installation path and [`PythonInstallationKey`] for an interpreter,
+    /// without reading its build revision.
+    fn path_and_key_from_interpreter(
+        interpreter: &Interpreter,
+    ) -> Option<(PathBuf, PythonInstallationKey)> {
         let managed_root = ManagedPythonInstallations::from_settings(None).ok()?;
         let root = managed_root.absolute_root().ok()?;
 
-        Self::path_from_base_prefix(root, interpreter.sys_base_prefix())
+        Self::path_and_key_from_base_prefix(root, interpreter.sys_base_prefix())
     }
 
-    fn path_from_base_prefix(root: PathBuf, sys_base_prefix: &Path) -> Option<PathBuf> {
+    fn path_and_key_from_base_prefix(
+        root: PathBuf,
+        sys_base_prefix: &Path,
+    ) -> Option<(PathBuf, PythonInstallationKey)> {
         // Canonicalize both paths to handle Windows path format differences
         // (e.g., \\?\ prefix, different casing, junction vs actual path).
         // Fall back to the original path if canonicalization fails (e.g., target doesn't exist).
@@ -394,10 +402,10 @@ impl ManagedPythonInstallation {
         let name = first_component.as_os_str().to_str()?;
 
         // Verify it's a valid installation key.
-        PythonInstallationKey::from_str(name).ok()?;
+        let key = PythonInstallationKey::from_str(name).ok()?;
 
         // Construct the installation path within the managed root.
-        Some(root.join(name))
+        Some((root.join(name), key))
     }
 
     /// The path to this managed installation's Python executable.
@@ -1018,6 +1026,8 @@ pub fn python_executable_dir() -> Result<PathBuf, Error> {
 
 #[cfg(test)]
 mod tests {
+    use anyhow::{Context, Result};
+
     use super::*;
     use crate::implementation::LenientImplementationName;
     use crate::installation::PythonInstallationKey;
@@ -1072,17 +1082,24 @@ mod tests {
     }
 
     #[test]
-    fn path_from_base_prefix_preserves_build_variant() {
-        let temp_dir = tempfile::tempdir().unwrap();
+    fn path_and_key_from_base_prefix_preserves_build_variant() -> Result<()> {
+        let temp_dir = tempfile::tempdir()?;
         let root = temp_dir.path().join("python");
-        let installation = root.join("cpython-3.13.0+pgo+lto-linux-x86_64-gnu");
+        let name = "cpython-3.13.0+pgo+lto-linux-x86_64-gnu";
+        let installation = root.join(name);
         let base_prefix = installation.join("lib").join("python3.13");
-        fs::create_dir_all(&base_prefix).unwrap();
+        fs::create_dir_all(&base_prefix)?;
+        // Resolving the identity must not require readable build metadata.
+        fs::create_dir(installation.join("BUILD"))?;
 
-        assert_eq!(
-            ManagedPythonInstallation::path_from_base_prefix(root, &base_prefix).unwrap(),
-            dunce::canonicalize(installation).unwrap()
-        );
+        let (path, key) =
+            ManagedPythonInstallation::path_and_key_from_base_prefix(root, &base_prefix)
+                .context("Missing managed installation identity")?;
+        assert_eq!(path, dunce::canonicalize(installation)?);
+        assert_eq!(key, PythonInstallationKey::from_str(name)?);
+        assert!(ManagedPythonInstallation::from_path_and_key(&path, key).is_err());
+
+        Ok(())
     }
 
     #[test]
