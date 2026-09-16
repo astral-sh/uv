@@ -733,11 +733,17 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
                 .collect::<Result<Vec<_>, _>>()?;
-            let excludes = args
+            let mut excludes = args
                 .excludes
                 .into_iter()
                 .map(RequirementsSource::from_requirements_txt)
                 .collect::<Result<Vec<_>, _>>()?;
+            excludes.extend(
+                args.exclude_packages
+                    .into_iter()
+                    .map(|package| RequirementsSource::from_package_argument(package.as_ref()))
+                    .collect::<Result<Vec<_>, _>>()?,
+            );
             let build_constraints = args
                 .build_constraints
                 .into_iter()
@@ -941,11 +947,17 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
                 .collect::<Result<Vec<_>, _>>()?;
-            let excludes = args
+            let mut excludes = args
                 .excludes
                 .into_iter()
                 .map(RequirementsSource::from_requirements_txt)
                 .collect::<Result<Vec<_>, _>>()?;
+            excludes.extend(
+                args.exclude_packages
+                    .into_iter()
+                    .map(|package| RequirementsSource::from_package_argument(package.as_ref()))
+                    .collect::<Result<Vec<_>, _>>()?,
+            );
             let build_constraints = args
                 .build_constraints
                 .into_iter()
@@ -1662,11 +1674,17 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
                 .collect::<Result<Vec<_>, _>>()?;
-            let excludes = args
+            let mut excludes = args
                 .excludes
                 .into_iter()
                 .map(RequirementsSource::from_requirements_txt)
                 .collect::<Result<Vec<_>, _>>()?;
+            excludes.extend(
+                args.exclude_packages
+                    .into_iter()
+                    .map(|package| RequirementsSource::from_package_argument(package.as_ref()))
+                    .collect::<Result<Vec<_>, _>>()?,
+            );
             let build_constraints = args
                 .build_constraints
                 .into_iter()
