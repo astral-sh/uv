@@ -6831,6 +6831,7 @@ dependencies = [
  "rustc-hash",
  "serde",
  "serde_json",
+ "sha2 0.11.0",
  "smallvec",
  "thiserror",
  "toml",

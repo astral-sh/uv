@@ -68,6 +68,10 @@ use uv_types::{BuildContext, HashStrategy};
 use uv_warnings::warn_user_once;
 use uv_workspace::{Editability, WorkspaceMember};
 
+pub use crate::lock::build::{
+    BuildExecutor, BuildLockError, BuildOperation, BuildSourceId, BuildSourceInput, BuildStage,
+    LockedBuild, LockedBuilds, ensure_build_wheels,
+};
 pub use crate::lock::deserialize::Error as CanonicalLockError;
 pub use crate::lock::export::RequirementsTxtExport;
 pub use crate::lock::export::{
@@ -77,6 +81,7 @@ pub use crate::lock::installable::{Installable, InstallableRootKind};
 pub use crate::lock::map::PackageMap;
 pub use crate::lock::tree::{TreeDisplay, TreeJsonTarget};
 
+mod build;
 mod deserialize;
 pub(crate) mod export;
 mod installable;
@@ -86,17 +91,20 @@ mod tree;
 
 /// The current version of the lockfile format.
 const VERSION: u32 = 1;
+const BUILD_LOCK_VERSION: u32 = 2;
 
 /// An error returned when parsing a lockfile.
 #[derive(Debug, thiserror::Error)]
 pub enum LockParseError {
     /// The lockfile uses an unsupported schema version.
-    #[error("unsupported lockfile schema version (v{version}, but only v{supported} is supported)")]
+    #[error(
+        "unsupported lockfile schema version (v{version}; the newest supported version is v{supported})"
+    )]
     UnsupportedVersion { supported: u32, version: u32 },
 
     /// The lockfile cannot be parsed and uses an unsupported schema version.
     #[error(
-        "failed to parse lockfile using an unsupported schema version (v{version}, but only v{supported} is supported)"
+        "failed to parse lockfile using an unsupported schema version (v{version}; the newest supported version is v{supported})"
     )]
     UnparsableVersion {
         supported: u32,
@@ -292,11 +300,8 @@ pub struct Lock {
     /// The (major) version of the lockfile format.
     ///
     /// Changes to the major version indicate backwards- and forwards-incompatible changes to the
-    /// lockfile format. A given uv version only supports a single major version of the lockfile
-    /// format.
-    ///
-    /// In other words, a version of uv that supports version 2 of the lockfile format will not be
-    /// able to read lockfiles generated under version 1 or 3.
+    /// lockfile format. Version 1 describes runtime resolution. Version 2 additionally requires
+    /// build-resolution enforcement; readers that only understand version 1 must reject it.
     version: u32,
     /// The revision of the lockfile format.
     ///
@@ -333,6 +338,8 @@ pub struct Lock {
     by_id: FxHashMap<PackageId, PackageIndex>,
     /// The input requirements to the resolution.
     manifest: ResolverManifest,
+    /// Independent, mandatory build resolutions. Ordinary runtime-only locks omit this field.
+    build_lock: Option<LockedBuilds>,
 }
 
 /// Return the marker domain covered by the supported environments and `requires-python`.
@@ -2752,6 +2759,7 @@ impl Lock {
             packages,
             by_id,
             manifest,
+            build_lock: None,
         };
         Ok(lock)
     }
@@ -2822,7 +2830,7 @@ impl Lock {
 
     /// Returns `true` if this [`Lock`] can validate packages without declaration metadata.
     pub fn supports_missing_package_metadata(&self) -> bool {
-        (self.version(), self.revision()) >= (VERSION, METADATA_FREE_REVISION)
+        self.revision() >= METADATA_FREE_REVISION
     }
 
     /// Returns `true` if this [`Lock`] includes entries for empty `dependency-group` metadata.
@@ -3000,6 +3008,83 @@ impl Lock {
     /// Returns the root requirements that were used to generate this lock.
     pub fn requirements(&self) -> &BTreeSet<Requirement> {
         &self.manifest.requirements
+    }
+
+    /// Return the mandatory build coverage, if present.
+    pub fn build_lock(&self) -> Option<&LockedBuilds> {
+        self.build_lock.as_ref()
+    }
+
+    /// Attach independently validated build resolutions and fence older lockfile readers.
+    pub fn with_build_lock(mut self, build_lock: LockedBuilds) -> Result<Self, BuildLockError> {
+        build_lock.validate()?;
+        let sources = self
+            .packages
+            .iter()
+            .map(|package| BuildSourceId::normalize(package.id.clone()))
+            .collect::<BTreeSet<_>>();
+        if build_lock
+            .resolutions
+            .iter()
+            .any(|build| !sources.contains(build.source()))
+        {
+            return Err(BuildLockError::Invalid(
+                "build coverage refers to a source outside the runtime lock",
+            ));
+        }
+        self.version = BUILD_LOCK_VERSION;
+        self.build_lock = Some(build_lock);
+        Ok(self)
+    }
+
+    /// Remove the mandatory build contract, returning the ordinary runtime lock format.
+    #[must_use]
+    pub fn without_build_lock(mut self) -> Self {
+        self.version = VERSION;
+        self.build_lock = None;
+        self
+    }
+
+    /// Identify all non-virtual sources selected from the locked packages on this executor.
+    pub fn build_sources(
+        &self,
+        root: &Path,
+        tags: &uv_platform_tags::Tags,
+        markers: &MarkerEnvironment,
+        build_options: &BuildOptions,
+    ) -> Result<Vec<(uv_distribution_types::SourceDist, HashDigests)>, LockError> {
+        let mut sources = Vec::new();
+        for package in &self.packages {
+            if !package.fork_markers.is_empty()
+                && !package
+                    .fork_markers
+                    .iter()
+                    .any(|marker| marker.pep508().evaluate(markers, &[]))
+            {
+                continue;
+            }
+            if build_options.no_build_package(package.name()) && !self.is_workspace_member(package)
+            {
+                continue;
+            }
+            let HashedDist { dist, hashes } = package.to_dist(
+                root,
+                TagPolicy::Required(tags),
+                build_options,
+                markers,
+                if self.is_workspace_member(package) {
+                    FirstParty::Yes
+                } else {
+                    FirstParty::No
+                },
+            )?;
+            if let Dist::Source(source) = dist
+                && !source.is_virtual()
+            {
+                sources.push((source, hashes));
+            }
+        }
+        Ok(sources)
     }
 
     /// Intersect a requirement marker with the forks that contain a package, then simplify it
@@ -3543,10 +3628,10 @@ impl Lock {
                 Ok(lock) => lock,
                 Err(source) => {
                     if let Ok(lock) = toml::from_str::<LockVersion>(input)
-                        && lock.version() != VERSION
+                        && !matches!(lock.version(), VERSION | BUILD_LOCK_VERSION)
                     {
                         return Err(LockParseError::UnparsableVersion {
-                            supported: VERSION,
+                            supported: BUILD_LOCK_VERSION,
                             version: lock.version(),
                             source,
                         });
@@ -3556,9 +3641,9 @@ impl Lock {
             },
         };
 
-        if lock.version() != VERSION {
+        if !matches!(lock.version(), VERSION | BUILD_LOCK_VERSION) {
             return Err(LockParseError::UnsupportedVersion {
-                supported: VERSION,
+                supported: BUILD_LOCK_VERSION,
                 version: lock.version(),
             });
         }
@@ -6169,6 +6254,7 @@ struct LockWire {
     manifest: ResolverManifest,
     #[serde(rename = "package", alias = "distribution", default)]
     packages: Vec<PackageWire>,
+    build_lock: Option<LockedBuilds>,
 }
 
 impl TryFrom<LockWire> for Lock {
@@ -6238,7 +6324,7 @@ impl TryFrom<LockWire> for Lock {
             fork_strategy: options_wire.fork_strategy,
             exclude_newer: options_wire.exclude_newer.into(),
         };
-        let lock = Self::new(
+        let mut lock = Self::new(
             wire.version,
             wire.revision.unwrap_or(0),
             packages,
@@ -6250,6 +6336,21 @@ impl TryFrom<LockWire> for Lock {
             required_environments,
             fork_markers,
         )?;
+
+        if let Some(build_lock) = wire.build_lock {
+            if lock.version != BUILD_LOCK_VERSION {
+                return Err(LockErrorKind::InvalidBuildLock(
+                    "build resolutions require lockfile version 2".to_owned(),
+                )
+                .into());
+            }
+            lock = lock.with_build_lock(build_lock).map_err(LockError::from)?;
+        } else if lock.version == BUILD_LOCK_VERSION {
+            return Err(LockErrorKind::InvalidBuildLock(
+                "lockfile version 2 requires a build-lock table".to_owned(),
+            )
+            .into());
+        }
 
         Ok(lock)
     }
@@ -9683,6 +9784,8 @@ impl std::fmt::Display for WheelTagHint {
 /// is with the caller somewhere in such cases.
 #[derive(Debug, thiserror::Error)]
 enum LockErrorKind {
+    #[error("{0}")]
+    InvalidBuildLock(String),
     /// An error that occurs when the overrides for validating a
     /// metadata-free lockfile cannot be scoped to their packages.
     #[error(transparent)]

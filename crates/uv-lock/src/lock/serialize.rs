@@ -12,9 +12,10 @@ use uv_pep508::MarkerTree;
 use uv_pypi_types::ConflictKind;
 
 use super::{
-    Dependency, DirectSource, ExcludeNewerOverride, ExcludeNewerValue, ForkStrategy, Lock, Package,
-    PackageId, PrereleaseMode, RegistrySource, ResolutionMode, ResolverManifest, ResolverOptions,
-    Source, SourceDist, Wheel, WheelWireSource, simplified_universal_markers,
+    Dependency, DirectSource, ExcludeNewerOverride, ExcludeNewerValue, ForkStrategy, Lock,
+    LockedBuilds, Package, PackageId, PrereleaseMode, RegistrySource, ResolutionMode,
+    ResolverManifest, ResolverOptions, Source, SourceDist, Wheel, WheelWireSource,
+    simplified_universal_markers,
 };
 
 /// Serializes a lockfile directly while preserving the canonical `uv.lock` layout.
@@ -23,6 +24,19 @@ pub(super) fn to_toml(lock: &Lock) -> Result<String, toml_edit::ser::Error> {
     write_lock(&mut writer, lock).map_err(|error| match error {
         WriteError::Format => {
             toml_edit::ser::Error::Custom("failed to write lockfile to a string".to_string())
+        }
+        WriteError::Serialize(error) => error,
+    })?;
+    Ok(writer.output)
+}
+
+pub(super) fn build_lock_to_toml(
+    build_lock: &LockedBuilds,
+) -> Result<String, toml_edit::ser::Error> {
+    let mut writer = LockWriter::default();
+    write_build_lock(&mut writer, build_lock).map_err(|error| match error {
+        WriteError::Format => {
+            toml_edit::ser::Error::Custom("failed to write build lock to a string".to_owned())
         }
         WriteError::Serialize(error) => error,
     })?;
@@ -132,6 +146,51 @@ fn write_lock(writer: &mut LockWriter, lock: &Lock) -> Result<(), WriteError> {
         )?;
     }
 
+    if let Some(build_lock) = &lock.build_lock {
+        write_build_lock(writer, build_lock)?;
+    }
+
+    Ok(())
+}
+
+fn write_build_lock(writer: &mut LockWriter, build_lock: &LockedBuilds) -> Result<(), WriteError> {
+    writer.table(&["build-lock"])?;
+    writer.key_value("executor", serialize_value(&build_lock.executor)?)?;
+    if build_lock.resolutions.is_empty() {
+        writer.key_value("resolution", serialize_value(&Vec::<String>::new())?)?;
+    }
+    for build in &build_lock.resolutions {
+        writer.array_of_tables(&["build-lock", "resolution"])?;
+        writer.key_value("name", build.source.0.name.as_ref())?;
+        if let Some(version) = &build.source.0.version {
+            writer.key_value("version", version.to_string())?;
+        }
+        writer.key_start("source")?;
+        write_source_inline(writer, &build.source.0.source)?;
+        writer.raw("\n");
+        writer.key_value("operation", build.operation.to_string())?;
+        writer.key_value("input", serialize_value(&build.input)?)?;
+        writer.key_multiline_array(
+            "declared-requirements",
+            &build.declared_requirements,
+            |writer, requirement| writer.value(serialize_value(requirement)?),
+        )?;
+        writer.key_multiline_array(
+            "backend-requirements",
+            &build.backend_requirements,
+            |writer, requirement| writer.value(serialize_value(requirement)?),
+        )?;
+        writer.table(&["build-lock", "resolution", "bootstrap"])?;
+        writer.prefix = vec!["build-lock", "resolution", "bootstrap"];
+        write_lock(writer, &build.bootstrap)?;
+        writer.prefix.clear();
+        if let Some(final_resolution) = &build.final_resolution {
+            writer.table(&["build-lock", "resolution", "final"])?;
+            writer.prefix = vec!["build-lock", "resolution", "final"];
+            write_lock(writer, final_resolution)?;
+            writer.prefix.clear();
+        }
+    }
     Ok(())
 }
 
@@ -667,6 +726,7 @@ impl From<toml_edit::ser::Error> for WriteError {
 #[derive(Default)]
 struct LockWriter {
     output: String,
+    prefix: Vec<&'static str>,
 }
 
 impl LockWriter {
@@ -712,7 +772,8 @@ impl LockWriter {
         } else {
             self.raw("[");
         }
-        for (index, key) in path.iter().enumerate() {
+        let prefix = self.prefix.clone();
+        for (index, key) in prefix.iter().chain(path).enumerate() {
             if index > 0 {
                 self.raw(".");
             }
