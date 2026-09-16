@@ -41,10 +41,7 @@ use uv_python::{
     PythonPreference, PythonRequest, PythonSource, PythonVariant, PythonVersionFile,
     VersionFileDiscoveryOptions, VersionRequest,
 };
-use uv_requirements::{
-    LockedRequirements, NamedRequirementsResolver, RequirementsSpecification,
-    read_lock_requirements,
-};
+use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
 use uv_resolver::{
     DependencyMode, FlatIndex, OptionsBuilder, Preference, PythonRequirement, ResolverEnvironment,
     ResolverOutput,
@@ -63,6 +60,7 @@ use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::{Changelog, Modifications};
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
+use crate::commands::upgrade::{LockedRequirements, read_lock_requirements};
 use crate::commands::{capitalize, conjunction, pip};
 use crate::printer::Printer;
 use crate::settings::{

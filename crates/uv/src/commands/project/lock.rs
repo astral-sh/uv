@@ -32,7 +32,7 @@ use uv_python::{
     ConfigDiscovery, Interpreter, PythonDownloads, PythonEnvironment, PythonPreference,
     PythonRequest,
 };
-use uv_requirements::{ExtrasResolver, LockedRequirements, read_lock_requirements};
+use uv_requirements::ExtrasResolver;
 use uv_resolver::{
     FlatIndex, InMemoryIndex, Options, OptionsBuilder, PythonRequirement, ResolverEnvironment,
     UniversalMarker,
@@ -55,6 +55,7 @@ use crate::commands::project::{
     script_extra_build_requires,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
+use crate::commands::upgrade::{LockedRequirements, read_lock_requirements};
 use crate::commands::{ExitStatus, ScriptPath, UvError, pip};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, LockedSource, ResolverSettings};

@@ -100,6 +100,7 @@ pub(crate) mod reporters;
 mod self_update;
 mod tool;
 mod update_shell;
+mod upgrade;
 mod venv;
 mod workspace;
 
