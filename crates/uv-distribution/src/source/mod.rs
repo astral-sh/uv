@@ -1333,21 +1333,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // we use an exact timestamp.
         if let Some(pointer) = LocalRevisionPointer::read_from(&revision_entry)?
             && *pointer.cache_info() == cache_info
+            && pointer.revision().has_digests(hashes)
+            && expected_size.is_none_or(|expected| pointer.revision().size() == Some(expected))
         {
-            if let (Some(expected), Some(actual)) = (expected_size, pointer.revision().size())
-                && expected != actual
-            {
-                return Err(Error::MismatchedSize {
-                    distribution: source.to_string(),
-                    expected,
-                    actual,
-                });
-            }
-            if pointer.revision().has_digests(hashes)
-                && (expected_size.is_none() || pointer.revision().size().is_some())
-            {
-                return Ok(pointer);
-            }
+            return Ok(pointer);
         }
 
         // Otherwise, we need to create a new revision.
