@@ -2,7 +2,9 @@ use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
+use async_zip::base::read::mem::ZipFileReader;
 use async_zip::base::write::ZipFileWriter;
+use async_zip::error::ZipError;
 use async_zip::{Compression, ZipEntryBuilder};
 use reqwest::header::{
     ACCEPT_RANGES, AUTHORIZATION, CONTENT_LENGTH, CONTENT_RANGE, HeaderName, LOCATION, RANGE,
@@ -431,6 +433,71 @@ async fn remote_metadata_bounded_ranges() -> Result<()> {
         .await;
 
     assert_wheel_metadata_readable(&server).await
+}
+
+#[tokio::test]
+async fn remote_metadata_rejects_overflowing_zip64_size() -> Result<()> {
+    let metadata_path = "ok-1.0.0.dist-info/METADATA";
+    let mut writer = ZipFileWriter::new(Vec::new());
+    writer
+        .write_entry_whole(
+            ZipEntryBuilder::new(metadata_path.into(), Compression::Stored),
+            b"Metadata-Version: 2.1\nName: ok\nVersion: 1.0.0\n",
+        )
+        .await?;
+    let mut wheel = writer.close().await?;
+
+    // Add a ZIP64 compressed size to the central directory, leaving the real local header intact.
+    let end = wheel.len() - 22;
+    assert_eq!(&wheel[end..end + 4], b"PK\x05\x06");
+    let directory = u32::from_le_bytes(wheel[end + 16..end + 20].try_into()?) as usize;
+    let directory_size = u32::from_le_bytes(wheel[end + 12..end + 16].try_into()?);
+    let extra = directory + 46 + metadata_path.len();
+    assert_eq!(&wheel[directory..directory + 4], b"PK\x01\x02");
+    assert_eq!(&wheel[directory + 30..directory + 32], &[0, 0]);
+    assert_eq!(&wheel[directory + 46..extra], metadata_path.as_bytes());
+    wheel[directory + 20..directory + 24].copy_from_slice(&u32::MAX.to_le_bytes());
+    wheel[directory + 30..directory + 32].copy_from_slice(&12u16.to_le_bytes());
+    wheel.splice(
+        extra..extra,
+        [1, 0, 8, 0].into_iter().chain(u64::MAX.to_le_bytes()),
+    );
+    let end = end + 12;
+    wheel[end + 12..end + 16].copy_from_slice(&(directory_size + 12).to_le_bytes());
+
+    let archive = ZipFileReader::new(wheel.clone()).await?;
+    assert_eq!(archive.file().entries().len(), 1);
+    assert_eq!(archive.file().entries()[0].compressed_size(), u64::MAX);
+
+    let server = MockServer::start().await;
+    Mock::given(method("HEAD"))
+        .and(path("/artifact"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header(ACCEPT_RANGES, "bytes")
+                .insert_header(CONTENT_LENGTH, wheel.len().to_string()),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/artifact"))
+        .and(header_exists(RANGE.as_str()))
+        .respond_with(move |request: &Request| wheel_range_response(request, &wheel))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let error = assert_wheel_metadata_readable(&server)
+        .await
+        .expect_err("the overflowing entry size should be rejected");
+    let Some(ZipError::InvalidEntryDataRange) = error
+        .chain()
+        .find_map(|cause| cause.downcast_ref::<ZipError>())
+    else {
+        return Err(error.context("expected an invalid ZIP entry data range"));
+    };
+    Ok(())
 }
 
 /// A redirect target may reject range requests while allowing a full download. The range request
