@@ -55,7 +55,7 @@ use itertools::{Either, Itertools};
 use rustc_hash::FxHashMap;
 use version_ranges::Ranges;
 
-use uv_pep440::{Operator, Version, VersionSpecifier, release_specifier_to_range};
+use uv_pep440::{Operator, Version, VersionPattern, VersionSpecifier, release_specifier_to_range};
 
 use crate::marker::MarkerValueExtra;
 use crate::marker::lowering::{
@@ -317,10 +317,31 @@ impl InternerGuard<'_> {
                     ),
                     _ => (key.into(), value),
                 };
-                (
+                let string = self.create_node(
                     Variable::String(key),
-                    Edges::from_string(key, operator, value),
-                )
+                    Edges::from_string(key, operator, value.clone()),
+                );
+                // Darwin kernel releases are dotted versions. Other platforms can include
+                // arbitrary text in `platform_release`, so retain string comparisons there.
+                if key == CanonicalMarkerValueString::PlatformRelease
+                    && let Some(operator) = operator.to_pep440_operator()
+                    && let Ok(pattern) = value.parse::<VersionPattern>()
+                    && let Ok(specifier) = VersionSpecifier::from_pattern(operator, pattern)
+                {
+                    let version = self.create_node(
+                        Variable::VersionString(key),
+                        Edges::from_specifier(specifier),
+                    );
+                    let darwin = self.expression(MarkerExpression::String {
+                        key: MarkerValueString::SysPlatform,
+                        operator: MarkerOperator::Equal,
+                        value: arcstr::literal!("darwin"),
+                    });
+                    let version = self.and(darwin, version);
+                    let string = self.and(darwin.not(), string);
+                    return self.or(version, string);
+                }
+                return string;
             }
             MarkerExpression::List { pair, operator } => (
                 Variable::List(pair),
@@ -1162,6 +1183,8 @@ impl InternerGuard<'_> {
 pub(crate) enum Variable {
     /// A string marker, such as `os_name`.
     String(CanonicalMarkerValueString),
+    /// A string-valued marker interpreted as a version within a platform-specific scope.
+    VersionString(CanonicalMarkerValueString),
     /// A version marker, such as `python_version`.
     ///
     /// This is the highest order variable as it typically contains the most complex
