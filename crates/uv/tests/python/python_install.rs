@@ -16,10 +16,11 @@ use predicates::prelude::predicate;
 use tracing::debug;
 use uv_test::{LATEST_PYTHON_3_12, TestContext, uv_snapshot};
 
-use uv_fs::{Simplified, copy_dir_all};
+use uv_fs::{Simplified, copy_dir_all, remove_symlink};
 use uv_python::PythonInstallationKey;
 use uv_python::managed::{
-    ManagedPythonInstallation, ManagedPythonInstallations, platform_key_from_env,
+    ManagedPythonInstallation, ManagedPythonInstallations, PythonMinorVersionLink,
+    platform_key_from_env,
 };
 use uv_static::EnvVars;
 use walkdir::WalkDir;
@@ -130,6 +131,103 @@ fn python_install() {
 
     // The executable should be removed
     bin_python.assert(predicate::path::missing());
+}
+
+#[tokio::test]
+#[cfg(feature = "test-python-managed")]
+async fn python_install_multiple_build_variants() -> anyhow::Result<()> {
+    let source = uv_test::test_context_with_versions!(&[]).with_managed_python_dirs();
+    source
+        .python_install()
+        .args(["3.13.7", "3.13.7t", "--no-bin"])
+        .assert()
+        .success();
+
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs();
+    let platform = platform_key_from_env()?;
+    let key = format!("cpython-3.13.7-{platform}").parse::<PythonInstallationKey>()?;
+    let managed_dir = context.temp_dir.child("managed");
+    let mut downloads = serde_json::Map::new();
+
+    // Copy the unpacked installations without their minor-version links or executable aliases.
+    // Installing them together must recognize aliases created earlier in the same command.
+    for runtime in [None, Some("freethreaded")] {
+        let runtime_suffix = runtime.map_or(String::new(), |runtime| format!("+{runtime}"));
+        let stock_name = format!("cpython-3.13.7{runtime_suffix}-{platform}");
+        for build_variant in [None, Some("custom")] {
+            let build_suffix = build_variant.map_or(String::new(), |variant| format!("+{variant}"));
+            let name = format!("cpython-3.13.7{runtime_suffix}{build_suffix}-{platform}");
+            copy_dir_all(
+                source.temp_dir.child("managed").child(&stock_name),
+                managed_dir.child(&name),
+            )?;
+            downloads.insert(
+                name,
+                serde_json::json!({
+                    "name": "cpython",
+                    "arch": { "family": key.arch().family().to_string(), "variant": null },
+                    "os": key.os().to_string(),
+                    "libc": key.libc().to_string(),
+                    "major": 3,
+                    "minor": 13,
+                    "patch": 7,
+                    "prerelease": "",
+                    "variant": runtime,
+                    "build_variant": build_variant,
+                    "default": build_variant.is_none(),
+                    "url": "https://custom.example/cpython.tar.gz",
+                    "sha256": null,
+                    "build": null
+                }),
+            );
+        }
+    }
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/metadata"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "version": 1,
+            "downloads": downloads,
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.python_install()
+        .args(["3.13", "3.13+custom", "3.13+freethreaded", "3.13+freethreaded+custom"])
+        .arg("--bin")
+        .arg("--python-downloads-json-url")
+        .arg(format!("{}/metadata", server.uri())), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Installed 2 versions in [TIME]
+     + cpython-3.13.7+freethreaded-[PLATFORM] (python3.13t)
+     + cpython-3.13.7-[PLATFORM] (python3.13)
+    ");
+
+    let installations = ManagedPythonInstallations::from_settings(Some(managed_dir.to_path_buf()))?;
+    for installation in installations.find_all()? {
+        let minor_link = PythonMinorVersionLink::from_installation(&installation)
+            .context("Missing minor-version link")?;
+        assert!(minor_link.exists());
+        if installation.key().build_variant().is_none() {
+            let executable = context
+                .bin_dir
+                .child(installation.key().executable_name_minor());
+            assert_eq!(
+                canonicalize_link_path(&executable),
+                installation
+                    .executable(false)
+                    .simplified_display()
+                    .to_string(),
+            );
+        }
+    }
+
+    Ok(())
 }
 
 fn python_build_variant_context() -> anyhow::Result<(TestContext, ManagedPythonInstallation)> {
@@ -2563,6 +2661,61 @@ fn python_install_preview_upgrade() {
             );
         });
     }
+}
+
+#[test]
+fn python_install_patch_after_minor_alias() -> anyhow::Result<()> {
+    for remove_minor_link in [false, true] {
+        let context = uv_test::test_context_with_versions!(&[])
+            .with_filtered_python_keys()
+            .with_filtered_exe_suffix()
+            .with_managed_python_dirs();
+
+        // `--default` creates aliases through the minor-version link, even for a patch request.
+        context
+            .python_install()
+            .args(["3.12.8", "--default", "--preview"])
+            .assert()
+            .success();
+
+        if remove_minor_link {
+            let minor_link = context
+                .temp_dir
+                .child("managed")
+                .child(format!("cpython-3.12-{}", platform_key_from_env()?));
+            remove_symlink(minor_link.path())?;
+        }
+
+        // An explicit patch upgrade replaces the minor alias with a direct link to that patch.
+        context.python_install().arg("3.12.9").assert().success();
+
+        allow_duplicates! {
+            uv_snapshot!(context.filters(), context.python_install().arg("3.12.9"), @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Python 3.12.9 is already installed
+            ");
+
+            // Moving the minor-version link again must not change the patch alias.
+            uv_snapshot!(context.filters(), context.python_install().args(["3.12.11", "--no-bin"]), @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Installed Python 3.12.11 in [TIME]
+             + cpython-3.12.11-[PLATFORM]
+            ");
+
+            let bin_python = context
+                .bin_dir
+                .child(format!("python3.12{}", std::env::consts::EXE_SUFFIX));
+            uv_snapshot!(context.filters(), Command::new(bin_python.as_os_str()).arg("--version"), @"
+            exit_code: 0 (success)
+            ----- stdout -----
+            Python 3.12.9
+            ");
+        }
+    }
+
+    Ok(())
 }
 
 #[test]
