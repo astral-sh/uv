@@ -23,7 +23,7 @@ use uv_distribution_types::{
 };
 use uv_git::ResolvedRepositoryReference;
 use uv_git_types::GitOid;
-use uv_lock::{Lock, Package, ResolverManifest, SatisfiesResult};
+use uv_lock::{BuildExecutor, BuildLockError, Lock, Package, ResolverManifest, SatisfiesResult};
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::Version;
 use uv_preview::{Preview, PreviewFeature};
@@ -89,6 +89,7 @@ impl LockResult {
 /// Resolve the project requirements into a lockfile.
 pub(crate) async fn lock(
     project_dir: &Path,
+    build_dependencies: Option<bool>,
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,
     dry_run: DryRun,
@@ -107,6 +108,18 @@ pub(crate) async fn lock(
     printer: Printer,
     preview: Preview,
 ) -> anyhow::Result<ExitStatus> {
+    if build_dependencies.is_some() && frozen.is_some() {
+        anyhow::bail!(
+            "Build-dependency lock creation and removal are not available in frozen mode"
+        );
+    }
+    if build_dependencies == Some(true)
+        && !preview.is_enabled(PreviewFeature::BuildDependencyLocking)
+    {
+        anyhow::bail!(
+            "`uv lock --build-dependencies` requires `--preview-features build-dependency-locking`"
+        );
+    }
     // If necessary, initialize the PEP 723 script.
     let script = match script {
         Some(ScriptPath::Path(path)) => {
@@ -221,6 +234,7 @@ pub(crate) async fn lock(
             printer,
             preview,
         )
+        .with_build_dependencies(build_dependencies)
         .with_refresh(&refresh)
         .with_lockfile_contents_check(
             matches!(&refresh, Refresh::All(..))
@@ -291,6 +305,7 @@ pub(crate) enum LockMode<'env> {
 /// A lock operation.
 pub(crate) struct LockOperation<'env> {
     mode: LockMode<'env>,
+    build_dependencies: Option<bool>,
     constraints: Vec<NameRequirementSpecification>,
     refresh: Option<&'env Refresh>,
     check_lockfile_contents: bool,
@@ -321,6 +336,7 @@ impl<'env> LockOperation<'env> {
     ) -> Self {
         Self {
             mode,
+            build_dependencies: None,
             constraints: vec![],
             refresh: None,
             check_lockfile_contents: false,
@@ -334,6 +350,13 @@ impl<'env> LockOperation<'env> {
             printer,
             preview,
         }
+    }
+
+    /// Set an explicit request to create or remove the build-dependency contract.
+    #[must_use]
+    pub(crate) fn with_build_dependencies(mut self, build_dependencies: Option<bool>) -> Self {
+        self.build_dependencies = build_dependencies;
+        self
     }
 
     /// Set the external constraints for the [`LockOperation`].
@@ -398,6 +421,7 @@ impl<'env> LockOperation<'env> {
                     target,
                     interpreter,
                     Some(existing),
+                    self.build_dependencies,
                     self.mode,
                     check_lockfile_contents,
                     self.constraints,
@@ -452,6 +476,7 @@ impl<'env> LockOperation<'env> {
                     target,
                     interpreter,
                     existing,
+                    self.build_dependencies,
                     self.mode,
                     check_lockfile_contents,
                     self.constraints,
@@ -486,6 +511,7 @@ async fn do_lock(
     target: LockTarget<'_>,
     interpreter: &Interpreter,
     existing_lock: Option<Lock>,
+    build_dependencies: Option<bool>,
     mode: LockMode<'_>,
     check_lockfile_contents: Option<String>,
     external: Vec<NameRequirementSpecification>,
@@ -501,6 +527,19 @@ async fn do_lock(
     preview: Preview,
 ) -> Result<LockResult, ProjectError> {
     let start = std::time::Instant::now();
+    let require_build_lock = build_dependencies.unwrap_or_else(|| {
+        existing_lock
+            .as_ref()
+            .is_some_and(|lock| lock.build_lock().is_some())
+    });
+    let previous_build_lock = existing_lock.as_ref().and_then(Lock::build_lock).cloned();
+    if build_dependencies.is_none()
+        && let Some(builds) = &previous_build_lock
+    {
+        builds
+            .validate_executor(&BuildExecutor::from_interpreter(interpreter)?)
+            .map_err(anyhow::Error::from)?;
+    }
 
     // Extract the project settings.
     let ResolverSettings {
@@ -912,6 +951,12 @@ async fn do_lock(
     // If any of the resolution-determining settings changed, invalidate the lock.
     let existing_lock = if let Some(existing_lock) = existing_lock {
         let validation_build_dispatch = build_dispatch.fork(&locked_build_hasher);
+        let validation_build_dispatch =
+            if require_build_lock && let Some(builds) = existing_lock.build_lock() {
+                validation_build_dispatch.with_build_lock(builds, target.install_path())?
+            } else {
+                validation_build_dispatch
+            };
         let database = DistributionDatabase::new(
             &client,
             &validation_build_dispatch,
@@ -978,10 +1023,62 @@ async fn do_lock(
     match existing_lock {
         // Resolution from the lockfile succeeded.
         Some(ValidatedLock::Satisfies(lock)) => {
+            let needs_build_update = if require_build_lock {
+                if build_dependencies == Some(true) || lock.build_lock().is_none() {
+                    true
+                } else if let Some(builds) = lock.build_lock() {
+                    match builds.validate_lock_sources(
+                        &lock,
+                        target.install_path(),
+                        interpreter,
+                        build_options,
+                    ) {
+                        Ok(()) => false,
+                        Err(
+                            err @ (BuildLockError::ChangedSourceInput(_)
+                            | BuildLockError::UncoveredSource { .. }),
+                        ) => {
+                            if matches!(mode, LockMode::Locked(..)) {
+                                return Err(anyhow::Error::from(err).into());
+                            }
+                            true
+                        }
+                        Err(err) => return Err(anyhow::Error::from(err).into()),
+                    }
+                } else {
+                    false
+                }
+            } else {
+                lock.build_lock().is_some()
+            };
+            let result = if needs_build_update {
+                let previous = lock.clone();
+                let lock = if require_build_lock {
+                    let builds = build_dispatch
+                        .capture_build_lock(
+                            &lock,
+                            target.install_path(),
+                            previous_build_lock.as_ref(),
+                            upgrade,
+                        )
+                        .await?;
+                    lock.with_build_lock(builds)
+                        .map_err(uv_lock::LockError::from)?
+                } else {
+                    lock.without_build_lock()
+                };
+                if previous == lock {
+                    LockResult::Unchanged(lock)
+                } else {
+                    LockResult::Changed(Some(previous), lock)
+                }
+            } else {
+                LockResult::Unchanged(lock)
+            };
             // Print the success message after completing resolution.
-            logger.on_complete(lock.len(), start, printer)?;
+            logger.on_complete(result.lock().len(), start, printer)?;
 
-            Ok(LockResult::Unchanged(lock))
+            Ok(result)
         }
 
         // The lockfile did not contain enough information to obtain a resolution, fallback
@@ -1128,6 +1225,21 @@ async fn do_lock(
 
             let lock = if preview.is_enabled(PreviewFeature::MissingExcludeNewerPackageLock) {
                 lock.without_unused_exclude_newer_packages()
+            } else {
+                lock
+            };
+
+            let lock = if require_build_lock {
+                let builds = build_dispatch
+                    .capture_build_lock(
+                        &lock,
+                        target.install_path(),
+                        previous_build_lock.as_ref(),
+                        upgrade,
+                    )
+                    .await?;
+                lock.with_build_lock(builds)
+                    .map_err(uv_lock::LockError::from)?
             } else {
                 lock
             };
