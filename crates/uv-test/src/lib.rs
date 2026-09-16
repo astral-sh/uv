@@ -668,7 +668,7 @@ impl TestContext {
     #[must_use]
     pub fn with_filtered_current_version(mut self) -> Self {
         self.filters.push((
-            regex::escape(&format!("v{}", env!("CARGO_PKG_VERSION"))),
+            regex::escape(&format!("v{}", uv_version::version())),
             "v[CURRENT_VERSION]".to_string(),
         ));
         self

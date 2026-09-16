@@ -10,6 +10,7 @@ use serde::Serialize;
 use serde_json::Value;
 use uv_audit::{AdverseStatus, ProjectStatus, Vulnerability};
 use uv_normalize::PackageName;
+use uv_version::version as uv_version;
 
 use super::AuditResults;
 
@@ -81,10 +82,10 @@ impl Report {
                     driver: ToolComponent {
                         download_uri: Some(env!("CARGO_PKG_REPOSITORY").to_string()),
                         information_uri: Some(env!("CARGO_PKG_HOMEPAGE").to_string()),
-                        name: env!("CARGO_PKG_NAME").to_string(),
+                        name: "uv".to_string(),
                         rules: rules.into_values().collect(),
-                        semantic_version: Some(env!("CARGO_PKG_VERSION").to_string()),
-                        version: Some(env!("CARGO_PKG_VERSION").to_string()),
+                        semantic_version: Some(uv_version().to_string()),
+                        version: Some(uv_version().to_string()),
                     },
                 },
             }],

@@ -23,6 +23,7 @@ use uv_redacted::DisplaySafeUrl;
 use uv_static::{
     EnvVars, astral_mirror_base_url, astral_mirror_url_from_env, custom_astral_mirror_url,
 };
+use uv_version::version as uv_version;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -114,7 +115,7 @@ pub(crate) async fn self_update(
     // If we know what our version is, ignore whatever the receipt thinks it is!
     // This makes us behave better if someone manually installs a random version of uv
     // in a way that doesn't update the receipt.
-    if let Ok(version) = env!("CARGO_PKG_VERSION").parse() {
+    if let Ok(version) = uv_version().parse() {
         // This is best-effort, it's fine if it fails (also it can't actually fail)
         let _ = updater.set_current_version(version);
     }
@@ -177,7 +178,7 @@ pub(crate) async fn self_update(
 
         debug!("Resolved self-update target to `uv=={}`", resolved.version);
 
-        let current_version = Pep440Version::from_str(env!("CARGO_PKG_VERSION"))
+        let current_version = Pep440Version::from_str(uv_version())
             .context("Failed to parse the current uv version")?;
         if !is_update_needed(&current_version, &resolved.version, version.is_some()) {
             writeln!(
@@ -187,7 +188,7 @@ pub(crate) async fn self_update(
                     "{}{} You're already on version {} of uv{}.",
                     "success".green().bold(),
                     ":".bold(),
-                    format!("v{}", env!("CARGO_PKG_VERSION")).bold().cyan(),
+                    format!("v{}", uv_version()).bold().cyan(),
                     if version.is_none() {
                         " (the latest version)".to_string()
                     } else {
@@ -202,7 +203,7 @@ pub(crate) async fn self_update(
             writeln!(
                 printer.stderr_important(),
                 "Would update uv from {} to {}",
-                format!("v{}", env!("CARGO_PKG_VERSION")).bold().white(),
+                format!("v{}", uv_version()).bold().white(),
                 format!("v{}", resolved.version).bold().white(),
             )?;
             return Ok(ExitStatus::Success);
@@ -244,7 +245,7 @@ pub(crate) async fn self_update(
             writeln!(
                 printer.stderr_important(),
                 "Would update uv from {} to {}",
-                format!("v{}", env!("CARGO_PKG_VERSION")).bold().white(),
+                format!("v{}", uv_version()).bold().white(),
                 version.bold().white(),
             )?;
         } else {
@@ -253,7 +254,7 @@ pub(crate) async fn self_update(
                 "{}",
                 format_args!(
                     "You're on the latest version of uv ({})",
-                    format!("v{}", env!("CARGO_PKG_VERSION")).bold().white()
+                    format!("v{}", uv_version()).bold().white()
                 )
             )?;
         }
@@ -705,7 +706,7 @@ async fn run_custom_updater(
                     "{}{} You're on the latest version of uv ({})",
                     "success".green().bold(),
                     ":".bold(),
-                    format!("v{}", env!("CARGO_PKG_VERSION")).bold().cyan()
+                    format!("v{}", uv_version()).bold().cyan()
                 )
             )?;
         }
