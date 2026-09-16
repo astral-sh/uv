@@ -80,7 +80,12 @@ fn check_python_version() -> Result<()> {
         .temp_dir
         .child(".python-version")
         .write_str("3.12\n")?;
-    context.temp_dir.child("main.py").write_str("value = 1\n")?;
+    context.temp_dir.child("main.py").write_str(indoc! {r"
+        import sys
+        from typing import reveal_type
+
+        reveal_type(sys.version_info[1])
+    "})?;
 
     let check = || {
         let mut command = context.check();
@@ -90,6 +95,7 @@ fn check_python_version() -> Result<()> {
             .arg("--ty-version")
             .arg("0.0.17")
             .arg("--show-command")
+            .env("TY_OUTPUT_FORMAT", "concise")
             .env_remove(EnvVars::RUST_LOG);
         command
     };
@@ -97,7 +103,8 @@ fn check_python_version() -> Result<()> {
     uv_snapshot!(context.filters(), check(), @"
     exit_code: 0 (success)
     ----- stdout -----
-    All checks passed!
+    main.py:4:13: info[revealed-type] Revealed type: `Literal[11]`
+    Found 1 diagnostic
 
     ----- stderr -----
     Running `ty check --color auto -- ''`
@@ -106,7 +113,8 @@ fn check_python_version() -> Result<()> {
     uv_snapshot!(context.filters(), check().arg("--python").arg("cpython@3.12"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    All checks passed!
+    main.py:4:13: info[revealed-type] Revealed type: `Literal[12]`
+    Found 1 diagnostic
 
     ----- stderr -----
     Running `ty check --color auto --python-version 3.12 -- ''`
@@ -115,7 +123,8 @@ fn check_python_version() -> Result<()> {
     uv_snapshot!(context.filters(), check().env(EnvVars::UV_PYTHON, context.interpreter()), @"
     exit_code: 0 (success)
     ----- stdout -----
-    All checks passed!
+    main.py:4:13: info[revealed-type] Revealed type: `Literal[12]`
+    Found 1 diagnostic
 
     ----- stderr -----
     Running `ty check --color auto --python-version 3.12 -- ''`
@@ -124,7 +133,8 @@ fn check_python_version() -> Result<()> {
     uv_snapshot!(context.filters(), check().arg("--no-project").arg("--python").arg("3.12"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    All checks passed!
+    main.py:4:13: info[revealed-type] Revealed type: `Literal[12]`
+    Found 1 diagnostic
 
     ----- stderr -----
     Running `ty check --color auto --python-version 3.12`
@@ -135,13 +145,17 @@ fn check_python_version() -> Result<()> {
         # requires-python = ">=3.12"
         # dependencies = []
         # ///
-        value = 1
+        import sys
+        from typing import reveal_type
+
+        reveal_type(sys.version_info[1])
     "#})?;
 
     uv_snapshot!(context.filters(), check().arg("--script").arg("script.py").arg("--python").arg("3.12"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    All checks passed!
+    script.py:8:13: info[revealed-type] Revealed type: `Literal[12]`
+    Found 1 diagnostic
 
     ----- stderr -----
     Running `ty check --color auto --python-version 3.12 -- script.py`
@@ -1371,7 +1385,10 @@ fn check_no_sync_uses_compatible_lock_interpreter() -> Result<()> {
         dependencies = []
     "#})?;
     context.temp_dir.child("main.py").write_str(indoc! {r"
-        x: int = 1
+        import sys
+        from typing import reveal_type
+
+        reveal_type(sys.version_info[1])
     "})?;
     context
         .venv()
@@ -1390,11 +1407,13 @@ fn check_no_sync_uses_compatible_lock_interpreter() -> Result<()> {
             .arg("--ty-version")
             .arg("0.0.17")
             .arg("--show-command")
+            .env("TY_OUTPUT_FORMAT", "concise")
             .env_remove(EnvVars::RUST_LOG),
         @"
     exit_code: 0 (success)
     ----- stdout -----
-    All checks passed!
+    main.py:4:13: info[revealed-type] Revealed type: `Literal[11]`
+    Found 1 diagnostic
 
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
@@ -1417,11 +1436,13 @@ fn check_no_sync_uses_compatible_lock_interpreter() -> Result<()> {
             .arg("--ty-version")
             .arg("0.0.17")
             .arg("--show-command")
+            .env("TY_OUTPUT_FORMAT", "concise")
             .env_remove(EnvVars::RUST_LOG),
         @"
     exit_code: 0 (success)
     ----- stdout -----
-    All checks passed!
+    main.py:4:13: info[revealed-type] Revealed type: `Literal[11]`
+    Found 1 diagnostic
 
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
