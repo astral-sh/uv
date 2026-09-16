@@ -76,7 +76,7 @@ from argparse import ArgumentParser
 from dataclasses import dataclass
 from pathlib import Path
 from shutil import rmtree
-from subprocess import PIPE, check_call, run
+from subprocess import PIPE, CalledProcessError, check_call, run
 from tempfile import TemporaryDirectory, gettempdir
 from time import sleep
 
@@ -840,7 +840,16 @@ def main():
             # Each publish gets its own client, since we may need to introduce
             # target-specific authentication.
             with httpx.Client(timeout=120) as client:
-                test_publish_project(plan, client)
+                try:
+                    test_publish_project(plan, client)
+                except CalledProcessError as error:
+                    if error.stderr:
+                        print(
+                            f"Subprocess failed for {plan.target} "
+                            f"(exit code {error.returncode}):\n{error.stderr}",
+                            file=sys.stderr,
+                        )
+                    raise
 
 
 if __name__ == "__main__":
