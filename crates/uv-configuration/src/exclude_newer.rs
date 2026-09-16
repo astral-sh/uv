@@ -436,7 +436,7 @@ impl ExcludeNewer {
 
     /// Returns the effective exclude-newer timestamp for a specific package, falling back to the
     /// global value if no package-specific setting exists.
-    pub(crate) fn exclude_newer_package(&self, package_name: &PackageName) -> Option<Timestamp> {
+    pub fn exclude_newer_package(&self, package_name: &PackageName) -> Option<Timestamp> {
         match self.package.get(package_name) {
             Some(ExcludeNewerOverride::Enabled(value)) => Some(value.timestamp()),
             Some(ExcludeNewerOverride::Disabled) => None,
@@ -456,7 +456,7 @@ impl ExcludeNewer {
 
     /// Returns the effective exclude-newer timestamp and its source for a package resolved from a
     /// specific index.
-    pub(crate) fn exclude_newer_package_for_index_with_source(
+    pub fn exclude_newer_package_for_index_with_source(
         &self,
         package_name: &PackageName,
         index: Option<&ExcludeNewerOverride>,
@@ -487,7 +487,7 @@ impl ExcludeNewer {
     }
 
     /// Returns true if this has any configuration (global or per-package).
-    pub(crate) fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.global.is_none() && self.package.is_empty()
     }
 

@@ -62,7 +62,6 @@ use uv_types::{BuildContext, HashStrategy};
 use uv_warnings::warn_user_once;
 use uv_workspace::{Editability, WorkspaceMember};
 
-use crate::fork_strategy::ForkStrategy;
 pub use crate::lock::deserialize::Error as CanonicalLockError;
 pub(crate) use crate::lock::export::PylockTomlPackage;
 pub use crate::lock::export::RequirementsTxtExport;
@@ -79,6 +78,7 @@ use crate::{
     InMemoryIndex, MetadataResponse, Prerelease, PrereleaseMode, PrereleasePackage, ResolutionMode,
     ResolverOutput,
 };
+use uv_configuration::ForkStrategy;
 
 mod deserialize;
 pub(crate) mod export;

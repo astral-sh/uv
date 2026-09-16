@@ -5,9 +5,10 @@ use std::fmt;
 use anyhow::bail;
 
 use uv_cache::Refresh;
-use uv_configuration::{BuildIsolation, Reinstall, Upgrade};
+use uv_configuration::{
+    BuildIsolation, ExcludeNewerPackage, PrereleaseMode, PrereleasePackage, Reinstall, Upgrade,
+};
 use uv_distribution_types::{ConfigSettings, Index, PackageConfigSettings, Requirement};
-use uv_resolver::{ExcludeNewerPackage, PrereleaseMode, PrereleasePackage};
 use uv_settings::{
     Combine, EnvFlag, IndexOptions, PipOptions, ResolverInstallerOptions, ResolverOptions,
 };

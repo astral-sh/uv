@@ -24,7 +24,6 @@ use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, Tags};
 
 use crate::candidate_selector::CandidateSelector;
 use crate::error::{ErrorTree, PrefixMatch};
-use crate::exclude_newer::EffectiveExcludeNewerSource;
 use crate::fork_indexes::ForkIndexes;
 use crate::fork_urls::ForkUrls;
 use crate::prerelease::PrereleaseSelection;
@@ -35,6 +34,7 @@ use crate::resolver::{
     UnavailableVersion,
 };
 use crate::{Flexibility, InMemoryIndex, Options, ResolverEnvironment, VersionsResponse};
+use uv_configuration::EffectiveExcludeNewerSource;
 
 type ReportDerived = Derived<PubGrubPackage, Range<Version>, UnavailableReason>;
 
