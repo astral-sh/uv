@@ -97,6 +97,12 @@ pub(super) struct UrlDeclaration {
     pub(super) trusted_hashes: bool,
 }
 
+/// Two selected declarations that require different installation modes for the same directory.
+pub(super) struct DirectoryConflict {
+    pub(super) name: PackageName,
+    pub(super) origins: [(Id<PubGrubPackage>, SolverVersion, ParsedUrl); 2],
+}
+
 /// Outgoing URL and first-party candidate-policy possibilities from metadata the resolver has
 /// already inspected, including inactive extras. This cannot authorize a source or candidate itself.
 #[derive(Clone)]
@@ -432,6 +438,7 @@ impl SourceDependencies {
             }
         }
 
+        let mut directory_declarations = BTreeMap::<_, Vec<_>>::new();
         for package in &grounding.reachable {
             let Some(candidate) = selected.get(package) else {
                 continue;
@@ -471,6 +478,23 @@ impl SourceDependencies {
                     }
                     if let Some(declaration) = &dependency.declaration {
                         if declaration.trusted {
+                            if let ParsedUrl::Directory(directory) = &declaration.url.parsed_url
+                                && let Some(editable) = directory.editable
+                                && directory.r#virtual != Some(true)
+                                && let Some(name) =
+                                    state.package_store[dependency.package].name_no_root()
+                            {
+                                directory_declarations
+                                    .entry((name.clone(), declaration.source))
+                                    .or_default()
+                                    .push((
+                                        *package,
+                                        candidate.clone(),
+                                        declaration.url.parsed_url.clone(),
+                                        editable,
+                                        edge_context,
+                                    ));
+                            }
                             grounding
                                 .presentations
                                 .entry(declaration.source)
@@ -524,6 +548,41 @@ impl SourceDependencies {
                 }
             }
         }
+        for ((name, source), mut declarations) in directory_declarations {
+            declarations.sort_by(|a, b| {
+                (&state.package_store[a.0], &a.1, &a.2).cmp(&(
+                    &state.package_store[b.0],
+                    &b.1,
+                    &b.2,
+                ))
+            });
+            let mut editable_origins = declarations
+                .iter()
+                .filter(|(_, _, _, editable, _)| *editable)
+                .map(|(parent, candidate, _, _, _)| (*parent, candidate.clone()))
+                .collect::<Vec<_>>();
+            editable_origins.dedup();
+            if !editable_origins.is_empty() {
+                grounding
+                    .directory_editable_origins
+                    .insert(source, editable_origins);
+            }
+            let pair = declarations.iter().enumerate().find_map(|(index, a)| {
+                declarations[index + 1..]
+                    .iter()
+                    .find(|b| a.3 != b.3 && !a.4.is_disjoint(b.4))
+                    .map(|b| (a, b))
+            });
+            if let Some((a, b)) = pair {
+                grounding.directory_conflicts.push(DirectoryConflict {
+                    name,
+                    origins: [
+                        (a.0, a.1.clone(), a.2.clone()),
+                        (b.0, b.1.clone(), b.2.clone()),
+                    ],
+                });
+            }
+        }
         grounding
             .untrusted
             .sort_by_key(|(parent, _, package, source)| {
@@ -558,6 +617,8 @@ pub(super) struct Grounding {
     presentations: FxHashMap<SourceId, VerbatimParsedUrl>,
     pub(super) indexes: FxHashMap<PackageName, BTreeMap<IndexId, MarkerTree>>,
     source_contexts: BTreeSet<MarkerTree>,
+    pub(super) directory_conflicts: Vec<DirectoryConflict>,
+    directory_editable_origins: FxHashMap<SourceId, Vec<(Id<PubGrubPackage>, SolverVersion)>>,
     pub(super) hashes: ActiveHashes,
     hash_declarations: Vec<(Id<PubGrubPackage>, SolverVersion, Arc<Requirement>, bool)>,
     pub(super) policies: Vec<(Arc<Requirement>, bool)>,
@@ -697,6 +758,33 @@ impl Grounding {
             .unwrap_or_else(|| urls.get(source).as_ref().clone())
     }
 
+    /// Use editable metadata early during a retry, without making the expectation a declaration.
+    pub(super) fn metadata_url(
+        &self,
+        source: SourceId,
+        urls: &Urls,
+        preferred_editable: &BTreeSet<SourceId>,
+    ) -> VerbatimParsedUrl {
+        let mut url = self.url(source, urls);
+        if preferred_editable.contains(&source)
+            && let ParsedUrl::Directory(directory) = &mut url.parsed_url
+        {
+            directory.editable = Some(true);
+        }
+        url
+    }
+
+    /// Selected declarations that require this source to be editable.
+    pub(super) fn directory_editable_origins(
+        &self,
+        source: SourceId,
+    ) -> impl Iterator<Item = &(Id<PubGrubPackage>, SolverVersion)> {
+        self.directory_editable_origins
+            .get(&source)
+            .into_iter()
+            .flatten()
+    }
+
     pub(super) fn iter(
         &self,
     ) -> impl Iterator<Item = (&PackageName, &BTreeMap<SourceId, MarkerTree>)> {
@@ -715,18 +803,63 @@ fn scope_requirement(requirement: &Arc<Requirement>, marker: MarkerTree) -> Arc<
     }
 }
 
-/// Merge equivalent active declarations, preferring user path spellings and explicit editability.
+/// Merge active declarations of the same resource. Unspecified editability can adopt either
+/// explicit mode, while a virtual declaration must not suppress an independently required install.
 fn merge_presentation(previous: &mut VerbatimParsedUrl, incoming: &VerbatimParsedUrl) {
+    if let (ParsedUrl::Directory(old), ParsedUrl::Directory(new)) =
+        (&previous.parsed_url, &incoming.parsed_url)
+    {
+        let editable = if old.r#virtual == Some(true) && new.r#virtual == Some(true) {
+            Some(false)
+        } else {
+            let old_editable = if old.r#virtual == Some(true) {
+                None
+            } else {
+                old.editable
+            };
+            let new_editable = if new.r#virtual == Some(true) {
+                None
+            } else {
+                new.editable
+            };
+            match (old_editable, new_editable) {
+                (Some(a), Some(b)) => Some(a || b),
+                (a, b) => a.or(b),
+            }
+        };
+        let r#virtual = if old.r#virtual.is_none() && new.r#virtual.is_none() {
+            None
+        } else {
+            Some(old.r#virtual == Some(true) && new.r#virtual == Some(true))
+        };
+        let incoming_preferred = (
+            incoming.verbatim.force_relative(),
+            &incoming.verbatim,
+            incoming.verbatim.given().is_none(),
+            incoming.verbatim.given(),
+        ) < (
+            previous.verbatim.force_relative(),
+            &previous.verbatim,
+            previous.verbatim.given().is_none(),
+            previous.verbatim.given(),
+        );
+        if incoming_preferred {
+            *previous = incoming.clone();
+        }
+        if let ParsedUrl::Directory(ParsedDirectoryUrl {
+            editable: selected_editable,
+            r#virtual: selected_virtual,
+            ..
+        }) = &mut previous.parsed_url
+        {
+            *selected_editable = editable;
+            *selected_virtual = r#virtual;
+        }
+        return;
+    }
     let incoming_preferred =
         !incoming.verbatim.force_relative() || previous.verbatim.force_relative();
-    let previous_editable = previous.is_editable();
     if incoming_preferred {
         *previous = incoming.clone();
-    }
-    if (previous_editable || incoming.is_editable())
-        && let ParsedUrl::Directory(ParsedDirectoryUrl { editable, .. }) = &mut previous.parsed_url
-        && editable.is_none()
-    {
-        *editable = Some(true);
     }
 }

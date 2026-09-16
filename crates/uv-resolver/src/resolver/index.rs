@@ -1,4 +1,5 @@
 use std::hash::BuildHasherDefault;
+use std::iter;
 use std::sync::{Arc, Mutex};
 
 use rustc_hash::{FxHashMap, FxHasher};
@@ -112,6 +113,9 @@ impl InMemoryIndex {
     /// Supply metadata for a source tree before the next solve, replacing any completed output.
     pub fn insert_project_metadata(&self, id: DistributionId, metadata: Arc<MetadataResponse>) {
         self.invalidate_project_metadata(&id);
+        if let Some(alternate) = Self::other_directory_mode(&id) {
+            self.0.distributions.done(alternate, metadata.clone());
+        }
         self.0.distributions.done(id, metadata);
     }
 
@@ -120,13 +124,31 @@ impl InMemoryIndex {
         &self,
         id: &DistributionId,
     ) -> Option<Arc<MetadataResponse>> {
-        let committed = self
+        let alternate = Self::other_directory_mode(id);
+        let mut committed = self
             .0
             .resolved_direct
             .lock()
-            .expect("distribution metadata lock is not poisoned")
-            .remove(id);
-        self.0.distributions.remove(id).or(committed)
+            .expect("distribution metadata lock is not poisoned");
+        let mut previous = None;
+        for id in iter::once(id).chain(alternate.as_ref()) {
+            let resolved = committed.remove(id);
+            let cached = self.0.distributions.remove(id);
+            previous = previous.or(cached).or(resolved);
+        }
+        previous
+    }
+
+    /// A project edit changes both build modes, even if preparatory metadata used a bare URL.
+    fn other_directory_mode(id: &DistributionId) -> Option<DistributionId> {
+        match id {
+            DistributionId::Url(url) => Some(DistributionId::EditableDirectory(url.clone())),
+            DistributionId::EditableDirectory(url) => Some(DistributionId::Url(url.clone())),
+            DistributionId::PathBuf(_)
+            | DistributionId::Digest(_)
+            | DistributionId::AbsoluteUrl(_)
+            | DistributionId::RelativeUrl(..) => None,
+        }
     }
 
     pub(crate) fn direct(

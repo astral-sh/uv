@@ -106,7 +106,8 @@ impl Urls {
         &self.initial
     }
 
-    /// Give equivalent resource spellings the same immutable solver identity.
+    /// Give compatible resource spellings an immutable solver identity. A plain or virtual
+    /// directory can share either installation mode; selected paths reconcile explicit choices.
     pub(crate) fn intern(
         &self,
         name: &PackageName,
@@ -248,7 +249,9 @@ pub(super) fn same_resource(a: &ParsedUrl, b: &ParsedUrl, git: &GitResolver) -> 
             if let ParsedUrl::Directory(b) = b {
                 (a.install_path == b.install_path
                     || is_same_file(&a.install_path, &b.install_path).unwrap_or(false))
-                    && a.editable.is_none_or(|a| b.editable.is_none_or(|b| a == b))
+                    && (a.r#virtual == Some(true)
+                        || b.r#virtual == Some(true)
+                        || a.editable.is_none_or(|a| b.editable.is_none_or(|b| a == b)))
             } else {
                 false
             }

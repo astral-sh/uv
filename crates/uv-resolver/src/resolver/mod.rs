@@ -413,6 +413,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .or_else(|| search.failed_source_error())
                     .or_else(|| search.failed_policy_error());
                 return Err(source_error
+                    .or(search.directory_error)
                     .or(search.error)
                     .or(search.fallback_source_error)
                     .or_else(|| search.candidate_errors.into_values().next())
@@ -436,6 +437,46 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     ForkContinuation::SelectVersion { package } => (package, None),
                     ForkContinuation::UseVersion { package, version } => (package, Some(version)),
                     ForkContinuation::Propagate => {
+                        if !state.directory_metadata_modes.is_empty()
+                            && state.source_dependencies.has_contextual_sources()
+                        {
+                            let grounding = state.source_dependencies.grounding(
+                                &state.pubgrub,
+                                &state.env,
+                                &state.python_requirement,
+                                &self.urls,
+                                &self.git,
+                            );
+                            if let Some(marker) =
+                                grounding.conditional_source(&state.env, &state.python_requirement)
+                                && let Some((with_source, without_source)) =
+                                    fork_version_by_marker(&state.env, marker)
+                            {
+                                for env in [with_source, without_source] {
+                                    forked_states.push(SourceSearch::new(self.fresh_source_fork(
+                                        env,
+                                        SourceAssumptions::default(),
+                                        requests,
+                                    )));
+                                }
+                                continue 'FORK;
+                            }
+                            if grounding.directory_conflicts.is_empty()
+                                && let Some((source, editable)) =
+                                    state.changed_directory_metadata(&grounding, &self.urls, true)
+                            {
+                                self.retry_directory_metadata(
+                                    &state,
+                                    &mut search,
+                                    &grounding,
+                                    source,
+                                    editable,
+                                    requests,
+                                );
+                                forked_states.push(search);
+                                continue 'FORK;
+                            }
+                        }
                         // Run unit propagation.
                         let result = state.pubgrub.unit_propagation(state.next);
                         if state.env.fork_markers().is_some()
@@ -590,6 +631,21 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     &state.python_requirement,
                                 )
                             };
+                            if state.source_dependencies.has_urls()
+                                && let Some(marker) = grounding
+                                    .conditional_source(&state.env, &state.python_requirement)
+                                && let Some((with_source, without_source)) =
+                                    fork_version_by_marker(&state.env, marker)
+                            {
+                                for env in [with_source, without_source] {
+                                    forked_states.push(SourceSearch::new(self.fresh_source_fork(
+                                        env,
+                                        SourceAssumptions::default(),
+                                        requests,
+                                    )));
+                                }
+                                continue 'FORK;
+                            }
                             let ungrounded = state
                                 .pubgrub
                                 .partial_solution
@@ -676,6 +732,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 search.seen.insert((
                                     state.source_assumptions.clone(),
                                     state.preferred_lowest.clone(),
+                                    state.preferred_editable.clone(),
                                 ));
                                 state.next = package;
                                 state
@@ -736,6 +793,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 search.seen.insert((
                                     state.source_assumptions.clone(),
                                     state.preferred_lowest.clone(),
+                                    state.preferred_editable.clone(),
                                 ));
                                 state.next = parent;
                                 state
@@ -745,6 +803,87 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         Term::Positive(candidate),
                                     ));
                                 continue;
+                            }
+                            if let Some(conflict) = grounding.directory_conflicts.first() {
+                                let mut urls = conflict
+                                    .origins
+                                    .iter()
+                                    .map(|(_, _, url)| url.clone())
+                                    .collect::<Vec<_>>();
+                                urls.sort();
+                                let error = ResolveError::ConflictingUrls {
+                                    package_name: conflict.name.clone(),
+                                    urls,
+                                    env: state.env.clone(),
+                                };
+                                let (parent, candidate, _) = &conflict.origins[1];
+                                let error = if let Some(name) =
+                                    state.pubgrub.package_store[*parent].name_no_root()
+                                    && let Some(chain) =
+                                        state.source_dependencies.chain(*parent, candidate)
+                                {
+                                    ResolveError::Dependencies(
+                                        Box::new(error),
+                                        name.clone(),
+                                        candidate.version.clone(),
+                                        chain.clone(),
+                                    )
+                                } else {
+                                    enrich_dependency_error(
+                                        error,
+                                        *parent,
+                                        candidate,
+                                        &state.pubgrub,
+                                    )
+                                };
+                                let mut origins = conflict
+                                    .origins
+                                    .iter()
+                                    .map(|(id, candidate, _)| {
+                                        (
+                                            state.pubgrub.package_store[*id].clone(),
+                                            candidate.clone(),
+                                        )
+                                    })
+                                    .collect::<Vec<_>>();
+                                origins.dedup();
+                                // The native assignment satisfied all other requirements before
+                                // this policy invalidated it, so retain that cause across retries.
+                                search.directory_error.get_or_insert(error);
+                                if origins.len() == 1 {
+                                    state.next = *parent;
+                                    state.pubgrub.add_incompatibility(
+                                        Incompatibility::no_versions(
+                                            *parent,
+                                            Term::Positive(CandidateSet::singleton(
+                                                candidate.clone(),
+                                            )),
+                                        ),
+                                    );
+                                    continue;
+                                }
+                                self.enqueue_policy_alternatives(
+                                    &state,
+                                    &mut search,
+                                    origins,
+                                    requests,
+                                );
+                                forked_states.push(search);
+                                continue 'FORK;
+                            }
+                            if let Some((source, editable)) =
+                                state.changed_directory_metadata(&grounding, &self.urls, false)
+                            {
+                                self.retry_directory_metadata(
+                                    &state,
+                                    &mut search,
+                                    &grounding,
+                                    source,
+                                    editable,
+                                    requests,
+                                );
+                                forked_states.push(search);
+                                continue 'FORK;
                             }
                             let candidate_policy = state
                                 .pubgrub
@@ -842,6 +981,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 search.seen.insert((
                                     state.source_assumptions.clone(),
                                     state.preferred_lowest.clone(),
+                                    state.preferred_editable.clone(),
                                 ));
                                 state.next = package;
                                 let incompatibility = if prerelease {
@@ -988,6 +1128,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                                 candidate,
                                                 assumptions: assumptions.clone(),
                                                 preferred: state.preferred_lowest.clone(),
+                                                editable: state.preferred_editable.clone(),
                                             })
                                             .then_some((name.clone(), assumptions))
                                     });
@@ -998,6 +1139,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         requests,
                                     );
                                     retry.preferred_lowest.clone_from(&state.preferred_lowest);
+                                    retry
+                                        .preferred_editable
+                                        .clone_from(&state.preferred_editable);
                                     retry.preferred_lowest.insert(name);
                                     search.states.push(state);
                                     search.states.push(retry);
@@ -1193,7 +1337,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
                 let url = match solver_source {
                     SolverSource::Registry | SolverSource::Index(_) => None,
-                    SolverSource::Url(source) => Some(grounding.url(source, &self.urls)),
+                    SolverSource::Url(source) => {
+                        Some(grounding.metadata_url(source, &self.urls, &state.preferred_editable))
+                    }
                 };
                 let index = if let SolverSource::Index(index) = solver_source {
                     Some(self.indexes.resource(index))
@@ -1530,6 +1676,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &version,
                     &state.pins,
                     &grounding,
+                    &state.preferred_editable,
                     &state.env,
                     &state.python_requirement,
                     &state.pubgrub,
@@ -1553,6 +1700,22 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         return Err(error);
                     }
                 };
+
+                if let SolverSource::Url(source) = solver_source
+                    && matches!(&**next_package, PubGrubPackageInner::Package { .. })
+                    && let Some(VerbatimParsedUrl {
+                        parsed_url: ParsedUrl::Directory(directory),
+                        ..
+                    }) = &url
+                {
+                    let (used_normal, used_editable) =
+                        state.directory_metadata_modes.entry(source).or_default();
+                    if directory.editable.unwrap_or(false) {
+                        *used_editable = true;
+                    } else {
+                        *used_normal = true;
+                    }
+                }
 
                 match forked_deps {
                     ForkedDependencies::Unavailable(reason) => {
@@ -1900,15 +2063,82 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 let package = &state.pubgrub.package_store[id];
                 package.name_no_root().map(|_| (package.clone(), candidate))
             });
+        self.enqueue_policy_alternatives(state, search, choices, requests);
+    }
+
+    /// Reconsider only the candidates sufficient to make a selected-path policy invalid. Every
+    /// alternative permits a candidate's package to disappear if it is no longer required.
+    fn enqueue_policy_alternatives(
+        &self,
+        state: &ForkState,
+        search: &mut SourceSearch,
+        choices: impl IntoIterator<Item = (PubGrubPackage, SolverVersion)>,
+        requests: &MetadataRequests,
+    ) {
+        self.enqueue_policy_alternatives_with_editable(
+            state,
+            search,
+            choices,
+            &state.preferred_editable,
+            requests,
+        );
+    }
+
+    /// Explore changed policy authors under the given directory-metadata expectations.
+    fn enqueue_policy_alternatives_with_editable(
+        &self,
+        state: &ForkState,
+        search: &mut SourceSearch,
+        choices: impl IntoIterator<Item = (PubGrubPackage, SolverVersion)>,
+        preferred_editable: &BTreeSet<SourceId>,
+        requests: &MetadataRequests,
+    ) {
         for assumptions in state.source_assumptions.alternatives(choices) {
-            if search
-                .seen
-                .insert((assumptions.clone(), state.preferred_lowest.clone()))
-            {
+            if search.seen.insert((
+                assumptions.clone(),
+                state.preferred_lowest.clone(),
+                preferred_editable.clone(),
+            )) {
                 let mut retry = self.fresh_source_fork(state.env.clone(), assumptions, requests);
                 retry.preferred_lowest.clone_from(&state.preferred_lowest);
+                retry.preferred_editable.clone_from(preferred_editable);
                 search.states.push(retry);
             }
+        }
+    }
+
+    /// Replay a directory with its selected build mode. Keep ordinary alternatives where the
+    /// declarations requesting editable metadata are changed or no longer included in the solve.
+    fn retry_directory_metadata(
+        &self,
+        state: &ForkState,
+        search: &mut SourceSearch,
+        grounding: &Grounding,
+        source: SourceId,
+        editable: bool,
+        requests: &MetadataRequests,
+    ) {
+        let mut fallback = state.preferred_editable.clone();
+        fallback.remove(&source);
+        let origins = grounding
+            .directory_editable_origins(source)
+            .map(|(id, candidate)| (state.pubgrub.package_store[*id].clone(), candidate.clone()));
+        self.enqueue_policy_alternatives_with_editable(state, search, origins, &fallback, requests);
+
+        let mut preferred = fallback;
+        if editable {
+            preferred.insert(source);
+        }
+        let assumptions = state.source_assumptions.clone();
+        if search.seen.insert((
+            assumptions.clone(),
+            state.preferred_lowest.clone(),
+            preferred.clone(),
+        )) {
+            let mut retry = self.fresh_source_fork(state.env.clone(), assumptions, requests);
+            retry.preferred_lowest.clone_from(&state.preferred_lowest);
+            retry.preferred_editable = preferred;
+            search.states.push(retry);
         }
     }
 
@@ -2196,11 +2426,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         false
     }
 
-    /// Record all potentially applicable direct edges when a direct candidate's normal metadata
-    /// fetch completes. Constraints and scoped additions are also represented by initial inputs.
+    /// Record all potentially applicable direct edges from fetched metadata. Directory build modes
+    /// may supply different dependencies; either can expose a possibility, but never authorize it.
     fn remember_source_metadata(&self, source: SourceId, metadata: &Metadata) {
         let potentials = self.source_potentials.pin();
-        if potentials.contains_key(&source) {
+        let directory = matches!(self.urls.get(source).parsed_url, ParsedUrl::Directory(_));
+        if !directory && potentials.contains_key(&source) {
             return;
         }
         let requirements = self.overrides.apply_for(
@@ -2234,13 +2465,56 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 policies.push(requirement.into_owned());
             }
         }
-        potentials.get_or_insert(
+        let dependencies: Arc<[Requirement]> = dependencies.into();
+        let policies: Arc<[Requirement]> = policies.into();
+        let incoming = SourcePotential::Metadata {
+            version: metadata.version.clone(),
+            dependencies: dependencies.clone(),
+            policies: policies.clone(),
+        };
+        if !directory {
+            potentials.get_or_insert(source, incoming);
+            return;
+        }
+        if let Some(SourcePotential::Metadata {
+            dependencies: known_dependencies,
+            policies: known_policies,
+            ..
+        }) = potentials.get(&source)
+            && dependencies
+                .iter()
+                .all(|requirement| known_dependencies.contains(requirement))
+            && policies
+                .iter()
+                .all(|requirement| known_policies.contains(requirement))
+        {
+            return;
+        }
+        let merge = |previous: &Arc<[Requirement]>, incoming: &Arc<[Requirement]>| {
+            let mut combined = previous.to_vec();
+            combined.extend(
+                incoming
+                    .iter()
+                    .filter(|requirement| !previous.contains(requirement))
+                    .cloned(),
+            );
+            Arc::from(combined)
+        };
+        potentials.update_or_insert(
             source,
-            SourcePotential::Metadata {
-                version: metadata.version.clone(),
-                dependencies: dependencies.into(),
-                policies: policies.into(),
+            |previous| match previous {
+                SourcePotential::Unavailable => incoming.clone(),
+                SourcePotential::Metadata {
+                    version,
+                    dependencies: known_dependencies,
+                    policies: known_policies,
+                } => SourcePotential::Metadata {
+                    version: version.clone(),
+                    dependencies: merge(known_dependencies, &dependencies),
+                    policies: merge(known_policies, &policies),
+                },
             },
+            incoming.clone(),
         );
     }
 
@@ -2251,7 +2525,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         state: ForkState,
         requests: &MetadataRequests,
     ) -> SourceSearch {
-        if state.source_assumptions.is_empty() {
+        if state.source_assumptions.is_empty() && state.preferred_editable.is_empty() {
             SourceSearch::new(state)
         } else {
             SourceSearch::new(self.fresh_source_fork(
@@ -3335,6 +3609,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         candidate: &SolverVersion,
         pins: &FilePins,
         grounding: &Grounding,
+        preferred_editable: &BTreeSet<SourceId>,
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
@@ -3346,6 +3621,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             candidate,
             pins,
             grounding,
+            preferred_editable,
             env,
             python_requirement,
             pubgrub,
@@ -3374,6 +3650,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         candidate: &SolverVersion,
         pins: &FilePins,
         grounding: &Grounding,
+        preferred_editable: &BTreeSet<SourceId>,
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
@@ -3418,7 +3695,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 let direct;
                 let distribution_id = match candidate.source {
                     SolverSource::Url(source) => {
-                        let url = grounding.url(source, &self.urls);
+                        let url = grounding.metadata_url(source, &self.urls, preferred_editable);
                         direct = Some((Dist::from_url(name.clone(), url.clone())?, url));
                         None
                     }
@@ -4568,9 +4845,10 @@ enum ForkContinuation {
 /// The alternative source solves for exactly one environmental fork.
 struct SourceSearch {
     states: Vec<ForkState>,
-    seen: FxHashSet<(SourceAssumptions, BTreeSet<PackageName>)>,
+    seen: FxHashSet<(SourceAssumptions, BTreeSet<PackageName>, BTreeSet<SourceId>)>,
     error: Option<ResolveError>,
     source_error: Option<ResolveError>,
+    directory_error: Option<ResolveError>,
     fallback_source_error: Option<ResolveError>,
     candidate_errors: BTreeMap<SourceId, ResolveError>,
     failed_sources: Vec<SourceId>,
@@ -4585,6 +4863,7 @@ struct LowestAttempt {
     candidate: SolverVersion,
     assumptions: SourceAssumptions,
     preferred: BTreeSet<PackageName>,
+    editable: BTreeSet<SourceId>,
 }
 
 impl SourceSearch {
@@ -4592,12 +4871,14 @@ impl SourceSearch {
         let seen = FxHashSet::from_iter([(
             state.source_assumptions.clone(),
             state.preferred_lowest.clone(),
+            state.preferred_editable.clone(),
         )]);
         Self {
             states: vec![state],
             seen,
             error: None,
             source_error: None,
+            directory_error: None,
             fallback_source_error: None,
             candidate_errors: BTreeMap::new(),
             failed_sources: Vec::new(),
@@ -4751,6 +5032,10 @@ pub(crate) struct ForkState {
     selection_modes: FxHashMap<(Id<PubGrubPackage>, SolverVersion), bool>,
     /// Late local declarations whose support must survive a preferred-lowest retry.
     preferred_lowest: BTreeSet<PackageName>,
+    /// Directories whose editable metadata should be consulted before a late provider is selected.
+    preferred_editable: BTreeSet<SourceId>,
+    /// Whether normal and editable dependencies were incorporated into this branch for a directory.
+    directory_metadata_modes: BTreeMap<SourceId, (bool, bool)>,
     /// A cache for parsed version maps.
     ///
     /// Per fork, since the index for a package can differ between forks.
@@ -4818,6 +5103,8 @@ impl ForkState {
             possible_candidates: FxHashMap::default(),
             selection_modes: FxHashMap::default(),
             preferred_lowest: BTreeSet::new(),
+            preferred_editable: BTreeSet::new(),
+            directory_metadata_modes: BTreeMap::new(),
             known_versions: KnownVersions::default(),
             env,
             python_requirement,
@@ -4830,6 +5117,41 @@ impl ForkState {
         if self.source_package_set.insert(package) {
             self.source_packages.push(package);
         }
+    }
+
+    /// Find a selected directory whose authored build mode differs from the metadata used by this
+    /// branch. Partial assignments only require an early replay when they add editable authors.
+    fn changed_directory_metadata(
+        &self,
+        grounding: &Grounding,
+        urls: &Urls,
+        only_new_editable: bool,
+    ) -> Option<(SourceId, bool)> {
+        self.directory_metadata_modes
+            .iter()
+            .find_map(|(source, (used_normal, used_editable))| {
+                let selected =
+                    self.pubgrub
+                        .partial_solution
+                        .extract_solution()
+                        .any(|(id, candidate)| {
+                            candidate.source == SolverSource::Url(*source)
+                                && grounding.reachable.contains(&id)
+                                && self.pubgrub.package_store[id]
+                                    .name_no_root()
+                                    .is_some_and(|name| grounding.contains(name, *source))
+                        });
+                if !selected {
+                    return None;
+                }
+                let editable = grounding.url(*source, urls).is_editable();
+                let changed = if editable {
+                    *used_normal
+                } else {
+                    *used_editable && !only_new_editable
+                };
+                changed.then_some((*source, editable))
+            })
     }
 
     fn pick_package(&mut self) -> Option<Id<PubGrubPackage>> {

@@ -289,6 +289,13 @@ package. If backtracking excludes that package or extra, its URL no longer affec
 registry can still provide a package required through another path, unless another included
 dependency independently declares a URL.
 
+For a local directory, a plain URL leaves editability unspecified and can adopt an explicit choice
+from another included dependency. Conflicting editable and non-editable declarations cannot both be
+included in the same environment. A virtual declaration resolves a directory's dependencies without
+requiring its installation; another included declaration that requires installing the same directory
+takes precedence whether the installation is editable or normal. Editable and normal builds can
+report different dependencies, so uv uses the metadata for the selected installation mode.
+
 An index package cannot independently authorize a URL. Its metadata can refer to the same URL when
 it is also authorized by an included first-party declaration, constraint, or override. It can also
 activate an extra on an already authorized URL package; that package's own metadata may then declare

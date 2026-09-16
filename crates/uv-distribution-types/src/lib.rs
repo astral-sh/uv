@@ -1586,7 +1586,11 @@ impl Identifier for PathSourceDist {
 
 impl Identifier for DirectorySourceDist {
     fn distribution_id(&self) -> DistributionId {
-        self.url.distribution_id()
+        if self.editable == Some(true) {
+            DistributionId::EditableDirectory(uv_cache_key::CanonicalUrl::new(self.url.to_url()))
+        } else {
+            self.url.distribution_id()
+        }
     }
 
     fn resource_id(&self) -> ResourceId {
@@ -1726,7 +1730,11 @@ impl Identifier for PathSourceUrl<'_> {
 
 impl Identifier for DirectorySourceUrl<'_> {
     fn distribution_id(&self) -> DistributionId {
-        self.url.distribution_id()
+        if self.editable == Some(true) {
+            DistributionId::EditableDirectory(uv_cache_key::CanonicalUrl::new(self.url.clone()))
+        } else {
+            self.url.distribution_id()
+        }
     }
 
     fn resource_id(&self) -> ResourceId {

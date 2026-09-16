@@ -42,7 +42,10 @@ use uv_distribution_types::{
     RequiresPython, ResolvedDist, SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString,
     VersionId,
 };
-use uv_fs::{PortablePath, PortablePathBuf, Simplified, normalize_path, try_relative_to_if};
+use uv_fs::{
+    PortablePath, PortablePathBuf, Simplified, is_same_file_allow_missing, normalize_path,
+    try_relative_to_if,
+};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
 use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -1575,15 +1578,15 @@ struct DependencySources<'lock> {
     package_markers: PackageMarkers<'lock>,
 }
 
-/// Whether this requirement selects a registry source explicitly.
-fn requirement_has_explicit_index(requirement: &Requirement) -> bool {
+/// Whether an active declaration constrains the resolved index or directory installation mode.
+fn requirement_has_source_policy(requirement: &Requirement) -> bool {
     match &requirement.source {
         RequirementSource::Registry { index, .. } => index.is_some(),
+        RequirementSource::Directory { .. } => true,
         RequirementSource::Url { .. }
         | RequirementSource::GitDirectory { .. }
         | RequirementSource::GitPath { .. }
-        | RequirementSource::Path { .. }
-        | RequirementSource::Directory { .. } => false,
+        | RequirementSource::Path { .. } => false,
     }
 }
 
@@ -3712,6 +3715,69 @@ impl Lock {
                 _ => None,
             })
             .collect::<Vec<_>>();
+        let has_directory_sources = requires_dist
+            .iter()
+            .chain(dependency_groups.values().flatten())
+            .any(|requirement| matches!(requirement.source, RequirementSource::Directory { .. }));
+        // The lock encoding uses `directory` for both an unspecified and an explicitly
+        // non-editable requirement. Compare metadata in that encoding, but validate resolved
+        // sources against the installation choices the refreshed declarations actually specify.
+        let source_declarations = if has_directory_sources {
+            let requirements = if missing_metadata {
+                Self::preprocess_requirements(
+                    &package.id.name,
+                    package_version,
+                    &requires_dist,
+                    DependencyContext::Production,
+                    overrides,
+                    excludes,
+                )
+            } else if package.is_dynamic() {
+                FlatRequiresDist::from_requirements(requires_dist.clone(), &package.id.name)
+                    .into_iter()
+                    .collect()
+            } else {
+                requires_dist.to_vec()
+            };
+            Some(
+                requirements
+                    .into_iter()
+                    .map(|requirement| {
+                        normalize_source_requirement(requirement, root, &self.requires_python)
+                    })
+                    .collect::<Result<BTreeSet<_>, _>>()?,
+            )
+        } else {
+            None
+        };
+        let source_groups = if has_directory_sources {
+            Some(
+                dependency_groups
+                    .iter()
+                    .filter(|(_, requirements)| {
+                        self.includes_empty_groups() || !requirements.is_empty()
+                    })
+                    .map(|(group, requirements)| {
+                        Ok::<_, LockError>((
+                            group.clone(),
+                            requirements
+                                .iter()
+                                .cloned()
+                                .map(|requirement| {
+                                    normalize_source_requirement(
+                                        requirement,
+                                        root,
+                                        &self.requires_python,
+                                    )
+                                })
+                                .collect::<Result<_, _>>()?,
+                        ))
+                    })
+                    .collect::<Result<BTreeMap<_, _>, _>>()?,
+            )
+        } else {
+            None
+        };
 
         // Special-case: if the version is dynamic, compare the flattened requirements.
         let flattened = if package.is_dynamic() || missing_metadata {
@@ -3810,8 +3876,11 @@ impl Lock {
             ));
         }
 
-        if allow_missing_package_metadata || !indexes.is_empty() {
-            let declarations = flattened.as_ref().unwrap_or(&expected_requirements);
+        if allow_missing_package_metadata || !indexes.is_empty() || has_directory_sources {
+            let declarations = source_declarations
+                .as_ref()
+                .or(flattened.as_ref())
+                .unwrap_or(&expected_requirements);
             let package_activated_extras = activated_extras
                 .get(&package.id)
                 .cloned()
@@ -3820,7 +3889,7 @@ impl Lock {
                 self,
                 declarations,
                 provides_extra,
-                &expected_groups,
+                source_groups.as_ref().unwrap_or(&expected_groups),
                 source_requirements,
                 overrides,
                 excludes,
@@ -3842,12 +3911,12 @@ impl Lock {
                     dissatisfied => return Ok(dissatisfied),
                 }
             }
-            if !indexes.is_empty() {
-                expected.declarations.retain(requirement_has_explicit_index);
+            if !indexes.is_empty() || has_directory_sources {
+                expected.declarations.retain(requirement_has_source_policy);
                 for requirements in expected.dependency_groups.values_mut() {
-                    requirements.retain(requirement_has_explicit_index);
+                    requirements.retain(requirement_has_source_policy);
                 }
-                match self.satisfied_explicit_indexes(package, activated_extras, &expected)? {
+                match self.satisfied_declared_sources(package, activated_extras, &expected)? {
                     SatisfiesResult::Satisfied => {}
                     dissatisfied => return Ok(dissatisfied),
                 }
@@ -3866,10 +3935,9 @@ impl Lock {
         Ok(SatisfiesResult::Satisfied)
     }
 
-    /// Validate the resolved index where an active declaration pins it, including in locks that
-    /// already store distribution metadata. Ordinary requirements outside that marker stay free to
-    /// use the default index.
-    fn satisfied_explicit_indexes<'lock>(
+    /// Validate resolved sources where active declarations pin an index or directory, including
+    /// locks that already store distribution metadata. Other requirements remain unrestricted.
+    fn satisfied_declared_sources<'lock>(
         &self,
         package: &'lock Package,
         activated_extras: &mut FxHashMap<PackageId, BTreeMap<ExtraName, UniversalMarker>>,
@@ -4194,25 +4262,38 @@ impl Lock {
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedConstraints(expected, actual));
             }
-            expected
+            constraints
+                .iter()
+                .cloned()
+                .map(|requirement| {
+                    normalize_source_requirement(requirement, root, &self.requires_python)
+                })
+                .collect::<Result<_, _>>()?
         };
 
         // Validate that the lockfile was generated with the same overrides.
         let normalized_overrides = {
-            let normalize = |entry: Override<Requirement>| -> Result<_, LockError> {
+            let normalize = |entry: Override<Requirement>,
+                             preserve_directory_modes: bool|
+             -> Result<_, LockError> {
+                let normalize = |requirement| {
+                    if preserve_directory_modes {
+                        normalize_source_requirement(requirement, root, &self.requires_python)
+                    } else {
+                        normalize_requirement(requirement, root, &self.requires_python)
+                    }
+                };
                 match entry {
-                    Override::Requirement(requirement) => Ok(Override::Requirement(
-                        normalize_requirement(requirement, root, &self.requires_python)?,
-                    )),
+                    Override::Requirement(requirement) => {
+                        Ok(Override::Requirement(normalize(requirement)?))
+                    }
                     Override::Package(package) => Ok(Override::Package(PackageOverride {
                         package: package.package,
                         dependencies: package
                             .dependencies
                             .into_vec()
                             .into_iter()
-                            .map(|requirement| {
-                                normalize_requirement(requirement, root, &self.requires_python)
-                            })
+                            .map(normalize)
                             .collect::<Result<Vec<_>, _>>()?
                             .into_boxed_slice(),
                     })),
@@ -4221,19 +4302,23 @@ impl Lock {
             let expected: BTreeSet<_> = overrides
                 .iter()
                 .cloned()
-                .map(normalize)
+                .map(|entry| normalize(entry, false))
                 .collect::<Result<_, _>>()?;
             let actual: BTreeSet<_> = self
                 .manifest
                 .overrides
                 .iter()
                 .cloned()
-                .map(normalize)
+                .map(|entry| normalize(entry, false))
                 .collect::<Result<_, _>>()?;
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedOverrides(expected, actual));
             }
-            expected
+            overrides
+                .iter()
+                .cloned()
+                .map(|entry| normalize(entry, true))
+                .collect::<Result<BTreeSet<_>, _>>()?
         };
 
         // Validate that the lockfile was generated with the same excludes.
@@ -4336,16 +4421,8 @@ impl Lock {
         let source_overrides = Overrides::from_entries(normalized_overrides.into_iter().collect())
             .map_err(LockErrorKind::InvalidScopedOverride)?;
         let source_excludes = Excludes::from_entries(excludes.iter().cloned());
-        let dependency_overrides = if allow_missing_package_metadata {
-            source_overrides.clone()
-        } else {
-            Overrides::default()
-        };
-        let dependency_excludes = if allow_missing_package_metadata {
-            source_excludes.clone()
-        } else {
-            Excludes::default()
-        };
+        let dependency_overrides = &source_overrides;
+        let dependency_excludes = &source_excludes;
         // Projectless workspace groups and scripts are root declarations, so apply only
         // global overrides and exclusions before using them for sources or validation.
         let root_requirements = dependency_overrides
@@ -4359,18 +4436,18 @@ impl Lock {
                 !dependency_excludes.contains_for_package(None, &requirement.name)
             })
             .collect::<Vec<_>>();
-        let has_explicit_indexes = root_requirements
+        let has_source_policies = root_requirements
             .iter()
-            .any(|requirement| requirement_has_explicit_index(requirement))
+            .any(|requirement| requirement_has_source_policy(requirement))
             || self.packages.iter().any(|package| {
                 package
                     .metadata
                     .requires_dist
                     .iter()
                     .chain(package.metadata.dependency_groups.values().flatten())
-                    .any(requirement_has_explicit_index)
+                    .any(requirement_has_source_policy)
             });
-        let dependency_sources = if allow_missing_package_metadata || has_explicit_indexes {
+        let dependency_sources = if allow_missing_package_metadata || has_source_policies {
             let source_root_requirements = source_overrides
                 .apply_for_package(
                     None,
@@ -4401,6 +4478,12 @@ impl Lock {
         } else {
             DependencySources::default()
         };
+        if allow_missing_package_metadata || has_source_policies {
+            match self.satisfied_directory_sources(&dependency_sources, root) {
+                SatisfiesResult::Satisfied => {}
+                result => return Ok(result),
+            }
+        }
         for ((package_id, extra), marker) in &dependency_sources.package_markers.markers {
             if let Some(extra) = *extra
                 && !self.is_workspace_package(self.package(self.by_id[*package_id]))
@@ -4645,8 +4728,8 @@ impl Lock {
                             &metadata.provides_extra,
                             metadata.dependency_groups,
                             &dependency_sources,
-                            &dependency_overrides,
-                            &dependency_excludes,
+                            dependency_overrides,
+                            dependency_excludes,
                             requires_python.as_ref(),
                             Some(version),
                             package,
@@ -4712,8 +4795,8 @@ impl Lock {
                         &metadata.provides_extra,
                         metadata.dependency_groups,
                         &dependency_sources,
-                        &dependency_overrides,
-                        &dependency_excludes,
+                        dependency_overrides,
+                        dependency_excludes,
                         metadata.requires_python.as_ref(),
                         Some(&metadata.version),
                         package,
@@ -4783,8 +4866,8 @@ impl Lock {
                         &metadata.provides_extra,
                         metadata.dependency_groups,
                         &dependency_sources,
-                        &dependency_overrides,
-                        &dependency_excludes,
+                        dependency_overrides,
+                        dependency_excludes,
                         requires_python.as_ref(),
                         None,
                         package,
@@ -4849,8 +4932,8 @@ impl Lock {
                         &metadata.provides_extra,
                         metadata.dependency_groups,
                         &dependency_sources,
-                        &dependency_overrides,
-                        &dependency_excludes,
+                        dependency_overrides,
+                        dependency_excludes,
                         metadata.requires_python.as_ref(),
                         Some(&metadata.version),
                         package,
@@ -4889,6 +4972,102 @@ impl Lock {
         }
 
         Ok(SatisfiesResult::Satisfied)
+    }
+
+    /// Check installation modes against all reachable declarations of the same directory. An
+    /// unspecified mode can adopt selected editability, while a virtual path cannot suppress an
+    /// installation another selected declaration requires.
+    fn satisfied_directory_sources<'lock>(
+        &'lock self,
+        sources: &DependencySources<'_>,
+        root: &Path,
+    ) -> SatisfiesResult<'lock> {
+        for package in &self.packages {
+            let Some(path) = package.id.source.as_source_tree() else {
+                continue;
+            };
+            let Some(requirements) = sources.requirements.get(&package.id.name) else {
+                continue;
+            };
+            let locked = if package.fork_markers.is_empty() {
+                self.fork_markers_union()
+            } else {
+                package
+                    .fork_markers
+                    .iter()
+                    .fold(MarkerTree::FALSE, |marker, fork| marker.or(fork.combined()))
+            };
+            let mut declared = MarkerTree::FALSE;
+            let mut installed = MarkerTree::FALSE;
+            let mut editable = MarkerTree::FALSE;
+            let mut non_editable = MarkerTree::FALSE;
+            for requirement in requirements {
+                let RequirementSource::Directory {
+                    install_path,
+                    editable: declared_editable,
+                    r#virtual,
+                    ..
+                } = &requirement.source
+                else {
+                    continue;
+                };
+                if !package.id.source.matches_directory_path(install_path, root) {
+                    continue;
+                }
+                let marker = locked.and(requirement.marker);
+                declared = declared.or(marker);
+                if *r#virtual != Some(true) {
+                    installed = installed.or(marker);
+                    match declared_editable {
+                        Some(true) => editable = editable.or(marker),
+                        Some(false) => non_editable = non_editable.or(marker),
+                        None => {}
+                    }
+                }
+            }
+            if marker_is_unreachable(&self.requires_python, declared) {
+                continue;
+            }
+            let needs_editable = if matches!(package.id.source, Source::Editable(_)) {
+                if !marker_is_unreachable(&self.requires_python, non_editable)
+                    || !marker_is_unreachable(
+                        &self.requires_python,
+                        declared.and(editable.negate()),
+                    )
+                {
+                    Some(false)
+                } else {
+                    None
+                }
+            } else if !marker_is_unreachable(&self.requires_python, editable) {
+                Some(true)
+            } else {
+                None
+            };
+            if let Some(expected) = needs_editable {
+                return SatisfiesResult::MismatchedEditable(package.id.name.clone(), expected);
+            }
+            let needs_virtual = if matches!(package.id.source, Source::Virtual(_)) {
+                if normalize_path(root.join(path)).as_ref() != normalize_path(root).as_ref()
+                    && !marker_is_unreachable(&self.requires_python, installed)
+                {
+                    Some(false)
+                } else {
+                    None
+                }
+            } else if !marker_is_unreachable(
+                &self.requires_python,
+                declared.and(installed.negate()),
+            ) {
+                Some(true)
+            } else {
+                None
+            };
+            if let Some(expected) = needs_virtual {
+                return SatisfiesResult::MismatchedVirtual(package.id.name.clone(), expected);
+            }
+        }
+        SatisfiesResult::Satisfied
     }
 
     /// Return the part of the active context where an authorized direct source selects this package.
@@ -5054,7 +5233,8 @@ impl Lock {
                 continue;
             }
 
-            let mut requirement = normalize_requirement(requirement, root, &self.requires_python)?;
+            let mut requirement =
+                normalize_source_requirement(requirement, root, &self.requires_python)?;
             requirement.marker = requirement_marker;
             pending_sources.push(requirement.clone());
             source_requirements.insert(requirement);
@@ -5573,7 +5753,7 @@ impl Lock {
             if matches!(requirement.source, RequirementSource::Registry { .. }) {
                 continue;
             }
-            let requirement = normalize_requirement(
+            let requirement = normalize_source_requirement(
                 requirement.clone().into_owned(),
                 root,
                 &self.requires_python,
@@ -6026,9 +6206,9 @@ pub enum SatisfiesResult<'lock> {
     Satisfied,
     /// The lockfile uses a different set of workspace members.
     MismatchedMembers(BTreeSet<PackageName>, &'lock BTreeSet<PackageName>),
-    /// A workspace member switched from virtual to non-virtual or vice versa.
+    /// A source tree switched from virtual to non-virtual or vice versa.
     MismatchedVirtual(PackageName, bool),
-    /// A workspace member switched from editable to non-editable or vice versa.
+    /// A source tree switched from editable to non-editable or vice versa.
     MismatchedEditable(PackageName, bool),
     /// A source tree switched from dynamic to non-dynamic or vice versa.
     MismatchedDynamic(&'lock PackageName, bool),
@@ -7289,16 +7469,69 @@ impl PackageMetadata {
             dependency_groups,
         })
     }
+
+    /// Direct distributions supply only packaging metadata. Configured paths in Git metadata are
+    /// lowered to Git sources; any remaining physical directory is a plain PEP 508 URL. Those URLs
+    /// leave editability unspecified, even though the lock encodes them as `directory` requirements.
+    fn restore_remote_directory_modes(&mut self) {
+        Self::restore_remote_directory_requirements(&mut self.requires_dist);
+        for requirements in self.dependency_groups.values_mut() {
+            Self::restore_remote_directory_requirements(requirements);
+        }
+    }
+
+    /// Restore plain directory choices after reading retained metadata from the lock encoding.
+    fn restore_remote_directory_requirements(requirements: &mut BTreeSet<Requirement>) {
+        if !requirements.iter().any(|requirement| {
+            if let RequirementSource::Directory {
+                editable,
+                r#virtual,
+                ..
+            } = &requirement.source
+            {
+                *editable == Some(false) && *r#virtual == Some(false)
+            } else {
+                false
+            }
+        }) {
+            return;
+        }
+        *requirements = std::mem::take(requirements)
+            .into_iter()
+            .map(|mut requirement| {
+                if let RequirementSource::Directory {
+                    editable,
+                    r#virtual,
+                    ..
+                } = &mut requirement.source
+                    && *editable == Some(false)
+                    && *r#virtual == Some(false)
+                {
+                    *editable = None;
+                    *r#virtual = None;
+                }
+                requirement
+            })
+            .collect();
+    }
 }
 
 impl PackageWire {
     fn unwire(
-        self,
+        mut self,
         requires_python: &RequiresPython,
         environment: SimplifiedMarkerTree,
         default: UniversalMarker,
         unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
     ) -> Result<Package, LockError> {
+        match &self.id.source {
+            Source::Direct(..) | Source::Git(..) => self.metadata.restore_remote_directory_modes(),
+            Source::Registry(..)
+            | Source::Path(..)
+            | Source::Directory(..)
+            | Source::Editable(..)
+            | Source::Virtual(..) => {}
+        }
         // Consistency check
         if !uv_flags::contains(uv_flags::EnvironmentFlags::SKIP_WHEEL_FILENAME_CHECK) {
             if let Some(version) = &self.id.version {
@@ -7745,7 +7978,7 @@ impl Source {
                 normalize_path(root.join(path)).as_ref() == install_path.as_ref()
             }
             (
-                Self::Directory(path) | Self::Editable(path) | Self::Virtual(path),
+                Self::Directory(_) | Self::Editable(_) | Self::Virtual(_),
                 RequirementSource::Directory {
                     install_path,
                     editable,
@@ -7753,12 +7986,13 @@ impl Source {
                     ..
                 },
             ) => {
-                let actual = normalize_path(root.join(path));
-                actual.as_ref() == install_path.as_ref()
-                    && matches!(self, Self::Editable(_)) == editable.unwrap_or(false)
-                    && (matches!(self, Self::Virtual(_)) == r#virtual.unwrap_or(false)
-                        || matches!(self, Self::Virtual(_))
-                            && install_path.as_ref() == normalize_path(root).as_ref())
+                self.matches_directory_path(install_path, root)
+                    && (*r#virtual == Some(true)
+                        || editable
+                            .is_none_or(|editable| matches!(self, Self::Editable(_)) == editable))
+                    && (!matches!(self, Self::Virtual(_))
+                        || *r#virtual == Some(true)
+                        || install_path.as_ref() == normalize_path(root).as_ref())
             }
             (
                 Self::Git(url, source),
@@ -7797,6 +8031,14 @@ impl Source {
             _ => false,
         };
         Ok(result)
+    }
+
+    /// Return whether the locked source and declaration name the same directory, including aliases.
+    fn matches_directory_path(&self, expected: &Path, root: &Path) -> bool {
+        self.as_source_tree().is_some_and(|path| {
+            let actual = normalize_path(root.join(path));
+            is_same_file_allow_missing(actual.as_ref(), expected) == Some(true)
+        })
     }
 
     /// Returns `true` if the source is a registry or flat index.
@@ -9234,6 +9476,37 @@ fn normalize_file_location(location: &FileLocation) -> Result<UrlString, ToUrlEr
 fn normalize_url(mut url: DisplaySafeUrl) -> UrlString {
     url.set_fragment(None);
     UrlString::from(url)
+}
+
+/// Normalize a refreshed declaration without turning an unspecified directory choice into an
+/// explicit one. The lock encoding itself uses the same spelling for those choices.
+fn normalize_source_requirement(
+    requirement: Requirement,
+    root: &Path,
+    requires_python: &RequiresPython,
+) -> Result<Requirement, LockError> {
+    let directory_modes = if let RequirementSource::Directory {
+        editable,
+        r#virtual,
+        ..
+    } = &requirement.source
+    {
+        Some((*editable, *r#virtual))
+    } else {
+        None
+    };
+    let mut requirement = normalize_requirement(requirement, root, requires_python)?;
+    if let Some((editable, r#virtual)) = directory_modes
+        && let RequirementSource::Directory {
+            editable: normalized_editable,
+            r#virtual: normalized_virtual,
+            ..
+        } = &mut requirement.source
+    {
+        *normalized_editable = editable;
+        *normalized_virtual = r#virtual;
+    }
+    Ok(requirement)
 }
 
 /// Normalize a [`Requirement`], which could come from a lockfile, a `pyproject.toml`, etc.
