@@ -112,12 +112,8 @@ impl Display for ResolutionGraphNode {
 
 #[derive(Debug, Eq, PartialEq, Hash)]
 struct PackageRef<'a> {
-    package_name: &'a PackageName,
+    package: &'a ResolutionPackage,
     version: &'a Version,
-    url: Option<&'a VerbatimParsedUrl>,
-    index: Option<&'a IndexUrl>,
-    extra: Option<&'a ExtraName>,
-    group: Option<&'a GroupName>,
 }
 
 impl ResolverOutput {
@@ -291,21 +287,13 @@ impl ResolverOutput {
     ) {
         let from_index = edge.from.as_ref().map_or(root_index, |from| {
             inverse[&PackageRef {
-                package_name: from,
-                version: &edge.from_version,
-                url: edge.from_url.as_ref(),
-                index: edge.from_index.as_ref(),
-                extra: edge.from_extra.as_ref(),
-                group: edge.from_group.as_ref(),
+                package: &from.package,
+                version: &from.version,
             }]
         });
         let to_index = inverse[&PackageRef {
-            package_name: &edge.to,
-            version: &edge.to_version,
-            url: edge.to_url.as_ref(),
-            index: edge.to_index.as_ref(),
-            extra: edge.to_extra.as_ref(),
-            group: edge.to_group.as_ref(),
+            package: &edge.to.package,
+            version: &edge.to.version,
         }];
 
         let edge_marker = {
@@ -403,17 +391,7 @@ impl ResolverOutput {
             metadata,
             marker: UniversalMarker::TRUE,
         }));
-        inverse.insert(
-            PackageRef {
-                package_name: name,
-                version,
-                url: url.as_ref(),
-                index: index.as_ref(),
-                extra: extra.as_ref(),
-                group: group.as_ref(),
-            },
-            node,
-        );
+        inverse.insert(PackageRef { package, version }, node);
         Ok(())
     }
 

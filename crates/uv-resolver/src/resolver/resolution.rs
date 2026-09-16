@@ -5,7 +5,7 @@ use tracing::{Level, trace};
 
 use uv_distribution_types::IndexUrl;
 use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep440::Version;
+use uv_pep440::{MIN_VERSION, Version};
 use uv_pep508::MarkerTree;
 use uv_pypi_types::VerbatimParsedUrl;
 
@@ -42,28 +42,43 @@ impl Resolution {
                 "Resolution edge: {} -> {}",
                 edge.from
                     .as_ref()
-                    .map(PackageName::as_str)
+                    .map(|node| node.package.name.as_str())
                     .unwrap_or("ROOT"),
-                edge.to,
+                edge.to.package.name,
             );
             // The unwraps below are OK because `write`ing to
             // a String can never fail (except for OOM).
             let mut msg = String::new();
-            write!(msg, "{}", edge.from_version).unwrap();
-            if let Some(ref extra) = edge.from_extra {
+            write!(
+                msg,
+                "{}",
+                edge.from
+                    .as_ref()
+                    .map_or(&*MIN_VERSION, |node| &node.version)
+            )
+            .unwrap();
+            if let Some(extra) = edge
+                .from
+                .as_ref()
+                .and_then(|node| node.package.extra.as_ref())
+            {
                 write!(msg, " (extra: {extra})").unwrap();
             }
-            if let Some(ref dev) = edge.from_group {
+            if let Some(dev) = edge
+                .from
+                .as_ref()
+                .and_then(|node| node.package.dev.as_ref())
+            {
                 write!(msg, " (group: {dev})").unwrap();
             }
 
             write!(msg, " -> ").unwrap();
 
-            write!(msg, "{}", edge.to_version).unwrap();
-            if let Some(ref extra) = edge.to_extra {
+            write!(msg, "{}", edge.to.version).unwrap();
+            if let Some(ref extra) = edge.to.package.extra {
                 write!(msg, " (extra: {extra})").unwrap();
             }
-            if let Some(ref dev) = edge.to_group {
+            if let Some(ref dev) = edge.to.package.dev {
                 write!(msg, " (group: {dev})").unwrap();
             }
             if let Some(marker) = edge.marker.contents() {
@@ -87,23 +102,19 @@ pub(crate) struct ResolutionPackage {
     pub(crate) index: Option<IndexUrl>,
 }
 
-/// The `from_` fields and the `to_` fields allow mapping to the originating and target
-///  [`ResolutionPackage`] respectively. The `marker` is the edge weight.
+/// A pinned package used as an endpoint in a resolution dependency edge.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub(crate) struct ResolutionNode {
+    pub(crate) package: ResolutionPackage,
+    pub(crate) version: Version,
+}
+
+/// A dependency between pinned packages, weighted by its marker.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub(crate) struct ResolutionDependencyEdge {
     /// This value is `None` if the dependency comes from the root package.
-    pub(crate) from: Option<PackageName>,
-    pub(crate) from_version: Version,
-    pub(crate) from_url: Option<VerbatimParsedUrl>,
-    pub(crate) from_index: Option<IndexUrl>,
-    pub(crate) from_extra: Option<ExtraName>,
-    pub(crate) from_group: Option<GroupName>,
-    pub(crate) to: PackageName,
-    pub(crate) to_version: Version,
-    pub(crate) to_url: Option<VerbatimParsedUrl>,
-    pub(crate) to_index: Option<IndexUrl>,
-    pub(crate) to_extra: Option<ExtraName>,
-    pub(crate) to_group: Option<GroupName>,
+    pub(crate) from: Option<ResolutionNode>,
+    pub(crate) to: ResolutionNode,
     pub(crate) marker: MarkerTree,
 }
 
