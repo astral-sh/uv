@@ -69,6 +69,7 @@ use crate::resolver::environment::{
 pub(crate) use crate::resolver::fork_map::{ForkMap, ForkSet};
 pub use crate::resolver::index::InMemoryIndex;
 use crate::resolver::indexes::Indexes;
+use crate::resolver::package_source::PackageSource;
 pub use crate::resolver::provider::{
     DefaultResolverProvider, MetadataResponse, PackageVersionsResult, ResolverProvider,
     VersionsResponse, WheelMetadataResult,
@@ -91,6 +92,7 @@ mod environment;
 mod fork_map;
 mod index;
 mod indexes;
+mod package_source;
 mod provider;
 mod reporter;
 mod requests;
@@ -493,12 +495,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 let next_id = state.next;
                 let next_package = &state.pubgrub.package_store[state.next];
 
-                let url = next_package
-                    .name()
-                    .and_then(|name| state.fork_urls.get(name));
-                let index = next_package
-                    .name()
-                    .and_then(|name| state.fork_indexes.get(name));
+                let source =
+                    PackageSource::from_fork(next_package, &state.fork_urls, &state.fork_indexes);
 
                 // Consider:
                 // ```toml
@@ -511,7 +509,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // since we weren't sure whether it might also be a URL requirement when
                 // transforming the requirements. For that case, we do another request here
                 // (idempotent due to caching).
-                self.request_package(next_package, url, index, requests)?;
+                self.request_package(next_package, source, requests)?;
 
                 let version = if let Some(version) = initial_version {
                     version
@@ -526,7 +524,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     // Within a fixed resolver environment, an implicit registry candidate is
                     // stable for a given range and pre-release policy. Avoid repeating candidate
                     // selection when PubGrub revisits an identical decision after backtracking.
-                    let cache_selected_version = url.is_none() && index.is_none();
+                    let cache_selected_version = match source {
+                        PackageSource::Registry(None) => true,
+                        PackageSource::Url(_) | PackageSource::Registry(Some(_)) => false,
+                    };
                     let decision = if cache_selected_version
                         && let Some((selected_range, version)) =
                             state.selected_versions.get(&next_id)
@@ -537,11 +538,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         let decision = self.choose_version(
                             next_package,
                             next_id,
-                            index.map(IndexMetadata::url),
+                            source,
                             range,
                             &mut state.pins,
                             &preferences,
-                            &state.fork_urls,
                             &state.env,
                             &state.python_requirement,
                             &state.pubgrub,
@@ -611,7 +611,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     };
 
                     // Only consider registry packages for prefetch.
-                    if url.is_none() {
+                    if let PackageSource::Registry(index) = source {
                         state.prefetcher.prefetch_batches(
                             next_package,
                             index,
@@ -989,35 +989,23 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 parent: _,
                 source: _,
             } = dependency;
-            let url = package.name().and_then(|name| state.fork_urls.get(name));
-            let index = package.name().and_then(|name| state.fork_indexes.get(name));
-            self.visit_package(package, url, index, requests)?;
+            let Some(source) = PackageSource::for_prefetch(
+                package,
+                &state.fork_urls,
+                &state.fork_indexes,
+                &self.urls,
+            ) else {
+                continue;
+            };
+            self.request_package(package, source, requests)?;
         }
         Ok(())
-    }
-
-    /// Visit a [`PubGrubPackage`] prior to selection. This should be called on a [`PubGrubPackage`]
-    /// before it is selected, to allow metadata to be fetched in parallel.
-    fn visit_package(
-        &self,
-        package: &PubGrubPackage,
-        url: Option<&VerbatimParsedUrl>,
-        index: Option<&IndexMetadata>,
-        requests: &MetadataRequests,
-    ) -> Result<(), ResolveError> {
-        // Ignore unresolved URL packages, i.e., packages that use a direct URL in some forks.
-        if url.is_none() && package.name().is_none_or(|name| self.urls.any_url(name)) {
-            return Ok(());
-        }
-
-        self.request_package(package, url, index, requests)
     }
 
     fn request_package(
         &self,
         package: &PubGrubPackage,
-        url: Option<&VerbatimParsedUrl>,
-        index: Option<&IndexMetadata>,
+        source: PackageSource<'_>,
         requests: &MetadataRequests,
     ) -> Result<(), ResolveError> {
         // Only request real packages.
@@ -1025,17 +1013,20 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             return Ok(());
         };
 
-        if let Some(url) = url {
-            // Verify that the package is allowed under the hash-checking policy.
-            if !self.hasher.allows_url(&url.verbatim) {
-                return Err(ResolveError::UnhashedPackage(name.clone()));
-            }
+        match source {
+            PackageSource::Url(url) => {
+                // Verify that the package is allowed under the hash-checking policy.
+                if !self.hasher.allows_url(&url.verbatim) {
+                    return Err(ResolveError::UnhashedPackage(name.clone()));
+                }
 
-            // Emit a request to fetch the metadata for this distribution.
-            let dist = Dist::from_url(name.clone(), url.clone())?;
-            requests.request_metadata(dist.distribution_id(), || Ok(Request::Dist(dist)))?;
-        } else {
-            requests.request_package(name, index)?;
+                // Emit a request to fetch the metadata for this distribution.
+                let dist = Dist::from_url(name.clone(), url.clone())?;
+                requests.request_metadata(dist.distribution_id(), || Ok(Request::Dist(dist)))?;
+            }
+            PackageSource::Registry(index) => {
+                requests.request_package(name, index)?;
+            }
         }
         Ok(())
     }
@@ -1100,11 +1091,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         &self,
         package: &PubGrubPackage,
         id: Id<PubGrubPackage>,
-        index: Option<&IndexUrl>,
+        source: PackageSource<'_>,
         range: &Range<Version>,
         pins: &mut FilePins,
         preferences: &Preferences,
-        fork_urls: &ForkUrls,
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
@@ -1134,35 +1124,32 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             PubGrubPackageInner::Marker { name, .. }
             | PubGrubPackageInner::Extra { name, .. }
             | PubGrubPackageInner::Group { name, .. }
-            | PubGrubPackageInner::Package { name, .. } => {
-                if let Some(url) = package.name().and_then(|name| fork_urls.get(name)) {
-                    self.choose_version_url(
-                        id,
-                        name,
-                        range,
-                        url,
-                        env,
-                        python_requirement,
-                        pubgrub,
-                        requests,
-                    )
-                } else {
-                    self.choose_version_registry(
-                        package,
-                        id,
-                        name,
-                        index,
-                        range,
-                        preferences,
-                        env,
-                        python_requirement,
-                        pubgrub,
-                        pins,
-                        visited,
-                        requests,
-                    )
-                }
-            }
+            | PubGrubPackageInner::Package { name, .. } => match source {
+                PackageSource::Url(url) => self.choose_version_url(
+                    id,
+                    name,
+                    range,
+                    url,
+                    env,
+                    python_requirement,
+                    pubgrub,
+                    requests,
+                ),
+                PackageSource::Registry(index) => self.choose_version_registry(
+                    package,
+                    id,
+                    name,
+                    index.map(IndexMetadata::url),
+                    range,
+                    preferences,
+                    env,
+                    python_requirement,
+                    pubgrub,
+                    pins,
+                    visited,
+                    requests,
+                ),
+            },
         }
     }
 
@@ -2947,17 +2934,16 @@ impl KnownVersions {
         &'a mut self,
         index: &InMemoryIndex,
         installed_packages: &InstalledPackages,
-        fork_urls: &ForkUrls,
-        fork_indexes: &ForkIndexes,
+        source: PackageSource<'_>,
         package: &PubGrubPackage,
     ) -> Option<&'a [Version]> {
         let name = package.name_no_root()?;
         // Versions of packages from a URL or the workspace are not registry versions.
-        if fork_urls.get(name).is_some() {
+        let PackageSource::Registry(index_metadata) = source else {
             return None;
-        }
+        };
         if !self.0.contains_key(name) {
-            let response = if let Some(index_metadata) = fork_indexes.get(name) {
+            let response = if let Some(index_metadata) = index_metadata {
                 index
                     .explicit()
                     .get(&(name.clone(), index_metadata.url().clone()))?
@@ -3285,8 +3271,11 @@ impl ForkState {
             self.known_versions.get_or_update(
                 index,
                 installed_packages,
-                &self.fork_urls,
-                &self.fork_indexes,
+                PackageSource::from_fork(
+                    &self.pubgrub.package_store[self.next],
+                    &self.fork_urls,
+                    &self.fork_indexes,
+                ),
                 &self.pubgrub.package_store[self.next],
             ),
         )
