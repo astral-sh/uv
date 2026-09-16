@@ -49,7 +49,7 @@ impl MinimumLibcVersion {
     ///
     /// Native Linux tags declare no libc version, so accepting them does not establish a libc
     /// compatibility guarantee. Non-Linux tags are unconstrained.
-    pub fn supports_platform(self, platform: &PlatformTag) -> bool {
+    pub(crate) fn supports_platform(self, platform: &PlatformTag) -> bool {
         self.constraint(platform)
             .is_none_or(|(constraint, minimum)| match constraint {
                 LibcConstraint::Version(version) => minimum <= version,
