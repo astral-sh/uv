@@ -3,6 +3,7 @@ use std::ops::Bound;
 
 use either::Either;
 use itertools::Itertools;
+use rustc_hash::FxHashSet;
 use smallvec::SmallVec;
 use tracing::{debug, trace};
 
@@ -13,6 +14,7 @@ use uv_distribution_types::{
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
+use uv_pep508::MarkerTree;
 use uv_platform_tags::Tags;
 use uv_types::InstalledPackagesProvider;
 
@@ -30,6 +32,7 @@ pub(crate) struct CandidateSelector {
     prerelease_strategy: PrereleaseStrategy,
     index_strategy: IndexStrategy,
     allowed_yanks: AllowedYanks,
+    lowest_preferences: FxHashSet<PackageName>,
 }
 
 /// The policies whose changes can invalidate a cached registry candidate for one package.
@@ -62,7 +65,13 @@ impl CandidateSelector {
             ),
             index_strategy: options.index_strategy,
             allowed_yanks: AllowedYanks::from_manifest(manifest, env, options.dependency_mode),
+            lowest_preferences: FxHashSet::default(),
         }
+    }
+
+    /// Reconsider a candidate after a selected local dependency made its package direct.
+    pub(crate) fn prefer_lowest(&mut self, name: &PackageName) {
+        self.lowest_preferences.insert(name.clone());
     }
 
     /// Apply candidate policies discovered from currently selected first-party candidates.
@@ -101,7 +110,38 @@ impl CandidateSelector {
     ) -> bool {
         (!version.any_prerelease()
             || self.prerelease_strategy.selection(name, env) != PrereleaseSelection::Disallow)
-            && (!yanked || self.allowed_yanks.contains(name, version))
+            && (!yanked || self.allowed_yanks.contains_in(name, version, env))
+    }
+
+    /// Where a selected candidate is permitted, independently of speculative first-party policy.
+    pub(crate) fn candidate_permission_marker(
+        &self,
+        name: &PackageName,
+        version: &Version,
+        yanked: bool,
+    ) -> MarkerTree {
+        let prerelease = if version.any_prerelease() {
+            self.prerelease_strategy.permission_marker(name)
+        } else {
+            MarkerTree::TRUE
+        };
+        let yank = if yanked {
+            self.allowed_yanks.marker(name, version)
+        } else {
+            MarkerTree::TRUE
+        };
+        prerelease.and(yank)
+    }
+
+    /// The environments in which the normal resolution strategy prefers lower versions.
+    pub(crate) fn lowest_marker(&self, name: &PackageName) -> MarkerTree {
+        match &self.resolution_strategy {
+            ResolutionStrategy::Highest => MarkerTree::FALSE,
+            ResolutionStrategy::Lowest => MarkerTree::TRUE,
+            ResolutionStrategy::LowestDirect(direct_dependencies) => {
+                direct_dependencies.marker(name)
+            }
+        }
     }
 
     pub(crate) fn selection_policy(
@@ -306,6 +346,7 @@ impl CandidateSelector {
             installed_packages,
             reinstall,
             prerelease_selection,
+            env,
             tags,
         )
     }
@@ -320,6 +361,7 @@ impl CandidateSelector {
         installed_packages: &'a InstalledPackages,
         reinstall: bool,
         prerelease_selection: PrereleaseSelection,
+        env: &ResolverEnvironment,
         tags: Option<&Tags>,
     ) -> Option<Candidate<'a>> {
         for (version, source) in preferences {
@@ -393,7 +435,10 @@ impl CandidateSelector {
             // Check for a remote distribution that matches the preferred version
             if let Some((version_map, file)) = version_maps.iter().find_map(|version_map| {
                 version_map
-                    .get_with_yanks(version, self.allowed_yanks.contains(package_name, version))
+                    .get_with_yanks(
+                        version,
+                        self.allowed_yanks.contains_in(package_name, version, env),
+                    )
                     .map(|dist| (version_map, dist))
             }) {
                 // If the preferred version has a local variant, prefer that.
@@ -412,9 +457,10 @@ impl CandidateSelector {
                         if !range.contains(local) {
                             continue;
                         }
-                        if let Some(dist) = version_map
-                            .get_with_yanks(local, self.allowed_yanks.contains(package_name, local))
-                        {
+                        if let Some(dist) = version_map.get_with_yanks(
+                            local,
+                            self.allowed_yanks.contains_in(package_name, local, env),
+                        ) {
                             debug!("Preferring local version `{package_name}` (v{local})");
                             return Some(Candidate::new(
                                 package_name,
@@ -608,6 +654,7 @@ impl CandidateSelector {
                     range,
                     prerelease_candidates,
                     highest,
+                    env,
                 )
             } else {
                 self.select_candidate(
@@ -633,6 +680,7 @@ impl CandidateSelector {
                     range,
                     prerelease_candidates,
                     highest,
+                    env,
                 )
             }
         } else {
@@ -644,6 +692,7 @@ impl CandidateSelector {
                         range,
                         prerelease_candidates,
                         highest,
+                        env,
                     )
                 })
             } else {
@@ -654,6 +703,7 @@ impl CandidateSelector {
                         range,
                         prerelease_candidates,
                         highest,
+                        env,
                     )
                 })
             }
@@ -667,11 +717,21 @@ impl CandidateSelector {
         package_name: &PackageName,
         env: &ResolverEnvironment,
     ) -> bool {
+        if self.lowest_preferences.contains(package_name) {
+            return false;
+        }
         match &self.resolution_strategy {
             ResolutionStrategy::Highest => true,
             ResolutionStrategy::Lowest => false,
             ResolutionStrategy::LowestDirect(direct_dependencies) => {
-                !direct_dependencies.contains(package_name, env)
+                !env.marker_environment().map_or_else(
+                    || direct_dependencies.contains(package_name, env),
+                    |marker_environment| {
+                        direct_dependencies
+                            .marker(package_name)
+                            .evaluate(marker_environment, &[])
+                    },
+                )
             }
         }
     }
@@ -692,6 +752,7 @@ impl CandidateSelector {
         range: &Range<Version>,
         prerelease_candidates: PrereleaseCandidates,
         highest: bool,
+        env: &ResolverEnvironment,
     ) -> Option<Candidate<'a>> {
         let segments = range.iter();
         let segments = if highest {
@@ -731,7 +792,7 @@ impl CandidateSelector {
                     continue;
                 }
                 let Some(dist) = maybe_dist.prioritized_dist_with_yanks(
-                    self.allowed_yanks.contains(package_name, version),
+                    self.allowed_yanks.contains_in(package_name, version, env),
                 ) else {
                     continue;
                 };

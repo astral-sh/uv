@@ -1,9 +1,13 @@
 use rustc_hash::FxHashMap;
 
-use uv_distribution_types::{CompatibleDist, DistributionId, Identifier, ResolvedDist};
+use uv_distribution_types::{
+    CompatibleDist, DistributionId, Identifier, IndexMetadata, IndexUrl, ResolvedDist,
+};
 use uv_normalize::PackageName;
+use uv_pep440::Version;
 
 use crate::candidate_selector::Candidate;
+use crate::pubgrub::{SolverSource, SolverVersion};
 
 #[derive(Clone, Debug)]
 struct FilePin {
@@ -13,24 +17,40 @@ struct FilePin {
     metadata_id: DistributionId,
 }
 
+#[derive(Clone, Debug)]
+struct SelectedPin {
+    source: SolverSource,
+    explicit_index: Option<IndexMetadata>,
+}
+
 /// A set of package versions pinned to specific files.
 ///
 /// For example, given `Flask==3.0.0`, the [`FilePins`] would contain a mapping from `Flask` to
 /// `3.0.0` to the specific wheel or source distribution archive that was pinned for installation,
 /// along with the concrete distribution whose metadata was used during resolution.
 #[derive(Clone, Debug, Default)]
-pub(crate) struct FilePins(FxHashMap<(PackageName, uv_pep440::Version), FilePin>);
+pub(crate) struct FilePins {
+    candidates: FxHashMap<(PackageName, SolverVersion), FilePin>,
+    selected: FxHashMap<(PackageName, Version, Option<IndexUrl>), SelectedPin>,
+}
 
 // Inserts are common (every time we select a version) while reads are rare (converting the
 // final resolution).
 impl FilePins {
     /// Pin a candidate package.
     ///
-    /// Within a single fork, the same `(name, version)` always resolves to the same distribution,
-    /// so we skip construction when an entry already exists.
-    pub(crate) fn insert(&mut self, candidate: &Candidate, dist: &CompatibleDist) {
-        self.0
-            .entry((candidate.name().clone(), candidate.version().clone()))
+    /// Each registry search and explicit index has its own pin, even at the same version.
+    pub(crate) fn insert(
+        &mut self,
+        source: SolverSource,
+        candidate: &Candidate,
+        dist: &CompatibleDist,
+    ) {
+        self.candidates
+            .entry((
+                candidate.name().clone(),
+                SolverVersion::new(source, candidate.version().clone()),
+            ))
             .or_insert_with(|| FilePin {
                 dist: dist.for_installation().to_owned(),
                 metadata_id: dist.for_resolution().distribution_id(),
@@ -38,12 +58,8 @@ impl FilePins {
     }
 
     /// Return the pinned file for the given package name and version, if it exists.
-    pub(crate) fn get(
-        &self,
-        name: &PackageName,
-        version: &uv_pep440::Version,
-    ) -> Option<&ResolvedDist> {
-        self.0
+    pub(crate) fn get(&self, name: &PackageName, version: &SolverVersion) -> Option<&ResolvedDist> {
+        self.candidates
             .get(&(name.clone(), version.clone()))
             .map(|pin| &pin.dist)
     }
@@ -52,10 +68,46 @@ impl FilePins {
     pub(crate) fn dist_and_id(
         &self,
         name: &PackageName,
-        version: &uv_pep440::Version,
+        version: &SolverVersion,
     ) -> Option<(&ResolvedDist, &DistributionId)> {
-        self.0
+        self.candidates
             .get(&(name.clone(), version.clone()))
             .map(|pin| (&pin.dist, &pin.metadata_id))
+    }
+
+    /// Record which candidate supplied an output distribution in the finished fork.
+    pub(crate) fn select(
+        &mut self,
+        name: &PackageName,
+        candidate: &SolverVersion,
+        index: Option<IndexMetadata>,
+    ) {
+        if let Some(pin) = self.candidates.get(&(name.clone(), candidate.clone())) {
+            self.selected.insert(
+                (
+                    name.clone(),
+                    candidate.version.clone(),
+                    pin.dist.index().cloned(),
+                ),
+                SelectedPin {
+                    source: candidate.source,
+                    explicit_index: index,
+                },
+            );
+        }
+    }
+
+    pub(crate) fn resolved_dist_and_id(
+        &self,
+        name: &PackageName,
+        version: &Version,
+        index: Option<&IndexUrl>,
+    ) -> Option<(&ResolvedDist, &DistributionId, Option<&IndexMetadata>)> {
+        let selected = self
+            .selected
+            .get(&(name.clone(), version.clone(), index.cloned()))?;
+        let (dist, metadata_id) =
+            self.dist_and_id(name, &SolverVersion::new(selected.source, version.clone()))?;
+        Some((dist, metadata_id, selected.explicit_index.as_ref()))
     }
 }

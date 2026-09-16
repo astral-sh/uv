@@ -14,11 +14,25 @@ use crate::resolver::UnavailableReason;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct SourceId(pub(crate) usize);
 
+/// The identity of an explicitly pinned registry, interned by the resolver.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct IndexId(pub(crate) usize);
+
 /// The origin whose metadata and artifacts belong to a solver candidate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) enum SolverSource {
     Registry,
+    Index(IndexId),
     Url(SourceId),
+}
+
+impl SolverSource {
+    pub(crate) fn is_registry(self) -> bool {
+        match self {
+            Self::Registry | Self::Index(_) => true,
+            Self::Url(_) => false,
+        }
+    }
 }
 
 /// A source and PEP 440 version chosen together by PubGrub.
@@ -51,6 +65,8 @@ impl Display for SolverVersion {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct CandidateSet {
     registry: Range<Version>,
+    indexed: Range<Version>,
+    indexes: BTreeMap<IndexId, Range<Version>>,
     direct: Range<Version>,
     urls: BTreeMap<SourceId, Range<Version>>,
 }
@@ -59,6 +75,8 @@ impl CandidateSet {
     pub(crate) fn all(versions: Range<Version>) -> Self {
         Self {
             registry: versions.clone(),
+            indexed: versions.clone(),
+            indexes: BTreeMap::new(),
             direct: versions,
             urls: BTreeMap::new(),
         }
@@ -68,11 +86,26 @@ impl CandidateSet {
         match source {
             SolverSource::Registry => Self {
                 registry: versions,
+                indexed: Range::empty(),
+                indexes: BTreeMap::new(),
+                direct: Range::empty(),
+                urls: BTreeMap::new(),
+            },
+            SolverSource::Index(index) => Self {
+                registry: Range::empty(),
+                indexed: Range::empty(),
+                indexes: if versions == Range::empty() {
+                    BTreeMap::new()
+                } else {
+                    BTreeMap::from([(index, versions)])
+                },
                 direct: Range::empty(),
                 urls: BTreeMap::new(),
             },
             SolverSource::Url(source) => Self {
                 registry: Range::empty(),
+                indexed: Range::empty(),
+                indexes: BTreeMap::new(),
                 direct: Range::empty(),
                 urls: if versions == Range::empty() {
                     BTreeMap::new()
@@ -83,11 +116,42 @@ impl CandidateSet {
         }
     }
 
+    /// Version requirements without a possible first-party URL still accept any selected registry.
+    pub(crate) fn registries(versions: Range<Version>) -> Self {
+        Self {
+            registry: versions.clone(),
+            indexed: versions,
+            indexes: BTreeMap::new(),
+            direct: Range::empty(),
+            urls: BTreeMap::new(),
+        }
+    }
+
+    /// An explicit index constrains registry selection; an independently declared URL can take precedence.
+    pub(crate) fn index_or_url(index: IndexId, versions: Range<Version>) -> Self {
+        let mut candidates = Self::source(SolverSource::Index(index), versions.clone());
+        candidates.direct = versions;
+        candidates
+    }
+
     pub(crate) fn for_source(&self, source: SolverSource) -> &Range<Version> {
         match source {
             SolverSource::Registry => &self.registry,
+            SolverSource::Index(index) => self.indexes.get(&index).unwrap_or(&self.indexed),
             SolverSource::Url(source) => self.urls.get(&source).unwrap_or(&self.direct),
         }
+    }
+
+    /// Select a concrete index constrained by a dependency edge; never speculate on an unseen index.
+    pub(crate) fn index(&self) -> Option<IndexId> {
+        self.indexes.iter().find_map(|(index, versions)| {
+            (*versions != Range::empty() && self.indexed == Range::empty()).then_some(*index)
+        })
+    }
+
+    pub(crate) fn has_indexes(&self) -> bool {
+        self.indexed != Range::empty()
+            || self.indexes.values().any(|range| *range != Range::empty())
     }
 
     pub(crate) fn has_urls(&self) -> bool {
@@ -102,19 +166,30 @@ impl CandidateSet {
     pub(crate) fn only_urls(&self) -> impl Iterator<Item = SourceId> + '_ {
         self.urls.iter().filter_map(|(source, versions)| {
             (self.registry == Range::empty()
+                && self.indexed == Range::empty()
+                && self.indexes.values().all(|range| *range == Range::empty())
                 && self.direct == Range::empty()
                 && *versions != Range::empty())
             .then_some(*source)
         })
     }
 
+    /// Return the explicit registries when the normal search and other indexes are excluded.
+    pub(crate) fn only_indexes(&self) -> impl Iterator<Item = IndexId> + '_ {
+        self.indexes.iter().filter_map(|(index, versions)| {
+            (self.registry == Range::empty()
+                && self.indexed == Range::empty()
+                && *versions != Range::empty())
+            .then_some(*index)
+        })
+    }
+
     /// Remove source identity for the existing PEP 440 diagnostic formatter.
     pub(crate) fn project(&self) -> Range<Version> {
-        self.urls
-            .values()
-            .fold(self.registry.union(&self.direct), |range, versions| {
-                range.union(versions)
-            })
+        self.indexes.values().chain(self.urls.values()).fold(
+            self.registry.union(&self.indexed).union(&self.direct),
+            |range, versions| range.union(versions),
+        )
     }
 
     fn combine(
@@ -123,7 +198,24 @@ impl CandidateSet {
         operation: impl Fn(&Range<Version>, &Range<Version>) -> Range<Version>,
     ) -> Self {
         let registry = operation(&self.registry, &other.registry);
+        let indexed = operation(&self.indexed, &other.indexed);
         let direct = operation(&self.direct, &other.direct);
+        let index_sources: BTreeSet<_> = self
+            .indexes
+            .keys()
+            .chain(other.indexes.keys())
+            .copied()
+            .collect();
+        let indexes = index_sources
+            .into_iter()
+            .filter_map(|index| {
+                let versions = operation(
+                    self.for_source(SolverSource::Index(index)),
+                    other.for_source(SolverSource::Index(index)),
+                );
+                (versions != indexed).then_some((index, versions))
+            })
+            .collect();
         let sources: BTreeSet<_> = self.urls.keys().chain(other.urls.keys()).copied().collect();
         let urls = sources
             .into_iter()
@@ -137,6 +229,8 @@ impl CandidateSet {
             .collect();
         Self {
             registry,
+            indexed,
+            indexes,
             direct,
             urls,
         }
@@ -161,6 +255,12 @@ impl VersionSet for CandidateSet {
     fn complement(&self) -> Self {
         Self {
             registry: self.registry.complement(),
+            indexed: self.indexed.complement(),
+            indexes: self
+                .indexes
+                .iter()
+                .map(|(index, versions)| (*index, versions.complement()))
+                .collect(),
             direct: self.direct.complement(),
             urls: self
                 .urls
@@ -295,7 +395,7 @@ mod tests {
     use pubgrub::VersionSet;
     use uv_pep440::Version;
 
-    use super::{CandidateSet, SolverSource, SolverVersion, SourceId};
+    use super::{CandidateSet, IndexId, SolverSource, SolverVersion, SourceId};
     use crate::pubgrub::Range;
 
     #[test]
@@ -304,12 +404,32 @@ mod tests {
         let two = Version::new([2]);
         let known = SolverSource::Url(SourceId(0));
         let undiscovered = SolverSource::Url(SourceId(1));
+        let known_index = SolverSource::Index(IndexId(0));
+        let undiscovered_index = SolverSource::Index(IndexId(1));
         let all_one = CandidateSet::all(Range::singleton(one.clone()));
         let all_two = CandidateSet::all(Range::singleton(two.clone()));
         let registry_one = CandidateSet::singleton(SolverVersion::registry(one.clone()));
         let known_one = CandidateSet::singleton(SolverVersion::new(known, one.clone()));
+        let index_one = CandidateSet::singleton(SolverVersion::new(known_index, one.clone()));
+        let index_or_url = CandidateSet::index_or_url(IndexId(0), Range::singleton(one.clone()));
+        let registries = CandidateSet::registries(Range::singleton(one.clone()));
 
         assert!(all_one.contains(&SolverVersion::new(undiscovered, one.clone())));
+        assert!(all_one.contains(&SolverVersion::new(undiscovered_index, one.clone())));
+        assert!(registries.contains(&SolverVersion::new(undiscovered_index, one.clone())));
+        assert!(!registries.contains(&SolverVersion::new(undiscovered, one.clone())));
+        assert!(index_or_url.contains(&SolverVersion::new(undiscovered, one.clone())));
+        assert!(!index_or_url.contains(&SolverVersion::new(undiscovered_index, one.clone())));
+        assert_eq!(index_or_url.intersection(&registries), index_one);
+        assert_eq!(
+            index_one.union(&index_one.complement()),
+            CandidateSet::full()
+        );
+        assert!(
+            index_one
+                .complement()
+                .contains(&SolverVersion::new(undiscovered_index, one.clone()))
+        );
         assert_eq!(all_one.intersection(&all_two), CandidateSet::empty());
         assert!(!known_one.contains(&SolverVersion::new(undiscovered, one.clone())));
         assert!(

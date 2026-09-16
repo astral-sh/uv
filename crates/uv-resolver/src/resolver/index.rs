@@ -2,7 +2,7 @@ use std::hash::BuildHasherDefault;
 use std::sync::{Arc, Mutex};
 
 use rustc_hash::{FxHashMap, FxHasher};
-use uv_distribution_types::{Dist, DistributionId, HashCollection, HashValidation, IndexUrl};
+use uv_distribution_types::{Dist, DistributionId, HashCollection, HashValidation, IndexMetadata};
 use uv_normalize::PackageName;
 use uv_once_map::OnceMap;
 use uv_pypi_types::HashDigest;
@@ -21,7 +21,8 @@ struct SharedInMemoryIndex {
     /// came from.
     implicit: FxOnceMap<PackageName, Arc<VersionsResponse>>,
 
-    explicit: FxOnceMap<(PackageName, IndexUrl), Arc<VersionsResponse>>,
+    /// A flat index and Simple API index at the same URL expose different package versions.
+    explicit: FxOnceMap<(PackageName, IndexMetadata), Arc<VersionsResponse>>,
 
     /// A map from a concrete distribution to its metadata.
     distributions: DistributionMetadataIndex,
@@ -78,7 +79,9 @@ impl InMemoryIndex {
     }
 
     /// Returns a reference to the package metadata map.
-    pub(crate) fn explicit(&self) -> &FxOnceMap<(PackageName, IndexUrl), Arc<VersionsResponse>> {
+    pub(crate) fn explicit(
+        &self,
+    ) -> &FxOnceMap<(PackageName, IndexMetadata), Arc<VersionsResponse>> {
         &self.0.explicit
     }
 

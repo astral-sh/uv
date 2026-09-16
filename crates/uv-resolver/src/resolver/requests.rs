@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use tokio::sync::mpsc::Sender;
 
-use uv_distribution_types::{Dist, DistributionId, Identifier, IndexMetadata, IndexUrl};
+use uv_distribution_types::{Dist, DistributionId, Identifier, IndexMetadata};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_types::HashStrategy;
@@ -33,7 +33,7 @@ impl MetadataRequests {
         let registered = if let Some(index) = index {
             self.index
                 .explicit()
-                .register((name.clone(), index.url().clone()))
+                .register((name.clone(), index.clone()))
         } else {
             self.index.implicit().register(name.clone())
         };
@@ -92,7 +92,7 @@ impl MetadataRequests {
     pub(crate) fn wait_for_versions(
         &self,
         name: &PackageName,
-        index: Option<&IndexUrl>,
+        index: Option<&IndexMetadata>,
     ) -> Result<Arc<VersionsResponse>, ResolveError> {
         if let Some(index) = index {
             self.index

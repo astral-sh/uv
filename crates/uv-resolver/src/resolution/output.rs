@@ -11,8 +11,8 @@ use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::Metadata;
 use uv_distribution_types::{
-    Dist, DistributionId, HashCollection, Identifier, IndexUrl, Name, Requirement, RequiresPython,
-    ResolutionDiagnostic, ResolvedDist, parse_url_hashes,
+    Dist, DistributionId, HashCollection, Identifier, IndexMetadata, IndexUrl, Name, Requirement,
+    RequiresPython, ResolutionDiagnostic, ResolvedDist, parse_url_hashes,
 };
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
@@ -336,6 +336,7 @@ fn parse_dist(
         let hashes = get_hashes(
             name,
             index,
+            None,
             Some(url),
             &metadata_id,
             version,
@@ -366,8 +367,8 @@ fn parse_dist(
             Some(metadata),
         )
     } else {
-        let (dist, metadata_id) = pins
-            .dist_and_id(name, version)
+        let (dist, metadata_id, explicit_index) = pins
+            .resolved_dist_and_id(name, version, index)
             .expect("Every package should be pinned");
         let dist = dist.clone();
         let hashes_id = dist.distribution_id();
@@ -393,6 +394,7 @@ fn parse_dist(
         let hashes = get_hashes(
             name,
             index,
+            explicit_index,
             None,
             &hashes_id,
             version,
@@ -424,6 +426,7 @@ fn parse_dist(
 fn get_hashes(
     name: &PackageName,
     index: Option<&IndexUrl>,
+    explicit_index: Option<&IndexMetadata>,
     url: Option<&VerbatimParsedUrl>,
     metadata_id: &DistributionId,
     version: &Version,
@@ -431,8 +434,12 @@ fn get_hashes(
     hasher: &HashStrategy,
     in_memory: &InMemoryIndex,
 ) -> HashDigests {
-    // 1. Look for hashes from the lockfile.
-    if let Some(digests) = preferences.match_hashes(name, version) {
+    // 1. A version pin in requirements.txt has no source information; reuse its hashes only
+    // when the chosen source is the normal registry search.
+    if url.is_none()
+        && explicit_index.is_none()
+        && let Some(digests) = preferences.match_hashes(name, version)
+    {
         if !digests.is_empty() {
             return HashDigests::from(digests);
         }
@@ -478,14 +485,16 @@ fn get_hashes(
         }
     }
 
-    // 4. Look for hashes from the registry, which are served at the package level.
+    // 4. Look for hashes from the registry that supplied the selected candidate.
     if url.is_none() {
-        // Query the implicit and explicit indexes (lazily) for the hashes.
-        let implicit_response = in_memory.implicit().get(name);
-        let mut explicit_response = None;
-
-        // Search in the implicit indexes.
-        let hashes = implicit_response
+        let response = if let Some(explicit_index) = explicit_index {
+            in_memory
+                .explicit()
+                .get(&(name.clone(), explicit_index.clone()))
+        } else {
+            in_memory.implicit().get(name)
+        };
+        let hashes = response
             .as_ref()
             .and_then(|response| {
                 if let VersionsResponse::Found(version_maps) = &**response {
@@ -496,26 +505,8 @@ fn get_hashes(
             })
             .into_iter()
             .flatten()
-            .filter(|version_map| version_map.index() == index)
-            .find_map(|version_map| version_map.hashes(version))
-            .or_else(|| {
-                // Search in the explicit indexes.
-                explicit_response = index
-                    .and_then(|index| in_memory.explicit().get(&(name.clone(), index.clone())));
-                explicit_response
-                    .as_ref()
-                    .and_then(|response| {
-                        if let VersionsResponse::Found(version_maps) = &**response {
-                            Some(version_maps)
-                        } else {
-                            None
-                        }
-                    })
-                    .into_iter()
-                    .flatten()
-                    .filter(|version_map| version_map.index() == index)
-                    .find_map(|version_map| version_map.hashes(version))
-            });
+            .filter(|version_map| explicit_index.is_some() || version_map.index() == index)
+            .find_map(|version_map| version_map.hashes(version));
 
         if let Some(hashes) = hashes {
             let mut digests = HashDigests::from(hashes);

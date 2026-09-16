@@ -11,7 +11,8 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::trace;
 
 use uv_distribution_types::{
-    DerivationChain, DistErrorKind, IndexCapabilities, IndexLocations, IndexUrl, RequestedDist,
+    DerivationChain, DistErrorKind, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadata,
+    IndexUrl, RequestedDist,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{LowerBound, Version};
@@ -82,13 +83,21 @@ pub enum ResolveError {
             format!(" in {env}")
         },
         indexes.iter()
-            .map(std::string::ToString::to_string)
+            .map(|index| {
+                let format = if indexes.iter().any(|other| other.url == index.url && other.format != index.format) {
+                    match index.format {
+                        IndexFormat::Simple => " (Simple API)",
+                        IndexFormat::Flat => " (flat index)",
+                    }
+                } else { "" };
+                format!("{}{format}", index.url)
+            })
             .collect::<Vec<_>>()
             .join("\n- ")
     )]
     ConflictingIndexesForEnvironment {
         package_name: PackageName,
-        indexes: Vec<IndexUrl>,
+        indexes: Vec<IndexMetadata>,
         env: ResolverEnvironment,
     },
 

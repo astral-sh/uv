@@ -293,13 +293,18 @@ further URLs. This keeps the sources auditable: if only one index and no URL dep
 provided, uv will not install any package from outside the index.
 
 The solver distinguishes registry and URL candidates even when their versions are identical: their
-metadata may be different. Version requirements allow any source, including URLs not yet discovered.
-If the registry provides no suitable candidate but an authorized URL could still be introduced, the
-resolver continues processing other dependencies before rejecting the branch. It can revisit earlier
+metadata may be different. The same applies to different explicitly selected registries; an index
+declaration on an excluded package or extra no longer determines which registry supplies a package.
+Hashes recorded for a registry pin are not reused for a selected URL merely because the versions
+match. Version requirements allow any source, including URLs not yet discovered. If the registry
+provides no suitable candidate but an authorized URL could still be introduced, the resolver
+continues processing other dependencies before rejecting the branch. It can revisit earlier
 candidate decisions, including extras, when a different selection might supply the missing URL. The
 same principle applies to first-party declarations that permit an explicit prerelease or a yanked
 version: the resolver can try such a candidate while other dependencies are undecided, but accepts
-it only if a selected first-party declaration actually permits it.
+it only if a selected first-party declaration actually permits it in the environments where the
+package is needed. A dependency of a selected local project can also make a package direct for
+`--resolution lowest-direct`, even if another dependency was processed first.
 
 ## Prioritization
 

@@ -31700,6 +31700,52 @@ fn lock_multiple_sources_extra() -> Result<()> {
     Ok(())
 }
 
+/// Conditional exact pins to ordinary registry releases do not create candidate-policy forks.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_ordinary_conditional_pins_do_not_fork() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "one==1.0.0 ; sys_platform == 'linux'",
+            "two==1.0.0 ; platform_machine == 'x86_64'",
+            "three==1.0.0 ; implementation_name == 'cpython'",
+            "four==1.0.0 ; platform_release == 'example'",
+            "five==1.0.0 ; platform_version == 'example'",
+            "six==1.0.0 ; os_name == 'posix'",
+        ]
+    "#})?;
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "ordinary-conditional-pins"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.one.versions."1.0.0"]
+        [packages.two.versions."1.0.0"]
+        [packages.three.versions."1.0.0"]
+        [packages.four.versions."1.0.0"]
+        [packages.five.versions."1.0.0"]
+        [packages.six.versions."1.0.0"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+    assert_snapshot!(lock.get("resolution-markers").map(ToString::to_string).unwrap_or_default(), @"");
+    Ok(())
+}
+
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_multiple_sources_index_overlapping_extras() -> Result<()> {

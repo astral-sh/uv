@@ -5,6 +5,7 @@ use uv_configuration::{Prerelease, PrereleaseMode};
 use uv_distribution_types::{Requirement, RequirementSource};
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, VersionSpecifiers};
+use uv_pep508::MarkerTree;
 
 use crate::resolver::ForkSet;
 use crate::{DependencyMode, Manifest, ResolverEnvironment};
@@ -112,6 +113,15 @@ impl PrereleaseStrategy {
             }
         }
         packages
+    }
+
+    /// The environments in which a selected prerelease can actually be authorized.
+    pub(crate) fn permission_marker(&self, package_name: &PackageName) -> MarkerTree {
+        match self.package.get(package_name).unwrap_or(&self.default) {
+            PrereleasePolicy::Disallow => MarkerTree::FALSE,
+            PrereleasePolicy::Allow | PrereleasePolicy::IfNecessary => MarkerTree::TRUE,
+            PrereleasePolicy::Explicit(packages) => packages.marker(package_name),
+        }
     }
 
     /// Returns the pre-release candidate selection policy for a package.

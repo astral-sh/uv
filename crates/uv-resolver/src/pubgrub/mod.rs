@@ -5,7 +5,7 @@ pub(crate) use crate::pubgrub::range::Range;
 pub use crate::pubgrub::report::PubGrubHint;
 pub(crate) use crate::pubgrub::report::{PubGrubReportFormatter, report as report_derivation_tree};
 pub(crate) use crate::pubgrub::solver_version::{
-    CandidateSet, SolverSource, SolverVersion, SourceId,
+    CandidateSet, IndexId, SolverSource, SolverVersion, SourceId,
 };
 
 mod dependencies;

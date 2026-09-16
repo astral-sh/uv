@@ -6,11 +6,14 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use uv_distribution_types::{DerivationChain, Requirement};
 use uv_normalize::PackageName;
 use uv_pep440::{MIN_VERSION, Version};
+use uv_pep508::MarkerTree;
 use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl, VerbatimParsedUrl};
 use uv_types::{HashStrategy, HashStrategyError};
 
 use crate::dependency_provider::UvDependencyProvider;
-use crate::pubgrub::{CandidateSet, PubGrubPackage, SolverSource, SolverVersion, SourceId};
+use crate::pubgrub::{
+    CandidateSet, IndexId, PubGrubPackage, SolverSource, SolverVersion, SourceId,
+};
 use crate::resolver::urls::Urls;
 
 /// Optional source-search restrictions. They never introduce packages that the real root did not
@@ -68,6 +71,7 @@ pub(super) struct SourceDependencies {
     dependencies: FxHashMap<(Id<PubGrubPackage>, SolverVersion), Vec<SolvedDependency>>,
     order: FxHashMap<(Id<PubGrubPackage>, SolverVersion), usize>,
     chains: FxHashMap<(Id<PubGrubPackage>, SolverVersion), DerivationChain>,
+    has_urls: bool,
 }
 
 #[derive(Clone)]
@@ -75,6 +79,7 @@ pub(super) struct SolvedDependency {
     pub(super) package: Id<PubGrubPackage>,
     pub(super) candidates: CandidateSet,
     pub(super) declaration: Option<UrlDeclaration>,
+    pub(super) index: Option<IndexId>,
     pub(super) policy: Option<(Arc<Requirement>, bool)>,
 }
 
@@ -100,6 +105,10 @@ pub(super) enum SourcePotential {
 }
 
 impl SourceDependencies {
+    pub(super) fn has_urls(&self) -> bool {
+        self.has_urls
+    }
+
     pub(super) fn set_chain(
         &mut self,
         id: Id<PubGrubPackage>,
@@ -123,6 +132,9 @@ impl SourceDependencies {
         candidate: SolverVersion,
         dependencies: Vec<SolvedDependency>,
     ) {
+        self.has_urls |= dependencies
+            .iter()
+            .any(|dependency| dependency.declaration.is_some());
         let key = (package, candidate);
         let next = self.order.len();
         self.order.entry(key.clone()).or_insert(next);
@@ -159,6 +171,83 @@ impl SourceDependencies {
                             candidate.clone(),
                         )
                     })
+            })
+            .collect()
+    }
+
+    /// Find the selected candidate edges that pinned a registry named in a native failure proof.
+    pub(super) fn index_declarations(
+        &self,
+        state: &State<UvDependencyProvider>,
+        parent: &PubGrubPackage,
+        candidates: &CandidateSet,
+        dependency: &PackageName,
+        index: IndexId,
+    ) -> Vec<(usize, Id<PubGrubPackage>, SolverVersion)> {
+        self.dependencies
+            .iter()
+            .filter_map(|((id, candidate), dependencies)| {
+                if state.package_store[*id] != *parent || !candidates.contains(candidate) {
+                    return None;
+                }
+                dependencies
+                    .iter()
+                    .any(|entry| {
+                        state.package_store[entry.package].name_no_root() == Some(dependency)
+                            && entry.index == Some(index)
+                    })
+                    .then(|| {
+                        (
+                            self.order[&(*id, candidate.clone())],
+                            *id,
+                            candidate.clone(),
+                        )
+                    })
+            })
+            .collect()
+    }
+
+    /// Return currently rooted choices that lead to local declarations making this package direct.
+    pub(super) fn lowest_support(
+        &self,
+        state: &State<UvDependencyProvider>,
+        grounding: &Grounding,
+        name: &PackageName,
+    ) -> Vec<(PubGrubPackage, SolverVersion)> {
+        let Some(parents) = grounding.lowest_parents.get(name) else {
+            return Vec::new();
+        };
+        let selected: FxHashMap<_, _> = state.partial_solution.extract_solution().collect();
+        let mut reverse = FxHashMap::<_, Vec<_>>::default();
+        for ((parent, candidate), dependencies) in &self.dependencies {
+            if !grounding.reachable.contains(parent) || selected.get(parent) != Some(candidate) {
+                continue;
+            }
+            for dependency in dependencies {
+                if grounding.reachable.contains(&dependency.package) {
+                    reverse.entry(dependency.package).or_default().push(*parent);
+                }
+            }
+        }
+        let mut support = FxHashSet::default();
+        let mut pending = parents.iter().copied().collect::<Vec<_>>();
+        while let Some(package) = pending.pop() {
+            if support.insert(package)
+                && let Some(parents) = reverse.get(&package)
+            {
+                pending.extend(parents.iter().copied());
+            }
+        }
+        state
+            .partial_solution
+            .extract_solution()
+            .filter_map(|(id, candidate)| {
+                let package = &state.package_store[id];
+                (support.contains(&id)
+                    && package
+                        .name_no_root()
+                        .is_some_and(|package_name| package_name != name))
+                .then(|| (package.clone(), candidate))
             })
             .collect()
     }
@@ -223,6 +312,43 @@ impl SourceDependencies {
             }
         }
 
+        grounding
+            .contexts
+            .insert(state.root_package, MarkerTree::TRUE);
+        let mut pending = VecDeque::from([state.root_package]);
+        while let Some(package) = pending.pop_front() {
+            let Some(candidate) = selected.get(&package) else {
+                continue;
+            };
+            if let SolverSource::Url(source) = candidate.source
+                && !state.package_store[package]
+                    .name_no_root()
+                    .is_some_and(|name| grounding.contains(name, source))
+            {
+                continue;
+            }
+            let Some(dependencies) = self.dependencies.get(&(package, candidate.clone())) else {
+                continue;
+            };
+            let context = grounding.contexts[&package];
+            for dependency in dependencies {
+                let context = context.and(state.package_store[dependency.package].marker());
+                if context.is_false() {
+                    continue;
+                }
+                let previous = grounding
+                    .contexts
+                    .get(&dependency.package)
+                    .copied()
+                    .unwrap_or(MarkerTree::FALSE);
+                let updated = previous.or(context);
+                if updated != previous {
+                    grounding.contexts.insert(dependency.package, updated);
+                    pending.push_back(dependency.package);
+                }
+            }
+        }
+
         for package in &grounding.reachable {
             let Some(candidate) = selected.get(package) else {
                 continue;
@@ -236,12 +362,46 @@ impl SourceDependencies {
             }
             if let Some(dependencies) = self.dependencies.get(&(*package, candidate.clone())) {
                 for dependency in dependencies {
-                    if let Some(policy) = &dependency.policy {
-                        grounding.policies.push(policy.clone());
+                    if let Some(index) = dependency.index
+                        && let Some(name) = state.package_store[dependency.package].name_no_root()
+                    {
+                        grounding
+                            .indexes
+                            .entry(name.clone())
+                            .or_default()
+                            .insert(index);
+                    }
+                    if let Some((requirement, lowest)) = &dependency.policy
+                        && let Some(context) = grounding.contexts.get(package)
+                    {
+                        let marker = requirement.marker.and(*context);
+                        if !marker.is_false() {
+                            let requirement = if marker == requirement.marker {
+                                requirement.clone()
+                            } else {
+                                let mut scoped = requirement.as_ref().clone();
+                                scoped.marker = marker;
+                                Arc::new(scoped)
+                            };
+                            if *lowest {
+                                grounding
+                                    .lowest_parents
+                                    .entry(requirement.name.clone())
+                                    .or_default()
+                                    .insert(*package);
+                            }
+                            grounding.policies.push((requirement, *lowest));
+                        }
                     }
                     if let Some(declaration) = &dependency.declaration
                         && let Some(requirement) = &declaration.hash_requirement
                     {
+                        grounding.hash_declarations.push((
+                            *package,
+                            candidate.clone(),
+                            requirement.clone(),
+                            declaration.trusted_hashes,
+                        ));
                         if declaration.trusted_hashes {
                             grounding.hashes.trusted.push(requirement.clone());
                         } else {
@@ -281,9 +441,13 @@ impl SourceDependencies {
 #[derive(Default)]
 pub(super) struct Grounding {
     pub(super) reachable: FxHashSet<Id<PubGrubPackage>>,
+    pub(super) contexts: FxHashMap<Id<PubGrubPackage>, MarkerTree>,
+    lowest_parents: FxHashMap<PackageName, FxHashSet<Id<PubGrubPackage>>>,
     urls: FxHashMap<PackageName, BTreeSet<SourceId>>,
     presentations: FxHashMap<SourceId, VerbatimParsedUrl>,
+    pub(super) indexes: FxHashMap<PackageName, BTreeSet<IndexId>>,
     pub(super) hashes: ActiveHashes,
+    hash_declarations: Vec<(Id<PubGrubPackage>, SolverVersion, Arc<Requirement>, bool)>,
     pub(super) policies: Vec<(Arc<Requirement>, bool)>,
     pub(super) untrusted: Vec<(
         Id<PubGrubPackage>,
@@ -314,6 +478,48 @@ impl ActiveHashes {
 }
 
 impl Grounding {
+    /// Reduce a failed hash policy to selected candidate authors sufficient to reproduce it.
+    /// Declaration order and the distinction between trusted inputs and metadata are retained.
+    pub(super) fn hash_error_origins(
+        &self,
+        state: &State<UvDependencyProvider>,
+        base: &HashStrategy,
+        error: &HashStrategyError,
+    ) -> Vec<(Id<PubGrubPackage>, SolverVersion)> {
+        let mut origins: BTreeMap<_, _> = self
+            .hash_declarations
+            .iter()
+            .map(|(id, candidate, _, _)| {
+                ((state.package_store[*id].clone(), candidate.clone()), *id)
+            })
+            .collect();
+        let error = error.to_string();
+        for (origin, id) in origins.clone() {
+            origins.remove(&origin);
+            let mut hashes = ActiveHashes::default();
+            for (id, candidate, requirement, trusted) in &self.hash_declarations {
+                if !origins.contains_key(&(state.package_store[*id].clone(), candidate.clone())) {
+                    continue;
+                }
+                if *trusted {
+                    hashes.trusted.push(requirement.clone());
+                } else {
+                    hashes.metadata.push(requirement.clone());
+                }
+            }
+            if !hashes
+                .strategy(base)
+                .is_err_and(|remaining| remaining.to_string() == error)
+            {
+                origins.insert(origin, id);
+            }
+        }
+        origins
+            .into_iter()
+            .map(|((_, candidate), id)| (id, candidate))
+            .collect()
+    }
+
     pub(super) fn contains(&self, name: &PackageName, source: SourceId) -> bool {
         self.urls
             .get(name)
