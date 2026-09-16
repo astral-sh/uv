@@ -34,19 +34,31 @@ impl Display for MinimumLibcVersion {
 }
 
 impl MinimumLibcVersion {
-    /// Return whether any platform tag is permitted by the libc cutoff.
+    /// Retain wheels unless every platform tag uses an explicitly excluded libc.
     pub fn allows_wheel(self, filename: &WheelFilename) -> bool {
-        filename
-            .platform_tags()
-            .iter()
-            .any(|tag| self.allows_platform(tag))
+        filename.platform_tags().iter().any(|tag| {
+            self.constraint(tag)
+                .is_none_or(|(constraint, _)| match constraint {
+                    LibcConstraint::Version(_) => true,
+                    LibcConstraint::Excluded => false,
+                })
+        })
     }
 
-    /// Reject explicitly excluded libc implementations and releases newer than their baseline.
+    /// Whether a platform tag provides coverage at the configured libc baseline.
     ///
     /// Native Linux tags declare no libc version, so accepting them does not establish a libc
     /// compatibility guarantee. Non-Linux tags are unconstrained.
-    pub fn allows_platform(self, platform: &PlatformTag) -> bool {
+    pub fn supports_platform(self, platform: &PlatformTag) -> bool {
+        self.constraint(platform)
+            .is_none_or(|(constraint, minimum)| match constraint {
+                LibcConstraint::Version(version) => minimum <= version,
+                LibcConstraint::Excluded => false,
+            })
+    }
+
+    /// Pair a platform's libc requirement with the corresponding configured constraint.
+    fn constraint(self, platform: &PlatformTag) -> Option<(LibcConstraint, LibcVersion)> {
         let (constraint, minimum) = match platform {
             PlatformTag::Manylinux { major, minor, .. } => {
                 (self.glibc, LibcVersion::new(*major, *minor))
@@ -74,13 +86,9 @@ impl MinimumLibcVersion {
             | PlatformTag::Solaris { .. }
             | PlatformTag::Pyodide { .. }
             | PlatformTag::PyEmscripten { .. }
-            | PlatformTag::Ios { .. } => return true,
+            | PlatformTag::Ios { .. } => return None,
         };
-        match constraint {
-            Some(LibcConstraint::Version(version)) => minimum <= version,
-            Some(LibcConstraint::Excluded) => false,
-            None => true,
-        }
+        constraint.map(|constraint| (constraint, minimum))
     }
 
     /// Restrict coverage to each configured baseline independently. Retained wheels for another

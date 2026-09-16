@@ -861,7 +861,7 @@ fn implied_libc_markers(
             filename
                 .platform_tags()
                 .iter()
-                .filter(|tag| version.allows_platform(tag)),
+                .filter(|tag| version.supports_platform(tag)),
         )
         .and(python)
     };

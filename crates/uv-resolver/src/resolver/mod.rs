@@ -1217,7 +1217,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 BuiltDist::Path(dist) => &dist.filename,
             };
 
-            // Direct wheels must satisfy the same libc cutoff as registry wheels.
+            // Explicit libc exclusions apply to direct wheels as well as registry wheels.
             if let Some(minimum_libc_version) = self.options.minimum_libc_version
                 && !minimum_libc_version.allows_wheel(filename)
             {
