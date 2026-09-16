@@ -1,4 +1,5 @@
 use crate::{AnnotatedDist, DistributionMetadataIndex, MetadataResponse, Options, UniversalMarker};
+use futures::{StreamExt, TryStreamExt};
 use indexmap::IndexSet;
 use petgraph::{
     Directed,
@@ -7,15 +8,16 @@ use petgraph::{
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
+use uv_client::{FileHashError, RegistryClient};
 use uv_configuration::{BuildOptions, Constraints, Overrides};
 use uv_distribution_types::{
-    BuiltDist, Dist, Edge, Identifier, Name, Node, Requirement, RequiresPython,
+    BuiltDist, Dist, Edge, FileLocation, Identifier, Name, Node, Requirement, RequiresPython,
     ResolutionDiagnostic, ResolvedDist, SourceDist,
 };
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifier};
 use uv_pep508::{MarkerEnvironment, MarkerTree, MarkerTreeKind};
-use uv_pypi_types::{HashDigests, ParsedUrlError};
+use uv_pypi_types::{HashDigest, HashDigests, ParsedUrlError};
 /// The output of a successful resolution.
 ///
 /// Includes a complete resolution graph in which every node represents a pinned package and every
@@ -123,6 +125,9 @@ impl ResolverOutput {
     pub fn is_empty(&self) -> bool {
         self.base_dists().next().is_none()
     }
+
+    /// Generate registry hashes from the artifacts retained by a libc cutoff and build options.
+    ///
 
     /// Retain registry hashes only for artifacts permitted by package-specific build options.
     ///

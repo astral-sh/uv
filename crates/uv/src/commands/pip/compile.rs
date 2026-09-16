@@ -559,7 +559,11 @@ pub(crate) async fn pip_compile(
         .torch_backend(torch_backend)
         .build_options(build_options.clone())
         .artifact_environments(artifact_environments)
-        .minimum_libc_version(minimum_libc_version)
+        .minimum_libc_version(if universal {
+            minimum_libc_version
+        } else {
+            None
+        })
         .build();
 
     // Resolve the requirements.
@@ -603,6 +607,12 @@ pub(crate) async fn pip_compile(
 
     if generate_hashes && preview.is_enabled(PreviewFeature::ArtifactHashFiltering) {
         resolution.retain_allowed_distribution_hashes(&build_options);
+    }
+
+    if generate_hashes && matches!(format, PipCompileFormat::RequirementsTxt) {
+        resolution
+            .generate_artifact_hashes(&client, concurrency.downloads, &no_emit_packages)
+            .await?;
     }
 
     // Write the resolved dependencies to the output channel.

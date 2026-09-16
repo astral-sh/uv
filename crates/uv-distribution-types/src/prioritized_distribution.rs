@@ -10,10 +10,9 @@ use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString}
 use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagPriority, Tags};
 use uv_pypi_types::{HashDigest, Yanked};
 
-use crate::artifact_policy::ArtifactCoverage;
 use crate::{
-    ArtifactPolicy, ArtifactPolicyError, File, InstalledDist, KnownPlatform, RegistryBuiltDist,
-    RegistryBuiltWheel, RegistrySourceDist, ResolvedDistRef,
+    File, InstalledDist, KnownPlatform, MinimumLibcVersion, RegistryBuiltDist, RegistryBuiltWheel,
+    RegistrySourceDist, ResolvedDistRef,
 };
 
 /// A collection of distributions that have been filtered by relevance.
@@ -32,10 +31,8 @@ struct PrioritizedDistInner {
     wheels: Vec<(RegistryBuiltWheel, WheelCompatibility)>,
     /// The hashes for each distribution.
     hashes: Vec<HashDigest>,
-    /// Constraints shared by candidate selection, environment coverage, and output artifacts.
-    artifact_policy: ArtifactPolicy,
-    /// Cached environment coverage of compatible artifacts under the resolution's policy.
-    artifact_coverage: ArtifactCoverage,
+    /// The set of supported platforms for the distribution, described in terms of their markers.
+    markers: MarkerTree,
 }
 
 impl Default for PrioritizedDistInner {
@@ -45,8 +42,7 @@ impl Default for PrioritizedDistInner {
             best_wheel_index: None,
             wheels: Vec::new(),
             hashes: Vec::new(),
-            artifact_policy: ArtifactPolicy::default(),
-            artifact_coverage: ArtifactCoverage::EMPTY,
+            markers: MarkerTree::FALSE,
         }
     }
 }
@@ -105,13 +101,10 @@ impl CompatibleDist<'_> {
         }
     }
 
-    /// Return the environments covered by artifacts allowed by the resolution's policy.
-    pub fn artifact_coverage(&self) -> MarkerTree {
+    /// Return the set of supported platforms for the distribution, in terms of their markers.
+    pub fn implied_markers(&self) -> MarkerTree {
         match self.prioritized() {
-            Some(prioritized) => prioritized
-                .0
-                .artifact_coverage
-                .markers(prioritized.0.artifact_policy),
+            Some(prioritized) => prioritized.0.markers,
             None => MarkerTree::TRUE,
         }
     }
@@ -132,7 +125,7 @@ impl IncompatibleDist {
         match self {
             Self::Wheel(incompatibility) => match incompatibility {
                 IncompatibleWheel::NoBinary => format!("has {self}"),
-                IncompatibleWheel::ArtifactPolicy(_) => format!("has {self}"),
+                IncompatibleWheel::LibcVersion(_) => format!("has {self}"),
                 IncompatibleWheel::Tag(_) => format!("has {self}"),
                 IncompatibleWheel::Yanked(_) => format!("was {self}"),
                 IncompatibleWheel::ExcludeNewer(ts) => match ts {
@@ -162,7 +155,7 @@ impl IncompatibleDist {
         match self {
             Self::Wheel(incompatibility) => match incompatibility {
                 IncompatibleWheel::NoBinary => format!("have {self}"),
-                IncompatibleWheel::ArtifactPolicy(_) => format!("have {self}"),
+                IncompatibleWheel::LibcVersion(_) => format!("have {self}"),
                 IncompatibleWheel::Tag(_) => format!("have {self}"),
                 IncompatibleWheel::Yanked(_) => format!("were {self}"),
                 IncompatibleWheel::ExcludeNewer(ts) => match ts {
@@ -214,7 +207,7 @@ impl IncompatibleDist {
                 }
                 IncompatibleWheel::Tag(IncompatibleTag::Invalid) => None,
                 IncompatibleWheel::NoBinary => None,
-                IncompatibleWheel::ArtifactPolicy(_) => None,
+                IncompatibleWheel::LibcVersion(_) => None,
                 IncompatibleWheel::Yanked(..) => None,
                 IncompatibleWheel::ExcludeNewer(..) => None,
                 IncompatibleWheel::RequiresPython(..) => None,
@@ -231,7 +224,9 @@ impl Display for IncompatibleDist {
         match self {
             Self::Wheel(incompatibility) => match incompatibility {
                 IncompatibleWheel::NoBinary => f.write_str("no source distribution"),
-                IncompatibleWheel::ArtifactPolicy(error) => Display::fmt(error, f),
+                IncompatibleWheel::LibcVersion(version) => {
+                    write!(f, "no wheels compatible with {version}")
+                }
                 IncompatibleWheel::Tag(tag) => match tag {
                     IncompatibleTag::Invalid => f.write_str("no wheels with valid tags"),
                     IncompatibleTag::Python => {
@@ -317,8 +312,8 @@ pub enum WheelCompatibility {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum IncompatibleWheel {
-    /// The wheel is excluded by the universal resolution's artifact policy.
-    ArtifactPolicy(ArtifactPolicyError),
+    /// The wheel requires an excluded libc implementation or version.
+    LibcVersion(MinimumLibcVersion),
     /// The wheel was published after the exclude newer time.
     ExcludeNewer(Option<i64>),
     /// The wheel tags do not match those of the target Python platform.
@@ -360,31 +355,19 @@ pub enum HashComparison {
 }
 
 impl PrioritizedDist {
-    /// Create an empty distribution set governed by the given artifact policy.
-    pub fn new(artifact_policy: ArtifactPolicy) -> Self {
-        Self(Box::new(PrioritizedDistInner {
-            artifact_policy,
-            ..PrioritizedDistInner::default()
-        }))
-    }
-
     /// Insert the given built distribution into the [`PrioritizedDist`].
     pub fn insert_built(
         &mut self,
         dist: RegistryBuiltWheel,
         hashes: impl IntoIterator<Item = HashDigest>,
         compatibility: WheelCompatibility,
+        minimum_libc_version: Option<MinimumLibcVersion>,
     ) {
-        let compatibility = match self.0.artifact_policy.check_wheel(&dist.filename) {
-            Ok(()) => compatibility,
-            Err(error) => {
-                WheelCompatibility::Incompatible(IncompatibleWheel::ArtifactPolicy(error))
-            }
-        };
-        if compatibility.is_compatible() {
-            self.0
-                .artifact_coverage
-                .insert_wheel(self.0.artifact_policy, &dist.filename);
+        if compatibility.is_compatible() && !self.0.markers.is_true() {
+            self.0.markers = self
+                .0
+                .markers
+                .or(implied_markers(&dist.filename, minimum_libc_version));
         }
         // Track the hashes.
         if !compatibility.is_excluded() {
@@ -410,7 +393,7 @@ impl PrioritizedDist {
     ) {
         // A usable source distribution provides coverage for all environments.
         if compatibility.is_compatible() {
-            self.0.artifact_coverage = ArtifactCoverage::UNIVERSAL;
+            self.0.markers = MarkerTree::TRUE;
         }
         // Track the hashes.
         if !compatibility.is_excluded() {
@@ -686,7 +669,7 @@ impl WheelCompatibility {
         matches!(
             self,
             Self::Incompatible(
-                IncompatibleWheel::ExcludeNewer(_) | IncompatibleWheel::ArtifactPolicy(_)
+                IncompatibleWheel::ExcludeNewer(_) | IncompatibleWheel::LibcVersion(_)
             )
         )
     }
@@ -778,8 +761,8 @@ impl IncompatibleSource {
 impl IncompatibleWheel {
     fn is_more_compatible(&self, other: &Self) -> bool {
         match self {
-            Self::ArtifactPolicy(_) => match other {
-                Self::ExcludeNewer(_) | Self::ArtifactPolicy(_) => false,
+            Self::LibcVersion(_) => match other {
+                Self::ExcludeNewer(_) | Self::LibcVersion(_) => false,
                 Self::Tag(_)
                 | Self::RequiresPython(_, _)
                 | Self::Yanked(_)
@@ -796,14 +779,14 @@ impl IncompatibleWheel {
                     }
                 },
                 Self::MissingPlatform(_)
-                | Self::ArtifactPolicy(_)
+                | Self::LibcVersion(_)
                 | Self::NoBinary
                 | Self::RequiresPython(_, _)
                 | Self::Tag(_)
                 | Self::Yanked(_) => true,
             },
             Self::Tag(tag_self) => match other {
-                Self::ExcludeNewer(_) | Self::ArtifactPolicy(_) => false,
+                Self::ExcludeNewer(_) | Self::LibcVersion(_) => false,
                 Self::Tag(tag_other) => tag_self > tag_other,
                 Self::MissingPlatform(_)
                 | Self::NoBinary
@@ -811,14 +794,14 @@ impl IncompatibleWheel {
                 | Self::Yanked(_) => true,
             },
             Self::RequiresPython(_, _) => match other {
-                Self::ExcludeNewer(_) | Self::ArtifactPolicy(_) | Self::Tag(_) => false,
+                Self::ExcludeNewer(_) | Self::LibcVersion(_) | Self::Tag(_) => false,
                 // Version specifiers cannot be reasonably compared
                 Self::RequiresPython(_, _) => false,
                 Self::MissingPlatform(_) | Self::NoBinary | Self::Yanked(_) => true,
             },
             Self::Yanked(_) => match other {
                 Self::ExcludeNewer(_)
-                | Self::ArtifactPolicy(_)
+                | Self::LibcVersion(_)
                 | Self::Tag(_)
                 | Self::RequiresPython(_, _) => false,
                 // Yanks with a reason are more helpful for errors
@@ -827,7 +810,7 @@ impl IncompatibleWheel {
             },
             Self::NoBinary => match other {
                 Self::ExcludeNewer(_)
-                | Self::ArtifactPolicy(_)
+                | Self::LibcVersion(_)
                 | Self::Tag(_)
                 | Self::RequiresPython(_, _)
                 | Self::Yanked(_) => false,
@@ -839,14 +822,24 @@ impl IncompatibleWheel {
     }
 }
 
-/// Given a wheel filename, determine the set of supported markers.
-#[cfg(test)]
-pub(crate) fn implied_markers(filename: &WheelFilename) -> MarkerTree {
-    implied_platform_markers(filename.platform_tags()).and(implied_python_markers(filename))
+/// Given a wheel filename, determine the supported markers, excluding disallowed libc tags.
+///
+/// A wheel with multiple platform tags can remain eligible without covering every tagged platform.
+pub fn implied_markers(
+    filename: &WheelFilename,
+    minimum_libc_version: Option<MinimumLibcVersion>,
+) -> MarkerTree {
+    implied_platform_markers(
+        filename
+            .platform_tags()
+            .iter()
+            .filter(|tag| minimum_libc_version.is_none_or(|version| version.allows_platform(tag))),
+    )
+    .and(implied_python_markers(filename))
 }
 
 /// Infer the environments described by a set of platform tags.
-pub(crate) fn implied_platform_markers<'a>(
+fn implied_platform_markers<'a>(
     platform_tags: impl IntoIterator<Item = &'a PlatformTag>,
 ) -> MarkerTree {
     let mut marker = MarkerTree::FALSE;
@@ -953,7 +946,7 @@ pub(crate) fn implied_platform_markers<'a>(
 ///
 /// This is roughly the inverse of Python tag generation: given a tag, we want to infer the
 /// supported Python version (rather than generating the supported tags from a given Python version).
-pub(crate) fn implied_python_markers(filename: &WheelFilename) -> MarkerTree {
+fn implied_python_markers(filename: &WheelFilename) -> MarkerTree {
     let mut marker = MarkerTree::FALSE;
 
     // If any ABI tag is a stable ABI (`abi3` or `abi3t`), the python tag represents a minimum
@@ -1066,78 +1059,7 @@ pub(crate) fn implied_python_markers(filename: &WheelFilename) -> MarkerTree {
 mod tests {
     use std::str::FromStr;
 
-    use uv_distribution_filename::SourceDistExtension;
-    use uv_pypi_types::HashDigests;
-
-    use crate::{FileLocation, IndexUrl};
-
     use super::*;
-
-    fn registry_file(filename: &str) -> File {
-        File {
-            dist_info_metadata: None,
-            filename: filename.into(),
-            hashes: HashDigests::empty(),
-            requires_python: None,
-            size: None,
-            upload_time_utc_ms: None,
-            url: FileLocation::RelativeUrl("https://example.com/".into(), filename.into()),
-            yanked: None,
-        }
-    }
-
-    #[test]
-    fn incompatible_first_artifact_does_not_contribute_coverage()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let index = IndexUrl::parse("https://example.com/simple", None)?;
-        let compatible_filename = "example-1.0-py3-none-manylinux_2_17_x86_64.whl";
-        let compatible_wheel = RegistryBuiltWheel {
-            filename: compatible_filename.parse()?,
-            file: Box::new(registry_file(compatible_filename)),
-            index: index.clone(),
-            size_is_authoritative: false,
-        };
-        let source = RegistrySourceDist {
-            name: compatible_wheel.filename.name.clone(),
-            version: compatible_wheel.filename.version.clone(),
-            ext: SourceDistExtension::TarGz,
-            file: Box::new(registry_file("example-1.0.tar.gz")),
-            index: index.clone(),
-            wheels: Vec::new(),
-            size_is_authoritative: false,
-        };
-        let incompatible_filename = "example-1.0-py3-none-manylinux_2_17_aarch64.whl";
-        let incompatible_wheel = RegistryBuiltWheel {
-            filename: incompatible_filename.parse()?,
-            file: Box::new(registry_file(incompatible_filename)),
-            index,
-            size_is_authoritative: false,
-        };
-        let incompatible_source =
-            SourceDistCompatibility::Incompatible(IncompatibleSource::NoBuild);
-        let incompatible_tags =
-            WheelCompatibility::Incompatible(IncompatibleWheel::Tag(IncompatibleTag::Platform));
-        let policy = ArtifactPolicy::default();
-        let mut inserted_source = PrioritizedDist::new(policy);
-        inserted_source.insert_source(source, Vec::new(), incompatible_source);
-        let mut inserted_wheel = PrioritizedDist::new(policy);
-        inserted_wheel.insert_built(incompatible_wheel, Vec::new(), incompatible_tags);
-
-        let expected = implied_markers(&compatible_wheel.filename);
-        for mut prioritized in [inserted_source, inserted_wheel] {
-            assert_eq!(
-                prioritized.0.artifact_coverage.markers(policy),
-                MarkerTree::FALSE
-            );
-            prioritized.insert_built(
-                compatible_wheel.clone(),
-                Vec::new(),
-                WheelCompatibility::Compatible(HashComparison::Matched, None, None),
-            );
-            assert_eq!(prioritized.0.artifact_coverage.markers(policy), expected);
-        }
-        Ok(())
-    }
 
     #[track_caller]
     fn assert_platform_markers(filename: &str, expected: &str) {
@@ -1161,7 +1083,7 @@ mod tests {
     fn assert_implied_markers(filename: &str, expected: &str) {
         let filename = WheelFilename::from_str(filename).unwrap();
         assert_eq!(
-            implied_markers(&filename),
+            implied_markers(&filename, None),
             expected.parse::<MarkerTree>().unwrap()
         );
     }

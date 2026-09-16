@@ -1,5 +1,5 @@
 use uv_configuration::{BuildOptions, IndexStrategy};
-use uv_distribution_types::{ArtifactPolicy, MinimumLibcVersion};
+use uv_distribution_types::MinimumLibcVersion;
 use uv_pypi_types::SupportedEnvironments;
 use uv_torch::TorchStrategy;
 
@@ -20,15 +20,6 @@ pub struct Options {
     pub flexibility: Flexibility,
     pub build_options: BuildOptions,
     pub torch_backend: Option<TorchStrategy>,
-}
-
-impl Options {
-    /// Return the artifact constraints for a universal resolution.
-    pub(crate) fn artifact_policy(&self) -> ArtifactPolicy {
-        self.minimum_libc_version
-            .map(ArtifactPolicy::new)
-            .unwrap_or_default()
-    }
 }
 
 /// Builder for [`Options`].

@@ -11,7 +11,7 @@ use uv_client::{FlatIndexEntry, OwnedArchive, SimpleDetailMetadata, VersionFiles
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    ArtifactPolicy, HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl,
+    HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl, MinimumLibcVersion,
     PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, RequiresPython,
     SourceDistCompatibility, WheelCompatibility,
 };
@@ -55,7 +55,7 @@ impl VersionMap {
         available_version_cutoff: Option<Timestamp>,
         flat_index: Option<FlatDistributions>,
         build_options: &BuildOptions,
-        artifact_policy: ArtifactPolicy,
+        minimum_libc_version: Option<MinimumLibcVersion>,
     ) -> Self {
         let mut local = false;
         let mut entries = Vec::with_capacity(simple_metadata.iter().size_hint().0);
@@ -105,7 +105,7 @@ impl VersionMap {
                 requires_python,
                 included_version_cutoff,
                 available_version_cutoff,
-                artifact_policy,
+                minimum_libc_version,
             }),
         }
     }
@@ -116,10 +116,16 @@ impl VersionMap {
         tags: Option<&Tags>,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
-        artifact_policy: ArtifactPolicy,
+        minimum_libc_version: Option<MinimumLibcVersion>,
     ) -> Self {
-        FlatDistributions::from_entries(flat_metadata, tags, hasher, build_options, artifact_policy)
-            .into()
+        FlatDistributions::from_entries(
+            flat_metadata,
+            tags,
+            hasher,
+            build_options,
+            minimum_libc_version,
+        )
+        .into()
     }
 
     /// Return the [`ResolutionMetadata`] for the given version, if any.
@@ -495,8 +501,8 @@ struct VersionMapLazy {
     hasher: HashStrategy,
     /// The `requires-python` constraint for the resolution.
     requires_python: RequiresPython,
-    /// The policy governing which artifacts can be selected and recorded in the resolution.
-    artifact_policy: ArtifactPolicy,
+    /// The libc cutoff applied to Linux wheels during universal resolution.
+    minimum_libc_version: Option<MinimumLibcVersion>,
 }
 
 impl VersionMapLazy {
@@ -620,9 +626,7 @@ impl VersionMapLazy {
                     .files,
             )
             .expect("archived version files always deserializes");
-            let mut priority_dist = init
-                .cloned()
-                .unwrap_or_else(|| PrioritizedDist::new(self.artifact_policy));
+            let mut priority_dist = init.cloned().unwrap_or_default();
             for (filename, file) in files.all(&self.package_name) {
                 // Support resolving as if it were an earlier timestamp, at least as long files have
                 // upload time information.
@@ -685,7 +689,12 @@ impl VersionMapLazy {
                             index: self.index.clone(),
                             size_is_authoritative: false,
                         };
-                        priority_dist.insert_built(dist, hashes, compatibility);
+                        priority_dist.insert_built(
+                            dist,
+                            hashes,
+                            compatibility,
+                            self.minimum_libc_version,
+                        );
                     }
                     DistFilename::SourceDistFilename(filename) => {
                         let compatibility = self.source_dist_compatibility(
@@ -791,6 +800,12 @@ impl VersionMapLazy {
         // Check if after upload time cutoff
         if excluded {
             return WheelCompatibility::Incompatible(IncompatibleWheel::ExcludeNewer(upload_time));
+        }
+
+        if let Some(version) = self.minimum_libc_version
+            && !version.allows_wheel(filename)
+        {
+            return WheelCompatibility::Incompatible(IncompatibleWheel::LibcVersion(version));
         }
 
         // Check if binaries are disabled

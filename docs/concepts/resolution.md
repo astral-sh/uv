@@ -240,15 +240,15 @@ minimum-libc-version = { glibc = "2.31" }
 ```
 
 With this configuration, a `manylinux_2_17` wheel is allowed, but `manylinux_2_34` and `musllinux`
-wheels are not. To require support for musl as well, include it in the table:
+wheels are not. To allow musl wheels as well, include it in the table:
 
 ```toml
 minimum-libc-version = { glibc = "2.31", musl = "1.2" }
 ```
 
-Each required Linux environment must then have compatible artifacts for both libc implementations.
-If a package has no compatible wheel or usable source distribution, uv will try another version of
-the package, or fail resolution if no such version exists.
+Listing both implementations allows wheels for either; it does not require wheels for both.
+`required-environments` is checked against the remaining artifacts. If a required environment has
+no compatible wheel or usable source distribution, uv will try another version of the package.
 
 ## Common marker values
 
