@@ -18,9 +18,8 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
-    DependencyMetadata, HashCollection, IndexLocations, NameRequirementSpecification,
-    RequiredEnvironment, RequiredEnvironments, Requirement, RequiresPython,
-    UnresolvedRequirementSpecification,
+    DependencyMetadata, Environments, HashCollection, IndexLocations, NameRequirementSpecification,
+    Requirement, RequiresPython, UnresolvedRequirementSpecification,
 };
 use uv_git::ResolvedRepositoryReference;
 use uv_git_types::GitOid;
@@ -28,7 +27,7 @@ use uv_lock::{Lock, Package, ResolverManifest, SatisfiesResult};
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::Version;
 use uv_preview::{Preview, PreviewFeature};
-use uv_pypi_types::{ConflictKind, Conflicts, SupportedEnvironments};
+use uv_pypi_types::{ConflictKind, Conflicts};
 use uv_python::{
     ConfigDiscovery, Interpreter, PythonDownloads, PythonEnvironment, PythonPreference,
     PythonRequest,
@@ -653,15 +652,20 @@ async fn do_lock(
 
         // Ensure that the environments are disjoint.
         if let Some(environments) = &environments {
-            for [lhs, rhs] in environments.as_markers().array_windows() {
-                if !lhs.is_disjoint(*rhs) {
-                    let hint = lhs.negate().and(*rhs);
+            for (index, lhs) in environments.iter().enumerate() {
+                for rhs in &environments.as_slice()[index + 1..] {
+                    if lhs.marker.is_disjoint(rhs.marker) {
+                        continue;
+                    }
+                    let hint = lhs.marker.negate().and(rhs.marker);
 
                     let lhs = lhs
+                        .marker
                         .contents()
                         .map(|contents| contents.to_string())
                         .unwrap_or_else(|| "true".to_string());
                     let rhs = rhs
+                        .marker
                         .contents()
                         .map(|contents| contents.to_string())
                         .unwrap_or_else(|| "true".to_string());
@@ -705,11 +709,12 @@ async fn do_lock(
         None
     };
 
-    if required_environments.is_some_and(RequiredEnvironments::has_libc_constraints)
+    if (environments.is_some_and(Environments::has_libc_constraints)
+        || required_environments.is_some_and(Environments::has_libc_constraints))
         && !preview.is_enabled(PreviewFeature::MinimumLibcVersion)
     {
         warn_user_once!(
-            "Setting `libc` in `required-environments` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            "Setting `libc` in `environments` or `required-environments` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
             PreviewFeature::MinimumLibcVersion
         );
     }
@@ -742,13 +747,15 @@ async fn do_lock(
 
     // If any of the forks are incompatible with the Python requirement, error.
     for environment in environments
-        .map(SupportedEnvironments::as_markers)
+        .map(Environments::as_slice)
         .into_iter()
         .flatten()
-        .copied()
     {
-        if requires_python.to_marker_tree().is_disjoint(environment) {
-            return if let Some(contents) = environment.contents() {
+        if requires_python
+            .to_marker_tree()
+            .is_disjoint(environment.marker)
+        {
+            return if let Some(contents) = environment.marker.contents() {
                 Err(ProjectError::DisjointEnvironment(
                     contents,
                     requires_python.specifiers().clone(),
@@ -798,17 +805,7 @@ async fn do_lock(
     };
 
     let lock_supported_environments = environments.cloned().unwrap_or_default();
-    let lock_required_environments = required_environments
-        .map(RequiredEnvironments::as_slice)
-        .unwrap_or_default();
-    let artifact_environments = RequiredEnvironments::from_environments(
-        lock_supported_environments
-            .iter()
-            .copied()
-            .map(RequiredEnvironment::from)
-            .chain(lock_required_environments.iter().copied())
-            .collect(),
-    );
+    let lock_required_environments = required_environments.cloned().unwrap_or_default();
 
     let options = OptionsBuilder::new()
         .resolution_mode(*resolution)
@@ -817,7 +814,8 @@ async fn do_lock(
         .exclude_newer(exclude_newer.clone())
         .index_strategy(*index_strategy)
         .build_options(build_options.clone())
-        .artifact_environments(artifact_environments)
+        .supported_environments(lock_supported_environments.clone())
+        .required_environments(lock_required_environments.clone())
         .build();
     // Checking an existing lockfile may build metadata and install build dependencies. Verify any
     // artifacts recorded in that lockfile, including for an ordinary unlocked command.
@@ -1048,7 +1046,7 @@ async fn do_lock(
                     .unwrap_or_else(|| {
                         environments
                             .cloned()
-                            .map(SupportedEnvironments::into_markers)
+                            .map(Environments::into_markers)
                             .unwrap_or_default()
                     }),
             );
@@ -1129,12 +1127,12 @@ async fn do_lock(
                 &resolution,
                 manifest,
                 target.install_path(),
-                lock_supported_environments.clone().into_markers(),
+                lock_supported_environments.as_slice().to_vec(),
                 index_locations,
                 preview.is_enabled(PreviewFeature::LockWithoutMetadata),
             )?
             .with_conflicts(conflicts)
-            .with_required_environments(lock_required_environments.to_vec());
+            .with_required_environments(lock_required_environments.as_slice().to_vec());
 
             let lock = if preview.is_enabled(PreviewFeature::MissingExcludeNewerPackageLock) {
                 lock.without_unused_exclude_newer_packages()
@@ -1186,8 +1184,8 @@ impl ValidatedLock {
         excludes: &[ExcludeDependency],
         build_constraints: &Constraints,
         conflicts: &Conflicts,
-        environments: Option<&SupportedEnvironments>,
-        required_environments: Option<&RequiredEnvironments>,
+        environments: Option<&Environments>,
+        required_environments: Option<&Environments>,
         dependency_metadata: &DependencyMetadata,
         interpreter: &Interpreter,
         requires_python: &RequiresPython,
@@ -1293,11 +1291,11 @@ impl ValidatedLock {
         // If the set of supported environments has changed, we have to perform a clean resolution.
         let expected = lock.simplified_supported_environments();
         let actual = environments
-            .map(SupportedEnvironments::as_markers)
+            .map(Environments::as_slice)
             .unwrap_or_default()
             .iter()
             .copied()
-            .map(|marker| lock.simplify_environment(marker))
+            .filter_map(|environment| lock.simplify_environment(environment))
             .collect::<Vec<_>>();
         if expected != actual {
             debug!(
@@ -1310,11 +1308,11 @@ impl ValidatedLock {
         // If the set of required platforms has changed, we have to perform a clean resolution.
         let expected = lock.simplified_required_environments();
         let actual = required_environments
-            .map(RequiredEnvironments::as_slice)
+            .map(Environments::as_slice)
             .unwrap_or_default()
             .iter()
             .copied()
-            .filter_map(|environment| lock.simplify_required_environment(environment))
+            .filter_map(|environment| lock.simplify_environment(environment))
             .collect::<Vec<_>>();
         if expected != actual {
             debug!(

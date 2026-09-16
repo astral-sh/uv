@@ -1,5 +1,5 @@
 use uv_configuration::{BuildOptions, IndexStrategy};
-use uv_distribution_types::{ArtifactPolicy, RequiredEnvironments};
+use uv_distribution_types::{ArtifactPolicy, Environment, Environments};
 use uv_torch::TorchStrategy;
 
 use uv_configuration::ForkStrategy;
@@ -14,7 +14,8 @@ pub struct Options {
     pub fork_strategy: ForkStrategy,
     pub exclude_newer: ExcludeNewer,
     pub index_strategy: IndexStrategy,
-    pub artifact_environments: RequiredEnvironments,
+    pub supported_environments: Environments,
+    pub required_environments: Environments,
     pub flexibility: Flexibility,
     pub build_options: BuildOptions,
     pub torch_backend: Option<TorchStrategy>,
@@ -23,7 +24,14 @@ pub struct Options {
 impl Options {
     /// Return the artifact constraints for a universal resolution.
     pub(crate) fn artifact_policy(&self) -> ArtifactPolicy {
-        ArtifactPolicy::new(&self.artifact_environments)
+        ArtifactPolicy::new(&self.supported_environments, &self.required_environments)
+    }
+
+    /// Return the supported and required environments that need artifact coverage.
+    pub(crate) fn artifact_environments(&self) -> impl Iterator<Item = &Environment> {
+        self.supported_environments
+            .iter()
+            .chain(self.required_environments.iter())
     }
 }
 
@@ -36,7 +44,8 @@ pub struct OptionsBuilder {
     fork_strategy: ForkStrategy,
     exclude_newer: ExcludeNewer,
     index_strategy: IndexStrategy,
-    artifact_environments: RequiredEnvironments,
+    supported_environments: Environments,
+    required_environments: Environments,
     flexibility: Flexibility,
     build_options: BuildOptions,
     torch_backend: Option<TorchStrategy>,
@@ -90,10 +99,17 @@ impl OptionsBuilder {
         self
     }
 
-    /// Sets the environments that require artifact coverage.
+    /// Sets the supported environments, restricting eligible artifacts.
     #[must_use]
-    pub fn artifact_environments(mut self, artifact_environments: RequiredEnvironments) -> Self {
-        self.artifact_environments = artifact_environments;
+    pub fn supported_environments(mut self, supported_environments: Environments) -> Self {
+        self.supported_environments = supported_environments;
+        self
+    }
+
+    /// Sets the environments that require artifact coverage without restricting artifacts.
+    #[must_use]
+    pub fn required_environments(mut self, required_environments: Environments) -> Self {
+        self.required_environments = required_environments;
         self
     }
 
@@ -127,7 +143,8 @@ impl OptionsBuilder {
             fork_strategy: self.fork_strategy,
             exclude_newer: self.exclude_newer,
             index_strategy: self.index_strategy,
-            artifact_environments: self.artifact_environments,
+            supported_environments: self.supported_environments,
+            required_environments: self.required_environments,
             flexibility: self.flexibility,
             build_options: self.build_options,
             torch_backend: self.torch_backend,

@@ -1231,7 +1231,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 let wheel_marker = policy.wheel_coverage(filename);
                 // If the caller marked an environment as requiring artifact coverage, ensure it
                 // has coverage.
-                for environment in &self.options.artifact_environments {
+                for environment in self.options.artifact_environments() {
                     let environment_marker = environment.marker;
                     // If the platform is part of the current environment...
                     if env.included_by_marker(environment_marker)
@@ -1485,7 +1485,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         // If the caller marked an environment as requiring artifact coverage, ensure it has
         // coverage.
-        for environment in &self.options.artifact_environments {
+        for environment in self.options.artifact_environments() {
             let marker = environment.marker;
             // If the platform is part of the current environment...
             if env.included_by_marker(marker) {

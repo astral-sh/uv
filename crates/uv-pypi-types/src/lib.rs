@@ -12,7 +12,6 @@ pub use parsed_url::*;
 pub use project_status::*;
 pub use scheme::*;
 pub use simple_json::*;
-pub use supported_environments::*;
 
 mod base_url;
 mod build;
@@ -28,4 +27,3 @@ mod parsed_url;
 mod project_status;
 mod scheme;
 mod simple_json;
-mod supported_environments;

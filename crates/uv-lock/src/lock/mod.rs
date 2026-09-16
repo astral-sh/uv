@@ -34,12 +34,12 @@ use uv_distribution_filename::{
 };
 use uv_distribution_types::{
     ArchiveHashPolicy, BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist,
-    DirectorySourceDist, Dist, ExcludeNewerOverride, ExcludeNewerSpan, ExcludeNewerValue,
+    DirectorySourceDist, Environment, Dist, ExcludeNewerOverride, ExcludeNewerSpan, ExcludeNewerValue,
     FileLocation, FirstParty, GitDirectorySourceDist, GitPathBuiltDist, GitPathSourceDist,
     HashValidation, Identifier, IndexLocations, IndexMetadata, IndexUrl, MetadataHashPolicy, Name,
     NameRequirementSpecification, PYPI_URL, PathBuiltDist, PathSourceDist, RegistryBuiltDist,
     RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Requirement, RequirementSource,
-    RequiredEnvironment, RequiredEnvironments, RequiresPython, ResolvedDist, SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString,
+    RequiresPython, ResolvedDist, SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString,
     VersionId,
 };
 use uv_fs::{PortablePath, PortablePathBuf, Simplified, normalize_path, try_relative_to_if};
@@ -310,9 +310,9 @@ pub struct Lock {
     /// The conflicting groups/extras specified by the user.
     conflicts: Conflicts,
     /// The list of supported environments specified by the user.
-    supported_environments: Vec<MarkerTree>,
+    supported_environments: Vec<Environment>,
     /// The list of required platforms specified by the user.
-    required_environments: Vec<RequiredEnvironment>,
+    required_environments: Vec<Environment>,
     /// The range of supported Python versions.
     requires_python: RequiresPython,
     /// We discard the lockfile if these options don't match.
@@ -338,14 +338,14 @@ pub struct Lock {
 /// Return the marker domain covered by the supported environments and `requires-python`.
 pub fn implicit_constraints_marker(
     requires_python: MarkerTree,
-    supported_environments: &[MarkerTree],
+    supported_environments: &[Environment],
 ) -> MarkerTree {
     let mut environments_union = if supported_environments.is_empty() {
         MarkerTree::TRUE
     } else {
         let mut environments_union = MarkerTree::FALSE;
         for environment in supported_environments {
-            environments_union = environments_union.or(*environment);
+            environments_union = environments_union.or(environment.marker);
         }
         environments_union
     };
@@ -2429,7 +2429,7 @@ impl Lock {
         resolution: &ResolverOutput,
         manifest: ResolverManifest,
         root: &Path,
-        supported_environments: Vec<MarkerTree>,
+        supported_environments: Vec<Environment>,
         index_locations: &IndexLocations,
         metadata_free: bool,
     ) -> Result<Self, LockError> {
@@ -2437,14 +2437,17 @@ impl Lock {
         let requires_python = resolution.requires_python.clone();
         let supported_environments = supported_environments
             .into_iter()
-            .map(|marker| requires_python.complexify_markers(marker))
+            .map(|environment| Environment {
+                marker: requires_python.complexify_markers(environment.marker),
+                ..environment
+            })
             .collect::<Vec<_>>();
         let supported_environments_marker = if supported_environments.is_empty() {
             None
         } else {
             let mut combined = MarkerTree::FALSE;
-            for marker in &supported_environments {
-                combined = combined.or(*marker);
+            for environment in &supported_environments {
+                combined = combined.or(environment.marker);
             }
             Some(UniversalMarker::new(combined, ConflictMarker::TRUE))
         };
@@ -2616,8 +2619,8 @@ impl Lock {
         options: ResolverOptions,
         manifest: ResolverManifest,
         conflicts: Conflicts,
-        supported_environments: Vec<MarkerTree>,
-        required_environments: Vec<RequiredEnvironment>,
+        supported_environments: Vec<Environment>,
+        required_environments: Vec<Environment>,
         fork_markers: Vec<UniversalMarker>,
     ) -> Result<Self, LockError> {
         // Put all dependencies for each package in a canonical order and
@@ -2765,13 +2768,10 @@ impl Lock {
 
     /// Record the required platforms that were used to generate this lock.
     #[must_use]
-    pub fn with_required_environments(
-        mut self,
-        required_environments: Vec<RequiredEnvironment>,
-    ) -> Self {
+    pub fn with_required_environments(mut self, required_environments: Vec<Environment>) -> Self {
         self.required_environments = required_environments
             .into_iter()
-            .map(|environment| RequiredEnvironment {
+            .map(|environment| Environment {
                 marker: self.requires_python.complexify_markers(environment.marker),
                 ..environment
             })
@@ -2983,12 +2983,12 @@ impl Lock {
     }
 
     /// Returns the supported environments that were used to generate this lock.
-    pub fn supported_environments(&self) -> &[MarkerTree] {
+    pub fn supported_environments(&self) -> &[Environment] {
         &self.supported_environments
     }
 
     /// Returns the required platforms that were used to generate this lock.
-    fn required_environments(&self) -> &[RequiredEnvironment] {
+    fn required_environments(&self) -> &[Environment] {
         &self.required_environments
     }
 
@@ -3026,7 +3026,7 @@ impl Lock {
             combined
         };
 
-        (!marker.is_false()).then(|| self.simplify_environment(marker))
+        (!marker.is_false()).then(|| self.simplify_marker(marker))
     }
 
     /// Returns the dependency groups that were used to generate this lock.
@@ -3456,32 +3456,29 @@ impl Lock {
     /// by a human in `pyproject.toml`. (Think of "supported environments" in
     /// `pyproject.toml` as having an implicit `and python_full_version >=
     /// '{requires-python-bound}'` attached to each one.)
-    pub fn simplified_supported_environments(&self) -> Vec<MarkerTree> {
+    pub fn simplified_supported_environments(&self) -> Vec<Environment> {
         self.supported_environments()
             .iter()
             .copied()
-            .map(|marker| self.simplify_environment(marker))
+            .filter_map(|environment| self.simplify_environment(environment))
             .collect()
     }
 
     /// Return required environments with markers simplified to match their serialized form.
     /// Bare true markers are omitted; libc constraints remain even when their marker is true.
-    pub fn simplified_required_environments(&self) -> Vec<RequiredEnvironment> {
+    pub fn simplified_required_environments(&self) -> Vec<Environment> {
         self.required_environments()
             .iter()
             .copied()
-            .filter_map(|environment| self.simplify_required_environment(environment))
+            .filter_map(|environment| self.simplify_environment(environment))
             .collect()
     }
 
-    /// Simplify a required environment to its serialized form, omitting bare true markers.
+    /// Simplify an environment to its serialized form, omitting bare true markers.
     /// Libc constraints remain even when the marker simplifies to true.
-    pub fn simplify_required_environment(
-        &self,
-        environment: RequiredEnvironment,
-    ) -> Option<RequiredEnvironment> {
-        let environment = RequiredEnvironment {
-            marker: self.simplify_environment(environment.marker),
+    pub fn simplify_environment(&self, environment: Environment) -> Option<Environment> {
+        let environment = Environment {
+            marker: self.simplify_marker(environment.marker),
             ..environment
         };
         (environment.libc.is_some() || environment.marker.contents().is_some())
@@ -3490,7 +3487,7 @@ impl Lock {
 
     /// Simplify the given marker environment with respect to the lockfile's
     /// `requires-python` setting.
-    pub fn simplify_environment(&self, marker: MarkerTree) -> MarkerTree {
+    pub fn simplify_marker(&self, marker: MarkerTree) -> MarkerTree {
         self.requires_python.simplify_markers(marker)
     }
 
@@ -6176,10 +6173,13 @@ struct LockWire {
     /// forks in the lockfile so we can recreate them in subsequent resolutions.
     #[serde(rename = "resolution-markers", default)]
     fork_markers: Vec<SimplifiedMarkerTree>,
-    #[serde(rename = "supported-markers", default)]
-    supported_environments: Vec<SimplifiedMarkerTree>,
-    #[serde(rename = "required-markers", default)]
-    required_environments: RequiredEnvironments,
+    #[serde(default)]
+    supported_markers: Vec<SimplifiedMarkerTree>,
+    #[serde(default)]
+    required_markers: Vec<SimplifiedMarkerTree>,
+    /// Rich environment fields take precedence over their legacy marker-only projections.
+    supported_environments: Option<Vec<Environment>>,
+    required_environments: Option<Vec<Environment>>,
     #[serde(rename = "conflicts", default)]
     conflicts: Option<Conflicts>,
     /// We discard the lockfile if these options match.
@@ -6240,14 +6240,28 @@ impl TryFrom<LockWire> for Lock {
             .collect::<Result<Vec<_>, _>>()?;
         let supported_environments = wire
             .supported_environments
+            .unwrap_or_else(|| {
+                wire.supported_markers
+                    .into_iter()
+                    .map(|marker| Environment::from(marker.as_simplified_marker_tree()))
+                    .collect()
+            })
             .into_iter()
-            .map(|simplified_marker| simplified_marker.into_marker(&wire.requires_python))
+            .map(|environment| Environment {
+                marker: wire.requires_python.complexify_markers(environment.marker),
+                ..environment
+            })
             .collect();
         let required_environments = wire
             .required_environments
-            .iter()
-            .copied()
-            .map(|environment| RequiredEnvironment {
+            .unwrap_or_else(|| {
+                wire.required_markers
+                    .into_iter()
+                    .map(|marker| Environment::from(marker.as_simplified_marker_tree()))
+                    .collect()
+            })
+            .into_iter()
+            .map(|environment| Environment {
                 marker: wire.requires_python.complexify_markers(environment.marker),
                 ..environment
             })

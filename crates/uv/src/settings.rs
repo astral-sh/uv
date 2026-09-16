@@ -42,15 +42,14 @@ use uv_configuration::{
     VersionControlSystem,
 };
 use uv_distribution_types::{
-    ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, IndexUrl,
-    NameRequirementSpecification, PackageConfigSettings, RequiredEnvironments, Requirement,
+    ConfigSettings, DependencyMetadata, Environments, ExtraBuildVariables, Index, IndexLocations,
+    IndexUrl, NameRequirementSpecification, PackageConfigSettings, Requirement,
 };
 use uv_install_wheel::LinkMode;
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pep440::Version;
 use uv_pep508::{MarkerTree, RequirementOrigin};
 use uv_preview::Preview;
-use uv_pypi_types::SupportedEnvironments;
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{
@@ -3479,8 +3478,8 @@ pub(crate) struct PipCompileSettings {
     pub(crate) overrides_from_workspace: Vec<Override<Requirement>>,
     pub(crate) excludes_from_workspace: Vec<ExcludeDependency>,
     pub(crate) build_constraints_from_workspace: Vec<NameRequirementSpecification>,
-    pub(crate) environments: SupportedEnvironments,
-    pub(crate) required_environments: RequiredEnvironments,
+    pub(crate) environments: Environments,
+    pub(crate) required_environments: Environments,
     pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
 }
@@ -3594,7 +3593,7 @@ impl PipCompileSettings {
         let environments = if let Some(configuration) = &filesystem {
             configuration.environments.clone().unwrap_or_default()
         } else {
-            SupportedEnvironments::default()
+            Environments::default()
         };
 
         let required_environments = if let Some(configuration) = &filesystem {
@@ -3603,7 +3602,7 @@ impl PipCompileSettings {
                 .clone()
                 .unwrap_or_default()
         } else {
-            RequiredEnvironments::default()
+            Environments::default()
         };
 
         Ok(Self {

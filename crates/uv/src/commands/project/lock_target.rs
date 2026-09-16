@@ -14,13 +14,12 @@ use uv_configuration::{
 };
 use uv_distribution::LoweredRequirement;
 use uv_distribution_types::{
-    Index, IndexLocations, NameRequirementSpecification, RequiredEnvironments, Requirement,
-    RequiresPython,
+    Environments, Index, IndexLocations, NameRequirementSpecification, Requirement, RequiresPython,
 };
 use uv_lock::Lock;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep508::RequirementOrigin;
-use uv_pypi_types::{Conflicts, SupportedEnvironments, VerbatimParsedUrl};
+use uv_pypi_types::{Conflicts, VerbatimParsedUrl};
 use uv_scripts::Pep723Script;
 use uv_workspace::dependency_groups::{
     DependencyGroupError, FlatDependencyGroup, FlatDependencyGroups,
@@ -239,7 +238,7 @@ impl<'lock> LockTarget<'lock> {
     }
 
     /// Returns the set of supported environments for the [`LockTarget`].
-    pub(crate) fn environments(self) -> Option<&'lock SupportedEnvironments> {
+    pub(crate) fn environments(self) -> Option<&'lock Environments> {
         match self {
             Self::Workspace(workspace) => workspace.environments(),
             Self::Script(_) => {
@@ -250,7 +249,7 @@ impl<'lock> LockTarget<'lock> {
     }
 
     /// Returns the set of required platforms for the [`LockTarget`].
-    pub(crate) fn required_environments(self) -> Option<&'lock RequiredEnvironments> {
+    pub(crate) fn required_environments(self) -> Option<&'lock Environments> {
         match self {
             Self::Workspace(workspace) => workspace.required_environments(),
             Self::Script(_) => {

@@ -7,12 +7,13 @@ use uv_distribution_filename::WheelFilename;
 use uv_pep508::MarkerTree;
 use uv_platform_tags::{LibcVersion, PlatformTag};
 
-use crate::RequiredEnvironments;
+use crate::Environments;
 use crate::prioritized_distribution::{implied_platform_markers, implied_python_markers};
 
 /// The selected Linux libc families and their oldest supported releases.
 ///
-/// At least one family must be specified. An omitted family is excluded, not unconstrained.
+/// At least one family must be specified. The setting determines whether these releases constrain
+/// eligible artifacts or require compatible artifacts to exist.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
@@ -100,13 +101,13 @@ impl MinimumLibcVersion {
     }
 }
 
-/// Marker-scoped constraints on artifacts in a universal resolution.
+/// Artifact restrictions and coverage requirements for a universal resolution.
 ///
-/// Constrained scopes must be disjoint. Outside their union, artifacts keep their ordinary
-/// eligibility and coverage: required environments do not limit supported environments.
+/// Supported environments restrict eligible wheels. Required environments only constrain coverage.
 #[derive(Debug, Clone)]
 pub struct ArtifactPolicy {
-    environments: Arc<[LibcEnvironment]>,
+    supported: Arc<[LibcEnvironment]>,
+    required: Arc<[LibcEnvironment]>,
     unconstrained: MarkerTree,
 }
 
@@ -119,38 +120,50 @@ struct LibcEnvironment {
 impl Default for ArtifactPolicy {
     fn default() -> Self {
         Self {
-            environments: Arc::default(),
+            supported: Arc::default(),
+            required: Arc::default(),
             unconstrained: MarkerTree::TRUE,
         }
     }
 }
 
 impl ArtifactPolicy {
-    pub fn new(environments: &RequiredEnvironments) -> Self {
-        let environments = environments
-            .iter()
-            .filter_map(|environment| {
-                environment.libc.map(|libc| LibcEnvironment {
-                    marker: environment.marker,
-                    libc,
+    pub fn new(supported: &Environments, required: &Environments) -> Self {
+        let constrained = |environments: &Environments| {
+            environments
+                .iter()
+                .filter_map(|environment| {
+                    environment.libc.map(|libc| LibcEnvironment {
+                        marker: environment.marker,
+                        libc,
+                    })
                 })
-            })
-            .collect::<Arc<[_]>>();
-        let constrained = environments
+                .collect::<Arc<[_]>>()
+        };
+        let supported = constrained(supported);
+        let required = constrained(required);
+        let constrained = supported
             .iter()
             .fold(MarkerTree::FALSE, |marker, environment| {
                 marker.or(environment.marker)
             });
         Self {
-            environments,
+            supported,
+            required,
             unconstrained: constrained.negate(),
         }
+    }
+
+    /// Both supported and required environments need compatible artifacts, even when their scopes
+    /// overlap and specify different libc baselines.
+    fn coverage_environments(&self) -> impl Iterator<Item = &LibcEnvironment> {
+        self.supported.iter().chain(self.required.iter())
     }
 
     /// Retain a whole wheel if any tag is useful in any allowed region. Unknown platform tags
     /// remain eligible when their environment cannot be inferred; they contribute no coverage.
     pub fn check_wheel(&self, filename: &WheelFilename) -> Result<(), ArtifactPolicyError> {
-        if self.environments.is_empty() {
+        if self.supported.is_empty() {
             return Ok(());
         }
         let python = implied_python_markers(filename);
@@ -161,7 +174,7 @@ impl ArtifactPolicy {
             }
             let marker = platform.and(python);
             if !marker.is_disjoint(self.unconstrained)
-                || self.environments.iter().any(|environment| {
+                || self.supported.iter().any(|environment| {
                     environment.libc.allows_platform(tag) && !marker.is_disjoint(environment.marker)
                 })
             {
@@ -169,7 +182,7 @@ impl ArtifactPolicy {
             }
         }
         Err(ArtifactPolicyError {
-            environments: Arc::clone(&self.environments),
+            environments: Arc::clone(&self.supported),
         })
     }
 
@@ -186,7 +199,7 @@ impl ArtifactPolicy {
 /// policy that created it; separate wheel files can jointly satisfy a two-family scope.
 #[derive(Debug, Clone)]
 pub(crate) struct ArtifactCoverage {
-    unconstrained: MarkerTree,
+    ordinary: MarkerTree,
     environments: Vec<LibcCoverage>,
 }
 
@@ -199,33 +212,35 @@ struct LibcCoverage {
 impl ArtifactCoverage {
     pub(crate) fn new(policy: &ArtifactPolicy) -> Self {
         Self {
-            unconstrained: MarkerTree::FALSE,
+            ordinary: MarkerTree::FALSE,
             environments: vec![
                 LibcCoverage {
                     glibc: MarkerTree::FALSE,
                     musl: MarkerTree::FALSE
                 };
-                policy.environments.len()
+                policy.supported.len() + policy.required.len()
             ],
         }
     }
 
     /// A usable source distribution covers all regions without requiring a wheel for each libc.
     pub(crate) fn insert_source(&mut self) {
-        self.unconstrained = MarkerTree::TRUE;
+        self.ordinary = MarkerTree::TRUE;
+        for coverage in &mut self.environments {
+            coverage.glibc = MarkerTree::TRUE;
+            coverage.musl = MarkerTree::TRUE;
+        }
     }
 
     /// Union each wheel's complete platform-and-Python coverage before combining libc families.
     pub(crate) fn insert_wheel(&mut self, policy: &ArtifactPolicy, filename: &WheelFilename) {
-        if self.unconstrained.is_true() {
-            return;
-        }
         let python = implied_python_markers(filename);
-        let ordinary = implied_platform_markers(filename.platform_tags())
-            .and(python)
-            .and(policy.unconstrained);
-        self.unconstrained = self.unconstrained.or(ordinary);
-        for (coverage, environment) in self.environments.iter_mut().zip(policy.environments.iter())
+        let ordinary = implied_platform_markers(filename.platform_tags()).and(python);
+        self.ordinary = self.ordinary.or(ordinary);
+        for (coverage, environment) in self
+            .environments
+            .iter_mut()
+            .zip(policy.coverage_environments())
         {
             let minimum = environment.libc;
             let glibc = implied_platform_markers(filename.platform_tags().iter().filter(|tag| {
@@ -254,15 +269,15 @@ impl ArtifactCoverage {
     pub(crate) fn markers(&self, policy: &ArtifactPolicy) -> MarkerTree {
         self.environments
             .iter()
-            .zip(policy.environments.iter())
-            .fold(self.unconstrained, |markers, (coverage, environment)| {
+            .zip(policy.coverage_environments())
+            .fold(self.ordinary, |markers, (coverage, environment)| {
                 let covered = match (environment.libc.glibc, environment.libc.musl) {
                     (Some(_), Some(_)) => coverage.glibc.and(coverage.musl),
                     (Some(_), None) => coverage.glibc,
                     (None, Some(_)) => coverage.musl,
                     (None, None) => coverage.glibc.or(coverage.musl),
                 };
-                markers.or(covered)
+                markers.and(environment.marker.negate().or(covered))
             })
     }
 }
@@ -299,15 +314,16 @@ mod tests {
     use uv_platform_tags::LibcVersion;
 
     use super::{ArtifactCoverage, ArtifactPolicy, MinimumLibcVersion};
-    use crate::{RequiredEnvironment, RequiredEnvironments, implied_markers};
+    use crate::{Environment, Environments, implied_markers};
 
     fn global_policy(libc: MinimumLibcVersion) -> ArtifactPolicy {
-        ArtifactPolicy::new(&RequiredEnvironments::from_environments(vec![
-            RequiredEnvironment {
+        ArtifactPolicy::new(
+            &Environments::from_environments(vec![Environment {
                 marker: MarkerTree::TRUE,
                 libc: Some(libc),
-            },
-        ]))
+            }]),
+            &Environments::default(),
+        )
     }
 
     #[test]

@@ -223,9 +223,14 @@ required-environments = [
     `libc` is in preview. Use `--preview-features minimum-libc-version` or
     `preview-features = ["minimum-libc-version"]` to disable the warning.
 
-Environment markers do not include the libc implementation or version. A `required-environments`
-entry can include a `libc` field to select the libc implementations and minimum versions to support
-for that environment.
+Environment markers do not include the libc implementation or version. Entries in `environments` and
+`required-environments` can include a `libc` field to specify the oldest supported releases of
+glibc, musl, or both. As with marker-only entries, the two settings serve different purposes:
+
+- `required-environments` requires compatible artifacts for each specified libc implementation. It
+  does not exclude wheels for omitted implementations or newer versions.
+- `environments` restricts the artifacts used in the resolution. Within each entry's marker range,
+  wheels requiring a newer libc version, or using an omitted libc implementation, are excluded.
 
 For example, to require glibc 2.31 on ARM64 Linux and glibc 2.29 on x86-64 Linux:
 
@@ -242,8 +247,8 @@ marker = "sys_platform == 'linux' and platform_machine == 'x86_64'"
 libc = { glibc = "2.29" }
 ```
 
-Within each entry's marker range, uv excludes wheels that require a newer version, or use an omitted
-libc implementation (e.g., musl when `{ glibc = "2.29" }` is provided).
+These requirements can cause uv to select an older package version, but the selected version's musl
+wheels and wheels for newer glibc releases remain in the lockfile.
 
 To require support for both musl and glibc, include both implementations in the entry's table:
 
@@ -254,6 +259,24 @@ libc = { glibc = "2.31", musl = "1.2" }
 That environment must then have compatible artifacts for both libc implementations. If a package has
 no compatible wheel or usable source distribution, uv will try another version of the package, or
 fail resolution if no such version exists.
+
+To restrict Linux artifacts to glibc 2.31-compatible wheels instead, use `environments`:
+
+```toml title="pyproject.toml"
+[tool.uv]
+environments = [
+    { marker = "sys_platform == 'linux'", libc = { glibc = "2.31" } },
+    "sys_platform != 'linux'",
+]
+```
+
+This excludes musllinux wheels and wheels requiring glibc newer than 2.31, while keeping other
+platforms supported. Add `required-environments` separately when compatibility with a particular
+Linux architecture must be required.
+
+These checks use wheel tags, not the binaries inside a wheel. Native `linux_*` tags declare no libc
+version, and a source distribution is treated as buildable unless source builds are disabled;
+neither establishes that the package will build or run on the target system.
 
 ## Common marker values
 

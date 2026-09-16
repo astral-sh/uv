@@ -22,9 +22,9 @@ use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    ConfigSettings, DependencyMetadata, ExtraBuildVariables, HashCollection, Index, IndexLocations,
-    NameRequirementSpecification, Origin, PackageConfigSettings, RequiredEnvironment,
-    RequiredEnvironments, Requirement, RequiresPython, Verbatim,
+    ConfigSettings, DependencyMetadata, Environments, ExtraBuildVariables, HashCollection, Index,
+    IndexLocations, NameRequirementSpecification, Origin, PackageConfigSettings, Requirement,
+    RequiresPython, Verbatim,
 };
 use uv_fs::{CWD, Simplified};
 use uv_git::ResolvedRepositoryReference;
@@ -33,7 +33,7 @@ use uv_lock::PylockToml;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_preview::{Preview, PreviewFeature};
-use uv_pypi_types::{Conflicts, SupportedEnvironments};
+use uv_pypi_types::Conflicts;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVersion, VersionRequest,
@@ -75,8 +75,8 @@ pub(crate) async fn pip_compile(
     overrides_from_workspace: Vec<Override<Requirement>>,
     excludes_from_workspace: Vec<ExcludeDependency>,
     build_constraints_from_workspace: Vec<NameRequirementSpecification>,
-    environments: SupportedEnvironments,
-    required_environments: RequiredEnvironments,
+    environments: Environments,
+    required_environments: Environments,
     extras: ExtrasSpecification,
     groups: GroupsSpecification,
     output_file: Option<&Path>,
@@ -378,39 +378,40 @@ pub(crate) async fn pip_compile(
         PythonRequirement::from_interpreter(&interpreter)
     };
 
-    let artifact_environments = if universal {
-        for (index, lhs) in required_environments.iter().enumerate() {
-            for rhs in &required_environments.as_slice()[index + 1..] {
-                if lhs.libc.is_some() && rhs.libc.is_some() && !lhs.marker.is_disjoint(rhs.marker) {
-                    bail!(
-                        "Required environments `{}` and `{}` overlap. Required environments must be disjoint.",
-                        lhs.marker
-                            .try_to_string()
-                            .unwrap_or_else(|| "true".to_string()),
-                        rhs.marker
-                            .try_to_string()
-                            .unwrap_or_else(|| "true".to_string()),
-                    );
+    let (environments, required_environments) = if universal {
+        for (name, entries) in [
+            ("Supported", &environments),
+            ("Required", &required_environments),
+        ] {
+            for (index, lhs) in entries.iter().enumerate() {
+                for rhs in &entries.as_slice()[index + 1..] {
+                    if lhs.libc.is_some()
+                        && rhs.libc.is_some()
+                        && !lhs.marker.is_disjoint(rhs.marker)
+                    {
+                        bail!(
+                            "{name} environments `{}` and `{}` overlap. {name} environments must be disjoint.",
+                            lhs.marker
+                                .try_to_string()
+                                .unwrap_or_else(|| "true".to_string()),
+                            rhs.marker
+                                .try_to_string()
+                                .unwrap_or_else(|| "true".to_string()),
+                        );
+                    }
                 }
             }
         }
-        RequiredEnvironments::from_environments(
-            environments
-                .iter()
-                .copied()
-                .map(RequiredEnvironment::from)
-                .chain(required_environments.iter().copied())
-                .collect(),
-        )
+        (environments, required_environments)
     } else {
-        RequiredEnvironments::default()
+        (Environments::default(), Environments::default())
     };
 
     // Determine the environment for the resolution.
     let (tags, resolver_env) = if universal {
         (
             None,
-            ResolverEnvironment::universal(environments.into_markers()),
+            ResolverEnvironment::universal(environments.clone().into_markers()),
         )
     } else {
         let tags = resolution_tags(
@@ -554,12 +555,11 @@ pub(crate) async fn pip_compile(
         preview,
     );
 
-    if universal
-        && required_environments.has_libc_constraints()
+    if (environments.has_libc_constraints() || required_environments.has_libc_constraints())
         && !preview.is_enabled(PreviewFeature::MinimumLibcVersion)
     {
         warn_user_once!(
-            "Setting `libc` in `required-environments` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            "Setting `libc` in `environments` or `required-environments` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
             PreviewFeature::MinimumLibcVersion
         );
     }
@@ -573,7 +573,8 @@ pub(crate) async fn pip_compile(
         .index_strategy(index_strategy)
         .torch_backend(torch_backend)
         .build_options(build_options.clone())
-        .artifact_environments(artifact_environments)
+        .supported_environments(environments)
+        .required_environments(required_environments)
         .build();
 
     // Resolve the requirements.

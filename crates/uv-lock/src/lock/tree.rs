@@ -1271,7 +1271,7 @@ impl<'tree, 'env> JsonGraphBuilder<'tree, 'env> {
     fn marker(&self, edge: &Edge<'_>) -> Option<String> {
         self.tree
             .lock
-            .simplify_environment(edge.marker().pep508())
+            .simplify_marker(edge.marker().pep508())
             .try_to_string()
     }
 

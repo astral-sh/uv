@@ -54,27 +54,40 @@ fn write_lock(writer: &mut LockWriter, lock: &Lock) -> Result<(), WriteError> {
         SimplifiedMarkerTree::new(&lock.requires_python, lock.fork_markers_union())
             .as_simplified_marker_tree();
 
-    if !lock.supported_environments.is_empty() {
-        let markers = lock
-            .supported_environments
-            .iter()
-            .copied()
-            .map(|marker| SimplifiedMarkerTree::new(&lock.requires_python, marker))
-            .filter_map(SimplifiedMarkerTree::try_to_string);
-        writer.key_multiline_array("supported-markers", markers, |writer, marker| {
-            writer.value(&marker)
-        })?;
-    }
+    for (markers_key, environments_key, environments) in [
+        (
+            "supported-markers",
+            "supported-environments",
+            &lock.supported_environments,
+        ),
+        (
+            "required-markers",
+            "required-environments",
+            &lock.required_environments,
+        ),
+    ] {
+        if environments.is_empty() {
+            continue;
+        }
 
-    if !lock.required_environments.is_empty() {
-        let environments = lock
-            .required_environments
+        // Keep marker-only fields readable by older uv versions; libc constraints are additive.
+        let markers = environments.iter().filter_map(|environment| {
+            SimplifiedMarkerTree::new(&lock.requires_python, environment.marker).try_to_string()
+        });
+        writer.key_multiline_array(markers_key, markers, |writer, marker| writer.value(&marker))?;
+
+        if environments
             .iter()
-            .copied()
-            .filter_map(|environment| lock.simplify_required_environment(environment));
-        writer.key_multiline_array("required-markers", environments, |writer, environment| {
-            writer.value(serialize_value(&environment)?)
-        })?;
+            .any(|environment| environment.libc.is_some())
+        {
+            let environments = environments
+                .iter()
+                .copied()
+                .filter_map(|environment| lock.simplify_environment(environment));
+            writer.key_multiline_array(environments_key, environments, |writer, environment| {
+                writer.value(serialize_value(&environment)?)
+            })?;
+        }
     }
 
     if !lock.conflicts.is_empty() {

@@ -22,7 +22,7 @@ use tracing::instrument;
 use uv_build_backend::BuildBackendSettings;
 use uv_configuration::{ExcludeDependency, GitLfsSetting, Override};
 use uv_distribution_types::{
-    Index, IndexName, NameRequirementSpecification, RequiredEnvironments, RequirementSource,
+    Environments, Index, IndexName, NameRequirementSpecification, RequirementSource,
 };
 use uv_fs::{PortablePathBuf, try_relative_to_if};
 use uv_git_types::GitReference;
@@ -32,8 +32,7 @@ use uv_options_metadata::{OptionSet, OptionsMetadata, Visit};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerTree;
 use uv_pypi_types::{
-    ConflictError, Conflicts, DependencyGroups, SchemaConflicts, SupportedEnvironments,
-    VerbatimParsedUrl,
+    ConflictError, Conflicts, DependencyGroups, SchemaConflicts, VerbatimParsedUrl,
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_toml::deserialize_unique_map;
@@ -648,22 +647,23 @@ pub struct ToolUv {
     ///
     /// These environments will also be respected when `uv pip compile` is invoked with the
     /// `--universal` flag.
-    #[cfg_attr(
-        feature = "schemars",
-        schemars(
-            with = "Option<Vec<String>>",
-            description = "A list of environment markers, e.g., `python_version >= '3.6'`."
-        )
-    )]
+    ///
+    /// Entries can also be tables with a `marker` and `libc`, for example,
+    /// `{ marker = "sys_platform == 'linux'", libc = { glibc = "2.31" } }`.
+    /// Within that marker range, uv excludes wheels for omitted libc implementations and wheels
+    /// that require a newer version.
+    ///
+    /// Setting `libc` is in preview. Use `--preview-features minimum-libc-version` to disable the
+    /// warning.
     #[option(
         default = "[]",
-        value_type = "str | list[str]",
+        value_type = "str | list[str | dict]",
         example = r#"
             # Resolve for macOS, but not for Linux or Windows.
             environments = ["sys_platform == 'darwin'"]
         "#
     )]
-    pub(crate) environments: Option<SupportedEnvironments>,
+    pub(crate) environments: Option<Environments>,
 
     /// A list of required platforms, for packages that lack source distributions.
     ///
@@ -687,12 +687,11 @@ pub struct ToolUv {
     ///
     /// Entries can also be tables with a `marker` and `libc`, for example,
     /// `{ marker = "sys_platform == 'linux'", libc = { glibc = "2.31" } }`.
-    /// Within that marker range, uv excludes wheels for omitted libc implementations and wheels
-    /// that require a newer version. Every libc implementation in the table must have compatible
-    /// artifacts.
+    /// Each listed libc implementation must have compatible artifacts at the specified version.
+    /// Other wheels remain eligible, including wheels for omitted implementations and newer versions.
     ///
-    /// `libc` is in preview. Use `--preview-features minimum-libc-version` to
-    /// disable the warning.
+    /// Setting `libc` is in preview. Use `--preview-features minimum-libc-version` to disable the
+    /// warning.
     #[option(
         default = "[]",
         value_type = "str | list[str | dict]",
@@ -708,7 +707,7 @@ pub struct ToolUv {
             ]
         "#
     )]
-    pub(crate) required_environments: Option<RequiredEnvironments>,
+    pub(crate) required_environments: Option<Environments>,
 
     /// Declare collections of extras or dependency groups that are conflicting
     /// (i.e., mutually exclusive).

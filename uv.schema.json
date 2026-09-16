@@ -171,11 +171,15 @@
       }
     },
     "environments": {
-      "description": "A list of environment markers, e.g., `python_version >= '3.6'`.",
-      "type": ["array", "null"],
-      "items": {
-        "type": "string"
-      }
+      "description": "A list of supported environments against which to resolve dependencies.\n\nBy default, uv will resolve for all possible environments during a `uv lock` operation.\nHowever, you can restrict the set of supported environments to improve performance and avoid\nunsatisfiable branches in the solution space.\n\nThese environments will also be respected when `uv pip compile` is invoked with the\n`--universal` flag.\n\nEntries can also be tables with a `marker` and `libc`, for example,\n`{ marker = \"sys_platform == 'linux'\", libc = { glibc = \"2.31\" } }`.\nWithin that marker range, uv excludes wheels for omitted libc implementations and wheels\nthat require a newer version.\n\nSetting `libc` is in preview. Use `--preview-features minimum-libc-version` to disable the\nwarning.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/Environments"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "exclude-dependencies": {
       "description": "Dependencies to exclude when resolving the project's dependencies.\n\nExcludes are used to prevent a package from being selected during resolution,\nregardless of whether it's requested by any other package. When a package is excluded,\nit will be omitted from the dependency list entirely.\n\nIncluding a package as an exclusion will prevent it from being installed, even if\nit's requested by transitive dependencies. This can be useful for removing optional\ndependencies or working around packages with broken dependencies.\n\nExclusions can be limited to the dependencies declared by a specific package version by\nusing a table with `package` and `dependencies`. The `package` table identifies the package\nwhose dependencies will be excluded by `name` and, optionally, `version`. If `version` is\nomitted, the exclusions apply to all versions of that package. A version-specific entry\ntakes precedence over an all-versions entry.\n\n!!! note\n    In `uv lock`, `uv sync`, and `uv run`, uv will only read `exclude-dependencies` from\n    the `pyproject.toml` at the workspace root, and will ignore any declarations in other\n    workspace members or `uv.toml` files.",
@@ -515,10 +519,10 @@
       }
     },
     "required-environments": {
-      "description": "A list of required platforms, for packages that lack source distributions.\n\nWhen a package does not have a source distribution, it's availability will be limited to\nthe platforms supported by its built distributions (wheels). For example, if a package only\npublishes wheels for Linux, then it won't be installable on macOS or Windows.\n\nBy default, uv requires each package to include at least one wheel that is compatible with\nthe designated Python version. The `required-environments` setting can be used to ensure that\nthe resulting resolution contains wheels for specific platforms, or fails if no such wheels\nare available.\n\nWhile the `environments` setting _limits_ the set of environments that uv will consider when\nresolving dependencies, `required-environments` _expands_ the set of platforms that uv _must_\nsupport when resolving dependencies.\n\nFor example, `environments = [\"sys_platform == 'darwin'\"]` would limit uv to solving for\nmacOS (and ignoring Linux and Windows). On the other hand, `required-environments = [\"sys_platform == 'darwin'\"]`\nwould _require_ that any package without a source distribution include a wheel for macOS in\norder to be installable.\n\nEntries can also be tables with a `marker` and `libc`, for example,\n`{ marker = \"sys_platform == 'linux'\", libc = { glibc = \"2.31\" } }`.\nWithin that marker range, uv excludes wheels for omitted libc implementations and wheels\nthat require a newer version. Every libc implementation in the table must have compatible\nartifacts.\n\n`libc` is in preview. Use `--preview-features minimum-libc-version` to\ndisable the warning.",
+      "description": "A list of required platforms, for packages that lack source distributions.\n\nWhen a package does not have a source distribution, it's availability will be limited to\nthe platforms supported by its built distributions (wheels). For example, if a package only\npublishes wheels for Linux, then it won't be installable on macOS or Windows.\n\nBy default, uv requires each package to include at least one wheel that is compatible with\nthe designated Python version. The `required-environments` setting can be used to ensure that\nthe resulting resolution contains wheels for specific platforms, or fails if no such wheels\nare available.\n\nWhile the `environments` setting _limits_ the set of environments that uv will consider when\nresolving dependencies, `required-environments` _expands_ the set of platforms that uv _must_\nsupport when resolving dependencies.\n\nFor example, `environments = [\"sys_platform == 'darwin'\"]` would limit uv to solving for\nmacOS (and ignoring Linux and Windows). On the other hand, `required-environments = [\"sys_platform == 'darwin'\"]`\nwould _require_ that any package without a source distribution include a wheel for macOS in\norder to be installable.\n\nEntries can also be tables with a `marker` and `libc`, for example,\n`{ marker = \"sys_platform == 'linux'\", libc = { glibc = \"2.31\" } }`.\nEach listed libc implementation must have compatible artifacts at the specified version.\nOther wheels remain eligible, including wheels for omitted implementations and newer versions.\n\nSetting `libc` is in preview. Use `--preview-features minimum-libc-version` to disable the\nwarning.",
       "anyOf": [
         {
-          "$ref": "#/definitions/RequiredEnvironments"
+          "$ref": "#/definitions/Environments"
         },
         {
           "type": "null"
@@ -920,6 +924,39 @@
       "type": "string",
       "format": "uri"
     },
+    "Environment": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/MarkerTree"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "libc": {
+              "$ref": "#/definitions/MinimumLibcVersion"
+            },
+            "marker": {
+              "$ref": "#/definitions/MarkerTree"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["marker"]
+        }
+      ]
+    },
+    "Environments": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/MarkerTree"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Environment"
+          }
+        }
+      ]
+    },
     "ExcludeDependency": {
       "description": "An exclusion, either global or scoped to a specific package version.",
       "anyOf": [
@@ -1244,7 +1281,7 @@
       "type": "string"
     },
     "MinimumLibcVersion": {
-      "description": "The selected Linux libc families and their oldest supported releases.\n\nAt least one family must be specified. An omitted family is excluded, not unconstrained.",
+      "description": "The selected Linux libc families and their oldest supported releases.\n\nAt least one family must be specified. The setting determines whether these releases constrain\neligible artifacts or require compatible artifacts to exist.",
       "type": "object",
       "properties": {
         "glibc": {
@@ -1952,39 +1989,6 @@
       "description": "A Python version specifier, e.g. `3.11` or `3.12.4`.",
       "type": "string",
       "pattern": "^3\\.\\d+(\\.\\d+)?$"
-    },
-    "RequiredEnvironment": {
-      "anyOf": [
-        {
-          "$ref": "#/definitions/MarkerTree"
-        },
-        {
-          "type": "object",
-          "properties": {
-            "libc": {
-              "$ref": "#/definitions/MinimumLibcVersion"
-            },
-            "marker": {
-              "$ref": "#/definitions/MarkerTree"
-            }
-          },
-          "additionalProperties": false,
-          "required": ["marker"]
-        }
-      ]
-    },
-    "RequiredEnvironments": {
-      "anyOf": [
-        {
-          "$ref": "#/definitions/MarkerTree"
-        },
-        {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/RequiredEnvironment"
-          }
-        }
-      ]
     },
     "RequiredVersion": {
       "description": "A version specifier, e.g. `>=0.5.0` or `==0.5.0`.",

@@ -11,25 +11,28 @@ use uv_pep508::MarkerTree;
 
 use crate::MinimumLibcVersion;
 
-/// An environment that must have compatible artifacts, with optional Linux libc constraints.
+/// An environment marker with optional Linux libc constraints.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RequiredEnvironment {
+pub struct Environment {
     pub marker: MarkerTree,
     pub libc: Option<MinimumLibcVersion>,
 }
 
-impl From<MarkerTree> for RequiredEnvironment {
+impl From<MarkerTree> for Environment {
     fn from(marker: MarkerTree) -> Self {
         Self { marker, libc: None }
     }
 }
 
-impl Serialize for RequiredEnvironment {
+impl Serialize for Environment {
     /// Keep unconstrained entries as strings; tables retain libc constraints even for a true marker.
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let marker = self.marker.try_to_string().unwrap_or_default();
+        let marker = self
+            .marker
+            .try_to_string()
+            .unwrap_or_else(|| "python_version >= '0'".to_string());
         if let Some(version) = self.libc {
-            let mut table = serializer.serialize_struct("RequiredEnvironment", 2)?;
+            let mut table = serializer.serialize_struct("Environment", 2)?;
             table.serialize_field("marker", &marker)?;
             table.serialize_field("libc", &version)?;
             table.end()
@@ -39,12 +42,12 @@ impl Serialize for RequiredEnvironment {
     }
 }
 
-impl<'de> Deserialize<'de> for RequiredEnvironment {
+impl<'de> Deserialize<'de> for Environment {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         struct EnvironmentVisitor;
 
         impl<'de> Visitor<'de> for EnvironmentVisitor {
-            type Value = RequiredEnvironment;
+            type Value = Environment;
 
             fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
                 formatter.write_str("an environment marker string or table")
@@ -63,7 +66,7 @@ impl<'de> Deserialize<'de> for RequiredEnvironment {
                 }
 
                 let table = Table::deserialize(MapAccessDeserializer::new(map))?;
-                Ok(RequiredEnvironment {
+                Ok(Environment {
                     marker: table.marker,
                     libc: table.libc,
                 })
@@ -75,9 +78,9 @@ impl<'de> Deserialize<'de> for RequiredEnvironment {
 }
 
 #[cfg(feature = "schemars")]
-impl schemars::JsonSchema for RequiredEnvironment {
+impl schemars::JsonSchema for Environment {
     fn schema_name() -> Cow<'static, str> {
-        "RequiredEnvironment".into()
+        "Environment".into()
     }
 
     fn json_schema(generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
@@ -98,22 +101,29 @@ impl schemars::JsonSchema for RequiredEnvironment {
     }
 }
 
-/// Required environments accept a single marker or a list of markers and environment tables.
+/// A single marker or a list of markers and environment tables.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize)]
 #[serde(transparent)]
-pub struct RequiredEnvironments(Vec<RequiredEnvironment>);
+pub struct Environments(Vec<Environment>);
 
-impl RequiredEnvironments {
-    pub fn from_environments(environments: Vec<RequiredEnvironment>) -> Self {
+impl Environments {
+    pub fn from_environments(environments: Vec<Environment>) -> Self {
         Self(environments)
     }
 
-    pub fn as_slice(&self) -> &[RequiredEnvironment] {
+    pub fn as_slice(&self) -> &[Environment] {
         &self.0
     }
 
-    pub fn iter(&self) -> std::slice::Iter<'_, RequiredEnvironment> {
+    pub fn iter(&self) -> std::slice::Iter<'_, Environment> {
         self.0.iter()
+    }
+
+    pub fn into_markers(self) -> Vec<MarkerTree> {
+        self.0
+            .into_iter()
+            .map(|environment| environment.marker)
+            .collect()
     }
 
     pub fn has_libc_constraints(&self) -> bool {
@@ -121,28 +131,28 @@ impl RequiredEnvironments {
     }
 }
 
-impl<'a> IntoIterator for &'a RequiredEnvironments {
-    type Item = &'a RequiredEnvironment;
-    type IntoIter = std::slice::Iter<'a, RequiredEnvironment>;
+impl<'a> IntoIterator for &'a Environments {
+    type Item = &'a Environment;
+    type IntoIter = std::slice::Iter<'a, Environment>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
     }
 }
 
-impl<'de> Deserialize<'de> for RequiredEnvironments {
+impl<'de> Deserialize<'de> for Environments {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         struct EnvironmentsVisitor;
 
         impl<'de> Visitor<'de> for EnvironmentsVisitor {
-            type Value = RequiredEnvironments;
+            type Value = Environments;
 
             fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
                 formatter.write_str("an environment marker string or a list of strings and tables")
             }
 
             fn visit_str<E: serde::de::Error>(self, value: &str) -> Result<Self::Value, E> {
-                Ok(RequiredEnvironments(vec![
+                Ok(Environments(vec![
                     MarkerTree::from_str(value).map_err(E::custom)?.into(),
                 ]))
             }
@@ -152,7 +162,7 @@ impl<'de> Deserialize<'de> for RequiredEnvironments {
                 while let Some(environment) = seq.next_element()? {
                     environments.push(environment);
                 }
-                Ok(RequiredEnvironments(environments))
+                Ok(Environments(environments))
             }
         }
 
@@ -161,16 +171,16 @@ impl<'de> Deserialize<'de> for RequiredEnvironments {
 }
 
 #[cfg(feature = "schemars")]
-impl schemars::JsonSchema for RequiredEnvironments {
+impl schemars::JsonSchema for Environments {
     fn schema_name() -> Cow<'static, str> {
-        "RequiredEnvironments".into()
+        "Environments".into()
     }
 
     fn json_schema(generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
         schemars::json_schema!({
             "anyOf": [
                 generator.subschema_for::<MarkerTree>(),
-                generator.subschema_for::<Vec<RequiredEnvironment>>(),
+                generator.subschema_for::<Vec<Environment>>(),
             ],
         })
     }

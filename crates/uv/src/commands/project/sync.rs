@@ -27,7 +27,7 @@ use uv_fs::{PortablePathBuf, Simplified};
 use uv_installer::{InstallationStrategy, SitePackages};
 use uv_lock::{Installable, Lock, PythonReport};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
-use uv_pep508::{MarkerTree, VersionOrUrl};
+use uv_pep508::VersionOrUrl;
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, ParsedUrl};
 use uv_python::{
@@ -750,7 +750,7 @@ pub(crate) async fn do_sync<'a>(
     if !environments.is_empty() {
         if !environments
             .iter()
-            .any(|env| env.evaluate(&marker_env, &[]))
+            .any(|env| env.marker.evaluate(&marker_env, &[]))
         {
             return Err(ProjectError::LockedPlatformIncompatibility(
                 // For error reporting, we use the "simplified"
@@ -762,7 +762,7 @@ pub(crate) async fn do_sync<'a>(
                     .lock()
                     .simplified_supported_environments()
                     .into_iter()
-                    .filter_map(MarkerTree::contents)
+                    .filter_map(|environment| environment.marker.contents())
                     .map(|env| format!("`{env}`"))
                     .join(", "),
             ));

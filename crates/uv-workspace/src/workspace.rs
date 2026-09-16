@@ -17,13 +17,13 @@ use tracing::{debug, trace, warn};
 
 use uv_cache::Cache;
 use uv_configuration::{ActiveEnvironment, DependencyGroupsWithDefaults, ExcludeDependency};
-use uv_distribution_types::{Index, RequiredEnvironments, Requirement, RequirementSource};
+use uv_distribution_types::{Environments, Index, Requirement, RequirementSource};
 use uv_fs::{CWD, Simplified, normalize_path};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, GroupName, PackageName};
 use uv_once_map::OnceMap;
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerTree, VerbatimUrl};
-use uv_pypi_types::{ConflictError, Conflicts, SupportedEnvironments, VerbatimParsedUrl};
+use uv_pypi_types::{ConflictError, Conflicts, VerbatimParsedUrl};
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 
@@ -727,7 +727,7 @@ impl Workspace {
     }
 
     /// Returns the set of supported environments for the workspace.
-    pub fn environments(&self) -> Option<&SupportedEnvironments> {
+    pub fn environments(&self) -> Option<&Environments> {
         self.pyproject_toml
             .tool
             .as_ref()
@@ -736,7 +736,7 @@ impl Workspace {
     }
 
     /// Returns the set of required platforms for the workspace.
-    pub fn required_environments(&self) -> Option<&RequiredEnvironments> {
+    pub fn required_environments(&self) -> Option<&Environments> {
         self.pyproject_toml
             .tool
             .as_ref()
