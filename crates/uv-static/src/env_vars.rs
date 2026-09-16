@@ -642,6 +642,12 @@ impl EnvVars {
         format!("UV_INDEX_{name}_PASSWORD")
     }
 
+    /// Set to `1` to include Git metadata in development builds.
+    /// Release builds include Git metadata by default.
+    #[attr_hidden]
+    #[attr_added_in("0.12.16")]
+    pub const UV_BUILD_GIT_INFO: &'static str = "UV_BUILD_GIT_INFO";
+
     /// Used to set the uv commit hash at build time via `build.rs`.
     #[attr_hidden]
     #[attr_added_in("0.1.11")]
@@ -1210,6 +1216,11 @@ impl EnvVars {
     #[attr_hidden]
     #[attr_added_in("0.1.11")]
     pub const CARGO_MANIFEST_DIR: &'static str = "CARGO_MANIFEST_DIR";
+
+    /// The Cargo profile family: `debug` for profiles derived from `dev`, or `release`.
+    #[attr_hidden]
+    #[attr_added_in("0.12.16")]
+    pub const PROFILE: &'static str = "PROFILE";
 
     /// Specifies the directory where Cargo stores build artifacts (target directory).
     #[attr_hidden]
