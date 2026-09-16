@@ -11769,6 +11769,57 @@ fn editable_config_settings() -> Result<()> {
     Ok(())
 }
 
+/// Preserve quoted build settings when compiling a requirements file again.
+#[test]
+fn quoted_config_settings() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("package/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "package"
+        version = "1.0.0"
+        dependencies = []
+    "#})?;
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str("./package")?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--config-settings-package")
+        .arg("package:greeting=hello world")
+        .arg("--config-settings-package")
+        .arg(r#"package:quote=it's "quoted"\path"#)
+        .arg("--no-header")
+        .arg("--no-annotate")
+        .arg("-o")
+        .arg("requirements.txt"), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    ./package --config-settings='greeting=hello world' --config-settings='quote=it'"'"'s "quoted"/path'
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "#);
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.txt")
+        .arg("--no-header")
+        .arg("--no-annotate"), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    ./package --config-settings='greeting=hello world' --config-settings='quote=it'"'"'s "quoted"/path'
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "#);
+
+    Ok(())
+}
+
 /// Excluded editable dependencies should remain transitive under `--resolution=lowest-direct`.
 #[test]
 fn editable_scoped_exclusion_lowest_direct() -> Result<()> {
