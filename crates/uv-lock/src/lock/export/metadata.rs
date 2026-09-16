@@ -3,7 +3,9 @@ use std::fmt::Display;
 use std::path::Path;
 
 use uv_distribution_filename::WheelFilename;
-use uv_distribution_types::{Name, Requirement, RequiresPython, ResolvedDist, UrlString};
+use uv_distribution_types::{
+    InstalledDist, Name, Requirement, RequiresPython, ResolvedDist, UrlString,
+};
 use uv_fs::PortablePathBuf;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
@@ -88,7 +90,8 @@ pub struct Metadata {
     /// These entries are often what you should use as the entry-points into the `resolve` graph.
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     members: Vec<MetadataWorkspaceMember>,
-    /// The dependency graph
+    /// The dependency graph, including disconnected nodes for installed packages outside the
+    /// selected resolution.
     #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
     resolution: BTreeMap<MetadataNodeIdFlat, MetadataNode>,
 }
@@ -891,6 +894,10 @@ enum MetadataSource {
     Virtual {
         r#virtual: PortablePathBuf,
     },
+    /// An installed distribution outside the selected resolution, identified by its metadata path.
+    Installed {
+        installed: PortablePathBuf,
+    },
 }
 
 impl Display for MetadataSource {
@@ -909,7 +916,8 @@ impl Display for MetadataSource {
             | Self::Path { path }
             | Self::Directory { directory: path }
             | Self::Editable { editable: path }
-            | Self::Virtual { r#virtual: path } => {
+            | Self::Virtual { r#virtual: path }
+            | Self::Installed { installed: path } => {
                 write!(f, "{}+{}", self.name(), path)
             }
         }
@@ -926,6 +934,7 @@ impl MetadataSource {
             Self::Directory { .. } => "directory",
             Self::Editable { .. } => "editable",
             Self::Virtual { .. } => "virtual",
+            Self::Installed { .. } => "installed",
         }
     }
 }
@@ -1442,6 +1451,24 @@ impl Metadata {
             kind: MetadataNodeKind::Package,
         })
         .to_flat())
+    }
+
+    /// Add a disconnected node for an installed distribution outside the selected resolution.
+    ///
+    /// The installation path identifies the node because installed distributions do not always
+    /// record their original source, such as the registry they were downloaded from.
+    pub fn add_installed_package(&mut self, dist: &InstalledDist) -> String {
+        let node = MetadataNode::new(MetadataNodeId::Package(MetadataPackageNodeId {
+            name: dist.name().clone(),
+            version: Some(dist.version().clone()),
+            source: MetadataSource::Installed {
+                installed: PortablePathBuf::from(dist.install_path()),
+            },
+            kind: MetadataNodeKind::Package,
+        }));
+        let id = node.id.to_flat();
+        self.resolution.insert(id.clone(), node);
+        id
     }
 
     #[must_use]

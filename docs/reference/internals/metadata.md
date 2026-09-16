@@ -49,6 +49,19 @@ dependency groups are just lists of things you might want when working on the pa
 If the workspace root defines dependency groups but is not itself a package, its `"workspace"` node
 provides the corresponding group node ids through `dependency_groups`.
 
+## Installed packages
+
+When an environment exists, `module_owners` maps importable module names to the package nodes that
+provide them. Installed packages are matched by name to non-virtual packages in the selected
+resolution, even if the installed version differs from the locked version.
+
+Installed packages without a matching non-virtual package also appear in `resolution`. Their nodes
+contain the installed name and version, an empty `dependencies` array, and a `source.installed`
+field identifying the package's metadata path, such as its `.dist-info` directory. These nodes have
+no dependency edges connecting them to the workspace or script. This lets consumers identify imports
+provided by packages that remain installed after their declarations are removed. The empty
+`dependencies` array does not describe the installed package's own requirements.
+
 ## Handling multiple versions of a package
 
 Two versions of a package cannot be installed into a python environment, but the dependency graph

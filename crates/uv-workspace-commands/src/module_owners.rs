@@ -30,9 +30,10 @@ use uv_workspace::WorkspaceCache;
 ///
 /// By default, synchronization is sufficient (inexact), so required distributions are available
 /// to inspect without removing unrelated packages from an existing environment. Exact
-/// synchronization removes those unrelated packages instead. Only distributions in the selected
-/// resolution are assigned package IDs.
+/// synchronization removes those unrelated packages instead. Installed distributions are matched
+/// to the selected resolution by name; unmatched distributions get disconnected metadata nodes.
 pub(super) async fn collect_module_owners(
+    metadata: &mut Metadata,
     target: InstallTarget<'_>,
     venv: &PythonEnvironment,
     settings: &ResolverSettings,
@@ -47,9 +48,6 @@ pub(super) async fn collect_module_owners(
 ) -> Result<BTreeMap<ModuleName, Vec<String>>> {
     let (extras, groups) = target_selection(target);
     let package_ids = selected_package_ids(target, venv, &extras, &groups, settings)?;
-    if package_ids.is_none() && !matches!(sync, Some(Modifications::Exact)) {
-        return Ok(BTreeMap::new());
-    }
 
     if let Some(modifications) = sync {
         let reinstall = Reinstall::None;
@@ -97,11 +95,7 @@ pub(super) async fn collect_module_owners(
         .await?;
     }
 
-    let Some(package_ids) = package_ids else {
-        return Ok(BTreeMap::new());
-    };
-
-    find_module_owners_in_environment(venv, &package_ids)
+    find_module_owners_in_environment(metadata, venv, &package_ids)
 }
 
 /// Select the package IDs that can own modules in the target resolution.
@@ -111,7 +105,7 @@ fn selected_package_ids(
     extras: &ExtrasSpecificationWithDefaults,
     groups: &DependencyGroupsWithDefaults,
     settings: &ResolverSettings,
-) -> Result<Option<BTreeMap<PackageName, String>>> {
+) -> Result<BTreeMap<PackageName, String>> {
     let marker_env = resolution_markers(None, None, venv.interpreter());
     let tags = resolution_tags(None, None, venv.interpreter())?;
 
@@ -123,10 +117,6 @@ fn selected_package_ids(
         &settings.build_options,
         &InstallOptions::default(),
     )?;
-    if resolution.is_empty() {
-        return Ok(None);
-    }
-
     let workspace_root = PortablePathBuf::from(target.install_path());
     let mut package_ids = BTreeMap::<PackageName, String>::new();
     for dist in resolution.distributions().filter(|dist| !is_virtual(dist)) {
@@ -135,19 +125,21 @@ fn selected_package_ids(
             Metadata::package_node_id(&workspace_root, dist)?,
         );
     }
-    Ok(Some(package_ids))
+    Ok(package_ids)
 }
 
-/// Map modules in an existing environment to their selected package IDs.
+/// Map modules in an existing environment to selected or installed package IDs.
 fn find_module_owners_in_environment(
+    metadata: &mut Metadata,
     venv: &PythonEnvironment,
     package_ids: &BTreeMap<PackageName, String>,
 ) -> Result<BTreeMap<ModuleName, Vec<String>>> {
     let mut owners = BTreeMap::<ModuleName, BTreeSet<String>>::new();
     for dist in SitePackages::from_environment(venv)?.iter() {
-        let Some(package_id) = package_ids.get(dist.name()) else {
-            continue;
-        };
+        let package_id = package_ids
+            .get(dist.name())
+            .cloned()
+            .unwrap_or_else(|| metadata.add_installed_package(dist));
         // TODO: Editable installs often only record a `.pth` file; we'll
         // need to handle them specially.
         for module in dist.read_modules(venv.interpreter().extension_suffixes())? {

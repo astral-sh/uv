@@ -819,7 +819,7 @@ fn workspace_metadata_script_exact_sync_removes_extraneous_packages() -> Result<
         .assert()
         .success();
 
-    context
+    let assert = context
         .workspace_metadata()
         .arg("--script")
         .arg(script.path())
@@ -828,6 +828,39 @@ fn workspace_metadata_script_exact_sync_removes_extraneous_packages() -> Result<
         .env(EnvVars::VIRTUAL_ENV, context.venv.path())
         .assert()
         .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(serde_json::json!({
+            "module_owners": metadata["module_owners"],
+            "resolution": metadata["resolution"],
+        }), @r#"
+        {
+          "module_owners": {
+            "extra_module": [
+              {
+                "package_id": "metadata-extra==0.1.0@installed+[SITE_PACKAGES]/metadata_extra-0.1.0.dist-info"
+              }
+            ]
+          },
+          "resolution": {
+            "metadata-extra==0.1.0@installed+[SITE_PACKAGES]/metadata_extra-0.1.0.dist-info": {
+              "dependencies": [],
+              "kind": "package",
+              "name": "metadata-extra",
+              "source": {
+                "installed": "[SITE_PACKAGES]/metadata_extra-0.1.0.dist-info"
+              },
+              "version": "0.1.0"
+            },
+            "script+[TEMP_DIR]/script.py": {
+              "dependencies": [],
+              "kind": "script",
+              "path": "[TEMP_DIR]/script.py"
+            }
+          }
+        }
+        "#);
+    });
     context.pip_show().arg("metadata-extra").assert().success();
 
     let assert = context
@@ -1323,6 +1356,11 @@ fn workspace_metadata_exact_sync_removes_extraneous_packages() -> Result<()> {
         {
           "extraneous_installed": true,
           "module_owners": {
+            "extra_module": [
+              {
+                "package_id": "metadata-extra==0.1.0@installed+[SITE_PACKAGES]/metadata_extra-0.1.0.dist-info"
+              }
+            ],
             "required_module": [
               {
                 "package_id": "metadata-required==0.1.0@path+[TEMP_DIR]/metadata_required-0.1.0-py3-none-any.whl"
@@ -1936,7 +1974,7 @@ dependencies = [
 }
 
 #[test]
-fn workspace_metadata_module_owners_ignore_stale_virtual_package() -> Result<()> {
+fn workspace_metadata_module_owners_include_stale_virtual_package() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let stale_owner = context
@@ -1972,13 +2010,168 @@ package = false
         .assert()
         .success();
     let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
-    let module_owners = if let Some(module_owners) = metadata.get("module_owners") {
-        serde_json::to_string_pretty(module_owners)?
-    } else {
-        "<missing>".to_string()
-    };
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(serde_json::json!({
+            "module_owners": metadata["module_owners"],
+            "resolution": metadata["resolution"],
+        }), @r#"
+        {
+          "module_owners": {
+            "stale": [
+              {
+                "package_id": "module-owner-root==0.1.0@installed+[SITE_PACKAGES]/module_owner_root-0.1.0.dist-info"
+              }
+            ]
+          },
+          "resolution": {
+            "module-owner-root==0.1.0@installed+[SITE_PACKAGES]/module_owner_root-0.1.0.dist-info": {
+              "dependencies": [],
+              "kind": "package",
+              "name": "module-owner-root",
+              "source": {
+                "installed": "[SITE_PACKAGES]/module_owner_root-0.1.0.dist-info"
+              },
+              "version": "0.1.0"
+            },
+            "module-owner-root==0.1.0@virtual+[TEMP_DIR]/": {
+              "dependencies": [],
+              "kind": "package",
+              "name": "module-owner-root",
+              "source": {
+                "virtual": "[TEMP_DIR]/"
+              },
+              "version": "0.1.0"
+            },
+            "workspace+[TEMP_DIR]/": {
+              "dependencies": [],
+              "kind": "workspace",
+              "path": "[TEMP_DIR]/"
+            }
+          }
+        }
+        "#);
+    });
 
-    insta::assert_snapshot!(module_owners, @"<missing>");
+    Ok(())
+}
+
+#[test]
+fn workspace_metadata_module_owners_after_dependency_changes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let installed_owner = context
+        .temp_dir
+        .child("module_owner-0.1.0-py3-none-any.whl");
+    write_wheel(
+        installed_owner.path(),
+        "module-owner",
+        "module_owner-0.1.0",
+        &[("installed_module.py", "")],
+    )?;
+    let locked_owner = context
+        .temp_dir
+        .child("module_owner-0.2.0-py3-none-any.whl");
+    write_wheel_with_metadata(
+        locked_owner.path(),
+        "module-owner",
+        "0.2.0",
+        "module_owner-0.2.0",
+        "",
+        &[("replacement_module.py", "")],
+    )?;
+    let locked_owner_url = Url::from_file_path(locked_owner.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
+
+    context
+        .pip_install()
+        .arg(installed_owner.path())
+        .assert()
+        .success();
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "module-owner-root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["module-owner @ {locked_owner_url}"]
+        "#
+    })?;
+
+    // Modules from an older installation still belong to the selected package with the same name.
+    let assert = context.workspace_metadata().assert().success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(metadata["module_owners"], @r#"
+        {
+          "installed_module": [
+            {
+              "package_id": "module-owner==0.2.0@path+[TEMP_DIR]/module_owner-0.2.0-py3-none-any.whl"
+            }
+          ]
+        }
+        "#);
+    });
+
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "module-owner-root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#
+    })?;
+
+    // Refreshing the lockfile leaves the installed package available without declaring an edge.
+    let assert = context.workspace_metadata().assert().success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(serde_json::json!({
+            "module_owners": metadata["module_owners"],
+            "resolution": metadata["resolution"],
+        }), @r#"
+        {
+          "module_owners": {
+            "installed_module": [
+              {
+                "package_id": "module-owner==0.1.0@installed+[SITE_PACKAGES]/module_owner-0.1.0.dist-info"
+              }
+            ]
+          },
+          "resolution": {
+            "module-owner-root==0.1.0@virtual+[TEMP_DIR]/": {
+              "dependencies": [],
+              "kind": "package",
+              "name": "module-owner-root",
+              "source": {
+                "virtual": "[TEMP_DIR]/"
+              },
+              "version": "0.1.0"
+            },
+            "module-owner==0.1.0@installed+[SITE_PACKAGES]/module_owner-0.1.0.dist-info": {
+              "dependencies": [],
+              "kind": "package",
+              "name": "module-owner",
+              "source": {
+                "installed": "[SITE_PACKAGES]/module_owner-0.1.0.dist-info"
+              },
+              "version": "0.1.0"
+            },
+            "workspace+[TEMP_DIR]/": {
+              "dependencies": [],
+              "kind": "workspace",
+              "path": "[TEMP_DIR]/"
+            }
+          }
+        }
+        "#);
+    });
+
+    let assert = context
+        .workspace_metadata()
+        .arg("--frozen")
+        .assert()
+        .success();
+    let frozen_metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    assert_eq!(metadata, frozen_metadata);
 
     Ok(())
 }

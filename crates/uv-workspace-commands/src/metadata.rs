@@ -296,6 +296,7 @@ pub async fn metadata(
             })
             .ok();
         let module_owners = collect_module_owners(
+            &mut export,
             install_target,
             &environment,
             &settings,
