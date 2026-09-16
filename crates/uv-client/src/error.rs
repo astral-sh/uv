@@ -183,6 +183,8 @@ impl Error {
             | ErrorKind::MissingContentType(_)
             | ErrorKind::InvalidContentTypeHeader(..)
             | ErrorKind::UnsupportedMediaType(..)
+            | ErrorKind::VariantsJsonNotFile(_)
+            | ErrorKind::VariantsJsonFormat(..)
             | ErrorKind::Offline(_) => true,
             ErrorKind::Git(error) => error.is_user_failure(),
             ErrorKind::WrappedReqwestError(_, error) => error.is_user_failure(),

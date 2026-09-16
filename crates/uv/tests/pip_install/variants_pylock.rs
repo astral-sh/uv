@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use anyhow::Result;
 use assert_fs::prelude::*;
 use indoc::indoc;
+use insta::allow_duplicates;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use wiremock::matchers::path;
@@ -57,32 +58,36 @@ async fn pep825_pylock_metadata() -> Result<()> {
         .temp_dir
         .child("requirements.in")
         .write_str("example")?;
-    uv_snapshot!(context.filters(), context.pip_compile().arg("--preview-features").arg("wheel-variants")
-        .arg("requirements.in").arg("--no-index").arg("--find-links").arg(context.temp_dir.path())
-        .arg("--universal").arg("--no-header").arg("-o").arg("pylock.toml"), @r###"
-    exit_code: 0 (success)
-    ----- stdout -----
-    lock-version = "1.0"
-    created-by = "uv"
-    requires-python = ">=3.12"
+    allow_duplicates! {
+        for mode in [&["--universal"][..], &["--python-version", "3.12"][..]] {
+            uv_snapshot!(context.filters(), context.pip_compile().arg("--preview-features").arg("wheel-variants")
+                .arg("requirements.in").arg("--no-index").arg("--find-links").arg(context.temp_dir.path())
+                .args(mode).arg("--no-header").arg("-o").arg("pylock.toml"), @r###"
+            exit_code: 0 (success)
+            ----- stdout -----
+            lock-version = "1.0"
+            created-by = "uv"
+            requires-python = ">=3.12"
 
-    [[packages]]
-    name = "example"
-    version = "1.0.0"
-    wheels = [
-        { url = "file://[TEMP_DIR]/example-1.0.0-py3-none-any.whl", hashes = { sha256 = "[HASH]" } },
-        { url = "file://[TEMP_DIR]/example-1.0.0-py3-none-any-fast.whl", hashes = { sha256 = "[HASH]" } },
-        { url = "file://[TEMP_DIR]/example-1.0.0-py3-none-any-null.whl", hashes = { sha256 = "[HASH]" } },
-    ]
+            [[packages]]
+            name = "example"
+            version = "1.0.0"
+            wheels = [
+                { url = "file://[TEMP_DIR]/example-1.0.0-py3-none-any.whl", hashes = { sha256 = "[HASH]" } },
+                { url = "file://[TEMP_DIR]/example-1.0.0-py3-none-any-fast.whl", hashes = { sha256 = "[HASH]" } },
+                { url = "file://[TEMP_DIR]/example-1.0.0-py3-none-any-null.whl", hashes = { sha256 = "[HASH]" } },
+            ]
 
-    [packages.variants-json]
-    "$schema" = "https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json"
-    default-priorities = { namespace = ["gpu", "cpu"] }
-    variants = { fast = { gpu = { cuda = ["12.0", "13.0", "14.0"] } }, null = {} }
+            [packages.variants-json]
+            "$schema" = "https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json"
+            default-priorities = { namespace = ["gpu", "cpu"] }
+            variants = { fast = { gpu = { cuda = ["12.0", "13.0", "14.0"] } }, null = {} }
 
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    "###);
+            ----- stderr -----
+            Resolved 1 package in [TIME]
+            "###);
+        }
+    }
     // The exported file must remain usable when the mutable index metadata changes.
     context
         .temp_dir
@@ -115,7 +120,7 @@ async fn pep825_pylock_metadata() -> Result<()> {
     exit_code: 0 (success)
     ----- stdout -----
     fast build 0
-    {'variant': {'gpu': {'cuda': ['12.0', '13.0']}}, 'label': 'fast'}
+    {'label': 'fast', 'variant': {'gpu': {'cuda': ['12.0', '13.0']}}}
     "###);
 
     // Direct wheels carry the same complete metadata, with paths relative to the output file.
@@ -252,6 +257,63 @@ async fn pep825_pylock_metadata() -> Result<()> {
     Resolved 1 package in [TIME]
     "###);
 
+    // Frozen exports recover the wheel cached while locking, including hash-fragment URLs.
+    for hash_fragment in [
+        format!("#sha256={digest}"),
+        format!("#sha256={}", digest.to_ascii_uppercase()),
+        String::new(),
+    ] {
+        let context = uv_test::test_context!("3.12").with_filter((r"[a-f0-9]{64}", "[HASH]"));
+        let url = format!(
+            "{}/example-1.0.0-py3-none-any-fast.whl{}",
+            server.uri(),
+            hash_fragment
+        );
+        context
+            .temp_dir
+            .child("pyproject.toml")
+            .write_str(&format!(
+                indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["example @ {url}"]
+        "#},
+                url = url,
+            ))?;
+        allow_duplicates! {
+        uv_snapshot!(context.filters(), context.lock()
+            .arg("--preview-features").arg("wheel-variants").arg("--no-index"), @r###"
+        exit_code: 0 (success)
+        ----- stderr -----
+        Resolved 2 packages in [TIME]
+        "###);
+        }
+        allow_duplicates! {
+        uv_snapshot!(context.filters(), context.export()
+            .arg("--preview-features").arg("wheel-variants")
+            .arg("--frozen").arg("--offline").arg("--no-header")
+            .arg("--format").arg("pylock.toml"), @r###"
+        exit_code: 0 (success)
+        ----- stdout -----
+        lock-version = "1.0"
+        created-by = "uv"
+        requires-python = ">=3.12"
+
+        [[packages]]
+        name = "example"
+        version = "1.0.0"
+        archive = { url = "http://[LOCALHOST]/example-1.0.0-py3-none-any-fast.whl", hashes = { sha256 = "[HASH]" } }
+
+        [packages.variants-json]
+        "$schema" = "https://variants-schema.wheelnext.dev/peps/825/v0.1.1.json"
+        default-priorities = { namespace = ["gpu", "cpu"] }
+        variants = { fast = { gpu = { cuda = ["12.0", "13.0", "14.0"] } } }
+        "###);
+        }
+    }
+
     // Explicit archives still have to support the requested target before any reinstall.
     context.temp_dir.child("target.toml").write_str(indoc! {r#"
         [metadata]
@@ -271,5 +333,74 @@ async fn pep825_pylock_metadata() -> Result<()> {
     ----- stderr -----
     error: Package `example` can't be installed because the binary distribution is incompatible with the current platform
     "###);
+    Ok(())
+}
+
+/// A concrete export cannot reuse dependencies after selecting another label or property subset.
+#[test]
+fn pep825_pylock_concrete_variant_dependencies() -> Result<()> {
+    for (marker, target) in [
+        (
+            "variant_label == 'fast'",
+            indoc! {r#"
+                provider = []
+                [metadata]
+                version = "0.1"
+                created-by = "uv-test"
+            "#},
+        ),
+        (
+            "'gpu::cuda::12.0' in variant_properties",
+            indoc! {r#"
+                [metadata]
+                version = "0.1"
+                created-by = "uv-test"
+                [[provider]]
+                namespace = "gpu"
+                resolved = []
+                [provider.properties]
+                cuda = ["13.0"]
+            "#},
+        ),
+    ] {
+        let context = uv_test::test_context!("3.12");
+        let properties = json!({"gpu": {"cuda": ["12.0", "13.0"]}});
+        let dependency = format!("dep; {marker}");
+        write_wheel(
+            &context,
+            "example",
+            Some("fast"),
+            properties.clone(),
+            &[&dependency],
+            None,
+        )?;
+        write_wheel(
+            &context,
+            "example",
+            Some("null"),
+            json!({}),
+            &[&dependency],
+            None,
+        )?;
+        write_metadata(&context, json!({"fast": properties, "null": {}}))?;
+        context.temp_dir.child("target.toml").write_str(target)?;
+        context
+            .temp_dir
+            .child("requirements.in")
+            .write_str("example")?;
+        allow_duplicates! {
+        uv_snapshot!(context.filters(), context.pip_compile()
+            .arg("requirements.in").arg("--no-index")
+            .arg("--find-links").arg(context.temp_dir.path())
+            .arg("--preview-features").arg("wheel-variants")
+            .arg("--no-header").arg("-o").arg("pylock.toml")
+            .env("UV_VARIANT_LOCK", context.temp_dir.child("target.toml").path()), @r###"
+        exit_code: 2 (failure)
+        ----- stderr -----
+        Resolved 1 package in [TIME]
+        error: Cannot export variant-dependent dependencies for `example` to pylock.toml; the export cannot retain their selected wheel context
+        "###);
+        }
+    }
     Ok(())
 }

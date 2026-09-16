@@ -1635,6 +1635,42 @@ impl MarkerTree {
         Self(INTERNER.lock().restrict(self.0, assumption.0))
     }
 
+    /// Simplify markers for a wheel with a fixed filename label.
+    ///
+    /// Supported properties remain target-dependent except for ordinary and null wheels,
+    /// whose property sets are always empty. Scoped markers belong to other packages.
+    #[must_use]
+    pub fn simplify_variant_label(self, label: &str) -> Self {
+        if !self.has_variant_expression() {
+            return self;
+        }
+        let marker = self.restrict(Self::expression(MarkerExpression::String {
+            key: MarkerValueString::VariantLabel,
+            operator: MarkerOperator::Equal,
+            value: label.into(),
+        }));
+        Self(
+            INTERNER
+                .lock()
+                .restrict_by(marker.0, &|variable| match variable {
+                    Variable::In {
+                        key: CanonicalMarkerValueString::VariantLabel,
+                        value,
+                    } => Some(value.contains(label)),
+                    Variable::Contains {
+                        key: CanonicalMarkerValueString::VariantLabel,
+                        value,
+                    } => Some(label.contains(value.as_str())),
+                    Variable::List(
+                        CanonicalMarkerListPair::VariantNamespaces { base: None, .. }
+                        | CanonicalMarkerListPair::VariantFeatures { base: None, .. }
+                        | CanonicalMarkerListPair::VariantProperties { base: None, .. },
+                    ) if label.is_empty() || label == "null" => Some(false),
+                    _ => None,
+                }),
+        )
+    }
+
     /// Remove the extras from a marker, returning `None` if the marker tree evaluates to `true`.
     ///
     /// Any `extra` markers that are always `true` given the provided extras will be removed.
@@ -2755,7 +2791,7 @@ mod test {
     fn warnings5() {
         let env = env37().with_platform_release("10");
         let marker = MarkerTree::from_str("platform_release < '2'").unwrap();
-        assert!(marker.evaluate(&env, &[]));
+        assert!(marker.evaluate(&env, &MarkerVariantsUniversal, &[]));
         logs_contain("Comparing 10 and 2 lexicographically");
     }
 

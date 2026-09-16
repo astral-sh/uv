@@ -24,7 +24,7 @@ use uv_distribution_filename::{DistFilename, WheelFilename};
 use uv_distribution_types::{
     BuiltDist, File, FileLocation, IndexCapabilities, IndexEntryFilename, IndexFormat,
     IndexLocations, IndexMetadataRef, IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl,
-    Name, RegistryBuiltWheel, RegistryVariantsJson, VariantsJsonFilename,
+    Name, RegistryBuiltWheel, RegistryVariantsJson,
 };
 use uv_extract::hash::Hasher;
 use uv_git::{GIT_LFS, GitError, GitHttpSettings, GitResolver, Reporter};
@@ -979,7 +979,7 @@ impl RegistryClient {
                 Connectivity::Offline => CacheControl::AllowStale,
             };
 
-            let response_callback = async |response: Response| {
+            let response_callback = async |response: Response, _: &mut RetryState| {
                 let bytes = response.bytes().await.map_err(|err| {
                     ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
                 })?;
@@ -1685,13 +1685,6 @@ impl From<&CachedHashDigests> for HashDigests {
     }
 }
 
-#[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-#[rkyv(derive(Debug))]
-pub struct VersionVariantJson {
-    pub name: VariantsJsonFilename,
-    pub file: File,
-}
-
 /// The list of projects available in a Simple API index.
 #[derive(Default, Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
@@ -2371,7 +2364,7 @@ mod tests {
         );
         assert!(file.requires_python.is_none());
         assert!(file.yanked.is_none());
-        assert!(!file.dist_info_metadata);
+        assert!(file.dist_info_metadata.is_none());
         Ok(())
     }
 

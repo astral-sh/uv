@@ -50,7 +50,6 @@ cyclonedx-bom = { workspace = true }
 either = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
-hashbrown = { workspace = true }
 itertools = { workspace = true }
 jiff = { workspace = true, features = ["serde"] }
 memchr = { workspace = true }

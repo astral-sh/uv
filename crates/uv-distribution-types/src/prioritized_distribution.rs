@@ -380,12 +380,8 @@ impl PrioritizedDist {
     /// Create a new [`PrioritizedDist`] from the `variants.json`.
     pub fn from_variant_json(variant_json: RegistryVariantsJson) -> Self {
         Self(Box::new(PrioritizedDistInner {
-            markers: MarkerTree::TRUE,
-            best_wheel_index: None,
-            wheels: vec![],
-            source: None,
             variants_json: Some(variant_json),
-            hashes: vec![],
+            ..PrioritizedDistInner::default()
         }))
     }
 
@@ -482,11 +478,7 @@ impl PrioritizedDist {
                     },
                 )),
                 Some((sdist, SourceDistCompatibility::Compatible(sdist_hash))),
-            ) if matches!(
-                variant_priority,
-                VariantPriority::BestVariant | VariantPriority::NonVariant
-            ) || allow_all_variants =>
-            {
+            ) if *variant_priority == VariantPriority::NonVariant || allow_all_variants => {
                 if sdist_hash > wheel_hash {
                     Some(CompatibleDist::SourceDist {
                         sdist,
@@ -512,11 +504,7 @@ impl PrioritizedDist {
                     },
                 )),
                 _,
-            ) if matches!(
-                variant_priority,
-                VariantPriority::BestVariant | VariantPriority::NonVariant
-            ) || allow_all_variants =>
-            {
+            ) if *variant_priority == VariantPriority::NonVariant || allow_all_variants => {
                 Some(CompatibleDist::CompatibleWheel {
                     wheel,
                     priority: *tag_priority,
@@ -549,53 +537,50 @@ impl PrioritizedDist {
         }
     }
 
-    /// Prioritize a matching variant wheel over a matching non-variant wheel.
+    /// Prefer matching hashes, then variant properties, then platform and build tags.
     ///
-    /// Returns `None` or there is no matching variant.
+    /// Returns `None` if there is no supported wheel.
     pub fn prioritize_best_variant_wheel(
         &self,
         resolved_variants: &ResolvedVariants,
     ) -> Option<Self> {
-        let mut highest_priority_variant_wheel: Option<(usize, VariantScore)> = None;
+        type WheelPriority = (HashComparison, Option<VariantScore>);
+
+        let mut highest_priority_wheel: Option<(usize, WheelPriority)> = None;
         for (wheel_index, (wheel, compatibility)) in self.wheels().enumerate() {
-            if !compatibility.is_compatible() {
-                continue;
-            }
-
-            let Some(variant) = wheel.filename.variant() else {
-                // The non-variant wheel is already supported
+            let WheelCompatibility::Compatible { hash, .. } = compatibility else {
                 continue;
             };
-
-            let Some(scores) = resolved_variants.score_variant(variant) else {
-                continue;
+            let score = match wheel.filename.variant() {
+                Some(variant) => {
+                    let Some(score) = resolved_variants.score_variant(variant) else {
+                        continue;
+                    };
+                    Some(score)
+                }
+                None => None,
             };
+            let priority = (*hash, score);
 
-            if let Some((old_index, old_scores)) = &highest_priority_variant_wheel {
-                if &scores > old_scores
-                    || (&scores == old_scores
+            if let Some((old_index, old_priority)) = &highest_priority_wheel {
+                if &priority > old_priority
+                    || (&priority == old_priority
                         && compatibility.is_more_compatible(&self.0.wheels[*old_index].1))
                 {
-                    highest_priority_variant_wheel = Some((wheel_index, scores));
+                    highest_priority_wheel = Some((wheel_index, priority));
                 }
             } else {
-                highest_priority_variant_wheel = Some((wheel_index, scores));
+                highest_priority_wheel = Some((wheel_index, priority));
             }
         }
 
-        if let Some((wheel_index, _)) = highest_priority_variant_wheel {
-            use owo_colors::OwoColorize;
-
+        if let Some((wheel_index, _)) = highest_priority_wheel {
             let inner = PrioritizedDistInner {
                 best_wheel_index: Some(wheel_index),
                 ..(*self.0).clone()
             };
             let compatible_wheel = &inner.wheels[wheel_index];
-            debug!(
-                "{} {}",
-                "Using variant wheel".red(),
-                compatible_wheel.0.filename
-            );
+            debug!("{} {}", "Using wheel".red(), compatible_wheel.0.filename);
             Some(Self(Box::new(inner)))
         } else {
             None

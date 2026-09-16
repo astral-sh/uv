@@ -129,7 +129,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             }
 
             while let Some(result) = futures.next().await {
-                if let Some((lookahead, variant)) = result? {
+                if let Some((lookahead, variant, fixed_variant_label)) = result? {
                     // User-provided metadata can authorize dependencies even under required hashes.
                     // An override may only match after the source's version has been discovered.
                     // Read its hashes directly; the lookahead requirements may come from the archive.
@@ -161,11 +161,17 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                     } else {
                         hasher.augment_with_metadata_requirements(requirements)?
                     };
-                    for requirement in self.constraints.apply(self.overrides.apply_for(
+                    for mut requirement in self.constraints.apply(self.overrides.apply_for(
                         lookahead.package(),
                         lookahead.version(),
                         lookahead.requirements(),
                     )) {
+                        if let Some(label) = &fixed_variant_label {
+                            let marker = requirement.marker.simplify_variant_label(label);
+                            if marker != requirement.marker {
+                                requirement.to_mut().marker = marker;
+                            }
+                        }
                         if !self.excludes.contains_for(
                             lookahead.package(),
                             lookahead.version(),
@@ -199,7 +205,14 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         requirement: Requirement,
         hasher: HashStrategy,
         marker_env: Option<&MarkerEnvironment>,
-    ) -> Result<Option<(RequestedRequirements, Option<VariantWithLabel>)>, Error> {
+    ) -> Result<
+        Option<(
+            RequestedRequirements,
+            Option<VariantWithLabel>,
+            Option<String>,
+        )>,
+        Error,
+    > {
         trace!("Performing lookahead for {requirement}");
 
         // Determine whether the requirement represents a local distribution and convert to a
@@ -260,6 +273,19 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         // Concrete non-variant wheels use empty variant markers. Universal lookahead retains
         // all variant conditions for the resolver to consider.
         let variant = marker_env.map(|_| archive.variant.clone().unwrap_or_default());
+        let fixed_variant_label = if marker_env.is_none()
+            && let Dist::Built(built) = &dist
+        {
+            Some(
+                built
+                    .wheel_filename()
+                    .variant()
+                    .map_or("", |label| label.as_str())
+                    .to_string(),
+            )
+        } else {
+            None
+        };
         self.index
             .distributions()
             .done(id, Arc::new(MetadataResponse::Found(archive)));
@@ -297,6 +323,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         Ok(Some((
             RequestedRequirements::new(package, version, requirement.extras, requires_dist, direct),
             variant,
+            fixed_variant_label,
         )))
     }
 }

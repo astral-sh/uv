@@ -149,6 +149,7 @@ impl ResolveError {
         match self {
             Self::Dependencies(error, ..) => error.is_user_failure(),
             Self::Distribution(error) => error.is_user_failure(),
+            Self::VariantFrontend(error) => error.is_user_failure(),
             Self::ConflictingUrls { .. }
             | Self::ConflictingIndexesForEnvironment { .. }
             | Self::ConflictingIndexes(..)

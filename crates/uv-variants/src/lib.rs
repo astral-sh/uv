@@ -31,6 +31,4 @@ pub enum VariantPriority {
     Unknown,
     /// A non-variant wheel.
     NonVariant,
-    /// The supported variant wheel in this prioritized dist with the highest score.
-    BestVariant,
 }

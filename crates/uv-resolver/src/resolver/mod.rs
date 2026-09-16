@@ -22,11 +22,11 @@ use tracing::{Level, debug, info, instrument, trace, warn};
 use uv_configuration::{Constraints, Excludes, Overrides};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
-    BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, DistributionMetadata,
-    GlobalVersionId, Identifier, IncompatibleDist, IncompatibleSource, IncompatibleWheel,
-    IndexCapabilities, IndexLocations, IndexMetadata, IndexUrl, InstalledDist, Name,
-    PrioritizedDist, PythonRequirementKind, RegistryVariantsJson, RemoteSource, Requirement,
-    ResolvedDist, ResolvedDistRef, SourceDist, VersionId, VersionOrUrlRef, implied_markers,
+    BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, GlobalVersionId, Identifier,
+    IncompatibleDist, IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations,
+    IndexMetadata, IndexUrl, InstalledDist, Name, PrioritizedDist, PythonRequirementKind,
+    RegistryVariantsJson, RemoteSource, Requirement, ResolvedDist, ResolvedDistRef, SourceDist,
+    VersionId, VersionOrUrlRef, implied_markers,
 };
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
@@ -1226,14 +1226,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             if env.marker_environment().is_none() && !self.options.artifact_environments.is_empty()
             {
                 let wheel_marker = implied_markers(filename);
-                let variant_base = VersionId::from_url(&url.verbatim.to_url()).to_string();
                 // If the caller marked an environment as requiring artifact coverage, ensure it
                 // has coverage.
                 for environment_marker in self.options.artifact_environments.iter().copied() {
                     // If the platform is part of the current environment...
                     if env.included_by_marker(environment_marker)
                         && env.included_by_marker(
-                            find_environments(id, pubgrub, &variant_base).and(environment_marker),
+                            find_environments(id, pubgrub).and(environment_marker),
                         )
                     {
                         // ...but the wheel doesn't support it in this fork, it's incompatible.
@@ -1346,7 +1345,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         let candidate = self.variant_candidate(
             candidate,
             env,
-            request_sink,
+            requests,
             &mut variant_prioritized_dist_binding,
         )?;
 
@@ -1455,7 +1454,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         &self,
         candidate: Candidate<'prioritized>,
         env: &ResolverEnvironment,
-        request_sink: &mpsc::Sender<Request>,
+        requests: &MetadataRequests,
         variant_prioritized_dist_binding: &'prioritized mut PrioritizedDist,
     ) -> Result<Candidate<'prioritized>, ResolveError> {
         let candidate = if env.marker_environment().is_some() {
@@ -1483,10 +1482,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 VersionId::NameVersion(candidate.name().clone(), candidate.version().clone()),
                 index.clone(),
             );
-            if self.index.variant_priorities().register(version_id.clone()) {
-                request_sink
-                    .blocking_send(Request::Variants(version_id.clone(), variants_json.clone()))?;
-            }
+            requests.request_variants(&version_id, variants_json)?;
 
             let resolved_variants = self.index.variant_priorities().wait_blocking(&version_id);
             let Ok(resolved_variants) = &resolved_variants else {
@@ -1547,8 +1543,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             return Ok(None);
         }
 
-        let variant_base = candidate.package_id().to_string();
-
         // If the caller marked an environment as requiring artifact coverage, ensure it has
         // coverage.
         for marker in self.options.artifact_environments.iter().copied() {
@@ -1556,9 +1550,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             if env.included_by_marker(marker) {
                 // But isn't supported by the distribution in this fork...
                 if !env.included_by_marker(dist.implied_markers().and(marker))
-                    && env.included_by_marker(
-                        find_environments(id, pubgrub, &variant_base).and(marker),
-                    )
+                    && env.included_by_marker(find_environments(id, pubgrub).and(marker))
                 {
                     // Then we need to fork.
                     let Some((left, right)) = fork_version_by_marker(env, marker) else {
@@ -1879,6 +1871,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &self.requirements,
                     RequirementContext::Root,
                     &MarkerVariantsUniversal,
+                    None,
                 );
 
                 PubGrubDependency::from_requirements(
@@ -1902,12 +1895,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                 // Look up the distribution ID from the pins (common case) or fork URLs.
                 let owned_id;
+                let direct_dist = fork_urls
+                    .get(name)
+                    .map(|url| Dist::from_url(name.clone(), url.clone()))
+                    .transpose()?;
                 let distribution_id = if let Some((_, metadata_id)) =
                     pins.dist_and_id(name, version)
                 {
                     metadata_id
-                } else if let Some(url) = fork_urls.get(name) {
-                    let dist = Dist::from_url(name.clone(), url.clone())?;
+                } else if let Some(dist) = &direct_dist {
                     owned_id = dist.distribution_id();
                     &owned_id
                 } else {
@@ -2025,7 +2021,21 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         RequirementContext::Package { name, version },
                     )
                 };
-                let requirements = expander.expand(requirements, context, &variant);
+                // A direct wheel has the same label on every target, while supported property
+                // values can still differ between targets during universal resolution.
+                let fixed_variant_label = if env.marker_environment().is_none()
+                    && let Some(Dist::Built(dist)) = &direct_dist
+                {
+                    Some(
+                        dist.wheel_filename()
+                            .variant()
+                            .map_or("", |label| label.as_str()),
+                    )
+                } else {
+                    None
+                };
+                let requirements =
+                    expander.expand(requirements, context, &variant, fixed_variant_label);
 
                 PubGrubDependency::from_requirements(
                     &self.conflicts,
@@ -4136,11 +4146,7 @@ fn enrich_dependency_error(
 }
 
 /// Compute the set of markers for which a package is known to be relevant.
-fn find_environments(
-    id: Id<PubGrubPackage>,
-    state: &State<UvDependencyProvider>,
-    variant_base: &str,
-) -> MarkerTree {
+fn find_environments(id: Id<PubGrubPackage>, state: &State<UvDependencyProvider>) -> MarkerTree {
     let package = &state.package_store[id];
     if package.is_root() {
         return MarkerTree::TRUE;
@@ -4201,9 +4207,32 @@ fn find_environments(
                 continue;
             }
 
-            let mut next_environment = state.package_store[*child]
-                .marker()
-                .with_variant_base(variant_base);
+            // Proxy edges repeat the marker already applied on the incoming dependency.
+            // Only the real parent package owns a dependency's variant markers.
+            let parent_package = &state.package_store[*parent];
+            let mut next_environment = if parent_package.is_proxy() {
+                MarkerTree::TRUE
+            } else {
+                let marker = state.package_store[*child].marker();
+                if marker.has_variant_expression()
+                    && let Some(name) = parent_package.name_no_root()
+                {
+                    let version = match state
+                        .partial_solution
+                        .term_intersection_for_package(*parent)
+                    {
+                        Some(Term::Positive(versions)) => versions.as_singleton(),
+                        Some(Term::Negative(_)) | None => None,
+                    };
+                    // An undecided ancestor still needs a distinct scope, even when its
+                    // exact version is not known yet.
+                    let base = version
+                        .map_or_else(|| name.to_string(), |version| format!("{name}=={version}"));
+                    marker.with_variant_base(&base)
+                } else {
+                    marker
+                }
+            };
             next_environment = next_environment.and(current_environment);
 
             let entry = environments.entry(*child).or_insert(MarkerTree::FALSE);

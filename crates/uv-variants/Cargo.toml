@@ -26,7 +26,7 @@ tracing = { workspace = true }
 [dev-dependencies]
 insta = "1.43.1"
 itertools = { workspace = true }
-serde_json = { workspace = true, features = ["preserve_order"] }
+serde_json = { workspace = true }
 
 [lints]
 workspace = true

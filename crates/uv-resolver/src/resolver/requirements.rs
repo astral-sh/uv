@@ -99,8 +99,10 @@ impl<'a> RequirementExpander<'a> {
         dependencies: &'data [Requirement],
         context: RequirementContext<'data>,
         variants: &'data impl MarkerVariantsEnvironment,
+        fixed_variant_label: Option<&'data str>,
     ) -> impl Iterator<Item = Cow<'data, Requirement>> {
-        let requirements = self.requirements_for_context(dependencies, context, variants);
+        let requirements =
+            self.requirements_for_context(dependencies, context, variants, fixed_variant_label);
         let (name, version) = match context {
             // Dependency groups can include the project itself, so they do not flatten recursive
             // dependencies.
@@ -142,6 +144,7 @@ impl<'a> RequirementExpander<'a> {
                     extra: &extra,
                 },
                 variants,
+                fixed_variant_label,
             ) {
                 let requirement = match requirement {
                     Cow::Owned(mut requirement) => {
@@ -219,6 +222,7 @@ impl<'a> RequirementExpander<'a> {
         dependencies: impl IntoIterator<Item = &'data Requirement> + 'parameters,
         context: RequirementContext<'parameters>,
         variants: &'parameters impl MarkerVariantsEnvironment,
+        fixed_variant_label: Option<&'parameters str>,
     ) -> impl Iterator<Item = Cow<'data, Requirement>> + 'parameters
     where
         'data: 'parameters,
@@ -240,7 +244,7 @@ impl<'a> RequirementExpander<'a> {
                 // The requirements are then separately tracked in production and optional
                 // dependencies respectively.
 
-                let marker = match extra {
+                let mut marker = match extra {
                     Some(extra) => requirement
                         .marker
                         .simplify_extras(slice::from_ref(extra))
@@ -253,6 +257,9 @@ impl<'a> RequirementExpander<'a> {
                         ),
                     None => requirement.marker.simplify_not_extras_with(|_| true),
                 };
+                if let Some(label) = fixed_variant_label {
+                    marker = marker.simplify_variant_label(label);
+                }
 
                 if requirement.marker != marker {
                     requirement.to_mut().marker = marker;
@@ -266,6 +273,7 @@ impl<'a> RequirementExpander<'a> {
                     requirement,
                     extra,
                     variants,
+                    fixed_variant_label,
                 ))
             })
     }
@@ -327,6 +335,7 @@ impl<'a> RequirementExpander<'a> {
         requirement: Cow<'data, Requirement>,
         extra: Option<&'parameters ExtraName>,
         variants: &'parameters impl MarkerVariantsEnvironment,
+        fixed_variant_label: Option<&'parameters str>,
     ) -> impl Iterator<Item = Cow<'data, Requirement>> + 'parameters
     where
         'data: 'parameters,
@@ -341,7 +350,7 @@ impl<'a> RequirementExpander<'a> {
             .filter_map(move |constraint| {
                 // If the requirement would not be selected with any Python version
                 // supported by the root, skip it.
-                let constraint = if constraint.marker.is_true() {
+                let mut constraint = if constraint.marker.is_true() {
                     // Additionally, if the requirement is `requests ; sys_platform == 'darwin'`
                     // and the constraint is `requests ; python_version == '3.6'`, the
                     // constraint should only apply when _both_ markers are true.
@@ -407,6 +416,13 @@ impl<'a> RequirementExpander<'a> {
                         })
                     }
                 };
+
+                if let Some(label) = fixed_variant_label {
+                    let marker = constraint.marker.simplify_variant_label(label);
+                    if marker != constraint.marker {
+                        constraint.to_mut().marker = marker;
+                    }
+                }
 
                 // If we're in a fork in universal mode, ignore any dependency that isn't part of
                 // this fork (but will be part of another fork).

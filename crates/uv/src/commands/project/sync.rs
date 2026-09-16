@@ -862,8 +862,6 @@ pub(crate) async fn do_sync<'a>(
     // Read the build constraints from the lockfile.
     let build_constraints = target.build_constraints();
 
-    // TODO(konsti): Don't do this twice, find a better way to resolve the current build_dispatch
-    // -> resolution -> hasher -> flat_index -> resolution loop.
     // Verify build dependencies against the full lockfile, including unselected extras and groups.
     let constraint_hasher = HashStrategy::from_constraints(
         &build_constraints,
@@ -933,24 +931,8 @@ pub(crate) async fn do_sync<'a>(
     // Constrain any build requirements marked as `match-runtime = true`.
     let extra_build_requires = extra_build_requires.match_runtime(&resolution)?;
 
-    // TODO(charlie): These are all default values. We should consider whether we want to make them
-    // optional on the downstream APIs.
-    // Verify build dependencies against the full lockfile, including unselected extras and groups.
-    let constraint_hasher = HashStrategy::from_constraints(
-        &build_constraints,
-        Some(&venv.interpreter().to_resolver_marker_environment()),
-        uv_configuration::HashCheckingMode::Verify,
-    )?;
-    let build_hasher = target
-        .lock()
-        .hash_strategy(target.install_path())?
-        .with_constraint_hashes(&constraint_hasher)?;
-
     // Extract the hashes from the lockfile.
     let hasher = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?;
-
-    // Resolve the flat indexes from `--find-links`.
-    let flat_index = FlatIndex::load(&client, cache, index_locations).await?;
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
@@ -998,8 +980,7 @@ pub(crate) async fn do_sync<'a>(
         &tags,
     )?;
 
-    // Avoid constructing an HTTP client and build dispatch when planning shows that there is no
-    // installation work to perform.
+    // Finish without preparing distributions when the environment already satisfies the plan.
     if installation_plan.is_noop(modifications, bytecode_compilation, dry_run) {
         maybe_check_malware(
             &target,

@@ -6965,7 +6965,7 @@ impl Package {
 
         let filename = format!("{name}-{version}-variants.json");
         let file = File {
-            dist_info_metadata: false,
+            dist_info_metadata: None,
             filename: SmallString::from(filename),
             hashes: variants_json.hash.iter().map(|h| h.0.clone()).collect(),
             requires_python: None,
@@ -6973,7 +6973,6 @@ impl Package {
             upload_time_utc_ms: variants_json.upload_time.map(Timestamp::as_millisecond),
             url: file_url,
             yanked: None,
-            zstd: None,
         };
         Ok(Some(RegistryVariantsJson {
             filename: VariantsJsonFilename {

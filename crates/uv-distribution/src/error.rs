@@ -328,7 +328,17 @@ impl Error {
     /// Return whether this is an expected user-facing failure.
     pub fn is_user_failure(&self) -> bool {
         match self {
-            Self::NoBuild
+            Self::WheelVariantsPreview
+            | Self::WheelVariantRead(_)
+            | Self::WheelVariantParse(_)
+            | Self::WheelVariantMetadata(_)
+            | Self::WheelVariantMismatch { .. }
+            | Self::WheelVariantNamespaceMismatch { .. }
+            | Self::VariantLockRead(_)
+            | Self::VariantLockParse(..)
+            | Self::VariantLockVersion(..)
+            | Self::VariantLockMissing { .. }
+            | Self::NoBuild
             | Self::NoBuildPackage(_)
             | Self::InvalidUrl(_)
             | Self::NonFileUrl(_)

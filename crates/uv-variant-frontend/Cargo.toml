@@ -29,7 +29,7 @@ fs-err = { workspace = true }
 indoc = { workspace = true }
 owo-colors = { workspace = true }
 rustc-hash = { workspace = true }
-serde_json = { workspace = true, features = ["preserve_order"] }
+serde_json = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }

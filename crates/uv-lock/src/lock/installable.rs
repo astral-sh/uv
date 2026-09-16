@@ -6,7 +6,6 @@ use std::path::Path;
 use std::sync::Arc;
 
 use either::Either;
-use hashbrown::HashMap;
 use itertools::Itertools;
 use petgraph::Graph;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -183,9 +182,17 @@ pub trait Installable<'lock> {
         MarkerVariantsUniversal
     }
 
-    /// Whether this lock contains wheel variants that require artifact selection.
+    /// Whether this lock requires variant selection or dependency marker evaluation.
     fn has_variants(&self) -> bool {
-        self.lock().packages().iter().any(package_has_variants)
+        self.lock().packages().iter().any(|package| {
+            package_has_variants(package)
+                || package.all_dependencies().any(|dependency| {
+                    dependency
+                        .complexified_marker
+                        .pep508()
+                        .has_variant_expression()
+                })
+        })
     }
 
     /// Whether the parent's artifact has been selected before following its dependencies.
@@ -208,9 +215,9 @@ pub trait Installable<'lock> {
     ) -> Result<Resolution, LockError> {
         let mut target = VariantInstallable {
             target: self,
-            selected: HashMap::new(),
+            selected: FxHashMap::default(),
             variants: QueriedVariants::default(),
-            pending: RefCell::new(HashMap::new()),
+            pending: RefCell::new(FxHashMap::default()),
             install_options,
         };
         loop {
@@ -1924,9 +1931,9 @@ fn variant_base(package: &Package) -> String {
 
 struct VariantInstallable<'a, T: ?Sized> {
     target: &'a T,
-    selected: HashMap<PackageIndex, Node>,
+    selected: FxHashMap<PackageIndex, Node>,
     variants: QueriedVariants,
-    pending: RefCell<HashMap<PackageIndex, bool>>,
+    pending: RefCell<FxHashMap<PackageIndex, bool>>,
     install_options: &'a InstallOptions,
 }
 
@@ -2043,7 +2050,7 @@ static EMPTY_VARIANT: std::sync::LazyLock<VariantWithLabel> =
 
 /// Map for the package identifier to the package's variants for marker evaluation.
 #[derive(Default, Debug)]
-struct QueriedVariants(HashMap<String, VariantWithLabel>);
+struct QueriedVariants(FxHashMap<String, VariantWithLabel>);
 
 /// Variants for markers evaluation both for the current package (without base) and globally (with
 /// base).

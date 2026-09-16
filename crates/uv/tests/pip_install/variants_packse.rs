@@ -1,7 +1,10 @@
 //! Wheel variant scenarios ported from <https://github.com/astral-sh/packse/pull/292>.
 
+use std::fmt::Write;
 use std::process::Command;
 
+use anyhow::Result;
+use assert_fs::prelude::*;
 use indoc::indoc;
 
 use uv_test::packse::PackseServer;
@@ -141,6 +144,47 @@ fn variants_basic() {
     blas-first==1.0.0 (openblas_v2)
     cpu-first==1.0.0 (openblas_v2)
     ");
+}
+
+/// Required hashes take precedence over variant preference, both between variants and when
+/// choosing between a variant and an ordinary wheel.
+#[test]
+fn variants_require_hashes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("variants/variants-basic.toml");
+    let mut requirements = String::new();
+    for (package, filename) in [
+        ("cpu-first", "cpu_first-1.0.0-py3-none-any-openblas_v2.whl"),
+        ("blas-first", "blas_first-1.0.0-py3-none-any.whl"),
+    ] {
+        let (_, hash) = server
+            .files()
+            .find(|(candidate, _)| *candidate == filename)
+            .expect("fixture wheel");
+        writeln!(requirements, "{package}==1.0.0 --hash=sha256:{hash}")?;
+    }
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str(&requirements)?;
+
+    uv_snapshot!(context.filters(), command(&context, &server, 3)
+        .arg("--require-hashes").arg("-r").arg("requirements.txt"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + blas-first==1.0.0
+     + cpu-first==1.0.0
+    ");
+    uv_snapshot!(context.filters(), installed_variants(&context), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    blas-first==1.0.0 (non-variant)
+    cpu-first==1.0.0 (openblas_v2)
+    ");
+    Ok(())
 }
 
 /// Backtrack past a version with no compatible wheels, and distinguish null from non-variant

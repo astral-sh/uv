@@ -773,6 +773,38 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         if let Some(label) = wheel.filename.variant() {
             metadata.validate_wheel(label)?;
         }
+        if let BuiltDist::DirectUrl(dist) = dist
+            && dist.url.fragment().is_some()
+        {
+            // uv.lock stores hashes separately from URLs. Keep a fragmentless pointer so
+            // offline exports can find this wheel even when the hash spelling changes.
+            let cache = self.build_context.cache();
+            let source = cache.entry(
+                CacheBucket::Wheels,
+                WheelCache::Url(&dist.url).wheel_dir(wheel.filename.name.as_ref()),
+                format!("{}.http", wheel.filename.cache_key()),
+            );
+            let mut url = dist.url.to_url();
+            url.set_fragment(None);
+            let target = cache.entry(
+                CacheBucket::Wheels,
+                WheelCache::Url(&url).wheel_dir(wheel.filename.name.as_ref()),
+                format!("{}.variant.http", wheel.filename.cache_key()),
+            );
+            match fs_err::tokio::read(source.path()).await {
+                Ok(contents) => {
+                    fs_err::tokio::create_dir_all(target.dir())
+                        .await
+                        .map_err(Error::CacheWrite)?;
+                    write_atomic(target.path(), contents)
+                        .await
+                        .map_err(Error::CacheWrite)?;
+                }
+                // Responses with `Cache-Control: no-store` have no cache pointer.
+                Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+                Err(err) => return Err(Error::CacheRead(err)),
+            }
+        }
         Ok(metadata)
     }
 

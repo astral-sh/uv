@@ -308,15 +308,6 @@ pub struct DefaultPriorities {
     pub namespace: Vec<VariantNamespace>,
 }
 
-/// A `namespace :: feature :: property` entry.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub struct VariantPropertyType {
-    pub namespace: VariantNamespace,
-    pub feature: VariantFeature,
-    pub value: VariantValue,
-}
-
 /// Provider information
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]

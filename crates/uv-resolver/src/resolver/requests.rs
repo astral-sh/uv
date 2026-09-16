@@ -2,7 +2,9 @@ use std::sync::Arc;
 
 use tokio::sync::mpsc::Sender;
 
-use uv_distribution_types::{DistributionId, IndexMetadata, IndexUrl};
+use uv_distribution_types::{
+    DistributionId, GlobalVersionId, IndexMetadata, IndexUrl, RegistryVariantsJson,
+};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 
@@ -52,6 +54,19 @@ impl MetadataRequests {
     ) -> Result<(), ResolveError> {
         if self.index.distributions().register(id) {
             self.sender.blocking_send(request()?)?;
+        }
+        Ok(())
+    }
+
+    /// Request variant properties once for a package version from the selected index.
+    pub(crate) fn request_variants(
+        &self,
+        id: &GlobalVersionId,
+        variants_json: &RegistryVariantsJson,
+    ) -> Result<(), ResolveError> {
+        if self.index.variant_priorities().register(id.clone()) {
+            self.sender
+                .blocking_send(Request::Variants(id.clone(), variants_json.clone()))?;
         }
         Ok(())
     }

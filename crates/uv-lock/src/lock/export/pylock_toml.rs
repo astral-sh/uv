@@ -152,6 +152,10 @@ pub enum PylockTomlErrorKind {
         "Cannot export variant-dependent package markers for `{0}` to pylock.toml; PEP 825 permits variant markers only in dependency specifiers"
     )]
     VariantPackageMarker(PackageName),
+    #[error(
+        "Cannot export variant-dependent dependencies for `{0}` to pylock.toml; the export cannot retain their selected wheel context"
+    )]
+    VariantDependencies(PackageName),
     #[error("Package `{0}` uses a Git archive, which pylock.toml export does not support")]
     GitArchiveUnsupported(PackageName),
     #[error("Package `{0}` does not include a compatible wheel for the current platform")]
@@ -600,6 +604,22 @@ impl<'lock> PylockToml {
             };
             if omit.contains(dist.name()) {
                 continue;
+            }
+
+            // Concrete resolution has already evaluated these markers. Another target can
+            // select a different wheel or supported property subset, so its dependency set
+            // cannot be represented by this export's flat package list.
+            if tags.is_some()
+                && node.metadata.as_ref().is_some_and(|metadata| {
+                    metadata
+                        .requires_dist
+                        .iter()
+                        .any(|requirement| requirement.marker.has_variant_expression())
+                })
+            {
+                return Err(PylockTomlErrorKind::VariantDependencies(
+                    dist.name().clone(),
+                ));
             }
 
             // "The version MUST NOT be included when it cannot be guaranteed to be consistent with the code used (i.e. when a source tree is used)."
@@ -2178,23 +2198,53 @@ impl PylockTomlArchive {
         } else {
             // Resolution already cached the complete wheel when validating direct variants.
             // Reuse its metadata, including when exporting later without network access.
-            let entry = cache.entry(
+            let hashes = HashDigests::from(self.hashes.clone());
+            let mut cache_urls = vec![cache_url.unwrap_or(&url).clone()];
+            if cache_url.is_none() {
+                // uv.lock stores URL hashes separately, but the wheel may have been cached
+                // under the original URL with its hash fragment.
+                for hash in hashes.iter() {
+                    let mut cache_url = url.clone();
+                    cache_url.set_fragment(Some(&format!(
+                        "{}={}",
+                        hash.algorithm(),
+                        hash.digest()
+                    )));
+                    cache_urls.push(cache_url);
+                }
+            }
+            let mut entries = cache_urls
+                .iter()
+                .map(|cache_url| {
+                    cache.entry(
+                        CacheBucket::Wheels,
+                        WheelCache::Url(cache_url).wheel_dir(filename.name.as_ref()),
+                        format!("{}.http", filename.cache_key()),
+                    )
+                })
+                .collect::<Vec<_>>();
+            // Variant validation also retains a fragmentless pointer for frozen exports.
+            entries.push(cache.entry(
                 CacheBucket::Wheels,
-                WheelCache::Url(cache_url.unwrap_or(&url)).wheel_dir(filename.name.as_ref()),
-                format!("{}.http", filename.cache_key()),
-            );
-            let use_cache = match client.connectivity() {
-                Connectivity::Offline => true,
-                Connectivity::Online => cache
-                    .freshness(&entry, Some(&filename.name), None)?
-                    .is_fresh(),
-            };
-            if use_cache
-                && let Some(pointer) = HttpArchivePointer::read_from(&entry)
+                WheelCache::Url(&url).wheel_dir(filename.name.as_ref()),
+                format!("{}.variant.http", filename.cache_key()),
+            ));
+            for entry in entries {
+                let use_cache = match client.connectivity() {
+                    Connectivity::Offline => true,
+                    Connectivity::Online => cache
+                        .freshness(&entry, Some(&filename.name), None)?
+                        .is_fresh(),
+                };
+                if !use_cache {
+                    continue;
+                }
+                let Some(pointer) = HttpArchivePointer::read_from(&entry)
                     .map_err(PylockTomlErrorKind::WheelVariantCache)?
-            {
+                else {
+                    continue;
+                };
                 let archive = pointer.into_archive();
-                let hashes = HashDigests::from(self.hashes.clone());
                 let policy = if hashes.is_empty() {
                     ArchiveHashPolicy::None
                 } else {

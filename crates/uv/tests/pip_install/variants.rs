@@ -157,14 +157,14 @@ fn wheel_variants_preview_direct() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install().arg(filename), @r###"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to read `example @ file://[TEMP_DIR]/example-1.0.0-py3-none-any-null.whl`
-      ╰─▶ Wheel variants require `--preview-features wheel-variants`
+    error: Failed to read `example @ file://[TEMP_DIR]/example-1.0.0-py3-none-any-null.whl`
+      cause: Wheel variants require `--preview-features wheel-variants`
     "###);
     uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt"), @r###"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to read `example @ file://[TEMP_DIR]/example-1.0.0-py3-none-any-null.whl`
-      ╰─▶ Wheel variants require `--preview-features wheel-variants`
+    error: Failed to read `example @ file://[TEMP_DIR]/example-1.0.0-py3-none-any-null.whl`
+      cause: Wheel variants require `--preview-features wheel-variants`
     "###);
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--preview-features").arg("wheel-variants").arg(filename), @r###"
@@ -178,8 +178,8 @@ fn wheel_variants_preview_direct() -> Result<()> {
         .arg("requirements.txt").arg("--reinstall"), @r###"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to read `example @ file://[TEMP_DIR]/example-1.0.0-py3-none-any-null.whl`
-      ╰─▶ Wheel variants require `--preview-features wheel-variants`
+    error: Failed to read `example @ file://[TEMP_DIR]/example-1.0.0-py3-none-any-null.whl`
+      cause: Wheel variants require `--preview-features wheel-variants`
     "###);
     // A direct wheel must satisfy the target properties and retain its own marker context.
     let properties = json!({"gpu": {"cuda": ["12.0", "13.0", "14.0"]}});
@@ -220,8 +220,8 @@ fn wheel_variants_preview_direct() -> Result<()> {
         .env("UV_VARIANT_LOCK", context.temp_dir.child("incompatible.toml").path()), @r###"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to read `example @ file://[TEMP_DIR]/example-1.0.0-py3-none-any-fast.whl`
-      ╰─▶ Package example has no matching wheel for the current platform, but has the following variants: fast
+    error: Failed to read `example @ file://[TEMP_DIR]/example-1.0.0-py3-none-any-fast.whl`
+      cause: Package example has no matching wheel for the current platform, but has the following variants: fast
     "###);
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--preview-features").arg("wheel-variants")
@@ -316,6 +316,63 @@ fn pep825_metadata_only_version() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + example==1.0.0
+    "###);
+    Ok(())
+}
+
+/// Variant metadata cannot provide platform coverage when it precedes the wheels in a flat index.
+#[test]
+fn pep825_metadata_platform_coverage() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    write_metadata(&context, json!({"null": {}}))?;
+    let metadata = context.read("example-1.0.0-variants.json");
+    // Equivalent release versions with different trailing zeros put the sidecar before the wheel
+    // in the HTML parser's filename ordering.
+    let (_, wheel) = generate_wheel_with_files(
+        &"example".parse()?,
+        &"1.0.0.0".parse()?,
+        &[],
+        &BTreeMap::new(),
+        None,
+        "py3-none-manylinux_2_17_x86_64",
+        &[("example-1.0.0.0.dist-info/variant.json", &metadata)],
+    );
+    context
+        .temp_dir
+        .child("example-1.0.0.0-py3-none-manylinux_2_17_x86_64-null.whl")
+        .write_binary(&wheel)?;
+    context.temp_dir.child("index.html").write_str(indoc! {r#"
+        <a href="example-1.0.0-variants.json">example-1.0.0-variants.json</a>
+        <a href="example-1.0.0.0-py3-none-manylinux_2_17_x86_64-null.whl">example-1.0.0.0-py3-none-manylinux_2_17_x86_64-null.whl</a>
+    "#})?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["example"]
+
+        [tool.uv]
+        required-environments = ["sys_platform == 'win32'"]
+
+        [[tool.uv.index]]
+        name = "local"
+        url = "./index.html"
+        format = "flat"
+        default = true
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features").arg("wheel-variants"), @r###"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies for split (markers: sys_platform == 'win32')
+      cause: Because example==1.0.0 has no Windows-compatible wheels and only example==1.0.0 is available, we can conclude that all versions of example cannot be used.
+             And because your project depends on example, we can conclude that your project's requirements are unsatisfiable.
+
+    hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
     "###);
     Ok(())
 }
@@ -529,7 +586,7 @@ fn pep825_project_sync() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse `uv.lock`
-      Caused by: This lockfile uses wheel variants; pass `--preview-features wheel-variants` to use it
+      cause: This lockfile uses wheel variants; pass `--preview-features wheel-variants` to use it
     "###);
     // A changed host can change the dependency set without changing the selected label.
     context.temp_dir.child("target.toml").write_str(indoc! {r#"

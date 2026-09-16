@@ -4594,7 +4594,6 @@ version = "1.0.151"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c841b55ecdae098c80dcae9cf767f6f8a0c2cdb3416bbef72181df4d0fe73f14"
 dependencies = [
- "indexmap",
  "itoa",
  "memchr",
  "serde",
@@ -6833,7 +6832,6 @@ dependencies = [
  "either",
  "fs-err",
  "futures",
- "hashbrown 0.17.1",
  "insta",
  "itertools 0.14.0",
  "jiff",
@@ -7323,6 +7321,7 @@ dependencies = [
  "uv-pep440",
  "uv-pep508",
  "uv-platform-tags",
+ "uv-preview",
  "uv-pypi-types",
  "uv-python",
  "uv-redacted",
