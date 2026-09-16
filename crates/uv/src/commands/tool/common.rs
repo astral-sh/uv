@@ -353,10 +353,19 @@ impl ToolLock {
     }
 
     /// Read the lock for a tool, if one has been generated.
-    pub(crate) fn read(directory: &Path) -> Option<Self> {
+    ///
+    /// Tool installation cannot replay project build contracts. Reject one even when tool locks
+    /// are disabled, before a no-op or replacement can discard the required build environment.
+    pub(crate) fn read(directory: &Path) -> anyhow::Result<Option<Self>> {
         let path = directory.join("uv.lock");
-        match fs_err::read_to_string(&path) {
+        Ok(match fs_err::read_to_string(&path) {
             Ok(contents) => match Lock::from_toml(&contents) {
+                Ok(lock) if lock.build_lock().is_some() => {
+                    bail!(
+                        "The tool lockfile at `{}` requires build dependency locking, which tool installation does not support",
+                        path.user_display()
+                    );
+                }
                 Ok(lock) => Some(Self {
                     root: directory.to_path_buf(),
                     lock,
@@ -377,7 +386,7 @@ impl ToolLock {
                 );
                 None
             }
-        }
+        })
     }
 
     /// Write or remove the lock for a tool.

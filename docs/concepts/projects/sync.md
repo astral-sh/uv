@@ -114,9 +114,9 @@ The initial preview has deliberately narrow coverage:
   source builds are not supported.
 - Default build settings. Config settings, extra build dependencies or variables, and disabling
   package sources are not supported. `uv build --wheel` requires the recorded build constraints.
-- Project and workspace locks. Script-lock creation, ephemeral `uv run --with` requirements, sdist
-  creation, wheel builds from an sdist, file listing, and exporting the build contract are not yet
-  supported.
+- Project and workspace locks. Tool installation, script-lock creation, ephemeral `uv run --with`
+  requirements, sdist creation, wheel builds from an sdist, file listing, and exporting the build
+  contract are not yet supported.
 
 The lock records dependency environments, not a hermetic build machine. A backend can still observe
 external tools, environment variables, and mutable local source files. uv checks a local source's

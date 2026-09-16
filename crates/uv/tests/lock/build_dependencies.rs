@@ -665,6 +665,43 @@ fn build_dependencies_reject_script_without_mutation() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn build_dependencies_reject_tool_installation() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_tool_dirs();
+    let files = workspace(&context)?;
+    capture(&context, &files);
+    let encoded = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    let tool_dir = context.temp_dir.child("tools/helper");
+    tool_dir.create_dir_all()?;
+    let tool_lock = tool_dir.child("uv.lock");
+    tool_lock.write_str(&encoded)?;
+
+    for preview in [false, true] {
+        let mut install = context.tool_install();
+        install
+            .args(["helper==1.0.0", "--offline", "--no-index", "--find-links"])
+            .arg(&files)
+            .arg("--force");
+        if preview {
+            install.args(["--preview-features", "tool-install-locks"]);
+        }
+        install.assert().failure().stderr(predicates::str::contains(
+            "requires build dependency locking, which tool installation does not support",
+        ));
+
+        let mut upgrade = context.tool_upgrade();
+        upgrade.arg("helper");
+        if preview {
+            upgrade.args(["--preview-features", "tool-install-locks"]);
+        }
+        upgrade.assert().failure().stderr(predicates::str::contains(
+            "requires build dependency locking, which tool installation does not support",
+        ));
+        assert_eq!(fs_err::read_to_string(&tool_lock)?, encoded);
+    }
+    Ok(())
+}
+
 #[cfg(feature = "test-git")]
 #[test]
 fn build_dependencies_path_archive_and_git_source() -> Result<()> {
