@@ -80,6 +80,9 @@ uv creates a `uv.lock` file next to the `pyproject.toml`.
 installed across all possible Python markers such as operating system, architecture, and Python
 version.
 
+An optional [build-dependency lock](./sync.md#locking-build-dependencies) adds required build
+environments for one observed executor without changing the universal runtime graph.
+
 Unlike the `pyproject.toml`, which is used to specify the broad requirements of your project, the
 lockfile contains the exact resolved versions that are installed in the project environment. This
 file should be checked into version control, allowing for consistent and reproducible installations
