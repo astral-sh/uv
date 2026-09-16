@@ -619,7 +619,12 @@ impl BuildContext for BuildDispatch<'_> {
         // Only perform the direct build if the backend is uv in a compatible version.
         let source_tree_str = source_tree.display().to_string();
         let identifier = version_id.unwrap_or_else(|| &source_tree_str);
-        if let Err(reason) = check_direct_build(&source_tree, uv_version::version()) {
+        if let Err(reason) = check_direct_build(
+            &source_tree,
+            uv_version::version(),
+            &self.interpreter.to_resolver_marker_environment(),
+            self.constraints.requirements().cloned().map(Into::into),
+        ) {
             trace!("Requirements for direct build not matched because {reason}");
             return Ok(None);
         }
