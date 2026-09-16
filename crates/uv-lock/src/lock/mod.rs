@@ -2967,7 +2967,7 @@ impl Lock {
         self.options.fork_strategy
     }
 
-    /// Return the supported libc implementations and their minimum versions.
+    /// Return the selected libc implementation and minimum version.
     pub fn minimum_libc_version(&self) -> Option<MinimumLibcVersion> {
         self.options.minimum_libc_version
     }
@@ -5947,7 +5947,7 @@ struct ResolverOptions {
     prerelease: Prerelease,
     /// The [`ForkStrategy`] used to generate this lock.
     fork_strategy: ForkStrategy,
-    /// The supported libc implementations and their minimum versions.
+    /// The selected libc implementation and minimum version.
     minimum_libc_version: Option<MinimumLibcVersion>,
     /// The [`ExcludeNewer`] setting used to generate this lock.
     exclude_newer: ExcludeNewer,
@@ -5966,7 +5966,7 @@ struct ResolverOptionsWire {
     /// The [`ForkStrategy`] used to generate this lock.
     #[serde(default)]
     fork_strategy: ForkStrategy,
-    /// The supported libc implementations and their minimum versions.
+    /// The selected libc implementation and minimum version.
     minimum_libc_version: Option<MinimumLibcVersion>,
     /// The [`ExcludeNewer`] setting used to generate this lock.
     #[serde(flatten)]

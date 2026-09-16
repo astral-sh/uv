@@ -93,7 +93,7 @@ impl OptionsBuilder {
         self
     }
 
-    /// Sets the supported libc implementations and their minimum versions.
+    /// Sets the libc implementation and minimum version to support.
     #[must_use]
     pub fn minimum_libc_version(
         mut self,

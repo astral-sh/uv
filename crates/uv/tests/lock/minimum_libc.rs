@@ -194,9 +194,9 @@ fn minimum_libc_filters_locked_wheels() -> Result<()> {
     Ok(())
 }
 
-/// Either configured libc can provide coverage, and selecting musl alone excludes GNU wheels.
+/// Switching the selected libc family changes which wheels remain eligible.
 #[test]
-fn minimum_libc_both_families_and_musl_only() -> Result<()> {
+fn minimum_libc_switch_families() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let filters: Vec<_> = context
         .filters()
@@ -228,7 +228,7 @@ fn minimum_libc_both_families_and_musl_only() -> Result<()> {
         find-links = ["links"]
         environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
         required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
-        minimum-libc-version = { glibc = "2.31", musl = "1.2" }
+        minimum-libc-version = { glibc = "2.31" }
     "#})?;
     uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
     exit_code: 0 (success)
@@ -253,7 +253,7 @@ fn minimum_libc_both_families_and_musl_only() -> Result<()> {
         ]
 
         [options]
-        minimum-libc-version = { glibc = "2.31", musl = "1.2" }
+        minimum-libc-version = { glibc = "2.31" }
         exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
@@ -372,15 +372,15 @@ fn minimum_libc_unhashed_index_hashes() -> Result<()> {
     for tag in [
         "cp312-cp312-manylinux_2_17_x86_64",
         "cp312-cp312-manylinux_2_34_x86_64",
-        "cp312-cp312-musllinux_1_2_x86_64",
+        "cp312-cp312-manylinux_2_28_x86_64",
     ] {
         let wheel = wheel(&context, "demo", "1.0.0", tag)?;
         hashes.push(hex::encode(Sha256::digest(fs_err::read(wheel)?)));
     }
     let context = context.with_filters([
-        (hashes[0].clone(), "[GLIBC_HASH]".to_string()),
+        (hashes[0].clone(), "[GLIBC_2_17_HASH]".to_string()),
         (hashes[1].clone(), "[EXCLUDED_HASH]".to_string()),
-        (hashes[2].clone(), "[MUSL_HASH]".to_string()),
+        (hashes[2].clone(), "[GLIBC_2_28_HASH]".to_string()),
     ]);
     context
         .temp_dir
@@ -395,7 +395,7 @@ fn minimum_libc_unhashed_index_hashes() -> Result<()> {
         [tool.uv]
         no-index = true
         find-links = ["links"]
-        minimum-libc-version = { glibc = "2.31", musl = "1.2" }
+        minimum-libc-version = { glibc = "2.31" }
     "#})?;
     context
         .temp_dir
@@ -409,19 +409,19 @@ fn minimum_libc_unhashed_index_hashes() -> Result<()> {
     exit_code: 0 (success)
     ----- stdout -----
     demo==1.0.0 \
-        --hash=sha256:[MUSL_HASH] \
-        --hash=sha256:[GLIBC_HASH]
+        --hash=sha256:[GLIBC_2_28_HASH] \
+        --hash=sha256:[GLIBC_2_17_HASH]
 
     ----- stderr -----
     Resolved 1 package in [TIME]
     ");
-    // Reuse only valid hashes on the second compile without losing either libc family.
+    // Reuse only valid hashes on the second compile without losing either allowed wheel.
     uv_snapshot!(context.filters(), context.pip_compile().args(["pyproject.toml", "--universal", "--generate-hashes", "--offline", "--no-header", "--no-annotate", "--output-file", "requirements.txt", "--preview-features", "minimum-libc-version"]), @r"
     exit_code: 0 (success)
     ----- stdout -----
     demo==1.0.0 \
-        --hash=sha256:[MUSL_HASH] \
-        --hash=sha256:[GLIBC_HASH]
+        --hash=sha256:[GLIBC_2_28_HASH] \
+        --hash=sha256:[GLIBC_2_17_HASH]
 
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -796,7 +796,7 @@ fn minimum_libc_allows_sdist_fallback() -> Result<()> {
         no-index = true
         find-links = ["links"]
         required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
-        minimum-libc-version = { glibc = "2.31", musl = "1.2" }
+        minimum-libc-version = { glibc = "2.31" }
     "#})?;
 
     uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
@@ -816,7 +816,7 @@ fn minimum_libc_allows_sdist_fallback() -> Result<()> {
         ]
 
         [options]
-        minimum-libc-version = { glibc = "2.31", musl = "1.2" }
+        minimum-libc-version = { glibc = "2.31" }
         exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
@@ -939,7 +939,7 @@ fn minimum_libc_direct_url() -> Result<()> {
         [tool.uv]
         no-index = true
         required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
-        minimum-libc-version = {{ glibc = "2.34", musl = "1.2" }}
+        minimum-libc-version = {{ glibc = "2.34" }}
     "#})?;
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 0 (success)
@@ -989,20 +989,22 @@ fn minimum_libc_architectures_and_markers() -> Result<()> {
             "sys_platform == 'linux' and platform_machine == 'x86_64'",
             "sys_platform == 'linux' and platform_machine == 'aarch64'",
         ]
-        minimum-libc-version = { glibc = "2.31", musl = "1.2" }
+        minimum-libc-version = { glibc = "2.31" }
     "#})?;
 
     uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
     warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
-    Resolved 3 packages in [TIME]
+    Resolved 4 packages in [TIME]
     ");
-    // GNU/x86_64 and musl/aarch64 jointly cover both required architectures.
+    // The mixed-tag wheel remains eligible for x86_64, but its too-new ARM tag cannot
+    // provide coverage. ARM needs the older release.
     uv_snapshot!(context.filters(), context.export().args(["--frozen", "--no-hashes", "--no-header", "--no-annotate"]), @"
     exit_code: 0 (success)
     ----- stdout -----
-    demo==2.0.0 ; sys_platform == 'darwin' or sys_platform == 'linux'
+    demo==1.0.0 ; platform_machine == 'aarch64' and sys_platform == 'linux'
+    demo==2.0.0 ; (platform_machine != 'aarch64' and sys_platform == 'linux') or sys_platform == 'darwin'
     windows-only==1.0.0 ; sys_platform == 'win32'
     ");
     let lock = context.read("uv.lock");
@@ -1012,7 +1014,8 @@ fn minimum_libc_architectures_and_markers() -> Result<()> {
         revision = 3
         requires-python = ">=3.12"
         resolution-markers = [
-            "sys_platform == 'linux'",
+            "platform_machine != 'aarch64' and sys_platform == 'linux'",
+            "platform_machine == 'aarch64' and sys_platform == 'linux'",
             "sys_platform == 'darwin'",
             "sys_platform != 'darwin' and sys_platform != 'linux'",
         ]
@@ -1022,15 +1025,29 @@ fn minimum_libc_architectures_and_markers() -> Result<()> {
         ]
 
         [options]
-        minimum-libc-version = { glibc = "2.31", musl = "1.2" }
+        minimum-libc-version = { glibc = "2.31" }
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "demo"
+        version = "1.0.0"
+        source = { registry = "links" }
+        resolution-markers = [
+            "platform_machine == 'aarch64' and sys_platform == 'linux'",
+        ]
+        wheels = [
+            { path = "demo-1.0.0-cp312-cp312-manylinux_2_31_aarch64.whl" },
+        ]
 
         [[package]]
         name = "demo"
         version = "2.0.0"
         source = { registry = "links" }
+        resolution-markers = [
+            "platform_machine != 'aarch64' and sys_platform == 'linux'",
+            "sys_platform == 'darwin'",
+        ]
         wheels = [
-            { path = "demo-2.0.0-cp312-cp312-musllinux_1_2_aarch64.whl" },
             { path = "demo-2.0.0-cp312-cp312-macosx_11_0_arm64.whl" },
             { path = "demo-2.0.0-cp312-cp312-manylinux_2_17_x86_64.manylinux_2_34_aarch64.whl" },
         ]
@@ -1040,7 +1057,8 @@ fn minimum_libc_architectures_and_markers() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "demo", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+            { name = "demo", version = "1.0.0", source = { registry = "links" }, marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
+            { name = "demo", version = "2.0.0", source = { registry = "links" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or sys_platform == 'darwin'" },
             { name = "windows-only", marker = "sys_platform == 'win32'" },
         ]
 
@@ -1061,42 +1079,6 @@ fn minimum_libc_architectures_and_markers() -> Result<()> {
         "#);
     });
 
-    // Excluding musl removes ARM coverage from the newer version. The mixed-tag wheel
-    // remains eligible for x86_64, but its too-new ARM tag cannot provide coverage.
-    pyproject_toml.write_str(indoc! {r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = [
-            "demo; sys_platform == 'linux'",
-            "demo>=2; sys_platform == 'darwin'",
-            "windows-only; sys_platform == 'win32'",
-        ]
-
-        [tool.uv]
-        no-index = true
-        find-links = ["links"]
-        required-environments = [
-            "sys_platform == 'linux' and platform_machine == 'x86_64'",
-            "sys_platform == 'linux' and platform_machine == 'aarch64'",
-        ]
-        minimum-libc-version = { glibc = "2.31" }
-    "#})?;
-    uv_snapshot!(context.filters(), context.lock().args(["--offline", "--upgrade"]), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
-    Resolved 4 packages in [TIME]
-    Updated demo v2.0.0 -> v1.0.0, v2.0.0
-    ");
-    uv_snapshot!(context.filters(), context.export().args(["--frozen", "--no-hashes", "--no-header", "--no-annotate"]), @"
-    exit_code: 0 (success)
-    ----- stdout -----
-    demo==1.0.0 ; platform_machine == 'aarch64' and sys_platform == 'linux'
-    demo==2.0.0 ; (platform_machine != 'aarch64' and sys_platform == 'linux') or sys_platform == 'darwin'
-    windows-only==1.0.0 ; sys_platform == 'win32'
-    ");
     Ok(())
 }
 
@@ -1153,14 +1135,14 @@ fn minimum_libc_invalid_configuration() -> Result<()> {
         |
       8 | minimum-libc-version = {}
         |                        ^^
-      at least one of `glibc` or `musl` must be specified
+      wanted exactly 1 element, found 0 elements
 
     error: Failed to parse: `pyproject.toml`
       cause: TOML parse error at line 8, column 24
                |
              8 | minimum-libc-version = {}
                |                        ^^
-             at least one of `glibc` or `musl` must be specified
+             wanted exactly 1 element, found 0 elements
     ");
 
     pyproject_toml.write_str(indoc! {r#"
@@ -1171,24 +1153,52 @@ fn minimum_libc_invalid_configuration() -> Result<()> {
         dependencies = []
 
         [tool.uv]
-        minimum-libc-version = { glibc = "2.31", unknown = "1.2" }
+        minimum-libc-version = { glibc = "2.31", musl = "1.2" }
     "#})?;
     uv_snapshot!(context.filters(), context.lock().arg("--offline"), @r#"
     exit_code: 2 (failure)
     ----- stderr -----
     warning: Failed to parse `pyproject.toml` during settings discovery:
-      TOML parse error at line 8, column 42
+      TOML parse error at line 8, column 24
         |
-      8 | minimum-libc-version = { glibc = "2.31", unknown = "1.2" }
-        |                                          ^^^^^^^
-      unknown field `unknown`, expected `glibc` or `musl`
+      8 | minimum-libc-version = { glibc = "2.31", musl = "1.2" }
+        |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      wanted exactly 1 element, more than 1 element
 
     error: Failed to parse: `pyproject.toml`
-      cause: TOML parse error at line 8, column 42
+      cause: TOML parse error at line 8, column 24
                |
-             8 | minimum-libc-version = { glibc = "2.31", unknown = "1.2" }
-               |                                          ^^^^^^^
-             unknown field `unknown`, expected `glibc` or `musl`
+             8 | minimum-libc-version = { glibc = "2.31", musl = "1.2" }
+               |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+             wanted exactly 1 element, more than 1 element
+    "#);
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        minimum-libc-version = { unknown = "1.2" }
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: Failed to parse `pyproject.toml` during settings discovery:
+      TOML parse error at line 8, column 26
+        |
+      8 | minimum-libc-version = { unknown = "1.2" }
+        |                          ^^^^^^^
+      unknown variant `unknown`, expected `glibc` or `musl`
+
+    error: Failed to parse: `pyproject.toml`
+      cause: TOML parse error at line 8, column 26
+               |
+             8 | minimum-libc-version = { unknown = "1.2" }
+               |                          ^^^^^^^
+             unknown variant `unknown`, expected `glibc` or `musl`
     "#);
 
     // Like required-environments, the minimum libc version is a project-only setting.

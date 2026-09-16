@@ -744,7 +744,7 @@ impl Workspace {
             .and_then(|uv| uv.required_environments.as_ref())
     }
 
-    /// Returns the workspace's supported libc implementations and their minimum versions.
+    /// Returns the workspace's selected libc implementation and minimum version.
     pub fn minimum_libc_version(&self) -> Option<MinimumLibcVersion> {
         self.pyproject_toml
             .tool

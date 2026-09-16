@@ -332,7 +332,7 @@
       "type": ["boolean", "null"]
     },
     "minimum-libc-version": {
-      "description": "The libc implementations and minimum versions to support when resolving for Linux.\n\nDuring universal resolution, uv will exclude wheels for omitted libc implementations and\nwheels that require a newer version. For example, `{ glibc = \"2.31\" }` allows\n`manylinux_2_17` wheels, but not `manylinux_2_34` or `musllinux` wheels. If unset, both\nglibc and musl wheels remain eligible.\n\nUse `required-environments` to specify the Linux architectures to support. Listing both\nlibc implementations allows wheels for either; it does not require wheels for both.\nPackages with a usable source distribution can still be selected.\n\nThis setting is respected by `uv lock` and `uv pip compile --universal`.\n\nThis option is in preview and may change in any future release. Use\n`--preview-features minimum-libc-version` or configure\n`preview-features = [\"minimum-libc-version\"]` to disable the warning.",
+      "description": "The libc implementation and minimum version to support when resolving for Linux.\n\nDuring universal resolution, uv will exclude wheels for the other libc implementation and\nwheels that require a newer version. For example, `{ glibc = \"2.31\" }` allows\n`manylinux_2_17` wheels, but not `manylinux_2_34` or `musllinux` wheels. If unset, both\nglibc and musl wheels remain eligible.\n\nSpecify either `glibc` or `musl`, but not both. Use `required-environments` to specify\nthe Linux architectures to support.\nPackages with a usable source distribution can still be selected.\n\nThis setting is respected by `uv lock` and `uv pip compile --universal`.\n\nThis option is in preview and may change in any future release. Use\n`--preview-features minimum-libc-version` or configure\n`preview-features = [\"minimum-libc-version\"]` to disable the warning.",
       "anyOf": [
         {
           "$ref": "#/definitions/MinimumLibcVersion"
@@ -1251,18 +1251,29 @@
       "type": "string"
     },
     "MinimumLibcVersion": {
-      "description": "The selected Linux libc families and their oldest supported releases.\n\nAt least one family must be specified. An omitted family is excluded, not unconstrained.",
-      "type": "object",
-      "properties": {
-        "glibc": {
-          "type": ["string", "null"]
+      "description": "The selected Linux libc implementation and its oldest supported release.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "glibc": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["glibc"]
         },
-        "musl": {
-          "type": ["string", "null"]
+        {
+          "type": "object",
+          "properties": {
+            "musl": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["musl"]
         }
-      },
-      "additionalProperties": false,
-      "minProperties": 1
+      ]
     },
     "ModuleName": {
       "description": "Whether to include a single module or multiple modules.",
