@@ -5,7 +5,7 @@
 # no-build = true
 # exclude-newer = "P7D"
 # ///
-"""Reject external default-feature requests in the uv workspace."""
+"""Supplement cargo-deny bans with workspace dependency policy checks."""
 
 from __future__ import annotations
 
@@ -82,6 +82,23 @@ def inspect(
     return sorted(errors)
 
 
+def inspect_build_scripts(
+    metadata: dict[str, Any], allow_build_scripts: list[str]
+) -> list[str]:
+    member_ids = set(metadata["workspace_members"])
+    build_script_crates = {
+        package["name"]
+        for package in metadata["packages"]
+        if package["id"] not in member_ids
+        and any("custom-build" in target["kind"] for target in package["targets"])
+    }
+    return [
+        f".cargo/deny.toml: bans.build.allow-build-scripts entry {name!r} "
+        "does not match any dependency with a build script"
+        for name in sorted(set(allow_build_scripts) - build_script_crates)
+    ]
+
+
 def main() -> int:
     try:
         metadata = json.loads(
@@ -91,7 +108,7 @@ def main() -> int:
                     "metadata",
                     "--locked",
                     "--offline",
-                    "--no-deps",
+                    "--all-features",
                     "--format-version",
                     "1",
                 ],
@@ -102,22 +119,38 @@ def main() -> int:
     except subprocess.CalledProcessError as error:
         return error.returncode
 
-    with (Path(metadata["workspace_root"]) / "Cargo.toml").open("rb") as manifest:
+    root = Path(metadata["workspace_root"])
+    with (root / "Cargo.toml").open("rb") as manifest:
         workspace_dependencies = (
             tomllib.load(manifest).get("workspace", {}).get("dependencies", {})
         )
+    with (root / ".cargo" / "deny.toml").open("rb") as config:
+        allow_build_scripts = tomllib.load(config)["bans"]["build"][
+            "allow-build-scripts"
+        ]
 
-    errors = inspect(metadata, workspace_dependencies)
-    for error in errors:
+    feature_errors = inspect(metadata, workspace_dependencies)
+    for error in feature_errors:
         print(f"error: {error}", file=sys.stderr)
-    if errors:
+    if feature_errors:
         print(
             "Set default-features = false and request named features explicitly.",
             file=sys.stderr,
         )
+
+    build_script_errors = inspect_build_scripts(metadata, allow_build_scripts)
+    for error in build_script_errors:
+        print(f"error: {error}", file=sys.stderr)
+    if build_script_errors:
+        print(
+            "Remove stale entries from bans.build.allow-build-scripts.", file=sys.stderr
+        )
+
+    if feature_errors or build_script_errors:
         return 1
 
     print("Workspace external dependencies request no default features.")
+    print("The cargo-deny build-script allowlist has no stale entries.")
     return 0
 
 

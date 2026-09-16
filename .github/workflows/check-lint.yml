@@ -174,8 +174,10 @@ jobs:
         run: uv run --only-dev cargo deny --all-features check licenses
       - name: "Check sources"
         run: uv run --only-dev cargo deny --all-features check sources
-      - name: "Check workspace dependency features"
-        run: uv run --no-project scripts/check-cargo-default-features.py
+      - name: "Test workspace dependency checks"
+        run: uv run --no-project scripts/test-check-cargo-bans.py
+      - name: "Check workspace dependency features and build-script allowlist"
+        run: uv run --no-project scripts/check-cargo-bans.py
       - name: "Check bans"
         run: uv run --only-dev cargo deny --all-features check bans
       - name: "Check uv_build dependencies"
