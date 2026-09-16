@@ -26,7 +26,7 @@ pub struct SelfVersionInfo {
     version: String,
     /// Information about the git commit we may have been built from.
     ///
-    /// `None` if not built from a git repo or if retrieval failed.
+    /// `None` if Git metadata was disabled, unavailable, or retrieval failed.
     commit_info: Option<CommitInfo>,
     /// The target triple for which uv was built (e.g., `x86_64-unknown-linux-gnu`).
     target_triple: String,

@@ -140,10 +140,11 @@ cargo run -- pip install requests
 ```
 
 Development builds omit Git metadata from the version string so commits do not trigger
-recompilation. To include the commit hash and date, set `UV_BUILD_GIT_INFO=1` when building:
+recompilation. To include the commit hash and date, set `UV_INTERNAL__BUILD_GIT_INFO=1` when
+building:
 
 ```shell
-UV_BUILD_GIT_INFO=1 cargo run -- --version
+UV_INTERNAL__BUILD_GIT_INFO=1 cargo run -- --version
 ```
 
 Release builds, including profiles that inherit from `release`, include Git metadata by default.

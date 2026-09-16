@@ -14,7 +14,7 @@ env:
   CARGO_NET_RETRY: 10
   CARGO_TERM_COLOR: always
   RUSTUP_MAX_RETRIES: 10
-  UV_BUILD_GIT_INFO: 1
+  UV_INTERNAL__BUILD_GIT_INFO: 1
   UV_LOCKED: 1
 
 jobs:
@@ -433,7 +433,7 @@ jobs:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
       - name: "Cross build"
         env:
-          CROSS_BUILD_ENV_PASSTHROUGH: UV_BUILD_GIT_INFO
+          CROSS_BUILD_ENV_PASSTHROUGH: UV_INTERNAL__BUILD_GIT_INFO
         run: |
           # Install cross from `freebsd-firecracker`
           wget -q -O cross https://github.com/acj/freebsd-firecracker/releases/download/v0.0.10/cross

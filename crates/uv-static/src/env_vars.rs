@@ -642,12 +642,6 @@ impl EnvVars {
         format!("UV_INDEX_{name}_PASSWORD")
     }
 
-    /// Set to `1` to include Git metadata in development builds.
-    /// Release builds include Git metadata by default.
-    #[attr_hidden]
-    #[attr_added_in("0.12.16")]
-    pub const UV_BUILD_GIT_INFO: &'static str = "UV_BUILD_GIT_INFO";
-
     /// Used to set the uv commit hash at build time via `build.rs`.
     #[attr_hidden]
     #[attr_added_in("0.1.11")]
@@ -682,6 +676,12 @@ impl EnvVars {
     #[attr_hidden]
     #[attr_added_in("0.11.22")]
     pub const UV_INTERNAL__BUILD_DIR: &'static str = "UV_INTERNAL__BUILD_DIR";
+
+    /// Set to `1` to include Git metadata in development builds.
+    /// Release builds include Git metadata by default.
+    #[attr_hidden]
+    #[attr_added_in("0.12.16")]
+    pub const UV_INTERNAL__BUILD_GIT_INFO: &'static str = "UV_INTERNAL__BUILD_GIT_INFO";
 
     /// Used to force showing the derivation tree during resolver error reporting.
     #[attr_hidden]

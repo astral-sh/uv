@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use anyhow::{Ok, Result};
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
@@ -2151,20 +2153,20 @@ fn version_get_fallback_unmanaged_short() -> Result<()> {
     Ok(())
 }
 
-/// In tarball builds of uv, git version info is missing (distros do this)
+/// Whether this build should include Git metadata in its version output.
 fn git_version_info_expected() -> bool {
-    // This is setup to aggressively panic to make sure this is working at all
-    // If you're a packager of uv and this does indeed blow up for you, we will
-    // gladly change these expects into "just return false" or something.
-    let manifest_dir = std::env::var(uv_static::EnvVars::CARGO_MANIFEST_DIR)
-        .expect("CARGO_MANIFEST_DIR not defined");
-    let git_dir = std::path::Path::new(&manifest_dir)
+    if env!("PROFILE") != "release" && option_env!("UV_INTERNAL__BUILD_GIT_INFO") != Some("1") {
+        return false;
+    }
+
+    let manifest_dir =
+        std::env::var(EnvVars::CARGO_MANIFEST_DIR).expect("CARGO_MANIFEST_DIR not defined");
+    let workspace_root = Path::new(&manifest_dir)
         .parent()
         .expect("parent of manifest dir missing")
         .parent()
-        .expect("grandparent of manifest dir missing")
-        .join(".git");
-    git_dir.exists()
+        .expect("grandparent of manifest dir missing");
+    workspace_root.join(".git").exists() && !workspace_root.join(".jj").exists()
 }
 
 // Should error if this pyproject.toml isn't usable for whatever reason
