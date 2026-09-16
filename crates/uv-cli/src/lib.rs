@@ -4084,7 +4084,8 @@ pub struct LockArgs {
     /// Lock the isolated build dependencies needed by this project on the current interpreter.
     ///
     /// This preview feature upgrades the lockfile format. Older uv versions cannot read the
-    /// resulting lockfile. Build dependencies must be installable from wheels.
+    /// resulting lockfile. Source packages must have static runtime metadata, and build dependencies
+    /// must be installable from wheels.
     #[arg(long, conflicts_with_all = ["no_build_dependencies", "check_exists", "frozen"])]
     pub build_dependencies: bool,
 

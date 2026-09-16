@@ -167,7 +167,7 @@ impl BuildDispatch<'_> {
             &dispatch,
             self.concurrency.downloads_semaphore.clone(),
         )
-        .resolve_build_requirements(source, hashes)
+        .resolve_static_build_requirements(source, hashes)
         .await?;
         let mut captured = captured.lock().await;
         ensure!(

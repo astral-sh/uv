@@ -611,6 +611,60 @@ fn build_dependencies_reject_nested_source_without_publishing() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn build_dependencies_reject_dynamic_runtime_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let files = fixtures(context.temp_dir.path())?;
+    source(context.temp_dir.path(), "project", "1.0.0")?;
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    let contents = fs_err::read_to_string(&pyproject)?;
+    fs_err::write(
+        &pyproject,
+        contents.replace(
+            "dependencies = [\"runtime-only==1.0.0\"]",
+            "dynamic = [\"dependencies\"]",
+        ),
+    )?;
+    context
+        .lock()
+        .args(["--offline", "--no-index", "--find-links"])
+        .arg(&files)
+        .assert()
+        .success();
+    let lockfile = context.temp_dir.child("uv.lock");
+    let original = fs_err::read_to_string(&lockfile)?;
+    let output = capture_command(&context, &files).output()?;
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("requires static source metadata"),
+        "{stderr}"
+    );
+    assert_eq!(fs_err::read_to_string(lockfile)?, original);
+    Ok(())
+}
+
+#[test]
+fn build_dependencies_reject_script_without_mutation() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let script = context.temp_dir.child("example.py");
+    script.write_str("print('hello')\n")?;
+    context
+        .lock()
+        .args([
+            "--script",
+            "example.py",
+            "--build-dependencies",
+            "--preview-features",
+            "build-dependency-locking",
+        ])
+        .assert()
+        .failure();
+    assert_eq!(fs_err::read_to_string(script)?, "print('hello')\n");
+    assert!(!context.temp_dir.join("example.py.lock").exists());
+    Ok(())
+}
+
 #[cfg(feature = "test-git")]
 #[test]
 fn build_dependencies_path_archive_and_git_source() -> Result<()> {

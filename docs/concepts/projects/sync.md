@@ -105,6 +105,9 @@ version bounds supplied with `--upgrade-package`.
 
 The initial preview has deliberately narrow coverage:
 
+- Sources with static runtime metadata in `pyproject.toml` or a standards-compliant `PKG-INFO`.
+  Runtime metadata that depends on executing a backend is not supported, because resolving it before
+  capturing the build environment could produce a different runtime graph.
 - One observed Python interpreter, ABI, and marker environment. The runtime dependency graph remains
   universal, but builds on a different executor require a new build lock.
 - Isolated wheel and editable builds. Build dependencies must have compatible wheels; recursive

@@ -122,6 +122,9 @@ pub(crate) async fn lock(
             "`uv lock --build-dependencies` requires `--preview-features build-dependency-locking`"
         );
     }
+    if build_dependencies == Some(true) && script.is_some() {
+        anyhow::bail!("Build dependency locking is not yet supported for scripts");
+    }
     // If necessary, initialize the PEP 723 script.
     let script = match script {
         Some(ScriptPath::Path(path)) => {
@@ -159,9 +162,6 @@ pub(crate) async fn lock(
         .await?;
         LockTarget::Workspace(workspace.workspace())
     };
-    if build_dependencies == Some(true) && matches!(target, LockTarget::Script(_)) {
-        anyhow::bail!("Build dependency locking is not yet supported for scripts");
-    }
 
     // Determine the lock mode.
     let interpreter;

@@ -185,6 +185,24 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         Ok(metadata.hashes)
     }
 
+    /// Resolve build requirements only when the source's runtime metadata is static.
+    ///
+    /// This allows an independent build graph to be captured after runtime resolution without
+    /// assuming that two different build environments produce identical runtime metadata.
+    #[instrument(skip_all, fields(%source))]
+    pub async fn resolve_static_build_requirements(
+        &self,
+        source: &SourceDist,
+        hashes: ArchiveHashPolicy<'_>,
+    ) -> Result<HashDigests, Error> {
+        let metadata = SourceDistributionBuilder::new(self.build_context)
+            .with_static_build_requirements()
+            .download_and_build_metadata(&BuildableSource::Dist(source), hashes, &self.client)
+            .boxed_local()
+            .await?;
+        Ok(metadata.hashes)
+    }
+
     /// Either fetch the wheel or fetch and build the source distribution
     ///
     /// Returns a wheel that's compliant with the given platform tags.

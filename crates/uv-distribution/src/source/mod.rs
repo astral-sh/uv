@@ -212,7 +212,15 @@ pub(crate) struct SourceDistributionBuilder<'a, T: BuildContext> {
     build_context: &'a T,
     build_stack: Option<&'a BuildStack>,
     reporter: Option<Arc<dyn Reporter>>,
-    resolve_build_requirements: bool,
+    build_requirements: BuildRequirementDiscovery,
+}
+
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+enum BuildRequirementDiscovery {
+    #[default]
+    None,
+    AnyMetadata,
+    StaticMetadata,
 }
 
 /// The name of the file that contains the revision ID for a remote distribution, encoded via `MsgPack`.
@@ -237,7 +245,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             build_context,
             build_stack: None,
             reporter: None,
-            resolve_build_requirements: false,
+            build_requirements: BuildRequirementDiscovery::None,
         }
     }
 
@@ -246,9 +254,25 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     #[must_use]
     pub(crate) fn with_build_requirements(self) -> Self {
         Self {
-            resolve_build_requirements: true,
+            build_requirements: BuildRequirementDiscovery::AnyMetadata,
             ..self
         }
+    }
+
+    /// Require source metadata that does not depend on executing a build backend.
+    #[must_use]
+    pub(crate) fn with_static_build_requirements(self) -> Self {
+        Self {
+            build_requirements: BuildRequirementDiscovery::StaticMetadata,
+            ..self
+        }
+    }
+
+    fn check_dynamic_metadata_allowed(&self, source: &BuildableSource<'_>) -> Result<(), Error> {
+        if self.build_requirements == BuildRequirementDiscovery::StaticMetadata {
+            return Err(Error::StaticMetadataRequired(source.to_string()));
+        }
+        Ok(())
     }
 
     /// Set the [`BuildStack`] to use for the [`SourceDistributionBuilder`].
@@ -821,6 +845,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 StaticMetadata::Dynamic => true,
                 StaticMetadata::None => false,
             };
+        self.check_dynamic_metadata_allowed(source)?;
 
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);
@@ -1231,6 +1256,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             StaticMetadata::Dynamic => true,
             StaticMetadata::None => false,
         };
+        self.check_dynamic_metadata_allowed(source)?;
 
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);
@@ -1571,6 +1597,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             StaticMetadata::Dynamic => true,
             StaticMetadata::None => false,
         };
+        self.check_dynamic_metadata_allowed(source)?;
 
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::SourceDistributions,
@@ -2077,6 +2104,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             StaticMetadata::Dynamic => true,
             StaticMetadata::None => false,
         };
+        self.check_dynamic_metadata_allowed(source)?;
 
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);
@@ -2368,7 +2396,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                                     debug!(
                                         "Found static metadata via GitHub fast path for: {source}"
                                     );
-                                    if !self.resolve_build_requirements {
+                                    if self.build_requirements == BuildRequirementDiscovery::None {
                                         return Ok(ArchiveMetadata {
                                             metadata: Metadata::from_metadata23(metadata),
                                             hashes: HashDigests::empty(),
@@ -2466,6 +2494,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 StaticMetadata::Dynamic => true,
                 StaticMetadata::None => false,
             };
+        self.check_dynamic_metadata_allowed(source)?;
 
         // If the cache contains compatible metadata, return it.
         if self
@@ -3150,7 +3179,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         subdirectory: Option<&Path>,
         no_sources: &NoSources,
     ) -> Result<(), Error> {
-        if self.resolve_build_requirements {
+        if self.build_requirements != BuildRequirementDiscovery::None {
             self.setup_build_environment(source, source_root, subdirectory, no_sources.clone())
                 .await?;
         }
