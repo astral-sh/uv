@@ -804,7 +804,7 @@ impl EnvironmentOptions {
         )?)
         .map(Duration::from_secs);
 
-        // Ignore the deprecated variable entirely when its replacement is set, even to false.
+        // Ignore the deprecated `UV_NATIVE_TLS` variable when its replacement is set.
         let system_certs = EnvFlag::new(EnvVars::UV_SYSTEM_CERTS)?;
         let native_tls = if system_certs.value.is_some() {
             EnvFlag {
