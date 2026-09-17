@@ -3495,6 +3495,7 @@ impl PipCompileSettings {
             src_file,
             constraints,
             overrides,
+            overrides_from_env,
             excludes,
             extra,
             all_extras,
@@ -3618,6 +3619,7 @@ impl PipCompileSettings {
                 .collect(),
             overrides: overrides
                 .into_iter()
+                .chain(overrides_from_env)
                 .filter_map(Maybe::into_option)
                 .collect(),
             excludes: excludes
@@ -3823,6 +3825,7 @@ impl PipInstallSettings {
             no_editable_package,
             constraints,
             overrides,
+            overrides_from_env,
             excludes,
             build_constraints,
             extra,
@@ -3917,6 +3920,7 @@ impl PipInstallSettings {
                 .collect(),
             overrides: overrides
                 .into_iter()
+                .chain(overrides_from_env)
                 .filter_map(Maybe::into_option)
                 .collect(),
             excludes: excludes
