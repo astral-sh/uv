@@ -65,6 +65,15 @@ jobs:
     if: ${{ needs.plan.outputs.run-checks == 'true' }}
     uses: $/.github/workflows/check-release.yml
 
+  check-crates-policies:
+    needs: plan
+    if: ${{ needs.plan.outputs.check-crates-policies == 'true' }}
+    uses: $/.github/workflows/check-crates-policies.yml
+    secrets: inherit
+    permissions:
+      contents: read
+      id-token: write
+
   check-lock:
     needs: plan
     if: ${{ needs.plan.outputs.run-checks == 'true' }}

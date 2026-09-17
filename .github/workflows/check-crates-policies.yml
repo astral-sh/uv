@@ -1,28 +1,20 @@
-name: "Check crates policies"
-
 on:
-  pull_request:
-    branches: [main]
-    types: [opened, synchronize, reopened, edited]
+  workflow_call:
 
-permissions:
-  contents: read
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+permissions: {}
 
 env:
   UV_LOCKED: 1
 
 jobs:
   check:
-    if: >-
-      (github.repository == 'astral-sh/uv' || github.repository == 'astral-sh/uv-dev') &&
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      startsWith(github.head_ref, 'release/')
+    name: "crates policies"
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    environment: automations
     timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write # for the pull request comment credential broker
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -37,7 +29,29 @@ jobs:
           checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
 
       - name: "Check crates.io publish setup"
+        id: check
         run: |
           git clone --depth=1 --quiet https://github.com/astral-sh/crates-policies.git "$RUNNER_TEMP/crates-policies"
           git -C "$RUNNER_TEMP/crates-policies" log -1 --format='crates-policies commit: %H'
-          uv run --default-index https://pypi.org/simple "$RUNNER_TEMP/crates-policies/check.py" "$GITHUB_WORKSPACE"
+          uv run "$RUNNER_TEMP/crates-policies/check.py" "$GITHUB_WORKSPACE"
+
+      - name: "Get pull request comment token"
+        id: token
+        if: failure() && steps.check.outcome == 'failure'
+        uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
+        with:
+          exchange-url: ${{ secrets.STS_API_URL }}/exchange
+          audience: ${{ secrets.STS_API_URL }}
+          repository: ${{ github.repository }}
+          permissions: |
+            pull_requests: write
+
+      - name: "Comment on the release pull request"
+        if: failure() && steps.token.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          printf -v body 'The [crates.io publishing policy check](%s/%s/actions/runs/%s/attempts/%s) failed. Register any newly publishable crates in [astral-sh/crates-policies](https://github.com/astral-sh/crates-policies). Re-run the check after the policy is updated.\n' \
+            "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"
+          gh pr comment "$PULL_REQUEST_NUMBER" --repo "$GITHUB_REPOSITORY" --body "$body"
