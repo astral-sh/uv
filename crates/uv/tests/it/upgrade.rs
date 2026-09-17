@@ -1749,21 +1749,6 @@ async fn upgrade_uses_extra_index_url_credentials_for_registry_source() -> Resul
     uv_snapshot!(
         context.filters(),
         context
-            .lock()
-            .arg("--no-cache")
-            .env(EnvVars::UV_EXTRA_INDEX_URL, &authenticated_index),
-        @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Resolved 2 packages in [TIME]
-    "
-    );
-    fs_err::remove_file(context.temp_dir.child("uv.lock"))?;
-
-    uv_snapshot!(
-        context.filters(),
-        context
             .upgrade()
             .arg("iniconfig")
             .arg("--no-cache")

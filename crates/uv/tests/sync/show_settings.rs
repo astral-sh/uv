@@ -3299,9 +3299,10 @@ fn index_by_name() -> anyhow::Result<()> {
         assert_eq!(named, explicit, "{argument}");
     }
 
-    let commands: [fn(&TestContext) -> Command; 4] = [
+    let commands: [fn(&TestContext) -> Command; 5] = [
         TestContext::lock,
         TestContext::sync,
+        TestContext::upgrade,
         TestContext::venv,
         TestContext::pip_list,
     ];

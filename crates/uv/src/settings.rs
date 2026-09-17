@@ -5451,6 +5451,8 @@ fn parse_failure(name: &str, expected: &str) -> ! {
 
 #[cfg(test)]
 mod tests {
+    use uv_cli::{IndexArgs, RegistryClientArgs};
+
     use super::*;
 
     #[test]
@@ -5460,10 +5462,22 @@ mod tests {
             UpgradeArgs {
                 packages: vec![package.clone()],
                 exclude: Vec::new(),
+                index_args: IndexArgs {
+                    index: None,
+                    default_index: None,
+                    index_url: None,
+                    extra_index_url: None,
+                    find_links: None,
+                    no_index: false,
+                },
+                registry_client: RegistryClientArgs {
+                    index_strategy: None,
+                    keyring_provider: None,
+                },
             },
             None,
             EnvironmentOptions::new()?,
-        );
+        )?;
         let expected = FxHashSet::from_iter([package]);
 
         assert!(!settings.settings.upgrade.is_all());
