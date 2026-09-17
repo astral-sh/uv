@@ -520,17 +520,22 @@ fn report_missing_lower_bounds(
     constraints: &Constraints,
     overrides: &Overrides,
 ) {
+    let mut missing_lower_bounds = Vec::new();
     for node_index in graph.node_indices() {
         let ResolutionGraphNode::Dist(dist) = graph.node_weight(node_index).unwrap() else {
             // Ignore the root package.
             continue;
         };
         if !has_lower_bound(node_index, dist.name(), graph, constraints, overrides) {
-            diagnostics.push(ResolutionDiagnostic::MissingLowerBound {
-                package_name: dist.name().clone(),
-            });
+            missing_lower_bounds.push(dist.name());
         }
     }
+    missing_lower_bounds.sort_unstable();
+    diagnostics.extend(missing_lower_bounds.into_iter().map(|package_name| {
+        ResolutionDiagnostic::MissingLowerBound {
+            package_name: package_name.clone(),
+        }
+    }));
 }
 
 /// Whether the given package has a lower version bound by another package.
