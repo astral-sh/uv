@@ -30,7 +30,7 @@ impl ProxyUrl {
 
     /// Constructs a [`reqwest::Proxy`] from this [`ProxyUrl`] for the given [`ProxyUrlKind`].
     pub fn as_proxy(&self, kind: ProxyUrlKind) -> Proxy {
-        // SAFETY: Constructing a [`Proxy`] from a [`Url`] is infallible.
+        // SAFETY: The URL has a supported scheme and a host, validated on construction.
         match kind {
             ProxyUrlKind::Http => Proxy::http(self.0.as_str())
                 .expect("Constructing a proxy from a url should never fail"),
@@ -88,7 +88,12 @@ impl TryFrom<Url> for ProxyUrl {
     fn try_from(url: Url) -> Result<Self, Self::Error> {
         let url = DisplaySafeUrl::from_url(url);
         match url.scheme() {
-            "http" | "https" | "socks5" | "socks5h" => Ok(Self(url)),
+            "http" | "https" | "socks5" | "socks5h" => {
+                if !url.has_host() {
+                    return Err(ProxyUrlError::InvalidUrl(url::ParseError::EmptyHost));
+                }
+                Ok(Self(url))
+            }
             scheme => Err(ProxyUrlError::InvalidScheme {
                 scheme: scheme.to_string(),
                 url,
@@ -229,6 +234,16 @@ mod tests {
             result.unwrap_err().to_string(),
             @"invalid proxy URL scheme `file` in `file:///path/to/file`: expected http, https, socks5, or socks5h"
         );
+    }
+
+    #[test]
+    fn proxy_url_without_host() -> Result<(), ProxyUrlError> {
+        let url = Url::parse("socks5h:///proxy")?;
+        assert_matches!(
+            ProxyUrl::try_from(url),
+            Err(ProxyUrlError::InvalidUrl(url::ParseError::EmptyHost))
+        );
+        Ok(())
     }
 
     #[test]
