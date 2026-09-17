@@ -2170,7 +2170,7 @@ fn check_script() -> Result<()> {
         value: int = "wrong"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.check().arg("--script").arg(script.path()).arg("--no-sync"), @"
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--script").arg(script.path()).arg("--no-sync"), @"
     exit_code: 0 (success)
     ----- stdout -----
     All checks passed!
@@ -2763,7 +2763,7 @@ fn check_missing_pyproject_toml() -> Result<()> {
         x: int = 1
     "})?;
 
-    uv_snapshot!(context.filters(), context.check(), @"
+    uv_snapshot!(context.filters(), workspace_check(&context), @"
     exit_code: 0 (success)
     ----- stdout -----
     All checks passed!
@@ -2773,7 +2773,7 @@ fn check_missing_pyproject_toml() -> Result<()> {
     ");
 
     // Project-only settings are ignored without a discovered project.
-    uv_snapshot!(context.filters(), context.check().arg("--group").arg("dev").arg("--frozen").arg("--no-sync"), @"
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--group").arg("dev").arg("--frozen").arg("--no-sync"), @"
     exit_code: 0 (success)
     ----- stdout -----
     All checks passed!
@@ -2788,6 +2788,39 @@ fn check_missing_pyproject_toml() -> Result<()> {
     Ok(())
 }
 
+/// ty-pre-commit invokes `uv check` for users who may use another package manager or installer,
+/// so checking must also work when the project is not managed by uv.
+/// See <https://github.com/astral-sh/ty-pre-commit/issues/30>.
+#[test]
+fn check_unmanaged_project() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+
+        [tool.uv]
+        managed = false
+    "#})?;
+    let main_py = context.temp_dir.child("main.py");
+    main_py.write_str(indoc! {r"
+        x: int = 1
+    "})?;
+
+    uv_snapshot!(context.filters(), workspace_check(&context), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn check_no_project() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[]).with_filtered_python_sources();
@@ -2797,7 +2830,7 @@ fn check_no_project() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        requires-python = ">=4.0"
+        requires-python = ">=3.12"
         dependencies = []
     "#})?;
 
@@ -2806,15 +2839,17 @@ fn check_no_project() -> Result<()> {
         x: int = 1
     "})?;
 
-    uv_snapshot!(context.filters(), context.check(), @"
+    uv_snapshot!(context.filters(), workspace_check(&context), @"
     exit_code: 2 (failure)
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
-    error: No interpreter found for Python >=4.0 in [PYTHON SOURCES]
+    error: No interpreter found for Python >=3.12 in [PYTHON SOURCES]
+
+    hint: A managed Python download is available for Python >=3.12, but Python downloads are set to 'never'
     ");
 
     // The unavailable project environment is not initialized when project discovery is disabled.
-    uv_snapshot!(context.filters(), context.check().arg("--no-project"), @"
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--no-project"), @"
     exit_code: 0 (success)
     ----- stdout -----
     All checks passed!
@@ -2826,8 +2861,7 @@ fn check_no_project() -> Result<()> {
     // Project-only settings are ignored when project discovery is disabled.
     uv_snapshot!(
         context.filters(),
-        context
-            .check()
+        workspace_check(&context)
             .arg("--no-project")
             .arg("--extra")
             .arg("foo")
