@@ -93,8 +93,8 @@ jobs:
         id: token
         uses: open-security-tools/ost-simple-sts@bda64bffc5722085512dc618ab85f588b6c49b96 # v0.0.4
         with:
-          exchange-url: ${{ secrets.STS_API_URL }}/exchange
-          audience: ${{ secrets.STS_API_URL }}
+          exchange-url: ${{ secrets.RELEASES_STS_API_URL }}/exchange
+          audience: ${{ secrets.RELEASES_STS_API_URL }}
           repository: astral-sh/docs
           permissions: |
             contents: write
@@ -117,8 +117,8 @@ jobs:
         run: |
           branch_name="${BRANCH_NAME}"
 
-          git config user.name "astral-automations-bot[bot]"
-          git config user.email "305554984+astral-automations-bot[bot]@users.noreply.github.com"
+          git config user.name "astral-releases-bot[bot]"
+          git config user.email "328004183+astral-releases-bot[bot]@users.noreply.github.com"
 
           git checkout -b $branch_name
           git add site/uv
