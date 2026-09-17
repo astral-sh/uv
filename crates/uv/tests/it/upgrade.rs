@@ -72,6 +72,31 @@ fn upgrade_help() {
     Options:
           --exclude <EXCLUDE>  Exclude the named package from upgrades
 
+    Index options:
+          --index <INDEX>
+              The indexes to use when resolving dependencies, in addition to the default index [env:
+              UV_INDEX]
+          --default-index <DEFAULT_INDEX>
+              The default package index (by default: <https://pypi.org/simple>) [env: UV_DEFAULT_INDEX]
+      -i, --index-url <INDEX_URL>
+              (Deprecated: use `--default-index` instead) The URL of the Python package index (by
+              default: <https://pypi.org/simple>) [env: UV_INDEX_URL]
+          --extra-index-url <EXTRA_INDEX_URL>
+              (Deprecated: use `--index` instead) Extra URLs of package indexes to use, in addition to
+              `--index-url` [env: UV_EXTRA_INDEX_URL]
+      -f, --find-links <FIND_LINKS>
+              Locations to search for candidate distributions, in addition to those found in the
+              registry indexes [env: UV_FIND_LINKS]
+          --no-index
+              Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and
+              those provided via `--find-links`
+          --index-strategy <INDEX_STRATEGY>
+              The strategy to use when resolving against multiple index URLs [env: UV_INDEX_STRATEGY=]
+              [possible values: first-index, unsafe-first-match, unsafe-best-match]
+          --keyring-provider <KEYRING_PROVIDER>
+              Attempt to use `keyring` for authentication for index URLs [env: UV_KEYRING_PROVIDER=]
+              [possible values: disabled, subprocess]
+
     Cache options:
       -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary
                                    directory for the duration of the operation [env: UV_NO_CACHE=]
@@ -1692,7 +1717,7 @@ fn upgrade_allows_registry_source() -> Result<()> {
 }
 
 #[tokio::test]
-async fn upgrade_ignores_extra_index_url_credentials_for_registry_source() -> Result<()> {
+async fn upgrade_uses_extra_index_url_credentials_for_registry_source() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let proxy = crate::pypi_proxy::start().await;
     let pyproject_toml = format!(
@@ -1736,7 +1761,6 @@ async fn upgrade_ignores_extra_index_url_credentials_for_registry_source() -> Re
     );
     fs_err::remove_file(context.temp_dir.child("uv.lock"))?;
 
-    // `uv upgrade` should use the same credentials as other resolving commands; astral-sh/uv#21773.
     uv_snapshot!(
         context.filters(),
         context
@@ -1745,13 +1769,11 @@ async fn upgrade_ignores_extra_index_url_credentials_for_registry_source() -> Re
             .arg("--no-cache")
             .env(EnvVars::UV_EXTRA_INDEX_URL, authenticated_index),
         @"
-    exit_code: 1 (failure)
+    exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    error: No solution found when resolving dependencies
-      cause: Because iniconfig was not found in the package registry and your project depends on iniconfig>=2, we can conclude that your project's requirements are unsatisfiable.
-
-    hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
+    Resolved 2 packages in [TIME]
+    Add iniconfig v2.0.0
     "
     );
 
