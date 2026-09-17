@@ -66,11 +66,6 @@ impl CacheKey for VerbatimParsedUrl {
 }
 
 impl VerbatimParsedUrl {
-    /// Returns `true` if the URL is editable.
-    pub fn is_editable(&self) -> bool {
-        self.parsed_url.is_editable()
-    }
-
     /// Make the URL an editable source.
     ///
     /// # Errors

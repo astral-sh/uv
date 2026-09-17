@@ -77,6 +77,13 @@ impl ForkScope {
                 .conflict()
                 .is_none_or(|conflict| env.included_by_group(conflict))
     }
+
+    fn marker(&self) -> MarkerTree {
+        let marker = self.marker.without_extras();
+        self.conflict.as_ref().map_or(marker, |conflict| {
+            UniversalMarker::new(marker, ConflictMarker::from_conflict_item(conflict)).combined()
+        })
+    }
 }
 
 impl<T> Default for ForkMap<T> {
@@ -86,6 +93,21 @@ impl<T> Default for ForkMap<T> {
 }
 
 impl<T> ForkMap<T> {
+    /// The environments in which a first-party requirement grants candidate policy.
+    pub(crate) fn requirement_marker(requirement: &Requirement) -> MarkerTree {
+        ForkScope::from_requirement(requirement).marker()
+    }
+
+    pub(crate) fn marker(&self, package_name: &PackageName) -> MarkerTree {
+        self.0
+            .get(package_name)
+            .into_iter()
+            .flatten()
+            .fold(MarkerTree::FALSE, |marker, entry| {
+                marker.or(entry.scope.marker())
+            })
+    }
+
     /// Associate a value with the [`Requirement`] in a given fork.
     pub(crate) fn add(&mut self, requirement: &Requirement, value: T) {
         self.0

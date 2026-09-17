@@ -499,7 +499,8 @@ fn conflict_marker_reachability<'lock>(
             if let Node::Package(child) = graph[child_edge.target()] {
                 for extra in child_edge.weight().dep_extras() {
                     let item = ConflictItem::from((child.name().clone(), (*extra).clone()));
-                    parent_map.insert(item, parent_marker);
+                    let active_marker = parent_map.entry(item).or_insert(MarkerTree::FALSE);
+                    *active_marker = active_marker.or(parent_marker);
                 }
             }
 
@@ -519,7 +520,7 @@ fn conflict_marker_reachability<'lock>(
                     // the dependency marker as redundant when the lockfile is written.
                     let active_marker = if let Node::Package(parent) = graph[parent_index] {
                         let item = ConflictItem::from((parent.name().clone(), (*extra).clone()));
-                        *parent_map.entry(item).or_insert(parent_marker)
+                        parent_map.get(&item).copied().unwrap_or(MarkerTree::FALSE)
                     } else {
                         parent_marker
                     };
@@ -533,7 +534,8 @@ fn conflict_marker_reachability<'lock>(
                     // resolving any active extras on the edge.
                     if let Node::Package(parent) = graph[parent_index] {
                         let item = ConflictItem::from((parent.name().clone(), (*group).clone()));
-                        parent_map.insert(item, parent_marker);
+                        let active_marker = parent_map.entry(item).or_insert(MarkerTree::FALSE);
+                        *active_marker = active_marker.or(parent_marker);
                     }
 
                     // Resolve any active extras on the edge.
@@ -550,34 +552,48 @@ fn conflict_marker_reachability<'lock>(
             parent_marker = parent_marker.and(marker);
 
             // Combine the inferred conflicts with the existing conflicts on the node.
-            match conflict_maps.entry(child_edge.target()) {
+            let conflicts_changed = match conflict_maps.entry(child_edge.target()) {
                 Entry::Occupied(mut existing) => {
                     let child_map = existing.get_mut();
+                    let mut changed = false;
                     for (key, value) in parent_map {
                         let child_marker = child_map.entry(key).or_insert(MarkerTree::FALSE);
-                        *child_marker = child_marker.or(value);
+                        let merged = child_marker.or(value);
+                        changed |= merged != *child_marker;
+                        *child_marker = merged;
                     }
+                    changed
                 }
                 Entry::Vacant(vacant) => {
+                    let changed = parent_map.values().any(|marker| !marker.is_false());
                     vacant.insert(parent_map);
+                    changed
                 }
-            }
+            };
 
             // Combine the inferred marker with the existing marker on the node.
-            match reachability.entry(child_edge.target()) {
+            let reachability_changed = match reachability.entry(child_edge.target()) {
                 Entry::Occupied(mut existing) => {
                     // If the marker is a subset of the existing marker (A ⊆ B exactly if
-                    // A ∪ B = A), updating the child wouldn't change child's marker.
+                    // A ∪ B = B), updating the child wouldn't change child's marker.
                     parent_marker = parent_marker.or(*existing.get());
                     if parent_marker != *existing.get() {
                         existing.insert(parent_marker);
-                        queue.push(child_edge.target());
+                        true
+                    } else {
+                        false
                     }
                 }
                 Entry::Vacant(vacant) => {
                     vacant.insert(parent_marker);
-                    queue.push(child_edge.target());
+                    true
                 }
+            };
+
+            // Another path can activate an extra on a package that was already reachable without
+            // it. Its optional dependencies must be revisited even if the package marker is unchanged.
+            if conflicts_changed || reachability_changed {
+                queue.push(child_edge.target());
             }
         }
     }

@@ -1669,6 +1669,8 @@ fn requirements_txt_ssh_git_username() -> Result<()> {
 
              Please make sure you have the correct access rights
              and the repository exists.
+
+    hint: `uv-private-pypackage` was included because `debug` (v0.1.0) depends on `uv-private-pypackage`
     "#);
 
     let ssh_deploy_key = context.temp_dir.child("uv_test_key");

@@ -10,6 +10,7 @@ use uv_distribution_types::{
     Dist, IndexCapabilities, IndexLocations, IndexMetadata, IndexMetadataRef, InstalledDist,
     RequestedDist, RequiresPython,
 };
+use uv_git_types::GitUrl;
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
 use uv_static::EnvVars;
@@ -52,6 +53,7 @@ pub trait ResolverProvider {
     fn get_or_build_wheel_metadata<'io>(
         &'io self,
         dist: &'io Dist,
+        hasher: &'io HashStrategy,
     ) -> impl Future<Output = WheelMetadataResult> + 'io;
 
     /// Get the metadata for an installed distribution.
@@ -59,6 +61,9 @@ pub trait ResolverProvider {
         &'io self,
         dist: &'io InstalledDist,
     ) -> impl Future<Output = WheelMetadataResult> + 'io;
+
+    /// Resolve a Git reference for comparison without obtaining package metadata.
+    fn resolve_git_reference<'io>(&'io self, git: &'io GitUrl) -> impl Future<Output = ()> + 'io;
 
     /// Set the [`Reporter`] to use for this installer.
     #[must_use]
@@ -225,13 +230,24 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
     }
 
     /// Fetch the metadata for a distribution, building it if necessary.
-    async fn get_or_build_wheel_metadata<'io>(&'io self, dist: &'io Dist) -> WheelMetadataResult {
+    async fn get_or_build_wheel_metadata<'io>(
+        &'io self,
+        dist: &'io Dist,
+        hasher: &'io HashStrategy,
+    ) -> WheelMetadataResult {
         match self
             .fetcher
-            .get_or_build_wheel_metadata(dist, self.hasher.metadata_policy(dist))
+            .get_or_build_wheel_metadata(dist, hasher.metadata_policy(dist))
             .await
         {
             Ok(metadata) => Ok(MetadataResponse::Found(metadata)),
+            // Unlike registry versions, a direct candidate identifies the exact artifact that
+            // failed. Keep its original error for a failure proof that requires this source; the
+            // solver can still discard it when an alternative drops the declaration.
+            Err(err) if dist.index().is_none() => Ok(MetadataResponse::Error(
+                Box::new(RequestedDist::Installable(dist.clone())),
+                Arc::new(err),
+            )),
             Err(err) => match err {
                 uv_distribution::Error::Client(client) => {
                     let retries = client.retries();
@@ -311,6 +327,12 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                 Arc::new(err),
             )),
         }
+    }
+
+    async fn resolve_git_reference<'io>(&'io self, git: &'io GitUrl) {
+        // Only the reference mapping matters here. The chosen, authorized source handles errors
+        // from its normal metadata request.
+        let _ = self.fetcher.resolve_git_reference(git).await;
     }
 
     /// Set the [`Reporter`] to use for this installer.

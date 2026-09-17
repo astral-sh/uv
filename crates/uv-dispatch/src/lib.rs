@@ -17,10 +17,8 @@ use uv_build_backend::check_direct_build;
 use uv_build_frontend::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
-use uv_configuration::{
-    BuildKind, BuildOptions, Constraints, IndexStrategy, NoSources, Overrides, Reinstall,
-};
-use uv_configuration::{BuildOutput, Concurrency, Excludes};
+use uv_configuration::{BuildKind, BuildOptions, Constraints, IndexStrategy, NoSources, Reinstall};
+use uv_configuration::{BuildOutput, Concurrency};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
@@ -33,7 +31,6 @@ use uv_installer::{InstallationStrategy, Installer, Plan, Planner, Preparer, Sit
 use uv_preview::Preview;
 use uv_pypi_types::Conflicts;
 use uv_python::{Interpreter, PythonEnvironment};
-use uv_requirements::LookaheadResolver;
 use uv_resolver::{
     ExcludeNewer, FlatIndex, Flexibility, InMemoryIndex, Manifest, OptionsBuilder,
     PythonRequirement, Resolver, ResolverEnvironment,
@@ -65,7 +62,7 @@ pub enum BuildDispatchError {
     Prepare(#[from] uv_installer::PrepareError),
 
     #[error(transparent)]
-    Lookahead(#[from] uv_requirements::Error),
+    HashStrategy(#[from] uv_types::HashStrategyError),
 }
 
 impl uv_errors::Hinted for BuildDispatchError {
@@ -97,7 +94,7 @@ impl IsBuildBackendError for BuildDispatchError {
             Self::BuildFrontend(error) => error.is_user_failure(),
             Self::Resolve(error) => error.is_user_failure(),
             Self::Prepare(error) => error.is_user_failure(),
-            Self::Lookahead(error) => error.is_user_failure(),
+            Self::HashStrategy(_) => true,
             Self::Anyhow(error) => error
                 .chain()
                 .find_map(|cause| cause.downcast_ref::<uv_resolver::ResolveError>())
@@ -113,7 +110,7 @@ impl IsBuildBackendError for BuildDispatchError {
             | Self::Join(_)
             | Self::Anyhow(_)
             | Self::Prepare(_)
-            | Self::Lookahead(_) => false,
+            | Self::HashStrategy(_) => false,
             Self::BuildFrontend(err) => err.is_build_backend_error(),
         }
     }
@@ -318,39 +315,12 @@ impl BuildContext for BuildDispatch<'_> {
         let resolver_env = ResolverEnvironment::specific(marker_env);
         let tags = self.interpreter.tags()?;
 
-        // Walk any URL requirements transitively so their sub-URLs (for example, a workspace
-        // member that depends on another workspace member) are known before the resolver runs
-        // its URL allow-list check. This mirrors what the project resolver does in
-        // `uv_requirements::LookaheadResolver` and prevents a `DisallowedUrl` error when one
-        // `build-system.requires` entry pulls in another URL dependency.
         let hasher = self
             .hasher
             .clone()
-            .augment_with_requirements(requirements.iter())
-            .map_err(uv_requirements::Error::from)?;
-        let overrides = Overrides::default();
-        let excludes = Excludes::default();
-        let (lookaheads, hasher) = LookaheadResolver::new(
-            requirements,
-            self.constraints,
-            &overrides,
-            &excludes,
-            self.dependency_metadata,
-            &hasher,
-            &self.shared_state.index,
-            DistributionDatabase::new(
-                self.client,
-                self,
-                self.concurrency.downloads_semaphore.clone(),
-            )
-            .with_build_stack(build_stack),
-        )
-        .resolve(&resolver_env)
-        .await?;
-
-        let manifest = Manifest::simple(requirements.to_vec())
-            .with_constraints(self.constraints.clone())
-            .with_lookaheads(lookaheads);
+            .augment_with_requirements(requirements.iter())?;
+        let manifest =
+            Manifest::simple(requirements.to_vec()).with_constraints(self.constraints.clone());
 
         let resolver = Resolver::new(
             manifest,
@@ -378,7 +348,7 @@ impl BuildContext for BuildDispatch<'_> {
             )
             .with_build_stack(build_stack),
         )?;
-        let resolution = Resolution::from(resolver.resolve().await.with_context(|| {
+        let (resolution, hasher) = resolver.resolve_with_hashes().await.with_context(|| {
             format!(
                 "No solution found when resolving: {}",
                 requirements
@@ -386,8 +356,11 @@ impl BuildContext for BuildDispatch<'_> {
                     .map(|requirement| format!("`{requirement}`"))
                     .join(", ")
             )
-        })?);
-        Ok(ResolvedRequirements::new(resolution, hasher))
+        })?;
+        Ok(ResolvedRequirements::new(
+            Resolution::from(resolution),
+            hasher,
+        ))
     }
 
     #[instrument(

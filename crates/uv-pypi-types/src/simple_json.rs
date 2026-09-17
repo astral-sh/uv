@@ -392,16 +392,22 @@ impl Hashes {
         }
     }
 
-    /// Parse a supported hash from a URL fragment, ignoring unrelated fragment parameters.
+    /// Parse supported hashes from a URL fragment, ignoring unrelated fragment parameters.
     pub fn parse_url_fragment(fragment: &str) -> Result<Option<Self>, HashError> {
+        let mut hashes = Self::default();
+        let mut seen = Vec::new();
         for fragment in fragment.split('&') {
             if let Some((algorithm, _)) = fragment.split_once('=')
-                && HashAlgorithm::from_str(algorithm).is_ok()
+                && let Ok(algorithm) = HashAlgorithm::from_str(algorithm)
+                && !seen.contains(&algorithm)
             {
-                return Self::parse_fragment(fragment).map(Some);
+                seen.push(algorithm);
+                for digest in HashDigests::from(Self::parse_fragment(fragment)?) {
+                    hashes.insert(digest);
+                }
             }
         }
-        Ok(None)
+        Ok((!hashes.is_empty()).then_some(hashes))
     }
 
     /// Insert a digest into its algorithm-specific slot.
@@ -913,6 +919,27 @@ mod tests {
     use crate::{
         CoreMetadata, Digest, HashAlgorithm, HashDigest, HashDigests, HashError, Hashes, PypiFile,
     };
+
+    #[test]
+    fn url_fragment_collects_distinct_hash_algorithms() -> Result<(), HashError> {
+        let sha256 = "ab".repeat(32);
+        let duplicate = "cd".repeat(32);
+        let sha512 = "ef".repeat(64);
+        let fragment =
+            format!("subdirectory=project&sha256={sha256}&sha512={sha512}&sha256={duplicate}");
+        let expected = Hashes::from(
+            [
+                HashDigest::new(HashAlgorithm::Sha256, sha256)?,
+                HashDigest::new(HashAlgorithm::Sha512, sha512)?,
+            ]
+            .into_iter()
+            .collect::<HashDigests>(),
+        );
+        assert_eq!(Hashes::parse_url_fragment(&fragment)?, Some(expected));
+        assert!(Hashes::parse_url_fragment("sha256=invalid&subdirectory=project").is_err());
+        assert_eq!(Hashes::parse_url_fragment("subdirectory=project")?, None);
+        Ok(())
+    }
 
     #[test]
     fn pypi_core_metadata_precedence() -> Result<(), serde_json::Error> {

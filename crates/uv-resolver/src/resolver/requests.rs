@@ -1,12 +1,16 @@
 use std::sync::Arc;
 
 use tokio::sync::mpsc::Sender;
+use tokio::sync::oneshot;
 
-use uv_distribution_types::{DistributionId, IndexMetadata, IndexUrl};
+use uv_distribution_types::{Dist, DistributionId, Identifier, IndexMetadata, Name, RequestedDist};
+use uv_git_types::GitUrl;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
+use uv_types::HashStrategy;
 
 use crate::pubgrub::Range;
+use crate::resolver::index::DirectHashKey;
 use crate::resolver::{InMemoryIndex, MetadataResponse, Request, VersionsResponse};
 use crate::{PythonRequirement, ResolveError};
 
@@ -31,7 +35,7 @@ impl MetadataRequests {
         let registered = if let Some(index) = index {
             self.index
                 .explicit()
-                .register((name.clone(), index.url().clone()))
+                .register((name.clone(), index.clone()))
         } else {
             self.index.implicit().register(name.clone())
         };
@@ -56,6 +60,61 @@ impl MetadataRequests {
         Ok(())
     }
 
+    /// Request a direct resource once for its name and current hash policy. Source trees without
+    /// required validation can share successful project metadata after checking its declared name.
+    pub(crate) fn request_direct(
+        &self,
+        dist: Dist,
+        hasher: &HashStrategy,
+    ) -> Result<(), ResolveError> {
+        let id = dist.distribution_id();
+        let hashes = DirectHashKey::new(&dist, hasher);
+        let registered = if hashes.uses_project_cache(&dist) {
+            let named = self.index.project_direct(&id);
+            if !named.register(dist.name().clone()) {
+                return Ok(());
+            }
+            if let Some(metadata) = self.index.distributions().get(&id)
+                && let MetadataResponse::Found(archive) = metadata.as_ref()
+            {
+                let metadata = if &archive.metadata.name == dist.name() {
+                    metadata
+                } else {
+                    Arc::new(MetadataResponse::Error(
+                        Box::new(RequestedDist::Installable(dist.clone())),
+                        Arc::new(uv_distribution::Error::WheelMetadataNameMismatch {
+                            given: dist.name().clone(),
+                            metadata: archive.metadata.name.clone(),
+                        }),
+                    ))
+                };
+                named.done(dist.name().clone(), metadata);
+                return Ok(());
+            }
+            true
+        } else {
+            self.index
+                .direct()
+                .register((id, dist.name().clone(), hashes))
+        };
+        if registered {
+            self.sender
+                .blocking_send(Request::Dist(dist, Some(hasher.clone())))?;
+        }
+        Ok(())
+    }
+
+    /// Request a Git reference comparison independently of direct package metadata and builds.
+    pub(crate) fn request_git_reference(
+        &self,
+        git: GitUrl,
+    ) -> Result<oneshot::Receiver<()>, ResolveError> {
+        let (sender, receiver) = oneshot::channel();
+        self.sender
+            .blocking_send(Request::GitReference(Box::new(git), sender))?;
+        Ok(receiver)
+    }
+
     /// Schedule speculative candidate selection using an already-requested package version map.
     pub(crate) fn prefetch(
         &self,
@@ -75,7 +134,7 @@ impl MetadataRequests {
     pub(crate) fn wait_for_versions(
         &self,
         name: &PackageName,
-        index: Option<&IndexUrl>,
+        index: Option<&IndexMetadata>,
     ) -> Result<Arc<VersionsResponse>, ResolveError> {
         if let Some(index) = index {
             self.index
@@ -100,5 +159,25 @@ impl MetadataRequests {
             .distributions()
             .wait_blocking(id)
             .map_err(|_| ResolveError::UnregisteredTask(description()))
+    }
+
+    pub(crate) fn wait_for_direct(
+        &self,
+        dist: &Dist,
+        hasher: &HashStrategy,
+    ) -> Result<Arc<MetadataResponse>, ResolveError> {
+        let id = dist.distribution_id();
+        let hashes = DirectHashKey::new(dist, hasher);
+        if hashes.uses_project_cache(dist) {
+            self.index
+                .project_direct(&id)
+                .wait_blocking(dist.name())
+                .map_err(|_| ResolveError::UnregisteredTask(dist.to_string()))
+        } else {
+            self.index
+                .direct()
+                .wait_blocking(&(id, dist.name().clone(), hashes))
+                .map_err(|_| ResolveError::UnregisteredTask(dist.to_string()))
+        }
     }
 }

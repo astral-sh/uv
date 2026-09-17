@@ -268,35 +268,79 @@ Python 3.13. uv prunes wheels from the lockfile that are outside the range (e.g.
 
 In uv, a dependency can either be a registry dependency, a package with a version specifier or the
 plain package name, or a URL dependency. All requirements in the form `{name} @ {url}` are URL
-dependencies, and also all dependencies that have a `git`,` url`, `path`, or `workspace` source.
+dependencies, as are dependencies that have a `git`, `url`, `path`, or `workspace` source.
 
-When a URL is declared for a package, uv pins the package to this URL, and the version this URL
-implies. If there are two conflicting URLs for a package, the resolver errors, as a URL can only be
-declared as something akin to an exact `==` pin, and not as list of URLs. A list of URLs is
-supported through [flat indexes](../../concepts/indexes.md#flat-indexes) instead.
+When an included dependency declares a URL, uv pins the package to this URL and to the version it
+provides. A plain or version-based requirement for the same package can use that URL, provided its
+version matches. If two dependencies that must be included require different URLs in the same
+environment, resolution fails. A list of interchangeable URLs is supported through
+[flat indexes](../../concepts/indexes.md#flat-indexes) instead.
 
 uv requires that URLs are either declared directly (in the project, in a
 [workspace member](../../concepts/projects/workspaces.md), in a
 [constraint](../../concepts/resolution.md#dependency-constraints), or in an
-[override](../../concepts/resolution.md#dependency-overrides), any location that is discovered
-directly), or by other URL dependencies. uv discovers all URL dependencies and their transitive URL
-dependencies ahead of the resolution and pins all packages to the URLs and the versions they imply.
+[override](../../concepts/resolution.md#dependency-overrides)), or by other URL dependencies that
+are themselves authorized. uv discovers URL dependencies while resolving metadata. A declaration is
+attached to the selected version and source of the package that introduced it, and applies only in
+the environments where both its marker and the dependency path that activates it are true. For
+example, if an index package requests a URL package's extra only on Linux, URLs declared by that
+extra apply only on Linux. Different platforms can consequently select different URLs for the same
+package. If backtracking excludes that package or extra, its URL no longer affects the solution. The
+registry can still provide a package required through another path, unless another included
+dependency independently declares a URL.
 
-uv does not allow URLs in index packages. This has two reasons: One is a security and predictability
-aspect, that forbids registry distributions to point to non-registry distributions and helps
-auditing which URLs can be accessed. For example, when only using one index URL and no URL
-dependencies, uv will not install any package from outside the index.
+For a local directory, a plain URL leaves editability unspecified and can adopt an explicit choice
+from another included dependency. Conflicting editable and non-editable declarations cannot both be
+included in the same environment. A virtual declaration resolves a directory's dependencies without
+requiring its installation; another included declaration that requires installing the same directory
+takes precedence whether the installation is editable or normal. Editable and normal builds can
+report different dependencies or fail independently, so the resolver treats them as separate
+candidates and uses the metadata for the selected installation mode. A plain or virtual declaration
+alone uses a normal build; dependencies reported only by an editable build cannot cause that same
+build to become editable.
 
-The other is that URLs can add additional versions to the resolution. Say the root package depends
-on foo, bar, and baz, all registry dependencies. foo depends on `bar >= 2`, but bar only has version
-1 on the index. With the incremental approach, this is an error: foo cannot be fulfilled, there is a
-resolver error. If URLs on index packages were allowed, it could be that there is a version of baz
-declares a dependency on baz-core and that has a version that declares
-`bar @ https://example.com/bar-2-py3-none-any.whl` adding a version of bar that makes requirements
-resolve. If a dependency can add new versions, discarding any version in the resolver would require
-looking at all possible versions of all direct and transitive dependencies. This breaks the core
-assumption incremental resolvers make that the set of versions for a package is static and would
-require to always fetch the metadata for all possibly reachable version.
+An index package cannot independently authorize a URL. Its metadata can refer to the same URL when
+it is also authorized by an included first-party declaration, constraint, or override. It can also
+activate an extra on an already authorized URL package; that package's own metadata may then declare
+further URLs. For Git, a different reference to the same repository, package location, and commit
+can use the authorized source. uv resolves the references to compare commits; it obtains package
+metadata only from an authorized source. A selected declaration can require Git LFS even when
+another declaration of the same checkout omits it. Checkouts with and without LFS are separate
+candidates because the files and metadata available can differ. Metadata found only with LFS cannot
+enable LFS for its own checkout. This keeps the sources auditable: if only one index and no URL
+dependencies are provided, uv will not install any package from outside the index.
+
+The solver distinguishes registry and URL candidates even when their versions are identical: their
+metadata may be different. The same applies to different explicitly selected registries; an index
+declaration on an excluded package or extra no longer determines which registry supplies a package,
+and a declaration activated only on Linux does not determine the registry for other platforms.
+Hashes recorded for a registry pin are not reused for a selected URL merely because the versions
+match. Hashes authored on selected declarations of the same archive are retained; another included
+dependency spelling the URL without a hash cannot remove one. Version requirements allow any source,
+including URLs not yet discovered. If the registry provides no suitable candidate but an authorized
+URL could still be introduced, the resolver continues processing other dependencies before rejecting
+the branch. It can revisit earlier candidate decisions, including extras, when a different selection
+might supply the missing URL. For small sets of universal registry wheels covering the active
+environment, changing the registry version cannot help when every version has the same requirements
+and Python compatibility, or when none of those requirements can reach a possible first-party source
+or policy. Those candidates stay unrestricted while the search revisits the choices that can
+activate a source. If a required URL cannot be fetched or its metadata is invalid, uv reports the
+underlying error; an error from an excluded candidate does not prevent resolution from succeeding.
+The same principle applies to first-party declarations that permit an explicit prerelease or a
+yanked version: the resolver can try such a candidate while other dependencies are undecided, but
+accepts it only if a selected first-party declaration actually permits it in the environments where
+the package is needed. A dependency of a selected local project can also make a package direct for
+`--resolution lowest-direct`, even if another dependency was processed first. When a package is
+direct in only some environments, `--fork-strategy fewest` can reuse the lowest compatible version
+across environments; the default strategy prefers the highest version where the package is only
+transitive.
+
+Lockfile checks also follow current source authority. An immutable registry or Git package can sit
+on a path to a mutable dependency; when an independent source declaration, constraint, or global
+override authorizes that dependency, uv validates its current metadata. Source declarations on Git
+providers are retained so they can be checked offline. The metadata-free preview lock format also
+retains incoming requests for empty dependency extras, so adding a dependency to an activated extra
+can make a lock stale.
 
 ## Prioritization
 

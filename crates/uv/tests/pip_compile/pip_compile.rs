@@ -2,6 +2,7 @@
 
 use std::collections::BTreeMap;
 use std::env::current_dir;
+use std::fmt::Write as _;
 use std::fs;
 use std::process::Command;
 use std::str::FromStr;
@@ -23,6 +24,8 @@ use url::Url;
 use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
+use uv_cache_key::{RepositoryUrl, cache_digest};
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -32,8 +35,8 @@ use uv_static::EnvVars;
 use uv_test::archive::write_tar_gz;
 #[cfg(feature = "test-universal")]
 use uv_test::diff_snapshot;
-use uv_test::packse::PackseServer;
 use uv_test::packse::scenario::{ArtifactMetadata, Package, PackageMetadata, Scenario};
+use uv_test::packse::{PackseServer, generate_wheel};
 use uv_test::{DEFAULT_PYTHON_VERSION, TestContext, download_to_disk, uv_snapshot};
 
 #[test]
@@ -2662,6 +2665,2352 @@ fn mixed_url_dependency() -> Result<()> {
     Ok(())
 }
 
+/// Write a direct wheel separately from the registry, retaining real metadata for source tests.
+fn source_dependency_wheel(
+    context: &TestContext,
+    directory: &str,
+    name: &str,
+    requirements: &[&str],
+    extras: &[(&str, &str)],
+) -> Result<Url> {
+    let requirements = requirements
+        .iter()
+        .map(|requirement| requirement.parse())
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut optional_requirements = BTreeMap::<_, Vec<_>>::new();
+    for (extra, requirement) in extras {
+        optional_requirements
+            .entry(extra.parse()?)
+            .or_default()
+            .push(requirement.parse()?);
+    }
+    let (filename, wheel) = generate_wheel(
+        &name.parse()?,
+        &"1.0.0".parse()?,
+        &requirements,
+        &optional_requirements,
+        None,
+        "py3-none-any",
+        &[],
+    );
+    let directory = context.temp_dir.child(directory);
+    directory.create_dir_all()?;
+    let file = directory.child(filename);
+    file.write_binary(&wheel)?;
+    Url::from_file_path(file.path()).map_err(|()| anyhow::anyhow!("wheel path is not absolute"))
+}
+
+/// An unspecified directory mode cannot hide contradictory selected choices, but backtracking may
+/// discard an extra that introduces one of them.
+#[test]
+fn url_source_directory_editability_conflict() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("leaf/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "leaf"
+        version = "1.0.0"
+    "#})?;
+    context
+        .temp_dir
+        .child("a-left/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "a-left"
+        version = "1.0.0"
+        dependencies = ["leaf"]
+
+        [tool.uv.sources]
+        leaf = { path = "../leaf", editable = true }
+    "#})?;
+    let right = context.temp_dir.child("b-right/pyproject.toml");
+    right.write_str(indoc! {r#"
+        [project]
+        name = "b-right"
+        version = "1.0.0"
+        dependencies = ["leaf"]
+
+        [tool.uv.sources]
+        leaf = { path = "../leaf", editable = false }
+    "#})?;
+    let directory_url = |name| {
+        Url::from_file_path(context.temp_dir.child(name).path())
+            .map_err(|()| anyhow::anyhow!("directory path is not absolute"))
+    };
+    let roots = format!(
+        "leaf @ {}\na-left @ {}\nb-right @ {}\n",
+        directory_url("leaf")?,
+        directory_url("a-left")?,
+        directory_url("b-right")?,
+    );
+    let requirements = context.temp_dir.child("requirements.in");
+    requirements.write_str(&roots)?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in").arg("--offline").arg("--no-index"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to resolve dependencies for package `b-right==1.0.0`
+      cause: Requirements contain conflicting URLs for package `leaf`:
+             - file://[TEMP_DIR]/leaf
+             - file://[TEMP_DIR]/leaf (editable)
+    ");
+
+    right.write_str(indoc! {r#"
+        [project]
+        name = "b-right"
+        version = "1.0.0"
+
+        [project.optional-dependencies]
+        url = ["leaf"]
+
+        [tool.uv.sources]
+        leaf = { path = "../leaf", editable = false }
+    "#})?;
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "backtrack-directory-editability"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.selector.versions."2.0.0"]
+        requires = ["b-right[url]"]
+        [packages.selector.versions."1.0.0"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    requirements.write_str(&format!("{roots}selector\n"))?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in
+    -e file://[TEMP_DIR]/leaf
+        # via
+        #   -r requirements.in
+        #   a-left
+    a-left @ file://[TEMP_DIR]/a-left
+        # via -r requirements.in
+    b-right @ file://[TEMP_DIR]/b-right
+        # via -r requirements.in
+    selector==1.0.0
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// A late editable declaration must resolve and report the editable backend's dependencies. If
+/// only an optional provider requires that mode, its activating version can be discarded instead.
+#[test]
+fn url_source_directory_editable_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let leaf = context.temp_dir.child("a-leaf");
+    leaf.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "a-leaf"
+        version = "1.0.0"
+        dynamic = ["dependencies"]
+
+        [build-system]
+        requires = []
+        build-backend = "backend"
+        backend-path = ["."]
+    "#})?;
+    leaf.child("backend.py").write_str(indoc! {r#"
+        from pathlib import Path
+
+        def get_requires_for_build_wheel(config_settings=None):
+            return []
+
+        def get_requires_for_build_editable(config_settings=None):
+            return []
+
+        def metadata(directory, requires_dist):
+            dist_info = Path(directory) / "a_leaf-1.0.0.dist-info"
+            dist_info.mkdir()
+            (dist_info / "METADATA").write_text(
+                "Metadata-Version: 2.2\nName: a-leaf\nVersion: 1.0.0\n" + requires_dist
+            )
+            return dist_info.name
+
+        def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
+            return metadata(metadata_directory, "Requires-Dist: wheel-only\n")
+
+        def prepare_metadata_for_build_editable(metadata_directory, config_settings=None):
+            return metadata(metadata_directory,
+                "Requires-Dist: wheel-only\nRequires-Dist: editable-only\n")
+    "#})?;
+    let provider = context.temp_dir.child("z-provider");
+    let provider_project = provider.child("pyproject.toml");
+    provider_project.write_str(indoc! {r#"
+        [project]
+        name = "z-provider"
+        version = "1.0.0"
+        dependencies = ["a-leaf"]
+
+        [tool.uv.sources]
+        a-leaf = { path = "../a-leaf", editable = true }
+    "#})?;
+    let leaf_url = Url::from_file_path(leaf.path())
+        .map_err(|()| anyhow::anyhow!("directory path is not absolute"))?;
+    let provider_url = Url::from_file_path(provider.path())
+        .map_err(|()| anyhow::anyhow!("directory path is not absolute"))?;
+    let roots = format!("a-leaf @ {leaf_url}\nz-provider @ {provider_url}\n");
+    let requirements = context.temp_dir.child("requirements.in");
+    requirements.write_str(&roots)?;
+    let available = toml::from_str::<Scenario>(indoc! {r#"
+        name = "late-directory-editable-metadata"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.wheel-only.versions."1.0.0"]
+        [packages.editable-only.versions."1.0.0"]
+    "#})?;
+    let available = PackseServer::from_scenario(&available);
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in").arg("--index-url").arg(available.index_url()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in
+    -e file://[TEMP_DIR]/a-leaf
+        # via
+        #   -r requirements.in
+        #   z-provider
+    editable-only==1.0.0
+        # via a-leaf
+    wheel-only==1.0.0
+        # via a-leaf
+    z-provider @ file://[TEMP_DIR]/z-provider
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    let missing = toml::from_str::<Scenario>(indoc! {r#"
+        name = "backtrack-directory-editable-metadata"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.wheel-only.versions."1.0.0"]
+        [packages.selector.versions."2.0.0"]
+        requires = ["z-provider[editable]"]
+        [packages.selector.versions."1.0.0"]
+    "#})?;
+    let missing = PackseServer::from_scenario(&missing);
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in").arg("--index-url").arg(missing.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because editable-only was not found in the package registry and a-leaf==1.0.0 depends on editable-only, we can conclude that a-leaf==1.0.0 cannot be used.
+             And because only a-leaf==1.0.0 is available, we can conclude that all versions of a-leaf cannot be used. (1)
+
+             Because z-provider==1.0.0 depends on a-leaf and only z-provider==1.0.0 is available, we can conclude that all versions of z-provider depend on a-leaf.
+             And because we know from (1) that all versions of a-leaf cannot be used, we can conclude that all versions of z-provider cannot be used.
+             And because you require z-provider, we can conclude that your requirements are unsatisfiable.
+    ");
+
+    provider_project.write_str(indoc! {r#"
+        [project]
+        name = "z-provider"
+        version = "1.0.0"
+
+        [project.optional-dependencies]
+        editable = ["a-leaf"]
+
+        [tool.uv.sources]
+        a-leaf = { path = "../a-leaf", editable = true }
+    "#})?;
+    requirements.write_str(&format!("{roots}selector\n"))?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in").arg("--index-url").arg(missing.index_url()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in
+    a-leaf @ file://[TEMP_DIR]/a-leaf
+        # via -r requirements.in
+    selector==1.0.0
+        # via -r requirements.in
+    wheel-only==1.0.0
+        # via a-leaf
+    z-provider @ file://[TEMP_DIR]/z-provider
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// A normal backend failure cannot exclude a directory that another selected URL requires editable.
+/// Dependencies from an unsupported editable build cannot establish that authorization themselves.
+#[test]
+fn url_source_directory_failed_normal_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let leaf = context.temp_dir.child("a-leaf");
+    leaf.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "a-leaf"
+        version = "1.0.0"
+        dynamic = ["dependencies"]
+
+        [build-system]
+        requires = []
+        build-backend = "backend"
+        backend-path = ["."]
+    "#})?;
+    let backend = leaf.child("backend.py");
+    let backend_contents = indoc! {r#"
+        from pathlib import Path
+
+        def get_requires_for_build_wheel(config_settings=None):
+            return ["unavailable-wheel-only"]
+
+        def get_requires_for_build_editable(config_settings=None):
+            return []
+
+        def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
+            return prepare_metadata_for_build_editable(metadata_directory, config_settings)
+
+        def prepare_metadata_for_build_editable(metadata_directory, config_settings=None):
+            dist_info = Path(metadata_directory) / "a_leaf-1.0.0.dist-info"
+            dist_info.mkdir()
+            (dist_info / "METADATA").write_text(
+                "Metadata-Version: 2.2\nName: a-leaf\nVersion: 1.0.0\n" + REQUIRES_DIST
+            )
+            return dist_info.name
+
+        REQUIRES_DIST = ""
+    "#};
+    backend.write_str(backend_contents)?;
+    let provider = context.temp_dir.child("z-provider");
+    provider.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "z-provider"
+        version = "1.0.0"
+        dependencies = ["a-leaf"]
+
+        [tool.uv.sources]
+        a-leaf = { path = "../a-leaf", editable = true }
+    "#})?;
+    let leaf_url = Url::from_file_path(leaf.path())
+        .map_err(|()| anyhow::anyhow!("directory path is not absolute"))?;
+    let provider_url = Url::from_file_path(provider.path())
+        .map_err(|()| anyhow::anyhow!("directory path is not absolute"))?;
+    let requirements = context.temp_dir.child("requirements.in");
+    requirements.write_str(&format!(
+        "a-leaf @ {leaf_url}\nz-provider @ {provider_url}\n"
+    ))?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in").arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --no-index
+    -e file://[TEMP_DIR]/a-leaf
+        # via
+        #   -r requirements.in
+        #   z-provider
+    z-provider @ file://[TEMP_DIR]/z-provider
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    requirements.write_str(&format!(
+        "z-provider @ {provider_url}\na-leaf @ {leaf_url}\n"
+    ))?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in").arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --no-index
+    -e file://[TEMP_DIR]/a-leaf
+        # via
+        #   -r requirements.in
+        #   z-provider
+    z-provider @ file://[TEMP_DIR]/z-provider
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    requirements.write_str(&format!("a-leaf @ {leaf_url}\n"))?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in").arg("--no-index"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to build `a-leaf @ file://[TEMP_DIR]/a-leaf`
+      cause: Failed to resolve requirements from `build-system.requires`
+      cause: No solution found when resolving: `unavailable-wheel-only`
+      cause: Because unavailable-wheel-only was not found in the provided package locations and you require unavailable-wheel-only, we can conclude that your requirements are unsatisfiable.
+
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+    ");
+
+    backend.write_str(&backend_contents.replace(
+        "REQUIRES_DIST = \"\"",
+        &format!("REQUIRES_DIST = \"Requires-Dist: z-provider @ {provider_url}\\n\""),
+    ))?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in").arg("--no-index").arg("--no-cache"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to build `a-leaf @ file://[TEMP_DIR]/a-leaf`
+      cause: Failed to resolve requirements from `build-system.requires`
+      cause: No solution found when resolving: `unavailable-wheel-only`
+      cause: Because unavailable-wheel-only was not found in the provided package locations and you require unavailable-wheel-only, we can conclude that your requirements are unsatisfiable.
+
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+    ");
+
+    backend.write_str(
+        &backend_contents
+            .replace("[\"unavailable-wheel-only\"]", "[]")
+            .replace(
+                "def get_requires_for_build_editable(config_settings=None):\n    return []",
+                "def get_requires_for_build_editable(config_settings=None):\n    return [\"unavailable-editable-only\"]",
+            ),
+    )?;
+    provider.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "z-provider"
+        version = "1.0.0"
+
+        [project.optional-dependencies]
+        editable = ["a-leaf"]
+
+        [tool.uv.sources]
+        a-leaf = { path = "../a-leaf", editable = true }
+    "#})?;
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "failed-optional-directory-editable-backend"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.selector.versions."2.0.0"]
+        requires = ["z-provider[editable]"]
+        [packages.selector.versions."1.0.0"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    requirements.write_str(&format!(
+        "a-leaf @ {leaf_url}\nz-provider @ {provider_url}\nselector\n"
+    ))?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in").arg("--index-url").arg(server.index_url()).arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --no-cache
+    a-leaf @ file://[TEMP_DIR]/a-leaf
+        # via -r requirements.in
+    selector==1.0.0
+        # via -r requirements.in
+    z-provider @ file://[TEMP_DIR]/z-provider
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// Successful directory metadata may be reused only after validating each requested package name.
+#[test]
+fn url_source_directory_rejects_cached_metadata_for_other_name() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let real = context.temp_dir.child("a-real");
+    real.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "a-real"
+        version = "1.0.0"
+    "#})?;
+    let url = Url::from_file_path(real.path())
+        .map_err(|()| anyhow::anyhow!("directory path is not absolute"))?;
+    let requirements = context.temp_dir.child("requirements.in");
+    requirements.write_str(&format!("a-real @ {url}\nz-fake @ {url}\n"))?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in").arg("--no-index"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to build `z-fake @ file://[TEMP_DIR]/a-real`
+      cause: Package metadata name `a-real` does not match given name `z-fake`
+    ");
+
+    requirements.write_str(&format!("z-fake @ {url}\na-real @ {url}\n"))?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in").arg("--no-index"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to build `z-fake @ file://[TEMP_DIR]/a-real`
+      cause: Package metadata name `a-real` does not match given name `z-fake`
+    ");
+
+    requirements.write_str(&format!("a-real @ {url}\n"))?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in").arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --no-index
+    a-real @ file://[TEMP_DIR]/a-real
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    Ok(())
+}
+
+/// Empty registry leaves cannot activate an inactive URL extra, but another registry package's
+/// lower version can still activate it while the leaves keep their preferred versions.
+#[test]
+fn url_source_registry_leaves_cannot_activate_provider() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let target = source_dependency_wheel(&context, "direct", "a-missing", &[], &[])?;
+    let target_requirement = format!("a-missing @ {target}");
+    let provider = source_dependency_wheel(
+        &context,
+        "direct",
+        "provider",
+        &[],
+        &[("activate", &target_requirement)],
+    )?;
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "url-provider-with-empty-registry-leaves"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.leaf-one.versions."2.0.0"]
+        [packages.leaf-one.versions."1.0.0"]
+        [packages.leaf-two.versions."2.0.0"]
+        [packages.leaf-two.versions."1.0.0"]
+        [packages.selector.versions."2.0.0"]
+        [packages.selector.versions."1.0.0"]
+        requires = ["provider[activate]"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    let roots = format!("provider @ {provider}\na-missing\nleaf-one\nleaf-two\n");
+    let requirements = context.temp_dir.child("requirements.in");
+    requirements.write_str(&roots)?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because a-missing was not found in the package registry and you require a-missing, we can conclude that your requirements are unsatisfiable.
+    ");
+
+    requirements.write_str(&format!("{roots}selector\n"))?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in
+    a-missing @ file://[TEMP_DIR]/direct/a_missing-1.0.0-py3-none-any.whl
+        # via
+        #   -r requirements.in
+        #   provider
+    leaf-one==2.0.0
+        # via -r requirements.in
+    leaf-two==2.0.0
+        # via -r requirements.in
+    provider @ file://[TEMP_DIR]/direct/provider-1.0.0-py3-none-any.whl
+        # via
+        #   -r requirements.in
+        #   selector
+    selector==1.0.0
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// Registry versions with identical nonempty requirements cannot change which URL extras are active.
+/// A registry version that adds an indirect route to a URL extra still must be reconsidered.
+#[test]
+fn url_source_registry_wrappers_cannot_activate_provider() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let target = source_dependency_wheel(&context, "direct", "a-missing", &[], &[])?;
+    let provider = source_dependency_wheel(
+        &context,
+        "direct",
+        "provider",
+        &[],
+        &[("activate", &format!("a-missing @ {target}"))],
+    )?;
+    let mut scenario = indoc! {r#"
+        name = "url-provider-with-registry-wrappers"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.shared.versions."1.0.0"]
+        [packages.bridge.versions."1.0.0".extras]
+        activate = ["provider[activate]"]
+        [packages.selector.versions."2.0.0"]
+        requires = ["shared"]
+        [packages.selector.versions."1.0.0"]
+        requires = ["bridge[activate]"]
+    "#}
+    .to_string();
+    let mut roots = format!("provider @ {provider}\na-missing\n");
+    for index in 0..8 {
+        let name = format!("wrapper-{index}");
+        write!(
+            scenario,
+            "[packages.{name}.versions.\"2.0.0\"]\nrequires = [\"shared\"]\n\
+             [packages.{name}.versions.\"1.0.0\"]\nrequires = [\"shared\"]\n"
+        )?;
+        writeln!(roots, "{name}")?;
+    }
+    let scenario = toml::from_str::<Scenario>(&scenario)?;
+    let server = PackseServer::from_scenario(&scenario);
+    let requirements = context.temp_dir.child("requirements.in");
+    requirements.write_str(&roots)?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because a-missing was not found in the package registry and you require a-missing, we can conclude that your requirements are unsatisfiable.
+    ");
+
+    requirements.write_str(&format!(
+        "provider @ {provider}\na-missing\nwrapper-0\nselector\n"
+    ))?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in
+    a-missing @ file://[TEMP_DIR]/direct/a_missing-1.0.0-py3-none-any.whl
+        # via
+        #   -r requirements.in
+        #   provider
+    bridge==1.0.0
+        # via selector
+    provider @ file://[TEMP_DIR]/direct/provider-1.0.0-py3-none-any.whl
+        # via
+        #   -r requirements.in
+        #   bridge
+    selector==1.0.0
+        # via -r requirements.in
+    shared==1.0.0
+        # via wrapper-0
+    wrapper-0==2.0.0
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// An extra activated by an excluded registry candidate must not replace a surviving registry
+/// dependency, even when the URL and registry publish the same version with different metadata.
+#[test]
+fn url_source_excluded_provider_keeps_registry_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let target = source_dependency_wheel(&context, "direct", "target", &["url-only"], &[])?;
+    let direct_target = format!("target @ {target}");
+    let provider = source_dependency_wheel(
+        &context,
+        "direct",
+        "provider",
+        &[],
+        &[("url", &direct_target)],
+    )?;
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "excluded-url-source"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.selector.versions."2.0.0"]
+        requires = ["provider[url]", "missing"]
+        [packages.selector.versions."1.0.0"]
+        [packages.target.versions."1.0.0"]
+        requires = ["registry-only"]
+        [packages.registry-only.versions."1.0.0"]
+        [packages.url-only.versions."1.0.0"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str(&format!("provider @ {provider}\nselector\ntarget"))?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in
+    provider @ file://[TEMP_DIR]/direct/provider-1.0.0-py3-none-any.whl
+        # via -r requirements.in
+    registry-only==1.0.0
+        # via target
+    selector==1.0.0
+        # via -r requirements.in
+    target==1.0.0
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// An index from a rejected extra cannot select a different wheel for the same registry version,
+/// or conflict with an independently selected first-party index.
+#[test]
+fn url_source_excluded_provider_keeps_registry_index() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let primary = toml::from_str::<Scenario>(indoc! {r#"
+        name = "primary-source-index"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.selector.versions."2.0.0"]
+        requires = ["provider[index]", "z-selector-missing"]
+        [packages.selector.versions."1.0.0"]
+        [packages.a-target.versions."1.0.0"]
+        requires = ["primary-only"]
+        [packages.primary-only.versions."1.0.0"]
+        [packages.secondary-only.versions."1.0.0"]
+    "#})?;
+    let primary = PackseServer::from_scenario(&primary);
+    let secondary = toml::from_str::<Scenario>(indoc! {r#"
+        name = "secondary-source-index"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.a-target.versions."1.0.0"]
+        requires = ["secondary-only"]
+    "#})?;
+    let secondary = PackseServer::from_scenario(&secondary);
+
+    let provider = context.temp_dir.child("provider");
+    provider.create_dir_all()?;
+    provider.child("pyproject.toml").write_str(&format!(
+        indoc! {r#"
+        [project]
+        name = "provider"
+        version = "1.0.0"
+        [project.optional-dependencies]
+        index = ["a-target"]
+        [tool.uv.sources]
+        a-target = {{ index = "secondary" }}
+        [[tool.uv.index]]
+        name = "secondary"
+        url = "{}"
+        explicit = true
+    "#},
+        secondary.index_url()
+    ))?;
+    let requirements = context.temp_dir.child("requirements.in");
+    let provider = Url::from_file_path(provider.path())
+        .map_err(|()| anyhow::anyhow!("project path is not absolute"))?;
+    requirements.write_str(&format!("provider @ {provider}\nselector\na-target"))?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in").arg("--index-url").arg(primary.index_url()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in
+    a-target==1.0.0
+        # via -r requirements.in
+    primary-only==1.0.0
+        # via a-target
+    provider @ file://[TEMP_DIR]/provider
+        # via -r requirements.in
+    selector==1.0.0
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    let other = context.temp_dir.child("other");
+    other.create_dir_all()?;
+    other.child("pyproject.toml").write_str(&format!(
+        indoc! {r#"
+        [project]
+        name = "other"
+        version = "1.0.0"
+        dependencies = ["a-target"]
+        [tool.uv.sources]
+        a-target = {{ index = "primary" }}
+        [[tool.uv.index]]
+        name = "primary"
+        url = "{}"
+        explicit = true
+    "#},
+        primary.index_url()
+    ))?;
+    let other = Url::from_file_path(other.path())
+        .map_err(|()| anyhow::anyhow!("project path is not absolute"))?;
+    requirements.write_str(&format!(
+        "provider @ {provider}\nother @ {other}\nselector\na-target"
+    ))?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in").arg("--index-url").arg(primary.index_url()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in
+    a-target==1.0.0
+        # via
+        #   -r requirements.in
+        #   other
+    other @ file://[TEMP_DIR]/other
+        # via -r requirements.in
+    primary-only==1.0.0
+        # via a-target
+    provider @ file://[TEMP_DIR]/provider
+        # via -r requirements.in
+    selector==1.0.0
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// A rejected flat index cannot hide a valid Simple API index at the same address.
+#[tokio::test]
+async fn url_source_excluded_provider_keeps_registry_index_format() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "index-format-selector"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.selector.versions."2.0.0"]
+        requires = ["provider[flat]", "z-missing"]
+        [packages.selector.versions."1.0.0"]
+        requires = ["provider[simple]"]
+    "#})?;
+    let registry = PackseServer::from_scenario(&scenario);
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "index-format-target"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.a-target.versions."1.0.0"]
+    "#})?;
+    let files = PackseServer::from_scenario(&scenario);
+    let server = MockServer::start().await;
+    let index_url = format!("{}/simple/", server.uri());
+    let filename = "a_target-1.0.0-py3-none-any.whl";
+    let metadata = format!(
+        r#"<html><body><a href="{}" data-upload-time="2024-01-01T00:00:00Z">{filename}</a></body></html>"#,
+        files.file_url(filename),
+    );
+    Mock::given(method("GET"))
+        .and(path("/simple/"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_raw(b"<html><body></body></html>".to_vec(), "text/html"),
+        )
+        .expect(1..)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/simple/a-target/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(metadata.into_bytes(), "text/html"))
+        .expect(1..)
+        .mount(&server)
+        .await;
+
+    let provider = context.temp_dir.child("provider");
+    provider.create_dir_all()?;
+    provider.child("pyproject.toml").write_str(&format!(
+        indoc! {r#"
+        [project]
+        name = "provider"
+        version = "1.0.0"
+        [project.optional-dependencies]
+        flat = ["a-target"]
+        simple = ["a-target"]
+        [tool.uv.sources]
+        a-target = [{{ index = "flat", extra = "flat" }}, {{ index = "simple", extra = "simple" }}]
+        [[tool.uv.index]]
+        name = "flat"
+        url = "{index_url}"
+        format = "flat"
+        explicit = true
+        [[tool.uv.index]]
+        name = "simple"
+        url = "{index_url}"
+        format = "simple"
+        explicit = true
+    "#},
+        index_url = index_url
+    ))?;
+    let provider = Url::from_file_path(provider.path())
+        .map_err(|()| anyhow::anyhow!("project path is not absolute"))?;
+    let requirements = context.temp_dir.child("requirements.in");
+    requirements.write_str(&format!("provider @ {provider}\nselector\na-target"))?;
+
+    uv_snapshot!(context.filters(), context.pip_compile().arg("requirements.in")
+        .arg("--index-url").arg(registry.index_url()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in
+    a-target==1.0.0
+        # via
+        #   -r requirements.in
+        #   provider
+    provider @ file://[TEMP_DIR]/provider
+        # via
+        #   -r requirements.in
+        #   selector
+    selector==1.0.0
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    server.verify().await;
+
+    requirements.write_str(&format!("provider[flat,simple] @ {provider}\na-target"))?;
+    uv_snapshot!(context.filters(), context.pip_compile().arg("requirements.in")
+        .arg("--index-url").arg(registry.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to resolve dependencies for package `provider==1.0.0`
+      cause: Requirements contain conflicting indexes for package `a-target`:
+             - http://[LOCALHOST]/simple/ (Simple API)
+             - http://[LOCALHOST]/simple/ (flat index)
+    ");
+    Ok(())
+}
+
+/// A failed URL lookup from an optional provider is local to that candidate; the registry still
+/// satisfies the target when the provider's extra is excluded.
+#[test]
+fn url_source_excluded_provider_cannot_fail_on_missing_artifact() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let target = context.temp_dir.child("a_target-1.0.0-py3-none-any.whl");
+    let target = Url::from_file_path(target.path())
+        .map_err(|()| anyhow::anyhow!("wheel path is not absolute"))?;
+    let direct_target = format!("a-target @ {target}");
+    let provider = source_dependency_wheel(
+        &context,
+        "direct",
+        "provider",
+        &[],
+        &[("url", &direct_target)],
+    )?;
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "excluded-missing-url-source"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.selector.versions."2.0.0"]
+        requires = ["provider[url]"]
+        [packages.selector.versions."1.0.0"]
+        [packages.a-target.versions."1.0.0"]
+        [packages.zzz-outside.versions."1.0.0"]
+        requires = ["zzz-impossible"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    let requirements = context.temp_dir.child("requirements.in");
+    requirements.write_str(&format!("provider @ {provider}\nselector\na-target==1.0.0"))?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in
+    a-target==1.0.0
+        # via -r requirements.in
+    provider @ file://[TEMP_DIR]/direct/provider-1.0.0-py3-none-any.whl
+        # via -r requirements.in
+    selector==1.0.0
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    requirements.write_str(&format!(
+        "provider @ {provider}\nselector\na-target==1.0.0\nzzz-outside"
+    ))?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because zzz-impossible was not found in the package registry and all versions of zzz-outside depend on zzz-impossible, we can conclude that all versions of zzz-outside cannot be used.
+             And because you require zzz-outside, we can conclude that your requirements are unsatisfiable.
+    ");
+    Ok(())
+}
+
+/// Required URLs report their artifact error; a malformed URL from an optional candidate can be dropped.
+#[test]
+fn url_source_reports_required_metadata_errors() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let direct = context.temp_dir.child("direct");
+    direct.create_dir_all()?;
+    let invalid_name = "validation-2.0.0-py3-none-any.whl";
+    let broken_name = "validation-3.0.0-py3-none-any.whl";
+    fs_err::copy(
+        context.workspace_root.join("test/links").join(invalid_name),
+        direct.child(invalid_name).path(),
+    )?;
+    fs_err::copy(
+        context.workspace_root.join("test/links").join(broken_name),
+        direct.child(broken_name).path(),
+    )?;
+    let invalid = Url::from_file_path(direct.child(invalid_name).path())
+        .map_err(|()| anyhow::anyhow!("wheel path is not absolute"))?;
+    let broken = Url::from_file_path(direct.child(broken_name).path())
+        .map_err(|()| anyhow::anyhow!("wheel path is not absolute"))?;
+    let invalid_requirement = format!("validation @ {invalid}");
+    let broken_requirement = format!("validation @ {broken}");
+    let provider = source_dependency_wheel(
+        &context,
+        "direct",
+        "provider",
+        &[],
+        &[
+            ("invalid", &invalid_requirement),
+            ("broken", &broken_requirement),
+        ],
+    )?;
+    let requirements = context.temp_dir.child("requirements.in");
+    requirements.write_str(&invalid_requirement)?;
+    uv_snapshot!(context.filters(), context.pip_compile().arg("requirements.in")
+        .arg("--no-index").arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to read `validation @ file://[TEMP_DIR]/direct/validation-2.0.0-py3-none-any.whl`
+      cause: Couldn't parse metadata of validation-2.0.0-py3-none-any.whl from validation @ file://[TEMP_DIR]/direct/validation-2.0.0-py3-none-any.whl
+      cause: Failed to parse version: Unexpected end of version specifier, expected operator. Did you mean `==12`?:
+             12
+             ^^
+    ");
+
+    requirements.write_str(&format!("provider[broken] @ {provider}"))?;
+    uv_snapshot!(context.filters(), context.pip_compile().arg("requirements.in")
+        .arg("--no-index").arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to read `validation @ file://[TEMP_DIR]/direct/validation-3.0.0-py3-none-any.whl`
+      cause: Failed to read metadata: `[TEMP_DIR]/direct/validation-3.0.0-py3-none-any.whl`
+      cause: Multiple .dist-info directories found: validation-2.0.0, validation-3.0.0
+
+    hint: `validation` (v3.0.0) was included because `provider[broken]` (v1.0.0) depends on `validation`
+    ");
+
+    requirements.write_str("validation @ https://example.org/validation-1.0.0-py3-none-any.whl")?;
+    uv_snapshot!(context.filters(), context.pip_compile().arg("requirements.in")
+        .arg("--no-index").arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to download `validation @ https://example.org/validation-1.0.0-py3-none-any.whl`
+      cause: Network connectivity is disabled, but the requested data wasn't found in the cache for: `https://example.org/validation-1.0.0-py3-none-any.whl`
+    ");
+
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "optional-malformed-url"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.selector.versions."2.0.0"]
+        requires = ["provider[invalid]"]
+        [packages.selector.versions."1.0.0"]
+        [packages.validation.versions."1.0.0"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    requirements.write_str(&format!("provider @ {provider}\nselector\nvalidation"))?;
+    uv_snapshot!(context.filters(), context.pip_compile().arg("requirements.in")
+        .arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in
+    provider @ file://[TEMP_DIR]/direct/provider-1.0.0-py3-none-any.whl
+        # via -r requirements.in
+    selector==1.0.0
+        # via -r requirements.in
+    validation==1.0.0
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// Conflicting hashes on a rejected URL extra cannot replace a separate required package's failure.
+#[test]
+fn url_source_excluded_provider_cannot_fail_on_conflicting_hashes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let first = format!(
+        "a-target @ https://example.org/a_target-1.0.0-py3-none-any.whl#sha256={}",
+        "0".repeat(64)
+    );
+    let second = format!(
+        "a-target @ https://example.org/a_target-1.0.0-py3-none-any.whl#sha256={}",
+        "1".repeat(64)
+    );
+    let provider = source_dependency_wheel(
+        &context,
+        "direct",
+        "provider",
+        &[],
+        &[("broken", &first), ("broken", &second)],
+    )?;
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "excluded-conflicting-hashes"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.a-target.versions."1.0.0"]
+        [packages.selector.versions."2.0.0"]
+        requires = ["provider[broken]", "z-selector-missing"]
+        [packages.selector.versions."1.0.0"]
+        [packages.zzz-outside.versions."1.0.0"]
+        requires = ["zzz-impossible"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    let requirements = context.temp_dir.child("requirements.in");
+    requirements.write_str(&format!("provider @ {provider}\nselector\na-target"))?;
+
+    uv_snapshot!(context.filters(), context.pip_install().arg("--dry-run")
+        .arg("-r").arg("requirements.in").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Would download 3 packages
+    Would install 3 packages
+     + a-target==1.0.0
+     + provider @ file://[TEMP_DIR]/direct/provider-1.0.0-py3-none-any.whl
+     + selector==1.0.0
+    ");
+
+    requirements.write_str(&format!(
+        "provider @ {provider}\nselector\na-target\nzzz-outside"
+    ))?;
+    uv_snapshot!(context.filters(), context.pip_install().arg("--dry-run")
+        .arg("-r").arg("requirements.in").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because zzz-impossible was not found in the package registry and all versions of zzz-outside depend on zzz-impossible, we can conclude that all versions of zzz-outside cannot be used.
+             And because you require zzz-outside, we can conclude that your requirements are unsatisfiable.
+    ");
+    Ok(())
+}
+
+/// A prior registry pin's hash cannot be reused when an included dependency now selects a URL
+/// distribution of the same package and version.
+#[test]
+fn url_source_recomputes_registry_preference_hash_for_direct_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let target = source_dependency_wheel(&context, "direct", "target", &[], &[])?;
+    let provider = source_dependency_wheel(
+        &context,
+        "direct",
+        "provider",
+        &[&format!("target @ {target}")],
+        &[],
+    )?;
+    let target_hash = hex::encode(Sha256::digest(read(
+        context
+            .temp_dir
+            .child("direct/target-1.0.0-py3-none-any.whl")
+            .path(),
+    )?));
+    let provider_hash = hex::encode(Sha256::digest(read(
+        context
+            .temp_dir
+            .child("direct/provider-1.0.0-py3-none-any.whl")
+            .path(),
+    )?));
+    let context = context
+        .with_filter((target_hash, "[TARGET_HASH]"))
+        .with_filter((provider_hash, "[PROVIDER_HASH]"));
+    let registry = PackseServer::empty();
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str(&format!("provider @ {provider}"))?;
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str(&format!("target==1.0.0 --hash=sha256:{}\n", "0".repeat(64)))?;
+
+    uv_snapshot!(context.filters(), context.pip_compile().arg("requirements.in").arg("--generate-hashes")
+        .arg("-o").arg("requirements.txt").arg("--index-url").arg(registry.index_url()), @r"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --generate-hashes -o requirements.txt
+    provider @ file://[TEMP_DIR]/direct/provider-1.0.0-py3-none-any.whl \
+        --hash=sha256:[PROVIDER_HASH]
+        # via -r requirements.in
+    target @ file://[TEMP_DIR]/direct/target-1.0.0-py3-none-any.whl \
+        --hash=sha256:[TARGET_HASH]
+        # via provider
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// Registry Git references can reuse an independently authorized commit, including late aliases.
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
+#[test]
+fn url_source_registry_git_aliases() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let repository = context.temp_dir.child("repository");
+    repository.create_dir_all()?;
+    repository.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "target"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+    "#})?;
+    Command::new("git")
+        .arg("init")
+        .arg(repository.path())
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args(["add", "."])
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args([
+            "-c",
+            "user.name=Example",
+            "-c",
+            "user.email=example@example.com",
+            "commit",
+            "-m",
+            "Trusted commit",
+        ])
+        .env("GIT_AUTHOR_DATE", "2000-01-01T00:00:00Z")
+        .env("GIT_COMMITTER_DATE", "2000-01-01T00:00:00Z")
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args(["tag", "trusted"])
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args(["tag", "alias"])
+        .assert()
+        .success();
+    let commit = Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args(["rev-parse", "HEAD"])
+        .output()?;
+    assert!(commit.status.success());
+    let commit = String::from_utf8(commit.stdout)?;
+    let commit = commit.trim();
+
+    repository.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "target"
+        dynamic = ["version"]
+
+        [build-system]
+        requires = []
+        build-backend = "backend"
+        backend-path = ["."]
+    "#})?;
+    repository.child("backend.py").write_str(indoc! {r#"
+        import os
+        from pathlib import Path
+
+        Path(os.environ["UV_TEST_SENTINEL"]).write_text("executed")
+    "#})?;
+    repository.child(".gitmodules").write_str(indoc! {r#"
+        [submodule "untrusted"]
+            path = untrusted
+            url = ../missing-submodule
+    "#})?;
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args(["add", "."])
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args(["update-index", "--add", "--cacheinfo"])
+        .arg(format!("160000,{commit},untrusted"))
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args([
+            "-c",
+            "user.name=Example",
+            "-c",
+            "user.email=example@example.com",
+            "commit",
+            "-m",
+            "Different commit",
+        ])
+        .env("GIT_AUTHOR_DATE", "2000-01-02T00:00:00Z")
+        .env("GIT_COMMITTER_DATE", "2000-01-02T00:00:00Z")
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args(["tag", "different"])
+        .assert()
+        .success();
+    let different = Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args(["rev-parse", "--short", "HEAD"])
+        .output()?;
+    assert!(different.status.success());
+    let different = String::from_utf8(different.stdout)?;
+    let different = different.trim();
+
+    let repository_url = Url::from_file_path(repository.path())
+        .map_err(|()| anyhow::anyhow!("repository path is not absolute"))?;
+    let trusted = format!("target @ git+{repository_url}@trusted");
+    let provider =
+        source_dependency_wheel(&context, "direct", "provider", &[], &[("url", &trusted)])?;
+    let scenario = toml::from_str::<Scenario>(&formatdoc! {r#"
+        name = "registry-git-aliases"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.a-hub.versions."1.0.0"]
+        requires = ["target @ git+{repository_url}@{commit}"]
+        [packages.b-hub.versions."1.0.0"]
+        requires = ["target @ git+{repository_url}@alias"]
+        [packages.optional.versions."2.0.0"]
+        requires = ["target @ git+{repository_url}@different"]
+        [packages.optional.versions."1.0.0"]
+        [packages.different.versions."1.0.0"]
+        requires = ["target @ git+{repository_url}@different"]
+        [packages.z-selector.versions."1.0.0"]
+        requires = ["provider[url]"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    let sentinel = context.temp_dir.child("backend-executed");
+    let context = context.with_filter((commit, "[COMMIT]"));
+    let requirements = context.temp_dir.child("requirements.in");
+    requirements.write_str(&format!("{trusted}\na-hub\nb-hub\noptional"))?;
+    uv_snapshot!(context.filters(), context.pip_compile().arg("requirements.in")
+        .arg("--index-url").arg(server.index_url()).env("UV_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in
+    a-hub==1.0.0
+        # via -r requirements.in
+    b-hub==1.0.0
+        # via -r requirements.in
+    optional==1.0.0
+        # via -r requirements.in
+    target @ git+file://[TEMP_DIR]/repository@[COMMIT]
+        # via
+        #   -r requirements.in
+        #   a-hub
+        #   b-hub
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    requirements.write_str(&format!("provider @ {provider}\na-hub\nb-hub\nz-selector"))?;
+    uv_snapshot!(context.filters(), context.pip_compile().arg("requirements.in")
+        .arg("--index-url").arg(server.index_url()).env("UV_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in
+    a-hub==1.0.0
+        # via -r requirements.in
+    b-hub==1.0.0
+        # via -r requirements.in
+    provider @ file://[TEMP_DIR]/direct/provider-1.0.0-py3-none-any.whl
+        # via
+        #   -r requirements.in
+        #   z-selector
+    target @ git+file://[TEMP_DIR]/repository@[COMMIT]
+        # via
+        #   a-hub
+        #   b-hub
+        #   provider
+    z-selector==1.0.0
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    requirements.write_str(&format!("provider @ {provider}\ndifferent\nz-selector"))?;
+    uv_snapshot!(context.filters(), context.pip_compile().arg("requirements.in")
+        .arg("--index-url").arg(server.index_url()).env("UV_TEST_SENTINEL", sentinel.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to resolve dependencies for package `different==1.0.0`
+      cause: Package `target` was included as a URL dependency. URL dependencies must be expressed as direct requirements or constraints. Consider adding `target @ git+file://[TEMP_DIR]/repository@different` to your dependencies or constraints file.
+    ");
+
+    let git_trace = context.temp_dir.child("git-trace");
+    requirements.write_str("b-hub")?;
+    uv_snapshot!(context.filters(), context.pip_compile().arg("requirements.in")
+        .arg("--index-url").arg(server.index_url()).env("GIT_TRACE", git_trace.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to resolve dependencies for package `b-hub==1.0.0`
+      cause: Package `target` was included as a URL dependency. URL dependencies must be expressed as direct requirements or constraints. Consider adding `target @ git+file://[TEMP_DIR]/repository@alias` to your dependencies or constraints file.
+    ");
+    assert!(
+        !git_trace.exists(),
+        "the registry source triggered Git without an authorized source"
+    );
+    assert!(
+        !sentinel.exists(),
+        "the registry source's build backend was executed"
+    );
+    let repository = RepositoryUrl::parse(repository_url.as_str())?;
+    let checkouts = context
+        .cache_dir
+        .child("git-v0/checkouts")
+        .child(cache_digest(&repository));
+    assert!(
+        checkouts.exists(),
+        "the authorized source was not checked out"
+    );
+    assert!(
+        !checkouts.child(different).exists(),
+        "the registry source or its submodules were checked out"
+    );
+    Ok(())
+}
+
+/// A registry distribution cannot introduce a URL, even when the target and an unrelated direct
+/// dependency are otherwise present in the solve.
+#[test]
+fn url_source_registry_cannot_introduce_a_url() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let target = source_dependency_wheel(&context, "direct", "target", &["url-only"], &[])?;
+    let provider = source_dependency_wheel(&context, "direct", "provider", &[], &[])?;
+    let scenario = toml::from_str::<Scenario>(&format!(
+        indoc! {r#"
+        name = "untrusted-registry-url"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.selector.versions."2.0.0"]
+        requires = ["target @ {}"]
+        [packages.selector.versions."1.0.0"]
+        [packages.target.versions."1.0.0"]
+        requires = ["registry-only"]
+        [packages.registry-only.versions."1.0.0"]
+        [packages.url-only.versions."1.0.0"]
+    "#},
+        target
+    ))?;
+    let server = PackseServer::from_scenario(&scenario);
+    let requirements = context.temp_dir.child("requirements.in");
+    requirements.write_str(&format!("provider @ {provider}\nselector\ntarget"))?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in
+    provider @ file://[TEMP_DIR]/direct/provider-1.0.0-py3-none-any.whl
+        # via -r requirements.in
+    registry-only==1.0.0
+        # via target
+    selector==1.0.0
+        # via -r requirements.in
+    target==1.0.0
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    requirements.write_str(&format!("provider @ {provider}\nselector==2\ntarget"))?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to resolve dependencies for package `selector==2.0.0`
+      cause: Package `target` was included as a URL dependency. URL dependencies must be expressed as direct requirements or constraints. Consider adding `target @ file://[TEMP_DIR]/direct/target-1.0.0-py3-none-any.whl` to your dependencies or constraints file.
+    ");
+    Ok(())
+}
+
+/// Registry metadata cannot authorize its own direct dependency through a cycle, even when the same
+/// URL appears in an extra of a directly required package that is never independently activated.
+#[test]
+fn url_source_registry_cannot_authorize_an_inactive_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let target = source_dependency_wheel(&context, "direct", "target", &["provider[url]"], &[])?;
+    let direct_target = format!("target @ {target}");
+    let provider = source_dependency_wheel(
+        &context,
+        "direct",
+        "provider",
+        &[],
+        &[("url", &direct_target)],
+    )?;
+    let mut scenario = Scenario::empty();
+    scenario.packages.insert(
+        "selector".parse()?,
+        Package {
+            versions: BTreeMap::from([(
+                "1.0.0".parse()?,
+                PackageMetadata {
+                    requires: vec![direct_target.parse()?],
+                    wheel: Some(ArtifactMetadata::default()),
+                    ..PackageMetadata::default()
+                },
+            )]),
+        },
+    );
+    let server = PackseServer::from_scenario(&scenario);
+    let requirements = context.temp_dir.child("requirements.in");
+    requirements.write_str(&format!("provider @ {provider}\nselector==1.0.0\ntarget"))?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to resolve dependencies for package `selector==1.0.0`
+      cause: Package `target` was included as a URL dependency. URL dependencies must be expressed as direct requirements or constraints. Consider adding `target @ file://[TEMP_DIR]/direct/target-1.0.0-py3-none-any.whl` to your dependencies or constraints file.
+    ");
+
+    requirements.write_str(&format!(
+        "provider[url] @ {provider}\nselector==1.0.0\ntarget"
+    ))?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in
+    provider @ file://[TEMP_DIR]/direct/provider-1.0.0-py3-none-any.whl
+        # via
+        #   -r requirements.in
+        #   target
+    selector==1.0.0
+        # via -r requirements.in
+    target @ file://[TEMP_DIR]/direct/target-1.0.0-py3-none-any.whl
+        # via
+        #   -r requirements.in
+        #   provider
+        #   selector
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// A URL declared on one platform changes only that platform's target and metadata, even when a
+/// separate bare root dependency requires the same package everywhere.
+#[cfg(feature = "test-universal")]
+#[test]
+fn url_source_marker_limits_registry_and_direct_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let target = source_dependency_wheel(&context, "direct", "target", &["url-only"], &[])?;
+    let direct_target = format!("target @ {target} ; sys_platform == 'linux'");
+    let provider = source_dependency_wheel(&context, "direct", "provider", &[&direct_target], &[])?;
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "marker-url-source"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.target.versions."1.0.0"]
+        requires = ["registry-only"]
+        [packages.registry-only.versions."1.0.0"]
+        [packages.url-only.versions."1.0.0"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str(&format!("provider @ {provider}\ntarget"))?;
+
+    uv_snapshot!(context.filters(), context.pip_compile().arg("--universal")
+        .arg("requirements.in").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --universal requirements.in
+    provider @ file://[TEMP_DIR]/direct/provider-1.0.0-py3-none-any.whl
+        # via -r requirements.in
+    registry-only==1.0.0 ; sys_platform != 'linux'
+        # via target
+    target==1.0.0 ; sys_platform != 'linux'
+        # via -r requirements.in
+    target @ file://[TEMP_DIR]/direct/target-1.0.0-py3-none-any.whl ; sys_platform == 'linux'
+        # via
+        #   -r requirements.in
+        #   provider
+    url-only==1.0.0 ; sys_platform == 'linux'
+        # via target
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// The marker on a registry request for an extra restricts the URLs declared by that extra.
+#[cfg(feature = "test-universal")]
+#[test]
+fn url_source_marker_on_registry_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let target = source_dependency_wheel(&context, "direct", "target", &["url-only"], &[])?;
+    let direct_target = format!("target @ {target}");
+    let provider = source_dependency_wheel(
+        &context,
+        "direct",
+        "provider",
+        &[],
+        &[("url", &direct_target)],
+    )?;
+    let scenario = toml::from_str::<Scenario>(&formatdoc! {r#"
+        name = "conditional-registry-extra"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.selector.versions."1.0.0"]
+        requires = ["provider[url] ; sys_platform == 'linux'"]
+        [packages.backtracking-selector.versions."2.0.0"]
+        requires = ["provider[url]", "missing"]
+        [packages.backtracking-selector.versions."1.0.0"]
+        requires = ["provider[url] ; sys_platform == 'linux'"]
+        [packages.registry-url.versions."1.0.0"]
+        requires = ["target @ {target}"]
+        [packages.target.versions."1.0.0"]
+        requires = ["registry-only"]
+        [packages.registry-only.versions."1.0.0"]
+        [packages.url-only.versions."1.0.0"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    let requirements = context.temp_dir.child("requirements.in");
+    requirements.write_str(&format!("provider @ {provider}\nselector\ntarget"))?;
+    uv_snapshot!(context.filters(), context.pip_compile().arg("--universal")
+        .arg("requirements.in").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --universal requirements.in
+    provider @ file://[TEMP_DIR]/direct/provider-1.0.0-py3-none-any.whl
+        # via
+        #   -r requirements.in
+        #   selector
+    registry-only==1.0.0 ; sys_platform != 'linux'
+        # via target
+    selector==1.0.0
+        # via -r requirements.in
+    target==1.0.0 ; sys_platform != 'linux'
+        # via -r requirements.in
+    target @ file://[TEMP_DIR]/direct/target-1.0.0-py3-none-any.whl ; sys_platform == 'linux'
+        # via
+        #   -r requirements.in
+        #   provider
+    url-only==1.0.0 ; sys_platform == 'linux'
+        # via target
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    ");
+
+    requirements.write_str(&format!(
+        "provider @ {provider}\nbacktracking-selector\ntarget"
+    ))?;
+    uv_snapshot!(context.filters(), context.pip_compile().arg("--universal")
+        .arg("requirements.in").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --universal requirements.in
+    backtracking-selector==1.0.0
+        # via -r requirements.in
+    provider @ file://[TEMP_DIR]/direct/provider-1.0.0-py3-none-any.whl
+        # via
+        #   -r requirements.in
+        #   backtracking-selector
+    registry-only==1.0.0 ; sys_platform != 'linux'
+        # via target
+    target==1.0.0 ; sys_platform != 'linux'
+        # via -r requirements.in
+    target @ file://[TEMP_DIR]/direct/target-1.0.0-py3-none-any.whl ; sys_platform == 'linux'
+        # via
+        #   -r requirements.in
+        #   provider
+    url-only==1.0.0 ; sys_platform == 'linux'
+        # via target
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    ");
+
+    requirements.write_str(&format!(
+        "provider @ {provider}\nselector\ntarget\nregistry-url"
+    ))?;
+    uv_snapshot!(context.filters(), context.pip_compile().arg("--universal")
+        .arg("requirements.in").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to resolve dependencies for package `registry-url==1.0.0`
+      cause: Package `target` was included as a URL dependency. URL dependencies must be expressed as direct requirements or constraints. Consider adding `target @ file://[TEMP_DIR]/direct/target-1.0.0-py3-none-any.whl` to your dependencies or constraints file.
+    ");
+    Ok(())
+}
+
+/// Two extras activated on disjoint platforms can select different URLs for the same package.
+#[cfg(feature = "test-universal")]
+#[test]
+fn url_source_disjoint_markers_on_registry_extras() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let linux = source_dependency_wheel(&context, "linux", "target", &["linux-only"], &[])?;
+    let other = source_dependency_wheel(&context, "other", "target", &["other-only"], &[])?;
+    let linux_target = format!("target @ {linux}");
+    let other_target = format!("target @ {other}");
+    let linux_provider = source_dependency_wheel(
+        &context,
+        "linux",
+        "linux-provider",
+        &[],
+        &[("url", &linux_target)],
+    )?;
+    let other_provider = source_dependency_wheel(
+        &context,
+        "other",
+        "other-provider",
+        &[],
+        &[("url", &other_target)],
+    )?;
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "disjoint-registry-extras"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.selector.versions."1.0.0"]
+        requires = [
+            "linux-provider[url] ; sys_platform == 'linux'",
+            "other-provider[url] ; sys_platform != 'linux'",
+        ]
+        [packages.target.versions."1.0.0"]
+        requires = ["registry-only"]
+        [packages.registry-only.versions."1.0.0"]
+        [packages.linux-only.versions."1.0.0"]
+        [packages.other-only.versions."1.0.0"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    context.temp_dir.child("requirements.in").write_str(&format!(
+        "linux-provider @ {linux_provider}\nother-provider @ {other_provider}\nselector\ntarget",
+    ))?;
+    uv_snapshot!(context.filters(), context.pip_compile().arg("--universal")
+        .arg("requirements.in").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --universal requirements.in
+    linux-only==1.0.0 ; sys_platform == 'linux'
+        # via target
+    linux-provider @ file://[TEMP_DIR]/linux/linux_provider-1.0.0-py3-none-any.whl
+        # via
+        #   -r requirements.in
+        #   selector
+    other-only==1.0.0 ; sys_platform != 'linux'
+        # via target
+    other-provider @ file://[TEMP_DIR]/other/other_provider-1.0.0-py3-none-any.whl
+        # via
+        #   -r requirements.in
+        #   selector
+    selector==1.0.0
+        # via -r requirements.in
+    target @ file://[TEMP_DIR]/linux/target-1.0.0-py3-none-any.whl ; sys_platform == 'linux'
+        # via
+        #   -r requirements.in
+        #   linux-provider
+    target @ file://[TEMP_DIR]/other/target-1.0.0-py3-none-any.whl ; sys_platform != 'linux'
+        # via
+        #   -r requirements.in
+        #   other-provider
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// A direct override supersedes a direct constraint only where that override applies. The registry
+/// override in the remaining environments still allows the constraint's independent direct source.
+#[cfg(feature = "test-universal")]
+#[test]
+fn url_source_override_and_constraint_markers() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let constrained =
+        source_dependency_wheel(&context, "constrained", "target", &["constraint-only"], &[])?;
+    let overridden =
+        source_dependency_wheel(&context, "overridden", "target", &["override-only"], &[])?;
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "conditional-url-override"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.constraint-only.versions."1.0.0"]
+        [packages.override-only.versions."1.0.0"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str("target")?;
+    context
+        .temp_dir
+        .child("constraints.in")
+        .write_str(&format!("target @ {constrained}"))?;
+    context.temp_dir.child("overrides.in").write_str(&format!(
+        "target @ {overridden} ; sys_platform == 'linux'\ntarget ; sys_platform != 'linux'"
+    ))?;
+
+    uv_snapshot!(context.filters(), context.pip_compile().arg("--universal")
+        .arg("requirements.in").arg("--constraint").arg("constraints.in")
+        .arg("--override").arg("overrides.in").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --universal requirements.in --constraint constraints.in --override overrides.in
+    constraint-only==1.0.0 ; sys_platform != 'linux'
+        # via target
+    override-only==1.0.0 ; sys_platform == 'linux'
+        # via target
+    target @ file://[TEMP_DIR]/constrained/target-1.0.0-py3-none-any.whl ; sys_platform != 'linux'
+        # via
+        #   -c constraints.in
+        #   --override overrides.in
+        #   -r requirements.in
+    target @ file://[TEMP_DIR]/overridden/target-1.0.0-py3-none-any.whl ; sys_platform == 'linux'
+        # via
+        #   -c constraints.in
+        #   --override overrides.in
+        #   -r requirements.in
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// Explicit first-party pins discovered in direct wheel metadata still allow yanks and opt into
+/// prereleases when prerelease policy requires a first-party declaration.
+#[test]
+fn url_source_direct_metadata_candidate_policies() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let provider = source_dependency_wheel(
+        &context,
+        "direct",
+        "provider",
+        &["yanked==1.0.0", "preview==1.0.0a1"],
+        &[],
+    )?;
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "direct-candidate-policies"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.yanked.versions."1.0.0"]
+        yanked = true
+        [packages.preview.versions."1.0.0a1"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str(&format!("provider @ {provider}"))?;
+
+    uv_snapshot!(context.filters(), context.pip_compile().arg("--prerelease=explicit")
+        .arg("requirements.in").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --prerelease=explicit requirements.in
+    preview==1.0.0a1
+        # via provider
+    provider @ file://[TEMP_DIR]/direct/provider-1.0.0-py3-none-any.whl
+        # via -r requirements.in
+    yanked==1.0.0
+        # via provider
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    warning: `yanked==1.0.0` is yanked
+    ");
+    Ok(())
+}
+
+/// A selected local extra makes its dependency direct for lowest-direct resolution, even if a
+/// registry package caused the dependency's version to be chosen before activating the extra.
+#[test]
+fn url_source_late_lowest_direct_policy() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let provider = context.temp_dir.child("provider");
+    provider.create_dir_all()?;
+    provider.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "provider"
+        version = "1.0.0"
+        [project.optional-dependencies]
+        pin = ["target>=1"]
+        fallback = ["fallback-target>=1"]
+    "#})?;
+    let provider = Url::from_file_path(provider.path())
+        .map_err(|()| anyhow::anyhow!("project path is not absolute"))?;
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "late-lowest-direct"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.a-hub.versions."1.0.0"]
+        requires = ["target>=1", "z-selector"]
+        [packages.z-selector.versions."1.0.0"]
+        requires = ["provider[pin]"]
+        [packages.target.versions."2.0.0"]
+        [packages.target.versions."1.0.0"]
+        [packages.a-fallback.versions."1.0.0"]
+        requires = ["fallback-target>=1", "z-fallback-selector"]
+        [packages.z-fallback-selector.versions."2.0.0"]
+        [packages.z-fallback-selector.versions."1.0.0"]
+        requires = ["provider[fallback]"]
+        [packages.fallback-target.versions."2.0.0"]
+        requires = ["z-fallback-selector==1"]
+        [packages.fallback-target.versions."1.0.0"]
+        requires = ["z-fallback-selector==2"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    let requirements = context.temp_dir.child("requirements.in");
+    requirements.write_str(&format!("provider @ {provider}\na-hub>=1"))?;
+
+    uv_snapshot!(context.filters(), context.pip_compile().arg("--resolution=lowest-direct")
+        .arg("requirements.in").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --resolution=lowest-direct requirements.in
+    a-hub==1.0.0
+        # via -r requirements.in
+    provider @ file://[TEMP_DIR]/provider
+        # via
+        #   -r requirements.in
+        #   z-selector
+    target==1.0.0
+        # via
+        #   a-hub
+        #   provider
+    z-selector==1.0.0
+        # via a-hub
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    // The lower candidate removes the only dependency path that makes it direct.
+    requirements.write_str(&format!("provider @ {provider}\na-fallback>=1"))?;
+    uv_snapshot!(context.filters(), context.pip_compile().arg("--resolution=lowest-direct")
+        .arg("requirements.in").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --resolution=lowest-direct requirements.in
+    a-fallback==1.0.0
+        # via -r requirements.in
+    fallback-target==2.0.0
+        # via
+        #   a-fallback
+        #   provider
+    provider @ file://[TEMP_DIR]/provider
+        # via
+        #   -r requirements.in
+        #   z-fallback-selector
+    z-fallback-selector==1.0.0
+        # via
+        #   a-fallback
+        #   fallback-target
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// A conditional local dependency prefers the lower version only where it is direct. The same
+/// package can still be required transitively on other platforms.
+#[cfg(feature = "test-universal")]
+#[test]
+fn url_source_marker_limits_lowest_direct_policy() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let provider = context.temp_dir.child("provider");
+    provider.create_dir_all()?;
+    provider.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "provider"
+        version = "1.0.0"
+        [project.optional-dependencies]
+        pin = ["target>=1 ; sys_platform == 'linux'"]
+    "#})?;
+    let provider = Url::from_file_path(provider.path())
+        .map_err(|()| anyhow::anyhow!("project path is not absolute"))?;
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "conditional-lowest-direct"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.a-hub.versions."1.0.0"]
+        requires = ["target>=1", "z-selector"]
+        [packages.z-selector.versions."1.0.0"]
+        requires = ["provider[pin]"]
+        [packages.target.versions."2.0.0"]
+        [packages.target.versions."1.0.0"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str(&format!("provider @ {provider}\na-hub>=1"))?;
+
+    uv_snapshot!(context.filters(), context.pip_compile().arg("--universal").arg("--resolution=lowest-direct")
+        .arg("requirements.in").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --universal --resolution=lowest-direct requirements.in
+    a-hub==1.0.0
+        # via -r requirements.in
+    provider @ file://[TEMP_DIR]/provider
+        # via
+        #   -r requirements.in
+        #   z-selector
+    target==1.0.0 ; sys_platform == 'linux'
+        # via
+        #   a-hub
+        #   provider
+    target==2.0.0 ; sys_platform != 'linux'
+        # via a-hub
+    z-selector==1.0.0
+        # via a-hub
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// Bare registry requests made before a selector decision can be satisfied by first-party pins
+/// from an extra activated only by an older selector. Inactive pins must not satisfy those requests.
+#[test]
+fn url_source_late_candidate_policies() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let provider = source_dependency_wheel(
+        &context,
+        "direct",
+        "provider",
+        &[],
+        &[("pins", "a-preview==1.0.0a1"), ("pins", "a-yanked==1.0.0")],
+    )?;
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "late-candidate-policies"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.selector.versions."2.0.0"]
+        [packages.selector.versions."1.0.0"]
+        requires = ["provider[pins]"]
+        [packages.a-preview.versions."1.0.0a1"]
+        [packages.a-yanked.versions."1.0.0"]
+        yanked = true
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    let requirements = context.temp_dir.child("requirements.in");
+    requirements.write_str(&format!(
+        "a-preview\na-yanked\nprovider @ {provider}\nselector"
+    ))?;
+
+    uv_snapshot!(context.filters(), context.pip_compile().arg("--prerelease=explicit")
+        .arg("requirements.in").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --prerelease=explicit requirements.in
+    a-preview==1.0.0a1
+        # via
+        #   -r requirements.in
+        #   provider
+    a-yanked==1.0.0
+        # via
+        #   -r requirements.in
+        #   provider
+    provider @ file://[TEMP_DIR]/direct/provider-1.0.0-py3-none-any.whl
+        # via
+        #   -r requirements.in
+        #   selector
+    selector==1.0.0
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    warning: `a-yanked==1.0.0` is yanked
+    ");
+
+    requirements.write_str(&format!(
+        "a-preview\na-yanked\nprovider @ {provider}\nselector==2"
+    ))?;
+    uv_snapshot!(context.filters(), context.pip_compile().arg("--prerelease=explicit")
+        .arg("requirements.in").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because only a-preview==1.0.0a1 is available and a-preview==1.0.0a1 is a pre-release, but pre-releases weren't enabled, we can conclude that all versions of a-preview cannot be used.
+             And because you require a-preview, we can conclude that your requirements are unsatisfiable.
+
+    hint: Pre-releases are available for `a-preview` in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+    ");
+    Ok(())
+}
+
+/// Conditional first-party pins cannot allow a prerelease or yank where the provider does not pin it.
+#[cfg(feature = "test-universal")]
+#[test]
+fn url_source_marker_limits_candidate_policies() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .chain([(
+            // This hint is only shown when the current platform doesn't match the target.
+            r"\nhint: The resolution failed for an environment that is not the current one[^\n]*\n",
+            "",
+        )])
+        .collect();
+    let provider = source_dependency_wheel(
+        &context,
+        "direct",
+        "provider",
+        &[
+            "preview==1.0.0a1 ; sys_platform == 'linux'",
+            "yanked==1.0.0 ; sys_platform == 'linux'",
+        ],
+        &[],
+    )?;
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "conditional-candidate-policies"
+        [root]
+        [expected]
+        satisfiable = false
+        [packages.preview.versions."1.0.0a1"]
+        [packages.yanked.versions."1.0.0"]
+        yanked = true
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    let requirements = context.temp_dir.child("requirements.in");
+    requirements.write_str(&format!("provider @ {provider}\npreview"))?;
+    uv_snapshot!(filters, context.pip_compile().arg("--universal").arg("--prerelease=explicit")
+        .arg("requirements.in").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies for split (markers: sys_platform != 'linux')
+      cause: Because there are no versions of preview and you require preview, we can conclude that your requirements are unsatisfiable.
+
+    hint: Pre-releases are available for `preview` in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+    ");
+
+    requirements.write_str(&format!("provider @ {provider}\nyanked"))?;
+    uv_snapshot!(filters, context.pip_compile().arg("--universal").arg("--prerelease=explicit")
+        .arg("requirements.in").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies for split (markers: sys_platform != 'linux')
+      cause: Because yanked==1.0.0 was yanked and only yanked==1.0.0 is available, we can conclude that all versions of yanked cannot be used.
+             And because you require yanked, we can conclude that your requirements are unsatisfiable.
+    ");
+
+    requirements.write_str(&format!("provider @ {provider}"))?;
+    uv_snapshot!(filters, context.pip_compile().arg("--universal").arg("--prerelease=explicit")
+        .arg("requirements.in").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --universal --prerelease=explicit requirements.in
+    preview==1.0.0a1 ; sys_platform == 'linux'
+        # via provider
+    provider @ file://[TEMP_DIR]/direct/provider-1.0.0-py3-none-any.whl
+        # via -r requirements.in
+    yanked==1.0.0 ; sys_platform == 'linux'
+        # via provider
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    warning: `yanked==1.0.0` is yanked
+    ");
+    Ok(())
+}
+
+/// A surviving direct provider can replace the registry independently of a conflicting URL from
+/// an excluded candidate. The output must use the surviving direct artifact's own metadata.
+#[test]
+fn url_source_independent_provider_survives() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let abandoned =
+        source_dependency_wheel(&context, "abandoned", "target", &["abandoned-only"], &[])?;
+    let abandoned_target = format!("target @ {abandoned}");
+    let provider = source_dependency_wheel(
+        &context,
+        "direct",
+        "provider",
+        &[],
+        &[("url", &abandoned_target)],
+    )?;
+    let surviving =
+        source_dependency_wheel(&context, "surviving", "target", &["surviving-only"], &[])?;
+    let surviving_target = format!("target @ {surviving}");
+    let survivor =
+        source_dependency_wheel(&context, "direct", "survivor", &[&surviving_target], &[])?;
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "independent-url-source"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.selector.versions."2.0.0"]
+        requires = ["provider[url]"]
+        [packages.selector.versions."1.0.0"]
+        [packages.target.versions."1.0.0"]
+        requires = ["registry-only"]
+        [packages.registry-only.versions."1.0.0"]
+        [packages.abandoned-only.versions."1.0.0"]
+        [packages.surviving-only.versions."1.0.0"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str(&format!(
+            "provider @ {provider}\nselector\ntarget\nsurvivor @ {survivor}"
+        ))?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in
+    provider @ file://[TEMP_DIR]/direct/provider-1.0.0-py3-none-any.whl
+        # via -r requirements.in
+    selector==1.0.0
+        # via -r requirements.in
+    surviving-only==1.0.0
+        # via target
+    survivor @ file://[TEMP_DIR]/direct/survivor-1.0.0-py3-none-any.whl
+        # via -r requirements.in
+    target @ file://[TEMP_DIR]/surviving/target-1.0.0-py3-none-any.whl
+        # via
+        #   -r requirements.in
+        #   survivor
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// The target has no registry candidates. An earlier registry choice must still be reconsidered
+/// when only an older selector activates the already-grounded direct provider's URL extra.
+#[test]
+fn url_source_late_provider_without_registry_candidate() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let target = source_dependency_wheel(&context, "direct", "a-target", &[], &[])?;
+    let direct_target = format!("a-target @ {target}");
+    let provider = source_dependency_wheel(
+        &context,
+        "direct",
+        "provider",
+        &[],
+        &[("url", &direct_target)],
+    )?;
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "late-url-source"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.selector.versions."2.0.0"]
+        [packages.selector.versions."1.0.0"]
+        requires = ["provider[url]"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str(&format!("a-target==1.0.0\nprovider @ {provider}\nselector"))?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in
+    a-target @ file://[TEMP_DIR]/direct/a_target-1.0.0-py3-none-any.whl
+        # via
+        #   -r requirements.in
+        #   provider
+    provider @ file://[TEMP_DIR]/direct/provider-1.0.0-py3-none-any.whl
+        # via
+        #   -r requirements.in
+        #   selector
+    selector==1.0.0
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    Ok(())
+}
+
 /// Request Werkzeug via both a version and a URL dependency at a _different_ version, which
 /// should result in a conflict.
 #[test]
@@ -4946,6 +7295,56 @@ fn deduplicate_editable() -> Result<()> {
     Ok(())
 }
 
+/// A repeated editable uses the final literal path, so the generated file does not depend on an
+/// environment variable that was only used by an intermediate declaration.
+#[test]
+fn deduplicate_editable_environment_variable() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let leaf = context.temp_dir.child("leaf");
+    leaf.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "leaf"
+        version = "1.0.0"
+
+        [project.optional-dependencies]
+        extra = []
+    "#})?;
+    let url = Url::from_file_path(leaf.path())
+        .map_err(|()| anyhow::anyhow!("directory path is not absolute"))?;
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str(&format!("-e {url}\n-e ${{DEP_DIR}}\n-e {url}[extra]\n"))?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in").arg("--no-index").arg("-o").arg("requirements.txt")
+        .env("DEP_DIR", leaf.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --no-index -o requirements.txt
+    -e file://[TEMP_DIR]/leaf
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.txt").arg("--no-index")
+        .env_remove("DEP_DIR"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --no-index
+    -e file://[TEMP_DIR]/leaf
+        # via -r requirements.txt
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    Ok(())
+}
+
 #[test]
 fn strip_fragment_unnamed() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -5633,6 +8032,207 @@ async fn generate_hashes_url_fragment() -> Result<()> {
                sha512:34d2da25dff510a575ddfacf1c54928d04a28fac96a457c2b079d9a773b8dd5cd3a33f763def112d75298a1a0f10d939c8ddfe41fa50b26c9206f59c1b284557
     ");
 
+    Ok(())
+}
+
+/// A selected first-party wheel spelling the same URL cannot remove or replace an authored digest.
+#[tokio::test]
+async fn generate_hashes_url_fragment_with_selected_provider() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let filename = "ok-1.0.0-py3-none-any.whl";
+    let wheel = read(context.workspace_root.join("test/links").join(filename))?;
+    let wheel_hash = hex::encode(Sha256::digest(&wheel));
+    let wheel_sha512 = hex::encode(Sha512::digest(&wheel));
+    let wrong_hash = "0".repeat(128);
+    let target = format!("{}/{filename}", server.uri());
+    Mock::given(method("HEAD"))
+        .and(path(format!("/{filename}")))
+        .respond_with(ResponseTemplate::new(405))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(format!("/{filename}")))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(wheel))
+        .mount(&server)
+        .await;
+
+    let parent = source_dependency_wheel(
+        &context,
+        "direct",
+        "a-parent",
+        &[&format!("ok @ {target}")],
+        &[],
+    )?;
+    let other = source_dependency_wheel(
+        &context,
+        "direct",
+        "z-parent",
+        &[&format!("ok @ {target}#sha256={wheel_hash}")],
+        &[],
+    )?;
+    let parent_hash = hex::encode(Sha256::digest(read(
+        context
+            .temp_dir
+            .child("direct/a_parent-1.0.0-py3-none-any.whl")
+            .path(),
+    )?));
+    let other_hash = hex::encode(Sha256::digest(read(
+        context
+            .temp_dir
+            .child("direct/z_parent-1.0.0-py3-none-any.whl")
+            .path(),
+    )?));
+    let context = context
+        .with_filter((wheel_hash.clone(), "[WHEEL_SHA256]"))
+        .with_filter((wrong_hash.clone(), "[ROOT_SHA512]"))
+        .with_filter((parent_hash, "[PARENT_HASH]"))
+        .with_filter((other_hash, "[OTHER_HASH]"))
+        .with_filter((wheel_sha512, "[WHEEL_SHA512]"));
+    let requirements = context.temp_dir.child("requirements.in");
+    requirements.write_str(&format!(
+        "a-parent @ {parent}\nok @ {target}#sha256={wheel_hash}\n"
+    ))?;
+    uv_snapshot!(context.filters(), context.pip_compile().arg("requirements.in"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in
+    a-parent @ file://[TEMP_DIR]/direct/a_parent-1.0.0-py3-none-any.whl
+        # via -r requirements.in
+    ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl#sha256=[WHEEL_SHA256]
+        # via
+        #   -r requirements.in
+        #   a-parent
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    requirements.write_str(&format!(
+        "a-parent @ {parent}\nok @ {target}#sha512={wrong_hash}\n"
+    ))?;
+    uv_snapshot!(context.filters(), context.pip_compile().arg("requirements.in")
+        .arg("--generate-hashes").arg("-o").arg("requirements.txt"), @r"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --generate-hashes -o requirements.txt
+    a-parent @ file://[TEMP_DIR]/direct/a_parent-1.0.0-py3-none-any.whl \
+        --hash=sha256:[PARENT_HASH]
+        # via -r requirements.in
+    ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl#sha512=[ROOT_SHA512] \
+        --hash=sha512:[ROOT_SHA512]
+        # via
+        #   -r requirements.in
+        #   a-parent
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.pip_install().arg("--require-hashes")
+        .arg("-r").arg("requirements.txt"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: Failed to download `ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl#sha512=[ROOT_SHA512]`
+      cause: Hash mismatch for `ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl#sha512=[ROOT_SHA512]`
+
+             Expected:
+               sha512:[ROOT_SHA512]
+
+             Computed:
+               sha256:[WHEEL_SHA256]
+               sha512:[WHEEL_SHA512]
+    ");
+
+    requirements.write_str(&format!(
+        "a-parent @ {parent}\nz-parent @ {other}\nok @ {target}#sha512={wrong_hash}\n"
+    ))?;
+    uv_snapshot!(context.filters(), context.pip_compile().arg("requirements.in")
+        .arg("--generate-hashes"), @r"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --generate-hashes
+    a-parent @ file://[TEMP_DIR]/direct/a_parent-1.0.0-py3-none-any.whl \
+        --hash=sha256:[PARENT_HASH]
+        # via -r requirements.in
+    ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl#sha512=[ROOT_SHA512]&sha256=[WHEEL_SHA256] \
+        --hash=sha512:[ROOT_SHA512] \
+        --hash=sha256:[WHEEL_SHA256]
+        # via
+        #   -r requirements.in
+        #   a-parent
+        #   z-parent
+    z-parent @ file://[TEMP_DIR]/direct/z_parent-1.0.0-py3-none-any.whl \
+        --hash=sha256:[OTHER_HASH]
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// Local archive URL fragments also come from surviving declarations, even when the root has none.
+#[test]
+fn generate_hashes_local_url_fragment_with_selected_provider() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let target = source_dependency_wheel(&context, "direct", "target", &[], &[])?;
+    let wrong_hash = "0".repeat(128);
+    let parent = source_dependency_wheel(
+        &context,
+        "direct",
+        "provider",
+        &[&format!("target @ {target}#sha512={wrong_hash}")],
+        &[],
+    )?;
+    let parent_hash = hex::encode(Sha256::digest(read(
+        context
+            .temp_dir
+            .child("direct/provider-1.0.0-py3-none-any.whl")
+            .path(),
+    )?));
+    let context = context
+        .with_filter((wrong_hash, "[DECLARED_HASH]"))
+        .with_filter((parent_hash, "[PARENT_HASH]"));
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str(&format!("provider @ {parent}\ntarget @ {target}"))?;
+    uv_snapshot!(context.filters(), context.pip_compile().arg("requirements.in"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in
+    provider @ file://[TEMP_DIR]/direct/provider-1.0.0-py3-none-any.whl
+        # via -r requirements.in
+    target @ file://[TEMP_DIR]/direct/target-1.0.0-py3-none-any.whl#sha512=[DECLARED_HASH]
+        # via
+        #   -r requirements.in
+        #   provider
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.pip_compile().arg("requirements.in").arg("--generate-hashes"), @r"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --generate-hashes
+    provider @ file://[TEMP_DIR]/direct/provider-1.0.0-py3-none-any.whl \
+        --hash=sha256:[PARENT_HASH]
+        # via -r requirements.in
+    target @ file://[TEMP_DIR]/direct/target-1.0.0-py3-none-any.whl#sha512=[DECLARED_HASH] \
+        --hash=sha512:[DECLARED_HASH]
+        # via
+        #   -r requirements.in
+        #   provider
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
     Ok(())
 }
 
@@ -9623,7 +12223,9 @@ fn universal_nested_overlapping_local_requirement() -> Result<()> {
         # via torch
     tbb==2021.13.1 ; platform_machine != 'x86_64' and sys_platform == 'win32'
         # via mkl
-    torch==2.0.0+cu118 ; platform_machine == 'x86_64'
+    torch==2.0.0 ; os_name != 'Linux' and platform_machine == 'x86_64' and sys_platform == 'darwin'
+        # via -r requirements.in
+    torch==2.0.0+cu118 ; (os_name == 'Linux' and platform_machine == 'x86_64') or (platform_machine == 'x86_64' and sys_platform != 'darwin')
         # via
         #   -r requirements.in
         #   example
@@ -9636,7 +12238,7 @@ fn universal_nested_overlapping_local_requirement() -> Result<()> {
         # via torch
 
     ----- stderr -----
-    Resolved 17 packages in [TIME]
+    Resolved 18 packages in [TIME]
     "
     );
 
@@ -11790,7 +14392,7 @@ fn editable_scoped_exclusion_lowest_direct() -> Result<()> {
     Ok(())
 }
 
-/// Excluded editable dependencies should not be traversed during lookahead resolution.
+/// Excluded editable dependencies should not be traversed during resolution.
 #[test]
 fn editable_scoped_exclusion_missing_path() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -14588,7 +17190,7 @@ fn git_source_missing_tag() -> Result<()> {
       cause: Git operation failed
       cause: failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
       cause: failed to fetch tag `missing`
-      cause: process didn't exit successfully: `git fetch --force --update-head-ok 'https://github.com/astral-test/uv-public-pypackage' '+refs/tags/missing:refs/remotes/origin/tags/missing'` (exit status: 128)
+      cause: process didn't exit successfully: `git fetch --no-recurse-submodules --force --update-head-ok 'https://github.com/astral-test/uv-public-pypackage' '+refs/tags/missing:refs/remotes/origin/tags/missing'` (exit status: 128)
              --- stderr
              fatal: couldn't find remote ref refs/tags/missing
     ");
@@ -16254,14 +18856,40 @@ fn universal_conflicting_override_urls() -> Result<()> {
             .arg("--overrides")
             .arg("overrides.txt")
             .arg("--universal"), @"
-    exit_code: 1 (failure)
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --overrides overrides.txt --universal
+    anyio==1.0.0a2 ; sys_platform == 'win32'
+        # via -r requirements.in
+    anyio==4.3.0 ; sys_platform != 'win32'
+        # via -r requirements.in
+    async-generator==1.10 ; sys_platform == 'win32'
+        # via anyio
+    idna==3.6 ; sys_platform != 'win32'
+        # via anyio
+    sniffio @ https://files.pythonhosted.org/packages/c3/a0/5dba8ed157b0136607c7f2151db695885606968d1fae123dc3391e0cfdbf/sniffio-1.3.0-py3-none-any.whl ; sys_platform == 'darwin'
+        # via
+        #   --override overrides.txt
+        #   anyio
+
     ----- stderr -----
-    error: Failed to resolve dependencies for package `anyio==4.3.0`
-      cause: Requirements contain conflicting URLs for package `sniffio` in split `sys_platform == 'win32'`:
-             - https://files.pythonhosted.org/packages/c3/a0/5dba8ed157b0136607c7f2151db695885606968d1fae123dc3391e0cfdbf/sniffio-1.3.0-py3-none-any.whl
-             - https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl
+    Resolved 5 packages in [TIME]
     "
     );
+
+    requirements_in.write_str("anyio\nsniffio")?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+            .arg("requirements.in")
+            .arg("--overrides")
+            .arg("overrides.txt")
+            .arg("--universal"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Requirements contain conflicting URLs for package `sniffio` in split `sys_platform == 'win32'`:
+    - https://files.pythonhosted.org/packages/c3/a0/5dba8ed157b0136607c7f2151db695885606968d1fae123dc3391e0cfdbf/sniffio-1.3.0-py3-none-any.whl
+    - https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl
+    ");
 
     Ok(())
 }
@@ -16340,6 +18968,46 @@ fn compile_lowest_prereleases() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Fewest reuses a compatible version when a package is a direct dependency in only part of the resolution.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lowest_direct_fork_max_python_fewest() -> Result<()> {
+    let context = uv_test::test_context!("3.11");
+    let server = PackseServer::new("fork/lowest-direct-fork-max-python.toml");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str(indoc! {r"
+        forkroot==3.0.0
+        forkdep>=2.8 ; python_full_version < '3.12'
+    "})?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--resolution=lowest-direct")
+        .arg("--universal")
+        .arg("--fork-strategy=fewest")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --resolution=lowest-direct --universal --fork-strategy=fewest
+    forkdep==2.8
+        # via
+        #   -r requirements.in
+        #   forkroot
+    forkleaf==1.1.0
+        # via forkroot
+    forkroot==3.0.0
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
     ");
 
     Ok(())

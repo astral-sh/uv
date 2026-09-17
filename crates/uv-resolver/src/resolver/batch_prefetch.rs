@@ -101,7 +101,7 @@ impl BatchPrefetcher {
         let versions_response = self
             .prefetch_runner
             .requests
-            .wait_for_versions(name, index.map(IndexMetadata::url))?;
+            .wait_for_versions(name, index)?;
 
         let phase = BatchPrefetchStrategy::Compatible {
             compatible: current_range.clone(),

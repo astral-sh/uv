@@ -156,7 +156,7 @@ impl<'a> From<HashValidation<'a>> for ArchiveHashPolicy<'a> {
 /// Which distributions should have hashes collected during resolution.
 ///
 /// Reuse declared hashes when available; otherwise, compute a SHA-256 hash from the archive.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum HashCollection {
     /// Do not collect hashes during resolution.
     #[default]
@@ -167,15 +167,22 @@ pub enum HashCollection {
     All,
 }
 
-/// Read a URL's declared hash for resolution, excluding MD5, which `--require-hashes` rejects.
+/// Read a URL's declared hashes for resolution, excluding MD5, which `--require-hashes` rejects.
 pub fn parse_url_hashes(url: &DisplaySafeUrl) -> Option<HashDigests> {
-    let hashes = url
-        .fragment()?
-        .split('&')
-        .find_map(|fragment| Hashes::parse_fragment(fragment).ok())?;
-    let hashes = HashDigests::from(hashes);
-    let contains_md5 = hashes.iter().any(|hash| matches!(hash, HashDigest::Md5(_)));
-    (!contains_md5).then_some(hashes)
+    let mut hashes = Vec::<HashDigest>::new();
+    for parameter in url.fragment()?.split('&') {
+        if let Ok(parsed) = Hashes::parse_fragment(parameter)
+            && let Some(hash) = HashDigests::from(parsed).into_iter().next()
+            && !matches!(hash, HashDigest::Md5(_))
+            && !hashes
+                .iter()
+                .any(|existing| existing.algorithm() == hash.algorithm())
+        {
+            hashes.push(hash);
+        }
+    }
+    let hashes = hashes.into_iter().collect::<HashDigests>();
+    (!hashes.is_empty()).then_some(hashes)
 }
 
 pub trait Hashed {

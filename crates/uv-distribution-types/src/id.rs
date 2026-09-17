@@ -205,6 +205,8 @@ impl Display for VersionId {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum DistributionId {
     Url(CanonicalUrl),
+    /// A local directory built in editable mode can have different metadata from a normal wheel.
+    EditableDirectory(CanonicalUrl),
     PathBuf(PathBuf),
     Digest(HashDigest),
     AbsoluteUrl(String),

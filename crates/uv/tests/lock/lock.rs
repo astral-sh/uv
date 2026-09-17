@@ -1,3 +1,5 @@
+#[cfg(feature = "test-universal")]
+use std::collections::BTreeMap;
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 use std::process::Command;
 
@@ -30,7 +32,7 @@ use uv_static::EnvVars;
 #[cfg(feature = "test-universal")]
 use uv_test::archive::write_tar_gz;
 #[cfg(feature = "test-universal")]
-use uv_test::packse::{PackseServer, scenario::Scenario};
+use uv_test::packse::{PackseServer, generate_wheel, scenario::Scenario};
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 use uv_test::{READ_ONLY_GITHUB_TOKEN, decode_token};
 use uv_test::{diff_snapshot, uv_snapshot};
@@ -87,6 +89,8 @@ fn lock_validation_warning_chain() -> Result<()> {
              3 | version = 42
                |           ^^
              invalid type: integer `42`, expected a string
+
+    hint: `child` was included because `project` (v0.1.0) depends on `child`
     ");
     Ok(())
 }
@@ -123,7 +127,7 @@ fn lock_without_package_metadata(lock: &str) -> Result<toml_edit::DocumentMut> {
         }
         package.remove("metadata");
     }
-    lock["revision"] = toml_edit::value(4);
+    lock["revision"] = toml_edit::value(5);
     Ok(lock)
 }
 
@@ -1197,6 +1201,8 @@ fn lock_sdist_git_archive_missing_lfs() -> Result<()> {
     error: Failed to download and build `iniconfig @ git+https://github.com/astral-sh/archive-in-git-test#lfs=true&path=archives/iniconfig-2.0.0.tar.gz`
       cause: The source distribution `git+https://github.com/astral-sh/archive-in-git-test#lfs=true&path=archives/iniconfig-2.0.0.tar.gz` is missing Git LFS artifacts.
       cause: Git LFS extension not found. Ensure that Git LFS is installed and available.
+
+    hint: `iniconfig` was included because `project` (v0.1.0) depends on `iniconfig`
     "###
     );
 
@@ -1340,6 +1346,8 @@ fn lock_wheel_git_archive_missing_lfs() -> Result<()> {
     error: Failed to download `iniconfig @ git+https://github.com/astral-sh/archive-in-git-test#lfs=true&path=archives/iniconfig-2.0.0-py3-none-any.whl`
       cause: The wheel `git+https://github.com/astral-sh/archive-in-git-test#lfs=true&path=archives/iniconfig-2.0.0-py3-none-any.whl` is missing Git LFS artifacts.
       cause: Git LFS extension not found. Ensure that Git LFS is installed and available.
+
+    hint: `iniconfig` (v2.0.0) was included because `project` (v0.1.0) depends on `iniconfig`
     "###
     );
 
@@ -1917,6 +1925,8 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
 
              Computed:
                sha256:1aa0f7263e4991934282ab8912e95fdd34f24459d7c4f8b845c2281a04c89807
+
+    hint: `demo-pkg` was included because `project` (v0.1.0) depends on `demo-pkg`
     ");
     assert!(
         !sentinel.exists(),
@@ -2198,6 +2208,8 @@ async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
 
              Computed:
                sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
+
+    hint: `demo-pkg` was included because `project` (v0.1.0) depends on `demo-pkg`
     ");
     assert!(
         !sentinel.exists(),
@@ -2220,6 +2232,8 @@ async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
 
              Computed:
                sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
+
+    hint: `demo-pkg` was included because `project` (v0.1.0) depends on `demo-pkg`
     ");
     assert!(
         !sentinel.exists(),
@@ -2558,6 +2572,8 @@ async fn lock_sdist_url_root_subdirectory_locked_hash_mismatch() -> Result<()> {
 
              Computed:
                sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
+
+    hint: `demo-pkg` was included because `project` (v0.1.0) depends on `demo-pkg`
     ");
     assert!(
         !sentinel.exists(),
@@ -2627,6 +2643,8 @@ async fn lock_sdist_url_rejected_archive_not_cached() -> Result<()> {
 
              Computed:
                sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
+
+    hint: `demo-pkg` was included because `project` (v0.1.0) depends on `demo-pkg`
     ");
     assert!(
         !sentinel.exists(),
@@ -2666,6 +2684,8 @@ async fn lock_sdist_url_rejected_archive_not_cached() -> Result<()> {
       cause: Failed to extract archive: demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz
       cause: I/O operation failed during extraction
       cause: Invalid gzip header
+
+    hint: `demo-pkg` was included because `project` (v0.1.0) depends on `demo-pkg`
     ");
     assert!(
         !sentinel.exists(),
@@ -2754,6 +2774,8 @@ async fn lock_sdist_url_equivalent_subdirectory_locked_hash_mismatch() -> Result
 
              Computed:
                sha256:4d8741dcbddac394ac2680d99589d36c9d8fd7b3b19665531de9cc02550ec5eb
+
+    hint: `demo-pkg` was included because `project` (v0.1.0) depends on `demo-pkg`
     ");
     assert!(
         !sentinel.exists(),
@@ -2826,6 +2848,8 @@ fn lock_sdist_path_locked_hash_mismatch() -> Result<()> {
 
              Computed:
                sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
+
+    hint: `demo-pkg` was included because `project` (v0.1.0) depends on `demo-pkg`
     ");
     assert!(!sentinel.exists(), "the refreshed backend was executed");
 
@@ -20766,7 +20790,7 @@ fn lock_writes_without_package_metadata() -> Result<()> {
     let preview_lock = context.read("uv.lock");
     assert_snapshot!(preview_lock, @r#"
     version = 1
-    revision = 4
+    revision = 5
     requires-python = ">=3.12"
 
     [options]
@@ -22468,7 +22492,7 @@ fn lock_metadata_free_direct_url_constraint() -> Result<()> {
     Ok(())
 }
 
-/// A direct URL constraint can select a source across disjoint platform markers.
+/// A direct URL constraint selects its source only where its marker is active.
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_metadata_free_disjoint_marker_direct_url_constraint() -> Result<()> {
@@ -22514,7 +22538,7 @@ fn lock_metadata_free_disjoint_marker_direct_url_constraint() -> Result<()> {
         .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 4 packages in [TIME]
+    Resolved 5 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.lock()
@@ -22527,7 +22551,7 @@ fn lock_metadata_free_disjoint_marker_direct_url_constraint() -> Result<()> {
         .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 4 packages in [TIME]
+    Resolved 5 packages in [TIME]
     ");
 
     Ok(())
@@ -22599,7 +22623,7 @@ fn lock_metadata_free_shared_direct_sources() -> Result<()> {
     Ok(())
 }
 
-/// First-party direct sources apply globally, even across disjoint platform markers.
+/// First-party direct sources do not replace registry packages across disjoint platform markers.
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_metadata_free_shared_disjoint_marker_direct_sources() -> Result<()> {
@@ -22645,7 +22669,7 @@ fn lock_metadata_free_shared_disjoint_marker_direct_sources() -> Result<()> {
         .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 4 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.lock()
@@ -22658,17 +22682,26 @@ fn lock_metadata_free_shared_disjoint_marker_direct_sources() -> Result<()> {
         .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 4 packages in [TIME]
     ");
 
     Ok(())
 }
 
-/// A conditional provider shares its production and activated-extra sources across environments.
+/// A conditional provider shares its production and activated-extra sources only where it is included.
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_metadata_free_shared_conditional_provider_sources() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .chain([(
+            // This hint is only shown when the current platform doesn't match the target.
+            r"\nhint: The resolution failed for an environment that is not the current one[^\n]*\n",
+            "",
+        )])
+        .collect();
     context
         .temp_dir
         .child("pyproject.toml")
@@ -22679,10 +22712,10 @@ fn lock_metadata_free_shared_conditional_provider_sources() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = [
             "provider[direct] ; sys_platform == 'darwin'",
-            "leaf",
-            "twig",
-            "extra-leaf[nested]",
-            "extra-twig",
+            "leaf ; sys_platform == 'darwin'",
+            "twig ; sys_platform == 'darwin'",
+            "extra-leaf[nested] ; sys_platform == 'darwin'",
+            "extra-twig ; sys_platform == 'darwin'",
         ]
 
         [tool.uv.sources]
@@ -22696,10 +22729,10 @@ fn lock_metadata_free_shared_conditional_provider_sources() -> Result<()> {
         name = "provider"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["leaf ; sys_platform != 'darwin'"]
+        dependencies = ["leaf ; sys_platform == 'darwin'"]
 
         [project.optional-dependencies]
-        direct = ["extra-leaf[nested] ; sys_platform != 'darwin'"]
+        direct = ["extra-leaf[nested] ; sys_platform == 'darwin'"]
 
         [tool.uv.sources]
         leaf = { path = "../leaf" }
@@ -22776,16 +22809,32 @@ fn lock_metadata_free_shared_conditional_provider_sources() -> Result<()> {
     Resolved 6 packages in [TIME]
     ");
 
+    // Requiring the leaf outside the provider's marker cannot reuse the locked direct source.
+    let root = context.temp_dir.child("pyproject.toml");
+    let root_contents = context.read("pyproject.toml");
+    root.write_str(&root_contents.replace("leaf ; sys_platform == 'darwin'", "leaf"))?;
+    uv_snapshot!(filters, context.lock()
+        .arg("--preview-features").arg("lock-without-metadata")
+        .arg("--check").arg("--offline").arg("--no-cache").arg("--no-index"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies for split (markers: python_full_version >= '3.12' and sys_platform != 'darwin')
+      cause: Because leaf was not found in the provided package locations and your project depends on leaf, we can conclude that your project's requirements are unsatisfiable.
+
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+    ");
+    root.write_str(&root_contents)?;
+
     // Script requirements enter source discovery without a workspace package.
     context.temp_dir.child("script.py").write_str(indoc! {r#"
         # /// script
         # requires-python = ">=3.12"
         # dependencies = [
         #     "provider[direct] ; sys_platform == 'darwin'",
-        #     "leaf",
-        #     "twig",
-        #     "extra-leaf[nested]",
-        #     "extra-twig",
+        #     "leaf ; sys_platform == 'darwin'",
+        #     "twig ; sys_platform == 'darwin'",
+        #     "extra-leaf[nested] ; sys_platform == 'darwin'",
+        #     "extra-twig ; sys_platform == 'darwin'",
         # ]
         #
         # [tool.uv.sources]
@@ -22819,7 +22868,8 @@ fn lock_metadata_free_shared_conditional_provider_sources() -> Result<()> {
     Resolved 5 packages in [TIME]
     ");
 
-    // A bare extra request cannot authorize sources omitted by the direct source provider.
+    // The root's bare extra request can activate a source-bearing extra on the independently
+    // grounded direct package, even when the provider itself requests only the base package.
     context
         .temp_dir
         .child("provider/pyproject.toml")
@@ -22831,18 +22881,1525 @@ fn lock_metadata_free_shared_conditional_provider_sources() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
         .arg("lock-without-metadata")
-        .arg("--check")
         .arg("--offline")
-        .arg("--no-cache")
         .arg("--no-index"), @"
-    exit_code: 1 (failure)
+    exit_code: 0 (success)
     ----- stderr -----
-    error: Failed to resolve dependencies for package `extra-leaf==0.1.0`
-      cause: Package `extra-twig` was included as a URL dependency. URL dependencies must be expressed as direct requirements or constraints. Consider adding `extra-twig @ file://[TEMP_DIR]/extra-twig` to your dependencies or constraints file.
-
-    hint: `extra-leaf` (v0.1.0) was included because `project` (v0.1.0) depends on `extra-leaf`
+    Resolved 6 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features").arg("lock-without-metadata")
+        .arg("--check").arg("--offline").arg("--no-cache").arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
     ");
 
+    Ok(())
+}
+
+/// A packaged root cannot be locked under a fabricated name, even if an existing lock contains the
+/// same physical directory under both its real name and the fabricated name.
+#[test]
+fn lock_url_directory_mismatched_name() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["foo"]
+
+        [build-system]
+        requires = []
+        build-backend = "backend"
+        backend-path = ["."]
+
+        [tool.uv.sources]
+        foo = { path = ".", editable = true }
+    "#})?;
+    let lock = context.temp_dir.child("uv.lock");
+    uv_snapshot!(context.filters(), context.lock().arg("--no-index"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to build `foo @ file://[TEMP_DIR]/`
+      cause: Package metadata name `project` does not match given name `foo`
+
+    hint: `foo` was included because `project` (v0.1.0) depends on `foo`
+    ");
+    assert!(!lock.path().exists());
+
+    lock.write_str(indoc! {r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "foo"
+        version = "0.1.0"
+        source = { editable = "." }
+
+        [package.metadata]
+        requires-dist = [{ name = "foo", editable = "." }]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [{ name = "foo" }]
+
+        [package.metadata]
+        requires-dist = [{ name = "foo", editable = "." }]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--check").arg("--no-index"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to build `foo @ file://[TEMP_DIR]/`
+      cause: Package metadata name `project` does not match given name `foo`
+
+    hint: `foo` was included because `project` (v0.1.0) depends on `foo`
+    ");
+    Ok(())
+}
+
+/// A raw root URL can adopt selected editability, but both lock formats reject a lock that has
+/// silently combined editable and non-editable declarations of that directory.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_url_directory_editability_conflict() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let leaf = context.temp_dir.child("leaf");
+    leaf.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "leaf"
+        version = "1.0.0"
+    "#})?;
+    let leaf_url =
+        Url::from_file_path(leaf.path()).map_err(|()| anyhow!("directory path is not absolute"))?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["leaf @ {leaf_url}", "a-left", "b-right"]
+
+        [tool.uv.sources]
+        a-left = {{ path = "a-left" }}
+        b-right = {{ path = "b-right" }}
+    "#})?;
+    context
+        .temp_dir
+        .child("a-left/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "a-left"
+        version = "1.0.0"
+        dependencies = ["leaf"]
+
+        [tool.uv.sources]
+        leaf = { path = "../leaf", editable = true }
+    "#})?;
+    let right = context.temp_dir.child("b-right/pyproject.toml");
+    let right_project = indoc! {r#"
+        [project]
+        name = "b-right"
+        version = "1.0.0"
+        dependencies = ["leaf"]
+
+        [tool.uv.sources]
+        leaf = { path = "../leaf", editable = true }
+    "#};
+    let check_format = |preview| -> Result<()> {
+        let lock = |check| {
+            let mut command = context.lock();
+            if preview {
+                command
+                    .arg("--preview-features")
+                    .arg("lock-without-metadata");
+            }
+            command.arg("--offline").arg("--no-cache").arg("--no-index");
+            if check {
+                command.arg("--check");
+            } else {
+                command.arg("--upgrade");
+            }
+            command
+        };
+        right.write_str(right_project)?;
+        uv_snapshot!(context.filters(), lock(false), @"
+        exit_code: 0 (success)
+        ----- stderr -----
+        Resolved 4 packages in [TIME]
+        ");
+        uv_snapshot!(context.filters(), lock(true), @"
+        exit_code: 0 (success)
+        ----- stderr -----
+        Resolved 4 packages in [TIME]
+        ");
+
+        right.write_str(&right_project.replace("editable = true", "editable = false"))?;
+        if !preview {
+            // The full lock stores the provider metadata. Keep it consistent with the refreshed
+            // project so validation must compare both declarations with the resolved source.
+            let mut edited = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+            let right_package = edited["package"]
+                .as_array_of_tables_mut()
+                .and_then(|packages| {
+                    packages
+                        .iter_mut()
+                        .find(|package| package["name"].as_str() == Some("b-right"))
+                })
+                .ok_or_else(|| anyhow!("lockfile did not contain b-right"))?;
+            let requirement = right_package["metadata"]["requires-dist"]
+                .as_array_mut()
+                .and_then(|requirements| requirements.get_mut(0))
+                .and_then(toml_edit::Value::as_inline_table_mut)
+                .ok_or_else(|| anyhow!("lockfile did not contain the directory requirement"))?;
+            let path = requirement
+                .remove("editable")
+                .ok_or_else(|| anyhow!("directory requirement was not editable"))?;
+            requirement.insert("directory", path);
+            context
+                .temp_dir
+                .child("uv.lock")
+                .write_str(&edited.to_string())?;
+        }
+        uv_snapshot!(context.filters(), lock(true), @"
+        exit_code: 1 (failure)
+        ----- stderr -----
+        error: Failed to resolve dependencies for package `b-right==1.0.0`
+          cause: Requirements contain conflicting URLs for package `leaf` in all marker environments:
+                 - file://[TEMP_DIR]/leaf
+                 - file://[TEMP_DIR]/leaf (editable)
+
+        hint: `b-right` (v1.0.0) was included because `project` (v1.0.0) depends on `b-right`
+        ");
+        Ok(())
+    };
+    insta::allow_duplicates! {
+        check_format(false)?;
+        check_format(true)
+    }?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "leaf @ {leaf_url}",
+            "a-left ; sys_platform == 'win32'",
+            "b-right ; sys_platform != 'win32'",
+        ]
+
+        [tool.uv.sources]
+        a-left = {{ path = "a-left" }}
+        b-right = {{ path = "b-right" }}
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--offline").arg("--no-index").arg("--upgrade"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.lock().arg("--offline").arg("--no-index")
+        .arg("--no-cache").arg("--check"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.export().arg("--frozen").arg("--no-header")
+        .arg("--no-hashes").arg("--no-emit-project"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e leaf ; sys_platform == 'win32'
+        # via
+        #   a-left
+        #   project
+    file://[TEMP_DIR]/leaf ; sys_platform != 'win32'
+        # via
+        #   b-right
+        #   project
+    ./a-left ; sys_platform == 'win32'
+        # via project
+    ./b-right ; sys_platform != 'win32'
+        # via project
+    ");
+    Ok(())
+}
+
+/// A remote provider's plain directory URL does not conflict with an independently editable source.
+/// The lock's plain directory encoding remains valid without network access or a cache.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_url_directory_remote_keeps_unspecified_editability() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let leaf = context.temp_dir.child("leaf");
+    leaf.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "leaf"
+        version = "1.0.0"
+    "#})?;
+    let leaf_url =
+        Url::from_file_path(leaf.path()).map_err(|()| anyhow!("directory path is not absolute"))?;
+    let scenario = toml::from_str::<Scenario>(&formatdoc! {r#"
+        name = "wheel-unspecified-directory-editability"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.provider.versions."1.0.0"]
+        requires = ["leaf @ {leaf_url}"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["provider @ {}", "z-edit"]
+
+        [tool.uv.sources]
+        z-edit = {{ path = "z-edit" }}
+    "#, server.file_url("provider-1.0.0-py3-none-any.whl")})?;
+    context
+        .temp_dir
+        .child("z-edit/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "z-edit"
+        version = "1.0.0"
+        dependencies = ["leaf"]
+
+        [tool.uv.sources]
+        leaf = { path = "../leaf", editable = true }
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--no-index"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.lock().arg("--no-index").arg("--offline")
+        .arg("--no-cache").arg("--check"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+    let provider = lock["package"]
+        .as_array_of_tables()
+        .and_then(|packages| {
+            packages
+                .iter()
+                .find(|package| package["name"].as_str() == Some("provider"))
+        })
+        .ok_or_else(|| anyhow!("lockfile did not contain provider"))?;
+    let requirement = provider["metadata"]["requires-dist"]
+        .as_array()
+        .and_then(|requirements| requirements.get(0))
+        .and_then(toml_edit::Value::as_inline_table)
+        .ok_or_else(|| anyhow!("lockfile did not contain the directory requirement"))?;
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(requirement.to_string(), @r#"{ name = "leaf", directory = "leaf" }"#);
+    });
+
+    uv_snapshot!(context.filters(), context.lock().arg("--no-index").arg("--upgrade")
+        .arg("--preview-features").arg("lock-without-metadata"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.lock().arg("--no-index").arg("--offline")
+        .arg("--no-cache").arg("--check")
+        .arg("--preview-features").arg("lock-without-metadata"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    let project = context.temp_dir.child("pyproject.toml");
+    project.write_str(&context.read("pyproject.toml").replace(
+        &server.file_url("provider-1.0.0-py3-none-any.whl"),
+        &server.file_url("provider-1.0.0.tar.gz"),
+    ))?;
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.lock().arg("--no-index").arg("--offline")
+        .arg("--no-cache").arg("--check"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// Packaging metadata from Git can refer to a physical directory outside the repository. Such a URL
+/// has no editability choice and stays compatible with an independently editable provider in a lock.
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
+#[test]
+fn lock_url_directory_git_keeps_unspecified_editability() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let leaf = context.temp_dir.child("leaf");
+    leaf.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "leaf"
+        version = "1.0.0"
+    "#})?;
+    let leaf_url =
+        Url::from_file_path(leaf.path()).map_err(|()| anyhow!("directory path is not absolute"))?;
+    context
+        .temp_dir
+        .child("z-edit/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "z-edit"
+        version = "1.0.0"
+        dependencies = ["leaf"]
+
+        [tool.uv.sources]
+        leaf = { path = "../leaf", editable = true }
+    "#})?;
+
+    let repository = context.temp_dir.child("repository");
+    repository
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "provider"
+        version = "1.0.0"
+        dependencies = ["leaf @ {leaf_url}"]
+    "#})?;
+    Command::new("git")
+        .arg("init")
+        .arg(repository.path())
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .arg("add")
+        .arg(".")
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .arg("-c")
+        .arg("user.name=Example")
+        .arg("-c")
+        .arg("user.email=example@example.com")
+        .arg("commit")
+        .arg("-m")
+        .arg("Initial commit")
+        .env("GIT_AUTHOR_DATE", "2000-01-01T00:00:00Z")
+        .env("GIT_COMMITTER_DATE", "2000-01-01T00:00:00Z")
+        .assert()
+        .success();
+
+    let repository_url = Url::from_directory_path(repository.path())
+        .map_err(|()| anyhow!("failed to convert repository path to file URL"))?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["provider", "z-edit"]
+
+        [tool.uv.sources]
+        provider = {{ git = "{repository_url}" }}
+        z-edit = {{ path = "z-edit" }}
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features").arg("lock-without-metadata")
+        .arg("--no-index").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+    let lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+    let provider = lock["package"]
+        .as_array_of_tables()
+        .and_then(|packages| {
+            packages
+                .iter()
+                .find(|package| package["name"].as_str() == Some("provider"))
+        })
+        .ok_or_else(|| anyhow!("lockfile did not contain provider"))?;
+    let requirement = provider["metadata"]["requires-dist"]
+        .as_array()
+        .and_then(|requirements| requirements.get(0))
+        .and_then(toml_edit::Value::as_inline_table)
+        .ok_or_else(|| anyhow!("lockfile did not contain the directory requirement"))?;
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(requirement.to_string(), @r#"{ name = "leaf", directory = "leaf" }"#);
+    });
+    fs_err::rename(
+        repository.path(),
+        context.temp_dir.child("unavailable-repository").path(),
+    )?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features").arg("lock-without-metadata")
+        .arg("--check").arg("--no-index").arg("--offline").arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// Independently requiring an install takes precedence over a virtual path in either declaration
+/// order. A sole virtual path remains virtual, and validation rejects the wrong locked mode.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_url_directory_virtual_and_installable() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("leaf/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "leaf"
+        version = "1.0.0"
+    "#})?;
+    context
+        .temp_dir
+        .child("a-virtual/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "a-virtual"
+        version = "1.0.0"
+        dependencies = ["leaf"]
+
+        [tool.uv.sources]
+        leaf = { path = "../leaf", editable = false, package = false }
+    "#})?;
+    context
+        .temp_dir
+        .child("z-install/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "z-install"
+        version = "1.0.0"
+        dependencies = ["leaf"]
+
+        [tool.uv.sources]
+        leaf = { path = "../leaf", editable = false, package = true }
+    "#})?;
+    let project = context.temp_dir.child("pyproject.toml");
+    let write_project = |dependencies: &str| {
+        project.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = [{dependencies}]
+
+        [tool.uv.sources]
+        a-virtual = {{ path = "a-virtual" }}
+        z-install = {{ path = "z-install" }}
+    "#})
+    };
+    let lock = || {
+        let mut command = context.lock();
+        command.arg("--offline").arg("--no-cache").arg("--no-index");
+        command
+    };
+    let export = || {
+        let mut command = context.export();
+        command
+            .arg("--frozen")
+            .arg("--no-header")
+            .arg("--no-hashes")
+            .arg("--no-emit-project");
+        command
+    };
+    let check_order = |dependencies| -> Result<()> {
+        write_project(dependencies)?;
+        uv_snapshot!(context.filters(), lock().arg("--upgrade"), @"
+        exit_code: 0 (success)
+        ----- stderr -----
+        Resolved 4 packages in [TIME]
+        ");
+        uv_snapshot!(context.filters(), lock().arg("--check"), @"
+        exit_code: 0 (success)
+        ----- stderr -----
+        Resolved 4 packages in [TIME]
+        ");
+        uv_snapshot!(context.filters(), export(), @"
+        exit_code: 0 (success)
+        ----- stdout -----
+        ./a-virtual
+            # via project
+        ./leaf
+            # via
+            #   a-virtual
+            #   z-install
+        ./z-install
+            # via project
+        ");
+        Ok(())
+    };
+    insta::allow_duplicates! {
+        check_order(r#""a-virtual", "z-install""#)?;
+        check_order(r#""z-install", "a-virtual""#)
+    }?;
+    let installable_lock = context.read("uv.lock");
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&installable_lock.replace(
+            "source = { directory = \"leaf\" }",
+            "source = { virtual = \"leaf\" }",
+        ))?;
+    uv_snapshot!(context.filters(), lock().arg("--check"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    write_project(r#""a-virtual""#)?;
+    uv_snapshot!(context.filters(), lock().arg("--upgrade"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Removed z-install v1.0.0
+    ");
+    uv_snapshot!(context.filters(), lock().arg("--check"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), export(), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    ./a-virtual
+        # via project
+    ");
+
+    write_project(
+        r#""a-virtual ; sys_platform == 'win32'", "z-install ; sys_platform != 'win32'""#,
+    )?;
+    uv_snapshot!(context.filters(), lock().arg("--upgrade"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Added z-install v1.0.0
+    ");
+    uv_snapshot!(context.filters(), lock().arg("--check"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), export(), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    ./a-virtual ; sys_platform == 'win32'
+        # via project
+    ./leaf ; sys_platform != 'win32'
+        # via z-install
+    ./z-install ; sys_platform != 'win32'
+        # via project
+    ");
+
+    let install = context.temp_dir.child("z-install/pyproject.toml");
+    install.write_str(
+        &context
+            .read("z-install/pyproject.toml")
+            .replace("editable = false", "editable = true"),
+    )?;
+    write_project(r#""a-virtual", "z-install""#)?;
+    uv_snapshot!(context.filters(), lock().arg("--upgrade"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), lock().arg("--check"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), export(), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./leaf
+        # via
+        #   a-virtual
+        #   z-install
+    ./a-virtual
+        # via project
+    ./z-install
+        # via project
+    ");
+    Ok(())
+}
+
+/// A rejected registry candidate cannot activate a source-bearing extra on a retained local
+/// dependency; the target and its metadata must come from the registry in the resulting lock.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_excluded_direct_source_provider_keeps_registry() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "lock-excluded-url-source"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.selector.versions."2.0.0"]
+        requires = ["provider[url]", "missing"]
+        [packages.selector.versions."1.0.0"]
+        [packages.target.versions."1.0.0"]
+        requires = ["registry-only"]
+        [packages.registry-only.versions."1.0.0"]
+        [packages.url-only.versions."1.0.0"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["provider", "selector", "target"]
+
+        [tool.uv.sources]
+        provider = { path = "provider" }
+    "#})?;
+    context
+        .temp_dir
+        .child("provider/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "provider"
+        version = "1.0.0"
+
+        [project.optional-dependencies]
+        url = ["target"]
+
+        [tool.uv.sources]
+        target = { path = "../target" }
+    "#})?;
+    context
+        .temp_dir
+        .child("target/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "target"
+        version = "1.0.0"
+        dependencies = ["url-only"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features").arg("lock-without-metadata")
+        .arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.export().arg("--frozen").arg("--no-header")
+        .arg("--no-hashes").arg("--no-emit-project"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    ./provider
+        # via project
+    registry-only==1.0.0
+        # via target
+    selector==1.0.0
+        # via project
+    target==1.0.0
+        # via project
+    ");
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features").arg("lock-without-metadata")
+        .arg("--check").arg("--offline").arg("--no-cache")
+        .arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// Registry requests can activate an authorized URL package's extra without re-resolving its lock.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_url_from_registry_extra_offline() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["provider", "selector", "consumer", "target"]
+
+        [tool.uv.sources]
+        provider = { path = "provider" }
+    "#})?;
+    context
+        .temp_dir
+        .child("provider/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "provider"
+        version = "1.0.0"
+
+        [project.optional-dependencies]
+        url = ["target"]
+
+        [tool.uv.sources]
+        target = { path = "../target" }
+    "#})?;
+    let target = context.temp_dir.child("target");
+    target.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "target"
+        version = "1.0.0"
+        dependencies = ["url-only"]
+    "#})?;
+    let target = Url::from_directory_path(target.path())
+        .map_err(|()| anyhow!("target directory is not an absolute path"))?;
+    let scenario = toml::from_str::<Scenario>(&formatdoc! {r#"
+        name = "lock-url-from-registry-extra"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.selector.versions."1.0.0"]
+        requires = ["provider[url] ; sys_platform == 'linux'"]
+        [packages.consumer.versions."1.0.0"]
+        requires = [
+            "target @ {target} ; sys_platform == 'linux'",
+            "target ; sys_platform != 'linux'",
+        ]
+        [packages.target.versions."1.0.0"]
+        requires = ["registry-only"]
+        [packages.registry-only.versions."1.0.0"]
+        [packages.url-only.versions."1.0.0"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features").arg("lock-without-metadata")
+        .arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.export().arg("--frozen").arg("--no-header")
+        .arg("--no-hashes").arg("--no-emit-project"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    ./provider
+        # via
+        #   project
+        #   selector
+    ./target ; sys_platform == 'linux'
+        # via
+        #   consumer
+        #   project
+        #   provider
+    consumer==1.0.0
+        # via project
+    registry-only==1.0.0 ; sys_platform != 'linux'
+        # via target
+    selector==1.0.0
+        # via project
+    target==1.0.0 ; sys_platform != 'linux'
+        # via
+        #   consumer
+        #   project
+    url-only==1.0.0 ; sys_platform == 'linux'
+        # via target
+    ");
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features").arg("lock-without-metadata")
+        .arg("--check").arg("--offline").arg("--no-cache")
+        .arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// Standard and metadata-free locks must reject an edge resolved from the wrong explicit index.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_index_from_registry_extra_validates_resolved_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let primary = toml::from_str::<Scenario>(indoc! {r#"
+        name = "lock-registry-extra-primary"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.selector.versions."1.0.0"]
+        requires = ["provider[index] ; sys_platform == 'linux'"]
+        [packages.target.versions."1.0.0"]
+        requires = ["default-only"]
+        [packages.default-only.versions."1.0.0"]
+        [packages.indexed-only.versions."1.0.0"]
+    "#})?;
+    let secondary = toml::from_str::<Scenario>(indoc! {r#"
+        name = "lock-registry-extra-secondary"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.target.versions."2.0.0"]
+        requires = ["indexed-only"]
+    "#})?;
+    let primary = PackseServer::from_scenario(&primary);
+    let secondary = PackseServer::from_scenario(&secondary);
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["provider", "selector", "target"]
+
+        [tool.uv.sources]
+        provider = { path = "provider" }
+    "#})?;
+    context
+        .temp_dir
+        .child("provider/pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "provider"
+        version = "1.0.0"
+
+        [project.optional-dependencies]
+        index = ["target"]
+
+        [tool.uv.sources]
+        target = {{ index = "secondary" }}
+
+        [[tool.uv.index]]
+        name = "secondary"
+        url = "{}"
+        explicit = true
+    "#, secondary.index_url()})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(primary.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.export().arg("--frozen").arg("--no-header")
+        .arg("--no-hashes").arg("--no-emit-project"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    ./provider
+        # via
+        #   project
+        #   selector
+    default-only==1.0.0 ; sys_platform != 'linux'
+        # via target
+    indexed-only==1.0.0 ; sys_platform == 'linux'
+        # via target
+    selector==1.0.0
+        # via project
+    target==1.0.0 ; sys_platform != 'linux'
+        # via project
+    target==2.0.0 ; sys_platform == 'linux'
+        # via
+        #   project
+        #   provider
+    ");
+    let valid = context.read("uv.lock");
+    let mut stale = valid.parse::<toml_edit::DocumentMut>()?;
+    let packages = stale["package"]
+        .as_array_of_tables_mut()
+        .ok_or_else(|| anyhow!("lockfile has no packages"))?;
+    let default_source = packages
+        .iter()
+        .find(|package| {
+            package["name"].as_str() == Some("target")
+                && package["version"].as_str() == Some("1.0.0")
+        })
+        .and_then(|package| package["source"].as_value())
+        .cloned()
+        .ok_or_else(|| anyhow!("lockfile has no default target"))?;
+    let provider = packages
+        .iter_mut()
+        .find(|package| package["name"].as_str() == Some("provider"))
+        .ok_or_else(|| anyhow!("lockfile has no provider"))?;
+    let edge = provider["optional-dependencies"]["index"]
+        .as_array_mut()
+        .and_then(|edges| edges.get_mut(0))
+        .and_then(toml_edit::Value::as_inline_table_mut)
+        .ok_or_else(|| anyhow!("lockfile has no indexed dependency"))?;
+    edge.insert("version", "1.0.0".into());
+    edge.insert("source", default_source);
+    let stale = stale.to_string();
+    let lock = context.temp_dir.child("uv.lock");
+
+    lock.write_str(&stale)?;
+    uv_snapshot!(context.filters(), context.lock().arg("--check")
+        .arg("--index-url").arg(primary.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    lock.write_str(&valid)?;
+    uv_snapshot!(context.filters(), context.lock().arg("--check").arg("--offline").arg("--no-cache")
+        .arg("--index-url").arg(primary.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    ");
+
+    lock.write_str(&lock_without_package_metadata(&stale)?.to_string())?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features").arg("lock-without-metadata").arg("--check")
+        .arg("--index-url").arg(primary.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    lock.write_str(&lock_without_package_metadata(&valid)?.to_string())?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features").arg("lock-without-metadata")
+        .arg("--check").arg("--offline").arg("--no-cache")
+        .arg("--index-url").arg(primary.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// A URL override replaces a URL constraint only in its own environments, both during resolution
+/// and when validating the resulting lock without cached metadata.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_url_override_and_constraint_markers() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "lock-conditional-url-override"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.constraint-only.versions."1.0.0"]
+        [packages.override-only.versions."1.0.0"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    let constrained = context.temp_dir.child("constrained");
+    let overridden = context.temp_dir.child("overridden");
+    constrained.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "target"
+        version = "1.0.0"
+        dependencies = ["constraint-only"]
+    "#})?;
+    overridden.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "target"
+        version = "1.0.0"
+        dependencies = ["override-only"]
+    "#})?;
+    let constrained = Url::from_directory_path(constrained.path())
+        .map_err(|()| anyhow!("constrained directory is not an absolute path"))?;
+    let overridden = Url::from_directory_path(overridden.path())
+        .map_err(|()| anyhow!("overridden directory is not an absolute path"))?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["target"]
+
+        [tool.uv]
+        constraint-dependencies = ["target @ {constrained}"]
+        override-dependencies = [
+            "target @ {overridden} ; sys_platform == 'linux'",
+            "target ; sys_platform != 'linux'",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features").arg("lock-without-metadata")
+        .arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.export().arg("--frozen").arg("--no-header")
+        .arg("--no-hashes").arg("--no-emit-project"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    file://[TEMP_DIR]/constrained ; sys_platform != 'linux'
+        # via project
+    file://[TEMP_DIR]/overridden ; sys_platform == 'linux'
+        # via project
+    constraint-only==1.0.0 ; sys_platform != 'linux'
+        # via target
+    override-only==1.0.0 ; sys_platform == 'linux'
+        # via target
+    ");
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features").arg("lock-without-metadata")
+        .arg("--check").arg("--offline").arg("--no-cache")
+        .arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// A root URL constraint or override can authorize a mutable directory below immutable registries.
+/// Its name and activated extra must be refreshed for either lock format, including offline.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_url_constraint_and_override_validate_directory_below_registry() -> Result<()> {
+    insta::allow_duplicates! {
+        for setting in ["constraint-dependencies", "override-dependencies"] {
+            for metadata_free in [false, true] {
+                let context = uv_test::test_context!("3.12");
+                let wheels = context.temp_dir.child("wheels");
+                wheels.create_dir_all()?;
+                for (name, requirements) in [
+                    ("owner", vec!["middle"]),
+                    ("middle", vec!["target[feature]"]),
+                    ("added", vec![]),
+                ] {
+                    let requirements = requirements.iter().map(|requirement| requirement.parse()).collect::<Result<Vec<_>, _>>()?;
+                    let (filename, wheel) = generate_wheel(&name.parse()?, &"1.0.0".parse()?, &requirements, &BTreeMap::new(), None, "py3-none-any", &[]);
+                    wheels.child(filename).write_binary(&wheel)?;
+                }
+                let target = context.temp_dir.child("target");
+                let target_project = target.child("pyproject.toml");
+                let write_target = |name, dependencies| {
+                    target_project.write_str(&formatdoc! {r#"
+                        [project]
+                        name = "{name}"
+                        version = "1.0.0"
+                        requires-python = ">=3.12"
+
+                        [project.optional-dependencies]
+                        feature = [{dependencies}]
+                    "#})
+                };
+                write_target("target", "")?;
+                let target_url = Url::from_directory_path(target.path()).map_err(|()| anyhow!("target is not an absolute path"))?;
+                let extras = if setting == "override-dependencies" { "[feature]" } else { "" };
+                context.temp_dir.child("pyproject.toml").write_str(&formatdoc! {r#"
+                    [project]
+                    name = "project"
+                    version = "1.0.0"
+                    requires-python = ">=3.12"
+                    dependencies = ["owner"]
+
+                    [tool.uv]
+                    {setting} = ["target{extras} @ {target_url}"]
+                "#})?;
+                let lock = || {
+                    let mut command = context.lock();
+                    command.arg("--no-index").arg("--find-links").arg("wheels").arg("--offline").arg("--no-cache");
+                    if metadata_free {
+                        command.arg("--preview-features").arg("lock-without-metadata");
+                    }
+                    command
+                };
+                uv_snapshot!(context.filters(), lock(), @"
+                exit_code: 0 (success)
+                ----- stderr -----
+                Resolved 4 packages in [TIME]
+                ");
+                uv_snapshot!(context.filters(), lock().arg("--check"), @"
+                exit_code: 0 (success)
+                ----- stderr -----
+                Resolved 4 packages in [TIME]
+                ");
+
+                if metadata_free {
+                    let mut legacy = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+                    legacy["revision"] = toml_edit::value(4);
+                    let middle = legacy["package"].as_array_of_tables_mut().and_then(|packages| {
+                        packages.iter_mut().find(|package| package["name"].as_str() == Some("middle"))
+                    }).ok_or_else(|| anyhow!("lockfile did not contain middle"))?;
+                    let dependency = middle["dependencies"].as_array_mut().and_then(|dependencies| dependencies.get_mut(0))
+                        .and_then(toml_edit::Value::as_inline_table_mut).ok_or_else(|| anyhow!("middle did not depend on target"))?;
+                    if dependency.remove("extra").is_none() {
+                        anyhow::bail!("middle did not request the target extra");
+                    }
+                    context.temp_dir.child("uv.lock").write_str(&legacy.to_string())?;
+                    uv_snapshot!(context.filters(), lock().arg("--check"), @"
+                    exit_code: 1 (failure)
+                    ----- stderr -----
+                    Resolved 4 packages in [TIME]
+                    error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+
+                    hint: To update the lockfile, run `uv lock`.
+                    ");
+                    uv_snapshot!(context.filters(), lock(), @"
+                    exit_code: 0 (success)
+                    ----- stderr -----
+                    Resolved 4 packages in [TIME]
+                    ");
+                    uv_snapshot!(context.filters(), lock().arg("--check"), @"
+                    exit_code: 0 (success)
+                    ----- stderr -----
+                    Resolved 4 packages in [TIME]
+                    ");
+                }
+
+                write_target("target", r#""added""#)?;
+                uv_snapshot!(context.filters(), lock().arg("--check"), @"
+                exit_code: 1 (failure)
+                ----- stderr -----
+                Resolved 5 packages in [TIME]
+                error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+
+                hint: To update the lockfile, run `uv lock`.
+                ");
+                uv_snapshot!(context.filters(), lock(), @"
+                exit_code: 0 (success)
+                ----- stderr -----
+                Resolved 5 packages in [TIME]
+                Added added v1.0.0
+                ");
+                uv_snapshot!(context.filters(), context.export().arg("--frozen").arg("--no-header")
+                    .arg("--no-hashes").arg("--no-emit-project"), @"
+                exit_code: 0 (success)
+                ----- stdout -----
+                file://[TEMP_DIR]/target
+                    # via middle
+                added==1.0.0
+                    # via target
+                middle==1.0.0
+                    # via owner
+                owner==1.0.0
+                    # via project
+                ");
+
+                write_target("wrong-name", r#""added""#)?;
+                uv_snapshot!(context.filters(), lock().arg("--check"), @"
+                exit_code: 1 (failure)
+                ----- stderr -----
+                error: Failed to build `target @ file://[TEMP_DIR]/target`
+                  cause: Package metadata name `wrong-name` does not match given name `target`
+
+                hint: `target` was included because `project` (v1.0.0) depends on `owner` (v1.0.0) which depends on `middle` (v1.0.0) which depends on `target`
+                ");
+            }
+        }
+        Ok::<(), anyhow::Error>(())
+    }?;
+    Ok(())
+}
+
+/// LFS belongs to the selected Git candidate. An omitted declaration cannot erase it, and a late
+/// selected provider can recover after normal Git metadata fails without enabling an inactive extra.
+#[cfg(all(feature = "test-universal", feature = "test-git-lfs"))]
+#[test]
+fn lock_url_git_lfs_uses_selected_checkout_mode() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_git_lfs_config();
+    let repository = context.temp_dir.child("repository");
+    repository.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "target"
+        version = "1.0.0"
+    "#})?;
+    Command::new("git")
+        .arg("init")
+        .arg(repository.path())
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args(["lfs", "install", "--local", "--skip-repo"])
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args(["lfs", "track", "pyproject.toml"])
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args(["add", "."])
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args([
+            "-c",
+            "user.name=Example",
+            "-c",
+            "user.email=example@example.com",
+            "commit",
+            "-m",
+            "Initial commit",
+        ])
+        .env("GIT_AUTHOR_DATE", "2000-01-01T00:00:00Z")
+        .env("GIT_COMMITTER_DATE", "2000-01-01T00:00:00Z")
+        .assert()
+        .success();
+    let commit = String::from_utf8(
+        Command::new("git")
+            .arg("-C")
+            .arg(repository.path())
+            .args(["rev-parse", "HEAD"])
+            .output()?
+            .stdout,
+    )?
+    .trim()
+    .to_string();
+    let repository_url = Url::from_file_path(repository.path())
+        .map_err(|()| anyhow!("repository is not an absolute path"))?;
+    let context = context
+        .with_filter((commit.clone(), "[COMMIT]"))
+        .with_filter(("[az]-parent", "[PARENT]"));
+    let project = context.temp_dir.child("pyproject.toml");
+    let write_project = |parent, lfs| {
+        project.write_str(&formatdoc! {r#"
+            [project]
+            name = "project"
+            version = "1.0.0"
+            requires-python = ">=3.12"
+            dependencies = ["{parent}", "target"]
+
+            [tool.uv.sources]
+            {parent} = {{ path = "{parent}" }}
+            target = {{ git = "{repository_url}", rev = "{commit}"{lfs} }}
+        "#})
+    };
+    let lock = || {
+        let mut command = context.lock();
+        command.arg("--no-index").arg("--offline").arg("--no-cache");
+        command
+    };
+    let target_source = || -> Result<String> {
+        let lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+        let target = lock["package"]
+            .as_array_of_tables()
+            .and_then(|packages| {
+                packages
+                    .iter()
+                    .find(|package| package["name"].as_str() == Some("target"))
+            })
+            .ok_or_else(|| anyhow!("lockfile did not contain target"))?;
+        let source = target["source"]
+            .as_inline_table()
+            .ok_or_else(|| anyhow!("target has no source"))?;
+        Ok(source.to_string())
+    };
+    insta::allow_duplicates! {
+        for parent in ["a-parent", "z-parent"] {
+            context.temp_dir.child(parent).child("pyproject.toml").write_str(&formatdoc! {r#"
+                [project]
+                name = "{parent}"
+                version = "1.0.0"
+                dependencies = ["target"]
+
+                [tool.uv.sources]
+                target = {{ git = "{repository_url}", rev = "{commit}" }}
+            "#})?;
+            write_project(parent, ", lfs = true")?;
+            uv_snapshot!(context.filters(), lock().env(EnvVars::UV_INTERNAL__TEST_LFS_DISABLED, "1"), @"
+            exit_code: 1 (failure)
+            ----- stderr -----
+            error: Failed to download and build `target @ git+file://[TEMP_DIR]/repository@[COMMIT]#lfs=true`
+              cause: The source distribution `git+file://[TEMP_DIR]/repository@[COMMIT]#lfs=true` is missing Git LFS artifacts.
+              cause: Git LFS extension not found. Ensure that Git LFS is installed and available.
+
+            hint: `target` was included because `project` (v1.0.0) depends on `target`
+            ");
+            uv_snapshot!(context.filters(), lock(), @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Resolved 3 packages in [TIME]
+            ");
+            let source = target_source()?;
+            insta::with_settings!({ filters => context.filters() }, {
+                assert_snapshot!(source, @r#" { git = "file://[TEMP_DIR]/repository?lfs=true&rev=[COMMIT]#[COMMIT]" }"#);
+            });
+            uv_snapshot!(context.filters(), lock().arg("--check"), @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Resolved 3 packages in [TIME]
+            ");
+            let lockfile = context.temp_dir.child("uv.lock");
+            let valid = context.read("uv.lock");
+            let mut stale = valid.parse::<toml_edit::DocumentMut>()?;
+            let target = stale["package"].as_array_of_tables_mut().and_then(|packages| {
+                packages.iter_mut().find(|package| package["name"].as_str() == Some("target"))
+            }).ok_or_else(|| anyhow!("lockfile did not contain target"))?;
+            let git = target["source"]["git"].as_str().ok_or_else(|| anyhow!("target has no Git source"))?.replace("?lfs=true&", "?");
+            target["source"]["git"] = toml_edit::value(git);
+            lockfile.write_str(&stale.to_string())?;
+            uv_snapshot!(context.filters(), lock().arg("--check"), @"
+            exit_code: 1 (failure)
+            ----- stderr -----
+            Resolved 3 packages in [TIME]
+            error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+
+            hint: To update the lockfile, run `uv lock`.
+            ");
+            fs_err::remove_file(lockfile.path())?;
+        }
+        Ok::<(), anyhow::Error>(())
+    }?;
+
+    let provider = context.temp_dir.child("z-provider").child("pyproject.toml");
+    let write_provider = |dependencies| {
+        provider.write_str(&formatdoc! {r#"
+            [project]
+            name = "z-provider"
+            version = "1.0.0"
+            {dependencies}
+
+            [tool.uv.sources]
+            target = {{ git = "{repository_url}", rev = "{commit}", lfs = true }}
+        "#})
+    };
+    write_project("z-provider", "")?;
+    write_provider(r#"dependencies = ["target"]"#)?;
+    uv_snapshot!(context.filters(), lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    let source = target_source()?;
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(source, @r#" { git = "file://[TEMP_DIR]/repository?lfs=true&rev=[COMMIT]#[COMMIT]" }"#);
+    });
+    uv_snapshot!(context.filters(), lock().arg("--check"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    fs_err::remove_file(context.temp_dir.child("uv.lock").path())?;
+
+    write_provider(indoc! {r#"
+        dependencies = []
+        [project.optional-dependencies]
+        active = ["target"]
+    "#})?;
+    uv_snapshot!(context.filters(), lock(), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to download and build `target @ git+file://[TEMP_DIR]/repository@[COMMIT]`
+      cause: Failed to parse metadata from built wheel
+      cause: Invalid `pyproject.toml`
+      cause: TOML parse error at line 1, column 9
+               |
+             1 | version https://git-lfs.github.com/spec/v1
+               |         ^
+             key with no value, expected `=`
+
+    hint: `target` was included because `project` (v1.0.0) depends on `target`
+    ");
+
+    let git_provider = context.temp_dir.child("provider-repository");
+    git_provider
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "z-provider"
+        version = "1.0.0"
+        dependencies = ["target"]
+
+        [tool.uv.sources]
+        target = {{ git = "{repository_url}", rev = "{commit}", lfs = true }}
+    "#})?;
+    Command::new("git")
+        .arg("init")
+        .arg(git_provider.path())
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(git_provider.path())
+        .args(["add", "."])
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(git_provider.path())
+        .args([
+            "-c",
+            "user.name=Example",
+            "-c",
+            "user.email=example@example.com",
+            "commit",
+            "-m",
+            "Initial commit",
+        ])
+        .env("GIT_AUTHOR_DATE", "2000-01-01T00:00:00Z")
+        .env("GIT_COMMITTER_DATE", "2000-01-01T00:00:00Z")
+        .assert()
+        .success();
+    let provider_url = Url::from_directory_path(git_provider.path())
+        .map_err(|()| anyhow!("provider is not an absolute path"))?;
+    project.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["z-provider", "target"]
+
+        [tool.uv.sources]
+        z-provider = {{ git = "{provider_url}" }}
+        target = {{ git = "{repository_url}", rev = "{commit}" }}
+    "#})?;
+    uv_snapshot!(context.filters(), lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    fs_err::rename(
+        git_provider.path(),
+        context.temp_dir.child("unavailable-provider").path(),
+    )?;
+    uv_snapshot!(context.filters(), lock().arg("--check"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
     Ok(())
 }
 
@@ -22851,6 +24408,15 @@ fn lock_metadata_free_shared_conditional_provider_sources() -> Result<()> {
 #[test]
 fn lock_metadata_free_shared_git_direct_source() -> Result<()> {
     let context = uv_test::test_context!("3.13");
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .chain([(
+            // This hint is only shown when the current platform doesn't match the target.
+            r"\nhint: The resolution failed for an environment that is not the current one[^\n]*",
+            "",
+        )])
+        .collect();
 
     let repository = context.temp_dir.child("repository");
     repository.child("archives").create_dir_all()?;
@@ -22910,7 +24476,7 @@ fn lock_metadata_free_shared_git_direct_source() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.13"
-        dependencies = ["basic-package ; sys_platform == 'win32'", "provider"]
+        dependencies = ["basic-package ; sys_platform == 'darwin'", "provider"]
 
         [tool.uv.sources]
         provider = {{ git = "{repository_url}" }}
@@ -22934,6 +24500,18 @@ fn lock_metadata_free_shared_git_direct_source() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
+    ");
+
+    let root = context.temp_dir.child("pyproject.toml");
+    let root_contents = context.read("pyproject.toml");
+    root.write_str(&root_contents.replace("sys_platform == 'darwin'", "sys_platform == 'win32'"))?;
+    uv_snapshot!(filters, context.lock()
+        .arg("--preview-features").arg("lock-without-metadata")
+        .arg("--check").arg("--offline").arg("--no-cache"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies for split (markers: python_full_version >= '3.13' and sys_platform != 'darwin')
+      cause: Because there are no versions of basic-package{sys_platform == 'win32'} and your project depends on basic-package{sys_platform == 'win32'}, we can conclude that your project's requirements are unsatisfiable.
     ");
 
     Ok(())
@@ -23516,7 +25094,7 @@ fn lock_metadata_free_shared_static_metadata_direct_source() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["httpx[http2]", "local", "anyio", "six"]
+        dependencies = ["httpx[http2]", "local", "anyio==4.4.0", "six"]
 
         [tool.uv.sources]
         local = {{ path = "local" }}
@@ -23589,7 +25167,7 @@ fn lock_metadata_free_shared_static_metadata_direct_source() -> Result<()> {
     error: Failed to resolve dependencies for package `anyio==4.4.0`
       cause: Package `six` was included as a URL dependency. URL dependencies must be expressed as direct requirements or constraints. Consider adding `six @ http://[LOCALHOST]/files/six-1.0.0-py3-none-any.whl` to your dependencies or constraints file.
 
-    hint: `anyio` (v4.4.0) was included because `project` (v0.1.0) depends on `anyio`
+    hint: `anyio` (v4.4.0) was included because `project` (v0.1.0) depends on `anyio==4.4.0`
     ");
 
     Ok(())
@@ -29742,6 +31320,8 @@ fn lock_invalid_project_table() -> Result<()> {
              2 |         [project.urls]
                |          ^^^^^^^
              `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set
+
+    hint: `b` was included because `a` (v0.1.0) depends on `b`
     ");
 
     Ok(())
@@ -31350,6 +32930,10 @@ fn lock_extra_marker_preserves_production_platform() -> Result<()> {
         version = 1
         revision = 3
         requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform == 'win32'",
+            "sys_platform != 'win32'",
+        ]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
@@ -31492,6 +33076,52 @@ fn lock_multiple_sources_extra() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
+    Ok(())
+}
+
+/// Conditional exact pins to ordinary registry releases do not create candidate-policy forks.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_ordinary_conditional_pins_do_not_fork() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "one==1.0.0 ; sys_platform == 'linux'",
+            "two==1.0.0 ; platform_machine == 'x86_64'",
+            "three==1.0.0 ; implementation_name == 'cpython'",
+            "four==1.0.0 ; platform_release == 'example'",
+            "five==1.0.0 ; platform_version == 'example'",
+            "six==1.0.0 ; os_name == 'posix'",
+        ]
+    "#})?;
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "ordinary-conditional-pins"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.one.versions."1.0.0"]
+        [packages.two.versions."1.0.0"]
+        [packages.three.versions."1.0.0"]
+        [packages.four.versions."1.0.0"]
+        [packages.five.versions."1.0.0"]
+        [packages.six.versions."1.0.0"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+    assert_snapshot!(lock.get("resolution-markers").map(ToString::to_string).unwrap_or_default(), @"");
     Ok(())
 }
 
@@ -33108,6 +34738,9 @@ fn lock_transitive_git() -> Result<()> {
         dependencies = [
             { name = "d" },
         ]
+
+        [package.metadata]
+        requires-dist = [{ name = "d", git = "https://github.com/astral-sh/workspace-virtual-root-test?subdirectory=packages%2Fd&rev=fac39c8d4c5d0ef32744e2bb309bbe34a759fd46" }]
 
         [[package]]
         name = "d"
@@ -42327,7 +43960,7 @@ fn lock_unsupported_wheel_url_requires_python() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: No solution found when resolving dependencies
-      cause: Because only numpy==2.3.5 is available and numpy==2.3.5 has no wheels with a matching Python version tag (e.g., `cp312`), we can conclude that all versions of numpy cannot be used.
+      cause: Because numpy==2.3.5 has no wheels with a matching Python version tag (e.g., `cp312`) and only numpy==2.3.5 is available, we can conclude that all versions of numpy cannot be used.
              And because your project depends on numpy, we can conclude that your project's requirements are unsatisfiable.
     ");
 
@@ -42367,7 +44000,7 @@ fn lock_unsupported_wheel_url_supported_platform() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: No solution found when resolving dependencies for split (markers: sys_platform == 'win32')
-      cause: Because only numpy==2.3.5 is available and numpy==2.3.5 has no Windows-compatible wheels, we can conclude that all versions of numpy cannot be used.
+      cause: Because numpy==2.3.5 has no Windows-compatible wheels and only numpy==2.3.5 is available, we can conclude that all versions of numpy cannot be used.
              And because your project depends on numpy, we can conclude that your project's requirements are unsatisfiable.
     ");
 
@@ -42397,7 +44030,7 @@ fn lock_unsupported_wheel_url_required_platform() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: No solution found when resolving dependencies
-      cause: Because only numpy==2.3.5 is available and numpy==2.3.5 has no Windows-compatible wheels, we can conclude that all versions of numpy cannot be used.
+      cause: Because numpy==2.3.5 has no Windows-compatible wheels and only numpy==2.3.5 is available, we can conclude that all versions of numpy cannot be used.
              And because your project depends on numpy, we can conclude that your project's requirements are unsatisfiable.
     ");
 
@@ -42560,7 +44193,7 @@ fn lock_required_environment_wheel_url_fork() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: No solution found when resolving dependencies for split (markers: platform_machine == 'x86_64')
-      cause: Because only a==1.0.0 is available and a==1.0.0 has no Linux-compatible wheels, we can conclude that all versions of a cannot be used.
+      cause: Because a==1.0.0 has no Linux-compatible wheels and only a==1.0.0 is available, we can conclude that all versions of a cannot be used.
              And because your project depends on a, we can conclude that your project's requirements are unsatisfiable.
     ");
 

@@ -11,7 +11,8 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::trace;
 
 use uv_distribution_types::{
-    DerivationChain, DistErrorKind, IndexCapabilities, IndexLocations, IndexUrl, RequestedDist,
+    DerivationChain, DistErrorKind, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadata,
+    IndexUrl, RequestedDist,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{LowerBound, Version};
@@ -22,7 +23,6 @@ use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 
 use crate::candidate_selector::CandidateSelector;
-use crate::dependency_provider::UvDependencyProvider;
 use crate::fork_indexes::ForkIndexes;
 use crate::fork_urls::ForkUrls;
 use crate::prerelease::PrereleaseSelection;
@@ -47,6 +47,9 @@ pub enum ResolveError {
 
     #[error(transparent)]
     Distribution(#[from] uv_distribution::Error),
+
+    #[error(transparent)]
+    HashStrategy(#[from] uv_types::HashStrategyError),
 
     #[error("The channel closed unexpectedly")]
     ChannelClosed,
@@ -80,13 +83,21 @@ pub enum ResolveError {
             format!(" in {env}")
         },
         indexes.iter()
-            .map(std::string::ToString::to_string)
+            .map(|index| {
+                let format = if indexes.iter().any(|other| other.url == index.url && other.format != index.format) {
+                    match index.format {
+                        IndexFormat::Simple => " (Simple API)",
+                        IndexFormat::Flat => " (flat index)",
+                    }
+                } else { "" };
+                format!("{}{format}", index.url)
+            })
             .collect::<Vec<_>>()
             .join("\n- ")
     )]
     ConflictingIndexesForEnvironment {
         package_name: PackageName,
-        indexes: Vec<IndexUrl>,
+        indexes: Vec<IndexMetadata>,
         env: ResolverEnvironment,
     },
 
@@ -150,6 +161,7 @@ impl ResolveError {
             | Self::ConflictingIndexesForEnvironment { .. }
             | Self::ConflictingIndexes(..)
             | Self::DisallowedUrl { .. }
+            | Self::HashStrategy(_)
             | Self::DistributionType(_)
             | Self::NoSolution(_)
             | Self::UnhashedPackage(_)
@@ -461,7 +473,7 @@ pub struct NoSolutionError {
 impl NoSolutionError {
     /// Create a new [`NoSolutionError`] from a [`pubgrub::NoSolutionError`].
     pub(crate) fn new(
-        error: pubgrub::NoSolutionError<UvDependencyProvider>,
+        error: ErrorTree,
         index: InMemoryIndex,
         included_versions: FxHashMap<PackageName, BTreeSet<Version>>,
         available_versions: FxHashMap<PackageName, BTreeSet<Version>>,
@@ -532,6 +544,144 @@ impl NoSolutionError {
             },
         )
         .expect("derivation tree should contain at least one external term")
+    }
+
+    /// Remove source-only carrier terms from a PEP 440 report when the root's direct source and
+    /// a missing-version statement already establish that those versions cannot be selected.
+    pub(crate) fn collapse_source_constraints(tree: ErrorTree, urls: &ForkUrls) -> ErrorTree {
+        fn ruled_out_in(
+            package: &PubGrubPackage,
+            versions: Option<&Range<Version>>,
+            causes: &[&ErrorTree],
+        ) -> bool {
+            let mut pending = causes.to_vec();
+            let mut seen = FxHashSet::default();
+            while let Some(tree) = pending.pop() {
+                if !seen.insert(std::ptr::from_ref(tree)) {
+                    continue;
+                }
+                match tree {
+                    DerivationTree::External(External::NoVersions(unavailable, ruled_out))
+                        if unavailable == package
+                            && versions.is_none_or(|versions| versions.subset_of(ruled_out)) =>
+                    {
+                        return true;
+                    }
+                    DerivationTree::External(_) => {}
+                    DerivationTree::Derived(derived) => {
+                        pending.push(&derived.cause1);
+                        pending.push(&derived.cause2);
+                    }
+                }
+            }
+            false
+        }
+
+        fn redundant(generic: &ErrorTree, inner: &ErrorDerived, urls: &ForkUrls) -> bool {
+            let DerivationTree::External(External::FromDependencyOf(root, _, dependency, versions)) =
+                generic
+            else {
+                return false;
+            };
+            if !root.is_root() || *versions != Range::full() {
+                return false;
+            }
+            if dependency
+                .name_no_root()
+                .is_some_and(|name| urls.contains_key(name))
+                && inner.terms.contains_key(root)
+                && !inner.terms.contains_key(dependency)
+                && ruled_out_in(dependency, None, &[&inner.cause1, &inner.cause2])
+            {
+                return true;
+            }
+            let pair = match (inner.cause1.as_ref(), inner.cause2.as_ref()) {
+                (
+                    DerivationTree::External(External::FromDependencyOf(
+                        parent,
+                        _,
+                        package,
+                        requested,
+                    )),
+                    DerivationTree::External(External::NoVersions(unavailable, ruled_out)),
+                )
+                | (
+                    DerivationTree::External(External::NoVersions(unavailable, ruled_out)),
+                    DerivationTree::External(External::FromDependencyOf(
+                        parent,
+                        _,
+                        package,
+                        requested,
+                    )),
+                ) => (parent, package, requested, unavailable, ruled_out),
+                _ => return false,
+            };
+            pair.0 == root
+                && pair.1 == dependency
+                && pair.3 == dependency
+                && pair.2.subset_of(pair.4)
+        }
+        map_derivation_tree(
+            tree,
+            DerivationTree::External,
+            |mut metadata, cause1, cause2| {
+                let mut removed = false;
+                if metadata
+                    .terms
+                    .values()
+                    .any(|term| matches!(term, Term::Positive(_)))
+                {
+                    metadata.terms.retain(|package, term| {
+                        let remove = if let Term::Negative(versions) = term {
+                            package
+                                .name_no_root()
+                                .is_some_and(|name| urls.contains_key(name))
+                                && ruled_out_in(package, Some(versions), &[&cause1, &cause2])
+                        } else {
+                            false
+                        };
+                        removed |= remove;
+                        !remove
+                    });
+                }
+                let pair = match (&cause1, &cause2) {
+                    (generic, DerivationTree::Derived(inner))
+                        if redundant(generic, inner, urls) =>
+                    {
+                        Some(false)
+                    }
+                    (DerivationTree::Derived(inner), generic)
+                        if redundant(generic, inner, urls) =>
+                    {
+                        Some(true)
+                    }
+                    (
+                        DerivationTree::External(External::NoVersions(..)),
+                        DerivationTree::Derived(inner),
+                    ) if removed && inner.terms == metadata.terms => Some(false),
+                    (
+                        DerivationTree::Derived(inner),
+                        DerivationTree::External(External::NoVersions(..)),
+                    ) if removed && inner.terms == metadata.terms => Some(true),
+                    _ => None,
+                };
+                if let Some(first) = pair {
+                    let (kept, dropped) = if first {
+                        (cause1, cause2)
+                    } else {
+                        (cause2, cause1)
+                    };
+                    drop_derivation_tree(dropped);
+                    if let DerivationTree::Derived(mut inner) = kept {
+                        inner.terms = metadata.terms;
+                        inner.shared_id = metadata.shared_id.or(inner.shared_id);
+                        return DerivationTree::Derived(inner);
+                    }
+                    return kept;
+                }
+                derived_tree(metadata, cause1, cause2)
+            },
+        )
     }
 
     /// Simplifies the version ranges on any incompatibilities to remove the `[max]` sentinel.

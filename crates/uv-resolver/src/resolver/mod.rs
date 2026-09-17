@@ -1,7 +1,7 @@
 //! Given a set of requirements, find a set of compatible packages.
 
 use std::borrow::Cow;
-use std::cmp::Ordering;
+use std::cmp::{Ordering, Reverse};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt::{Display, Formatter};
 use std::ops::Bound;
@@ -12,35 +12,41 @@ use std::{mem, thread};
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
 use papaya::{HashMap, ResizeMode};
-use pubgrub::{Id, IncompId, Incompatibility, Kind, Ranges, State, Term};
+use pubgrub::{
+    DerivationTree, External, Id, IncompId, Incompatibility, Kind, Ranges, State, Term, VersionSet,
+};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::{self, Receiver};
 use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{Level, debug, info, instrument, trace, warn};
 
-use uv_configuration::{Constraints, Excludes, Overrides};
-use uv_distribution::{ArchiveMetadata, DistributionDatabase};
+use uv_configuration::{Constraints, Excludes, ForkStrategy, Overrides};
+use uv_distribution::{ArchiveMetadata, DistributionDatabase, Metadata};
 use uv_distribution_types::{
-    BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, Identifier, IncompatibleDist,
-    IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations, IndexMetadata,
-    IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement, ResolvedDist,
-    ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
+    BuiltDist, CompatibleDist, DependencyMetadata, Dist, DistErrorKind, Identifier,
+    IncompatibleDist, IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations,
+    IndexMetadata, IndexUrl, InstalledDist, Name, PrioritizedDist, PythonRequirementKind,
+    RemoteSource, RequestedDist, Requirement, RequirementSource, ResolvedDist, ResolvedDistRef,
+    SourceDist, VersionOrUrlRef, implied_markers,
 };
 use uv_git::GitResolver;
+use uv_git_types::GitUrl;
 use uv_normalize::PackageName;
 use uv_pep440::{MIN_VERSION, Version, VersionSpecifiers, release_specifiers_to_ranges};
 use uv_pep508::{
     MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
 };
-use uv_platform_tags::{IncompatibleTag, Tags};
-use uv_pypi_types::{ConflictItem, ConflictItemRef, ConflictKindRef, Conflicts, VerbatimParsedUrl};
+use uv_platform_tags::{IncompatibleTag, PlatformTag, Tags};
+use uv_pypi_types::{
+    ConflictItem, ConflictItemRef, ConflictKindRef, Conflicts, ParsedUrl, VerbatimParsedUrl, Yanked,
+};
 use uv_static::EnvVars;
 use uv_torch::TorchStrategy;
-use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
+use uv_types::{BuildContext, HashStrategy, HashStrategyError, InstalledPackagesProvider};
 use uv_warnings::warn_user_once;
 
-use crate::candidate_selector::{Candidate, CandidateDist, CandidateSelector};
+use crate::candidate_selector::{Candidate, CandidateDist, CandidateSelector, SelectionPolicy};
 use crate::dependency_provider::UvDependencyProvider;
 use crate::error::{NoSolutionError, ResolveError, derivation_tree_packages};
 use crate::fork_indexes::ForkIndexes;
@@ -48,9 +54,12 @@ use crate::fork_urls::ForkUrls;
 use crate::manifest::Manifest;
 use crate::pins::FilePins;
 use crate::preferences::{PreferenceSource, Preferences};
+use crate::prerelease::contains_prerelease;
+use crate::pubgrub::solver_version::{project_error, report_sources as sources_for_report};
 use crate::pubgrub::{
-    DependencySource, PubGrubDependency, PubGrubPackage, PubGrubPackageInner, PubGrubPriorities,
-    PubGrubPython, Range,
+    CandidateSet, DependencySource, IndexId, PubGrubDependency, PubGrubPackage,
+    PubGrubPackageInner, PubGrubPriorities, PubGrubPython, Range, SolverSource, SolverVersion,
+    UrlCandidate, UrlMode,
 };
 use crate::python_requirement::PythonRequirement;
 use crate::resolution::ResolverOutput;
@@ -66,6 +75,7 @@ use crate::resolver::environment::{
     ForkingPossibility, fork_version_by_marker, fork_version_by_python_requirement,
 };
 pub(crate) use crate::resolver::fork_map::{ForkMap, ForkSet};
+use crate::resolver::index::DirectHashKey;
 pub use crate::resolver::index::InMemoryIndex;
 use crate::resolver::indexes::Indexes;
 use crate::resolver::package_source::PackageSource;
@@ -76,6 +86,10 @@ pub use crate::resolver::provider::{
 pub use crate::resolver::reporter::Reporter;
 use crate::resolver::requests::MetadataRequests;
 use crate::resolver::requirements::{RequirementContext, RequirementExpander};
+use crate::resolver::sources::{
+    ActiveHashes, Grounding, SolvedDependency, SourceAssumptions, SourceDependencies,
+    SourcePotential, UrlDeclaration,
+};
 use crate::resolver::system::SystemDependency;
 pub(crate) use crate::resolver::urls::Urls;
 use crate::universal_marker::UniversalMarker;
@@ -85,7 +99,6 @@ pub(crate) use provider::MetadataUnavailable;
 pub(crate) use resolution::{
     Resolution, ResolutionDependencyEdge, ResolutionNode, ResolutionPackage,
 };
-use uv_configuration::ForkStrategy;
 
 mod availability;
 mod batch_prefetch;
@@ -100,6 +113,7 @@ mod reporter;
 mod requests;
 mod requirements;
 mod resolution;
+mod sources;
 mod system;
 mod urls;
 
@@ -125,8 +139,10 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     locations: IndexLocations,
     exclusions: Exclusions,
     urls: Urls,
+    source_potentials: Box<HashMap<UrlCandidate, SourcePotential>>,
     indexes: Indexes,
     dependency_mode: DependencyMode,
+    dependency_metadata: DependencyMetadata,
     hasher: HashStrategy,
     env: ResolverEnvironment,
     // The environment of the current Python interpreter.
@@ -139,10 +155,13 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     index: InMemoryIndex,
     installed_packages: InstalledPackages,
     // Papaya's maps are large on Windows, so box them to keep resolver futures small.
-    /// Incompatibilities for packages that are entirely unavailable.
+    /// Incompatibilities for packages that are entirely unavailable from the implicit registry.
     unavailable_packages: Box<HashMap<PackageName, UnavailablePackage>>,
-    /// Incompatibilities for packages that are unavailable at specific versions.
-    incomplete_packages: Box<HashMap<PackageName, HashMap<Version, MetadataUnavailable>>>,
+    /// The same lookup failures for each explicitly selected registry.
+    unavailable_index_packages: Box<HashMap<IndexId, HashMap<PackageName, UnavailablePackage>>>,
+    /// Incompatibilities for packages that are unavailable at specific versions and sources.
+    incomplete_packages:
+        Box<HashMap<(PackageName, SolverSource), HashMap<Version, MetadataUnavailable>>>,
     /// The options that were used to configure this resolver.
     options: Options,
     /// The reporter to use for this resolver.
@@ -198,7 +217,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             build_context.capabilities(),
         );
 
-        Ok(Self::new_custom_io(
+        let mut resolver = Self::new_custom_io(
             manifest,
             options,
             hasher,
@@ -213,7 +232,9 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             build_context.locations(),
             provider,
             installed_packages,
-        ))
+        );
+        resolver.state.dependency_metadata = build_context.dependency_metadata().clone();
+        Ok(resolver)
     }
 }
 
@@ -243,7 +264,9 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             capabilities: capabilities.clone(),
             selector: CandidateSelector::for_resolution(&options, &manifest, &env),
             dependency_mode: options.dependency_mode,
-            urls: Urls::from_manifest(&manifest, &env, git, options.dependency_mode),
+            dependency_metadata: DependencyMetadata::default(),
+            urls: Urls::from_manifest(&manifest, &env, options.dependency_mode),
+            source_potentials: Box::default(),
             indexes: Indexes::from_manifest(&manifest, &env, options.dependency_mode),
             project: manifest.project,
             workspace_members: manifest.workspace_members,
@@ -262,6 +285,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             conflicts,
             installed_packages,
             unavailable_packages: Box::default(),
+            unavailable_index_packages: Box::default(),
             incomplete_packages: Box::default(),
             options,
             reporter: None,
@@ -285,6 +309,13 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
 
     /// Resolve a set of requirements into a set of pinned versions.
     pub async fn resolve(self) -> Result<ResolverOutput, ResolveError> {
+        self.resolve_with_hashes()
+            .await
+            .map(|(resolution, _)| resolution)
+    }
+
+    /// Resolve requirements and return the hash policy from the paths included in the solution.
+    pub async fn resolve_with_hashes(self) -> Result<(ResolverOutput, HashStrategy), ResolveError> {
         let state = Arc::new(self.state);
         let provider = Arc::new(self.provider);
 
@@ -322,7 +353,10 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
 
 impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackages> {
     #[instrument(skip_all)]
-    fn solve(self: Arc<Self>, requests: &MetadataRequests) -> Result<ResolverOutput, ResolveError> {
+    fn solve(
+        self: Arc<Self>,
+        requests: &MetadataRequests,
+    ) -> Result<(ResolverOutput, HashStrategy), ResolveError> {
         debug!(
             "Solving with installed Python version: {}",
             self.python_requirement.exact()
@@ -338,13 +372,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         let mut visited = FxHashSet::default();
 
         let root = PubGrubPackage::from(PubGrubPackageInner::Root(self.project.clone()));
-        let pubgrub = State::init(root.clone(), MIN_VERSION.clone());
+        let pubgrub = State::init(root.clone(), SolverVersion::registry(MIN_VERSION.clone()));
         let prefetcher = BatchPrefetcher::new(self.capabilities.clone(), requests.clone());
         let state = ForkState::new(
             pubgrub,
             self.env.clone(),
             self.python_requirement.clone(),
             prefetcher,
+            self.indexes.clone(),
         );
         let mut preferences = self.preferences.clone();
         let mut forked_states = self.env.initial_forked_states(state)?;
@@ -362,9 +397,35 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 forked_states.sort_by(|a, b| cmp_requires_python(&a.env, &b.env));
             }
         }
+        let mut forked_states = forked_states
+            .into_iter()
+            .map(SourceSearch::new)
+            .collect::<Vec<_>>();
         let mut resolutions = vec![];
+        let mut active_hashes = ActiveHashes::default();
+        let mut active_policies = Vec::new();
 
-        'FORK: while let Some(mut state) = forked_states.pop() {
+        'FORK: while let Some(mut search) = forked_states.pop() {
+            let Some(mut state) = search.states.pop() else {
+                let source_error = search
+                    .source_error
+                    .take()
+                    .or_else(|| search.failed_source_error())
+                    .or_else(|| search.failed_policy_error());
+                return Err(source_error
+                    .or(search.directory_error)
+                    .or(search.error)
+                    .or(search.fallback_source_error)
+                    .or_else(|| search.candidate_errors.into_values().next())
+                    .or_else(|| {
+                        search
+                            .policy_errors
+                            .into_iter()
+                            .next()
+                            .map(|(_, error)| error)
+                    })
+                    .expect("an exhausted source search has a failure"));
+            };
             if let Some(split) = state.env.end_user_fork_display() {
                 let requires_python = state.python_requirement.target();
                 debug!("Solving {split} (requires-python: {requires_python:?})");
@@ -378,20 +439,127 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     ForkContinuation::Propagate => {
                         // Run unit propagation.
                         let result = state.pubgrub.unit_propagation(state.next);
+                        if state.env.fork_markers().is_some()
+                            && state.source_dependencies.has_contextual_sources()
+                        {
+                            let grounding = state.source_dependencies.grounding(
+                                &state.pubgrub,
+                                &state.env,
+                                &state.python_requirement,
+                                &self.urls,
+                                &self.git,
+                            );
+                            if let Some(marker) =
+                                grounding.conditional_source(&state.env, &state.python_requirement)
+                                && let Some((with_source, without_source)) =
+                                    fork_version_by_marker(&state.env, marker)
+                            {
+                                for env in [with_source, without_source] {
+                                    forked_states.push(SourceSearch::new(self.fresh_source_fork(
+                                        env,
+                                        SourceAssumptions::default(),
+                                        requests,
+                                    )));
+                                }
+                                continue 'FORK;
+                            }
+                        }
                         match result {
                             Err(err) => {
-                                // If unit propagation failed, there is no solution.
-                                return Err(self.convert_no_solution_err(
+                                // A native conflict exhausts this retry, but other choices may
+                                // supply a source that was missing from a previously stalled branch.
+                                if search.error.is_none() {
+                                    search.source_error = self
+                                        .source_conflict(&err, &state)
+                                        .or_else(|| search.failure_from_proof(&err));
+                                }
+                                let grounding = state.source_dependencies.grounding(
+                                    &state.pubgrub,
+                                    &state.env,
+                                    &state.python_requirement,
+                                    &self.urls,
+                                    &self.git,
+                                );
+                                let fork_urls = grounding
+                                    .iter()
+                                    .filter_map(|(name, sources)| {
+                                        sources.first_key_value().map(|(source, _)| {
+                                            (name.clone(), grounding.url(*source, &self.urls))
+                                        })
+                                    })
+                                    .collect();
+                                let mut report_sources = sources_for_report(&err);
+                                report_sources.extend(
+                                    grounding
+                                        .indexes
+                                        .iter()
+                                        // A grounded URL will override the index. Keep its proof's
+                                        // mode available when its declaration accepts either mode.
+                                        .filter(|(name, _)| {
+                                            grounding.sources_for(name).next().is_none()
+                                        })
+                                        .filter_map(|(name, sources)| {
+                                            sources.first_key_value().map(|(source, _)| {
+                                                (name.clone(), SolverSource::Index(*source))
+                                            })
+                                        }),
+                                );
+                                for (name, sources) in grounding.iter() {
+                                    let Some((source, _)) = sources.first_key_value() else {
+                                        continue;
+                                    };
+                                    let candidate = if grounding.has_mode(source.editable()) {
+                                        source.editable()
+                                    } else if grounding.has_mode(source.git_lfs()) {
+                                        source.git_lfs()
+                                    } else if urls::declaration_mode(
+                                        &grounding.url(*source, &self.urls).parsed_url,
+                                    ) == Some(UrlMode::Normal)
+                                    {
+                                        source.normal()
+                                    } else if let Some(SolverSource::Url(candidate)) =
+                                        report_sources.get(name)
+                                        && candidate.source == *source
+                                    {
+                                        *candidate
+                                    } else {
+                                        source.normal()
+                                    };
+                                    report_sources
+                                        .insert(name.clone(), SolverSource::Url(candidate));
+                                }
+                                let fork_indexes = report_sources
+                                    .iter()
+                                    .filter_map(|(name, source)| match source {
+                                        SolverSource::Index(index) => {
+                                            Some((name.clone(), state.indexes.resource(*index)))
+                                        }
+                                        SolverSource::Registry | SolverSource::Url(_) => None,
+                                    })
+                                    .collect();
+                                let known_versions = state
+                                    .known_versions
+                                    .for_report(&report_sources, &state.indexes);
+                                let error = self.convert_no_solution_err(
                                     err,
-                                    state.fork_urls,
-                                    state.fork_indexes,
-                                    &state.known_versions.0,
+                                    fork_urls,
+                                    fork_indexes,
+                                    &report_sources,
+                                    &known_versions,
                                     state.env,
                                     self.current_environment.clone(),
                                     &visited,
-                                ));
+                                );
+                                if search.error.is_none() {
+                                    search.error = Some(error);
+                                }
+                                forked_states.push(search);
+                                continue 'FORK;
                             }
                             Ok(conflicts) => {
+                                if !conflicts.is_empty() {
+                                    state.pending_sources.clear();
+                                }
                                 for (affected, incompatibility) in conflicts {
                                     // Conflict tracking: If there was a conflict, track affected and
                                     // culprit for all root cause incompatibilities
@@ -429,14 +597,604 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         // Choose a package.
                         // We aren't allowed to use the term intersection as it would extend the
                         // mutable borrow of `state`.
-                        let Some((highest_priority_pkg, _)) =
-                            state.pubgrub.partial_solution.pick_highest_priority_pkg(
-                                |id, _range| state.priorities.get(&state.pubgrub.package_store[id]),
-                            )
-                        else {
+                        let Some(highest_priority_pkg) = state.pick_package() else {
+                            let grounding = if self.urls.has_potential()
+                                || state.source_dependencies.has_urls()
+                                || state.source_dependencies.has_indexes()
+                            {
+                                state.source_dependencies.grounding(
+                                    &state.pubgrub,
+                                    &state.env,
+                                    &state.python_requirement,
+                                    &self.urls,
+                                    &self.git,
+                                )
+                            } else {
+                                state.source_dependencies.registry_grounding(
+                                    &state.pubgrub,
+                                    &state.env,
+                                    &state.python_requirement,
+                                )
+                            };
+                            if state.source_dependencies.has_urls()
+                                && let Some(marker) = grounding
+                                    .conditional_source(&state.env, &state.python_requirement)
+                                && let Some((with_source, without_source)) =
+                                    fork_version_by_marker(&state.env, marker)
+                            {
+                                for env in [with_source, without_source] {
+                                    forked_states.push(SourceSearch::new(self.fresh_source_fork(
+                                        env,
+                                        SourceAssumptions::default(),
+                                        requests,
+                                    )));
+                                }
+                                continue 'FORK;
+                            }
+                            let ungrounded = state
+                                .pubgrub
+                                .partial_solution
+                                .extract_solution()
+                                .find_map(|(id, candidate)| {
+                                    let name = state.pubgrub.package_store[id].name_no_root()?;
+                                    let rooted = match candidate.source {
+                                        SolverSource::Registry => true,
+                                        SolverSource::Index(index) => grounding
+                                            .indexes
+                                            .get(name)
+                                            .is_some_and(|indexes| indexes.contains_key(&index)),
+                                        SolverSource::Url(candidate) => {
+                                            grounding.contains(name, candidate.source)
+                                        }
+                                    };
+                                    (grounding.reachable.contains(&id) && !rooted).then_some(id)
+                                });
+                            if let Some(package) = ungrounded {
+                                state.pubgrub.backtrack_package(package);
+                                state.pending_sources.clear();
+                                state.reschedule_sources = true;
+                                continue;
+                            }
+                            if let Some(package) = state.pending_package() {
+                                let candidates = state
+                                    .pending_sources
+                                    .remove(&package)
+                                    .expect("the package is pending");
+                                let package_name =
+                                    state.pubgrub.package_store[package].name_no_root();
+                                if let Some((parent, parent_candidate, dependency, source)) =
+                                    grounding.untrusted.iter().find(|(_, _, dependency, _)| {
+                                        state.pubgrub.package_store[*dependency].name_no_root()
+                                            == package_name
+                                    })
+                                    && let Some(name) =
+                                        state.pubgrub.package_store[*dependency].name_no_root()
+                                {
+                                    let url = self.urls.get(*source);
+                                    let error = ResolveError::DisallowedUrl {
+                                        name: name.clone(),
+                                        url: url.verbatim.to_string(),
+                                    };
+                                    let error = enrich_dependency_error(
+                                        error,
+                                        *parent,
+                                        parent_candidate,
+                                        &state.pubgrub,
+                                    );
+                                    if urls::git_url(&url.parsed_url).is_some() {
+                                        search.record_policy_error(
+                                            vec![(
+                                                state.pubgrub.package_store[*parent].clone(),
+                                                parent_candidate.clone(),
+                                            )],
+                                            error,
+                                        );
+                                    } else {
+                                        search.record_candidate_error(source.normal(), error);
+                                    }
+                                }
+                                if package_name.is_some_and(|name| {
+                                    self.may_supply_url(
+                                        name,
+                                        &candidates,
+                                        &state.env,
+                                        &state.python_requirement,
+                                    ) || self.may_supply_index(
+                                        name,
+                                        &candidates,
+                                        &state.env,
+                                        &state.python_requirement,
+                                    )
+                                }) {
+                                    self.enqueue_source_alternatives(&state, &mut search, requests);
+                                }
+                                // Keep this branch as an ordinary restrictive solve too: PubGrub
+                                // may find a valid alternative that drops the pending package.
+                                state.source_assumptions.restrict(
+                                    state.pubgrub.package_store[package].clone(),
+                                    &candidates.complement(),
+                                );
+                                search.seen.insert((
+                                    state.source_assumptions.clone(),
+                                    state.preferred_lowest.clone(),
+                                ));
+                                state.next = package;
+                                state
+                                    .pubgrub
+                                    .add_incompatibility(Incompatibility::no_versions(
+                                        package,
+                                        Term::Positive(candidates),
+                                    ));
+                                continue;
+                            }
+                            let unmatched_git = grounding.untrusted.iter().find_map(
+                                |(parent, parent_candidate, dependency, source)| {
+                                    let url = self.urls.get(*source);
+                                    urls::git_url(&url.parsed_url)?;
+                                    let name =
+                                        state.pubgrub.package_store[*dependency].name_no_root()?;
+                                    state
+                                        .pubgrub
+                                        .partial_solution
+                                        .extract_solution()
+                                        .any(|(id, candidate)| {
+                                            state.pubgrub.package_store[id].name_no_root()
+                                                == Some(name)
+                                                && !candidate.source.is_registry()
+                                        })
+                                        .then(|| {
+                                            (*parent, parent_candidate.clone(), name.clone(), url)
+                                        })
+                                },
+                            );
+                            if let Some((parent, candidate, name, url)) = unmatched_git {
+                                let package = state.pubgrub.package_store[parent].clone();
+                                let error = enrich_dependency_error(
+                                    ResolveError::DisallowedUrl {
+                                        name: name.clone(),
+                                        url: url.verbatim.to_string(),
+                                    },
+                                    parent,
+                                    &candidate,
+                                    &state.pubgrub,
+                                );
+                                search.record_policy_error(
+                                    vec![(package.clone(), candidate.clone())],
+                                    error,
+                                );
+                                if self.may_supply_url(
+                                    &name,
+                                    &CandidateSet::urls(Range::full()),
+                                    &state.env,
+                                    &state.python_requirement,
+                                ) {
+                                    self.enqueue_source_alternatives(&state, &mut search, requests);
+                                }
+                                let candidate = CandidateSet::singleton(candidate);
+                                state
+                                    .source_assumptions
+                                    .restrict(package, &candidate.complement());
+                                search.seen.insert((
+                                    state.source_assumptions.clone(),
+                                    state.preferred_lowest.clone(),
+                                ));
+                                state.next = parent;
+                                state
+                                    .pubgrub
+                                    .add_incompatibility(Incompatibility::no_versions(
+                                        parent,
+                                        Term::Positive(candidate),
+                                    ));
+                                continue;
+                            }
+                            if let Some(conflict) = grounding.directory_conflicts.first() {
+                                let mut urls = conflict
+                                    .origins
+                                    .iter()
+                                    .map(|(_, _, url)| url.clone())
+                                    .collect::<Vec<_>>();
+                                urls.sort();
+                                let error = ResolveError::ConflictingUrls {
+                                    package_name: conflict.name.clone(),
+                                    urls,
+                                    env: state.env.clone(),
+                                };
+                                let (parent, candidate, _) = &conflict.origins[1];
+                                let error = if let Some(name) =
+                                    state.pubgrub.package_store[*parent].name_no_root()
+                                    && let Some(chain) =
+                                        state.source_dependencies.chain(*parent, candidate)
+                                {
+                                    ResolveError::Dependencies(
+                                        Box::new(error),
+                                        name.clone(),
+                                        candidate.version.clone(),
+                                        chain.clone(),
+                                    )
+                                } else {
+                                    enrich_dependency_error(
+                                        error,
+                                        *parent,
+                                        candidate,
+                                        &state.pubgrub,
+                                    )
+                                };
+                                let mut origins = conflict
+                                    .origins
+                                    .iter()
+                                    .map(|(id, candidate, _)| {
+                                        (
+                                            state.pubgrub.package_store[*id].clone(),
+                                            candidate.clone(),
+                                        )
+                                    })
+                                    .collect::<Vec<_>>();
+                                origins.dedup();
+                                // The native assignment satisfied all other requirements before
+                                // this policy invalidated it, so retain that cause across retries.
+                                search.directory_error.get_or_insert(error);
+                                if origins.len() == 1 {
+                                    state.next = *parent;
+                                    state.pubgrub.add_incompatibility(
+                                        Incompatibility::no_versions(
+                                            *parent,
+                                            Term::Positive(CandidateSet::singleton(
+                                                candidate.clone(),
+                                            )),
+                                        ),
+                                    );
+                                    continue;
+                                }
+                                self.enqueue_policy_alternatives(
+                                    &state,
+                                    &mut search,
+                                    origins,
+                                    requests,
+                                );
+                                forked_states.push(search);
+                                continue 'FORK;
+                            }
+                            // An unspecified mode leaves both candidates in PubGrub. An alternative
+                            // can keep a branch alive after normal metadata fails, but only an
+                            // independently selected declaration can justify it in the completed
+                            // solve. Retry other selections before excluding it from this branch.
+                            let unselected_mode =
+                                state.pubgrub.partial_solution.extract_solution().find_map(
+                                    |(id, candidate)| {
+                                        let SolverSource::Url(direct) = candidate.source else {
+                                            return None;
+                                        };
+                                        (direct.mode != UrlMode::Normal
+                                            && grounding.reachable.contains(&id)
+                                            && !grounding.has_mode(direct))
+                                        .then_some((id, direct))
+                                    },
+                                );
+                            if let Some((id, direct)) = unselected_mode {
+                                let candidate =
+                                    CandidateSet::source(SolverSource::Url(direct), Range::full());
+                                if state.pubgrub.package_store[id].name_no_root().is_some_and(
+                                    |name| {
+                                        self.may_supply_url(
+                                            name,
+                                            &candidate,
+                                            &state.env,
+                                            &state.python_requirement,
+                                        )
+                                    },
+                                ) {
+                                    self.enqueue_source_alternatives(&state, &mut search, requests);
+                                }
+                                state.source_assumptions.restrict(
+                                    state.pubgrub.package_store[id].clone(),
+                                    &candidate.complement(),
+                                );
+                                search.seen.insert((
+                                    state.source_assumptions.clone(),
+                                    state.preferred_lowest.clone(),
+                                ));
+                                state.next = id;
+                                state
+                                    .pubgrub
+                                    .add_incompatibility(Incompatibility::no_versions(
+                                        id,
+                                        Term::Positive(candidate),
+                                    ));
+                                continue;
+                            }
+                            let candidate_policy = state
+                                .pubgrub
+                                .partial_solution
+                                .extract_solution()
+                                .find_map(|(id, candidate)| {
+                                    if !candidate.source.is_registry() {
+                                        return None;
+                                    }
+                                    let name = state.pubgrub.package_store[id].name_no_root()?;
+                                    let yanked = state
+                                        .possible_candidates
+                                        .get(&(id, candidate.clone()))
+                                        .copied()
+                                        .unwrap_or(false)
+                                        || state
+                                            .pins
+                                            .get(name, &candidate)
+                                            .and_then(ResolvedDist::yanked)
+                                            .is_some_and(Yanked::is_yanked);
+                                    if !candidate.version.any_prerelease() && !yanked {
+                                        return None;
+                                    }
+                                    let needed = *grounding.contexts.get(&id)?;
+                                    let selector =
+                                        self.selected_candidate_selector(&grounding, name);
+                                    if state.env.fork_markers().is_some() {
+                                        let permission = state.python_requirement.simplify_markers(
+                                            selector.candidate_permission_marker(
+                                                name,
+                                                &candidate.version,
+                                                yanked,
+                                            ),
+                                        );
+                                        if state
+                                            .env
+                                            .included_by_marker(needed.and(permission.negate()))
+                                        {
+                                            let split = state
+                                                .env
+                                                .included_by_marker(needed.and(permission))
+                                                .then(|| {
+                                                    fork_version_by_marker(&state.env, permission)
+                                                })
+                                                .flatten();
+                                            let prerelease = candidate.version.any_prerelease()
+                                                && !state.env.included_by_marker(needed.and(
+                                                    selector.candidate_permission_marker(
+                                                        name,
+                                                        &candidate.version,
+                                                        false,
+                                                    ),
+                                                ));
+                                            return Some((id, candidate, split, prerelease));
+                                        }
+                                        None
+                                    } else {
+                                        let disallowed = !selector.allows_possible_candidate(
+                                            name,
+                                            &candidate.version,
+                                            yanked,
+                                            &state.env,
+                                        );
+                                        let prerelease = disallowed
+                                            && candidate.version.any_prerelease()
+                                            && !selector.allows_possible_candidate(
+                                                name,
+                                                &candidate.version,
+                                                false,
+                                                &state.env,
+                                            );
+                                        disallowed.then_some((id, candidate, None, prerelease))
+                                    }
+                                });
+                            if let Some((package, candidate, split, prerelease)) = candidate_policy
+                            {
+                                if let Some((with_permission, without_permission)) = split {
+                                    for env in [with_permission, without_permission] {
+                                        forked_states.push(SourceSearch::new(
+                                            self.fresh_source_fork(
+                                                env,
+                                                SourceAssumptions::default(),
+                                                requests,
+                                            ),
+                                        ));
+                                    }
+                                    continue 'FORK;
+                                }
+                                self.enqueue_source_alternatives(&state, &mut search, requests);
+                                let candidate = CandidateSet::singleton(candidate);
+                                state.source_assumptions.restrict(
+                                    state.pubgrub.package_store[package].clone(),
+                                    &candidate.complement(),
+                                );
+                                search.seen.insert((
+                                    state.source_assumptions.clone(),
+                                    state.preferred_lowest.clone(),
+                                ));
+                                state.next = package;
+                                let incompatibility = if prerelease {
+                                    Incompatibility::custom_term(
+                                        package,
+                                        Term::Positive(candidate),
+                                        UnavailableReason::Version(UnavailableVersion::Prerelease),
+                                    )
+                                } else {
+                                    Incompatibility::no_versions(package, Term::Positive(candidate))
+                                };
+                                state.pubgrub.add_incompatibility(incompatibility);
+                                continue;
+                            }
+                            if matches!(self.options.resolution_mode, ResolutionMode::LowestDirect)
+                            {
+                                // Fewest can share the lowest preference where no dependency or
+                                // source incompatibility independently forces an environment split.
+                                if self.options.fork_strategy == ForkStrategy::RequiresPython
+                                    && state.env.fork_markers().is_some()
+                                    && let Some((direct, transitive)) = state
+                                        .pubgrub
+                                        .partial_solution
+                                        .extract_solution()
+                                        .find_map(|(id, candidate)| {
+                                            if !candidate.source.is_registry() {
+                                                return None;
+                                            }
+                                            let package = &state.pubgrub.package_store[id];
+                                            let PubGrubPackageInner::Package {
+                                                name,
+                                                extra: None,
+                                                group: None,
+                                                ..
+                                            } = &**package
+                                            else {
+                                                return None;
+                                            };
+                                            let needed = *grounding.contexts.get(&id)?;
+                                            let direct = state.python_requirement.simplify_markers(
+                                                self.selected_candidate_selector(&grounding, name)
+                                                    .lowest_marker(name),
+                                            );
+                                            if state.env.included_by_marker(needed.and(direct))
+                                                && state
+                                                    .env
+                                                    .included_by_marker(needed.and(direct.negate()))
+                                            {
+                                                fork_version_by_marker(&state.env, direct)
+                                            } else {
+                                                None
+                                            }
+                                        })
+                                {
+                                    for env in [direct, transitive] {
+                                        forked_states.push(SourceSearch::new(
+                                            self.fresh_source_fork(
+                                                env,
+                                                SourceAssumptions::default(),
+                                                requests,
+                                            ),
+                                        ));
+                                    }
+                                    continue 'FORK;
+                                }
+                                let mut guarded = BTreeSet::new();
+                                let invalid_guard =
+                                    state.pubgrub.partial_solution.extract_solution().find_map(
+                                        |(id, candidate)| {
+                                            let package = &state.pubgrub.package_store[id];
+                                            let PubGrubPackageInner::Package {
+                                                name,
+                                                extra: None,
+                                                group: None,
+                                                ..
+                                            } = &**package
+                                            else {
+                                                return None;
+                                            };
+                                            if !state.preferred_lowest.contains(name) {
+                                                return None;
+                                            }
+                                            guarded.insert(name.clone());
+                                            self.selected_candidate_selector(&grounding, name)
+                                                .use_highest_version(name, &state.env)
+                                                .then_some((id, candidate))
+                                        },
+                                    );
+                                if let Some((package, candidate)) = invalid_guard {
+                                    state.next = package;
+                                    state.pubgrub.add_incompatibility(
+                                        Incompatibility::no_versions(
+                                            package,
+                                            Term::Positive(CandidateSet::singleton(candidate)),
+                                        ),
+                                    );
+                                    continue;
+                                }
+                                if guarded != state.preferred_lowest {
+                                    // This exploratory branch removed a package whose directness was
+                                    // needed to prefer its lower version. Keep the existing alternatives.
+                                    forked_states.push(search);
+                                    continue 'FORK;
+                                }
+
+                                let replay = state
+                                    .pubgrub
+                                    .partial_solution
+                                    .extract_solution()
+                                    .find_map(|(id, candidate)| {
+                                        let package = &state.pubgrub.package_store[id];
+                                        let PubGrubPackageInner::Package {
+                                            name,
+                                            extra: None,
+                                            group: None,
+                                            ..
+                                        } = &**package
+                                        else {
+                                            return None;
+                                        };
+                                        if !grounding.reachable.contains(&id)
+                                            || state.selection_modes.get(&(id, candidate.clone()))
+                                                != Some(&true)
+                                            || self
+                                                .selected_candidate_selector(&grounding, name)
+                                                .use_highest_version(name, &state.env)
+                                        {
+                                            return None;
+                                        }
+                                        let mut assumptions = state.source_assumptions.clone();
+                                        for (support, selected) in state
+                                            .source_dependencies
+                                            .lowest_support(&state.pubgrub, &grounding, name)
+                                        {
+                                            assumptions.restrict(
+                                                support,
+                                                &CandidateSet::singleton(selected),
+                                            );
+                                        }
+                                        search
+                                            .lowest_attempts
+                                            .insert(LowestAttempt {
+                                                package: package.clone(),
+                                                candidate,
+                                                assumptions: assumptions.clone(),
+                                                preferred: state.preferred_lowest.clone(),
+                                            })
+                                            .then_some((name.clone(), assumptions))
+                                    });
+                                if let Some((name, assumptions)) = replay {
+                                    let mut retry = self.fresh_source_fork(
+                                        state.env.clone(),
+                                        assumptions,
+                                        requests,
+                                    );
+                                    retry.preferred_lowest.clone_from(&state.preferred_lowest);
+                                    retry.preferred_lowest.insert(name);
+                                    search.states.push(state);
+                                    search.states.push(retry);
+                                    forked_states.push(search);
+                                    continue 'FORK;
+                                }
+                            }
                             // All packages have been assigned, the fork has been successfully resolved
                             if tracing::enabled!(Level::DEBUG) {
                                 state.prefetcher.log_tried_versions();
+                            }
+                            if let Err((source, error)) =
+                                self.commit_direct_metadata(&state, &grounding, requests)
+                            {
+                                let error = *error;
+                                if source.is_none()
+                                    && let ResolveError::HashStrategy(error) = error
+                                {
+                                    if self.reject_hash_policy(
+                                        &mut state,
+                                        &mut search,
+                                        &grounding,
+                                        error,
+                                        requests,
+                                    ) {
+                                        continue;
+                                    }
+                                    forked_states.push(search);
+                                    continue 'FORK;
+                                }
+                                if is_source_error(&error) {
+                                    if let Some(source) = source {
+                                        search.record_candidate_error(source, error);
+                                    } else {
+                                        search.fallback_source_error.get_or_insert(error);
+                                    }
+                                    self.enqueue_source_alternatives(&state, &mut search, requests);
+                                    forked_states.push(search);
+                                    continue 'FORK;
+                                }
+                                return Err(error);
                             }
                             debug!(
                                 "{} resolution took {:.3}s",
@@ -444,7 +1202,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 start.elapsed().as_secs_f32()
                             );
 
-                            let resolution = state.into_resolution();
+                            let resolution = state.into_resolution(&self.urls, &grounding);
+                            active_policies.extend(grounding.policies);
+                            active_hashes.extend(grounding.hashes);
 
                             // Walk over the selected versions, and mark them as preferences. We have to
                             // add forks back as to not override the preferences from the lockfile for
@@ -498,8 +1258,133 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 let next_id = state.next;
                 let next_package = &state.pubgrub.package_store[state.next];
 
-                let source =
-                    PackageSource::from_fork(next_package, &state.fork_urls, &state.fork_indexes);
+                let candidates = state
+                    .pubgrub
+                    .partial_solution
+                    .term_intersection_for_package(next_id)
+                    .expect("a package was chosen but we don't have a term")
+                    .unwrap_positive()
+                    .clone();
+                let grounding = if self.urls.has_potential() || state.source_dependencies.has_urls()
+                {
+                    state.source_dependencies.grounding(
+                        &state.pubgrub,
+                        &state.env,
+                        &state.python_requirement,
+                        &self.urls,
+                        &self.git,
+                    )
+                } else {
+                    Grounding::default()
+                };
+                let mut policies = grounding
+                    .policies
+                    .iter()
+                    .filter(|(requirement, _)| {
+                        next_package.name_no_root() == Some(&requirement.name)
+                    })
+                    .map(|(requirement, lowest)| (requirement.as_ref(), *lowest))
+                    .peekable();
+                let mut selector = if policies.peek().is_some() {
+                    Cow::Owned(self.selector.with_requirements(policies))
+                } else {
+                    Cow::Borrowed(&self.selector)
+                };
+                if let Some(name) = next_package.name_no_root()
+                    && state.preferred_lowest.contains(name)
+                {
+                    selector.to_mut().prefer_lowest(name);
+                }
+                let solver_source = initial_version.as_ref().map_or_else(
+                    || {
+                        if matches!(
+                            &**next_package,
+                            PubGrubPackageInner::Root(_)
+                                | PubGrubPackageInner::Python(_)
+                                | PubGrubPackageInner::System(_)
+                        ) {
+                            return SolverSource::Registry;
+                        }
+                        next_package
+                            .name_no_root()
+                            .and_then(|name| grounding.source(name, &candidates, &self.urls))
+                            .map(SolverSource::Url)
+                            .or_else(|| candidates.index().map(SolverSource::Index))
+                            .unwrap_or(SolverSource::Registry)
+                    },
+                    |candidate| candidate.source,
+                );
+                let range = candidates.for_source(solver_source);
+                if *range == Range::empty() {
+                    if next_package.name_no_root().is_some_and(|name| {
+                        (candidates.has_urls()
+                            && (self.may_supply_url(
+                                name,
+                                &candidates,
+                                &state.env,
+                                &state.python_requirement,
+                            ) || grounding.untrusted.iter().any(|(_, _, dependency, _)| {
+                                state.pubgrub.package_store[*dependency].name_no_root()
+                                    == Some(name)
+                            })))
+                            || (candidates.has_indexes()
+                                && self.may_supply_index(
+                                    name,
+                                    &candidates,
+                                    &state.env,
+                                    &state.python_requirement,
+                                ))
+                    }) {
+                        state.pending_sources.insert(next_id, candidates);
+                        state.reschedule_sources = true;
+                    } else {
+                        state
+                            .pubgrub
+                            .add_incompatibility(Incompatibility::no_versions(
+                                next_id,
+                                Term::Positive(candidates),
+                            ));
+                    }
+                    continue;
+                }
+                if let SolverSource::Url(direct) = solver_source
+                    && direct.mode != UrlMode::Normal
+                    && !grounding.has_mode(direct)
+                    && let Some(name) = next_package.name_no_root()
+                {
+                    let alternative = CandidateSet::source(solver_source, Range::full());
+                    if !self.may_supply_url(
+                        name,
+                        &alternative,
+                        &state.env,
+                        &state.python_requirement,
+                    ) {
+                        // An unspecified declaration cannot select this mode unless some independently
+                        // reachable direct declaration may still require that mode.
+                        state
+                            .pubgrub
+                            .add_incompatibility(Incompatibility::no_versions(
+                                next_id,
+                                Term::Positive(alternative),
+                            ));
+                        continue;
+                    }
+                }
+                let url = match solver_source {
+                    SolverSource::Registry | SolverSource::Index(_) => None,
+                    SolverSource::Url(candidate) => {
+                        Some(grounding.metadata_url(candidate, &self.urls))
+                    }
+                };
+                let index = if let SolverSource::Index(index) = solver_source {
+                    Some(self.indexes.resource(index))
+                } else {
+                    None
+                };
+                let source = match &url {
+                    Some(url) => PackageSource::Url(url),
+                    None => PackageSource::Registry(index.as_ref()),
+                };
 
                 // Consider:
                 // ```toml
@@ -512,18 +1397,42 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // since we weren't sure whether it might also be a URL requirement when
                 // transforming the requirements. For that case, we do another request here
                 // (idempotent due to caching).
-                self.request_package(next_package, source, requests)?;
+                let hasher = match grounding.hashes.strategy(&self.hasher) {
+                    Ok(hasher) => hasher,
+                    Err(error) => {
+                        if self.reject_hash_policy(
+                            &mut state,
+                            &mut search,
+                            &grounding,
+                            error,
+                            requests,
+                        ) {
+                            continue;
+                        }
+                        forked_states.push(search);
+                        continue 'FORK;
+                    }
+                };
+                if let Err(error) = Self::request_package(next_package, source, &hasher, requests) {
+                    if let SolverSource::Url(url_source) = solver_source
+                        && is_source_error(&error)
+                    {
+                        self.reject_source_candidate(
+                            &mut state,
+                            &mut search,
+                            next_id,
+                            &candidates,
+                            url_source,
+                            error,
+                        );
+                        continue;
+                    }
+                    return Err(error);
+                }
 
                 let version = if let Some(version) = initial_version {
                     version
                 } else {
-                    let term_intersection = state
-                        .pubgrub
-                        .partial_solution
-                        .term_intersection_for_package(next_id)
-                        .expect("a package was chosen but we don't have a term");
-                    let range = term_intersection.unwrap_positive();
-
                     // Within a fixed resolver environment, an implicit registry candidate is
                     // stable for a given range and pre-release policy. Avoid repeating candidate
                     // selection when PubGrub revisits an identical decision after backtracking.
@@ -531,14 +1440,22 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         PackageSource::Registry(None) => true,
                         PackageSource::Url(_) | PackageSource::Registry(Some(_)) => false,
                     };
+                    let policy = (cache_selected_version && self.urls.has_potential())
+                        .then(|| {
+                            next_package
+                                .name_no_root()
+                                .map(|name| selector.selection_policy(name, &state.env))
+                        })
+                        .flatten();
                     let decision = if cache_selected_version
-                        && let Some((selected_range, version)) =
+                        && let Some((selected_range, selected_policy, version)) =
                             state.selected_versions.get(&next_id)
                         && selected_range == range
+                        && selected_policy == &policy
                     {
                         Some(ResolverVersion::Unforked(version.clone()))
                     } else {
-                        let decision = self.choose_version(
+                        let mut decision = match self.choose_version(
                             next_package,
                             next_id,
                             source,
@@ -549,15 +1466,112 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             &state.python_requirement,
                             &state.pubgrub,
                             &mut visited,
+                            &selector,
+                            &hasher,
                             requests,
-                        )?;
+                        ) {
+                            Ok(decision) => decision,
+                            Err(error) => {
+                                if let SolverSource::Url(url_source) = solver_source
+                                    && is_source_error(&error)
+                                {
+                                    self.reject_source_candidate(
+                                        &mut state,
+                                        &mut search,
+                                        next_id,
+                                        &candidates,
+                                        url_source,
+                                        error,
+                                    );
+                                    continue;
+                                }
+                                return Err(error);
+                            }
+                        };
+
+                        if let PackageSource::Registry(_) = source
+                            && let Some(name) = next_package.name_no_root()
+                            && (decision.is_none()
+                                || possible_yanked_version(decision.as_ref()).is_some())
+                            && self.may_supply_selection_policy(
+                                name,
+                                &state.env,
+                                &state.python_requirement,
+                            )
+                        {
+                            let mut yanked = possible_yanked_version(decision.as_ref()).cloned();
+                            let possible_selector =
+                                selector.with_possible_policy(name, yanked.as_ref());
+                            let mut possible = self.choose_version(
+                                next_package,
+                                next_id,
+                                source,
+                                range,
+                                &mut state.pins,
+                                &preferences,
+                                &state.env,
+                                &state.python_requirement,
+                                &state.pubgrub,
+                                &mut visited,
+                                &possible_selector,
+                                &hasher,
+                                requests,
+                            )?;
+                            if yanked.is_none()
+                                && let Some(version) = possible_yanked_version(possible.as_ref())
+                            {
+                                yanked = Some(version.clone());
+                                let possible_selector =
+                                    selector.with_possible_policy(name, yanked.as_ref());
+                                possible = self.choose_version(
+                                    next_package,
+                                    next_id,
+                                    source,
+                                    range,
+                                    &mut state.pins,
+                                    &preferences,
+                                    &state.env,
+                                    &state.python_requirement,
+                                    &state.pubgrub,
+                                    &mut visited,
+                                    &possible_selector,
+                                    &hasher,
+                                    requests,
+                                )?;
+                            }
+                            let mut remember = |id, version: &Version| {
+                                state
+                                    .possible_candidates
+                                    .entry((id, SolverVersion::new(solver_source, version.clone())))
+                                    .and_modify(|is_yanked| {
+                                        *is_yanked |= yanked.as_ref() == Some(version);
+                                    })
+                                    .or_insert_with(|| yanked.as_ref() == Some(version));
+                            };
+                            match &possible {
+                                Some(ResolverVersion::Unforked(version)) => {
+                                    remember(next_id, version);
+                                }
+                                Some(ResolverVersion::Forked(forks)) => {
+                                    for fork in forks {
+                                        if let Some(version) = &fork.version {
+                                            remember(fork.id, version);
+                                        }
+                                    }
+                                }
+                                Some(ResolverVersion::Unavailable(..)) | None => {}
+                            }
+                            if possible.is_some() {
+                                decision = possible;
+                            }
+                        }
 
                         if cache_selected_version
                             && let Some(ResolverVersion::Unforked(version)) = &decision
                         {
                             state
                                 .selected_versions
-                                .insert(next_id, (range.clone(), version.clone()));
+                                .insert(next_id, (range.clone(), policy, version.clone()));
                         }
 
                         decision
@@ -567,21 +1581,36 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     let Some(version) = decision else {
                         debug!("No compatible version found for: {next_package}");
 
-                        let term_intersection = state
-                            .pubgrub
-                            .partial_solution
-                            .term_intersection_for_package(next_id)
-                            .expect("a package was chosen but we don't have a term");
+                        let ruled_out = if solver_source == SolverSource::Registry
+                            && next_package.name_no_root().is_none_or(|name| {
+                                !self.may_supply_url(
+                                    name,
+                                    &candidates,
+                                    &state.env,
+                                    &state.python_requirement,
+                                ) && !self.may_supply_index(
+                                    name,
+                                    &candidates,
+                                    &state.env,
+                                    &state.python_requirement,
+                                )
+                            }) {
+                            candidates.clone()
+                        } else {
+                            CandidateSet::source(solver_source, range.clone())
+                        };
 
-                        if let PubGrubPackageInner::Package { name, .. } = &**next_package {
+                        if solver_source.is_registry()
+                            && let PubGrubPackageInner::Package { name, .. } = &**next_package
+                        {
                             // Check if the decision was due to the package being unavailable
-                            if let Some(reason) = self.unavailable_packages.pin().get(name) {
+                            if let Some(reason) = self.unavailable_package(name, solver_source) {
                                 state
                                     .pubgrub
                                     .add_incompatibility(Incompatibility::custom_term(
                                         next_id,
-                                        term_intersection.clone(),
-                                        UnavailableReason::Package(reason.clone()),
+                                        Term::Positive(ruled_out),
+                                        UnavailableReason::Package(reason),
                                     ));
                                 continue;
                             }
@@ -591,7 +1620,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             .pubgrub
                             .add_incompatibility(Incompatibility::no_versions(
                                 next_id,
-                                term_intersection.clone(),
+                                Term::Positive(ruled_out),
                             ));
                         continue;
                     };
@@ -599,12 +1628,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     let version = match version {
                         ResolverVersion::Unforked(version) => version,
                         ResolverVersion::Forked(forks) => {
-                            forked_states.extend(self.version_forks_to_fork_states(state, forks));
+                            forked_states.extend(
+                                self.version_forks_to_fork_states(state, forks, solver_source)
+                                    .map(|state| self.environmental_source_search(state, requests)),
+                            );
                             continue 'FORK;
                         }
                         ResolverVersion::Unavailable(version, reason) => {
                             state.add_unavailable_version(
-                                version,
+                                SolverVersion::new(solver_source, version),
                                 reason,
                                 &self.index,
                                 &self.installed_packages,
@@ -615,27 +1647,47 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                     // Only consider registry packages for prefetch.
                     if let PackageSource::Registry(index) = source {
+                        let unchanging = state
+                            .pubgrub
+                            .partial_solution
+                            .unchanging_term_for_package(next_id)
+                            .map(|term| match term {
+                                Term::Positive(candidates) => {
+                                    Term::Positive(candidates.for_source(solver_source).clone())
+                                }
+                                Term::Negative(candidates) => {
+                                    Term::Negative(candidates.for_source(solver_source).clone())
+                                }
+                            });
                         state.prefetcher.prefetch_batches(
                             next_package,
                             index,
                             &version,
-                            term_intersection.unwrap_positive(),
-                            state
-                                .pubgrub
-                                .partial_solution
-                                .unchanging_term_for_package(next_id),
+                            range,
+                            unchanging.as_ref(),
                             &state.python_requirement,
                             &self.selector,
                             &state.env,
                         )?;
                     }
 
-                    version
+                    SolverVersion::new(solver_source, version)
                 };
 
-                state.prefetcher.version_tried(next_package, &version);
+                if matches!(self.options.resolution_mode, ResolutionMode::LowestDirect)
+                    && version.source.is_registry()
+                    && let Some(name) = next_package.name_no_root()
+                {
+                    state.selection_modes.insert(
+                        (next_id, version.clone()),
+                        selector.use_highest_version(name, &state.env),
+                    );
+                }
+                state
+                    .prefetcher
+                    .version_tried(next_package, &version.version);
 
-                self.on_progress(next_package, &version);
+                self.on_progress(next_package, &version.version);
 
                 if state
                     .added_dependencies
@@ -644,6 +1696,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 {
                     // `dep_incompats` are already in `incompatibilities` so we know there are not satisfied
                     // terms and can add the decision directly.
+                    state.pending_sources.clear();
                     state
                         .pubgrub
                         .partial_solution
@@ -652,17 +1705,35 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
 
                 // Retrieve that package dependencies.
-                let forked_deps = self.get_dependencies_forking(
+                let forked_deps = match self.get_dependencies_forking(
                     next_id,
                     next_package,
                     &version,
                     &state.pins,
-                    &state.fork_urls,
+                    &grounding,
                     &state.env,
                     &state.python_requirement,
                     &state.pubgrub,
                     requests,
-                )?;
+                ) {
+                    Ok(dependencies) => dependencies,
+                    Err(error) => {
+                        if let SolverSource::Url(url_source) = solver_source
+                            && is_source_error(&error)
+                        {
+                            self.reject_source_candidate(
+                                &mut state,
+                                &mut search,
+                                next_id,
+                                &candidates,
+                                url_source,
+                                error,
+                            );
+                            continue;
+                        }
+                        return Err(error);
+                    }
+                };
 
                 match forked_deps {
                     ForkedDependencies::Unavailable(reason) => {
@@ -688,33 +1759,29 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             .or_default()
                             .insert(version.clone());
 
-                        // Enrich the state with any URLs, etc.
-                        state
-                            .visit_package_version_dependencies(
-                                next_id,
-                                &version,
-                                &self.urls,
-                                &self.indexes,
-                                &dependencies,
-                                &self.git,
-                                &self.workspace_members,
-                                self.selector.resolution_strategy(),
-                            )
+                        state.visit_package_version_dependencies(
+                            next_id,
+                            &version,
+                            &dependencies,
+                            &self.workspace_members,
+                            self.selector.resolution_strategy(),
+                        );
+
+                        // Emit a request to fetch the metadata for each registry package.
+                        self.visit_dependencies(&dependencies, requests)
                             .map_err(|err| {
                                 enrich_dependency_error(err, next_id, &version, &state.pubgrub)
                             })?;
 
-                        // Emit a request to fetch the metadata for each registry package.
-                        self.visit_dependencies(&dependencies, &state, requests)
-                            .map_err(|err| {
-                                enrich_dependency_error(err, next_id, &version, &state.pubgrub)
-                            })?;
+                        self.prepare_git_dependencies(&dependencies, &grounding, requests)?;
 
                         // Add the dependencies to the state.
                         state.add_package_version_dependencies(
                             next_id,
                             &version,
                             dependencies,
+                            &self.urls,
+                            &self.git,
                             &self.index,
                             &self.installed_packages,
                         );
@@ -722,6 +1789,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     ForkedDependencies::Forked {
                         mut forks,
                         diverging_packages,
+                        replay_candidates,
                     } => {
                         state
                             .added_dependencies
@@ -757,6 +1825,19 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             }
                         }
 
+                        if replay_candidates {
+                            // Other selected packages may already have contributed marked edges
+                            // before this declaration was discovered. Replay the root under each
+                            // narrower environment so those edges and their authority are recomputed.
+                            forked_states.extend(forks.into_iter().map(|fork| {
+                                SourceSearch::new(self.fresh_source_fork(
+                                    fork.env,
+                                    SourceAssumptions::default(),
+                                    requests,
+                                ))
+                            }));
+                            continue 'FORK;
+                        }
                         for new_fork_state in self.forks_to_fork_states(
                             state,
                             &version,
@@ -764,7 +1845,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             requests,
                             &diverging_packages,
                         ) {
-                            forked_states.push(new_fork_state?);
+                            forked_states
+                                .push(self.environmental_source_search(new_fork_state?, requests));
                         }
                         continue 'FORK;
                     }
@@ -801,8 +1883,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         version: None,
                                     })
                                     .collect();
-                                forked_states
-                                    .extend(self.version_forks_to_fork_states(state, forks));
+                                forked_states.extend(
+                                    self.version_forks_to_fork_states(state, forks, version.source)
+                                        .map(|state| {
+                                            self.environmental_source_search(state, requests)
+                                        }),
+                                );
                                 continue 'FORK;
                             }
                         }
@@ -849,7 +1935,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         for resolution in &resolutions {
             resolution.trace_resolution();
         }
-        crate::resolution::from_state(
+        let hasher = active_hashes.strategy(&self.hasher)?;
+        let selector = self.selector.with_requirements(
+            active_policies
+                .iter()
+                .map(|(requirement, lowest)| (requirement.as_ref(), *lowest)),
+        );
+        let resolution = crate::resolution::from_state(
             &resolutions,
             self.project.as_ref(),
             &self.workspace_members,
@@ -857,21 +1949,743 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             self.constraints.clone(),
             self.overrides.clone(),
             &self.preferences,
-            &self.hasher,
+            &hasher,
             &self.index,
             &self.git,
             self.python_requirement.target().clone(),
             &self.conflicts,
-            self.selector.resolution_strategy(),
+            selector.resolution_strategy(),
             self.options.clone(),
+        )?;
+        Ok((resolution, hasher))
+    }
+
+    /// Apply candidate policies from selected first-party paths for one package.
+    fn selected_candidate_selector(
+        &self,
+        grounding: &Grounding,
+        name: &PackageName,
+    ) -> CandidateSelector {
+        self.selector
+            .with_requirements(
+                grounding
+                    .policies
+                    .iter()
+                    .filter_map(|(requirement, lowest)| {
+                        (&requirement.name == name).then_some((requirement.as_ref(), *lowest))
+                    }),
+            )
+    }
+
+    /// Recheck every selected direct distribution against the completed fork's hash declarations.
+    /// A later surviving parent may have added a digest after the candidate's initial fetch.
+    fn commit_direct_metadata(
+        &self,
+        state: &ForkState,
+        grounding: &Grounding,
+        requests: &MetadataRequests,
+    ) -> Result<(), (Option<UrlCandidate>, Box<ResolveError>)> {
+        let hasher = grounding
+            .hashes
+            .strategy(&self.hasher)
+            .map_err(|error| (None, Box::new(error.into())))?;
+        let mut direct = FxHashSet::default();
+        for (id, candidate) in state.pubgrub.partial_solution.extract_solution() {
+            let SolverSource::Url(source) = candidate.source else {
+                continue;
+            };
+            if !grounding.reachable.contains(&id) || !direct.insert(source) {
+                continue;
+            }
+            let package = &state.pubgrub.package_store[id];
+            let Some(name) = package.name_no_root() else {
+                continue;
+            };
+            let result = (|| {
+                let url = grounding.metadata_url(source, &self.urls);
+                Self::request_package(package, PackageSource::Url(&url), &hasher, requests)?;
+                let allowed = hasher.allows_url(&url.verbatim);
+                let dist = Dist::from_url(name.clone(), url)?;
+                let metadata = requests.wait_for_direct(&dist, &hasher)?;
+                match metadata.as_ref() {
+                    MetadataResponse::Found(_) => {
+                        if !allowed {
+                            return Err(ResolveError::UnhashedPackage(name.clone()));
+                        }
+                        self.index.commit_direct(dist.distribution_id(), metadata);
+                    }
+                    MetadataResponse::Unavailable(_) => {
+                        return Err(ResolveError::PackageUnavailable(name.clone()));
+                    }
+                    MetadataResponse::Error(dist, error) => {
+                        return Err(ResolveError::Dist(
+                            DistErrorKind::from_requested_dist(dist, error.as_ref()),
+                            dist.clone(),
+                            DerivationChainBuilder::from_state(id, &candidate, &state.pubgrub)
+                                .unwrap_or_default(),
+                            error.clone(),
+                        ));
+                    }
+                }
+                Ok(())
+            })();
+            result.map_err(|error| (Some(source), Box::new(error)))?;
+        }
+        Ok(())
+    }
+
+    /// Restart a stalled source branch under optional restrictions on previously chosen candidates.
+    fn fresh_source_fork(
+        &self,
+        env: ResolverEnvironment,
+        assumptions: SourceAssumptions,
+        requests: &MetadataRequests,
+    ) -> ForkState {
+        let root = PubGrubPackage::from(PubGrubPackageInner::Root(self.project.clone()));
+        let pubgrub = State::init(root, SolverVersion::registry(MIN_VERSION.clone()));
+        let prefetcher = BatchPrefetcher::new(self.capabilities.clone(), requests.clone());
+        let mut state = ForkState::new(
+            pubgrub,
+            self.env.clone(),
+            self.python_requirement.clone(),
+            prefetcher,
+            self.indexes.clone(),
         )
+        .with_env(env);
+        for (package, allowed) in assumptions.iter() {
+            let package = state.pubgrub.package_store.alloc(package.clone());
+            state
+                .pubgrub
+                .add_incompatibility(Incompatibility::no_versions(
+                    package,
+                    Term::Positive(allowed.complement()),
+                ));
+        }
+        state.source_assumptions = assumptions;
+        state
+    }
+
+    /// Cover every change to the concrete selections in a stalled branch without requiring any
+    /// package that might be absent from an alternative solution.
+    fn enqueue_source_alternatives(
+        &self,
+        state: &ForkState,
+        search: &mut SourceSearch,
+        requests: &MetadataRequests,
+    ) {
+        let mut registry_choices = FxHashMap::default();
+        let mut registry_sources = FxHashMap::default();
+        let mut possible_sources = FxHashMap::default();
+        let choices = state
+            .pubgrub
+            .partial_solution
+            .extract_solution()
+            .filter_map(|(id, candidate)| {
+                let package = &state.pubgrub.package_store[id];
+                let name = package.name_no_root()?;
+                if candidate.source == SolverSource::Registry
+                    && *registry_choices.entry(name.clone()).or_insert_with(|| {
+                        self.registry_cannot_activate_source(
+                            name,
+                            &state.env,
+                            &state.python_requirement,
+                            requests,
+                            &mut registry_sources,
+                            &mut possible_sources,
+                        )
+                    })
+                {
+                    return None;
+                }
+                Some((package.clone(), candidate))
+            });
+        self.enqueue_policy_alternatives(state, search, choices, requests);
+    }
+
+    /// Prove that changing the registry version cannot alter its outgoing requirements, or that all
+    /// its outgoing requirements only reach registries which cannot activate a first-party source
+    /// or policy. Unknown metadata, larger graphs, and builds retain the exhaustive search.
+    fn registry_cannot_activate_source(
+        &self,
+        name: &PackageName,
+        env: &ResolverEnvironment,
+        python_requirement: &PythonRequirement,
+        requests: &MetadataRequests,
+        registry_sources: &mut FxHashMap<PackageName, bool>,
+        possible_sources: &mut FxHashMap<PackageName, bool>,
+    ) -> bool {
+        const MAX_PACKAGES: usize = 32;
+        const MAX_VERSIONS: usize = 4;
+
+        if self.dependency_mode.is_direct() {
+            return false;
+        }
+        if let Some(result) = registry_sources.get(name) {
+            return *result;
+        }
+
+        let mut pending = VecDeque::from([name.clone()]);
+        let mut visited = FxHashSet::default();
+        let mut version_invariant = false;
+        let proof = (|| {
+            while let Some(package) = pending.pop_front() {
+                if let Some(result) = registry_sources.get(&package) {
+                    if !result {
+                        return None;
+                    }
+                    continue;
+                }
+                if !visited.insert(package.clone()) {
+                    continue;
+                }
+                if visited.len() > MAX_PACKAGES
+                    || !self.installed_packages.get_packages(&package).is_empty()
+                {
+                    return None;
+                }
+                requests.request_package(&package, None).ok()?;
+                let response = requests.wait_for_versions(&package, None).ok()?;
+                let VersionsResponse::Found(version_maps) = response.as_ref() else {
+                    return None;
+                };
+                let mut distributions = Vec::new();
+                let mut seen = FxHashSet::default();
+                let mut count = 0;
+                for version_map in version_maps {
+                    for (version, handle) in version_map.iter(&Range::full()) {
+                        count += 1;
+                        if count > MAX_VERSIONS
+                            || !self.hasher.allows_package(&package, version)
+                            || self
+                                .dependency_metadata
+                                .get(&package, Some(version))
+                                .is_some_and(|metadata| !metadata.requires_dist.is_empty())
+                        {
+                            return None;
+                        }
+                        let Some(dist @ CompatibleDist::CompatibleWheel { wheel, .. }) =
+                            handle.prioritized_dist().and_then(PrioritizedDist::get)
+                        else {
+                            return None;
+                        };
+                        let wheel_marker = implied_markers(&wheel.filename);
+                        let covers_environment = if let Some(markers) = env.marker_environment() {
+                            wheel_marker.evaluate(markers, &[])
+                        } else {
+                            env.fork_markers().is_some_and(|fork| {
+                                fork.and(python_requirement.to_marker_tree())
+                                    .is_disjoint(wheel_marker.negate())
+                            })
+                        };
+                        if !wheel.filename.platform_tags().contains(&PlatformTag::Any)
+                            || !covers_environment
+                        {
+                            return None;
+                        }
+                        let dist = dist.for_resolution();
+                        let id = dist.distribution_id();
+                        if seen.insert(id.clone()) {
+                            distributions.push((id, Request::from(dist)));
+                        }
+                    }
+                }
+                if distributions.is_empty() {
+                    return None;
+                }
+                for (id, request) in distributions {
+                    requests.request_metadata(id, || Ok(request)).ok()?;
+                }
+                let mut signatures = Vec::new();
+                for id in seen {
+                    let response = requests
+                        .wait_for_metadata(&id, || package.to_string())
+                        .ok()?;
+                    let MetadataResponse::Found(archive) = response.as_ref() else {
+                        return None;
+                    };
+                    if archive.metadata.name != package
+                        || !archive.metadata.dependency_groups.is_empty()
+                    {
+                        return None;
+                    }
+                    let requirements = self
+                        .overrides
+                        .apply_for(
+                            &package,
+                            &archive.metadata.version,
+                            &archive.metadata.requires_dist,
+                        )
+                        .filter(|requirement| {
+                            !self.excludes.contains_for_package(
+                                Some((&package, &archive.metadata.version)),
+                                &requirement.name,
+                            )
+                        })
+                        .map(Cow::into_owned)
+                        .collect::<BTreeSet<_>>();
+                    if requirements.iter().any(|requirement| {
+                        !matches!(
+                            requirement.source,
+                            RequirementSource::Registry { index: None, .. }
+                        )
+                    }) {
+                        return None;
+                    }
+                    let extras = archive
+                        .metadata
+                        .provides_extra
+                        .iter()
+                        .cloned()
+                        .collect::<BTreeSet<_>>();
+                    signatures.push((
+                        requirements,
+                        extras,
+                        archive.metadata.requires_python.clone(),
+                    ));
+                }
+                if &package == name
+                    && signatures
+                        .first()
+                        .is_some_and(|first| signatures.iter().all(|signature| signature == first))
+                {
+                    // This proves that changing this candidate cannot activate a source, even
+                    // when an unchanged dependency might itself activate one. Ancestors which
+                    // can change whether that dependency is present still need a reachability proof.
+                    version_invariant = true;
+                    return Some(());
+                }
+                for (requirements, _, _) in signatures {
+                    for requirement in requirements {
+                        let possible = possible_sources
+                            .entry(requirement.name.clone())
+                            .or_insert_with(|| {
+                                self.may_supply_url(
+                                    &requirement.name,
+                                    &CandidateSet::urls(Range::full()),
+                                    env,
+                                    python_requirement,
+                                ) || self.may_supply_index(
+                                    &requirement.name,
+                                    &CandidateSet::all(Range::full()),
+                                    env,
+                                    python_requirement,
+                                ) || self.may_supply_selection_policy(
+                                    &requirement.name,
+                                    env,
+                                    python_requirement,
+                                )
+                            });
+                        if *possible {
+                            return None;
+                        }
+                        pending.push_back(requirement.name.clone());
+                    }
+                }
+            }
+            Some(())
+        })();
+        if proof.is_some() {
+            trace!(%name, "Changing registry wheels cannot activate a first-party source or policy");
+            if !version_invariant {
+                registry_sources.extend(visited.into_iter().map(|package| (package, true)));
+            }
+            true
+        } else {
+            registry_sources.insert(name.clone(), false);
+            false
+        }
+    }
+
+    /// Reconsider only the candidates sufficient to make a selected-path policy invalid. Every
+    /// alternative permits a candidate's package to disappear if it is no longer required.
+    fn enqueue_policy_alternatives(
+        &self,
+        state: &ForkState,
+        search: &mut SourceSearch,
+        choices: impl IntoIterator<Item = (PubGrubPackage, SolverVersion)>,
+        requests: &MetadataRequests,
+    ) {
+        for assumptions in state.source_assumptions.alternatives(choices) {
+            if search
+                .seen
+                .insert((assumptions.clone(), state.preferred_lowest.clone()))
+            {
+                let mut retry = self.fresh_source_fork(state.env.clone(), assumptions, requests);
+                retry.preferred_lowest.clone_from(&state.preferred_lowest);
+                search.states.push(retry);
+            }
+        }
+    }
+
+    /// Keep policy-dependent failures pending in case another selected path supplies trusted hashes.
+    /// Other direct retrieval errors reject only the specific source and allow ordinary backtracking.
+    fn reject_source_candidate(
+        &self,
+        state: &mut ForkState,
+        search: &mut SourceSearch,
+        id: Id<PubGrubPackage>,
+        candidates: &CandidateSet,
+        source: UrlCandidate,
+        error: ResolveError,
+    ) {
+        let policy_dependent = is_hash_source_error(&error);
+        search.record_candidate_error(source, error);
+        if policy_dependent {
+            state.pending_sources.insert(id, candidates.clone());
+            state.reschedule_sources = true;
+        } else {
+            self.source_potentials
+                .pin()
+                .get_or_insert(source, SourcePotential::Unavailable);
+            state
+                .pubgrub
+                .add_incompatibility(Incompatibility::no_versions(
+                    id,
+                    Term::Positive(CandidateSet::source(
+                        SolverSource::Url(source),
+                        Range::full(),
+                    )),
+                ));
+        }
+    }
+
+    /// Exclude a candidate that independently creates an invalid hash policy. A policy that needs
+    /// multiple authors instead requires reconsidering their selections together.
+    fn reject_hash_policy(
+        &self,
+        state: &mut ForkState,
+        search: &mut SourceSearch,
+        grounding: &Grounding,
+        error: HashStrategyError,
+        requests: &MetadataRequests,
+    ) -> bool {
+        let origins = grounding.hash_error_origins(&state.pubgrub, &self.hasher, &error);
+        search.record_policy_error(
+            origins
+                .iter()
+                .map(|(id, candidate)| {
+                    (state.pubgrub.package_store[*id].clone(), candidate.clone())
+                })
+                .collect(),
+            error.into(),
+        );
+        if let [(id, candidate)] = origins.as_slice() {
+            state.next = *id;
+            state
+                .pubgrub
+                .add_incompatibility(Incompatibility::no_versions(
+                    *id,
+                    Term::Positive(CandidateSet::singleton(candidate.clone())),
+                ));
+            true
+        } else {
+            self.enqueue_source_alternatives(state, search, requests);
+            false
+        }
+    }
+
+    /// Lookup the mode a potential declaration can use to discover outgoing edges. An unspecified
+    /// declaration uses normal metadata; explicit alternatives are traversed separately.
+    fn potential_sources(&self, name: &PackageName, url: &VerbatimParsedUrl) -> Vec<UrlCandidate> {
+        self.urls
+            .lookup(name, url, &self.git)
+            .into_iter()
+            .map(|source| match urls::declaration_mode(&url.parsed_url) {
+                Some(UrlMode::Editable) => source.editable(),
+                Some(UrlMode::GitLfs) => source.git_lfs(),
+                Some(UrlMode::Normal) | None => source.normal(),
+            })
+            .collect()
+    }
+
+    /// Whether an initial or as-yet-uninspected direct resource could supply an allowed URL for
+    /// this package. Inspected metadata includes every extra but never grants source authority.
+    fn may_supply_url(
+        &self,
+        name: &PackageName,
+        candidates: &CandidateSet,
+        env: &ResolverEnvironment,
+        python_requirement: &PythonRequirement,
+    ) -> bool {
+        let python_marker = python_requirement.to_marker_tree();
+        let mut pending = VecDeque::from(self.urls.initial().to_vec());
+        let mut seen = FxHashSet::default();
+        while let Some(requirement) = pending.pop_front() {
+            let marker = requirement.marker.without_extras();
+            if python_marker.is_disjoint(marker)
+                || !env.included_by_marker(marker.and(python_marker))
+                || env
+                    .marker_environment()
+                    .is_some_and(|environment| !marker.evaluate(environment, &[]))
+            {
+                continue;
+            }
+            let Some(url) = requirement.source.to_verbatim_parsed_url() else {
+                continue;
+            };
+            let sources = self.potential_sources(&requirement.name, &url);
+            let known = sources
+                .iter()
+                .map(|source| self.source_potentials.pin().get(source).cloned())
+                .collect::<Vec<_>>();
+            let metadata = known.iter().find_map(|known| match known {
+                Some(SourcePotential::Metadata {
+                    version,
+                    dependencies,
+                    ..
+                }) => Some((version, dependencies)),
+                Some(SourcePotential::Unavailable) | None => None,
+            });
+            let unknown = sources.is_empty() || known.iter().any(Option::is_none);
+            if &requirement.name == name {
+                if let Some((version, _)) = metadata {
+                    if sources.iter().any(|source| {
+                        candidates
+                            .for_source(SolverSource::Url(*source))
+                            .contains(version)
+                    }) {
+                        return true;
+                    }
+                } else if unknown
+                    && ((sources.is_empty() && candidates.allows_unseen_url())
+                        || sources.iter().zip(&known).any(|(source, known)| {
+                            known.is_none()
+                                && *candidates.for_source(SolverSource::Url(*source))
+                                    != Range::empty()
+                        }))
+                {
+                    return true;
+                }
+            }
+            if self.dependency_mode.is_direct() {
+                continue;
+            }
+            let previous = seen.len();
+            seen.extend(sources.iter().copied());
+            let newly_seen = seen.len() != previous;
+            if !sources.is_empty() && !newly_seen {
+                continue;
+            }
+            if let Some((_, dependencies)) = metadata {
+                pending.extend(dependencies.iter().cloned());
+            } else if unknown {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Whether an initial index or an uninspected first-party source can supply an explicit index.
+    fn may_supply_index(
+        &self,
+        name: &PackageName,
+        candidates: &CandidateSet,
+        env: &ResolverEnvironment,
+        python_requirement: &PythonRequirement,
+    ) -> bool {
+        if !candidates.has_indexes() {
+            return false;
+        }
+        if self.indexes.get(name, env).into_iter().any(|index| {
+            *candidates.for_source(SolverSource::Index(self.indexes.intern(index)))
+                != Range::empty()
+        }) {
+            return true;
+        }
+        let python_marker = python_requirement.to_marker_tree();
+        let mut pending = VecDeque::from(self.urls.initial().to_vec());
+        let mut seen = FxHashSet::default();
+        while let Some(requirement) = pending.pop_front() {
+            let marker = requirement.marker.without_extras();
+            if python_marker.is_disjoint(marker)
+                || !env.included_by_marker(marker.and(python_marker))
+                || env
+                    .marker_environment()
+                    .is_some_and(|environment| !marker.evaluate(environment, &[]))
+            {
+                continue;
+            }
+            if let RequirementSource::Registry {
+                index: Some(index), ..
+            } = &requirement.source
+            {
+                if &requirement.name == name
+                    && *candidates.for_source(SolverSource::Index(self.indexes.intern(index)))
+                        != Range::empty()
+                {
+                    return true;
+                }
+                continue;
+            }
+            let Some(url) = requirement.source.to_verbatim_parsed_url() else {
+                continue;
+            };
+            if self.dependency_mode.is_direct() {
+                continue;
+            }
+            let sources = self.potential_sources(&requirement.name, &url);
+            if sources.is_empty() {
+                return true;
+            }
+            let previous = seen.len();
+            seen.extend(sources.iter().copied());
+            if seen.len() == previous {
+                continue;
+            }
+            let potentials = self.source_potentials.pin();
+            let known = sources
+                .iter()
+                .map(|source| potentials.get(source))
+                .collect::<Vec<_>>();
+            if let Some(dependencies) = known.iter().find_map(|known| match known {
+                Some(SourcePotential::Metadata { dependencies, .. }) => Some(dependencies),
+                Some(SourcePotential::Unavailable) | None => None,
+            }) {
+                pending.extend(dependencies.iter().cloned());
+            } else if known.iter().any(Option::is_none) {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Whether metadata the resolver has already obtained can still opt a registry candidate in.
+    /// The actual declaration must be selected before any speculative candidate can be accepted.
+    fn may_supply_selection_policy(
+        &self,
+        name: &PackageName,
+        env: &ResolverEnvironment,
+        python_requirement: &PythonRequirement,
+    ) -> bool {
+        if self.dependency_mode.is_direct() {
+            return false;
+        }
+        let python_marker = python_requirement.to_marker_tree();
+        let possible_marker = |marker: MarkerTree| {
+            let marker = marker.without_extras();
+            !python_marker.is_disjoint(marker)
+                && env.included_by_marker(marker.and(python_marker))
+                && env
+                    .marker_environment()
+                    .is_none_or(|environment| marker.evaluate(environment, &[]))
+        };
+        let mut pending = VecDeque::from(self.urls.initial().to_vec());
+        let mut seen = FxHashSet::default();
+        while let Some(requirement) = pending.pop_front() {
+            if !possible_marker(requirement.marker) {
+                continue;
+            }
+            let Some(url) = requirement.source.to_verbatim_parsed_url() else {
+                continue;
+            };
+            let sources = self.potential_sources(&requirement.name, &url);
+            if sources.is_empty() {
+                return true;
+            }
+            let previous = seen.len();
+            seen.extend(sources.iter().copied());
+            let newly_seen = seen.len() != previous;
+            if !newly_seen {
+                continue;
+            }
+            let potentials = self.source_potentials.pin();
+            let known = sources
+                .iter()
+                .map(|source| potentials.get(source))
+                .collect::<Vec<_>>();
+            if let Some((dependencies, policies)) = known.iter().find_map(|known| match known {
+                Some(SourcePotential::Metadata {
+                    dependencies,
+                    policies,
+                    ..
+                }) => Some((dependencies, policies)),
+                Some(SourcePotential::Unavailable) | None => None,
+            }) {
+                if policies
+                    .iter()
+                    .any(|policy| &policy.name == name && possible_marker(policy.marker))
+                {
+                    return true;
+                }
+                pending.extend(dependencies.iter().cloned());
+            } else if known.iter().any(Option::is_none) {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Record all potentially applicable direct edges from fetched metadata. Direct metadata modes
+    /// may supply different dependencies; either can expose a possibility, but never authorize it.
+    fn remember_source_metadata(&self, source: UrlCandidate, metadata: &Metadata) {
+        let potentials = self.source_potentials.pin();
+        if potentials.contains_key(&source) {
+            return;
+        }
+        let requirements = self.overrides.apply_for(
+            &metadata.name,
+            &metadata.version,
+            metadata.requires_dist.as_ref(),
+        );
+        let groups = metadata
+            .dependency_groups
+            .values()
+            .flat_map(|group| self.overrides.apply(group.as_ref()));
+        let mut dependencies = Vec::new();
+        let mut policies = Vec::new();
+        for requirement in requirements.chain(groups).filter(|requirement| {
+            !self
+                .excludes
+                .contains_for_package(Some((&metadata.name, &metadata.version)), &requirement.name)
+        }) {
+            if requirement.source.to_verbatim_parsed_url().is_some()
+                || matches!(
+                    &requirement.source,
+                    RequirementSource::Registry { index: Some(_), .. }
+                )
+            {
+                dependencies.push(requirement.as_ref().clone());
+            }
+            if let RequirementSource::Registry { specifier, .. } = &requirement.source
+                && (contains_prerelease(specifier)
+                    || AllowedYanks::explicit_pin(&requirement).is_some())
+            {
+                policies.push(requirement.into_owned());
+            }
+        }
+        potentials.get_or_insert(
+            source,
+            SourcePotential::Metadata {
+                version: metadata.version.clone(),
+                dependencies: dependencies.into(),
+                policies: policies.into(),
+            },
+        );
+    }
+
+    /// Source alternatives apply only within one environment. A new environmental split restarts
+    /// an assumed branch without those restrictions so every subenvironment can explore all sources.
+    fn environmental_source_search(
+        &self,
+        state: ForkState,
+        requests: &MetadataRequests,
+    ) -> SourceSearch {
+        if state.source_assumptions.is_empty() {
+            SourceSearch::new(state)
+        } else {
+            SourceSearch::new(self.fresh_source_fork(
+                state.env,
+                SourceAssumptions::default(),
+                requests,
+            ))
+        }
     }
 
     /// Convert the dependency [`Fork`]s into [`ForkState`]s.
     fn forks_to_fork_states<'a>(
         &'a self,
         current_state: ForkState,
-        version: &'a Version,
+        version: &'a SolverVersion,
         forks: Vec<Fork>,
         requests: &'a MetadataRequests,
         diverging_packages: &'a BTreeSet<PackageName>,
@@ -910,33 +2724,38 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 (fork, forked_state.with_env(env))
             })
             .map(move |(fork, mut forked_state)| {
-                // Enrich the state with any URLs, etc.
-                forked_state
-                    .visit_package_version_dependencies(
-                        package,
-                        version,
-                        &self.urls,
-                        &self.indexes,
-                        &fork.dependencies,
-                        &self.git,
-                        &self.workspace_members,
-                        self.selector.resolution_strategy(),
-                    )
+                forked_state.visit_package_version_dependencies(
+                    package,
+                    version,
+                    &fork.dependencies,
+                    &self.workspace_members,
+                    self.selector.resolution_strategy(),
+                );
+
+                // Emit a request to fetch the metadata for each registry package.
+                self.visit_dependencies(&fork.dependencies, requests)
                     .map_err(|err| {
                         enrich_dependency_error(err, package, version, &forked_state.pubgrub)
                     })?;
 
-                // Emit a request to fetch the metadata for each registry package.
-                self.visit_dependencies(&fork.dependencies, &forked_state, requests)
-                    .map_err(|err| {
-                        enrich_dependency_error(err, package, version, &forked_state.pubgrub)
-                    })?;
+                if Self::has_git_dependency(&fork.dependencies) {
+                    let grounding = forked_state.source_dependencies.grounding(
+                        &forked_state.pubgrub,
+                        &forked_state.env,
+                        &forked_state.python_requirement,
+                        &self.urls,
+                        &self.git,
+                    );
+                    self.prepare_git_dependencies(&fork.dependencies, &grounding, requests)?;
+                }
 
                 // Add the dependencies to the state.
                 forked_state.add_package_version_dependencies(
                     package,
                     version,
                     fork.dependencies,
+                    &self.urls,
+                    &self.git,
                     &self.index,
                     &self.installed_packages,
                 );
@@ -951,6 +2770,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         &self,
         current_state: ForkState,
         forks: Vec<VersionFork>,
+        source: SolverSource,
     ) -> impl Iterator<Item = ForkState> + '_ {
         // This is a somewhat tortured technique to ensure
         // that our resolver state is only cloned as much
@@ -968,7 +2788,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             let continuation = match fork.version {
                 Some(version) => ForkContinuation::UseVersion {
                     package: fork.id,
-                    version,
+                    version: SolverVersion::new(source, version),
                 },
                 None => ForkContinuation::SelectVersion { package: fork.id },
             };
@@ -982,7 +2802,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     fn visit_dependencies(
         &self,
         dependencies: &[PubGrubDependency],
-        state: &ForkState,
         requests: &MetadataRequests,
     ) -> Result<(), ResolveError> {
         for dependency in dependencies {
@@ -990,25 +2809,116 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 package,
                 version: _,
                 parent: _,
-                source: _,
+                source,
+                policy: _,
             } = dependency;
-            let Some(source) = PackageSource::for_prefetch(
-                package,
-                &state.fork_urls,
-                &state.fork_indexes,
-                &self.urls,
-            ) else {
+            // An explicit URL is fetched after a currently selected trusted path authorizes it.
+            if source.verbatim_url().is_some()
+                || package.name().is_none_or(|name| self.urls.any_url(name))
+            {
                 continue;
+            }
+            let index = source.explicit_index();
+            Self::request_package(
+                package,
+                PackageSource::Registry(index),
+                &self.hasher,
+                requests,
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Whether a dependency batch can require Git reference comparison.
+    fn has_git_dependency(dependencies: &[PubGrubDependency]) -> bool {
+        dependencies
+            .iter()
+            .any(|dependency| match &dependency.source {
+                DependencySource::Url { url, .. } => urls::git_url(&url.parsed_url).is_some(),
+                DependencySource::Unspecified | DependencySource::ExplicitIndex(_) => false,
+            })
+    }
+
+    /// Resolve potentially equivalent Git references only when an independently trusted spelling
+    /// names the same package and repository. Registry references never cause package metadata or
+    /// build backends to be loaded for comparison.
+    fn prepare_git_dependencies(
+        &self,
+        dependencies: &[PubGrubDependency],
+        grounding: &Grounding,
+        requests: &MetadataRequests,
+    ) -> Result<(), ResolveError> {
+        let mut incoming =
+            BTreeMap::<PackageName, (Vec<VerbatimParsedUrl>, Vec<VerbatimParsedUrl>)>::new();
+        for dependency in dependencies {
+            if let DependencySource::Url { url, trusted, .. } = &dependency.source
+                && urls::git_url(&url.parsed_url).is_some()
+                && let Some(name) = dependency.package.name_no_root()
+            {
+                let (trusted_urls, registry_urls) = incoming.entry(name.clone()).or_default();
+                if *trusted {
+                    trusted_urls.push(url.as_ref().clone());
+                } else {
+                    registry_urls.push(url.as_ref().clone());
+                }
+            }
+        }
+        let mut unresolved = BTreeSet::new();
+        for (name, (mut trusted, mut registry)) in incoming {
+            trusted.extend(
+                grounding
+                    .sources_for(&name)
+                    .map(|source| grounding.url(source, &self.urls)),
+            );
+            registry.extend(
+                grounding
+                    .untrusted_urls
+                    .get(&name)
+                    .into_iter()
+                    .flatten()
+                    .cloned(),
+            );
+            let could_match = |a: &VerbatimParsedUrl, b: &VerbatimParsedUrl| {
+                urls::could_be_same_git_resource(&a.parsed_url, &b.parsed_url)
+                    && !urls::same_resource(&a.parsed_url, &b.parsed_url, &self.git)
             };
-            self.request_package(package, source, requests)?;
+            for url in &trusted {
+                if trusted
+                    .iter()
+                    .chain(&registry)
+                    .any(|other| could_match(url, other))
+                    && let Some(git) = urls::git_url(&url.parsed_url)
+                    && self.git.known_precise(git).is_none()
+                {
+                    unresolved.insert(git.clone());
+                }
+            }
+            for url in &registry {
+                if trusted.iter().any(|other| could_match(url, other))
+                    && let Some(git) = urls::git_url(&url.parsed_url)
+                    && self.git.known_precise(git).is_none()
+                {
+                    unresolved.insert(git.clone());
+                }
+            }
+        }
+        let mut scheduled = Vec::with_capacity(unresolved.len());
+        for git in unresolved {
+            let completion = requests.request_git_reference(git.clone())?;
+            scheduled.push((git, completion));
+        }
+        for (git, completion) in scheduled {
+            completion
+                .blocking_recv()
+                .map_err(|_| ResolveError::UnregisteredTask(git.to_string()))?;
         }
         Ok(())
     }
 
     fn request_package(
-        &self,
         package: &PubGrubPackage,
         source: PackageSource<'_>,
+        hasher: &HashStrategy,
         requests: &MetadataRequests,
     ) -> Result<(), ResolveError> {
         // Only request real packages.
@@ -1018,14 +2928,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         match source {
             PackageSource::Url(url) => {
-                // Verify that the package is allowed under the hash-checking policy.
-                if !self.hasher.allows_url(&url.verbatim) {
+                let dist = Dist::from_url(name.clone(), url.clone())?;
+                // A source fetch must enforce the policy before running its backend and can give a
+                // more precise error. Wheels defer byte verification to installation.
+                if !hasher.allows_url(&url.verbatim) && matches!(&dist, Dist::Built(_)) {
                     return Err(ResolveError::UnhashedPackage(name.clone()));
                 }
 
                 // Emit a request to fetch the metadata for this distribution.
-                let dist = Dist::from_url(name.clone(), url.clone())?;
-                requests.request_metadata(dist.distribution_id(), || Ok(Request::Dist(dist)))?;
+                requests.request_direct(dist, hasher)?;
             }
             PackageSource::Registry(index) => {
                 requests.request_package(name, index)?;
@@ -1041,7 +2952,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             Item = (
                 Id<PubGrubPackage>,
                 &'data PubGrubPackage,
-                &'data Range<Version>,
+                &'data CandidateSet,
             ),
         >,
         pre_visited: &mut FxHashMap<Id<PubGrubPackage>, Range<Version>>,
@@ -1053,6 +2964,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         // Iterate over the potential packages, and fetch file metadata for any of them. These
         // represent our current best guesses for the versions that we _might_ select.
         for (id, package, range) in packages {
+            let range = range.for_source(SolverSource::Registry);
+            if *range == Range::empty() {
+                continue;
+            }
             let PubGrubPackageInner::Package {
                 name,
                 extra: None,
@@ -1102,6 +3017,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
         visited: &mut FxHashSet<PackageName>,
+        selector: &CandidateSelector,
+        hasher: &HashStrategy,
         requests: &MetadataRequests,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
         match &**package {
@@ -1136,13 +3053,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     env,
                     python_requirement,
                     pubgrub,
+                    hasher,
                     requests,
                 ),
                 PackageSource::Registry(index) => self.choose_version_registry(
                     package,
                     id,
                     name,
-                    index.map(IndexMetadata::url),
+                    index.map_or(SolverSource::Registry, |index| {
+                        SolverSource::Index(self.indexes.intern(index))
+                    }),
+                    index,
                     range,
                     preferences,
                     env,
@@ -1150,6 +3071,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     pubgrub,
                     pins,
                     visited,
+                    selector,
                     requests,
                 ),
             },
@@ -1167,6 +3089,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
+        hasher: &HashStrategy,
         requests: &MetadataRequests,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
         debug!(
@@ -1175,29 +3098,61 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         );
 
         let dist = Dist::from_url(name.clone(), url.clone())?;
-        let distribution_id = dist.distribution_id();
-        let response = requests.wait_for_metadata(&distribution_id, || dist.to_string())?;
+        let response = requests.wait_for_direct(&dist, hasher)?;
 
-        // If we failed to fetch the metadata for a URL, we can't proceed.
+        let source_error = |dist: Box<RequestedDist>, error: Arc<uv_distribution::Error>| {
+            let candidates = self.urls.lookup(name, url, &self.git).into_iter().fold(
+                CandidateSet::empty(),
+                |candidates, source| {
+                    candidates.union(&Urls::declaration_candidates(
+                        source,
+                        &url.parsed_url,
+                        range.clone(),
+                    ))
+                },
+            );
+            let chain = DerivationChainBuilder::from_candidates(id, &candidates, pubgrub)
+                .unwrap_or_default();
+            ResolveError::Dist(
+                DistErrorKind::from_requested_dist(dist.as_ref(), error.as_ref()),
+                dist,
+                chain,
+                error,
+            )
+        };
+
+        // Keep the concrete error for a malformed direct candidate so a failure proof that
+        // requires this URL can report the underlying mismatch.
         let metadata = match &*response {
-            MetadataResponse::Found(archive) => &archive.metadata,
-            MetadataResponse::Unavailable(reason) => {
-                self.unavailable_packages
-                    .pin()
-                    .insert(name.clone(), reason.into());
-                return Ok(None);
+            MetadataResponse::Found(archive) => {
+                if &archive.metadata.name != name {
+                    return Err(source_error(
+                        Box::new(RequestedDist::Installable(dist)),
+                        Arc::new(uv_distribution::Error::WheelMetadataNameMismatch {
+                            given: name.clone(),
+                            metadata: archive.metadata.name.clone(),
+                        }),
+                    ));
+                }
+                &archive.metadata
             }
-            // TODO(charlie): Add derivation chain for URL dependencies. In practice, this isn't
-            // critical since we fetch URL dependencies _prior_ to invoking the resolver.
-            MetadataResponse::Error(dist, err) => {
-                return Err(ResolveError::Dist(
-                    DistErrorKind::from_requested_dist(dist, &**err),
-                    dist.clone(),
-                    DerivationChain::default(),
-                    err.clone(),
+            MetadataResponse::Unavailable(MetadataUnavailable::InconsistentMetadata(error)) => {
+                return Err(source_error(
+                    Box::new(RequestedDist::Installable(dist)),
+                    error.clone(),
                 ));
             }
+            MetadataResponse::Unavailable(_) => {
+                return Ok(None);
+            }
+            MetadataResponse::Error(dist, err) => {
+                return Err(source_error(dist.clone(), err.clone()));
+            }
         };
+
+        if !hasher.allows_url(&url.verbatim) {
+            return Err(ResolveError::UnhashedPackage(name.clone()));
+        }
 
         let version = &metadata.version;
 
@@ -1274,6 +3229,46 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         Ok(Some(ResolverVersion::Unforked(version.clone())))
     }
 
+    /// Return a package-level lookup failure from the selected registry.
+    fn unavailable_package(
+        &self,
+        name: &PackageName,
+        source: SolverSource,
+    ) -> Option<UnavailablePackage> {
+        match source {
+            SolverSource::Registry => self.unavailable_packages.pin().get(name).cloned(),
+            SolverSource::Index(index) => self
+                .unavailable_index_packages
+                .pin()
+                .get(&index)
+                .and_then(|packages| packages.pin().get(name).cloned()),
+            SolverSource::Url(_) => None,
+        }
+    }
+
+    /// Record a missing package against the registry that was actually queried.
+    fn record_unavailable_package(
+        &self,
+        name: &PackageName,
+        source: SolverSource,
+        reason: UnavailablePackage,
+    ) {
+        match source {
+            SolverSource::Registry => {
+                self.unavailable_packages.pin().insert(name.clone(), reason);
+            }
+            SolverSource::Index(index) => {
+                let indexes = self.unavailable_index_packages.pin();
+                let packages = indexes.get_or_insert(
+                    index,
+                    HashMap::builder().resize_mode(ResizeMode::Blocking).build(),
+                );
+                packages.pin().insert(name.clone(), reason);
+            }
+            SolverSource::Url(_) => {}
+        }
+    }
+
     /// Given a candidate registry requirement, choose the next version in range to try, or `None`
     /// if there is no version in this range.
     fn choose_version_registry(
@@ -1281,7 +3276,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         package: &PubGrubPackage,
         id: Id<PubGrubPackage>,
         name: &PackageName,
-        index: Option<&IndexUrl>,
+        solver_source: SolverSource,
+        index: Option<&IndexMetadata>,
         range: &Range<Version>,
         preferences: &Preferences,
         env: &ResolverEnvironment,
@@ -1289,30 +3285,26 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         pubgrub: &State<UvDependencyProvider>,
         pins: &mut FilePins,
         visited: &mut FxHashSet<PackageName>,
+        selector: &CandidateSelector,
         requests: &MetadataRequests,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
         // Wait for the metadata to be available.
         let versions_response = requests.wait_for_versions(name, index)?;
+        let index = index.map(IndexMetadata::url);
         visited.insert(name.clone());
 
         let version_maps = match *versions_response {
             VersionsResponse::Found(ref version_maps) => version_maps.as_slice(),
             VersionsResponse::NoIndex => {
-                self.unavailable_packages
-                    .pin()
-                    .insert(name.clone(), UnavailablePackage::NoIndex);
+                self.record_unavailable_package(name, solver_source, UnavailablePackage::NoIndex);
                 &[]
             }
             VersionsResponse::Offline => {
-                self.unavailable_packages
-                    .pin()
-                    .insert(name.clone(), UnavailablePackage::Offline);
+                self.record_unavailable_package(name, solver_source, UnavailablePackage::Offline);
                 &[]
             }
             VersionsResponse::NotFound => {
-                self.unavailable_packages
-                    .pin()
-                    .insert(name.clone(), UnavailablePackage::NotFound);
+                self.record_unavailable_package(name, solver_source, UnavailablePackage::NotFound);
                 &[]
             }
         };
@@ -1320,7 +3312,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         debug!("Searching for a compatible version of {package} ({range})");
 
         // Find a version.
-        let Some(candidate) = self.selector.select(
+        let Some(candidate) = selector.select(
             name,
             range,
             version_maps,
@@ -1402,12 +3394,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             package,
             id,
             name,
+            solver_source,
             index,
             range,
             preferences,
             env,
             pubgrub,
             pins,
+            selector,
             requests,
         )? {
             return Ok(Some(forked));
@@ -1430,7 +3424,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             candidate.choice_kind(),
             filename,
         );
-        self.visit_candidate(&candidate, dist, package, name, pins, requests)?;
+        self.visit_candidate(
+            &candidate,
+            dist,
+            package,
+            name,
+            solver_source,
+            pins,
+            requests,
+        )?;
 
         let version = candidate.version().clone();
         Ok(Some(ResolverVersion::Unforked(version)))
@@ -1456,12 +3458,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         package: &PubGrubPackage,
         id: Id<PubGrubPackage>,
         name: &PackageName,
+        solver_source: SolverSource,
         index: Option<&IndexUrl>,
         range: &Range<Version>,
         preferences: &Preferences,
         env: &ResolverEnvironment,
         pubgrub: &State<UvDependencyProvider>,
         pins: &mut FilePins,
+        selector: &CandidateSelector,
         requests: &MetadataRequests,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
         // This only applies to universal resolutions.
@@ -1538,7 +3542,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             candidate.version().clone().without_local(),
         ));
 
-        let Some(base_candidate) = self.selector.select(
+        let Some(base_candidate) = selector.select(
             name,
             &range,
             version_maps,
@@ -1592,7 +3596,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 base_candidate.choice_kind(),
                 filename,
             );
-            self.visit_candidate(&base_candidate, base_dist, package, name, pins, requests)?;
+            self.visit_candidate(
+                &base_candidate,
+                base_dist,
+                package,
+                name,
+                solver_source,
+                pins,
+                requests,
+            )?;
 
             return Ok(Some(ResolverVersion::Unforked(
                 base_candidate.version().clone(),
@@ -1639,8 +3651,24 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 .collect::<Vec<_>>()
                 .join(", ")
         );
-        self.visit_candidate(candidate, dist, package, name, pins, requests)?;
-        self.visit_candidate(&base_candidate, base_dist, package, name, pins, requests)?;
+        self.visit_candidate(
+            candidate,
+            dist,
+            package,
+            name,
+            solver_source,
+            pins,
+            requests,
+        )?;
+        self.visit_candidate(
+            &base_candidate,
+            base_dist,
+            package,
+            name,
+            solver_source,
+            pins,
+            requests,
+        )?;
 
         let forks = vec![
             VersionFork {
@@ -1664,12 +3692,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         dist: &CompatibleDist,
         package: &PubGrubPackage,
         name: &PackageName,
+        solver_source: SolverSource,
         pins: &mut FilePins,
         requests: &MetadataRequests,
     ) -> Result<(), ResolveError> {
         // We want to return a package pinned to a specific version; but we _also_ want to
         // store the exact file that we selected to satisfy that version.
-        pins.insert(candidate, dist);
+        pins.insert(solver_source, candidate, dist);
 
         // Emit a request to fetch the metadata for this version.
         if matches!(&**package, PubGrubPackageInner::Package { .. }) {
@@ -1737,9 +3766,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         &self,
         id: Id<PubGrubPackage>,
         package: &PubGrubPackage,
-        version: &Version,
+        candidate: &SolverVersion,
         pins: &FilePins,
-        fork_urls: &ForkUrls,
+        grounding: &Grounding,
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
@@ -1748,9 +3777,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         let dependencies = self.get_dependencies(
             id,
             package,
-            version,
+            candidate,
             pins,
-            fork_urls,
+            grounding,
             env,
             python_requirement,
             pubgrub,
@@ -1771,19 +3800,20 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     }
 
     /// Given a candidate package and version, return its dependencies.
-    #[instrument(skip_all, fields(%package, %version))]
+    #[instrument(skip_all, fields(%package, version = %candidate))]
     fn get_dependencies(
         &self,
         id: Id<PubGrubPackage>,
         package: &PubGrubPackage,
-        version: &Version,
+        candidate: &SolverVersion,
         pins: &FilePins,
-        fork_urls: &ForkUrls,
+        grounding: &Grounding,
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
         requests: &MetadataRequests,
     ) -> Result<Dependencies, ResolveError> {
+        let version = &candidate.version;
         let expander = RequirementExpander::new(
             &self.constraints,
             &self.overrides,
@@ -1800,6 +3830,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     requirements,
                     None,
                     Some(package),
+                    |_| true,
+                    |_| true,
+                    None,
                 )
             }
 
@@ -1814,27 +3847,34 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     return Ok(Dependencies::Unforkable(Vec::default()));
                 }
 
-                // Look up the distribution ID from the pins (common case) or fork URLs.
-                let owned_id;
-                let distribution_id = if let Some((_, metadata_id)) =
-                    pins.dist_and_id(name, version)
-                {
-                    metadata_id
-                } else if let Some(url) = fork_urls.get(name) {
-                    let dist = Dist::from_url(name.clone(), url.clone())?;
-                    owned_id = dist.distribution_id();
-                    &owned_id
-                } else {
-                    debug_assert!(
-                        false,
-                        "Dependencies were requested for a package without a pinned distribution"
-                    );
-                    return Err(ResolveError::UnregisteredTask(format!("{name}=={version}")));
+                // Registry pins and direct resources at the same PEP 440 version can have
+                // completely different metadata. Consult only the selected candidate's source.
+                let direct;
+                let distribution_id = match candidate.source {
+                    SolverSource::Url(source) => {
+                        let url = grounding.metadata_url(source, &self.urls);
+                        direct = Some((Dist::from_url(name.clone(), url.clone())?, url));
+                        None
+                    }
+                    SolverSource::Registry | SolverSource::Index(_) => {
+                        direct = None;
+                        let Some((_, metadata_id)) = pins.dist_and_id(name, candidate) else {
+                            debug_assert!(
+                                false,
+                                "Dependencies were requested for a package without a pinned distribution"
+                            );
+                            return Err(ResolveError::UnregisteredTask(format!(
+                                "{name}=={version}"
+                            )));
+                        };
+                        Some(metadata_id)
+                    }
                 };
 
                 // If the package does not exist in the registry or locally, we cannot fetch its dependencies
-                if self.dependency_mode.is_transitive()
-                    && self.unavailable_packages.pin().contains_key(name)
+                if candidate.source.is_registry()
+                    && self.dependency_mode.is_transitive()
+                    && self.unavailable_package(name, candidate.source).is_some()
                     && self.installed_packages.get_packages(name).is_empty()
                 {
                     debug_assert!(
@@ -1845,11 +3885,26 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
 
                 // Wait for the metadata to be available.
-                let response =
-                    requests.wait_for_metadata(distribution_id, || format!("{name}=={version}"))?;
+                let response = if let Some((dist, url)) = direct {
+                    let hasher = grounding.hashes.strategy(&self.hasher)?;
+                    if !hasher.allows_url(&url.verbatim) && matches!(&dist, Dist::Built(_)) {
+                        return Err(ResolveError::UnhashedPackage(name.clone()));
+                    }
+                    requests.request_direct(dist.clone(), &hasher)?;
+                    requests.wait_for_direct(&dist, &hasher)?
+                } else if let Some(distribution_id) = distribution_id {
+                    requests.wait_for_metadata(distribution_id, || format!("{name}=={version}"))?
+                } else {
+                    return Err(ResolveError::UnregisteredTask(format!("{name}=={version}")));
+                };
 
                 let metadata = match &*response {
-                    MetadataResponse::Found(archive) => &archive.metadata,
+                    MetadataResponse::Found(archive) => {
+                        if let SolverSource::Url(source) = candidate.source {
+                            self.remember_source_metadata(source, &archive.metadata);
+                        }
+                        &archive.metadata
+                    }
                     MetadataResponse::Unavailable(reason) => {
                         let unavailable_version = UnavailableVersion::from(reason);
                         let message = unavailable_version.singular_message();
@@ -1859,16 +3914,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         } else {
                             warn!("{name} {message}");
                         }
-                        let incomplete_packages = self.incomplete_packages.pin();
-                        let versions = incomplete_packages.get_or_insert(
-                            name.clone(),
-                            HashMap::builder().resize_mode(ResizeMode::Blocking).build(),
-                        );
-                        versions.pin().insert(version.clone(), reason.clone());
+                        if candidate.source.is_registry() {
+                            let incomplete_packages = self.incomplete_packages.pin();
+                            let versions = incomplete_packages.get_or_insert(
+                                (name.clone(), candidate.source),
+                                HashMap::builder().resize_mode(ResizeMode::Blocking).build(),
+                            );
+                            versions.pin().insert(version.clone(), reason.clone());
+                        }
                         return Ok(Dependencies::Unavailable(unavailable_version));
                     }
                     MetadataResponse::Error(dist, err) => {
-                        let chain = DerivationChainBuilder::from_state(id, version, pubgrub)
+                        let chain = DerivationChainBuilder::from_state(id, candidate, pubgrub)
                             .unwrap_or_default();
                         return Err(ResolveError::Dist(
                             DistErrorKind::from_requested_dist(dist, &**err),
@@ -1894,7 +3951,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .as_ref()
                     .filter(|torch_backend| matches!(torch_backend, TorchStrategy::Cuda { .. }))
                     .filter(|torch_backend| torch_backend.has_system_dependency(name))
-                    .and_then(|_| pins.get(name, version).and_then(ResolvedDist::index))
+                    .filter(|_| candidate.source.is_registry())
+                    .and_then(|_| pins.get(name, candidate).and_then(ResolvedDist::index))
                     .map(IndexUrl::url)
                     .and_then(SystemDependency::from_index)
                     .into_iter()
@@ -1930,13 +3988,105 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         RequirementContext::Package { name, version },
                     )
                 };
-                let requirements = expander.expand(requirements, context);
+                let user_path =
+                    self.workspace_members.contains(name) || self.project.as_ref() == Some(name);
+                let configured_metadata = self.dependency_metadata.get(name, Some(version));
+                let policy = match candidate.source {
+                    SolverSource::Registry | SolverSource::Index(_) => None,
+                    SolverSource::Url(source) => Some(matches!(
+                        grounding.url(source.source, &self.urls).parsed_url,
+                        ParsedUrl::Directory(_)
+                    )),
+                };
+                let source_context = env.fork_markers().map_or(MarkerTree::TRUE, |fork| {
+                    let context = grounding
+                        .contexts
+                        .get(&id)
+                        .copied()
+                        .unwrap_or_else(|| package.marker());
+                    if fork
+                        .and(python_requirement.to_marker_tree())
+                        .is_disjoint(context.negate())
+                    {
+                        MarkerTree::TRUE
+                    } else {
+                        python_requirement.simplify_markers(context)
+                    }
+                });
+                let requirements =
+                    expander
+                        .expand(requirements, context)
+                        .filter_map(|mut requirement| {
+                            if user_path {
+                                requirement.to_mut().set_force_relative(false);
+                            }
+                            let has_source = match &requirement.source {
+                                RequirementSource::Registry { index, .. } => index.is_some(),
+                                RequirementSource::Url { .. }
+                                | RequirementSource::GitDirectory { .. }
+                                | RequirementSource::GitPath { .. }
+                                | RequirementSource::Path { .. }
+                                | RequirementSource::Directory { .. } => true,
+                            };
+                            if has_source && !source_context.is_true() {
+                                // A concrete source can affect unmarked requirements from other parents.
+                                // Fork before applying it outside the path that reached this package or
+                                // activated this extra.
+                                let marker = requirement.marker.and(source_context);
+                                if marker.is_false() || !env.included_by_marker(marker) {
+                                    return None;
+                                }
+                                if marker != requirement.marker {
+                                    requirement.to_mut().marker = marker;
+                                }
+                            }
+                            Some(requirement)
+                        });
 
                 PubGrubDependency::from_requirements(
                     &self.conflicts,
                     requirements,
                     group.as_ref(),
                     Some(package),
+                    |requirement| {
+                        matches!(candidate.source, SolverSource::Url(_))
+                            || self.urls.configuration_authorizes(
+                                group.is_none().then_some((name, version)),
+                                requirement,
+                                &self.git,
+                            )
+                    },
+                    |requirement| {
+                        self.urls.configuration_authorizes(
+                            group.is_none().then_some((name, version)),
+                            requirement,
+                            &self.git,
+                        ) || configured_metadata.as_ref().is_some_and(|metadata| {
+                            metadata.requires_dist.iter().any(|configured| {
+                                if configured.name != requirement.name {
+                                    return false;
+                                }
+                                let marker = requirement.marker.without_extras();
+                                let configured_marker = configured.marker.without_extras();
+                                if !marker.is_disjoint(configured_marker.negate()) {
+                                    return false;
+                                }
+                                let configured = Requirement::from(configured.clone());
+                                requirement
+                                    .source
+                                    .to_verbatim_parsed_url()
+                                    .zip(configured.source.to_verbatim_parsed_url())
+                                    .is_some_and(|(url, configured)| {
+                                        urls::same_resource(
+                                            &url.parsed_url,
+                                            &configured.parsed_url,
+                                            &self.git,
+                                        )
+                                    })
+                            })
+                        })
+                    },
+                    policy,
                 )
                 .map(|mut dependencies| {
                     dependencies.extend(system_dependencies);
@@ -1963,6 +4113,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             version: Range::singleton(version.clone()),
                             parent: None,
                             source: DependencySource::Unspecified,
+                            policy: None,
                         })
                         .collect(),
                 ));
@@ -1991,6 +4142,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     version: Range::singleton(version.clone()),
                                     parent: None,
                                     source: DependencySource::Unspecified,
+                                    policy: None,
                                 })
                         })
                         .collect(),
@@ -2017,6 +4169,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             version: Range::singleton(version.clone()),
                             parent: None,
                             source: DependencySource::Unspecified,
+                            policy: None,
                         })
                         .collect(),
                 ));
@@ -2061,7 +4214,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         .distributions()
                         .done(dist.distribution_id(), Arc::new(metadata));
                 }
-                Some(Response::Dist { dist, metadata }) => {
+                Some(Response::Dist {
+                    dist,
+                    metadata,
+                    direct_hashes,
+                }) => {
                     let dist_kind = match dist {
                         Dist::Built(_) => "built",
                         Dist::Source(_) => "source",
@@ -2076,9 +4233,29 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             warn!("{dist} {message}");
                         }
                     }
-                    self.index
-                        .distributions()
-                        .done(dist.distribution_id(), Arc::new(metadata));
+                    if let Some(hashes) = direct_hashes {
+                        let metadata = Arc::new(metadata);
+                        if hashes.uses_project_cache(&dist) {
+                            let id = dist.distribution_id();
+                            if let MetadataResponse::Found(_) = metadata.as_ref() {
+                                self.index
+                                    .distributions()
+                                    .done(id.clone(), metadata.clone());
+                            }
+                            self.index
+                                .project_direct(&id)
+                                .done(dist.name().clone(), metadata);
+                        } else {
+                            self.index.direct().done(
+                                (dist.distribution_id(), dist.name().clone(), hashes),
+                                metadata,
+                            );
+                        }
+                    } else {
+                        self.index
+                            .distributions()
+                            .done(dist.distribution_id(), Arc::new(metadata));
+                    }
                 }
                 None => {}
             }
@@ -2104,13 +4281,22 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                 Ok(Some(Response::Package(
                     package_name,
-                    index.map(IndexMetadata::into_url),
+                    index,
                     package_versions,
                 )))
             }
 
+            Request::GitReference(git, completion) => {
+                provider.resolve_git_reference(&git).await;
+                let _ = completion.send(());
+                Ok(None)
+            }
+
             // Fetch distribution metadata from the distribution database.
-            Request::Dist(dist) => {
+            Request::Dist(dist, direct_hasher) => {
+                let direct_hashes = direct_hasher
+                    .as_ref()
+                    .map(|hasher| DirectHashKey::new(&dist, hasher));
                 if let Some(version) = dist.version() {
                     if let Some(index) = dist.index() {
                         // Check the implicit indexes for pre-provided metadata.
@@ -2129,16 +4315,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         metadata: MetadataResponse::Found(
                                             ArchiveMetadata::from_metadata23(metadata),
                                         ),
+                                        direct_hashes,
                                     }));
                                 }
                             }
                         }
 
-                        // Check the explicit indexes for pre-provided metadata.
+                        // Only Simple API version maps can contain registry-provided metadata;
+                        // a flat index at the same address has a separate version map.
                         let versions_response = self
                             .index
                             .explicit()
-                            .get(&(dist.name().clone(), index.clone()));
+                            .get(&(dist.name().clone(), IndexMetadata::from(index.clone())));
                         if let Some(VersionsResponse::Found(version_maps)) =
                             versions_response.as_deref()
                         {
@@ -2152,6 +4340,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     metadata: MetadataResponse::Found(
                                         ArchiveMetadata::from_metadata23(metadata),
                                     ),
+                                    direct_hashes,
                                 }));
                             }
                         }
@@ -2159,12 +4348,38 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
 
                 let metadata = provider
-                    .get_or_build_wheel_metadata(&dist)
+                    .get_or_build_wheel_metadata(
+                        &dist,
+                        direct_hasher.as_ref().unwrap_or(&self.hasher),
+                    )
                     .boxed_local()
-                    .await?;
+                    .await;
+                let metadata = match metadata {
+                    Ok(metadata) => metadata,
+                    Err(error) if direct_hasher.is_some() => MetadataResponse::Error(
+                        Box::new(RequestedDist::Installable(dist.clone())),
+                        Arc::new(error),
+                    ),
+                    Err(error) => return Err(error.into()),
+                };
 
                 if let MetadataResponse::Found(metadata) = &metadata {
                     if &metadata.metadata.name != dist.name() {
+                        if direct_hasher.is_some() {
+                            let error = uv_distribution::Error::WheelMetadataNameMismatch {
+                                given: dist.name().clone(),
+                                metadata: metadata.metadata.name.clone(),
+                            };
+                            let metadata = MetadataResponse::Error(
+                                Box::new(RequestedDist::Installable(dist.clone())),
+                                Arc::new(error),
+                            );
+                            return Ok(Some(Response::Dist {
+                                dist,
+                                metadata,
+                                direct_hashes,
+                            }));
+                        }
                         return Err(ResolveError::MismatchedPackageName {
                             request: "distribution metadata",
                             expected: dist.name().clone(),
@@ -2173,7 +4388,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     }
                 }
 
-                Ok(Some(Response::Dist { dist, metadata }))
+                Ok(Some(Response::Dist {
+                    dist,
+                    metadata,
+                    direct_hashes,
+                }))
             }
 
             Request::Installed(dist) => {
@@ -2275,6 +4494,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 ResolvedDist::Installable { dist, .. } => Response::Dist {
                                     dist: (*dist).clone(),
                                     metadata,
+                                    direct_hashes: None,
                                 },
                                 ResolvedDist::Installed { dist } => Response::Installed {
                                     dist: (*dist).clone(),
@@ -2333,13 +4553,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     let response = match dist {
                         ResolvedDist::Installable { dist, .. } => {
                             let metadata = provider
-                                .get_or_build_wheel_metadata(&dist)
+                                .get_or_build_wheel_metadata(&dist, &self.hasher)
                                 .boxed_local()
                                 .await?;
 
                             Response::Dist {
                                 dist: (*dist).clone(),
                                 metadata,
+                                direct_hashes: None,
                             }
                         }
                         ResolvedDist::Installed { dist } => {
@@ -2363,24 +4584,34 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
     fn convert_no_solution_err(
         &self,
-        mut err: pubgrub::NoSolutionError<UvDependencyProvider>,
+        err: pubgrub::NoSolutionError<UvDependencyProvider>,
         fork_urls: ForkUrls,
         fork_indexes: ForkIndexes,
+        report_sources: &FxHashMap<PackageName, SolverSource>,
         known_versions: &FxHashMap<PackageName, Arc<[Version]>>,
         env: ResolverEnvironment,
         current_environment: MarkerEnvironment,
         visited: &FxHashSet<PackageName>,
     ) -> ResolveError {
+        let source_for = |package: &PubGrubPackage| {
+            package
+                .name_no_root()
+                .and_then(|name| report_sources.get(name))
+                .copied()
+                .unwrap_or(SolverSource::Registry)
+        };
+        let mut err = project_error(err, source_for);
         err = NoSolutionError::collapse_local_version_segments(NoSolutionError::collapse_proxies(
             err,
         ));
         err = NoSolutionError::narrow_widened_sets(err, known_versions);
+        err = NoSolutionError::collapse_source_constraints(err, &fork_urls);
 
         let mut unavailable_packages = FxHashMap::default();
         for package in derivation_tree_packages(&err) {
             if let PubGrubPackageInner::Package { name, .. } = &**package {
-                if let Some(reason) = self.unavailable_packages.pin().get(name) {
-                    unavailable_packages.insert(name.clone(), reason.clone());
+                if let Some(reason) = self.unavailable_package(name, source_for(package)) {
+                    unavailable_packages.insert(name.clone(), reason);
                 }
             }
         }
@@ -2389,7 +4620,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         let incomplete_packages_cache = self.incomplete_packages.pin();
         for package in derivation_tree_packages(&err) {
             if let PubGrubPackageInner::Package { name, .. } = &**package
-                && let Some(versions) = incomplete_packages_cache.get(name)
+                && let Some(versions) =
+                    incomplete_packages_cache.get(&(name.clone(), source_for(package)))
             {
                 for (version, reason) in &versions.pin() {
                     incomplete_packages
@@ -2419,9 +4651,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 continue;
             }
             let versions_response = if let Some(index) = fork_indexes.get(name) {
-                self.index
-                    .explicit()
-                    .get(&(name.clone(), index.url().clone()))
+                self.index.explicit().get(&(name.clone(), index.clone()))
             } else {
                 self.index.implicit().get(name)
             };
@@ -2521,6 +4751,160 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         )))
     }
 
+    /// Report distinct trusted URLs or indexes only when both declarations occur in PubGrub's failure proof.
+    fn source_conflict(
+        &self,
+        error: &pubgrub::NoSolutionError<UvDependencyProvider>,
+        state: &ForkState,
+    ) -> Option<ResolveError> {
+        type Declaration = (
+            UrlCandidate,
+            usize,
+            Id<PubGrubPackage>,
+            SolverVersion,
+            ParsedUrl,
+        );
+        type IndexDeclaration = (IndexId, usize, Id<PubGrubPackage>, SolverVersion);
+        let mut sources = BTreeMap::<PackageName, Vec<Declaration>>::new();
+        let mut indexes = BTreeMap::<PackageName, Vec<IndexDeclaration>>::new();
+        let mut pending = vec![error];
+        let mut seen = FxHashSet::default();
+        while let Some(tree) = pending.pop() {
+            if !seen.insert(std::ptr::from_ref(tree)) {
+                continue;
+            }
+            match tree {
+                DerivationTree::External(External::FromDependencyOf(
+                    parent,
+                    candidates,
+                    dependency,
+                    requirements,
+                )) => {
+                    let Some(name) = dependency.name_no_root() else {
+                        continue;
+                    };
+                    for source in requirements.only_urls() {
+                        for (order, id, candidate, url) in state
+                            .source_dependencies
+                            .trusted_declarations(&state.pubgrub, parent, candidates, name, source)
+                        {
+                            sources
+                                .entry(name.clone())
+                                .or_default()
+                                .push((source, order, id, candidate, url));
+                        }
+                    }
+                    for index in requirements.only_indexes() {
+                        for (order, id, candidate) in state.source_dependencies.index_declarations(
+                            &state.pubgrub,
+                            parent,
+                            candidates,
+                            name,
+                            index,
+                        ) {
+                            indexes
+                                .entry(name.clone())
+                                .or_default()
+                                .push((index, order, id, candidate));
+                        }
+                    }
+                }
+                DerivationTree::External(_) => {}
+                DerivationTree::Derived(derived) => {
+                    pending.push(&derived.cause2);
+                    pending.push(&derived.cause1);
+                }
+            }
+        }
+        for (name, declarations) in indexes {
+            let pair = declarations.iter().enumerate().find_map(|(index, a)| {
+                declarations[index + 1..]
+                    .iter()
+                    .find(|b| a.0 != b.0 && (a.2 != b.2 || a.3 == b.3))
+                    .map(|b| (a, b))
+            });
+            let Some((a, b)) = pair else { continue };
+            let mut indexes = vec![self.indexes.resource(a.0), self.indexes.resource(b.0)];
+            indexes.sort();
+            let error = ResolveError::ConflictingIndexesForEnvironment {
+                package_name: name,
+                indexes,
+                env: state.env.clone(),
+            };
+            let (_, _, parent, candidate) = if a.1 > b.1 { a } else { b };
+            if let Some(name) = state.pubgrub.package_store[*parent].name_no_root()
+                && let Some(chain) = state.source_dependencies.chain(*parent, candidate)
+            {
+                return Some(ResolveError::Dependencies(
+                    Box::new(error),
+                    name.clone(),
+                    candidate.version.clone(),
+                    chain.clone(),
+                ));
+            }
+            return Some(enrich_dependency_error(
+                error,
+                *parent,
+                candidate,
+                &state.pubgrub,
+            ));
+        }
+        for (name, declarations) in sources {
+            let pair = declarations.iter().enumerate().find_map(|(index, a)| {
+                declarations[index + 1..]
+                    .iter()
+                    .find(|b| {
+                        (a.2 != b.2 || a.3 == b.3)
+                            && (a.0.source != b.0.source
+                                || urls::declaration_mode(&a.4)
+                                    .zip(urls::declaration_mode(&b.4))
+                                    .is_some_and(|(a, b)| a != b))
+                    })
+                    .map(|b| (a, b))
+            });
+            let Some((a, b)) = pair else { continue };
+            let grounding = state.source_dependencies.grounding(
+                &state.pubgrub,
+                &state.env,
+                &state.python_requirement,
+                &self.urls,
+                &self.git,
+            );
+            let mut urls = if a.0.source == b.0.source {
+                vec![a.4.clone(), b.4.clone()]
+            } else {
+                vec![
+                    grounding.url(a.0.source, &self.urls).parsed_url,
+                    grounding.url(b.0.source, &self.urls).parsed_url,
+                ]
+            };
+            urls.sort();
+            let error = ResolveError::ConflictingUrls {
+                package_name: name,
+                urls,
+                env: state.env.clone(),
+            };
+            let (_, _, parent, candidate, _) = if a.1 > b.1 { a } else { b };
+            if let Some(name) = state.pubgrub.package_store[*parent].name_no_root()
+                && let Some(chain) = state.source_dependencies.chain(*parent, candidate)
+            {
+                return Some(ResolveError::Dependencies(
+                    Box::new(error),
+                    name.clone(),
+                    candidate.version.clone(),
+                    chain.clone(),
+                ));
+            }
+            return Some(enrich_dependency_error(
+                error,
+                *parent,
+                candidate,
+                &state.pubgrub,
+            ));
+        }
+        None
+    }
+
     fn on_progress(&self, package: &PubGrubPackage, version: &Version) {
         if let Some(reporter) = self.reporter.as_ref() {
             match &**package {
@@ -2547,9 +4931,33 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 /// All known versions for each package, from the version maps and the installed packages,
 /// used to keep the version sets in the partial solution minimal.
 #[derive(Clone, Default)]
-struct KnownVersions(FxHashMap<PackageName, Arc<[Version]>>);
+struct KnownVersions {
+    by_source: FxHashMap<(PackageName, Option<IndexMetadata>), Arc<[Version]>>,
+}
 
 impl KnownVersions {
+    /// Produce the listing for the source used to explain a failure. A URL's version is not part
+    /// of an independently queried registry listing for a package with the same name.
+    fn for_report(
+        &self,
+        sources: &FxHashMap<PackageName, SolverSource>,
+        indexes: &Indexes,
+    ) -> FxHashMap<PackageName, Arc<[Version]>> {
+        self.by_source
+            .iter()
+            .filter_map(|((name, index), versions)| {
+                let selected = match sources.get(name).copied().unwrap_or(SolverSource::Registry) {
+                    SolverSource::Registry => index.is_none(),
+                    SolverSource::Index(selected) => index
+                        .as_ref()
+                        .is_some_and(|index| *index == indexes.resource(selected)),
+                    SolverSource::Url(_) => false,
+                };
+                selected.then(|| (name.clone(), versions.clone()))
+            })
+            .collect()
+    }
+
     /// Returns the sorted, deduplicated candidate universe used to widen version sets.
     ///
     /// Results are cached on the first call per package.
@@ -2574,11 +4982,12 @@ impl KnownVersions {
         let PackageSource::Registry(index_metadata) = source else {
             return None;
         };
-        if !self.0.contains_key(name) {
+        let key = (name.clone(), index_metadata.cloned());
+        if !self.by_source.contains_key(&key) {
             let response = if let Some(index_metadata) = index_metadata {
                 index
                     .explicit()
-                    .get(&(name.clone(), index_metadata.url().clone()))?
+                    .get(&(name.clone(), index_metadata.clone()))?
             } else {
                 index.implicit().get(name)?
             };
@@ -2597,9 +5006,9 @@ impl KnownVersions {
                 .collect();
             versions.sort_unstable();
             versions.dedup();
-            self.0.insert(name.clone(), versions.into());
+            self.by_source.insert(key.clone(), versions.into());
         }
-        Some(&self.0[name][..])
+        Some(&self.by_source[&key][..])
     }
 }
 
@@ -2614,8 +5023,138 @@ enum ForkContinuation {
     /// Use the version selected for this package by the fork operation.
     UseVersion {
         package: Id<PubGrubPackage>,
-        version: Version,
+        version: SolverVersion,
     },
+}
+
+/// The alternative source solves for exactly one environmental fork.
+struct SourceSearch {
+    states: Vec<ForkState>,
+    seen: FxHashSet<(SourceAssumptions, BTreeSet<PackageName>)>,
+    error: Option<ResolveError>,
+    source_error: Option<ResolveError>,
+    directory_error: Option<ResolveError>,
+    fallback_source_error: Option<ResolveError>,
+    candidate_errors: BTreeMap<UrlCandidate, ResolveError>,
+    failed_sources: Vec<UrlCandidate>,
+    policy_errors: Vec<(Vec<(PubGrubPackage, SolverVersion)>, ResolveError)>,
+    failed_candidates: FxHashMap<PubGrubPackage, CandidateSet>,
+    lowest_attempts: FxHashSet<LowestAttempt>,
+}
+
+#[derive(PartialEq, Eq, Hash)]
+struct LowestAttempt {
+    package: PubGrubPackage,
+    candidate: SolverVersion,
+    assumptions: SourceAssumptions,
+    preferred: BTreeSet<PackageName>,
+}
+
+impl SourceSearch {
+    fn new(state: ForkState) -> Self {
+        let seen = FxHashSet::from_iter([(
+            state.source_assumptions.clone(),
+            state.preferred_lowest.clone(),
+        )]);
+        Self {
+            states: vec![state],
+            seen,
+            error: None,
+            source_error: None,
+            directory_error: None,
+            fallback_source_error: None,
+            candidate_errors: BTreeMap::new(),
+            failed_sources: Vec::new(),
+            policy_errors: Vec::new(),
+            failed_candidates: FxHashMap::default(),
+            lowest_attempts: FxHashSet::default(),
+        }
+    }
+
+    fn record_candidate_error(&mut self, source: UrlCandidate, error: ResolveError) {
+        self.candidate_errors.entry(source).or_insert(error);
+    }
+
+    fn failed_source_error(&mut self) -> Option<ResolveError> {
+        self.failed_sources
+            .iter()
+            .find_map(|source| self.candidate_errors.remove(source))
+    }
+
+    fn record_policy_error(
+        &mut self,
+        origins: Vec<(PubGrubPackage, SolverVersion)>,
+        error: ResolveError,
+    ) {
+        if origins.is_empty() {
+            self.fallback_source_error.get_or_insert(error);
+        } else if !self
+            .policy_errors
+            .iter()
+            .any(|(known, _)| *known == origins)
+        {
+            self.policy_errors.push((origins, error));
+        }
+    }
+
+    fn failed_policy_error(&mut self) -> Option<ResolveError> {
+        let index = self.policy_errors.iter().position(|(origins, _)| {
+            origins.iter().all(|(package, candidate)| {
+                self.failed_candidates
+                    .get(package)
+                    .is_some_and(|required| required.contains(candidate))
+            })
+        })?;
+        Some(self.policy_errors.remove(index).1)
+    }
+
+    fn record_failed_candidates(&mut self, package: &PubGrubPackage, requirements: &CandidateSet) {
+        self.failed_candidates
+            .entry(package.clone())
+            .and_modify(|known| *known = known.union(requirements))
+            .or_insert_with(|| requirements.clone());
+    }
+
+    /// A direct retrieval failure explains an unsatisfiable solve only if its exact source was
+    /// required in the native proof. Failures encountered on unrelated branches remain diagnostic.
+    fn failure_from_proof(
+        &mut self,
+        error: &pubgrub::NoSolutionError<UvDependencyProvider>,
+    ) -> Option<ResolveError> {
+        let mut pending = vec![error];
+        let mut seen = FxHashSet::default();
+        while let Some(tree) = pending.pop() {
+            if !seen.insert(std::ptr::from_ref(tree)) {
+                continue;
+            }
+            match tree {
+                DerivationTree::External(
+                    External::FromDependencyOf(_, _, package, requirements)
+                    | External::NoVersions(package, requirements),
+                ) => {
+                    self.record_failed_candidates(package, requirements);
+                    for source in requirements.only_urls() {
+                        if !self.failed_sources.contains(&source) {
+                            self.failed_sources.push(source);
+                        }
+                    }
+                }
+                DerivationTree::External(External::NotRoot(package, candidate)) => {
+                    self.record_failed_candidates(
+                        package,
+                        &CandidateSet::singleton(candidate.clone()),
+                    );
+                }
+                DerivationTree::External(External::Custom(..)) => {}
+                DerivationTree::Derived(derived) => {
+                    pending.push(&derived.cause2);
+                    pending.push(&derived.cause1);
+                }
+            }
+        }
+        self.failed_source_error()
+            .or_else(|| self.failed_policy_error())
+    }
 }
 
 /// State that is used during unit propagation in the resolver, one instance per fork.
@@ -2642,17 +5181,8 @@ pub(crate) struct ForkState {
     /// After resolution is finished, this map is consulted to recover both the
     /// locked artifact and the metadata backing the resolved dependency edges.
     pins: FilePins,
-    /// Ensure we don't have duplicate URLs in any branch.
-    ///
-    /// Unlike [`Urls`], we add only the URLs we have seen in this branch, and there can be only
-    /// one URL per package. By prioritizing direct URL dependencies over registry dependencies,
-    /// this map is populated for all direct URL packages before we look at any registry packages.
-    fork_urls: ForkUrls,
-    /// Ensure we don't have duplicate indexes in any branch.
-    ///
-    /// Unlike [`Indexes`], we add only the indexes we have seen in this branch, and there can be
-    /// only one index per package.
-    fork_indexes: ForkIndexes,
+    /// Stable identities for explicit registries used by dependency edges in this branch.
+    indexes: Indexes,
     /// When dependencies for a package are retrieved, this map of priorities
     /// is updated based on how each dependency was specified. Certain types
     /// of dependencies have more "priority" than others (like direct URL
@@ -2661,11 +5191,30 @@ pub(crate) struct ForkState {
     priorities: PubGrubPriorities,
     /// This keeps track of the set of versions for each package that we've
     /// already visited during resolution. This avoids doing redundant work.
-    added_dependencies: FxHashMap<Id<PubGrubPackage>, FxHashSet<Version>>,
+    added_dependencies: FxHashMap<Id<PubGrubPackage>, FxHashSet<SolverVersion>>,
+    /// Dependencies with the candidate and source authority that introduced them.
+    source_dependencies: SourceDependencies,
+    /// Packages whose allowed sources currently have no grounded concrete candidate.
+    pending_sources: FxHashMap<Id<PubGrubPackage>, CandidateSet>,
+    /// Optional candidate restrictions local to one retry of a stalled source solve.
+    source_assumptions: SourceAssumptions,
+    /// All registered package IDs, in allocation order, for rescheduling pending packages.
+    source_packages: Vec<Id<PubGrubPackage>>,
+    source_package_set: FxHashSet<Id<PubGrubPackage>>,
+    /// Use a stable scan after a package has been removed from PubGrub's heap as pending.
+    reschedule_sources: bool,
     /// The last range scheduled for prefetch for each undecided package.
     pre_visited: FxHashMap<Id<PubGrubPackage>, Range<Version>>,
     /// The last version selected for each package and range in a specific environment.
-    selected_versions: FxHashMap<Id<PubGrubPackage>, (Range<Version>, Version)>,
+    selected_versions:
+        FxHashMap<Id<PubGrubPackage>, (Range<Version>, Option<SelectionPolicy>, Version)>,
+    /// Registry candidates tentatively selected in case a first-party path opts them in.
+    /// The value records whether the exact candidate was yanked by its index.
+    possible_candidates: FxHashMap<(Id<PubGrubPackage>, SolverVersion), bool>,
+    /// The ordering used when each registry candidate was last selected in lowest-direct mode.
+    selection_modes: FxHashMap<(Id<PubGrubPackage>, SolverVersion), bool>,
+    /// Late local declarations whose support must survive a preferred-lowest retry.
+    preferred_lowest: BTreeSet<PackageName>,
     /// A cache for parsed version maps.
     ///
     /// Per fork, since the index for a package can differ between forks.
@@ -2711,18 +5260,28 @@ impl ForkState {
         env: ResolverEnvironment,
         python_requirement: PythonRequirement,
         prefetcher: BatchPrefetcher,
+        indexes: Indexes,
     ) -> Self {
+        let root = pubgrub.root_package;
         Self {
             continuation: ForkContinuation::Propagate,
-            next: pubgrub.root_package,
+            next: root,
             pubgrub,
             pins: FilePins::default(),
-            fork_urls: ForkUrls::default(),
-            fork_indexes: ForkIndexes::default(),
+            indexes,
             priorities: PubGrubPriorities::default(),
             added_dependencies: FxHashMap::default(),
+            source_dependencies: SourceDependencies::default(),
+            pending_sources: FxHashMap::default(),
+            source_assumptions: SourceAssumptions::default(),
+            source_packages: vec![root],
+            source_package_set: FxHashSet::from_iter([root]),
+            reschedule_sources: false,
             pre_visited: FxHashMap::default(),
             selected_versions: FxHashMap::default(),
+            possible_candidates: FxHashMap::default(),
+            selection_modes: FxHashMap::default(),
+            preferred_lowest: BTreeSet::new(),
             known_versions: KnownVersions::default(),
             env,
             python_requirement,
@@ -2731,47 +5290,90 @@ impl ForkState {
         }
     }
 
-    /// Visit the dependencies for the selected version of the current package, incorporating any
-    /// relevant URLs and pinned indexes into the [`ForkState`].
+    fn remember_source_package(&mut self, package: Id<PubGrubPackage>) {
+        if self.source_package_set.insert(package) {
+            self.source_packages.push(package);
+        }
+    }
+
+    fn pick_package(&mut self) -> Option<Id<PubGrubPackage>> {
+        if !self.reschedule_sources {
+            return self
+                .pubgrub
+                .partial_solution
+                .pick_highest_priority_pkg(|id, _| {
+                    self.priorities.get(&self.pubgrub.package_store[id])
+                })
+                .map(|(id, _)| id);
+        }
+        let selected: FxHashSet<_> = self
+            .pubgrub
+            .partial_solution
+            .extract_solution()
+            .map(|(id, _)| id)
+            .collect();
+        self.source_packages
+            .iter()
+            .enumerate()
+            .filter_map(|(index, id)| {
+                if selected.contains(id) {
+                    return None;
+                }
+                let Some(Term::Positive(range)) = self
+                    .pubgrub
+                    .partial_solution
+                    .term_intersection_for_package(*id)
+                else {
+                    return None;
+                };
+                if self.pending_sources.get(id) == Some(range) {
+                    return None;
+                }
+                Some((index, *id))
+            })
+            .max_by_key(|(index, id)| {
+                (
+                    self.priorities.get(&self.pubgrub.package_store[*id]),
+                    Reverse(*index),
+                )
+            })
+            .map(|(_, id)| id)
+    }
+
+    fn pending_package(&self) -> Option<Id<PubGrubPackage>> {
+        let selected: FxHashSet<_> = self
+            .pubgrub
+            .partial_solution
+            .extract_solution()
+            .map(|(id, _)| id)
+            .collect();
+        self.source_packages.iter().copied().find(|id| {
+            !selected.contains(id)
+                && self.pubgrub.partial_solution.term_intersection_for_package(*id).is_some_and(|term| {
+                    matches!(term, Term::Positive(range) if self.pending_sources.get(id) == Some(range))
+                })
+        })
+    }
+
+    /// Register dependency priorities and warn about unbounded direct requirements.
     fn visit_package_version_dependencies(
         &mut self,
         for_package: Id<PubGrubPackage>,
-        for_version: &Version,
-        urls: &Urls,
-        indexes: &Indexes,
+        for_version: &SolverVersion,
         dependencies: &[PubGrubDependency],
-        git: &GitResolver,
         workspace_members: &BTreeSet<PackageName>,
         resolution_strategy: &ResolutionStrategy,
-    ) -> Result<(), ResolveError> {
+    ) {
         for dependency in dependencies {
             let PubGrubDependency {
                 package,
                 version,
                 parent: _,
                 source,
+                policy: _,
             } = dependency;
 
-            let mut has_url = false;
-            if let Some(name) = package.name() {
-                // From the [`Requirement`] to [`PubGrubDependency`] conversion, we get a URL if the
-                // requirement was a URL requirement. `Urls` applies canonicalization to this and
-                // override URLs to both URL and registry requirements, which we then check for
-                // conflicts using [`ForkUrl`].
-                for url in urls.get_url(&self.env, name, source.verbatim_url(), git)? {
-                    self.fork_urls.insert(name, url, &self.env)?;
-                    has_url = true;
-                }
-
-                if let Some(index) = source.explicit_index() {
-                    self.fork_indexes.insert(name, index, &self.env)?;
-                }
-
-                // If the package is pinned to an exact index, add it to the fork.
-                for index in indexes.get(name, &self.env) {
-                    self.fork_indexes.insert(name, index, &self.env)?;
-                }
-            }
+            let has_url = source.verbatim_url().is_some();
 
             if let Some(name) = self.pubgrub.package_store[for_package]
                 .name_no_root()
@@ -2820,16 +5422,13 @@ impl ForkState {
             }
 
             // Update the package priorities.
-            self.priorities.insert(package, version, &self.fork_urls);
+            self.priorities.insert(package, version, has_url);
             // As we're adding an incompatibility from the proxy package to the base package,
             // we need to register the base package.
             if let Some(base_package) = package.base_package() {
-                self.priorities
-                    .insert(&base_package, version, &self.fork_urls);
+                self.priorities.insert(&base_package, version, has_url);
             }
         }
-
-        Ok(())
     }
 
     /// Adds the dependencies for the selected version of the current package.
@@ -2840,76 +5439,215 @@ impl ForkState {
     fn add_package_version_dependencies<InstalledPackages: InstalledPackagesProvider>(
         &mut self,
         for_package: Id<PubGrubPackage>,
-        for_version: &Version,
+        for_version: &SolverVersion,
         dependencies: Vec<PubGrubDependency>,
+        urls: &Urls,
+        git: &GitResolver,
         index: &InMemoryIndex,
         installed_packages: &InstalledPackages,
     ) {
-        for dependency in &dependencies {
+        if dependencies.iter().any(|dependency| {
+            matches!(
+                &dependency.source,
+                DependencySource::Url { trusted: true, .. } | DependencySource::ExplicitIndex(_)
+            )
+        }) && let Some(chain) =
+            DerivationChainBuilder::from_state(for_package, for_version, &self.pubgrub)
+        {
+            self.source_dependencies
+                .set_chain(for_package, for_version.clone(), chain);
+        }
+        let is_proxy = self.pubgrub.package_store[for_package].is_proxy();
+        // Only URL declarations consume the preferred authorized identities. Ordinary registry
+        // dependencies and proxy links do not need to walk the selected graph to lower their ranges.
+        let mut preferred: FxHashMap<_, Vec<_>> = if !is_proxy
+            && (urls.has_potential() || self.source_dependencies.has_urls())
+            && dependencies
+                .iter()
+                .any(|dependency| match &dependency.source {
+                    DependencySource::Url { .. } => true,
+                    DependencySource::Unspecified | DependencySource::ExplicitIndex(_) => false,
+                }) {
+            self.source_dependencies
+                .grounding(
+                    &self.pubgrub,
+                    &self.env,
+                    &self.python_requirement,
+                    urls,
+                    git,
+                )
+                .iter()
+                .map(|(name, sources)| (name.clone(), sources.keys().copied().collect()))
+                .collect()
+        } else {
+            FxHashMap::default()
+        };
+        let mut solved_dependencies = Vec::with_capacity(dependencies.len());
+        for dependency in dependencies {
             let PubGrubDependency {
                 package,
                 version,
                 parent: _,
-                source: _,
+                source,
+                policy,
             } = dependency;
 
-            let Some(base_package) = package.base_package() else {
-                continue;
+            let (candidates, declaration, explicit_index) = if is_proxy {
+                (
+                    CandidateSet::source(for_version.source, version),
+                    None,
+                    None,
+                )
+            } else if let DependencySource::Url {
+                url,
+                trusted,
+                hash_requirement,
+                trusted_hashes,
+            } = &source
+                && let Some(name) = package.name_no_root()
+            {
+                let preferred = preferred.entry(name.clone()).or_default();
+                let source = urls.intern(name, url, git, preferred);
+                if *trusted && !preferred.contains(&source) {
+                    preferred.push(source);
+                }
+                // Registry Git references cannot authorize a source. Keep the URL dimension open
+                // until an independent declaration can resolve and compare the exact reference;
+                // multiple aliases must not conflict before that declaration becomes available.
+                let candidates = if !*trusted && urls::git_url(&url.parsed_url).is_some() {
+                    CandidateSet::urls(version)
+                } else {
+                    Urls::declaration_candidates(source, &url.parsed_url, version)
+                };
+                (
+                    candidates,
+                    Some(UrlDeclaration {
+                        source,
+                        url: url.as_ref().clone(),
+                        trusted: *trusted,
+                        hash_requirement: hash_requirement.clone(),
+                        trusted_hashes: *trusted_hashes,
+                    }),
+                    None,
+                )
+            } else if let DependencySource::ExplicitIndex(index) = &source {
+                let index = self.indexes.intern(index);
+                let candidates = if urls.has_potential() {
+                    CandidateSet::index_or_url(index, version)
+                } else {
+                    CandidateSet::source(SolverSource::Index(index), version)
+                };
+                (candidates, None, Some(index))
+            } else if !urls.has_potential()
+                && !matches!(
+                    &*package,
+                    PubGrubPackageInner::Root(_)
+                        | PubGrubPackageInner::Python(_)
+                        | PubGrubPackageInner::System(_)
+                )
+            {
+                let candidates = if package
+                    .name_no_root()
+                    .is_some_and(|name| self.indexes.contains_key(name))
+                {
+                    CandidateSet::registries(version)
+                } else {
+                    CandidateSet::source(SolverSource::Registry, version)
+                };
+                (candidates, None, None)
+            } else if matches!(
+                &*package,
+                PubGrubPackageInner::Root(_)
+                    | PubGrubPackageInner::Python(_)
+                    | PubGrubPackageInner::System(_)
+            ) {
+                (
+                    CandidateSet::source(SolverSource::Registry, version),
+                    None,
+                    None,
+                )
+            } else {
+                (CandidateSet::all(version), None, None)
             };
 
-            let proxy_package = self.pubgrub.package_store.alloc(package.clone());
-            let base_package_id = self.pubgrub.package_store.alloc(base_package.clone());
-            self.pubgrub.add_proxy_package_incompatibility(
-                proxy_package,
-                base_package_id,
-                version.clone(),
-            );
+            let package_id = self.pubgrub.package_store.alloc(package.clone());
+            self.remember_source_package(package_id);
+            if let Some(base_package) = package.base_package() {
+                let base_package_id = self.pubgrub.package_store.alloc(base_package);
+                self.remember_source_package(base_package_id);
+                self.pubgrub.add_proxy_package_incompatibility(
+                    package_id,
+                    base_package_id,
+                    candidates.clone(),
+                );
+            }
+            solved_dependencies.push(SolvedDependency {
+                package: package_id,
+                candidates,
+                declaration,
+                index: explicit_index,
+                policy,
+            });
         }
 
         // Widen across gaps so rejected adjacent versions merge into contiguous ranges rather
         // than leaving one hole per version.
         let versions = self.widen_version_to_gap(for_version, index, installed_packages);
+        self.source_dependencies.insert(
+            for_package,
+            for_version.clone(),
+            solved_dependencies.clone(),
+            for_package != self.pubgrub.root_package,
+        );
+        self.pending_sources.clear();
+        let native_dependencies = solved_dependencies
+            .into_iter()
+            .map(|dependency| {
+                (
+                    self.pubgrub.package_store[dependency.package].clone(),
+                    dependency.candidates,
+                )
+            })
+            .collect::<Vec<_>>();
         let conflict = self.pubgrub.add_package_version_dependencies(
-            self.next,
+            for_package,
             for_version.clone(),
             versions,
-            dependencies.into_iter().map(|dependency| {
-                let PubGrubDependency {
-                    package,
-                    version,
-                    parent: _,
-                    source: _,
-                } = dependency;
-                (package, version)
-            }),
+            native_dependencies,
         );
 
         // Conflict tracking: If the version was rejected due to its dependencies, record culprit
         // and affected.
         if let Some(incompatibility) = conflict {
-            self.record_conflict(for_package, Some(for_version), incompatibility);
+            self.record_conflict(for_package, Some(&for_version.version), incompatibility);
         }
     }
 
     /// Widens a version of the current package to the gap around it in the known versions.
     fn widen_version_to_gap<InstalledPackages: InstalledPackagesProvider>(
         &mut self,
-        version: &Version,
+        candidate: &SolverVersion,
         index: &InMemoryIndex,
         installed_packages: &InstalledPackages,
-    ) -> Range<Version> {
-        widen_to_gap(
-            version,
-            self.known_versions.get_or_update(
+    ) -> CandidateSet {
+        let package = &self.pubgrub.package_store[self.next];
+        let explicit = if let SolverSource::Index(index) = candidate.source {
+            Some(self.indexes.resource(index))
+        } else {
+            None
+        };
+        let known_versions = match candidate.source {
+            SolverSource::Url(_) => None,
+            SolverSource::Registry | SolverSource::Index(_) => self.known_versions.get_or_update(
                 index,
                 installed_packages,
-                PackageSource::from_fork(
-                    &self.pubgrub.package_store[self.next],
-                    &self.fork_urls,
-                    &self.fork_indexes,
-                ),
-                &self.pubgrub.package_store[self.next],
+                PackageSource::Registry(explicit.as_ref()),
+                package,
             ),
+        };
+        CandidateSet::source(
+            candidate.source,
+            widen_to_gap(&candidate.version, known_versions),
         )
     }
 
@@ -2917,7 +5655,7 @@ impl ForkState {
         &mut self,
         affected: Id<PubGrubPackage>,
         version: Option<&Version>,
-        incompatibility: IncompId<PubGrubPackage, Range<Version>, UnavailableReason>,
+        incompatibility: IncompId<PubGrubPackage, CandidateSet, UnavailableReason>,
     ) {
         let mut culprit_is_real = false;
         for (incompatible, _term) in self.pubgrub.incompatibility_store[incompatibility].iter() {
@@ -3030,7 +5768,7 @@ impl ForkState {
     /// distributions is incompatible, so it cannot be selected either.
     fn add_unavailable_version<InstalledPackages: InstalledPackagesProvider>(
         &mut self,
-        version: Version,
+        version: SolverVersion,
         reason: UnavailableVersion,
         index: &InMemoryIndex,
         installed_packages: &InstalledPackages,
@@ -3045,20 +5783,24 @@ impl ForkState {
             | IncompatibleDist::Wheel(IncompatibleWheel::RequiresPython(requires_python, kind)),
         ) = reason
         {
-            let package = &self.next;
+            let package = self.next;
             let python = self.pubgrub.package_store.alloc(PubGrubPackage::from(
                 PubGrubPackageInner::Python(match kind {
                     PythonRequirementKind::Installed => PubGrubPython::Installed,
                     PythonRequirementKind::Target => PubGrubPython::Target,
                 }),
             ));
+            self.remember_source_package(python);
             self.pubgrub
                 .add_incompatibility(Incompatibility::from_dependency(
-                    *package,
+                    package,
                     versions,
                     (
                         python,
-                        Range::from_versions(release_specifiers_to_ranges(requires_python)),
+                        CandidateSet::source(
+                            SolverSource::Registry,
+                            Range::from_versions(release_specifiers_to_ranges(requires_python)),
+                        ),
                     ),
                 ));
             self.pubgrub
@@ -3082,6 +5824,7 @@ impl ForkState {
     /// Narrow the environment and Python requirement, invalidating candidates from the parent fork.
     fn with_env(mut self, env: ResolverEnvironment) -> Self {
         self.selected_versions.clear();
+        self.pending_sources.clear();
         self.env = env;
         // If the fork contains a narrowed Python requirement, apply it.
         if let Some(req) = self.env.narrow_python_requirement(&self.python_requirement) {
@@ -3097,29 +5840,44 @@ impl ForkState {
     fn source(
         &self,
         name: &PackageName,
-        version: &Version,
-    ) -> (Option<&VerbatimParsedUrl>, Option<&IndexUrl>) {
-        let url = self.fork_urls.get(name);
-        let index = url
-            .is_none()
-            .then(|| {
+        candidate: &SolverVersion,
+        urls: &Urls,
+        grounding: &Grounding,
+    ) -> (Option<VerbatimParsedUrl>, Option<&IndexUrl>) {
+        match candidate.source {
+            SolverSource::Url(source) => (Some(grounding.selected_url(source, urls)), None),
+            SolverSource::Registry | SolverSource::Index(_) => (
+                None,
                 self.pins
-                    .get(name, version)
-                    .expect("Every package should be pinned")
-                    .index()
-            })
-            .flatten();
-        (url, index)
+                    .get(name, candidate)
+                    .expect("Every registry package should be pinned")
+                    .index(),
+            ),
+        }
     }
 
-    fn into_resolution(self) -> Resolution {
+    fn into_resolution(mut self, urls: &Urls, grounding: &Grounding) -> Resolution {
         let solution: FxHashMap<_, _> = self.pubgrub.partial_solution.extract_solution().collect();
+        for (package, candidate) in &solution {
+            if grounding.reachable.contains(package)
+                && let Some(name) = self.pubgrub.package_store[*package].name_no_root()
+            {
+                let index = match candidate.source {
+                    SolverSource::Index(index) => Some(self.indexes.resource(index)),
+                    SolverSource::Registry | SolverSource::Url(_) => None,
+                };
+                self.pins.select(name, candidate, index);
+            }
+        }
         let edge_count: usize = solution
             .keys()
             .map(|package| self.pubgrub.incompatibilities[package].len())
             .sum();
         let mut edges: Vec<ResolutionDependencyEdge> = Vec::with_capacity(edge_count);
         for (package, self_version) in &solution {
+            if !grounding.reachable.contains(package) {
+                continue;
+            }
             for id in &self.pubgrub.incompatibilities[package] {
                 let incompatibility = &self.pubgrub.incompatibility_store[*id];
                 let pubgrub::Kind::FromDependencyOf(self_package, dependency_package) =
@@ -3128,13 +5886,16 @@ impl ForkState {
                     continue;
                 };
                 let (self_package, dependency_package) = (*self_package, *dependency_package);
+                if !grounding.reachable.contains(&dependency_package) {
+                    continue;
+                }
                 let Some((self_range, dependency_range)) =
                     incompatibility.dependency_version_sets()
                 else {
                     continue;
                 };
-                let dependency_range =
-                    dependency_range.map_or_else(|| Cow::Owned(Range::empty()), Cow::Borrowed);
+                let dependency_range = dependency_range
+                    .map_or_else(|| Cow::Owned(CandidateSet::empty()), Cow::Borrowed);
                 if *package != self_package {
                     continue;
                 }
@@ -3210,29 +5971,29 @@ impl ForkState {
                     | PubGrubPackageInner::System(_) => continue,
                 };
                 let from = self_name.map(|name| {
-                    let (url, index) = self.source(name, self_version);
+                    let (url, index) = self.source(name, self_version, urls, grounding);
                     ResolutionNode {
                         package: ResolutionPackage {
                             name: name.clone(),
                             extra: self_extra.cloned(),
                             dev: self_group.cloned(),
-                            url: url.cloned(),
+                            url,
                             index: index.cloned(),
                         },
-                        version: self_version.clone(),
+                        version: self_version.version.clone(),
                     }
                 });
 
-                let (url, index) = self.source(name, dependency_version);
+                let (url, index) = self.source(name, dependency_version, urls, grounding);
                 let to = ResolutionNode {
                     package: ResolutionPackage {
                         name: name.clone(),
                         extra: extra.cloned(),
                         dev: group.cloned(),
-                        url: url.cloned(),
+                        url,
                         index: index.cloned(),
                     },
-                    version: dependency_version.clone(),
+                    version: dependency_version.version.clone(),
                 };
                 let edge = ResolutionDependencyEdge { from, to, marker };
 
@@ -3252,6 +6013,9 @@ impl ForkState {
         let nodes = solution
             .into_iter()
             .filter_map(|(package, version)| {
+                if !grounding.reachable.contains(&package) {
+                    return None;
+                }
                 if let PubGrubPackageInner::Package {
                     name,
                     extra,
@@ -3259,16 +6023,16 @@ impl ForkState {
                     marker: MarkerTree::TRUE,
                 } = &*self.pubgrub.package_store[package]
                 {
-                    let (url, index) = self.source(name, &version);
+                    let (url, index) = self.source(name, &version, urls, grounding);
                     Some((
                         ResolutionPackage {
                             name: name.clone(),
                             extra: extra.clone(),
                             dev: group.clone(),
-                            url: url.cloned(),
+                            url,
                             index: index.cloned(),
                         },
-                        version,
+                        version.version,
                     ))
                 } else {
                     None
@@ -3310,7 +6074,9 @@ pub(crate) enum Request {
     /// A request to fetch the metadata for a package.
     Package(PackageName, Option<IndexMetadata>),
     /// A request to fetch the metadata for a built or source distribution.
-    Dist(Dist),
+    Dist(Dist, Option<HashStrategy>),
+    /// A request to compare a Git reference without loading package metadata.
+    GitReference(Box<GitUrl>, oneshot::Sender<()>),
     /// A request to fetch the metadata from an already-installed distribution.
     Installed(InstalledDist),
     /// A request to pre-fetch the metadata for a package and the best-guess distribution.
@@ -3334,7 +6100,7 @@ impl<'a> From<ResolvedDistRef<'a>> for Request {
                     (&source.name, &source.version),
                     "expected chosen sdist to match prioritized sdist"
                 );
-                Self::Dist(Dist::Source(SourceDist::Registry(source)))
+                Self::Dist(Dist::Source(SourceDist::Registry(source)), None)
             }
             ResolvedDistRef::InstallableRegistryBuiltDist {
                 wheel, prioritized, ..
@@ -3347,7 +6113,7 @@ impl<'a> From<ResolvedDistRef<'a>> for Request {
                 // This is okay because we're only here if the prioritized dist
                 // has at least one wheel, so this always succeeds.
                 let built = prioritized.built_dist().expect("at least one wheel");
-                Self::Dist(Dist::Built(BuiltDist::Registry(built)))
+                Self::Dist(Dist::Built(BuiltDist::Registry(built)), None)
             }
             ResolvedDistRef::Installed { dist } => Self::Installed(dist.clone()),
         }
@@ -3360,8 +6126,11 @@ impl Display for Request {
             Self::Package(package_name, _) => {
                 write!(f, "Versions {package_name}")
             }
-            Self::Dist(dist) => {
+            Self::Dist(dist, _) => {
                 write!(f, "Metadata {dist}")
+            }
+            Self::GitReference(git, _) => {
+                write!(f, "Git reference {git}")
             }
             Self::Installed(dist) => {
                 write!(f, "Installed metadata {dist}")
@@ -3377,11 +6146,12 @@ impl Display for Request {
 #[expect(clippy::large_enum_variant)]
 enum Response {
     /// The returned metadata for a package hosted on a registry.
-    Package(PackageName, Option<IndexUrl>, VersionsResponse),
+    Package(PackageName, Option<IndexMetadata>, VersionsResponse),
     /// The returned metadata for a distribution.
     Dist {
         dist: Dist,
         metadata: MetadataResponse,
+        direct_hashes: Option<DirectHashKey>,
     },
     /// The returned metadata for an already-installed distribution.
     Installed {
@@ -3437,6 +6207,8 @@ enum ForkedDependencies {
         forks: Vec<Fork>,
         /// The package(s) with different requirements for disjoint markers.
         diverging_packages: BTreeSet<PackageName>,
+        /// A conditional URL or first-party candidate policy requires decisions to be replayed.
+        replay_candidates: bool,
     },
     /// Package metadata has a `Requires-Python` specifier that is incompatible with the target.
     RequiresPython(VersionSpecifiers),
@@ -3463,6 +6235,9 @@ impl ForkedDependencies {
             }
             Dependencies::Unavailable(err) => return Self::Unavailable(err),
         };
+        let replay_candidates = deps
+            .iter()
+            .any(|dependency| Self::conditional_candidate(dependency, env));
         let mut name_to_deps: BTreeMap<PackageName, Vec<PubGrubDependency>> = BTreeMap::new();
         for dep in deps {
             let name = dep
@@ -3482,8 +6257,19 @@ impl ForkedDependencies {
             Self::Forked {
                 forks,
                 diverging_packages,
+                replay_candidates,
             }
         }
+    }
+
+    /// A conditional concrete source can change the metadata selected for an unmarked dependency.
+    /// First-party candidate policies are split only when a selected yank or prerelease requires it.
+    fn conditional_candidate(dependency: &PubGrubDependency, env: &ResolverEnvironment) -> bool {
+        let marker = dependency.package.marker();
+        (dependency.source.verbatim_url().is_some() || dependency.source.explicit_index().is_some())
+            && env
+                .fork_markers()
+                .is_some_and(|fork| !fork.is_disjoint(marker) && !fork.is_disjoint(marker.negate()))
     }
 
     /// Noop companion to [`ForkedDependencies::from_dependencies_universal`] for non-universal
@@ -3515,6 +6301,12 @@ impl ForkedDependencies {
         let mut diverging_packages = BTreeSet::new();
         for (name, mut deps) in name_to_deps {
             assert!(!deps.is_empty(), "every name has at least one dependency");
+            // A conditional source or first-party candidate policy changes what another parent may
+            // require without a marker. Its true and false environments need separate decisions
+            // even if this parent has only one requirement for that name.
+            let guarded_candidate = deps
+                .iter()
+                .any(|dependency| Self::conditional_candidate(dependency, env));
             // We never fork if there's only one dependency
             // specification for a given package name. This particular
             // strategy results in a "conservative" approach to forking
@@ -3533,8 +6325,9 @@ impl ForkedDependencies {
                 // For example, given `requires-python = ">=3.7"` and `uv ; python_version >= "3.8"`,
                 // where uv itself only supports Python 3.8 and later, we need to fork to ensure
                 // that the resolution can find a solution.
-                if marker::requires_python(dep.package.marker())
-                    .is_none_or(|bound| !python_requirement.raises(&bound))
+                if !guarded_candidate
+                    && marker::requires_python(dep.package.marker())
+                        .is_none_or(|bound| !python_requirement.raises(&bound))
                 {
                     let dep = deps.pop().unwrap();
                     let marker = dep.package.marker();
@@ -3553,8 +6346,9 @@ impl ForkedDependencies {
                         // Unless that "same marker" is a Python requirement that is stricter than
                         // the current Python requirement. In that case, we need to fork to respect
                         // the stricter requirement.
-                        if marker::requires_python(marker)
-                            .is_none_or(|bound| !python_requirement.raises(&bound))
+                        if !guarded_candidate
+                            && marker::requires_python(marker)
+                                .is_none_or(|bound| !python_requirement.raises(&bound))
                         {
                             for dep in deps {
                                 for fork in &mut forks {
@@ -3923,14 +6717,76 @@ pub(crate) struct VersionFork {
 fn enrich_dependency_error(
     error: ResolveError,
     id: Id<PubGrubPackage>,
-    version: &Version,
+    version: &SolverVersion,
     pubgrub: &State<UvDependencyProvider>,
 ) -> ResolveError {
     let Some(name) = pubgrub.package_store[id].name_no_root() else {
         return error;
     };
     let chain = DerivationChainBuilder::from_state(id, version, pubgrub).unwrap_or_default();
-    ResolveError::Dependencies(Box::new(error), name.clone(), version.clone(), chain)
+    ResolveError::Dependencies(
+        Box::new(error),
+        name.clone(),
+        version.version.clone(),
+        chain,
+    )
+}
+
+/// Find an index candidate whose only reported incompatibility is a yank.
+fn possible_yanked_version(decision: Option<&ResolverVersion>) -> Option<&Version> {
+    if let Some(ResolverVersion::Unavailable(
+        version,
+        UnavailableVersion::IncompatibleDist(
+            IncompatibleDist::Wheel(IncompatibleWheel::Yanked(_))
+            | IncompatibleDist::Source(IncompatibleSource::Yanked(_)),
+        ),
+    )) = decision
+    {
+        Some(version)
+    } else {
+        None
+    }
+}
+
+/// Failures that belong to a direct candidate rather than the whole resolver or request channel.
+fn is_source_error(error: &ResolveError) -> bool {
+    match error {
+        ResolveError::Dependencies(error, ..) => is_source_error(error),
+        ResolveError::Distribution(_)
+        | ResolveError::DistributionType(_)
+        | ResolveError::Dist(..)
+        | ResolveError::HashStrategy(_)
+        | ResolveError::UnhashedPackage(_)
+        | ResolveError::PackageUnavailable(_) => true,
+        ResolveError::Client(_)
+        | ResolveError::ChannelClosed
+        | ResolveError::UnregisteredTask(_)
+        | ResolveError::ConflictingUrls { .. }
+        | ResolveError::ConflictingIndexesForEnvironment { .. }
+        | ResolveError::ConflictingIndexes(..)
+        | ResolveError::DisallowedUrl { .. }
+        | ResolveError::NoSolution(_)
+        | ResolveError::InvalidVersion(_)
+        | ResolveError::ConflictingDistribution(_)
+        | ResolveError::ConflictMarker(_)
+        | ResolveError::MismatchedPackageName { .. } => false,
+    }
+}
+
+/// Whether another included path could change the hash policy for this direct resource.
+fn is_hash_source_error(error: &ResolveError) -> bool {
+    match error {
+        ResolveError::Dependencies(error, ..) => is_hash_source_error(error),
+        ResolveError::HashStrategy(_) | ResolveError::UnhashedPackage(_) => true,
+        ResolveError::Dist(_, _, _, error) => matches!(
+            error.as_ref(),
+            uv_distribution::Error::MismatchedHashes { .. }
+                | uv_distribution::Error::MissingHashes { .. }
+                | uv_distribution::Error::MissingActualHashes { .. }
+                | uv_distribution::Error::MissingExpectedHashes { .. }
+        ),
+        _ => false,
+    }
 }
 
 /// Compute the set of markers for which a package is known to be relevant.

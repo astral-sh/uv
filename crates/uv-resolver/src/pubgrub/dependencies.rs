@@ -1,12 +1,12 @@
 use std::borrow::Cow;
 use std::iter;
+use std::sync::Arc;
 
 use either::Either;
 
 use uv_distribution_types::{IndexMetadata, Requirement, RequirementSource};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
-use uv_pep508::RequirementOrigin;
 use uv_pypi_types::{ConflictItemRef, Conflicts, VerbatimParsedUrl};
 
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, Range};
@@ -15,7 +15,7 @@ use crate::resolver::UnsatisfiableRequirement;
 /// The source constraint carried by a single dependency edge.
 ///
 /// Most dependency edges are source-agnostic and use [`DependencySource::Unspecified`]. Direct
-/// URLs and group-scoped explicit indexes use a concrete source so fork construction can keep
+/// URLs and explicit indexes use a concrete source so fork construction can keep
 /// that source information attached to the edge that introduced it.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub(crate) enum DependencySource {
@@ -23,7 +23,12 @@ pub(crate) enum DependencySource {
     #[default]
     Unspecified,
     /// The dependency was introduced by a direct URL-like requirement.
-    Url(Box<VerbatimParsedUrl>),
+    Url {
+        url: Box<VerbatimParsedUrl>,
+        trusted: bool,
+        hash_requirement: Option<Arc<Requirement>>,
+        trusted_hashes: bool,
+    },
     /// The dependency was introduced by a requirement pinned to an explicit index.
     ExplicitIndex(IndexMetadata),
 }
@@ -31,22 +36,14 @@ pub(crate) enum DependencySource {
 impl DependencySource {
     /// Derive the edge-local source constraint from a requirement.
     ///
-    /// Registry requirements only carry a source here when they are tied to a group-scoped
-    /// explicit index. Direct URL-like requirements always preserve their verbatim URL.
+    /// Registry requirements carry an explicitly configured index when present. Direct URL-like
+    /// requirements always preserve their verbatim URL.
     fn from_requirement(requirement: &Requirement) -> Self {
         match &requirement.source {
-            RequirementSource::Registry { index, .. }
-                if matches!(
-                    requirement.origin.as_ref(),
-                    Some(RequirementOrigin::Group(_, Some(_), _))
-                ) =>
-            {
-                index
-                    .clone()
-                    .map(Self::ExplicitIndex)
-                    .unwrap_or(Self::Unspecified)
-            }
-            RequirementSource::Registry { .. } => Self::Unspecified,
+            RequirementSource::Registry { index, .. } => index
+                .clone()
+                .map(Self::ExplicitIndex)
+                .unwrap_or(Self::Unspecified),
             RequirementSource::Url { .. }
             | RequirementSource::GitDirectory { .. }
             | RequirementSource::GitPath { .. }
@@ -55,7 +52,12 @@ impl DependencySource {
                 .source
                 .to_verbatim_parsed_url()
                 .map(Box::new)
-                .map(Self::Url)
+                .map(|url| Self::Url {
+                    url,
+                    trusted: false,
+                    hash_requirement: None,
+                    trusted_hashes: false,
+                })
                 .unwrap_or(Self::Unspecified),
         }
     }
@@ -63,7 +65,7 @@ impl DependencySource {
     /// Return the direct URL attached to this source, if any.
     pub(crate) fn verbatim_url(&self) -> Option<&VerbatimParsedUrl> {
         match self {
-            Self::Url(url) => Some(url.as_ref()),
+            Self::Url { url, .. } => Some(url.as_ref()),
             Self::Unspecified | Self::ExplicitIndex(_) => None,
         }
     }
@@ -72,7 +74,7 @@ impl DependencySource {
     pub(crate) fn explicit_index(&self) -> Option<&IndexMetadata> {
         match self {
             Self::ExplicitIndex(index) => Some(index),
-            Self::Unspecified | Self::Url(_) => None,
+            Self::Unspecified | Self::Url { .. } => None,
         }
     }
 }
@@ -99,10 +101,12 @@ pub(crate) struct PubGrubDependency {
 
     /// The direct source constraint attached to this dependency edge.
     ///
-    /// This is only populated when the edge itself needs source identity, e.g. for direct URLs
-    /// or group-scoped explicit indexes. Manifest-wide URL and index constraints are still applied
-    /// separately via `Urls` and `Indexes`.
+    /// Direct URLs retain their declaring edge and authority. Explicit indexes also retain their
+    /// declaring edge alongside any initial index configuration.
     pub(crate) source: DependencySource,
+
+    /// A first-party declaration that can opt into prereleases, yanks or lowest-direct selection.
+    pub(crate) policy: Option<(Arc<Requirement>, bool)>,
 }
 
 impl PubGrubDependency {
@@ -116,15 +120,44 @@ impl PubGrubDependency {
         requirements: impl IntoIterator<Item = Cow<'a, Requirement>>,
         group_name: Option<&'a GroupName>,
         parent_package: Option<&'a PubGrubPackage>,
+        authorizes: impl Fn(&Requirement) -> bool,
+        trusted_hashes: impl Fn(&Requirement) -> bool,
+        policy: Option<bool>,
     ) -> Result<Vec<Self>, UnsatisfiableRequirement> {
         let mut dependencies = Vec::new();
         for requirement in requirements {
-            dependencies.extend(Self::from_requirement(
-                conflicts,
-                requirement,
-                group_name,
-                parent_package,
-            )?);
+            let trusted = authorizes(&requirement);
+            let hashes_are_trusted = trusted_hashes(&requirement);
+            let hash_requirement = (requirement.source.to_verbatim_parsed_url().is_some()
+                && (trusted || hashes_are_trusted))
+                .then(|| Arc::new(requirement.as_ref().clone()));
+            let policy = policy.map(|lowest| {
+                (
+                    hash_requirement
+                        .clone()
+                        .unwrap_or_else(|| Arc::new(requirement.as_ref().clone())),
+                    lowest,
+                )
+            });
+            dependencies.extend(
+                Self::from_requirement(conflicts, requirement, group_name, parent_package)?.map(
+                    |mut dependency| {
+                        if let DependencySource::Url {
+                            trusted: authority,
+                            hash_requirement: hashes,
+                            trusted_hashes: hash_authority,
+                            ..
+                        } = &mut dependency.source
+                        {
+                            *authority = trusted;
+                            hashes.clone_from(&hash_requirement);
+                            *hash_authority = hashes_are_trusted;
+                        }
+                        dependency.policy.clone_from(&policy);
+                        dependency
+                    },
+                ),
+            );
         }
         Ok(dependencies)
     }
@@ -207,6 +240,7 @@ impl PubGrubDependency {
                         None
                     },
                     source,
+                    policy: None,
                 },
                 PubGrubPackageInner::Marker { .. } => Self {
                     package,
@@ -217,6 +251,7 @@ impl PubGrubDependency {
                         None
                     },
                     source,
+                    policy: None,
                 },
                 PubGrubPackageInner::Extra { name, .. } => {
                     if group_name.is_none() {
@@ -230,6 +265,7 @@ impl PubGrubDependency {
                         version,
                         parent: None,
                         source,
+                        policy: None,
                     }
                 }
                 PubGrubPackageInner::Group { name, .. } => {
@@ -244,6 +280,7 @@ impl PubGrubDependency {
                         version,
                         parent: None,
                         source,
+                        policy: None,
                     }
                 }
                 PubGrubPackageInner::Root(_) => unreachable!("Root package in dependencies"),

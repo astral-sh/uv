@@ -255,6 +255,23 @@ impl VerbatimUrl {
         self
     }
 
+    /// Replace the fragment in both the parsed URL and its original representation.
+    #[must_use]
+    pub fn with_fragment(mut self, fragment: Option<&str>) -> Self {
+        self.url.set_fragment(fragment);
+        if let Some(given) = &self.given {
+            let base = given
+                .split_once('#')
+                .map_or(given.as_str(), |(base, _)| base);
+            self.given = Some(if let Some(fragment) = fragment {
+                ArcStr::from(format!("{base}#{fragment}"))
+            } else {
+                ArcStr::from(base)
+            });
+        }
+        self
+    }
+
     /// Set the verbatim representation of the URL.
     #[must_use]
     pub fn with_given(self, given: impl AsRef<str>) -> Self {
@@ -780,6 +797,22 @@ mod tests {
         assert_eq!(absolute, relative);
         assert!(!relative.with_force_relative(false).prefers_relative());
 
+        Ok(())
+    }
+
+    #[test]
+    fn replacing_fragment_retains_given_url() -> Result<(), VerbatimUrlError> {
+        let url = VerbatimUrl::parse_url("https://example.com/wheel#sha256=old")?
+            .with_given("https://EXAMPLE.com/${WHEEL}#sha256=old");
+        let url = url.with_fragment(Some("sha512=new&subdirectory=project"));
+        assert_eq!(url.fragment(), Some("sha512=new&subdirectory=project"));
+        assert_eq!(
+            url.given(),
+            Some("https://EXAMPLE.com/${WHEEL}#sha512=new&subdirectory=project")
+        );
+        let url = url.with_fragment(None);
+        assert_eq!(url.fragment(), None);
+        assert_eq!(url.given(), Some("https://EXAMPLE.com/${WHEEL}"));
         Ok(())
     }
 

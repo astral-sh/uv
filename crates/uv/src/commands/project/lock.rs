@@ -1438,6 +1438,18 @@ impl ValidatedLock {
                 }
                 Ok(Self::Preferable(lock))
             }
+            SatisfiesResult::MismatchedGitLfs(name, expected) => {
+                debug!(
+                    "Resolving despite existing lockfile due to mismatched Git LFS for `{name}` (expected: {expected})"
+                );
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MissingDependencyExtraRequests(name) => {
+                debug!(
+                    "Resolving despite existing lockfile because the preview revision did not retain incoming extra requests for `{name}`"
+                );
+                Ok(Self::Preferable(lock))
+            }
             SatisfiesResult::MismatchedVirtual(name, expected) => {
                 if expected {
                     debug!(
@@ -1537,6 +1549,12 @@ impl ValidatedLock {
                 debug!(
                     "Resolving despite existing lockfile due to missing local index: `{name}` `{version}` from `{}`",
                     index.display()
+                );
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MismatchedPackageName(expected, actual) => {
+                debug!(
+                    "Resolving despite existing lockfile due to mismatched package name: expected `{expected}`, found `{actual}`"
                 );
                 Ok(Self::Preferable(lock))
             }

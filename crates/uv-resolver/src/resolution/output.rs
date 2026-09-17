@@ -11,8 +11,8 @@ use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::Metadata;
 use uv_distribution_types::{
-    Dist, DistributionId, HashCollection, Identifier, IndexUrl, Name, Requirement, RequiresPython,
-    ResolutionDiagnostic, ResolvedDist, parse_url_hashes,
+    Dist, DistributionId, HashCollection, Identifier, IndexMetadata, IndexUrl, Name, Requirement,
+    RequiresPython, ResolutionDiagnostic, ResolvedDist, parse_url_hashes,
 };
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
@@ -336,6 +336,7 @@ fn parse_dist(
         let hashes = get_hashes(
             name,
             index,
+            None,
             Some(url),
             &metadata_id,
             version,
@@ -346,12 +347,9 @@ fn parse_dist(
 
         // Extract the metadata.
         let metadata = {
-            let response = in_memory
-                .distributions()
-                .get(&metadata_id)
-                .unwrap_or_else(|| {
-                    panic!("Every URL distribution should have metadata: {metadata_id:?}")
-                });
+            let response = in_memory.resolved_direct(&metadata_id).unwrap_or_else(|| {
+                panic!("Every URL distribution should have metadata: {metadata_id:?}")
+            });
 
             let MetadataResponse::Found(archive) = &*response else {
                 panic!("Every URL distribution should have metadata: {metadata_id:?}")
@@ -369,8 +367,8 @@ fn parse_dist(
             Some(metadata),
         )
     } else {
-        let (dist, metadata_id) = pins
-            .dist_and_id(name, version)
+        let (dist, metadata_id, explicit_index) = pins
+            .resolved_dist_and_id(name, version, index)
             .expect("Every package should be pinned");
         let dist = dist.clone();
         let hashes_id = dist.distribution_id();
@@ -396,6 +394,7 @@ fn parse_dist(
         let hashes = get_hashes(
             name,
             index,
+            explicit_index,
             None,
             &hashes_id,
             version,
@@ -427,6 +426,7 @@ fn parse_dist(
 fn get_hashes(
     name: &PackageName,
     index: Option<&IndexUrl>,
+    explicit_index: Option<&IndexMetadata>,
     url: Option<&VerbatimParsedUrl>,
     metadata_id: &DistributionId,
     version: &Version,
@@ -434,16 +434,20 @@ fn get_hashes(
     hasher: &HashStrategy,
     in_memory: &InMemoryIndex,
 ) -> HashDigests {
-    // 1. Look for hashes from the lockfile.
-    if let Some(digests) = preferences.match_hashes(name, version) {
+    // 1. A version pin in requirements.txt has no source information; reuse its hashes only
+    // when the chosen source is the normal registry search.
+    if url.is_none()
+        && explicit_index.is_none()
+        && let Some(digests) = preferences.match_hashes(name, version)
+    {
         if !digests.is_empty() {
             return HashDigests::from(digests);
         }
     }
 
-    // 2. Reuse a direct URL's declared hash when collecting hashes without validation.
+    // 2. Reuse a direct archive's declared hashes when collecting hashes without validation.
     if let Some(url) = url
-        && let ParsedUrl::Archive(_) = &url.parsed_url
+        && let ParsedUrl::Archive(_) | ParsedUrl::Path(_) = &url.parsed_url
         && hasher.collection() != HashCollection::None
         && !hasher
             .archive_policy_for_url(&url.verbatim)
@@ -454,7 +458,12 @@ fn get_hashes(
     }
 
     // 3. Look for hashes computed for the specific wheel or source distribution.
-    if let Some(metadata_response) = in_memory.distributions().get(metadata_id) {
+    let metadata_response = if url.is_some() {
+        in_memory.resolved_direct(metadata_id)
+    } else {
+        in_memory.distributions().get(metadata_id)
+    };
+    if let Some(metadata_response) = metadata_response {
         if let MetadataResponse::Found(ref archive) = *metadata_response {
             let mut digests = archive.hashes.clone();
             digests.sort_unstable();
@@ -464,14 +473,28 @@ fn get_hashes(
         }
     }
 
-    // 4. Look for hashes from the registry, which are served at the package level.
-    if url.is_none() {
-        // Query the implicit and explicit indexes (lazily) for the hashes.
-        let implicit_response = in_memory.implicit().get(name);
-        let mut explicit_response = None;
+    // A lockfile may already supply trusted digests for this exact direct artifact. Metadata for a
+    // wheel can be read without redownloading its bytes, so reuse those digests when none were
+    // computed during this resolution.
+    if let Some(url) = url
+        && hasher.collection() != HashCollection::None
+    {
+        let policy = hasher.archive_policy_for_url(&url.verbatim);
+        if !policy.digests().is_empty() {
+            return HashDigests::from(policy.digests());
+        }
+    }
 
-        // Search in the implicit indexes.
-        let hashes = implicit_response
+    // 4. Look for hashes from the registry that supplied the selected candidate.
+    if url.is_none() {
+        let response = if let Some(explicit_index) = explicit_index {
+            in_memory
+                .explicit()
+                .get(&(name.clone(), explicit_index.clone()))
+        } else {
+            in_memory.implicit().get(name)
+        };
+        let hashes = response
             .as_ref()
             .and_then(|response| {
                 if let VersionsResponse::Found(version_maps) = &**response {
@@ -482,26 +505,8 @@ fn get_hashes(
             })
             .into_iter()
             .flatten()
-            .filter(|version_map| version_map.index() == index)
-            .find_map(|version_map| version_map.hashes(version))
-            .or_else(|| {
-                // Search in the explicit indexes.
-                explicit_response = index
-                    .and_then(|index| in_memory.explicit().get(&(name.clone(), index.clone())));
-                explicit_response
-                    .as_ref()
-                    .and_then(|response| {
-                        if let VersionsResponse::Found(version_maps) = &**response {
-                            Some(version_maps)
-                        } else {
-                            None
-                        }
-                    })
-                    .into_iter()
-                    .flatten()
-                    .filter(|version_map| version_map.index() == index)
-                    .find_map(|version_map| version_map.hashes(version))
-            });
+            .filter(|version_map| explicit_index.is_some() || version_map.index() == index)
+            .find_map(|version_map| version_map.hashes(version));
 
         if let Some(hashes) = hashes {
             let mut digests = HashDigests::from(hashes);

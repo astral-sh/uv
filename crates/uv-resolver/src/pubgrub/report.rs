@@ -15,7 +15,7 @@ use rustc_hash::FxHashMap;
 use uv_configuration::{IndexStrategy, NoBinary, NoBuild};
 use uv_distribution_types::{
     IncompatibleDist, IncompatibleSource, IncompatibleWheel, Index, IndexCapabilities,
-    IndexLocations, IndexMetadata, IndexUrl, RequiresPython,
+    IndexLocations, IndexUrl, RequiresPython,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
@@ -1059,8 +1059,10 @@ impl PubGrubReportFormatter<'_> {
                 .cloned()
         })?;
 
-        let response = if let Some(url) = fork_indexes.get(name).map(IndexMetadata::url) {
-            index.explicit().get(&(name.clone(), url.clone()))
+        let response = if let Some(explicit_index) = fork_indexes.get(name) {
+            index
+                .explicit()
+                .get(&(name.clone(), explicit_index.clone()))
         } else {
             index.implicit().get(name)
         }?;
@@ -1108,8 +1110,10 @@ impl PubGrubReportFormatter<'_> {
         env: &ResolverEnvironment,
         tags: Option<&Tags>,
     ) -> Option<PubGrubHint> {
-        let response = if let Some(url) = fork_indexes.get(name).map(IndexMetadata::url) {
-            index.explicit().get(&(name.clone(), url.clone()))
+        let response = if let Some(explicit_index) = fork_indexes.get(name) {
+            index
+                .explicit()
+                .get(&(name.clone(), explicit_index.clone()))
         } else {
             index.implicit().get(name)
         }?;

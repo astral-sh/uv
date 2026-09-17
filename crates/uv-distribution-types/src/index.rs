@@ -675,13 +675,6 @@ pub struct IndexMetadata {
     pub format: IndexFormat,
 }
 
-impl IndexMetadata {
-    /// Consume the [`IndexMetadata`] and return the [`IndexUrl`].
-    pub fn into_url(self) -> IndexUrl {
-        self.url
-    }
-}
-
 /// A reference to an [`IndexMetadata`].
 #[derive(Debug, Copy, Clone)]
 pub struct IndexMetadataRef<'a> {

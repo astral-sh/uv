@@ -1,10 +1,11 @@
 use std::borrow::Cow;
 
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use uv_configuration::{Prerelease, PrereleaseMode};
 use uv_distribution_types::{Requirement, RequirementSource};
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, VersionSpecifiers};
+use uv_pep508::MarkerTree;
 
 use crate::resolver::ForkSet;
 use crate::{DependencyMode, Manifest, ResolverEnvironment};
@@ -15,6 +16,7 @@ use crate::{DependencyMode, Manifest, ResolverEnvironment};
 pub(crate) struct PrereleaseStrategy {
     default: PrereleasePolicy,
     package: FxHashMap<PackageName, PrereleasePolicy>,
+    possible_explicit: FxHashSet<PackageName>,
 }
 
 #[derive(Debug, Clone)]
@@ -35,6 +37,28 @@ enum PrereleasePolicy {
 }
 
 impl PrereleaseStrategy {
+    /// Temporarily consider whether a selected first-party package can opt this package in.
+    pub(crate) fn permit_possible_explicit(&mut self, name: &PackageName) {
+        self.possible_explicit.insert(name.clone());
+    }
+
+    /// Apply a first-party declaration from a selected direct distribution.
+    pub(crate) fn register(&mut self, requirement: &Requirement) {
+        let RequirementSource::Registry { specifier, .. } = &requirement.source else {
+            return;
+        };
+        if !contains_prerelease(specifier) {
+            return;
+        }
+        if let PrereleasePolicy::Explicit(packages) = &mut self.default {
+            packages.add(requirement, ());
+        }
+        if let Some(PrereleasePolicy::Explicit(packages)) = self.package.get_mut(&requirement.name)
+        {
+            packages.add(requirement, ());
+        }
+    }
+
     #[allow(deprecated)]
     pub(crate) fn from_prerelease(
         prerelease: &Prerelease,
@@ -54,6 +78,7 @@ impl PrereleaseStrategy {
                     )
                 })
                 .collect(),
+            possible_explicit: FxHashSet::default(),
         }
     }
 
@@ -90,6 +115,15 @@ impl PrereleaseStrategy {
         packages
     }
 
+    /// The environments in which a selected prerelease can actually be authorized.
+    pub(crate) fn permission_marker(&self, package_name: &PackageName) -> MarkerTree {
+        match self.package.get(package_name).unwrap_or(&self.default) {
+            PrereleasePolicy::Disallow => MarkerTree::FALSE,
+            PrereleasePolicy::Allow | PrereleasePolicy::IfNecessary => MarkerTree::TRUE,
+            PrereleasePolicy::Explicit(packages) => packages.marker(package_name),
+        }
+    }
+
     /// Returns the pre-release candidate selection policy for a package.
     ///
     /// Pre-releases remain in the candidate universe but, unless they are globally allowed, are
@@ -105,7 +139,9 @@ impl PrereleaseStrategy {
             PrereleasePolicy::Allow => PrereleaseSelection::Allow,
             PrereleasePolicy::IfNecessary => PrereleaseSelection::PreferStable,
             PrereleasePolicy::Explicit(packages) => {
-                if packages.contains(package_name, env) {
+                if packages.contains(package_name, env)
+                    || self.possible_explicit.contains(package_name)
+                {
                     PrereleaseSelection::PreferStable
                 } else {
                     PrereleaseSelection::Disallow
@@ -119,7 +155,7 @@ impl PrereleaseStrategy {
 ///
 /// Exclusions do not opt a package into pre-releases. For example, `!=1.0a1` should not change
 /// which candidate kinds are considered.
-fn contains_prerelease(specifiers: &VersionSpecifiers) -> bool {
+pub(crate) fn contains_prerelease(specifiers: &VersionSpecifiers) -> bool {
     specifiers
         .iter()
         .filter(|specifier| {

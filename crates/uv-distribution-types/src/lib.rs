@@ -816,15 +816,6 @@ impl SourceDist {
         matches!(self, Self::Directory(_) | Self::Path(_))
     }
 
-    /// Returns the path to the source distribution, if it's a local distribution.
-    pub fn as_path(&self) -> Option<&Path> {
-        match self {
-            Self::Path(dist) => Some(&dist.install_path),
-            Self::Directory(dist) => Some(&dist.install_path),
-            _ => None,
-        }
-    }
-
     /// Returns the source tree of the distribution, if available.
     fn source_tree(&self) -> Option<&Path> {
         match self {
@@ -1595,7 +1586,11 @@ impl Identifier for PathSourceDist {
 
 impl Identifier for DirectorySourceDist {
     fn distribution_id(&self) -> DistributionId {
-        self.url.distribution_id()
+        if self.editable == Some(true) {
+            DistributionId::EditableDirectory(uv_cache_key::CanonicalUrl::new(self.url.to_url()))
+        } else {
+            self.url.distribution_id()
+        }
     }
 
     fn resource_id(&self) -> ResourceId {
@@ -1735,7 +1730,11 @@ impl Identifier for PathSourceUrl<'_> {
 
 impl Identifier for DirectorySourceUrl<'_> {
     fn distribution_id(&self) -> DistributionId {
-        self.url.distribution_id()
+        if self.editable == Some(true) {
+            DistributionId::EditableDirectory(uv_cache_key::CanonicalUrl::new(self.url.clone()))
+        } else {
+            self.url.distribution_id()
+        }
     }
 
     fn resource_id(&self) -> ResourceId {

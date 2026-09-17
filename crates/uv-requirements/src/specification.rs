@@ -20,10 +20,10 @@
 //!   is dynamic, we add the directory to `source_trees`.
 //! * `uv pip install .` in a directory with `pyproject.toml` or `uv pip compile requirements.in`
 //!   where the `requirements.in` points to that directory: The directory is listed in
-//!   `requirements`. The lookahead resolver reads the static metadata from `pyproject.toml` if
+//!   `requirements`. The resolver reads the static metadata from `pyproject.toml` if
 //!   available, otherwise it calls PEP 517 to resolve.
 //! * `uv pip install -e`: We add the directory in `editables` instead of `requirements`. The
-//!   lookahead resolver resolves it the same.
+//!   resolver resolves it the same.
 //! * `setup.py` or `setup.cfg` instead of `pyproject.toml`: Directory is an entry in
 //!   `source_trees`.
 

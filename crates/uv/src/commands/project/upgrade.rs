@@ -394,7 +394,7 @@ pub(crate) async fn upgrade(
     let distribution_id = DisplaySafeUrl::from_file_path(project.project_root())
         .map_err(|()| anyhow!("Project root is not a valid file URL"))?
         .distribution_id();
-    state.index().distributions().done(
+    state.index().insert_project_metadata(
         distribution_id,
         Arc::new(MetadataResponse::Found(ArchiveMetadata::from(metadata))),
     );

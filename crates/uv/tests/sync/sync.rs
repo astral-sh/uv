@@ -2581,6 +2581,8 @@ fn sync_extra_build_dependencies_setuptools_legacy() -> Result<()> {
              [stderr]
              Missing `anyio` module
 
+    hint: `child` was included because `parent` (v0.1.0) depends on `child`
+
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
@@ -10410,6 +10412,9 @@ fn sync_git_repeated_member_static_metadata() -> Result<()> {
             dependencies = [
                 { name = "uv-git-workspace-in-root" },
             ]
+
+            [package.metadata]
+            requires-dist = [{ name = "uv-git-workspace-in-root", git = "https://github.com/astral-sh/workspace-in-root-test.git" }]
             "#
             );
         }
@@ -10512,6 +10517,12 @@ fn sync_git_repeated_member_dynamic_metadata() -> Result<()> {
                 { name = "typing-extensions" },
             ]
 
+            [package.metadata]
+            requires-dist = [
+                { name = "dependency", git = "https://github.com/astral-sh/uv-dynamic-metadata-test.git?subdirectory=dependency" },
+                { name = "typing-extensions" },
+            ]
+
             [[package]]
             name = "typing-extensions"
             version = "4.10.0"
@@ -10610,6 +10621,9 @@ fn sync_git_repeated_member_backwards_path() -> Result<()> {
             dependencies = [
                 { name = "dependency" },
             ]
+
+            [package.metadata]
+            requires-dist = [{ name = "dependency", git = "https://github.com/astral-sh/uv-backwards-path-test?subdirectory=dependency" }]
             "#
             );
         }
@@ -10662,7 +10676,7 @@ fn sync_git_path_archive() -> Result<()> {
         },
         {
             assert_snapshot!(
-                lock, @r###"
+                lock, @r#"
             version = 1
             revision = 3
             requires-python = ">=3.13"
@@ -10677,6 +10691,9 @@ fn sync_git_path_archive() -> Result<()> {
             dependencies = [
                 { name = "iniconfig" },
             ]
+
+            [package.metadata]
+            requires-dist = [{ name = "iniconfig", git = "https://github.com/astral-sh/archive-in-git-test.git?path=archives%2Finiconfig-2.0.0-py3-none-any.whl" }]
 
             [[package]]
             name = "foo"
@@ -10696,7 +10713,7 @@ fn sync_git_path_archive() -> Result<()> {
             wheels = [
                 { filename = "iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" },
             ]
-            "###
+            "#
             );
         }
     );
@@ -10807,7 +10824,6 @@ fn mismatched_name_self_editable() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync(), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    Resolved 2 packages in [TIME]
     error: Failed to build `foo @ file://[TEMP_DIR]/`
       cause: Package metadata name `project` does not match given name `foo`
 
@@ -10846,7 +10862,6 @@ fn mismatched_name_self_editable_package() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync(), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    Resolved 2 packages in [TIME]
     error: Failed to build `foo @ file://[TEMP_DIR]/`
       cause: Package metadata name `project` does not match given name `foo`
 
@@ -10897,6 +10912,8 @@ fn mismatched_name_cached_wheel() -> Result<()> {
     ----- stderr -----
     error: Failed to download and build `foo @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
       cause: Package metadata name `iniconfig` does not match given name `foo`
+
+    hint: `foo` was included because `project` (v0.1.0) depends on `foo`
     ");
 
     Ok(())
@@ -10969,6 +10986,9 @@ fn sync_git_path_dependency() -> Result<()> {
             dependencies = [
                 { name = "package1" },
             ]
+
+            [package.metadata]
+            requires-dist = [{ name = "package1", git = "https://github.com/astral-sh/uv-path-dependency-test.git?subdirectory=package1" }]
             "#
             );
         }
@@ -11123,6 +11143,9 @@ fn lock_git_poetry_path_dependency() -> Result<()> {
             dependencies = [
                 { name = "child" },
             ]
+
+            [package.metadata]
+            requires-dist = [{ name = "child", git = "file://[TEMP_DIR]/repository/?subdirectory=child" }]
             "#
             );
         }
@@ -11263,6 +11286,9 @@ fn sync_git_metadata_archive_dependency() -> Result<()> {
             dependencies = [
                 { name = "basic-package" },
             ]
+
+            [package.metadata]
+            requires-dist = [{ name = "basic-package", git = "file://[TEMP_DIR]/repository/?path=root%2Farchives%2Fbasic_package-0.1.0-py3-none-any.whl" }]
             "#
             );
         }
