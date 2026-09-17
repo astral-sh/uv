@@ -296,7 +296,7 @@ impl BatchPrefetcherRunner {
             prefetch_count += 1;
 
             self.requests
-                .request_metadata(MetadataRequest::Resolved(dist), || Ok(()))?;
+                .request_metadata(MetadataRequest::Resolved(dist), |_| Ok(()))?;
         }
 
         match prefetch_count {

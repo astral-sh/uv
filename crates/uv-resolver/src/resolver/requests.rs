@@ -1,12 +1,14 @@
+use std::fmt;
 use std::sync::Arc;
 
 use tokio::sync::mpsc::Sender;
 
 use uv_distribution_types::{
-    Dist, DistributionId, Identifier, IndexMetadata, IndexUrl, ResolvedDistRef,
+    Dist, DistributionId, Identifier, IndexMetadata, IndexUrl, Name, ResolvedDistRef,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
+use uv_resolver_types::DistributionMetadataIndex;
 
 use crate::pubgrub::Range;
 use crate::resolver::{InMemoryIndex, MetadataResponse, Request, VersionsResponse};
@@ -41,6 +43,15 @@ impl MetadataRequest<'_> {
     }
 }
 
+impl Name for MetadataRequest<'_> {
+    fn name(&self) -> &PackageName {
+        match self {
+            Self::Dist(dist) => dist.name(),
+            Self::Resolved(dist) => dist.name(),
+        }
+    }
+}
+
 /// A registered version-list request, bound to its package and index scope.
 pub(crate) struct PendingVersions {
     index: InMemoryIndex,
@@ -65,17 +76,33 @@ impl PendingVersions {
 }
 
 /// A registered distribution request, including metadata supplied before resolution.
-pub(crate) struct PendingMetadata {
-    index: InMemoryIndex,
+///
+/// Selected pins retain this handle for repeated dependency queries. Borrowing the index avoids
+/// reference-count updates when pins are cloned for a fork.
+#[derive(Clone)]
+pub(crate) struct RegisteredMetadata<'index> {
+    index: &'index DistributionMetadataIndex,
     id: DistributionId,
 }
 
-impl PendingMetadata {
-    pub(crate) fn wait(self) -> Result<Arc<MetadataResponse>, ResolveError> {
+impl RegisteredMetadata<'_> {
+    pub(crate) fn id(&self) -> &DistributionId {
+        &self.id
+    }
+
+    pub(crate) fn wait(&self) -> Result<Arc<MetadataResponse>, ResolveError> {
         self.index
-            .distributions()
             .wait_blocking(&self.id)
             .map_err(|_| ResolveError::UnregisteredTask(format!("{:?}", self.id)))
+    }
+}
+
+impl fmt::Debug for RegisteredMetadata<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_tuple("RegisteredMetadata")
+            .field(&self.id)
+            .finish()
     }
 }
 
@@ -114,15 +141,15 @@ impl MetadataRequests {
     pub(crate) fn request_metadata(
         &self,
         request: MetadataRequest<'_>,
-        validate: impl FnOnce() -> Result<(), ResolveError>,
-    ) -> Result<PendingMetadata, ResolveError> {
+        validate: impl FnOnce(&MetadataRequest<'_>) -> Result<(), ResolveError>,
+    ) -> Result<RegisteredMetadata<'_>, ResolveError> {
         let id = request.id();
         if self.index.distributions().register(id.clone()) {
-            validate()?;
+            validate(&request)?;
             self.sender.blocking_send(request.into_request())?;
         }
-        Ok(PendingMetadata {
-            index: self.index.clone(),
+        Ok(RegisteredMetadata {
+            index: self.index.distributions(),
             id,
         })
     }
@@ -145,15 +172,15 @@ impl MetadataRequests {
     /// Recover a handle for metadata registered by this solver or by input preparation.
     pub(crate) fn metadata(
         &self,
-        id: &DistributionId,
+        id: DistributionId,
         description: impl FnOnce() -> String,
-    ) -> Result<PendingMetadata, ResolveError> {
-        if !self.index.distributions().contains_key(id) {
+    ) -> Result<RegisteredMetadata<'_>, ResolveError> {
+        if !self.index.distributions().contains_key(&id) {
             return Err(ResolveError::UnregisteredTask(description()));
         }
-        Ok(PendingMetadata {
-            index: self.index.clone(),
-            id: id.clone(),
+        Ok(RegisteredMetadata {
+            index: self.index.distributions(),
+            id,
         })
     }
 }
