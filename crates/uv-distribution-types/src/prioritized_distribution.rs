@@ -926,7 +926,8 @@ fn implied_platform_markers(filename: &WheelFilename) -> MarkerTree {
     marker
 }
 
-/// Translate a macOS deployment target into the corresponding Darwin kernel release.
+/// Translate a macOS deployment target into the corresponding
+/// [Darwin kernel release](<https://en.wikipedia.org/wiki/Darwin_(operating_system)#Darwin_20_onwards>).
 ///
 /// macOS 10.16 is the compatibility spelling of macOS 11. macOS 26 uses Darwin 25;
 /// starting with macOS 27, the major versions match.
