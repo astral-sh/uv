@@ -65,10 +65,6 @@ impl Display for BuildOperation {
 pub struct BuildSourceId(pub(super) PackageId);
 
 impl BuildSourceId {
-    pub fn name(&self) -> &PackageName {
-        &self.0.name
-    }
-
     pub fn from_source_dist(source: &SourceDist, root: &Path) -> Result<Self, LockError> {
         let version = match source {
             SourceDist::Registry(source) => Some(source.version.clone()),
