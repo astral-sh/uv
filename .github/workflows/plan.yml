@@ -137,7 +137,7 @@ jobs:
           [[ "$HAS_BUILD_PUSH_DOCKER_LABEL" == "true" ]] && has_build_push_docker_label=1
           [[ "$HAS_BUILD_WINDOWS_TRAMPOLINE_LABEL" == "true" ]] && has_build_windows_trampoline_label=1
 
-          # A release changes uv's project version, regardless of its branch name.
+          # Detect release preparation from changes to uv's project version.
           if [[ "$IS_UV_PR" == "true" ]]; then
             merge_base="$(git merge-base "$BASE_SHA" "$HEAD_SHA")"
             base_version="$(git show "${merge_base}:pyproject.toml" | python3 -c 'import sys, tomllib; print(tomllib.loads(sys.stdin.read())["project"]["version"])')"
