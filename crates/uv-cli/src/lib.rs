@@ -1303,6 +1303,21 @@ impl<T> Maybe<T> {
     }
 }
 
+impl<T> FromStr for Maybe<T>
+where
+    T: FromStr,
+{
+    type Err = T::Err;
+
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        if input.is_empty() {
+            Ok(Self::None)
+        } else {
+            input.parse().map(Self::Some)
+        }
+    }
+}
+
 /// Parse an `--index-url` argument into an [`PipIndex`], mapping the empty string to `None`.
 fn parse_index_url(input: &str) -> Result<Maybe<PipIndex>, String> {
     if input.is_empty() {
@@ -1517,18 +1532,6 @@ fn parse_file_path(input: &str) -> Result<PathBuf, String> {
     }
 }
 
-/// Parse a string into a [`RequirementsInput`], mapping the empty string to `None`.
-fn parse_maybe_requirements_input(input: &str) -> Result<Maybe<RequirementsInput>, String> {
-    if input.is_empty() {
-        Ok(Maybe::None)
-    } else {
-        input
-            .parse()
-            .map(Maybe::Some)
-            .map_err(|err: uv_configuration::RequirementsInputError| err.to_string())
-    }
-}
-
 // Parse a string, mapping the empty string to `None`.
 #[expect(clippy::unnecessary_wraps)]
 fn parse_maybe_string(input: &str) -> Result<Maybe<String>, String> {
@@ -1570,7 +1573,6 @@ pub struct PipCompileArgs {
         alias = "constraint",
         env = EnvVars::UV_CONSTRAINT,
         value_delimiter = ' ',
-        value_parser = parse_maybe_requirements_input,
         value_hint = ValueHint::FilePath,
     )]
     pub constraints: Vec<Maybe<RequirementsInput>>,
@@ -1589,7 +1591,6 @@ pub struct PipCompileArgs {
         alias = "override",
         env = EnvVars::UV_OVERRIDE,
         value_delimiter = ' ',
-        value_parser = parse_maybe_requirements_input,
         value_hint = ValueHint::FilePath,
     )]
     pub overrides: Vec<Maybe<RequirementsInput>>,
@@ -1606,7 +1607,6 @@ pub struct PipCompileArgs {
         alias = "exclude",
         env = EnvVars::UV_EXCLUDE,
         value_delimiter = ' ',
-        value_parser = parse_maybe_requirements_input,
         value_hint = ValueHint::FilePath,
     )]
     pub excludes: Vec<Maybe<RequirementsInput>>,
@@ -1623,7 +1623,6 @@ pub struct PipCompileArgs {
         alias = "build-constraint",
         env = EnvVars::UV_BUILD_CONSTRAINT,
         value_delimiter = ' ',
-        value_parser = parse_maybe_requirements_input,
         value_hint = ValueHint::FilePath,
     )]
     pub build_constraints: Vec<Maybe<RequirementsInput>>,
@@ -1964,7 +1963,6 @@ pub struct PipSyncArgs {
         alias = "constraint",
         env = EnvVars::UV_CONSTRAINT,
         value_delimiter = ' ',
-        value_parser = parse_maybe_requirements_input,
         value_hint = ValueHint::FilePath,
     )]
     pub constraints: Vec<Maybe<RequirementsInput>>,
@@ -1981,7 +1979,6 @@ pub struct PipSyncArgs {
         alias = "build-constraint",
         env = EnvVars::UV_BUILD_CONSTRAINT,
         value_delimiter = ' ',
-        value_parser = parse_maybe_requirements_input,
         value_hint = ValueHint::FilePath,
     )]
     pub build_constraints: Vec<Maybe<RequirementsInput>>,
@@ -2266,7 +2263,6 @@ pub struct PipInstallArgs {
         alias = "constraint",
         env = EnvVars::UV_CONSTRAINT,
         value_delimiter = ' ',
-        value_parser = parse_maybe_requirements_input,
         value_hint = ValueHint::FilePath,
     )]
     pub constraints: Vec<Maybe<RequirementsInput>>,
@@ -2285,7 +2281,6 @@ pub struct PipInstallArgs {
         alias = "override",
         env = EnvVars::UV_OVERRIDE,
         value_delimiter = ' ',
-        value_parser = parse_maybe_requirements_input,
         value_hint = ValueHint::FilePath,
     )]
     pub overrides: Vec<Maybe<RequirementsInput>>,
@@ -2302,7 +2297,6 @@ pub struct PipInstallArgs {
         alias = "exclude",
         env = EnvVars::UV_EXCLUDE,
         value_delimiter = ' ',
-        value_parser = parse_maybe_requirements_input,
         value_hint = ValueHint::FilePath,
     )]
     pub excludes: Vec<Maybe<RequirementsInput>>,
@@ -2319,7 +2313,6 @@ pub struct PipInstallArgs {
         alias = "build-constraint",
         env = EnvVars::UV_BUILD_CONSTRAINT,
         value_delimiter = ' ',
-        value_parser = parse_maybe_requirements_input,
         value_hint = ValueHint::FilePath,
     )]
     pub build_constraints: Vec<Maybe<RequirementsInput>>,
@@ -3101,7 +3094,6 @@ pub struct BuildArgs {
         alias = "build-constraint",
         env = EnvVars::UV_BUILD_CONSTRAINT,
         value_delimiter = ' ',
-        value_parser = parse_maybe_requirements_input,
         value_hint = ValueHint::FilePath,
     )]
     pub build_constraints: Vec<Maybe<RequirementsInput>>,
@@ -3622,7 +3614,7 @@ pub struct RunArgs {
     /// The same environment semantics as `--with` apply.
     ///
     /// Using `pyproject.toml`, `setup.py`, or `setup.cfg` files is not allowed.
-    #[arg(long, value_delimiter = ',', value_parser = parse_maybe_requirements_input, value_hint = ValueHint::FilePath)]
+    #[arg(long, value_delimiter = ',', value_hint = ValueHint::FilePath)]
     pub with_requirements: Vec<Maybe<RequirementsInput>>,
 
     /// Run the command in an isolated virtual environment [env: UV_ISOLATED=]
@@ -4219,7 +4211,6 @@ pub struct AddArgs {
         alias = "constraint",
         env = EnvVars::UV_CONSTRAINT,
         value_delimiter = ' ',
-        value_parser = parse_maybe_requirements_input,
         value_hint = ValueHint::FilePath,
     )]
     pub constraints: Vec<Maybe<RequirementsInput>>,
@@ -5578,7 +5569,6 @@ pub struct ToolRunArgs {
     #[arg(
         long,
         value_delimiter = ',',
-        value_parser = parse_maybe_requirements_input,
         value_hint = ValueHint::FilePath,
     )]
     pub with_requirements: Vec<Maybe<RequirementsInput>>,
@@ -5596,7 +5586,6 @@ pub struct ToolRunArgs {
         alias = "constraint",
         env = EnvVars::UV_CONSTRAINT,
         value_delimiter = ' ',
-        value_parser = parse_maybe_requirements_input,
         value_hint = ValueHint::FilePath,
     )]
     pub constraints: Vec<Maybe<RequirementsInput>>,
@@ -5613,7 +5602,6 @@ pub struct ToolRunArgs {
         alias = "build-constraint",
         env = EnvVars::UV_BUILD_CONSTRAINT,
         value_delimiter = ' ',
-        value_parser = parse_maybe_requirements_input,
         value_hint = ValueHint::FilePath,
     )]
     pub build_constraints: Vec<Maybe<RequirementsInput>>,
@@ -5632,7 +5620,6 @@ pub struct ToolRunArgs {
         alias = "override",
         env = EnvVars::UV_OVERRIDE,
         value_delimiter = ' ',
-        value_parser = parse_maybe_requirements_input,
         value_hint = ValueHint::FilePath,
     )]
     pub overrides: Vec<Maybe<RequirementsInput>>,
@@ -5759,7 +5746,7 @@ pub struct ToolInstallArgs {
     ///
     /// The following formats are supported: `requirements.txt`, `.py` files with inline metadata,
     /// and `pylock.toml`.
-    #[arg(long, value_delimiter = ',', value_parser = parse_maybe_requirements_input, value_hint = ValueHint::FilePath)]
+    #[arg(long, value_delimiter = ',', value_hint = ValueHint::FilePath)]
     pub with_requirements: Vec<Maybe<RequirementsInput>>,
 
     /// Install the target package in editable mode, such that changes in the package's source
@@ -5788,7 +5775,6 @@ pub struct ToolInstallArgs {
         alias = "constraint",
         env = EnvVars::UV_CONSTRAINT,
         value_delimiter = ' ',
-        value_parser = parse_maybe_requirements_input,
         value_hint = ValueHint::FilePath,
     )]
     pub constraints: Vec<Maybe<RequirementsInput>>,
@@ -5807,7 +5793,6 @@ pub struct ToolInstallArgs {
         alias = "override",
         env = EnvVars::UV_OVERRIDE,
         value_delimiter = ' ',
-        value_parser = parse_maybe_requirements_input,
         value_hint = ValueHint::FilePath,
     )]
     pub overrides: Vec<Maybe<RequirementsInput>>,
@@ -5824,7 +5809,6 @@ pub struct ToolInstallArgs {
         alias = "exclude",
         env = EnvVars::UV_EXCLUDE,
         value_delimiter = ' ',
-        value_parser = parse_maybe_requirements_input,
         value_hint = ValueHint::FilePath,
     )]
     pub excludes: Vec<Maybe<RequirementsInput>>,
@@ -5841,7 +5825,6 @@ pub struct ToolInstallArgs {
         alias = "build-constraint",
         env = EnvVars::UV_BUILD_CONSTRAINT,
         value_delimiter = ' ',
-        value_parser = parse_maybe_requirements_input,
         value_hint = ValueHint::FilePath,
     )]
     pub build_constraints: Vec<Maybe<RequirementsInput>>,
