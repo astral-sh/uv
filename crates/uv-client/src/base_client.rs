@@ -660,13 +660,15 @@ impl<'a> BaseClientBuilder<'a> {
 
         if let Some(http_proxy) = &self.http_proxy {
             let proxy = http_proxy
-                .as_proxy(ProxyUrlKind::Http)
+                .as_proxy(ProxyUrlKind::Http)?
                 .no_proxy(no_proxy.clone());
             client_builder = client_builder.proxy(proxy);
         }
 
         if let Some(https_proxy) = &self.https_proxy {
-            let proxy = https_proxy.as_proxy(ProxyUrlKind::Https).no_proxy(no_proxy);
+            let proxy = https_proxy
+                .as_proxy(ProxyUrlKind::Https)?
+                .no_proxy(no_proxy);
             client_builder = client_builder.proxy(proxy);
         }
 

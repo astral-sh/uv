@@ -9,9 +9,7 @@ use url::Url;
 
 use uv_redacted::DisplaySafeUrl;
 
-/// A validated proxy URL.
-///
-/// This type validates that the [`Url`] is valid for a [`reqwest::Proxy`] on construction.
+/// A proxy URL with a supported scheme and a host.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ProxyUrl(DisplaySafeUrl);
 
@@ -29,13 +27,10 @@ impl ProxyUrl {
     }
 
     /// Constructs a [`reqwest::Proxy`] from this [`ProxyUrl`] for the given [`ProxyUrlKind`].
-    pub fn as_proxy(&self, kind: ProxyUrlKind) -> Proxy {
-        // SAFETY: The URL has a supported scheme and a host, validated on construction.
+    pub fn as_proxy(&self, kind: ProxyUrlKind) -> Result<Proxy, reqwest::Error> {
         match kind {
-            ProxyUrlKind::Http => Proxy::http(self.0.as_str())
-                .expect("Constructing a proxy from a url should never fail"),
-            ProxyUrlKind::Https => Proxy::https(self.0.as_str())
-                .expect("Constructing a proxy from a url should never fail"),
+            ProxyUrlKind::Http => Proxy::http(self.0.as_str()),
+            ProxyUrlKind::Https => Proxy::https(self.0.as_str()),
         }
     }
 }
@@ -89,6 +84,7 @@ impl TryFrom<Url> for ProxyUrl {
         let url = DisplaySafeUrl::from_url(url);
         match url.scheme() {
             "http" | "https" | "socks5" | "socks5h" => {
+                // Reqwest can reinterpret a hostless SOCKS URL as an HTTP proxy.
                 if !url.has_host() {
                     return Err(ProxyUrlError::InvalidUrl(url::ParseError::EmptyHost));
                 }
@@ -238,11 +234,13 @@ mod tests {
 
     #[test]
     fn proxy_url_without_host() -> Result<(), ProxyUrlError> {
-        let url = Url::parse("socks5h:///proxy")?;
-        assert_matches!(
-            ProxyUrl::try_from(url),
-            Err(ProxyUrlError::InvalidUrl(url::ParseError::EmptyHost))
-        );
+        for input in ["socks5h:///proxy", "socks5:foo"] {
+            let url = Url::parse(input)?;
+            assert_matches!(
+                ProxyUrl::try_from(url),
+                Err(ProxyUrlError::InvalidUrl(url::ParseError::EmptyHost))
+            );
+        }
         Ok(())
     }
 
