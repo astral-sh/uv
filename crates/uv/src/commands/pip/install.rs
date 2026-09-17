@@ -146,6 +146,7 @@ pub(crate) async fn pip_install(
         mut override_dependencies,
         excludes,
         pylock,
+        pylock_groups,
         source_trees,
         groups,
         index_url,
@@ -512,11 +513,7 @@ pub(crate) async fn pip_install(
             .cloned()
             .collect::<Vec<_>>();
 
-        let groups = groups
-            .get(&pylock)
-            .cloned()
-            .unwrap_or_default()
-            .with_defaults(DefaultGroups::List(lock.default_groups.clone()));
+        let groups = pylock_groups.with_defaults(DefaultGroups::List(lock.default_groups.clone()));
         let groups = groups
             .group_names(lock.dependency_groups.iter())
             .cloned()

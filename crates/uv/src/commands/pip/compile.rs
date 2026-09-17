@@ -211,6 +211,7 @@ pub(crate) async fn pip_compile(
         mut override_dependencies,
         excludes,
         pylock,
+        pylock_groups: _,
         source_trees,
         groups,
         extras: used_extras,

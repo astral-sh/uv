@@ -150,7 +150,7 @@ pub(crate) async fn run(
             RequirementsSource::SetupCfg(_) => {
                 bail!("Adding requirements from a `setup.cfg` is not supported in `uv run`");
             }
-            RequirementsSource::Extensionless(path) if path == Path::new("-") => {
+            RequirementsSource::Extensionless(input) if input.is_stdin() => {
                 requirements_from_stdin = true;
             }
             _ => {}

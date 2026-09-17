@@ -1167,6 +1167,40 @@ async fn install_remote_requirements_txt() -> Result<()> {
     Ok(())
 }
 
+/// Install a package from a relative include in a remote `requirements.txt`.
+#[tokio::test]
+async fn install_remote_requirements_txt_with_relative_include() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/nested/requirements.txt"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("-r child.txt"))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/nested/child.txt"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("iniconfig"))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg(format!("{}/nested/requirements.txt", server.uri())), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "
+    );
+
+    context.assert_command("import iniconfig").success();
+
+    Ok(())
+}
+
 async fn start_requirements_server(
     username: &str,
     password: &str,

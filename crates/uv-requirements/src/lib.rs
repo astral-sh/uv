@@ -4,6 +4,7 @@ pub use crate::source_tree::*;
 pub use crate::sources::*;
 pub use crate::specification::*;
 pub use crate::unnamed::*;
+pub use uv_configuration::RequirementsInput;
 
 use uv_distribution_types::{Dist, DistErrorKind, Requirement, RequirementSource};
 

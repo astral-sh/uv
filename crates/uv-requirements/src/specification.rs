@@ -28,7 +28,7 @@
 //!   `source_trees`.
 
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use rustc_hash::FxHashSet;
@@ -39,6 +39,7 @@ use uv_cache_key::CanonicalUrl;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
     DependencyGroups, ExcludeDependency, NoBinary, NoBuild, Override, PackageOverride,
+    RequirementsInput,
 };
 use uv_distribution_types::{Index, Requirement};
 use uv_distribution_types::{
@@ -48,7 +49,6 @@ use uv_distribution_types::{
 use uv_fs::{CWD, Simplified};
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pypi_types::PyProjectToml;
-use uv_redacted::DisplaySafeUrl;
 use uv_requirements_txt::{RequirementsTxt, RequirementsTxtRequirement, SourceCache};
 use uv_scripts::{OverrideDependency, Pep723Metadata};
 use uv_warnings::warn_user;
@@ -70,7 +70,9 @@ pub struct RequirementsSpecification {
     /// The excludes for the project.
     pub excludes: Vec<ExcludeDependency>,
     /// The `pylock.toml` file from which to extract the resolution.
-    pub pylock: Option<PathBuf>,
+    pub pylock: Option<RequirementsInput>,
+    /// The dependency groups to use for a `pylock.toml` input.
+    pub pylock_groups: DependencyGroups,
     /// The source trees from which to extract requirements.
     pub source_trees: Vec<SourceTree>,
     /// The groups to use for `source_trees`
@@ -271,19 +273,19 @@ impl RequirementsSpecification {
                     ..Self::default()
                 }
             }
-            RequirementsSource::RequirementsTxt(path) => {
-                if !(path.starts_with("http://") || path.starts_with("https://") || path.exists()) {
+            RequirementsSource::RequirementsTxt(input) => {
+                if let RequirementsInput::Local(path) = input
+                    && !path.exists()
+                {
                     return Err(anyhow::anyhow!("File not found: `{}`", path.user_display()));
                 }
 
                 let requirements_txt =
-                    RequirementsTxt::parse_with_cache(path, &*CWD, client_builder, cache).await?;
+                    RequirementsTxt::parse_with_cache(input.clone(), &*CWD, client_builder, cache)
+                        .await?;
 
                 if requirements_txt == RequirementsTxt::default() {
-                    warn_user!(
-                        "Requirements file `{}` does not contain any dependencies",
-                        path.user_display()
-                    );
+                    warn_user!("Requirements file `{input}` does not contain any dependencies");
                 }
 
                 Self::from_requirements_txt(requirements_txt)
@@ -310,12 +312,12 @@ impl RequirementsSpecification {
                     ..Self::default()
                 }
             }
-            RequirementsSource::Pep723Script(path) => {
-                let content = if let Some(content) = cache.get(path.as_path()) {
+            RequirementsSource::Pep723Script(input) => {
+                let content = if let Some(content) = cache.get(input) {
                     content.clone()
                 } else {
-                    let content = read_file(path, client_builder).await?;
-                    cache.insert(path.clone(), content.clone());
+                    let content = read_file(input, client_builder).await?;
+                    cache.insert(input.clone(), content.clone());
                     content
                 };
 
@@ -323,8 +325,7 @@ impl RequirementsSpecification {
                     Ok(Some(script)) => script,
                     Ok(None) => {
                         return Err(anyhow::anyhow!(
-                            "`{}` does not contain inline script metadata",
-                            path.user_display(),
+                            "`{input}` does not contain inline script metadata",
                         ));
                     }
                     Err(err) => return Err(err.into()),
@@ -352,28 +353,29 @@ impl RequirementsSpecification {
                     ..Self::default()
                 }
             }
-            RequirementsSource::PylockToml(path) => {
-                if !(path.starts_with("http://") || path.starts_with("https://") || path.exists()) {
+            RequirementsSource::PylockToml(input) => {
+                if let RequirementsInput::Local(path) = input
+                    && !path.exists()
+                {
                     return Err(anyhow::anyhow!("File not found: `{}`", path.user_display()));
                 }
 
                 Self {
-                    pylock: Some(path.clone()),
+                    pylock: Some(input.clone()),
                     ..Self::default()
                 }
             }
-            RequirementsSource::EnvironmentYml(path) => {
+            RequirementsSource::EnvironmentYml(input) => {
                 return Err(anyhow::anyhow!(
-                    "Conda environment files (i.e., `{}`) are not supported",
-                    path.user_display()
+                    "Conda environment files (i.e., `{input}`) are not supported"
                 ));
             }
-            RequirementsSource::Extensionless(path) => {
-                let content = if let Some(content) = cache.get(path.as_path()) {
+            RequirementsSource::Extensionless(input) => {
+                let content = if let Some(content) = cache.get(input) {
                     content.clone()
                 } else {
-                    let content = read_file(path, client_builder).await?;
-                    cache.insert(path.clone(), content.clone());
+                    let content = read_file(input, client_builder).await?;
+                    cache.insert(input.clone(), content.clone());
                     content
                 };
 
@@ -382,17 +384,21 @@ impl RequirementsSpecification {
                     Self::from_pep723_metadata(&metadata)
                 } else {
                     // If it's not a PEP 723 script, assume it's a `requirements.txt` file.
-                    let requirements_txt =
-                        RequirementsTxt::parse_str(&content, &path, &*CWD, client_builder, cache)
-                            .await?;
+                    let requirements_txt = RequirementsTxt::parse_str(
+                        &content,
+                        input.clone(),
+                        &*CWD,
+                        client_builder,
+                        cache,
+                    )
+                    .await?;
 
                     if requirements_txt == RequirementsTxt::default() {
-                        if path == Path::new("-") {
+                        if input.is_stdin() {
                             warn_user!("No dependencies found in stdin");
                         } else {
                             warn_user!(
-                                "Requirements file `{}` does not contain any dependencies",
-                                path.user_display()
+                                "Requirements file `{input}` does not contain any dependencies"
                             );
                         }
                     }
@@ -424,8 +430,7 @@ impl RequirementsSpecification {
             }
         }) {
             return Err(anyhow::anyhow!(
-                "Cannot use `{}` as a constraint file",
-                pylock_toml.user_display()
+                "Cannot use `{pylock_toml}` as a constraint file"
             ));
         }
 
@@ -438,8 +443,7 @@ impl RequirementsSpecification {
             }
         }) {
             return Err(anyhow::anyhow!(
-                "Cannot use `{}` as an override file",
-                pylock_toml.user_display()
+                "Cannot use `{pylock_toml}` as an override file"
             ));
         }
 
@@ -452,20 +456,16 @@ impl RequirementsSpecification {
             }
         }) {
             return Err(anyhow::anyhow!(
-                "Cannot use `{}` as an exclude file",
-                pylock_toml.user_display()
+                "Cannot use `{pylock_toml}` as an exclude file"
             ));
         }
 
         // If we have a `pylock.toml`, don't allow additional requirements, constraints, or
         // overrides.
-        if let Some(pylock_toml) = requirements.iter().find_map(|source| {
-            if let RequirementsSource::PylockToml(path) = source {
-                Some(path)
-            } else {
-                None
-            }
-        }) {
+        if requirements
+            .iter()
+            .any(|source| matches!(source, RequirementsSource::PylockToml(_)))
+        {
             if requirements
                 .iter()
                 .any(|source| !matches!(source, RequirementsSource::PylockToml(..)))
@@ -499,16 +499,13 @@ impl RequirementsSpecification {
                 }
 
                 if !names.is_empty() {
-                    spec.groups.insert(
-                        pylock_toml.clone(),
-                        DependencyGroups::from_args(
-                            None,
-                            Vec::new(),
-                            Vec::new(),
-                            false,
-                            names,
-                            false,
-                        ),
+                    spec.pylock_groups = DependencyGroups::from_args(
+                        None,
+                        Vec::new(),
+                        Vec::new(),
+                        false,
+                        names,
+                        false,
                     );
                 }
             }
@@ -562,9 +559,7 @@ impl RequirementsSpecification {
             if let Some(pylock) = source.pylock {
                 if let Some(existing) = spec.pylock {
                     return Err(anyhow::anyhow!(
-                        "Multiple `pylock.toml` files specified: `{}` vs. `{}`",
-                        existing.user_display(),
-                        pylock.user_display()
+                        "Multiple `pylock.toml` files specified: `{existing}` vs. `{pylock}`",
                     ));
                 }
                 spec.pylock = Some(pylock);
@@ -735,31 +730,24 @@ pub struct GroupsSpecification {
     pub groups: Vec<PipGroupName>,
 }
 
-/// Read the contents of a path, fetching over HTTP(S) if necessary.
-async fn read_file(path: &Path, client_builder: &BaseClientBuilder<'_>) -> Result<String> {
-    // If the path is a URL, fetch it over HTTP(S).
-    if path.starts_with("http://") || path.starts_with("https://") {
-        // Only continue if we are absolutely certain no local file exists.
-        //
-        // We don't do this check on Windows since the file path would
-        // be invalid anyway, and thus couldn't refer to a local file.
-        if !cfg!(unix) || matches!(path.try_exists(), Ok(false)) {
-            let url = DisplaySafeUrl::parse(&path.to_string_lossy())?;
-
+/// Read the contents of a local or remote requirements input.
+async fn read_file(
+    input: &RequirementsInput,
+    client_builder: &BaseClientBuilder<'_>,
+) -> Result<String> {
+    match input {
+        RequirementsInput::Remote(url) => {
             let client = client_builder.build()?;
             let response = client
-                .for_host(&url)
+                .for_host(url)
                 .get(Url::from(url.clone()))
                 .send()
                 .await?;
 
             response.error_for_status_ref()?;
 
-            return Ok(response.text().await?);
+            Ok(response.text().await?)
         }
+        RequirementsInput::Local(path) => Ok(uv_fs::read_to_string_transcode(path).await?),
     }
-
-    // Read the file content.
-    let content = uv_fs::read_to_string_transcode(path).await?;
-    Ok(content)
 }
