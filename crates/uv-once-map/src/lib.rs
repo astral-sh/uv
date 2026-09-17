@@ -3,24 +3,12 @@ mod registered;
 pub use registered::{RegisteredEntry, RegisteredOnceMap, Registration};
 
 use std::borrow::Borrow;
-use std::fmt::{Debug, Display, Formatter};
+use std::fmt::{Debug, Formatter};
 use std::hash::{BuildHasher, Hash, RandomState};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use papaya::{HashMap, ResizeMode};
 use tokio::sync::Notify;
-
-/// The caller tried to wait for a task that was never registered.
-#[derive(Debug)]
-pub struct UnregisteredTask<K>(K);
-
-impl<K: Display> Display for UnregisteredTask<K> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Attempted to wait on an unregistered task: {}", self.0)
-    }
-}
-
-impl<K: Debug + Display> std::error::Error for UnregisteredTask<K> {}
 
 /// Run tasks only once and store the results in a parallel hash map.
 ///
@@ -46,8 +34,8 @@ impl<K: Eq + Hash + Clone, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
     ///
     /// If this method returns `true`, you need to start a job and call [`OnceMap::done`] eventually
     /// or other tasks will hang. If it returns `false`, this job is already in progress and you
-    /// can [`OnceMap::wait`] for the result.
-    pub fn register(&self, key: K) -> bool {
+    /// can call [`OnceMap::register_or_wait`] to wait for the result.
+    fn register(&self, key: K) -> bool {
         self.items
             .pin()
             .try_insert(key, Value::Waiting(Arc::new(Notify::new())))
@@ -124,25 +112,6 @@ impl<K: Eq + Hash + Clone, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
         if let Some(Value::Waiting(notify)) = self.items.pin().insert(key, Value::filled(value)) {
             notify.notify_waiters();
         }
-    }
-
-    /// Wait for the result of a job that is running.
-    ///
-    /// Will hang if [`OnceMap::done`] isn't called for this key, or if `UnregisteredTask` is a
-    /// non-fatal error and [`OnceMap::done`] isn't called for this key.
-    pub async fn wait(&self, key: &K) -> Result<V, UnregisteredTask<K>> {
-        self.register_or_wait(key)
-            .await
-            .ok_or_else(|| UnregisteredTask(key.clone()))
-    }
-
-    /// Wait for the result of a job that is running, in a blocking context.
-    ///
-    /// Will hang if [`OnceMap::done`] isn't called for this key, or if `UnregisteredTask` is a
-    /// non-fatal error and [`OnceMap::done`] isn't called for this key.
-    pub fn wait_blocking(&self, key: &K) -> Result<V, UnregisteredTask<K>> {
-        futures::executor::block_on(self.register_or_wait(key))
-            .ok_or_else(|| UnregisteredTask(key.clone()))
     }
 
     /// Return the result of a previous job, if any.

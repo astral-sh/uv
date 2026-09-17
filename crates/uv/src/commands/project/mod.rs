@@ -532,7 +532,7 @@ impl std::ops::Deref for UniversalState {
 
 impl UniversalState {
     /// Return mutable access to the index owner between lock operations.
-    pub(crate) fn index_mut(&mut self) -> &mut InMemoryIndex {
+    fn index_mut(&mut self) -> &mut InMemoryIndex {
         self.0.index_mut()
     }
 
