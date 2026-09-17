@@ -19,11 +19,6 @@ pub enum RequirementsInput {
 }
 
 impl RequirementsInput {
-    /// Return `true` if the input represents stdin.
-    pub fn is_stdin(&self) -> bool {
-        matches!(self, Self::Stdin)
-    }
-
     /// Resolve a nested input relative to this input.
     ///
     /// Local inputs are resolved against the containing file's directory, and inputs referenced

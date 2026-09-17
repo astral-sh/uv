@@ -394,12 +394,15 @@ impl RequirementsSpecification {
                     .await?;
 
                     if requirements_txt == RequirementsTxt::default() {
-                        if input.is_stdin() {
-                            warn_user!("No dependencies found in stdin");
-                        } else {
-                            warn_user!(
-                                "Requirements file `{input}` does not contain any dependencies"
-                            );
+                        match input {
+                            RequirementsInput::Stdin => {
+                                warn_user!("No dependencies found in stdin");
+                            }
+                            RequirementsInput::Local(_) | RequirementsInput::Remote(_) => {
+                                warn_user!(
+                                    "Requirements file `{input}` does not contain any dependencies"
+                                );
+                            }
                         }
                     }
 

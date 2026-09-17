@@ -22,7 +22,7 @@ use uv_cli::{ExternalCommand, GlobalArgs};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
     ActiveEnvironment, Concurrency, Constraints, DependencyGroups, DryRun, EditableMode, EnvFile,
-    ExtrasSpecification, InstallOptions, TargetTriple,
+    ExtrasSpecification, InstallOptions, RequirementsInput, TargetTriple,
 };
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::NameRequirementSpecification;
@@ -150,7 +150,7 @@ pub(crate) async fn run(
             RequirementsSource::SetupCfg(_) => {
                 bail!("Adding requirements from a `setup.cfg` is not supported in `uv run`");
             }
-            RequirementsSource::Extensionless(input) if input.is_stdin() => {
+            RequirementsSource::Extensionless(RequirementsInput::Stdin) => {
                 requirements_from_stdin = true;
             }
             _ => {}

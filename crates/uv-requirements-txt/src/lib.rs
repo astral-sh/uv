@@ -515,8 +515,8 @@ impl RequirementsTxt {
                 RequirementsTxtStatement::OnlyBinary(only_binary) => {
                     data.only_binary.extend(only_binary);
                 }
-                RequirementsTxtStatement::UnsupportedOption(flag) => {
-                    if requirements_txt.is_stdin() {
+                RequirementsTxtStatement::UnsupportedOption(flag) => match requirements_txt {
+                    RequirementsInput::Stdin => {
                         if flag.cli() {
                             uv_warnings::warn_user!(
                                 "Ignoring unsupported option from stdin: `{flag}` (hint: pass `{flag}` on the command line instead)",
@@ -528,7 +528,8 @@ impl RequirementsTxt {
                                 flag = flag.green()
                             );
                         }
-                    } else {
+                    }
+                    RequirementsInput::Local(_) | RequirementsInput::Remote(_) => {
                         if flag.cli() {
                             uv_warnings::warn_user!(
                                 "Ignoring unsupported option in `{path}`: `{flag}` (hint: pass `{flag}` on the command line instead)",
@@ -543,7 +544,7 @@ impl RequirementsTxt {
                             );
                         }
                     }
-                }
+                },
             }
         }
         Ok(data)
