@@ -114,6 +114,40 @@
       "on": {
         "workflow_run": ["completed"]
       },
+      "head_repositories": ["uv"],
+      "conditions": {
+        "/workflow_run/conclusion": "failure",
+        "/workflow_run/event": "pull_request",
+        "/workflow/path": ".github/workflows/check-crates-policies.yml"
+      },
+      "workflow": "report-crates-policies.yml",
+      "inputs": {
+        "run": "/workflow_run/id",
+        "head_sha": "/workflow_run/head_sha"
+      }
+    },
+    {
+      "repository": "uv-dev",
+      "on": {
+        "workflow_run": ["completed"]
+      },
+      "head_repositories": ["uv-dev"],
+      "conditions": {
+        "/workflow_run/conclusion": "failure",
+        "/workflow_run/event": "pull_request",
+        "/workflow/path": ".github/workflows/check-crates-policies.yml"
+      },
+      "workflow": "report-crates-policies.yml",
+      "inputs": {
+        "run": "/workflow_run/id",
+        "head_sha": "/workflow_run/head_sha"
+      }
+    },
+    {
+      "repository": "uv",
+      "on": {
+        "workflow_run": ["completed"]
+      },
       "head_repositories": ["uv", "uv-dev"],
       "conditions": {
         "/workflow_run/conclusion": {

@@ -1,0 +1,97 @@
+# Report failed release checks without executing pull request code with write access.
+name: "Report crates policies"
+
+on:
+  workflow_dispatch:
+    inputs:
+      run:
+        description: "The failed crates policies workflow run ID"
+        required: true
+        type: string
+      head_sha:
+        description: "The failed workflow run head SHA"
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  report:
+    if: github.repository == 'astral-sh/uv' || github.repository == 'astral-sh/uv-dev'
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      pull-requests: write
+    steps:
+      - name: "Comment on the release pull request"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ inputs.head_sha }}
+          RUN_ID: ${{ inputs.run }}
+        run: |
+          if ! [[ "$RUN_ID" =~ ^[0-9]+$ && "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Invalid workflow run ID or head SHA." >&2
+            exit 1
+          fi
+
+          workflow_run="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID")"
+          if ! jq --exit-status \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg head_sha "$HEAD_SHA" '
+              .repository.full_name == $repository
+              and .head_repository.full_name == $repository
+              and .path == ".github/workflows/check-crates-policies.yml"
+              and .event == "pull_request"
+              and .status == "completed"
+              and .conclusion == "failure"
+              and .head_sha == $head_sha
+              and (.head_branch | startswith("release/"))
+              and (.pull_requests | length) == 1
+            ' <<< "$workflow_run" > /dev/null; then
+            echo "The run is not a failed, same-repository release check."
+            exit 0
+          fi
+
+          pull_request="$(jq --raw-output '.pull_requests[0].number' <<< "$workflow_run")"
+          head_ref="$(jq --raw-output '.head_branch' <<< "$workflow_run")"
+          run_attempt="$(jq --raw-output '.run_attempt' <<< "$workflow_run")"
+
+          # Ignore completed checks for closed pull requests or superseded release heads.
+          pull_request_state="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$pull_request")"
+          if ! jq --exit-status \
+              --arg repository "$GITHUB_REPOSITORY" \
+              --arg head_sha "$HEAD_SHA" \
+              --arg head_ref "$head_ref" '
+                .state == "open"
+                and .base.repo.full_name == $repository
+                and .base.ref == "main"
+                and .head.repo.full_name == $repository
+                and .head.ref == $head_ref
+                and .head.sha == $head_sha
+              ' <<< "$pull_request_state" > /dev/null; then
+            echo "The release pull request is closed or its head changed."
+            exit 0
+          fi
+
+          marker='<!-- uv-crates-policies -->'
+          comment_id="$(gh api --paginate --slurp \
+            "repos/$GITHUB_REPOSITORY/issues/$pull_request/comments" \
+            --jq '[.[][] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- uv-crates-policies -->")))][0].id // empty')"
+
+          printf -v body '%s\n\nThe [crates.io publishing policy check](%s/%s/actions/runs/%s/attempts/%s) failed for %s. If the log lists new publishable crates, register them in [astral-sh/crates-policies](https://github.com/astral-sh/crates-policies). Re-run the check after the policy is updated.\n' \
+            "$marker" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$RUN_ID" "$run_attempt" "\`$HEAD_SHA\`"
+
+          if [ -n "$comment_id" ]; then
+            endpoint="repos/$GITHUB_REPOSITORY/issues/comments/$comment_id"
+            method=PATCH
+          else
+            endpoint="repos/$GITHUB_REPOSITORY/issues/$pull_request/comments"
+            method=POST
+          fi
+          jq --null-input --arg body "$body" '{body: $body}' \
+            | gh api --method "$method" "$endpoint" --input - --silent

@@ -1,0 +1,43 @@
+name: "Check crates policies"
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  UV_LOCKED: 1
+
+jobs:
+  check:
+    if: >-
+      (github.repository == 'astral-sh/uv' || github.repository == 'astral-sh/uv-dev') &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      startsWith(github.head_ref, 'release/')
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
+          version: "0.12.13"
+          checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
+
+      - name: "Check crates.io publish setup"
+        run: |
+          git clone --depth=1 --quiet https://github.com/astral-sh/crates-policies.git "$RUNNER_TEMP/crates-policies"
+          git -C "$RUNNER_TEMP/crates-policies" log -1 --format='crates-policies commit: %H'
+          uv run --default-index https://pypi.org/simple "$RUNNER_TEMP/crates-policies/check.py" "$GITHUB_WORKSPACE"
