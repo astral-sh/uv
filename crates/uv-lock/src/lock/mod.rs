@@ -7807,6 +7807,17 @@ impl TryFrom<SourceWire> for Source {
                     }
                 })?;
 
+                // Downstream consumers assume that locked Git sources use supported URL schemes.
+                let mut repository_url = url.clone();
+                repository_url.set_query(None);
+                repository_url.set_fragment(None);
+                GitUrl::from_commit(
+                    repository_url,
+                    git_source.kind.clone().into(),
+                    git_source.precise,
+                    git_source.lfs,
+                )?;
+
                 Ok(Self::Git(UrlString::from(url), git_source))
             }
             Direct { url, subdirectory } => Ok(Self::Direct(
