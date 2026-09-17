@@ -1691,6 +1691,73 @@ fn upgrade_allows_registry_source() -> Result<()> {
     Ok(())
 }
 
+#[tokio::test]
+async fn upgrade_ignores_extra_index_url_credentials_for_registry_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+    let pyproject_toml = format!(
+        r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=2"]
+
+        [tool.uv.sources]
+        iniconfig = {{ index = "private" }}
+
+        [[tool.uv.index]]
+        name = "private"
+        url = "{}/basic-auth/simple"
+        explicit = true
+        "#,
+        proxy.uri()
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject_toml)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    let authenticated_index = proxy.authenticated_url("public", "heron", "/basic-auth/simple");
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .lock()
+            .arg("--no-cache")
+            .env(EnvVars::UV_EXTRA_INDEX_URL, &authenticated_index),
+        @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 2 packages in [TIME]
+    "
+    );
+    fs_err::remove_file(context.temp_dir.child("uv.lock"))?;
+
+    // `uv upgrade` should use the same credentials as other resolving commands; astral-sh/uv#21773.
+    uv_snapshot!(
+        context.filters(),
+        context
+            .upgrade()
+            .arg("iniconfig")
+            .arg("--no-cache")
+            .env(EnvVars::UV_EXTRA_INDEX_URL, authenticated_index),
+        @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    error: No solution found when resolving dependencies
+      cause: Because iniconfig was not found in the package registry and your project depends on iniconfig>=2, we can conclude that your project's requirements are unsatisfiable.
+
+    hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
+    "
+    );
+
+    assert_project_unchanged(&context, &pyproject_toml)
+}
+
 #[test]
 #[cfg(feature = "test-pypi")]
 fn upgrade_ignores_inapplicable_non_registry_source() -> Result<()> {
