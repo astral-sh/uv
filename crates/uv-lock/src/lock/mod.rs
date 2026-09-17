@@ -7164,7 +7164,7 @@ impl PackageWire {
         };
 
         Ok(Package {
-            id: self.id.try_into()?,
+            id: PackageId::try_from(self.id)?,
             metadata: self.metadata,
             sdist: self.sdist,
             wheels: self.wheels,
@@ -7205,12 +7205,11 @@ impl PackageId {
             Some(annotated_dist.version.clone())
         };
         let name = annotated_dist.name.clone();
-        PackageIdWire {
+        Self::try_from(PackageIdWire {
             name,
             version,
             source,
-        }
-        .try_into()
+        })
     }
 }
 
@@ -7265,12 +7264,11 @@ impl PackageIdForDependency {
                 }
             }
         };
-        PackageIdWire {
+        PackageId::try_from(PackageIdWire {
             name: self.name,
             version,
             source,
-        }
-        .try_into()
+        })
     }
 }
 
