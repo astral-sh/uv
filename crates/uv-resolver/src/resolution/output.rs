@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 use std::collections::BTreeSet;
-use std::sync::Arc;
 
 use petgraph::{
     Directed, Direction,
@@ -9,24 +8,22 @@ use petgraph::{
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
 use uv_configuration::{Constraints, Overrides};
-use uv_distribution::Metadata;
 use uv_distribution_types::{
-    Dist, DistributionId, HashCollection, Identifier, IndexUrl, Name, Requirement, RequiresPython,
-    ResolutionDiagnostic, ResolvedDist, parse_url_hashes,
+    DistributionId, HashCollection, IndexUrl, Name, Requirement, RequiresPython,
+    ResolutionDiagnostic, parse_url_hashes,
 };
-use uv_git::GitResolver;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier};
 use uv_pypi_types::{Conflicts, HashDigests, ParsedUrl, VerbatimParsedUrl, Yanked};
 use uv_types::HashStrategy;
 
 use crate::graph_ops::{marker_reachability, simplify_conflict_markers};
-use crate::pins::FilePins;
 use crate::preferences::Preferences;
-use crate::redirect::url_to_precise;
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode, ResolverOutput};
 use crate::resolution_mode::ResolutionStrategy;
-use crate::resolver::{Resolution, ResolutionDependencyEdge, ResolutionPackage};
+use crate::resolver::{
+    ResolutionDependencyEdge, ResolutionPackage, ResolvedFork, SelectedDistribution,
+};
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::{InMemoryIndex, MetadataResponse, Options, ResolveError, VersionsResponse};
 
@@ -38,7 +35,7 @@ struct PackageRef<'a> {
 
 /// Create a new [`ResolverOutput`] from the resolved PubGrub state.
 pub(crate) fn from_state(
-    resolutions: &[Resolution],
+    resolutions: &[ResolvedFork],
     project: Option<&PackageName>,
     workspace_members: &BTreeSet<PackageName>,
     requirements: Vec<Requirement>,
@@ -47,7 +44,6 @@ pub(crate) fn from_state(
     preferences: &Preferences,
     hasher: &HashStrategy,
     index: &InMemoryIndex,
-    git: &GitResolver,
     requires_python: RequiresPython,
     conflicts: &Conflicts,
     resolution_strategy: &ResolutionStrategy,
@@ -66,7 +62,8 @@ pub(crate) fn from_state(
     let mut seen = FxHashSet::default();
     for resolution in resolutions {
         // Add every package to the graph.
-        for (package, version) in &resolution.nodes {
+        for (package, selected) in &resolution.nodes {
+            let version = selected.version();
             if !seen.insert((package, version)) {
                 // Insert each node only once.
                 continue;
@@ -77,13 +74,11 @@ pub(crate) fn from_state(
                 &mut diagnostics,
                 preferences,
                 hasher,
-                &resolution.pins,
                 index,
-                git,
                 package,
-                version,
+                selected,
                 project == Some(&package.name) || workspace_members.contains(&package.name),
-            )?;
+            );
         }
     }
 
@@ -239,32 +234,43 @@ fn add_version<'a>(
     diagnostics: &mut Vec<ResolutionDiagnostic>,
     preferences: &Preferences,
     hasher: &HashStrategy,
-    pins: &FilePins,
     in_memory: &InMemoryIndex,
-    git: &GitResolver,
     package: &'a ResolutionPackage,
-    version: &'a Version,
+    selected: &'a SelectedDistribution,
     is_workspace_member: bool,
-) -> Result<(), ResolveError> {
+) {
     let ResolutionPackage {
         name,
         kind,
         url,
         index,
     } = &package;
-    // Map the package to a distribution.
-    let (dist, hashes, metadata) = parse_dist(
+    let version = selected.version();
+    let dist = selected.dist().clone();
+    let hashes = get_hashes(
         name,
         index.as_ref(),
         url.as_ref(),
+        &selected.hashes_id(),
         version,
-        pins,
-        diagnostics,
         preferences,
         hasher,
         in_memory,
-        git,
-    )?;
+    );
+    let metadata = selected.metadata().cloned();
+
+    // Track yanks for registry distributions.
+    match dist.yanked() {
+        None | Some(Yanked::Bool(false)) => {}
+        Some(Yanked::Bool(true)) => diagnostics.push(ResolutionDiagnostic::YankedVersion {
+            dist: dist.clone(),
+            reason: None,
+        }),
+        Some(Yanked::Reason(reason)) => diagnostics.push(ResolutionDiagnostic::YankedVersion {
+            dist: dist.clone(),
+            reason: Some(reason.to_string()),
+        }),
+    }
 
     // We normally write dependency paths relative to the lockfile. For the current project and
     // workspace members, preserve the user's choice of relative or absolute paths instead.
@@ -309,115 +315,6 @@ fn add_version<'a>(
         marker: UniversalMarker::TRUE,
     }));
     inverse.insert(PackageRef { package, version }, node);
-    Ok(())
-}
-
-fn parse_dist(
-    name: &PackageName,
-    index: Option<&IndexUrl>,
-    url: Option<&VerbatimParsedUrl>,
-    version: &Version,
-    pins: &FilePins,
-    diagnostics: &mut Vec<ResolutionDiagnostic>,
-    preferences: &Preferences,
-    hasher: &HashStrategy,
-    in_memory: &InMemoryIndex,
-    git: &GitResolver,
-) -> Result<(ResolvedDist, HashDigests, Option<Metadata>), ResolveError> {
-    Ok(if let Some(url) = url {
-        // Create the locked distribution and recover the metadata using the original URL that
-        // was requested during resolution.
-        let dist = Dist::from_url(name.clone(), url_to_precise(url.clone(), git))?;
-        let metadata_id = Dist::from_url(name.clone(), url.clone())?.distribution_id();
-
-        // Extract the hashes.
-        let hashes = get_hashes(
-            name,
-            index,
-            Some(url),
-            &metadata_id,
-            version,
-            preferences,
-            hasher,
-            in_memory,
-        );
-
-        // Extract the metadata.
-        let metadata = {
-            let response = in_memory
-                .distributions()
-                .get(&metadata_id)
-                .unwrap_or_else(|| {
-                    panic!("Every URL distribution should have metadata: {metadata_id:?}")
-                });
-
-            let MetadataResponse::Found(archive) = &*response else {
-                panic!("Every URL distribution should have metadata: {metadata_id:?}")
-            };
-
-            archive.metadata.clone()
-        };
-
-        (
-            ResolvedDist::Installable {
-                dist: Arc::new(dist),
-                version: Some(version.clone()),
-            },
-            hashes,
-            Some(metadata),
-        )
-    } else {
-        let (dist, metadata_id) = pins
-            .dist_and_id(name, version)
-            .expect("Every package should be pinned");
-        let dist = dist.clone();
-        let hashes_id = dist.distribution_id();
-
-        // Track yanks for any registry distributions.
-        match dist.yanked() {
-            None | Some(Yanked::Bool(false)) => {}
-            Some(Yanked::Bool(true)) => {
-                diagnostics.push(ResolutionDiagnostic::YankedVersion {
-                    dist: dist.clone(),
-                    reason: None,
-                });
-            }
-            Some(Yanked::Reason(reason)) => {
-                diagnostics.push(ResolutionDiagnostic::YankedVersion {
-                    dist: dist.clone(),
-                    reason: Some(reason.to_string()),
-                });
-            }
-        }
-
-        // Extract the hashes.
-        let hashes = get_hashes(
-            name,
-            index,
-            None,
-            &hashes_id,
-            version,
-            preferences,
-            hasher,
-            in_memory,
-        );
-
-        // Extract the metadata.
-        let metadata = {
-            in_memory
-                .distributions()
-                .get(metadata_id)
-                .and_then(|response| {
-                    if let MetadataResponse::Found(archive) = &*response {
-                        Some(archive.metadata.clone())
-                    } else {
-                        None
-                    }
-                })
-        };
-
-        (dist, hashes, metadata)
-    })
 }
 
 /// Identify the hashes for a concrete distribution, preserving any hashes that were provided

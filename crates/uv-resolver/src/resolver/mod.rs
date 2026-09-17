@@ -85,7 +85,8 @@ use crate::yanks::AllowedYanks;
 use crate::{DependencyMode, Exclusions, FlatIndex, Options, ResolutionMode, VersionMap, marker};
 pub(crate) use provider::MetadataUnavailable;
 pub(crate) use resolution::{
-    Resolution, ResolutionDependencyEdge, ResolutionNode, ResolutionPackage,
+    Resolution, ResolutionDependencyEdge, ResolutionNode, ResolutionPackage, ResolvedFork,
+    SelectedDistribution,
 };
 use uv_configuration::ForkStrategy;
 
@@ -849,6 +850,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         for resolution in &resolutions {
             resolution.trace_resolution();
         }
+        let resolutions = resolutions
+            .into_iter()
+            .map(|resolution| resolution.finalize(&self.index, &self.git))
+            .collect::<Result<Vec<_>, _>>()?;
         crate::resolution::from_state(
             &resolutions,
             self.project.as_ref(),
@@ -859,7 +864,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             &self.preferences,
             &self.hasher,
             &self.index,
-            &self.git,
             self.python_requirement.target().clone(),
             &self.conflicts,
             self.selector.resolution_strategy(),
