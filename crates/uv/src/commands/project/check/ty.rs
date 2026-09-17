@@ -216,8 +216,16 @@ pub(super) async fn run(
             );
         }
     }
-    // Opt into ty querying uv for project metadata.
-    command.env("TY_UV", "1");
+    // Only query workspace metadata if a workspace was discovered. Keep uv integration enabled
+    // for standalone scripts, which have their own environments.
+    command.env(
+        "TY_UV",
+        if workspace_root.is_some() {
+            "1"
+        } else {
+            "scripts"
+        },
+    );
 
     if let Some(venv_path) = venv_path {
         command.env("VIRTUAL_ENV", venv_path);
