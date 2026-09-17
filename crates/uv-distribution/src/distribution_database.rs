@@ -23,7 +23,6 @@ use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
     RequestBuilder, RetryState,
 };
-use uv_configuration::initialize_rayon_once;
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     ArchiveHashPolicy, BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, HashCollection,
@@ -39,6 +38,7 @@ use uv_preview::PreviewFeature;
 use uv_pypi_types::{HashDigest, HashDigests, PyProjectToml};
 use uv_python::PythonVariant;
 use uv_redacted::DisplaySafeUrl;
+use uv_threads::initialize_rayon_once;
 use uv_types::{BuildContext, BuildStack};
 
 use crate::archive::Archive;

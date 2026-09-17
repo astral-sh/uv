@@ -5873,6 +5873,7 @@ dependencies = [
  "uv-shell",
  "uv-static",
  "uv-test",
+ "uv-threads",
  "uv-tool",
  "uv-torch",
  "uv-trampoline-builder",
@@ -6285,6 +6286,7 @@ dependencies = [
  "uv-redacted",
  "uv-small-str",
  "uv-static",
+ "uv-threads",
  "uv-torch",
  "uv-version",
  "uv-warnings",
@@ -6303,7 +6305,6 @@ dependencies = [
  "fs-err",
  "insta",
  "jiff",
- "rayon",
  "reqwest",
  "rustc-hash",
  "same-file",
@@ -6489,6 +6490,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-python",
  "uv-redacted",
+ "uv-threads",
  "uv-types",
  "uv-workspace",
  "walkdir",
@@ -6595,11 +6597,11 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
- "uv-configuration",
  "uv-distribution-filename",
  "uv-preview",
  "uv-pypi-types",
  "uv-static",
+ "uv-threads",
 ]
 
 [[package]]
@@ -6784,6 +6786,7 @@ dependencies = [
  "uv-python",
  "uv-redacted",
  "uv-static",
+ "uv-threads",
  "uv-types",
  "uv-warnings",
  "walkdir",
@@ -7479,6 +7482,14 @@ dependencies = [
  "uv-version",
  "walkdir",
  "wiremock",
+]
+
+[[package]]
+name = "uv-threads"
+version = "0.0.82"
+dependencies = [
+ "rayon",
+ "uv-static",
 ]
 
 [[package]]

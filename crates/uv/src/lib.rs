@@ -33,7 +33,6 @@ use uv_cli::{
     TopLevelArgs, WorkspaceCommand, WorkspaceNamespace, compat::CompatArgs, options::ArgumentError,
 };
 use uv_client::BaseClientBuilder;
-use uv_configuration::min_stack_size;
 use uv_flags::EnvironmentFlags;
 use uv_fs::{CWD, Simplified, normalize_path};
 #[cfg(feature = "self-update")]
@@ -47,6 +46,7 @@ use uv_requirements_txt::RequirementsTxtRequirement;
 use uv_scripts::{Pep723Error, Pep723Item, Pep723Script};
 use uv_settings::{Combine, EnvironmentOptions, FilesystemOptions, Options};
 use uv_static::EnvVars;
+use uv_threads::{RAYON_PARALLELISM, min_stack_size};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
@@ -564,7 +564,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
     anstream::ColorChoice::write_global(globals.color.into());
 
     // Don't initialize the rayon threadpool yet, this is too costly when we're doing a noop sync.
-    uv_configuration::RAYON_PARALLELISM.store(globals.concurrency.installs, Ordering::Relaxed);
+    RAYON_PARALLELISM.store(globals.concurrency.installs, Ordering::Relaxed);
 
     // Write out any resolved settings.
     macro_rules! show_settings {

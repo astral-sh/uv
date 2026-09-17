@@ -34,6 +34,7 @@ use uv_preview::Preview;
 use uv_redacted::DisplaySafeUrl;
 use uv_redacted::DisplaySafeUrlError;
 use uv_static::EnvVars;
+use uv_threads::min_stack_size;
 use uv_version::version;
 use uv_warnings::warn_user_once_with_chain;
 
@@ -155,7 +156,7 @@ impl CacheReadRuntime {
         self.runtime.get_or_init(|| {
             tokio::runtime::Builder::new_current_thread()
                 .thread_name("uv-cache-read")
-                .thread_stack_size(uv_configuration::min_stack_size())
+                .thread_stack_size(min_stack_size())
                 .max_blocking_threads(self.workers)
                 .build()
                 .expect("Failed building the cache-read Runtime")

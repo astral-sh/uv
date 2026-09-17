@@ -35,7 +35,6 @@ clap = { workspace = true, features = ["derive"], optional = true }
 either = { workspace = true }
 fs-err = { workspace = true }
 jiff = { workspace = true, features = ["serde"] }
-rayon = { workspace = true }
 reqwest = { workspace = true }
 rustc-hash = { workspace = true }
 same-file = { workspace = true }
