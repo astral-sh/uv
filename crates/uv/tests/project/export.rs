@@ -1324,6 +1324,53 @@ fn requirements_txt_frozen() -> Result<()> {
 
 #[cfg(feature = "test-universal")]
 #[test]
+fn requirements_txt_frozen_invalid_git_scheme() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["example"]
+    "#})?;
+
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "example"
+        version = "1.0.0"
+        source = { git = "git+https://example.com/pkg.git#0000000000000000000000000000000000000000" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [{ name = "example" }]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.export().arg("--frozen").arg("--offline"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to parse `uv.lock`
+      cause: TOML parse error at line 5, column 1
+               |
+             5 | [[package]]
+               | ^^^^^^^^^^^
+             Unsupported Git URL scheme `git+https:` in `git+https://example.com/pkg.git` (expected one of `https:`, `ssh:`, or `file:`)
+    ");
+
+    Ok(())
+}
+
+#[cfg(feature = "test-universal")]
+#[test]
 fn requirements_txt_create_missing_dir() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
