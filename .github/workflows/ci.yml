@@ -306,6 +306,7 @@ jobs:
       - check-fmt
       - check-lint
       - check-docs
+      - check-crates-policies
       - check-generated-files
       - test
       - test-system

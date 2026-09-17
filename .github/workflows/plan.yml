@@ -107,7 +107,7 @@ jobs:
         shell: bash
         env:
           GH_REF: ${{ github.ref }}
-          IS_RELEASE_PR: ${{ github.event_name == 'pull_request' && (github.repository == 'astral-sh/uv' || github.repository == 'astral-sh/uv-dev') && github.event.pull_request.head.repo.full_name == github.repository && github.base_ref == 'main' && startsWith(github.head_ref, 'release/') }}
+          IS_UV_PR: ${{ github.event_name == 'pull_request' && github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.full_name == github.repository && github.base_ref == 'main' }}
           HAS_SKIP_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:skip') }}
           HAS_INTEGRATION_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:integration') }}
           HAS_SYSTEM_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:system') }}
@@ -121,9 +121,9 @@ jobs:
           HAS_BUILD_PUSH_DOCKER_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'build:push-docker') }}
           HAS_BUILD_WINDOWS_TRAMPOLINE_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'build:windows-trampoline') }}
           BASE_SHA: ${{ inputs.base-sha || github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ inputs.head-sha || github.event.pull_request.head.sha }}
         run: |
           [[ "$GH_REF" == "refs/heads/main" ]] && on_main_branch=1
-          [[ "$IS_RELEASE_PR" == "true" ]] && is_release_pr=1
           [[ "$HAS_SKIP_LABEL" == "true" ]] && has_skip_label=1
           [[ "$HAS_INTEGRATION_LABEL" == "true" ]] && has_integration_label=1
           [[ "$HAS_SYSTEM_LABEL" == "true" ]] && has_system_label=1
@@ -136,6 +136,16 @@ jobs:
           [[ "$HAS_BUILD_RELEASE_LABEL" == "true" ]] && has_build_release_label=1
           [[ "$HAS_BUILD_PUSH_DOCKER_LABEL" == "true" ]] && has_build_push_docker_label=1
           [[ "$HAS_BUILD_WINDOWS_TRAMPOLINE_LABEL" == "true" ]] && has_build_windows_trampoline_label=1
+
+          # A release changes uv's project version, regardless of its branch name.
+          if [[ "$IS_UV_PR" == "true" ]]; then
+            merge_base="$(git merge-base "$BASE_SHA" "$HEAD_SHA")"
+            base_version="$(git show "${merge_base}:pyproject.toml" | python3 -c 'import sys, tomllib; print(tomllib.loads(sys.stdin.read())["project"]["version"])')"
+            head_version="$(git show "${HEAD_SHA}:pyproject.toml" | python3 -c 'import sys, tomllib; print(tomllib.loads(sys.stdin.read())["project"]["version"])')"
+            if [[ "$base_version" != "$head_version" ]]; then
+              is_release_pr=1
+            fi
+          fi
 
           # Detect changed files
           while IFS= read -r file; do
@@ -181,7 +191,7 @@ jobs:
           [[ ! $has_skip_label && ($any_code_changed || $on_main_branch) ]] && test_code=1
           [[ $any_code_changed ]] && review_security=1
           [[ $schema_changed ]] && check_schema=1
-          [[ ! $has_skip_label && $is_release_pr ]] && check_crates_policies=1
+          [[ $is_release_pr ]] && check_crates_policies=1
           [[ ! $has_skip_label && ! $has_build_skip_label && ! $has_build_skip_release_label && ($release_build_changed || $has_build_release_label) ]] && build_release_binaries=1
           [[ ! $has_skip_label ]] && run_checks=1
           [[ $publish_changed || $has_publish_label || $has_extended_label || $on_main_branch ]] && test_publish=1
