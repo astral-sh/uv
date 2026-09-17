@@ -84,12 +84,6 @@ impl From<&Path> for RequirementsInput {
     }
 }
 
-impl From<&PathBuf> for RequirementsInput {
-    fn from(path: &PathBuf) -> Self {
-        path.clone().into()
-    }
-}
-
 impl FromStr for RequirementsInput {
     type Err = RequirementsInputError;
 

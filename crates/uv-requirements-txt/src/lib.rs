@@ -1596,7 +1596,7 @@ mod test {
         let requirements_txt = temp_dir.path().join(path);
         fs::write(&requirements_txt, contents).unwrap();
 
-        let actual = RequirementsTxt::parse(&requirements_txt, &working_dir)
+        let actual = RequirementsTxt::parse(requirements_txt.as_path(), &working_dir)
             .await
             .unwrap();
 
