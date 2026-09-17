@@ -19,6 +19,25 @@ pub enum RequirementsInput {
 }
 
 impl RequirementsInput {
+    /// Resolve a local path relative to this input.
+    ///
+    /// Returns `None` when this input is remote.
+    pub fn resolve_local_path(&self, path: &Path, working_dir: &Path) -> Option<PathBuf> {
+        match self {
+            Self::Stdin if path.is_absolute() => Some(path.to_path_buf()),
+            Self::Stdin => Some(working_dir.join(path)),
+            Self::Local(_) if path.is_absolute() => Some(path.to_path_buf()),
+            Self::Local(parent) => {
+                let parent = parent
+                    .parent()
+                    .filter(|parent| !parent.as_os_str().is_empty())
+                    .unwrap_or(working_dir);
+                Some(parent.join(path))
+            }
+            Self::Remote(_) => None,
+        }
+    }
+
     /// Resolve a nested input relative to this input.
     ///
     /// Local inputs are resolved against the containing file's directory, and inputs referenced
@@ -28,15 +47,9 @@ impl RequirementsInput {
         match (self, input.parse()?) {
             (_, Self::Stdin) => Ok(Self::Stdin),
             (_, Self::Remote(url)) => Ok(Self::Remote(url)),
-            (Self::Local(_), Self::Local(path)) if path.is_absolute() => Ok(Self::Local(path)),
-            (Self::Local(parent), Self::Local(path)) => {
-                let parent = parent
-                    .parent()
-                    .filter(|parent| !parent.as_os_str().is_empty())
-                    .unwrap_or(working_dir);
-                Ok(Self::Local(parent.join(path)))
-            }
-            (Self::Stdin, Self::Local(path)) => Ok(Self::Local(working_dir.join(path))),
+            (Self::Local(_) | Self::Stdin, Self::Local(path)) => Ok(Self::Local(
+                self.resolve_local_path(&path, working_dir).unwrap_or(path),
+            )),
             (Self::Remote(_), Self::Local(path)) if split_scheme(input).is_some() => {
                 Ok(Self::Local(path))
             }

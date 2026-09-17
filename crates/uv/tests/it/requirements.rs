@@ -34,7 +34,7 @@ fn parse_requirements_input() -> Result<()> {
         Url::from_file_path(&absolute_path).expect("an absolute path should convert to a file URL");
     assert_eq!(
         file_url.as_str().parse::<RequirementsInput>()?,
-        RequirementsInput::Local(absolute_path)
+        RequirementsInput::Local(absolute_path.clone())
     );
 
     for remote in [
@@ -62,6 +62,23 @@ fn parse_requirements_input() -> Result<()> {
         RequirementsInput::Local("requirements.txt".into())
             .resolve("child.txt", Path::new("project"))?,
         RequirementsInput::Local(Path::new("project").join("child.txt"))
+    );
+    assert_eq!(
+        RequirementsInput::Local("requirements.txt".into())
+            .resolve_local_path(Path::new("child.txt"), Path::new("project")),
+        Some(Path::new("project").join("child.txt"))
+    );
+    assert_eq!(
+        RequirementsInput::Stdin.resolve_local_path(Path::new("child.txt"), Path::new("project")),
+        Some(Path::new("project").join("child.txt"))
+    );
+    assert_eq!(
+        remote.resolve_local_path(Path::new("child.txt"), Path::new("unused")),
+        None
+    );
+    assert_eq!(
+        remote.resolve_local_path(&absolute_path, Path::new("unused")),
+        None
     );
 
     Ok(())

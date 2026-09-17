@@ -787,7 +787,16 @@ fn parse_entry(
             .map(Cow::Owned)
             .unwrap_or(Cow::Borrowed(given));
         let expanded = expand_env_vars(given.as_ref());
-        let url = match requirements_txt.resolve(expanded.as_ref(), working_dir) {
+        let input = if let Some(path) = requirements_txt
+            .resolve_local_path(Path::new(expanded.as_ref()), working_dir)
+            .and_then(|path| std::path::absolute(path).ok())
+            .filter(|path| path.exists())
+        {
+            Ok(RequirementsInput::Local(path))
+        } else {
+            requirements_txt.resolve(expanded.as_ref(), working_dir)
+        };
+        let url = match input {
             Ok(RequirementsInput::Stdin) => {
                 VerbatimUrl::parse_url(expanded.as_ref()).map_err(|err| {
                     RequirementsTxtParserError::Url {
