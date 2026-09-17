@@ -12,7 +12,7 @@ use uv_pep440::Version;
 use uv_pep508::MarkerTree;
 use uv_pypi_types::{ParsedUrl, VerbatimParsedUrl};
 
-use crate::pubgrub::SourceId;
+use crate::pubgrub::{CandidateSet, DirectoryMode, Range, SolverSource, SourceId};
 use crate::{DependencyMode, Manifest, ResolverEnvironment};
 
 /// Root URL inputs and shared identities for direct resources discovered during solving.
@@ -106,8 +106,8 @@ impl Urls {
         &self.initial
     }
 
-    /// Give compatible resource spellings an immutable solver identity. A plain or virtual
-    /// directory can share either installation mode; selected paths reconcile explicit choices.
+    /// Give spellings of the same physical resource an immutable solver identity. Directory build
+    /// modes are separate candidates for this identity.
     pub(crate) fn intern(
         &self,
         name: &PackageName,
@@ -161,6 +161,34 @@ impl Urls {
             .expect("URL resource lock is not poisoned")[source.0]
             .1
             .clone()
+    }
+
+    pub(super) fn is_directory(&self, source: SourceId) -> bool {
+        match &self.get(source).parsed_url {
+            ParsedUrl::Directory(_) => true,
+            ParsedUrl::Archive(_)
+            | ParsedUrl::GitDirectory(_)
+            | ParsedUrl::GitPath(_)
+            | ParsedUrl::Path(_) => false,
+        }
+    }
+
+    /// Limit a URL dependency to the modes its author specifies. Plain and virtual directories do
+    /// not choose an installation mode; archives and Git distributions always use their normal one.
+    pub(super) fn declaration_candidates(
+        source: SourceId,
+        url: &ParsedUrl,
+        versions: Range<Version>,
+    ) -> CandidateSet {
+        match directory_mode(url) {
+            Some(DirectoryMode::Normal) => {
+                CandidateSet::source(SolverSource::Url(source.normal()), versions)
+            }
+            Some(DirectoryMode::Editable) => {
+                CandidateSet::source(SolverSource::Url(source.editable()), versions)
+            }
+            None => CandidateSet::directory(source, versions),
+        }
     }
 
     /// Whether this expanded URL requirement is independently authorized by root configuration.
@@ -247,15 +275,35 @@ pub(super) fn same_resource(a: &ParsedUrl, b: &ParsedUrl, git: &GitResolver) -> 
         }
         ParsedUrl::Directory(a) => {
             if let ParsedUrl::Directory(b) = b {
-                (a.install_path == b.install_path
-                    || is_same_file(&a.install_path, &b.install_path).unwrap_or(false))
-                    && (a.r#virtual == Some(true)
-                        || b.r#virtual == Some(true)
-                        || a.editable.is_none_or(|a| b.editable.is_none_or(|b| a == b)))
+                a.install_path == b.install_path
+                    || is_same_file(&a.install_path, &b.install_path).unwrap_or(false)
             } else {
                 false
             }
         }
+    }
+}
+
+/// Return a direct declaration's explicit build mode; a plain or virtual directory leaves it open.
+pub(super) fn directory_mode(url: &ParsedUrl) -> Option<DirectoryMode> {
+    match url {
+        ParsedUrl::Directory(directory) => {
+            if directory.r#virtual == Some(true) {
+                None
+            } else {
+                directory.editable.map(|editable| {
+                    if editable {
+                        DirectoryMode::Editable
+                    } else {
+                        DirectoryMode::Normal
+                    }
+                })
+            }
+        }
+        ParsedUrl::Archive(_)
+        | ParsedUrl::GitDirectory(_)
+        | ParsedUrl::GitPath(_)
+        | ParsedUrl::Path(_) => Some(DirectoryMode::Normal),
     }
 }
 

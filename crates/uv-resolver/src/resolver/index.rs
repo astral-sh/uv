@@ -2,6 +2,7 @@ use std::hash::BuildHasherDefault;
 use std::iter;
 use std::sync::{Arc, Mutex};
 
+use papaya::HashMap;
 use rustc_hash::{FxHashMap, FxHasher};
 use uv_distribution_types::{
     Dist, DistributionId, HashCollection, HashValidation, IndexMetadata, SourceDist,
@@ -31,15 +32,21 @@ struct SharedInMemoryIndex {
     /// validation share this map with project commands so edits and in-memory metadata are visible.
     distributions: DistributionMetadataIndex,
 
-    /// A direct source can be revisited after its trusted digests change. Its metadata request
-    /// must then validate against the new digests before any source backend runs.
-    direct: FxOnceMap<(DistributionId, DirectHashKey), Arc<MetadataResponse>>,
+    /// The named requests for source trees whose successful metadata can be shared with project
+    /// commands. Failed requests remain scoped to their name and are invalidated with project edits.
+    project_direct:
+        HashMap<DistributionId, Arc<NamedProjectMetadata>, BuildHasherDefault<FxHasher>>,
+
+    /// A direct source can be revisited after its trusted digests or requested name change. Its
+    /// metadata request must validate against both before any source backend runs.
+    direct: FxOnceMap<(DistributionId, PackageName, DirectHashKey), Arc<MetadataResponse>>,
 
     /// The direct metadata verified under the completed solutions' policies, used to build output.
     resolved_direct: Mutex<FxHashMap<DistributionId, Arc<MetadataResponse>>>,
 }
 
 pub(crate) type FxOnceMap<K, V> = OnceMap<K, V, BuildHasherDefault<FxHasher>>;
+pub(crate) type NamedProjectMetadata = FxOnceMap<PackageName, Arc<MetadataResponse>>;
 
 /// Hash collection and validation for one direct distribution, suitable for request deduplication.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -110,7 +117,8 @@ impl InMemoryIndex {
         &self.0.distributions
     }
 
-    /// Supply metadata for a source tree before the next solve, replacing any completed output.
+    /// Supply edited static project metadata for both build modes before the next solve, replacing
+    /// any completed output. Actual normal and editable backend metadata is cached independently.
     pub fn insert_project_metadata(&self, id: DistributionId, metadata: Arc<MetadataResponse>) {
         self.invalidate_project_metadata(&id);
         if let Some(alternate) = Self::other_directory_mode(&id) {
@@ -132,6 +140,7 @@ impl InMemoryIndex {
             .expect("distribution metadata lock is not poisoned");
         let mut previous = None;
         for id in iter::once(id).chain(alternate.as_ref()) {
+            self.0.project_direct.pin().remove(id);
             let resolved = committed.remove(id);
             let cached = self.0.distributions.remove(id);
             previous = previous.or(cached).or(resolved);
@@ -153,8 +162,16 @@ impl InMemoryIndex {
 
     pub(crate) fn direct(
         &self,
-    ) -> &FxOnceMap<(DistributionId, DirectHashKey), Arc<MetadataResponse>> {
+    ) -> &FxOnceMap<(DistributionId, PackageName, DirectHashKey), Arc<MetadataResponse>> {
         &self.0.direct
+    }
+
+    pub(crate) fn project_direct(&self, id: &DistributionId) -> Arc<NamedProjectMetadata> {
+        self.0
+            .project_direct
+            .pin()
+            .get_or_insert_with(id.clone(), || Arc::new(NamedProjectMetadata::default()))
+            .clone()
     }
 
     pub(crate) fn commit_direct(&self, id: DistributionId, metadata: Arc<MetadataResponse>) {

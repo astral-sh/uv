@@ -15,6 +15,36 @@ use crate::resolver::UnavailableReason;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct SourceId(pub(crate) usize);
 
+impl SourceId {
+    pub(crate) fn normal(self) -> UrlCandidate {
+        UrlCandidate {
+            source: self,
+            mode: DirectoryMode::Normal,
+        }
+    }
+
+    pub(crate) fn editable(self) -> UrlCandidate {
+        UrlCandidate {
+            source: self,
+            mode: DirectoryMode::Editable,
+        }
+    }
+}
+
+/// The metadata mode of a direct candidate. Archives and Git sources use only the normal mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) enum DirectoryMode {
+    Normal,
+    Editable,
+}
+
+/// A direct resource together with the build mode whose metadata belongs to the candidate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct UrlCandidate {
+    pub(crate) source: SourceId,
+    pub(crate) mode: DirectoryMode,
+}
+
 /// The identity of an explicitly pinned registry, interned by the resolver.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct IndexId(pub(crate) usize);
@@ -24,7 +54,7 @@ pub(crate) struct IndexId(pub(crate) usize);
 pub(crate) enum SolverSource {
     Registry,
     Index(IndexId),
-    Url(SourceId),
+    Url(UrlCandidate),
 }
 
 impl SolverSource {
@@ -83,7 +113,7 @@ struct SourceRanges {
     indexed: Range<Version>,
     indexes: BTreeMap<IndexId, Range<Version>>,
     direct: Range<Version>,
-    urls: BTreeMap<SourceId, Range<Version>>,
+    urls: BTreeMap<UrlCandidate, Range<Version>>,
 }
 
 static EMPTY_SOURCE_RANGE: LazyLock<Range<Version>> = LazyLock::new(Range::empty);
@@ -138,6 +168,26 @@ impl CandidateSet {
                     }
                 }
             }
+        }
+    }
+
+    /// A directory declaration that leaves editability open accepts either build mode of the same
+    /// physical resource. An editable candidate still needs an independently selected declaration.
+    pub(crate) fn directory(source: SourceId, versions: Range<Version>) -> Self {
+        if versions == Range::empty() {
+            return Self::empty();
+        }
+        Self {
+            registry: Range::empty(),
+            sources: OtherSources::new(SourceRanges {
+                indexed: Range::empty(),
+                indexes: BTreeMap::new(),
+                direct: Range::empty(),
+                urls: BTreeMap::from([
+                    (source.normal(), versions.clone()),
+                    (source.editable(), versions),
+                ]),
+            }),
         }
     }
 
@@ -242,7 +292,7 @@ impl CandidateSet {
     }
 
     /// Return the direct identities when this set excludes the registry and all other URLs.
-    pub(crate) fn only_urls(&self) -> impl Iterator<Item = SourceId> + '_ {
+    pub(crate) fn only_urls(&self) -> impl Iterator<Item = UrlCandidate> + '_ {
         self.sources.custom().into_iter().flat_map(|sources| {
             sources.urls.iter().filter_map(|(source, versions)| {
                 (self.registry == Range::empty()
@@ -301,7 +351,15 @@ impl CandidateSet {
         });
         let mut sources = indexes.chain(urls);
         let source = sources.next()?;
-        sources.next().is_none().then_some(source)
+        sources
+            .all(|other| match source {
+                SolverSource::Registry | SolverSource::Index(_) => false,
+                SolverSource::Url(a) => match other {
+                    SolverSource::Url(b) => a.source == b.source,
+                    SolverSource::Registry | SolverSource::Index(_) => false,
+                },
+            })
+            .then_some(source)
     }
 }
 
@@ -406,7 +464,7 @@ impl SourceRanges {
         self.indexes.get(&index).unwrap_or(&self.indexed)
     }
 
-    fn for_url(&self, source: SourceId) -> &Range<Version> {
+    fn for_url(&self, source: UrlCandidate) -> &Range<Version> {
         self.urls.get(&source).unwrap_or(&self.direct)
     }
 
@@ -787,8 +845,8 @@ mod tests {
     fn undiscovered_sources_participate_in_set_operations() {
         let one = Version::new([1]);
         let two = Version::new([2]);
-        let known = SolverSource::Url(SourceId(0));
-        let undiscovered = SolverSource::Url(SourceId(1));
+        let known = SolverSource::Url(SourceId(0).normal());
+        let undiscovered = SolverSource::Url(SourceId(1).normal());
         let known_index = SolverSource::Index(IndexId(0));
         let undiscovered_index = SolverSource::Index(IndexId(1));
         let all_one = CandidateSet::all(Range::singleton(one.clone()));
@@ -835,6 +893,31 @@ mod tests {
     }
 
     #[test]
+    fn directory_candidate_modes_are_independent() {
+        let version = Version::new([1]);
+        let source = SourceId(0);
+        let normal = SolverVersion::new(SolverSource::Url(source.normal()), version.clone());
+        let editable = SolverVersion::new(SolverSource::Url(source.editable()), version.clone());
+        let directory = CandidateSet::directory(source, Range::singleton(version.clone()));
+        let normal_only = CandidateSet::singleton(normal.clone());
+        let editable_only = CandidateSet::singleton(editable.clone());
+
+        assert_eq!(directory, normal_only.union(&editable_only));
+        assert!(normal_only.is_disjoint(&editable_only));
+        assert_eq!(directory.difference(&normal_only), editable_only);
+        assert!(directory.contains(&normal));
+        assert!(directory.contains(&editable));
+        assert!(!directory.contains(&SolverVersion::new(
+            SolverSource::Url(SourceId(1).editable()),
+            version,
+        )));
+        assert_eq!(
+            directory.union(&directory.complement()),
+            CandidateSet::full()
+        );
+    }
+
+    #[test]
     fn source_relationships_match_materialized_sets() {
         let one = Range::singleton(Version::new([1]));
         let two = Range::singleton(Version::new([2]));
@@ -842,8 +925,9 @@ mod tests {
         let higher = Range::strictly_higher_than(Version::new([1]));
         let index = SolverSource::Index(IndexId(0));
         let second_index = SolverSource::Index(IndexId(1));
-        let url = SolverSource::Url(SourceId(0));
-        let second_url = SolverSource::Url(SourceId(1));
+        let url = SolverSource::Url(SourceId(0).normal());
+        let editable = SolverSource::Url(SourceId(0).editable());
+        let second_url = SolverSource::Url(SourceId(1).normal());
         let mut sets = vec![
             CandidateSet::empty(),
             CandidateSet::full(),
@@ -855,6 +939,8 @@ mod tests {
             CandidateSet::source(index, one.clone()),
             CandidateSet::source(second_index, two.clone()),
             CandidateSet::source(url, lower.clone()),
+            CandidateSet::source(editable, higher.clone()),
+            CandidateSet::directory(SourceId(0), one.clone()),
             CandidateSet::source(second_url, higher.clone()),
             CandidateSet::index_or_url(IndexId(1), two.clone()),
             CandidateSet::source(index, lower.clone())
@@ -869,8 +955,11 @@ mod tests {
             second_index,
             SolverSource::Index(IndexId(99)),
             url,
+            editable,
             second_url,
-            SolverSource::Url(SourceId(99)),
+            SolverSource::Url(SourceId(1).editable()),
+            SolverSource::Url(SourceId(99).normal()),
+            SolverSource::Url(SourceId(99).editable()),
         ];
         for left in &sets {
             for right in &sets {

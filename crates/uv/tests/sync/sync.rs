@@ -10807,7 +10807,6 @@ fn mismatched_name_self_editable() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync(), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    Resolved 2 packages in [TIME]
     error: Failed to build `foo @ file://[TEMP_DIR]/`
       cause: Package metadata name `project` does not match given name `foo`
 
@@ -10846,7 +10845,6 @@ fn mismatched_name_self_editable_package() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync(), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    Resolved 2 packages in [TIME]
     error: Failed to build `foo @ file://[TEMP_DIR]/`
       cause: Package metadata name `project` does not match given name `foo`
 
@@ -10897,6 +10895,8 @@ fn mismatched_name_cached_wheel() -> Result<()> {
     ----- stderr -----
     error: Failed to download and build `foo @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
       cause: Package metadata name `iniconfig` does not match given name `foo`
+
+    hint: `foo` was included because `project` (v0.1.0) depends on `foo`
     ");
 
     Ok(())

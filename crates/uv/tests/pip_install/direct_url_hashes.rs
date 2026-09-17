@@ -186,6 +186,8 @@ async fn require_hashes_rejects_direct_url_hash_discovered_in_wheel_metadata() -
     ----- stderr -----
     error: Failed to build `ok @ file://[TEMP_DIR]/ok-1.0.0.tar.gz#sha256=[SOURCE_HASH]`
       cause: Hash-checking is enabled, but no hashes were provided or computed for: `ok @ file://[TEMP_DIR]/ok-1.0.0.tar.gz#sha256=[SOURCE_HASH]`
+
+    hint: `ok` was included because `metadata-parent` (v1.0.0) depends on `ok`
     ");
 
     context.assert_backend_did_not_run();

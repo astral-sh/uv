@@ -294,7 +294,10 @@ from another included dependency. Conflicting editable and non-editable declarat
 included in the same environment. A virtual declaration resolves a directory's dependencies without
 requiring its installation; another included declaration that requires installing the same directory
 takes precedence whether the installation is editable or normal. Editable and normal builds can
-report different dependencies, so uv uses the metadata for the selected installation mode.
+report different dependencies or fail independently, so the resolver treats them as separate
+candidates and uses the metadata for the selected installation mode. A plain or virtual declaration
+alone uses a normal build; dependencies reported only by an editable build cannot cause that same
+build to become editable.
 
 An index package cannot independently authorize a URL. Its metadata can refer to the same URL when
 it is also authorized by an included first-party declaration, constraint, or override. It can also
@@ -312,7 +315,9 @@ Hashes recorded for a registry pin are not reused for a selected URL merely beca
 match. Version requirements allow any source, including URLs not yet discovered. If the registry
 provides no suitable candidate but an authorized URL could still be introduced, the resolver
 continues processing other dependencies before rejecting the branch. It can revisit earlier
-candidate decisions, including extras, when a different selection might supply the missing URL. If a
+candidate decisions, including extras, when a different selection might supply the missing URL.
+Small sets of universal registry wheels covering the active environment whose metadata all declare
+no dependencies cannot activate a URL provider and do not need to be revisited for that search. If a
 required URL cannot be fetched or its metadata is invalid, uv reports the underlying error; an error
 from an excluded candidate does not prevent resolution from succeeding. The same principle applies
 to first-party declarations that permit an explicit prerelease or a yanked version: the resolver can

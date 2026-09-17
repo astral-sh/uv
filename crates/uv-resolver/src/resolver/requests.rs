@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot;
 
-use uv_distribution_types::{Dist, DistributionId, Identifier, IndexMetadata};
+use uv_distribution_types::{Dist, DistributionId, Identifier, IndexMetadata, Name, RequestedDist};
 use uv_git_types::GitUrl;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -60,8 +60,8 @@ impl MetadataRequests {
         Ok(())
     }
 
-    /// Request a direct resource once for the current hash policy. Source trees without required
-    /// validation share the metadata that project commands prepare and invalidate.
+    /// Request a direct resource once for its name and current hash policy. Source trees without
+    /// required validation can share successful project metadata after checking its declared name.
     pub(crate) fn request_direct(
         &self,
         dist: Dist,
@@ -70,9 +70,32 @@ impl MetadataRequests {
         let id = dist.distribution_id();
         let hashes = DirectHashKey::new(&dist, hasher);
         let registered = if hashes.uses_project_cache(&dist) {
-            self.index.distributions().register(id)
+            let named = self.index.project_direct(&id);
+            if !named.register(dist.name().clone()) {
+                return Ok(());
+            }
+            if let Some(metadata) = self.index.distributions().get(&id)
+                && let MetadataResponse::Found(archive) = metadata.as_ref()
+            {
+                let metadata = if &archive.metadata.name == dist.name() {
+                    metadata
+                } else {
+                    Arc::new(MetadataResponse::Error(
+                        Box::new(RequestedDist::Installable(dist.clone())),
+                        Arc::new(uv_distribution::Error::WheelMetadataNameMismatch {
+                            given: dist.name().clone(),
+                            metadata: archive.metadata.name.clone(),
+                        }),
+                    ))
+                };
+                named.done(dist.name().clone(), metadata);
+                return Ok(());
+            }
+            true
         } else {
-            self.index.direct().register((id, hashes))
+            self.index
+                .direct()
+                .register((id, dist.name().clone(), hashes))
         };
         if registered {
             self.sender
@@ -146,11 +169,14 @@ impl MetadataRequests {
         let id = dist.distribution_id();
         let hashes = DirectHashKey::new(dist, hasher);
         if hashes.uses_project_cache(dist) {
-            self.wait_for_metadata(&id, || dist.to_string())
+            self.index
+                .project_direct(&id)
+                .wait_blocking(dist.name())
+                .map_err(|_| ResolveError::UnregisteredTask(dist.to_string()))
         } else {
             self.index
                 .direct()
-                .wait_blocking(&(id, hashes))
+                .wait_blocking(&(id, dist.name().clone(), hashes))
                 .map_err(|_| ResolveError::UnregisteredTask(dist.to_string()))
         }
     }

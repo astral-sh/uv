@@ -1917,6 +1917,8 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
 
              Computed:
                sha256:1aa0f7263e4991934282ab8912e95fdd34f24459d7c4f8b845c2281a04c89807
+
+    hint: `demo-pkg` was included because `project` (v0.1.0) depends on `demo-pkg`
     ");
     assert!(
         !sentinel.exists(),
@@ -2198,6 +2200,8 @@ async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
 
              Computed:
                sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
+
+    hint: `demo-pkg` was included because `project` (v0.1.0) depends on `demo-pkg`
     ");
     assert!(
         !sentinel.exists(),
@@ -2220,6 +2224,8 @@ async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
 
              Computed:
                sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
+
+    hint: `demo-pkg` was included because `project` (v0.1.0) depends on `demo-pkg`
     ");
     assert!(
         !sentinel.exists(),
@@ -2558,6 +2564,8 @@ async fn lock_sdist_url_root_subdirectory_locked_hash_mismatch() -> Result<()> {
 
              Computed:
                sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
+
+    hint: `demo-pkg` was included because `project` (v0.1.0) depends on `demo-pkg`
     ");
     assert!(
         !sentinel.exists(),
@@ -2754,6 +2762,8 @@ async fn lock_sdist_url_equivalent_subdirectory_locked_hash_mismatch() -> Result
 
              Computed:
                sha256:4d8741dcbddac394ac2680d99589d36c9d8fd7b3b19665531de9cc02550ec5eb
+
+    hint: `demo-pkg` was included because `project` (v0.1.0) depends on `demo-pkg`
     ");
     assert!(
         !sentinel.exists(),
@@ -2826,6 +2836,8 @@ fn lock_sdist_path_locked_hash_mismatch() -> Result<()> {
 
              Computed:
                sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
+
+    hint: `demo-pkg` was included because `project` (v0.1.0) depends on `demo-pkg`
     ");
     assert!(!sentinel.exists(), "the refreshed backend was executed");
 
@@ -22871,6 +22883,77 @@ fn lock_metadata_free_shared_conditional_provider_sources() -> Result<()> {
     Resolved 6 packages in [TIME]
     ");
 
+    Ok(())
+}
+
+/// A packaged root cannot be locked under a fabricated name, even if an existing lock contains the
+/// same physical directory under both its real name and the fabricated name.
+#[test]
+fn lock_url_directory_mismatched_name() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["foo"]
+
+        [build-system]
+        requires = []
+        build-backend = "backend"
+        backend-path = ["."]
+
+        [tool.uv.sources]
+        foo = { path = ".", editable = true }
+    "#})?;
+    let lock = context.temp_dir.child("uv.lock");
+    uv_snapshot!(context.filters(), context.lock().arg("--no-index"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to build `foo @ file://[TEMP_DIR]/`
+      cause: Package metadata name `project` does not match given name `foo`
+
+    hint: `foo` was included because `project` (v0.1.0) depends on `foo`
+    ");
+    assert!(!lock.path().exists());
+
+    lock.write_str(indoc! {r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "foo"
+        version = "0.1.0"
+        source = { editable = "." }
+
+        [package.metadata]
+        requires-dist = [{ name = "foo", editable = "." }]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [{ name = "foo" }]
+
+        [package.metadata]
+        requires-dist = [{ name = "foo", editable = "." }]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--check").arg("--no-index"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to build `foo @ file://[TEMP_DIR]/`
+      cause: Package metadata name `project` does not match given name `foo`
+
+    hint: `foo` was included because `project` (v0.1.0) depends on `foo`
+    ");
     Ok(())
 }
 

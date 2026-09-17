@@ -1,5 +1,5 @@
 use pubgrub::{Id, Kind, State, VersionSet};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::dependency_provider::UvDependencyProvider;
 use crate::pubgrub::{CandidateSet, PubGrubPackage, SolverVersion};
@@ -19,71 +19,98 @@ impl DerivationChainBuilder {
         version: &SolverVersion,
         state: &State<UvDependencyProvider>,
     ) -> Option<DerivationChain> {
+        Self::from_candidates(id, &CandidateSet::singleton(version.clone()), state)
+    }
+
+    /// Compute a chain from the selected parents of a package whose exact version is not yet
+    /// available, such as a direct distribution that failed while its metadata was being read.
+    pub(crate) fn from_candidates(
+        id: Id<PubGrubPackage>,
+        candidates: &CandidateSet,
+        state: &State<UvDependencyProvider>,
+    ) -> Option<DerivationChain> {
         /// Find a path from the current package to the root package.
         fn find_path(
             id: Id<PubGrubPackage>,
-            version: &SolverVersion,
+            candidates: &CandidateSet,
             state: &State<UvDependencyProvider>,
             solution: &FxHashMap<Id<PubGrubPackage>, SolverVersion>,
             path: &mut Vec<DerivationStep>,
+            visiting: &mut FxHashSet<Id<PubGrubPackage>>,
         ) -> bool {
-            // Retrieve the incompatibilities for the current package.
-            let Some(incompatibilities) = state.incompatibilities.get(&id) else {
+            if !visiting.insert(id) {
                 return false;
-            };
-            for index in incompatibilities {
-                let incompat = &state.incompatibility_store[*index];
+            }
+            let found = (|| {
+                // Retrieve the incompatibilities for the current package.
+                let Some(incompatibilities) = state.incompatibilities.get(&id) else {
+                    return false;
+                };
+                for index in incompatibilities {
+                    let incompat = &state.incompatibility_store[*index];
 
-                // Find a dependency from a package to the current package.
-                if let Kind::FromDependencyOf(id1, id2) = &incompat.kind {
-                    let Some((_, dependency_versions)) = incompat.dependency_version_sets() else {
-                        continue;
-                    };
-                    let dependency_versions = dependency_versions
-                        .cloned()
-                        .unwrap_or_else(CandidateSet::empty);
-                    if id == *id2 && dependency_versions.contains(version) {
-                        if let Some(version) = solution.get(id1) {
-                            let p1 = &state.package_store[*id1];
-                            let p2 = &state.package_store[*id2];
+                    // Find a dependency from a package to the current package.
+                    if let Kind::FromDependencyOf(id1, id2) = &incompat.kind {
+                        let Some((_, dependency_versions)) = incompat.dependency_version_sets()
+                        else {
+                            continue;
+                        };
+                        let dependency_versions = dependency_versions
+                            .cloned()
+                            .unwrap_or_else(CandidateSet::empty);
+                        if id == *id2 && !dependency_versions.is_disjoint(candidates) {
+                            if let Some(version) = solution.get(id1) {
+                                let p1 = &state.package_store[*id1];
+                                let p2 = &state.package_store[*id2];
+                                let parent = CandidateSet::singleton(version.clone());
 
-                            if p1.name_no_root() == p2.name_no_root() {
-                                // Skip proxied dependencies.
-                                if find_path(*id1, version, state, solution, path) {
+                                if p1.name_no_root() == p2.name_no_root() {
+                                    // Skip proxied dependencies.
+                                    if find_path(*id1, &parent, state, solution, path, visiting) {
+                                        return true;
+                                    }
+                                } else if let Some(name) = p1.name_no_root() {
+                                    // Add to the current path.
+                                    path.push(DerivationStep::new(
+                                        name.clone(),
+                                        p1.extra().cloned(),
+                                        p1.group().cloned(),
+                                        Some(version.version.clone()),
+                                        dependency_versions.project().encoded_versions().clone(),
+                                    ));
+
+                                    // Recursively search the next package.
+                                    if find_path(*id1, &parent, state, solution, path, visiting) {
+                                        return true;
+                                    }
+
+                                    // Backtrack if the path didn't lead to the root.
+                                    path.pop();
+                                } else {
+                                    // If we've reached the root, return.
                                     return true;
                                 }
-                            } else if let Some(name) = p1.name_no_root() {
-                                // Add to the current path.
-                                path.push(DerivationStep::new(
-                                    name.clone(),
-                                    p1.extra().cloned(),
-                                    p1.group().cloned(),
-                                    Some(version.version.clone()),
-                                    dependency_versions.project().encoded_versions().clone(),
-                                ));
-
-                                // Recursively search the next package.
-                                if find_path(*id1, version, state, solution, path) {
-                                    return true;
-                                }
-
-                                // Backtrack if the path didn't lead to the root.
-                                path.pop();
-                            } else {
-                                // If we've reached the root, return.
-                                return true;
                             }
                         }
                     }
                 }
-            }
-            false
+                false
+            })();
+            visiting.remove(&id);
+            found
         }
 
         let solution: FxHashMap<_, _> = state.partial_solution.extract_solution().collect();
         let path = {
             let mut path = vec![];
-            if !find_path(id, version, state, &solution, &mut path) {
+            if !find_path(
+                id,
+                candidates,
+                state,
+                &solution,
+                &mut path,
+                &mut FxHashSet::default(),
+            ) {
                 return None;
             }
             path.reverse();

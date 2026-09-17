@@ -4649,6 +4649,24 @@ impl Lock {
                 continue;
             }
 
+            if let Some(source_tree) = package.id.source.as_source_tree()
+                && let Some(name) = Self::source_tree_metadata_cached(
+                    source_tree,
+                    root,
+                    package,
+                    database,
+                    &mut source_tree_metadata,
+                )
+                .await?
+                .name
+                && name != package.id.name
+            {
+                return Ok(SatisfiesResult::MismatchedPackageName(
+                    &package.id.name,
+                    name,
+                ));
+            }
+
             if allow_missing_package_metadata
                 && !package.has_metadata()
                 && matches!(package.id.source, Source::Direct(..))
@@ -5258,7 +5276,7 @@ impl Lock {
         hasher: &HashStrategy,
         index: &DistributionMetadataIndex,
         database: &DistributionDatabase<'_, Context>,
-        source_tree_metadata: &mut FxHashMap<PackageId, Option<SourceTreeRequiresDist>>,
+        source_tree_metadata: &mut FxHashMap<PackageId, SourceTreeMetadata>,
     ) -> Result<DependencySourceChanges<'lock>, LockError> {
         let mut changes = DependencySourceChanges::default();
         while let Some((package, extra, marker)) = reachability.package_queue.pop_front() {
@@ -5282,7 +5300,7 @@ impl Lock {
             // providers wait for a refreshed declaration to select their source in the second phase.
             let refreshed_source_tree =
                 if let Some(source_tree) = package.id.source.as_source_tree() {
-                    let metadata = Self::source_tree_requires_dist_cached(
+                    let source_metadata = Self::source_tree_metadata_cached(
                         source_tree,
                         root,
                         package,
@@ -5290,6 +5308,14 @@ impl Lock {
                         source_tree_metadata,
                     )
                     .await?;
+                    if source_metadata
+                        .name
+                        .as_ref()
+                        .is_some_and(|name| *name != package.id.name)
+                    {
+                        continue;
+                    }
+                    let metadata = source_metadata.requires_dist;
                     if configured_metadata.is_none()
                         && package.id.version.is_none()
                         && metadata
@@ -5316,7 +5342,13 @@ impl Lock {
                             requires_python: metadata.requires_python.clone(),
                             metadata: metadata.into(),
                         };
-                        source_tree_metadata.insert(package.id.clone(), Some(metadata.clone()));
+                        source_tree_metadata.insert(
+                            package.id.clone(),
+                            SourceTreeMetadata {
+                                name: Some(metadata.metadata.name.clone()),
+                                requires_dist: Some(metadata.clone()),
+                            },
+                        );
                         Some(metadata)
                     } else {
                         metadata
@@ -5600,7 +5632,7 @@ impl Lock {
         hasher: &HashStrategy,
         index: &DistributionMetadataIndex,
         database: &DistributionDatabase<'_, Context>,
-        source_tree_metadata: &mut FxHashMap<PackageId, Option<SourceTreeRequiresDist>>,
+        source_tree_metadata: &mut FxHashMap<PackageId, SourceTreeMetadata>,
     ) -> Result<DependencySources<'_>, LockError> {
         // Global URL overrides authorize sources and replace competing URL constraints.
         // Scoped overrides cannot grant this privilege, and excluded packages stay inactive.
@@ -5890,6 +5922,20 @@ impl Lock {
             if !visited_packages.insert(&package.id) {
                 continue;
             }
+            if let Some(source_tree) = package.id.source.as_source_tree()
+                && Self::source_tree_metadata_cached(
+                    source_tree,
+                    root,
+                    package,
+                    database,
+                    source_tree_metadata,
+                )
+                .await?
+                .name
+                .is_some_and(|name| name != package.id.name)
+            {
+                continue;
+            }
             let (package_version, direct_requirements, dependency_groups) = if let Some(metadata) =
                 dependency_metadata.get(&package.id.name, package.id.version.as_ref())
             {
@@ -6033,6 +6079,16 @@ impl Lock {
         }) && locked_hashes.is_none_or(|validation| {
             ArchiveHashPolicy::from(validation).matches(archive.hashes.as_slice())
         }) {
+            if archive.metadata.name != package.id.name {
+                return Err(LockErrorKind::Resolution {
+                    id: package.id.clone(),
+                    err: uv_distribution::Error::WheelMetadataNameMismatch {
+                        given: package.id.name.clone(),
+                        metadata: archive.metadata.name.clone(),
+                    },
+                }
+                .into());
+            }
             return Ok(archive.metadata.clone());
         }
 
@@ -6052,16 +6108,26 @@ impl Lock {
                 err,
             })?;
         let metadata = archive.metadata.clone();
+        if metadata.name != package.id.name {
+            return Err(LockErrorKind::Resolution {
+                id: package.id.clone(),
+                err: uv_distribution::Error::WheelMetadataNameMismatch {
+                    given: package.id.name.clone(),
+                    metadata: metadata.name,
+                },
+            }
+            .into());
+        }
         index.done(id, Arc::new(MetadataResponse::Found(archive)));
         Ok(metadata)
     }
 
-    async fn source_tree_requires_dist<Context: BuildContext>(
+    async fn source_tree_metadata<Context: BuildContext>(
         source_tree: &Path,
         root: &Path,
         package: &Package,
         database: &DistributionDatabase<'_, Context>,
-    ) -> Result<Option<SourceTreeRequiresDist>, LockError> {
+    ) -> Result<SourceTreeMetadata, LockError> {
         let parent = root.join(source_tree);
         let path = parent.join("pyproject.toml");
         match fs_err::tokio::read_to_string(&path).await {
@@ -6071,6 +6137,16 @@ impl Lock {
                         path: path.clone(),
                         err,
                     })?;
+                let name = pyproject_toml
+                    .project
+                    .as_ref()
+                    .map(|project| project.name.clone());
+                if name.as_ref().is_some_and(|name| *name != package.id.name) {
+                    return Ok(SourceTreeMetadata {
+                        name,
+                        requires_dist: None,
+                    });
+                }
                 let version = pyproject_toml
                     .project
                     .as_ref()
@@ -6096,31 +6172,52 @@ impl Lock {
                         id: package.id.clone(),
                         err,
                     })?;
-                Ok(metadata.map(|metadata| SourceTreeRequiresDist {
-                    version,
-                    requires_python,
-                    metadata,
-                }))
+                Ok(SourceTreeMetadata {
+                    name: metadata
+                        .as_ref()
+                        .map(|metadata| metadata.name.clone())
+                        .or(name),
+                    requires_dist: metadata.map(|metadata| SourceTreeRequiresDist {
+                        version,
+                        requires_python,
+                        metadata,
+                    }),
+                })
             }
-            Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(SourceTreeMetadata::default()),
             Err(err) => Err(LockErrorKind::UnreadablePyprojectToml { path, err }.into()),
         }
     }
 
-    /// Read source-tree metadata once for each package during lock validation.
+    /// Return dependency metadata from a source tree already examined for this locked package.
     async fn source_tree_requires_dist_cached<Context: BuildContext>(
         source_tree: &Path,
         root: &Path,
         package: &Package,
         database: &DistributionDatabase<'_, Context>,
-        cache: &mut FxHashMap<PackageId, Option<SourceTreeRequiresDist>>,
+        cache: &mut FxHashMap<PackageId, SourceTreeMetadata>,
     ) -> Result<Option<SourceTreeRequiresDist>, LockError> {
+        Ok(
+            Self::source_tree_metadata_cached(source_tree, root, package, database, cache)
+                .await?
+                .requires_dist,
+        )
+    }
+
+    /// Read the source-tree name and dependency metadata once for each locked package. The name
+    /// remains available when dynamic dependencies require a build.
+    async fn source_tree_metadata_cached<Context: BuildContext>(
+        source_tree: &Path,
+        root: &Path,
+        package: &Package,
+        database: &DistributionDatabase<'_, Context>,
+        cache: &mut FxHashMap<PackageId, SourceTreeMetadata>,
+    ) -> Result<SourceTreeMetadata, LockError> {
         if let Some(metadata) = cache.get(&package.id) {
             return Ok(metadata.clone());
         }
 
-        let metadata =
-            Self::source_tree_requires_dist(source_tree, root, package, database).await?;
+        let metadata = Self::source_tree_metadata(source_tree, root, package, database).await?;
         cache.insert(package.id.clone(), metadata.clone());
         Ok(metadata)
     }
@@ -6144,6 +6241,12 @@ struct SourceTreeRequiresDist {
     version: Option<Version>,
     requires_python: Option<VersionSpecifiers>,
     metadata: RequiresDist,
+}
+
+#[derive(Clone, Default)]
+struct SourceTreeMetadata {
+    name: Option<PackageName>,
+    requires_dist: Option<SourceTreeRequiresDist>,
 }
 
 impl<'lock> Auditable<'lock> {
@@ -6243,6 +6346,8 @@ pub enum SatisfiesResult<'lock> {
     MissingRemoteIndex(&'lock PackageName, &'lock Version, &'lock UrlString),
     /// The lockfile referenced a local index that was not provided
     MissingLocalIndex(&'lock PackageName, &'lock Version, &'lock Path),
+    /// A locked package name differs from the name of its selected source tree.
+    MismatchedPackageName(&'lock PackageName, PackageName),
     /// A package in the lockfile contains different `requires-dist` metadata than expected.
     MismatchedPackageRequirements(
         &'lock PackageName,

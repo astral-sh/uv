@@ -3305,6 +3305,21 @@ impl StaticMetadata {
             Err(err) => return Err(err),
         };
 
+        // A PEP 621 project name cannot be dynamic. Reject a mismatched source tree before a
+        // backend build or fallback metadata can mask the actual identity of that directory.
+        if source.is_source_tree()
+            && let Some(name) = source.name()
+            && let Some(project) = pyproject_toml
+                .as_ref()
+                .and_then(|pyproject| pyproject.project.as_ref())
+            && project.name != *name
+        {
+            return Err(Error::WheelMetadataNameMismatch {
+                given: name.clone(),
+                metadata: project.name.clone(),
+            });
+        }
+
         // Determine whether the version is static or dynamic.
         let dynamic = pyproject_toml.as_ref().is_some_and(|pyproject_toml| {
             pyproject_toml.project.as_ref().is_some_and(|project| {

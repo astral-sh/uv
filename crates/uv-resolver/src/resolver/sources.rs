@@ -13,7 +13,8 @@ use uv_types::{HashStrategy, HashStrategyError};
 
 use crate::dependency_provider::UvDependencyProvider;
 use crate::pubgrub::{
-    CandidateSet, IndexId, PubGrubPackage, SolverSource, SolverVersion, SourceId,
+    CandidateSet, DirectoryMode, IndexId, PubGrubPackage, SolverSource, SolverVersion, SourceId,
+    UrlCandidate,
 };
 use crate::python_requirement::PythonRequirement;
 use crate::resolver::environment::ResolverEnvironment;
@@ -175,29 +176,30 @@ impl SourceDependencies {
         parent: &PubGrubPackage,
         candidates: &CandidateSet,
         dependency: &PackageName,
-        source: SourceId,
-    ) -> Vec<(usize, Id<PubGrubPackage>, SolverVersion)> {
+        direct: UrlCandidate,
+    ) -> Vec<(usize, Id<PubGrubPackage>, SolverVersion, ParsedUrl)> {
         self.dependencies
             .iter()
-            .filter_map(|((id, candidate), dependencies)| {
-                if state.package_store[*id] != *parent || !candidates.contains(candidate) {
-                    return None;
-                }
-                dependencies
-                    .iter()
-                    .any(|entry| {
-                        state.package_store[entry.package].name_no_root() == Some(dependency)
-                            && entry.declaration.as_ref().is_some_and(|declaration| {
-                                declaration.trusted && declaration.source == source
-                            })
-                    })
+            .filter(|((id, candidate), _)| {
+                state.package_store[*id] == *parent && candidates.contains(candidate)
+            })
+            .flat_map(|((id, candidate), dependencies)| {
+                dependencies.iter().filter_map(move |entry| {
+                    let declaration = entry.declaration.as_ref()?;
+                    (state.package_store[entry.package].name_no_root() == Some(dependency)
+                        && declaration.trusted
+                        && declaration.source == direct.source
+                        && *entry.candidates.for_source(SolverSource::Url(direct))
+                            != crate::pubgrub::Range::empty())
                     .then(|| {
                         (
                             self.order[&(*id, candidate.clone())],
                             *id,
                             candidate.clone(),
+                            declaration.url.parsed_url.clone(),
                         )
                     })
+                })
             })
             .collect()
     }
@@ -373,7 +375,7 @@ impl SourceDependencies {
                 };
                 let mut context = grounding.contexts[&package];
                 if let Some(name) = state.package_store[package].name_no_root() {
-                    context = context.and(grounding.candidate_marker(name, candidate.source));
+                    context = context.and(grounding.outgoing_marker(name, candidate.source));
                 }
                 if context.is_false() {
                     continue;
@@ -416,6 +418,20 @@ impl SourceDependencies {
                                 *previous = updated;
                                 changed = true;
                             }
+                            if let ParsedUrl::Directory(directory) = &declaration.url.parsed_url
+                                && directory.editable == Some(true)
+                                && directory.r#virtual != Some(true)
+                            {
+                                let previous = grounding
+                                    .editables
+                                    .entry(declaration.source)
+                                    .or_insert(MarkerTree::FALSE);
+                                let updated = previous.or(context);
+                                if updated != *previous {
+                                    *previous = updated;
+                                    changed = true;
+                                }
+                            }
                         }
                         if let Some(index) = dependency.index {
                             let previous = grounding
@@ -439,19 +455,20 @@ impl SourceDependencies {
         }
 
         let mut directory_declarations = BTreeMap::<_, Vec<_>>::new();
+        let mut directory_presentations = BTreeMap::<_, Vec<_>>::new();
         for package in &grounding.reachable {
             let Some(candidate) = selected.get(package) else {
                 continue;
             };
             let mut context = grounding.contexts[package];
             if let Some(name) = state.package_store[*package].name_no_root() {
-                context = context.and(grounding.candidate_marker(name, candidate.source));
+                context = context.and(grounding.outgoing_marker(name, candidate.source));
             }
             if context.is_false() {
                 continue;
             }
             if let Some(dependencies) = self.dependencies.get(&(*package, candidate.clone())) {
-                for dependency in dependencies {
+                for (order, dependency) in dependencies.iter().enumerate() {
                     let edge_context = context.and(in_environment(
                         state.package_store[dependency.package].marker(),
                         env,
@@ -478,28 +495,38 @@ impl SourceDependencies {
                     }
                     if let Some(declaration) = &dependency.declaration {
                         if declaration.trusted {
-                            if let ParsedUrl::Directory(directory) = &declaration.url.parsed_url
-                                && let Some(editable) = directory.editable
-                                && directory.r#virtual != Some(true)
-                                && let Some(name) =
-                                    state.package_store[dependency.package].name_no_root()
-                            {
-                                directory_declarations
-                                    .entry((name.clone(), declaration.source))
+                            if let ParsedUrl::Directory(directory) = &declaration.url.parsed_url {
+                                directory_presentations
+                                    .entry(declaration.source)
                                     .or_default()
                                     .push((
-                                        *package,
-                                        candidate.clone(),
-                                        declaration.url.parsed_url.clone(),
-                                        editable,
-                                        edge_context,
+                                        state.package_store[*package].clone(),
+                                        order,
+                                        declaration.url.clone(),
                                     ));
+                                if let Some(editable) = directory.editable
+                                    && directory.r#virtual != Some(true)
+                                    && let Some(name) =
+                                        state.package_store[dependency.package].name_no_root()
+                                {
+                                    directory_declarations
+                                        .entry((name.clone(), declaration.source))
+                                        .or_default()
+                                        .push((
+                                            *package,
+                                            candidate.clone(),
+                                            declaration.url.parsed_url.clone(),
+                                            editable,
+                                            edge_context,
+                                        ));
+                                }
+                            } else {
+                                grounding
+                                    .presentations
+                                    .entry(declaration.source)
+                                    .and_modify(|url| merge_presentation(url, &declaration.url))
+                                    .or_insert_with(|| declaration.url.clone());
                             }
-                            grounding
-                                .presentations
-                                .entry(declaration.source)
-                                .and_modify(|url| merge_presentation(url, &declaration.url))
-                                .or_insert_with(|| declaration.url.clone());
                         }
                         if let Some(requirement) = &declaration.hash_requirement {
                             let requirement = scope_requirement(
@@ -526,9 +553,8 @@ impl SourceDependencies {
                                 .lookup(name, &declaration.url, git)
                                 .into_iter()
                                 .fold(MarkerTree::FALSE, |marker, source| {
-                                    marker
-                                        .or(grounding
-                                            .candidate_marker(name, SolverSource::Url(source)))
+                                    marker.or(grounding
+                                        .candidate_marker(name, SolverSource::Url(source.normal())))
                                 });
                             if !edge_context.is_disjoint(authorized.negate()) {
                                 grounding.untrusted.push((
@@ -548,7 +574,25 @@ impl SourceDependencies {
                 }
             }
         }
-        for ((name, source), mut declarations) in directory_declarations {
+        for (source, mut presentations) in directory_presentations {
+            // Honor the final selected declaration from the same author. Root spellings take
+            // precedence over transitive spellings, independent of decision and hash-map order.
+            presentations.sort_by(|a, b| {
+                (a.0.name_no_root().is_none(), &a.0, a.1).cmp(&(
+                    b.0.name_no_root().is_none(),
+                    &b.0,
+                    b.1,
+                ))
+            });
+            for (_, _, incoming) in presentations {
+                grounding
+                    .presentations
+                    .entry(source)
+                    .and_modify(|previous| merge_presentation(previous, &incoming))
+                    .or_insert(incoming);
+            }
+        }
+        for ((name, _source), mut declarations) in directory_declarations {
             declarations.sort_by(|a, b| {
                 (&state.package_store[a.0], &a.1, &a.2).cmp(&(
                     &state.package_store[b.0],
@@ -556,17 +600,6 @@ impl SourceDependencies {
                     &b.2,
                 ))
             });
-            let mut editable_origins = declarations
-                .iter()
-                .filter(|(_, _, _, editable, _)| *editable)
-                .map(|(parent, candidate, _, _, _)| (*parent, candidate.clone()))
-                .collect::<Vec<_>>();
-            editable_origins.dedup();
-            if !editable_origins.is_empty() {
-                grounding
-                    .directory_editable_origins
-                    .insert(source, editable_origins);
-            }
             let pair = declarations.iter().enumerate().find_map(|(index, a)| {
                 declarations[index + 1..]
                     .iter()
@@ -614,11 +647,11 @@ pub(super) struct Grounding {
     pub(super) contexts: FxHashMap<Id<PubGrubPackage>, MarkerTree>,
     lowest_parents: FxHashMap<PackageName, FxHashSet<Id<PubGrubPackage>>>,
     urls: FxHashMap<PackageName, BTreeMap<SourceId, MarkerTree>>,
+    editables: FxHashMap<SourceId, MarkerTree>,
     presentations: FxHashMap<SourceId, VerbatimParsedUrl>,
     pub(super) indexes: FxHashMap<PackageName, BTreeMap<IndexId, MarkerTree>>,
     source_contexts: BTreeSet<MarkerTree>,
     pub(super) directory_conflicts: Vec<DirectoryConflict>,
-    directory_editable_origins: FxHashMap<SourceId, Vec<(Id<PubGrubPackage>, SolverVersion)>>,
     pub(super) hashes: ActiveHashes,
     hash_declarations: Vec<(Id<PubGrubPackage>, SolverVersion, Arc<Requirement>, bool)>,
     pub(super) policies: Vec<(Arc<Requirement>, bool)>,
@@ -662,12 +695,30 @@ impl Grounding {
                 .and_then(|indexes| indexes.get(&index))
                 .copied()
                 .unwrap_or(MarkerTree::FALSE),
-            SolverSource::Url(source) => self
+            SolverSource::Url(candidate) => self
                 .urls
                 .get(name)
-                .and_then(|sources| sources.get(&source))
+                .and_then(|sources| sources.get(&candidate.source))
                 .copied()
                 .unwrap_or(MarkerTree::FALSE),
+        }
+    }
+
+    /// A speculative editable build can only expose dependencies after another selected edge has
+    /// authorized that build mode. Its own metadata cannot establish the missing authorization.
+    fn outgoing_marker(&self, name: &PackageName, source: SolverSource) -> MarkerTree {
+        let marker = self.candidate_marker(name, source);
+        if let SolverSource::Url(candidate) = source
+            && candidate.mode == DirectoryMode::Editable
+        {
+            marker.and(
+                self.editables
+                    .get(&candidate.source)
+                    .copied()
+                    .unwrap_or(MarkerTree::FALSE),
+            )
+        } else {
+            marker
         }
     }
 
@@ -740,15 +791,25 @@ impl Grounding {
             .flat_map(|sources| sources.keys().copied())
     }
 
-    pub(super) fn source(&self, name: &PackageName, candidates: &CandidateSet) -> Option<SourceId> {
-        self.urls
-            .get(name)?
-            .keys()
-            .find(|source| {
-                *candidates.for_source(SolverSource::Url(**source))
+    pub(super) fn source(
+        &self,
+        name: &PackageName,
+        candidates: &CandidateSet,
+        urls: &Urls,
+    ) -> Option<UrlCandidate> {
+        self.urls.get(name)?.keys().find_map(|source| {
+            let modes = if !urls.is_directory(*source) {
+                [Some(source.normal()), None]
+            } else if self.has_editable(*source) {
+                [Some(source.editable()), Some(source.normal())]
+            } else {
+                [Some(source.normal()), Some(source.editable())]
+            };
+            modes.into_iter().flatten().find(|candidate| {
+                *candidates.for_source(SolverSource::Url(*candidate))
                     != crate::pubgrub::Range::empty()
             })
-            .copied()
+        })
     }
 
     pub(super) fn url(&self, source: SourceId, urls: &Urls) -> VerbatimParsedUrl {
@@ -758,31 +819,19 @@ impl Grounding {
             .unwrap_or_else(|| urls.get(source).as_ref().clone())
     }
 
-    /// Use editable metadata early during a retry, without making the expectation a declaration.
-    pub(super) fn metadata_url(
-        &self,
-        source: SourceId,
-        urls: &Urls,
-        preferred_editable: &BTreeSet<SourceId>,
-    ) -> VerbatimParsedUrl {
-        let mut url = self.url(source, urls);
-        if preferred_editable.contains(&source)
-            && let ParsedUrl::Directory(directory) = &mut url.parsed_url
-        {
-            directory.editable = Some(true);
+    /// Read only the metadata belonging to the selected solver candidate, including during a
+    /// speculative editable choice that has yet to be supported by a declaration.
+    pub(super) fn metadata_url(&self, candidate: UrlCandidate, urls: &Urls) -> VerbatimParsedUrl {
+        let mut url = self.url(candidate.source, urls);
+        if let ParsedUrl::Directory(directory) = &mut url.parsed_url {
+            directory.editable = Some(candidate.mode == DirectoryMode::Editable);
         }
         url
     }
 
-    /// Selected declarations that require this source to be editable.
-    pub(super) fn directory_editable_origins(
-        &self,
-        source: SourceId,
-    ) -> impl Iterator<Item = &(Id<PubGrubPackage>, SolverVersion)> {
-        self.directory_editable_origins
-            .get(&source)
-            .into_iter()
-            .flatten()
+    /// Whether an independently selected, installing declaration requires this directory editable.
+    pub(super) fn has_editable(&self, source: SourceId) -> bool {
+        self.editables.contains_key(&source)
     }
 
     pub(super) fn iter(
@@ -832,17 +881,8 @@ fn merge_presentation(previous: &mut VerbatimParsedUrl, incoming: &VerbatimParse
         } else {
             Some(old.r#virtual == Some(true) && new.r#virtual == Some(true))
         };
-        let incoming_preferred = (
-            incoming.verbatim.force_relative(),
-            &incoming.verbatim,
-            incoming.verbatim.given().is_none(),
-            incoming.verbatim.given(),
-        ) < (
-            previous.verbatim.force_relative(),
-            &previous.verbatim,
-            previous.verbatim.given().is_none(),
-            previous.verbatim.given(),
-        );
+        let incoming_preferred =
+            !incoming.verbatim.force_relative() || previous.verbatim.force_relative();
         if incoming_preferred {
             *previous = incoming.clone();
         }
