@@ -76,6 +76,8 @@ env:
 jobs:
   plan:
     runs-on: depot-ubuntu-24.04
+    env:
+      IS_UV_PR: ${{ github.event_name == 'pull_request' && github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.full_name == github.repository && github.base_ref == 'main' }}
     outputs:
       test-code: ${{ steps.plan.outputs.test_code }}
       review-security: ${{ steps.plan.outputs.review_security }}
@@ -102,12 +104,19 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: "Install uv"
+        if: env.IS_UV_PR == 'true'
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
+          version: "0.12.13"
+          checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
+
       - name: "Plan"
         id: plan
         shell: bash
         env:
           GH_REF: ${{ github.ref }}
-          IS_UV_PR: ${{ github.event_name == 'pull_request' && github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.full_name == github.repository && github.base_ref == 'main' }}
           HAS_SKIP_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:skip') }}
           HAS_INTEGRATION_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:integration') }}
           HAS_SYSTEM_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:system') }}
@@ -140,8 +149,12 @@ jobs:
           # Detect release preparation from changes to uv's project version.
           if [[ "$IS_UV_PR" == "true" ]]; then
             merge_base="$(git merge-base "$BASE_SHA" "$HEAD_SHA")"
-            base_version="$(git show "${merge_base}:pyproject.toml" | python3 -c 'import sys, tomllib; print(tomllib.loads(sys.stdin.read())["project"]["version"])')"
-            head_version="$(git show "${HEAD_SHA}:pyproject.toml" | python3 -c 'import sys, tomllib; print(tomllib.loads(sys.stdin.read())["project"]["version"])')"
+            version_dir="$RUNNER_TEMP/uv-release-version"
+            mkdir -p "$version_dir/base" "$version_dir/head"
+            git show "${merge_base}:pyproject.toml" > "$version_dir/base/pyproject.toml"
+            git show "${HEAD_SHA}:pyproject.toml" > "$version_dir/head/pyproject.toml"
+            base_version="$(uv version --short --project "$version_dir/base")"
+            head_version="$(uv version --short --project "$version_dir/head")"
             if [[ "$base_version" != "$head_version" ]]; then
               is_release_pr=1
             fi
