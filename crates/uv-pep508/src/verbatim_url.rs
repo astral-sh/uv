@@ -335,7 +335,7 @@ impl VerbatimUrl {
     pub fn as_path(&self) -> Result<PathBuf, VerbatimUrlError> {
         self.url
             .to_file_path()
-            .map_err(|()| VerbatimUrlError::UrlConversion(self.url.to_file_path().unwrap()))
+            .map_err(|()| VerbatimUrlError::PathConversion(self.url.clone()))
     }
 }
 
@@ -514,6 +514,10 @@ pub enum VerbatimUrlError {
     /// Received a path that could not be converted to a URL.
     #[error("path could not be converted to a URL: {0}")]
     UrlConversion(PathBuf),
+
+    /// Received a URL that could not be converted to a path.
+    #[error("URL could not be converted to a path: {0}")]
+    PathConversion(DisplaySafeUrl),
 
     /// Received a path that could not be normalized.
     #[error("path could not be normalized: {0}")]
@@ -770,6 +774,24 @@ mod tests {
     use insta::assert_snapshot;
 
     use super::*;
+
+    #[test]
+    #[cfg(feature = "non-pep508-extensions")]
+    fn as_path_non_file_url() -> Result<(), VerbatimUrlError> {
+        let url: VerbatimUrl = "https://user:password@example.com".parse()?;
+        assert_snapshot!(url.as_path().expect_err("HTTPS URL is not a file path"), @"URL could not be converted to a path: https://user:****@example.com/");
+
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(all(windows, feature = "non-pep508-extensions"))]
+    fn as_path_localhost_unc() -> Result<(), VerbatimUrlError> {
+        let url = VerbatimUrl::from_absolute_path(r"\\localhost\share\package")?;
+        assert_snapshot!(url.as_path().expect_err("localhost URL has no drive letter"), @"URL could not be converted to a path: file://localhost/share/package");
+
+        Ok(())
+    }
 
     #[test]
     fn forced_relative_overrides_absolute_spelling() -> Result<(), VerbatimUrlError> {
