@@ -22,8 +22,9 @@ use uv_distribution::{DistributionDatabase, SourcedDependencyGroups};
 use uv_distribution_types::{
     CachedDist, ConfigSettings, DependencyMetadata, Diagnostic, Dist, ExtraBuildRequires,
     ExtraBuildVariables, IndexLocations, InstalledDist, InstalledVersion, LocalDist,
-    NameRequirementSpecification, PackageConfigSettings, Requirement, ResolutionDiagnostic,
-    UnresolvedRequirement, UnresolvedRequirementSpecification, VersionOrUrlRef,
+    NameRequirementSpecification, PackageConfigSettings, Requirement, RequirementScope,
+    ResolutionDiagnostic, UnresolvedRequirement, UnresolvedRequirementSpecification,
+    VersionOrUrlRef,
 };
 use uv_distribution_types::{
     DerivationChain, DistributionMetadata, InstalledMetadata, Name, Resolution,
@@ -249,7 +250,18 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             // Apply dependency-groups
             for (group_name, group) in &metadata.dependency_groups {
                 if groups.contains(group_name) {
+                    let scope =
+                        metadata
+                            .name
+                            .as_ref()
+                            .map_or(RequirementScope::Global, |package| {
+                                RequirementScope::Group {
+                                    package: package.clone(),
+                                    group: group_name.clone(),
+                                }
+                            });
                     requirements.extend(group.iter().cloned().map(|group| Requirement {
+                        scope: scope.clone(),
                         origin: Some(RequirementOrigin::Group(
                             pyproject_path.clone(),
                             metadata.name.clone(),

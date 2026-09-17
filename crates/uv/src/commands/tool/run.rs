@@ -3,6 +3,7 @@ use std::fmt::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
+use uv_distribution_types::RequirementScope;
 
 use anyhow::{Context, bail};
 use console::Term;
@@ -912,6 +913,7 @@ async fn get_or_create_environment(
                             index: None,
                             conflict: None,
                         },
+                        scope: RequirementScope::Global,
                         origin: None,
                     };
 
@@ -932,6 +934,7 @@ async fn get_or_create_environment(
                             index: None,
                             conflict: None,
                         },
+                        scope: RequirementScope::Global,
                         origin: None,
                     };
 
@@ -999,6 +1002,7 @@ async fn get_or_create_environment(
                     index: None,
                     conflict: None,
                 },
+                scope: RequirementScope::Global,
                 origin: None,
             })
         } else {

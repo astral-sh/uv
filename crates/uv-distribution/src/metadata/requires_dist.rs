@@ -398,6 +398,7 @@ impl FlatRequiresDist {
                     extras: requirement.extras.clone(),
                     groups: requirement.groups.clone(),
                     source: requirement.source.clone(),
+                    scope: requirement.scope.clone(),
                     origin: requirement.origin.clone(),
                     marker,
                 };
@@ -428,6 +429,7 @@ impl FlatRequiresDist {
                     extras: Box::new([]),
                     groups: req.groups.clone(),
                     source: req.source.clone(),
+                    scope: req.scope.clone(),
                     origin: req.origin.clone(),
                     marker: req.marker,
                 });

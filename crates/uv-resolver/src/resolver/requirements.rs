@@ -154,6 +154,7 @@ impl<'a> RequirementExpander<'a> {
                             extras: requirement.extras.clone(),
                             groups: requirement.groups.clone(),
                             source: requirement.source.clone(),
+                            scope: requirement.scope.clone(),
                             origin: requirement.origin.clone(),
                             marker: marker.simplify_extras(slice::from_ref(&extra)),
                         }
@@ -197,6 +198,7 @@ impl<'a> RequirementExpander<'a> {
                     extras: Box::new([]),
                     groups: req.groups.clone(),
                     source: req.source.clone(),
+                    scope: req.scope.clone(),
                     origin: req.origin.clone(),
                     marker: req.marker,
                 });
@@ -357,6 +359,7 @@ impl<'a> RequirementExpander<'a> {
                             extras: constraint.extras.clone(),
                             groups: constraint.groups.clone(),
                             source: constraint.source.clone(),
+                            scope: constraint.scope.clone(),
                             origin: constraint.origin.clone(),
                             marker,
                         })
@@ -394,6 +397,7 @@ impl<'a> RequirementExpander<'a> {
                             extras: constraint.extras.clone(),
                             groups: constraint.groups.clone(),
                             source: constraint.source.clone(),
+                            scope: constraint.scope.clone(),
                             origin: constraint.origin.clone(),
                             marker,
                         })
