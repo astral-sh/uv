@@ -214,7 +214,7 @@ proc-macro2 = { version = "1.0.86", default-features = false, features = ["proc-
 procfs = { version = "0.18.0", default-features = false, features = ["flate2"] }
 pubgrub = { version = "0.6.1", package = "astral-pubgrub", default-features = false }
 quote = { version = "1.0.37", default-features = false, features = ["proc-macro"] }
-rand = { version = "0.9.4", default-features = false, features = ["thread_rng"] }
+rand = { version = "0.10.2", default-features = false, features = ["thread_rng"] }
 rayon = { version = "1.10.0", default-features = false }
 ref-cast = { version = "1.0.24", default-features = false }
 reflink-copy = { version = "0.1.19", default-features = false }

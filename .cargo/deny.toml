@@ -88,7 +88,6 @@ allow-build-scripts = [
     "windows_x86_64_gnu",
     "windows_x86_64_gnullvm",
     "windows_x86_64_msvc",
-    "wit-bindgen",
     "zerocopy",
     "zmij",
     "zstd-safe",
