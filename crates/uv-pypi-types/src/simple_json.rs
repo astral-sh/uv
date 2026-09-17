@@ -502,7 +502,7 @@ pub struct Digest<const BYTES: usize>(SmallString);
 
 impl<const BYTES: usize> Digest<BYTES> {
     /// Validate a hexadecimal digest and normalize it to lowercase.
-    fn from_hex(digest: impl Into<SmallString>) -> Result<Self, HashError> {
+    pub fn from_hex(digest: impl Into<SmallString>) -> Result<Self, HashError> {
         let digest = digest.into();
         validate_hex(&digest, BYTES)?;
 
