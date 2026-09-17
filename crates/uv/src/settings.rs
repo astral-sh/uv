@@ -333,7 +333,7 @@ impl NetworkSettings {
                 "The `--no-native-tls` flag is deprecated and will be removed in a future release. Use `--no-system-certs` instead."
             );
         }
-        if environment.native_tls.value.is_some() {
+        if environment.native_tls.value.is_some() && environment.system_certs.value.is_none() {
             warn_user_once!(
                 "The `UV_NATIVE_TLS` environment variable is deprecated and will be removed in a future release. Use `UV_SYSTEM_CERTS` instead."
             );
