@@ -1500,6 +1500,60 @@ fn run_with() -> Result<()> {
 }
 
 #[test]
+fn run_overrides() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.8"
+        dependencies = ["sniffio==1.3.0"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#
+    })?;
+    context
+        .temp_dir
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r"
+        import anyio
+       "
+    })?;
+
+    let overrides_txt = context.temp_dir.child("overrides.txt");
+    overrides_txt.write_str("idna<=2")?;
+
+    // `anyio` would otherwise pull in the latest `idna`; the override should force the pinned
+    // version instead, mirroring `uv tool run --override`.
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("anyio").arg("--overrides").arg("overrides.txt").arg("main.py"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.0
+    Resolved 3 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==2.0
+     + sniffio==1.3.0
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn run_with_local_wheel_refreshes_rebuilt_wheel() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.12"]);
 

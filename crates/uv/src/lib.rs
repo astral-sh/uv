@@ -2314,11 +2314,18 @@ async fn run_project(
                     .collect::<Result<Vec<_>, _>>()?,
             );
 
+            let overrides = args
+                .overrides
+                .into_iter()
+                .map(RequirementsSource::from_overrides_txt)
+                .collect::<Result<Vec<_>, _>>()?;
+
             Box::pin(commands::run(
                 project_dir,
                 script,
                 command,
                 requirements,
+                overrides,
                 args.show_resolution || globals.verbose > 0,
                 args.lock_check,
                 args.frozen,
