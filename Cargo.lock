@@ -6320,6 +6320,7 @@ dependencies = [
  "uv-cache",
  "uv-cache-info",
  "uv-distribution-types",
+ "uv-fs",
  "uv-git",
  "uv-normalize",
  "uv-pep440",

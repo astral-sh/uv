@@ -3,6 +3,7 @@ use std::str::FromStr;
 
 use thiserror::Error;
 
+use uv_fs::Simplified;
 use uv_pep508::split_scheme;
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 
@@ -100,7 +101,7 @@ impl std::fmt::Display for RequirementsInput {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Stdin => f.write_str("-"),
-            Self::Local(path) => path.display().fmt(f),
+            Self::Local(path) => path.user_display().fmt(f),
             Self::Remote(url) => url.fmt(f),
         }
     }
