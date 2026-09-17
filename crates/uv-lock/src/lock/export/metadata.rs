@@ -8,7 +8,7 @@ use uv_fs::PortablePathBuf;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::{MarkerTree, StringVersion};
-use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts, ModuleName};
+use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts, HashDigest, ModuleName};
 use uv_python::{Interpreter, LenientImplementationName, PythonEnvironment};
 use uv_workspace::Workspace;
 
@@ -1054,8 +1054,8 @@ type Hash = String;
 ///
 /// We prefer matching PEP 691 (JSON-based Simple API for Python) here for future-proofing
 /// and convenience of consumption.
-fn hashes_map(hash: &crate::lock::Hash) -> BTreeMap<HashAlgorithm, Hash> {
-    Some((hash.0.algorithm().to_string(), hash.0.digest().to_string()))
+fn hashes_map(hash: &HashDigest) -> BTreeMap<HashAlgorithm, Hash> {
+    Some((hash.algorithm().to_string(), hash.digest().to_string()))
         .into_iter()
         .collect()
 }
