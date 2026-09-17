@@ -21,7 +21,9 @@ pub use uv_configuration::{
     serialize_exclude_newer_package_with_spans,
 };
 pub use uv_distribution_types::{ExcludeNewerOverride, ExcludeNewerSpan, ExcludeNewerValue};
-pub use uv_resolver_types::{Flexibility, Options, OptionsBuilder};
+pub use uv_resolver_types::{
+    Flexibility, Options, OptionsBuilder, ResolutionConversionError, SingleEnvironmentResolution,
+};
 pub use version_map::VersionMap;
 pub use yanks::AllowedYanks;
 

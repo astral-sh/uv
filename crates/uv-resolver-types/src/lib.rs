@@ -10,5 +10,8 @@ pub mod universal_marker;
 pub use distribution::AnnotatedDist;
 pub use metadata::{DistributionMetadataIndex, MetadataResponse, MetadataUnavailable};
 pub use options::{Flexibility, Options, OptionsBuilder};
-pub use output::{ConflictingDistributionError, ResolutionGraphNode, ResolverOutput};
+pub use output::{
+    ConflictingDistributionError, ResolutionConversionError, ResolutionGraphNode, ResolverOutput,
+    SingleEnvironmentResolution,
+};
 pub use universal_marker::{ConflictMarker, ConflictMarkerError, UniversalMarker};

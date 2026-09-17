@@ -1000,7 +1000,7 @@ pub(crate) async fn install(
                 )?;
                 (resolution, interpreter, Some(tool_lock))
             } else {
-                (resolution.into(), interpreter, None)
+                (resolution.try_into()?, interpreter, None)
             }
         };
         let hash_strategy = if tool_lock.is_some() {

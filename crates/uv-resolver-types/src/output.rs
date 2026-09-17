@@ -406,7 +406,50 @@ impl Display for ConflictingDistributionError {
     }
 }
 
-/// Convert a [`ResolverOutput`] into a [`uv_distribution_types::Resolution`].
+/// A resolution that can be collapsed to one installable distribution per package.
+///
+/// Construction rejects unresolved forks and duplicate base packages. The graph is kept private so
+/// those properties remain true until conversion to an installation resolution.
+#[derive(Debug)]
+pub struct SingleEnvironmentResolution(ResolverOutput);
+
+/// An output graph that cannot be converted to a single-environment resolution.
+#[derive(Debug, thiserror::Error)]
+pub enum ResolutionConversionError {
+    #[error("select an environment before converting a universal resolution")]
+    Universal,
+    #[error("multiple distributions selected for package `{0}`")]
+    DuplicatePackage(PackageName),
+}
+
+impl TryFrom<ResolverOutput> for SingleEnvironmentResolution {
+    type Error = ResolutionConversionError;
+
+    fn try_from(output: ResolverOutput) -> Result<Self, Self::Error> {
+        if !output.fork_markers.is_empty() {
+            return Err(ResolutionConversionError::Universal);
+        }
+        let mut names = FxHashSet::default();
+        for (_, dist) in output.base_dists() {
+            if !names.insert(&dist.name) {
+                return Err(ResolutionConversionError::DuplicatePackage(
+                    dist.name.clone(),
+                ));
+            }
+        }
+        Ok(Self(output))
+    }
+}
+
+impl TryFrom<ResolverOutput> for uv_distribution_types::Resolution {
+    type Error = ResolutionConversionError;
+
+    fn try_from(output: ResolverOutput) -> Result<Self, Self::Error> {
+        SingleEnvironmentResolution::try_from(output).map(Self::from)
+    }
+}
+
+/// Convert a [`SingleEnvironmentResolution`] into a [`uv_distribution_types::Resolution`].
 ///
 /// This involves converting [`ResolutionGraphNode`]s into [`Node`]s, which in turn involves
 /// dropping any extras and dependency groups from the graph nodes. Instead, each package is
@@ -414,22 +457,12 @@ impl Display for ConflictingDistributionError {
 /// than being represented as separate nodes. This is a more natural representation, but a further
 /// departure from the PubGrub model.
 ///
-/// For simplicity, this transformation makes the assumption that the resolution only applies to a
-/// subset of markers, i.e., it shouldn't be called on universal resolutions, and expects only a
-/// single version of each package to be present in the graph.
-impl From<ResolverOutput> for uv_distribution_types::Resolution {
-    fn from(output: ResolverOutput) -> Self {
+/// The input has no unresolved forks and contains at most one base distribution per package.
+impl From<SingleEnvironmentResolution> for uv_distribution_types::Resolution {
+    fn from(SingleEnvironmentResolution(output): SingleEnvironmentResolution) -> Self {
         let ResolverOutput {
-            graph,
-            diagnostics,
-            fork_markers,
-            ..
+            graph, diagnostics, ..
         } = output;
-
-        assert!(
-            fork_markers.is_empty(),
-            "universal resolutions are not supported"
-        );
 
         let mut transformed = Graph::with_capacity(graph.node_count(), graph.edge_count());
         let mut inverse = FxHashMap::with_capacity_and_hasher(graph.node_count(), FxBuildHasher);
@@ -487,5 +520,77 @@ impl From<ResolverOutput> for uv_distribution_types::Resolution {
         }
 
         Self::new(transformed).with_diagnostics(diagnostics)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use uv_pep440::VersionSpecifiers;
+    use uv_pep508::Pep508Url;
+    use uv_pypi_types::VerbatimParsedUrl;
+
+    use super::*;
+
+    fn empty_output() -> ResolverOutput {
+        ResolverOutput {
+            graph: Graph::new(),
+            requires_python: RequiresPython::from_specifiers(VersionSpecifiers::empty()),
+            fork_markers: vec![],
+            diagnostics: vec![],
+            requirements: vec![],
+            constraints: Constraints::default(),
+            overrides: Overrides::default(),
+            options: Options::default(),
+        }
+    }
+
+    #[test]
+    fn rejects_unselected_forks() {
+        let mut output = empty_output();
+        output.fork_markers.push(UniversalMarker::TRUE);
+        let error = SingleEnvironmentResolution::try_from(output).expect_err("unselected fork");
+        assert_eq!(
+            error.to_string(),
+            "select an environment before converting a universal resolution"
+        );
+    }
+
+    #[test]
+    fn rejects_duplicate_distributions() -> Result<(), Box<dyn std::error::Error>> {
+        let mut output = empty_output();
+        let name: PackageName = "demo".parse()?;
+        let version = Version::new([1, 0]);
+        let dist = AnnotatedDist {
+            dist: ResolvedDist::Installable {
+                dist: Arc::new(Dist::from_url(
+                    name.clone(),
+                    VerbatimParsedUrl::parse_url(
+                        "https://example.com/demo-1.0-py3-none-any.whl",
+                        None,
+                    )?,
+                )?),
+                version: Some(version.clone()),
+            },
+            name,
+            version,
+            extra: None,
+            group: None,
+            hashes: HashDigests::empty(),
+            metadata: None,
+            marker: UniversalMarker::TRUE,
+        };
+        output
+            .graph
+            .add_node(ResolutionGraphNode::Dist(dist.clone()));
+        output.graph.add_node(ResolutionGraphNode::Dist(dist));
+        let error =
+            SingleEnvironmentResolution::try_from(output).expect_err("duplicate distribution");
+        assert_eq!(
+            error.to_string(),
+            "multiple distributions selected for package `demo`"
+        );
+        Ok(())
     }
 }

@@ -304,6 +304,9 @@ pub(crate) enum ProjectError {
     Lock(#[from] uv_lock::LockError),
 
     #[error(transparent)]
+    ResolutionConversion(#[from] uv_resolver::ResolutionConversionError),
+
+    #[error(transparent)]
     Operation(#[from] pip::operations::Error),
 
     #[error(transparent)]
@@ -3119,7 +3122,7 @@ pub(crate) async fn update_environment(
     )
     .await
     {
-        Ok((resolution, hasher)) => (Resolution::from(resolution), hasher),
+        Ok((resolution, hasher)) => (Resolution::try_from(resolution)?, hasher),
         Err(err) => return Err(err.into()),
     };
     // Sync the environment.

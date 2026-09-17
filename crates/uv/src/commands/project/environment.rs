@@ -154,7 +154,7 @@ impl CachedEnvironment {
         let interpreter = Self::base_interpreter(interpreter, cache)?;
 
         // Resolve the requirements with the interpreter.
-        let resolution = Resolution::from(
+        let resolution = Resolution::try_from(
             resolve_environment(
                 spec,
                 EnvironmentResolution::Specific,
@@ -173,7 +173,7 @@ impl CachedEnvironment {
                 preview,
             )
             .await?,
-        );
+        )?;
 
         Self::from_resolution(
             &resolution,

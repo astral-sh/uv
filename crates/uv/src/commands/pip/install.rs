@@ -580,7 +580,7 @@ pub(crate) async fn pip_install(
         )
         .await
         {
-            Ok((graph, hasher)) => (Resolution::from(graph), hasher),
+            Ok((graph, hasher)) => (Resolution::try_from(graph)?, hasher),
             Err(err) => {
                 return Err(UvError::from(err).into());
             }

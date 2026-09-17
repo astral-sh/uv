@@ -378,7 +378,7 @@ impl BuildContext for BuildDispatch<'_> {
             )
             .with_build_stack(build_stack),
         )?;
-        let resolution = Resolution::from(resolver.resolve().await.with_context(|| {
+        let resolution = Resolution::try_from(resolver.resolve().await.with_context(|| {
             format!(
                 "No solution found when resolving: {}",
                 requirements
@@ -386,7 +386,8 @@ impl BuildContext for BuildDispatch<'_> {
                     .map(|requirement| format!("`{requirement}`"))
                     .join(", ")
             )
-        })?);
+        })?)
+        .map_err(anyhow::Error::from)?;
         Ok(ResolvedRequirements::new(resolution, hasher))
     }
 

@@ -464,7 +464,7 @@ pub(crate) async fn pip_sync(
         )
         .await
         {
-            Ok((resolution, hasher)) => (Resolution::from(resolution), hasher),
+            Ok((resolution, hasher)) => (Resolution::try_from(resolution)?, hasher),
             Err(err) => {
                 return Err(UvError::from(err).into());
             }

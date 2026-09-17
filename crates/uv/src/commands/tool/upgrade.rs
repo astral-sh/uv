@@ -535,7 +535,7 @@ async fn upgrade_tool(
         let environment = installed_tools.create_environment(name, interpreter.clone())?;
         let environment = sync_environment(
             environment,
-            &resolution.into(),
+            &resolution.try_into()?,
             HashStrategy::default(),
             Modifications::Exact,
             build_constraints,
