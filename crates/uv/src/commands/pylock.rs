@@ -26,6 +26,10 @@ pub(crate) async fn read_pylock_toml(
     client_builder: &BaseClientBuilder<'_>,
 ) -> anyhow::Result<(PathBuf, PylockToml)> {
     let (install_path, content) = match pylock {
+        RequirementsInput::Stdin => (
+            std::env::current_dir()?,
+            uv_fs::read_stdin_to_string_transcode()?,
+        ),
         RequirementsInput::Remote(url) => {
             let client = client_builder.build()?;
             let response = client

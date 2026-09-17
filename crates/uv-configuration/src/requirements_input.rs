@@ -6,9 +6,11 @@ use thiserror::Error;
 use uv_pep508::split_scheme;
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 
-/// A local or remote requirements input.
+/// A requirements input.
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum RequirementsInput {
+    /// Requirements read from stdin.
+    Stdin,
     /// A local requirements input.
     Local(PathBuf),
     /// A remote requirements input.
@@ -18,15 +20,17 @@ pub enum RequirementsInput {
 impl RequirementsInput {
     /// Return `true` if the input represents stdin.
     pub fn is_stdin(&self) -> bool {
-        matches!(self, Self::Local(path) if path == Path::new("-"))
+        matches!(self, Self::Stdin)
     }
 
     /// Resolve a nested input relative to this input.
     ///
-    /// Local inputs are resolved against the containing file's directory. Remote inputs are
-    /// resolved using URL reference resolution.
+    /// Local inputs are resolved against the containing file's directory, and inputs referenced
+    /// from stdin are resolved against the working directory. Remote inputs are resolved using URL
+    /// reference resolution.
     pub fn resolve(&self, input: &str, working_dir: &Path) -> Result<Self, RequirementsInputError> {
         match (self, input.parse()?) {
+            (_, Self::Stdin) => Ok(Self::Stdin),
             (_, Self::Remote(url)) => Ok(Self::Remote(url)),
             (Self::Local(_), Self::Local(path)) if path.is_absolute() => Ok(Self::Local(path)),
             (Self::Local(parent), Self::Local(path)) => {
@@ -36,6 +40,7 @@ impl RequirementsInput {
                     .unwrap_or(working_dir);
                 Ok(Self::Local(parent.join(path)))
             }
+            (Self::Stdin, Self::Local(path)) => Ok(Self::Local(working_dir.join(path))),
             (Self::Remote(_), Self::Local(path)) if split_scheme(input).is_some() => {
                 Ok(Self::Local(path))
             }
@@ -46,19 +51,23 @@ impl RequirementsInput {
 
 impl From<PathBuf> for RequirementsInput {
     fn from(path: PathBuf) -> Self {
-        Self::Local(path)
+        if path == Path::new("-") {
+            Self::Stdin
+        } else {
+            Self::Local(path)
+        }
     }
 }
 
 impl From<&Path> for RequirementsInput {
     fn from(path: &Path) -> Self {
-        Self::Local(path.to_path_buf())
+        path.to_path_buf().into()
     }
 }
 
 impl From<&PathBuf> for RequirementsInput {
     fn from(path: &PathBuf) -> Self {
-        Self::Local(path.clone())
+        path.clone().into()
     }
 }
 
@@ -67,7 +76,7 @@ impl FromStr for RequirementsInput {
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         let Some((scheme, rest)) = split_scheme(input) else {
-            return Ok(Self::Local(PathBuf::from(input)));
+            return Ok(PathBuf::from(input).into());
         };
 
         // Avoid interpreting Windows drive paths as URLs on other platforms.
@@ -90,6 +99,7 @@ impl FromStr for RequirementsInput {
 impl std::fmt::Display for RequirementsInput {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Stdin => f.write_str("-"),
             Self::Local(path) => path.display().fmt(f),
             Self::Remote(url) => url.fmt(f),
         }

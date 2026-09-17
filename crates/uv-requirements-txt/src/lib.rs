@@ -255,6 +255,14 @@ impl RequirementsTxt {
             content.clone()
         } else {
             let content = match requirements_txt {
+                RequirementsInput::Stdin => {
+                    uv_fs::read_stdin_to_string_transcode().map_err(|err| {
+                        RequirementsTxtFileError {
+                            file: Box::new(requirements_txt.clone()),
+                            error: RequirementsTxtParserError::Io(err),
+                        }
+                    })?
+                }
                 RequirementsInput::Local(path) => uv_fs::read_to_string_transcode(path)
                     .await
                     .map_err(|err| RequirementsTxtFileError {
@@ -685,8 +693,8 @@ fn parse_entry(
         }
 
         let source = match requirements_txt {
-            RequirementsInput::Local(path) if path != Path::new("-") => Some(path.as_path()),
-            RequirementsInput::Local(_) | RequirementsInput::Remote(_) => None,
+            RequirementsInput::Local(path) => Some(path.as_path()),
+            RequirementsInput::Stdin | RequirementsInput::Remote(_) => None,
         };
 
         let (mut requirement, hashes) =
@@ -779,6 +787,16 @@ fn parse_entry(
             .unwrap_or(Cow::Borrowed(given));
         let expanded = expand_env_vars(given.as_ref());
         let url = match requirements_txt.resolve(expanded.as_ref(), working_dir) {
+            Ok(RequirementsInput::Stdin) => {
+                VerbatimUrl::parse_url(expanded.as_ref()).map_err(|err| {
+                    RequirementsTxtParserError::Url {
+                        source: err,
+                        url: given.to_string(),
+                        start,
+                        end: s.cursor(),
+                    }
+                })?
+            }
             Ok(RequirementsInput::Local(path)) => {
                 if let Some(path) = std::path::absolute(path).ok().filter(|path| path.exists()) {
                     VerbatimUrl::from_absolute_path(path).map_err(|err| {
@@ -845,8 +863,8 @@ fn parse_entry(
         RequirementsTxtStatement::OnlyBinary(NoBuild::from_pip_arg(specifier))
     } else if s.at(char::is_ascii_alphanumeric) || s.at(|char| matches!(char, '.' | '/' | '$')) {
         let source = match requirements_txt {
-            RequirementsInput::Local(path) if path != Path::new("-") => Some(path.as_path()),
-            RequirementsInput::Local(_) | RequirementsInput::Remote(_) => None,
+            RequirementsInput::Local(path) => Some(path.as_path()),
+            RequirementsInput::Stdin | RequirementsInput::Remote(_) => None,
         };
 
         let (requirement, hashes) =
@@ -1449,6 +1467,7 @@ enum VisitedFiles<'a> {
 /// Return a stable identity for a requirements input without changing the input used to read it.
 fn visited_file(input: &RequirementsInput) -> RequirementsInput {
     match input {
+        RequirementsInput::Stdin => RequirementsInput::Stdin,
         RequirementsInput::Local(path) => {
             RequirementsInput::Local(normalize_path(path).into_owned())
         }

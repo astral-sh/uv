@@ -11,6 +11,12 @@ use uv_requirements::{RequirementsSource, RequirementsSpecification};
 
 #[test]
 fn parse_requirements_input() -> Result<()> {
+    assert_eq!("-".parse::<RequirementsInput>()?, RequirementsInput::Stdin);
+    assert_eq!(
+        RequirementsInput::from(Path::new("-")),
+        RequirementsInput::Stdin
+    );
+
     let relative_path = "requirements.txt";
     assert_eq!(
         relative_path.parse::<RequirementsInput>()?,

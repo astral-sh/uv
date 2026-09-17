@@ -730,12 +730,13 @@ pub struct GroupsSpecification {
     pub groups: Vec<PipGroupName>,
 }
 
-/// Read the contents of a local or remote requirements input.
+/// Read the contents of a requirements input.
 async fn read_file(
     input: &RequirementsInput,
     client_builder: &BaseClientBuilder<'_>,
 ) -> Result<String> {
     match input {
+        RequirementsInput::Stdin => Ok(uv_fs::read_stdin_to_string_transcode()?),
         RequirementsInput::Remote(url) => {
             let client = client_builder.build()?;
             let response = client

@@ -39,6 +39,7 @@ impl RequirementsSource {
     pub fn from_requirements_file(input: impl Into<RequirementsInput>) -> Result<Self> {
         let input = input.into();
         match input {
+            RequirementsInput::Stdin => Ok(Self::Extensionless(RequirementsInput::Stdin)),
             RequirementsInput::Local(path) => Self::from_local_requirements_file(path),
             RequirementsInput::Remote(url) => {
                 let filename = url
@@ -135,11 +136,8 @@ impl RequirementsSource {
     }
 
     fn from_requirements_txt_kind(input: RequirementsInput, kind: &str) -> Result<Self> {
-        if input.is_stdin() {
-            return Ok(Self::Extensionless(input));
-        }
-
         let filename = match &input {
+            RequirementsInput::Stdin => return Ok(Self::Extensionless(input)),
             RequirementsInput::Local(path) => path.file_name().and_then(OsStr::to_str),
             RequirementsInput::Remote(url) => url.path_segments().and_then(Iterator::last),
         };
