@@ -2801,8 +2801,8 @@ fn url_source_directory_editability_conflict() -> Result<()> {
     Ok(())
 }
 
-/// A late editable declaration must resolve the editable backend's dependencies. If only an
-/// optional provider requires that mode, its activating version can be discarded instead.
+/// A late editable declaration must resolve and report the editable backend's dependencies. If
+/// only an optional provider requires that mode, its activating version can be discarded instead.
 #[test]
 fn url_source_directory_editable_metadata() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2890,6 +2890,30 @@ fn url_source_directory_editable_metadata() -> Result<()> {
     Resolved 4 packages in [TIME]
     ");
 
+    let missing = toml::from_str::<Scenario>(indoc! {r#"
+        name = "backtrack-directory-editable-metadata"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.wheel-only.versions."1.0.0"]
+        [packages.selector.versions."2.0.0"]
+        requires = ["z-provider[editable]"]
+        [packages.selector.versions."1.0.0"]
+    "#})?;
+    let missing = PackseServer::from_scenario(&missing);
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in").arg("--index-url").arg(missing.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because editable-only was not found in the package registry and a-leaf==1.0.0 depends on editable-only, we can conclude that a-leaf==1.0.0 cannot be used.
+             And because only a-leaf==1.0.0 is available, we can conclude that all versions of a-leaf cannot be used. (1)
+
+             Because z-provider==1.0.0 depends on a-leaf and only z-provider==1.0.0 is available, we can conclude that all versions of z-provider depend on a-leaf.
+             And because we know from (1) that all versions of a-leaf cannot be used, we can conclude that all versions of z-provider cannot be used.
+             And because you require z-provider, we can conclude that your requirements are unsatisfiable.
+    ");
+
     provider_project.write_str(indoc! {r#"
         [project]
         name = "z-provider"
@@ -2902,17 +2926,6 @@ fn url_source_directory_editable_metadata() -> Result<()> {
         a-leaf = { path = "../a-leaf", editable = true }
     "#})?;
     requirements.write_str(&format!("{roots}selector\n"))?;
-    let missing = toml::from_str::<Scenario>(indoc! {r#"
-        name = "backtrack-directory-editable-metadata"
-        [root]
-        [expected]
-        satisfiable = true
-        [packages.wheel-only.versions."1.0.0"]
-        [packages.selector.versions."2.0.0"]
-        requires = ["z-provider[editable]"]
-        [packages.selector.versions."1.0.0"]
-    "#})?;
-    let missing = PackseServer::from_scenario(&missing);
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in").arg("--index-url").arg(missing.index_url()), @"
     exit_code: 0 (success)

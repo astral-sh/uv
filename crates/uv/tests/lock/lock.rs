@@ -87,6 +87,8 @@ fn lock_validation_warning_chain() -> Result<()> {
              3 | version = 42
                |           ^^
              invalid type: integer `42`, expected a string
+
+    hint: `child` was included because `project` (v0.1.0) depends on `child`
     ");
     Ok(())
 }
@@ -1197,6 +1199,8 @@ fn lock_sdist_git_archive_missing_lfs() -> Result<()> {
     error: Failed to download and build `iniconfig @ git+https://github.com/astral-sh/archive-in-git-test#lfs=true&path=archives/iniconfig-2.0.0.tar.gz`
       cause: The source distribution `git+https://github.com/astral-sh/archive-in-git-test#lfs=true&path=archives/iniconfig-2.0.0.tar.gz` is missing Git LFS artifacts.
       cause: Git LFS extension not found. Ensure that Git LFS is installed and available.
+
+    hint: `iniconfig` was included because `project` (v0.1.0) depends on `iniconfig`
     "###
     );
 
@@ -1340,6 +1344,8 @@ fn lock_wheel_git_archive_missing_lfs() -> Result<()> {
     error: Failed to download `iniconfig @ git+https://github.com/astral-sh/archive-in-git-test#lfs=true&path=archives/iniconfig-2.0.0-py3-none-any.whl`
       cause: The wheel `git+https://github.com/astral-sh/archive-in-git-test#lfs=true&path=archives/iniconfig-2.0.0-py3-none-any.whl` is missing Git LFS artifacts.
       cause: Git LFS extension not found. Ensure that Git LFS is installed and available.
+
+    hint: `iniconfig` (v2.0.0) was included because `project` (v0.1.0) depends on `iniconfig`
     "###
     );
 
@@ -2635,6 +2641,8 @@ async fn lock_sdist_url_rejected_archive_not_cached() -> Result<()> {
 
              Computed:
                sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
+
+    hint: `demo-pkg` was included because `project` (v0.1.0) depends on `demo-pkg`
     ");
     assert!(
         !sentinel.exists(),
@@ -2674,6 +2682,8 @@ async fn lock_sdist_url_rejected_archive_not_cached() -> Result<()> {
       cause: Failed to extract archive: demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz
       cause: I/O operation failed during extraction
       cause: Invalid gzip header
+
+    hint: `demo-pkg` was included because `project` (v0.1.0) depends on `demo-pkg`
     ");
     assert!(
         !sentinel.exists(),
@@ -30890,6 +30900,8 @@ fn lock_invalid_project_table() -> Result<()> {
              2 |         [project.urls]
                |          ^^^^^^^
              `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set
+
+    hint: `b` was included because `a` (v0.1.0) depends on `b`
     ");
 
     Ok(())
@@ -43525,7 +43537,7 @@ fn lock_unsupported_wheel_url_requires_python() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: No solution found when resolving dependencies
-      cause: Because only numpy==2.3.5 is available and numpy==2.3.5 has no wheels with a matching Python version tag (e.g., `cp312`), we can conclude that all versions of numpy cannot be used.
+      cause: Because numpy==2.3.5 has no wheels with a matching Python version tag (e.g., `cp312`) and only numpy==2.3.5 is available, we can conclude that all versions of numpy cannot be used.
              And because your project depends on numpy, we can conclude that your project's requirements are unsatisfiable.
     ");
 
@@ -43565,7 +43577,7 @@ fn lock_unsupported_wheel_url_supported_platform() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: No solution found when resolving dependencies for split (markers: sys_platform == 'win32')
-      cause: Because only numpy==2.3.5 is available and numpy==2.3.5 has no Windows-compatible wheels, we can conclude that all versions of numpy cannot be used.
+      cause: Because numpy==2.3.5 has no Windows-compatible wheels and only numpy==2.3.5 is available, we can conclude that all versions of numpy cannot be used.
              And because your project depends on numpy, we can conclude that your project's requirements are unsatisfiable.
     ");
 
@@ -43595,7 +43607,7 @@ fn lock_unsupported_wheel_url_required_platform() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: No solution found when resolving dependencies
-      cause: Because only numpy==2.3.5 is available and numpy==2.3.5 has no Windows-compatible wheels, we can conclude that all versions of numpy cannot be used.
+      cause: Because numpy==2.3.5 has no Windows-compatible wheels and only numpy==2.3.5 is available, we can conclude that all versions of numpy cannot be used.
              And because your project depends on numpy, we can conclude that your project's requirements are unsatisfiable.
     ");
 
@@ -43758,7 +43770,7 @@ fn lock_required_environment_wheel_url_fork() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: No solution found when resolving dependencies for split (markers: platform_machine == 'x86_64')
-      cause: Because only a==1.0.0 is available and a==1.0.0 has no Linux-compatible wheels, we can conclude that all versions of a cannot be used.
+      cause: Because a==1.0.0 has no Linux-compatible wheels and only a==1.0.0 is available, we can conclude that all versions of a cannot be used.
              And because your project depends on a, we can conclude that your project's requirements are unsatisfiable.
     ");
 

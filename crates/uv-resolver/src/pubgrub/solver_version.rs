@@ -334,9 +334,10 @@ impl CandidateSet {
         }
     }
 
-    /// The concrete source required by a declaration or supplying a candidate's metadata. A
-    /// possible, unassigned URL can coexist with a named index without becoming a reporting source.
-    fn report_source(&self) -> Option<SolverSource> {
+    /// The concrete source required by a declaration or supplying a candidate's metadata, and
+    /// whether it fixes the candidate, including its build mode. A possible, unassigned URL can
+    /// coexist with a named index without becoming a reporting source.
+    fn report_source(&self) -> Option<(SolverSource, bool)> {
         if self.registry != Range::empty() {
             return None;
         }
@@ -351,15 +352,21 @@ impl CandidateSet {
         });
         let mut sources = indexes.chain(urls);
         let source = sources.next()?;
-        sources
-            .all(|other| match source {
-                SolverSource::Registry | SolverSource::Index(_) => false,
-                SolverSource::Url(a) => match other {
-                    SolverSource::Url(b) => a.source == b.source,
-                    SolverSource::Registry | SolverSource::Index(_) => false,
+        let mut exact_mode = true;
+        for other in sources {
+            match source {
+                SolverSource::Registry | SolverSource::Index(_) => return None,
+                SolverSource::Url(candidate) => match other {
+                    SolverSource::Url(other) if candidate.source == other.source => {
+                        exact_mode = false;
+                    }
+                    SolverSource::Registry | SolverSource::Index(_) | SolverSource::Url(_) => {
+                        return None;
+                    }
                 },
-            })
-            .then_some(source)
+            }
+        }
+        Some((source, exact_mode))
     }
 }
 
@@ -663,13 +670,28 @@ pub(crate) fn report_sources(error: &SolverTree) -> FxHashMap<PackageName, Solve
     let mut sources = FxHashMap::default();
     let mut record = |package: &PubGrubPackage, candidates: &CandidateSet| {
         if let Some(name) = package.name_no_root()
-            && let Some(source) = candidates.report_source()
+            && let Some((source, exact_mode)) = candidates.report_source()
         {
-            let previous = sources.entry(name.clone()).or_insert(source);
-            if let SolverSource::Index(_) = *previous
-                && let SolverSource::Url(_) = source
-            {
-                *previous = source;
+            let (previous, previous_exact_mode) =
+                sources.entry(name.clone()).or_insert((source, exact_mode));
+            match (*previous, source) {
+                (SolverSource::Index(_), SolverSource::Url(_)) => {
+                    *previous = source;
+                    *previous_exact_mode = exact_mode;
+                }
+                (SolverSource::Url(previous_candidate), SolverSource::Url(candidate))
+                    if previous_candidate.source == candidate.source
+                        && exact_mode
+                        && !*previous_exact_mode =>
+                {
+                    *previous = source;
+                    *previous_exact_mode = true;
+                }
+                (
+                    SolverSource::Registry | SolverSource::Url(_),
+                    SolverSource::Registry | SolverSource::Index(_) | SolverSource::Url(_),
+                )
+                | (SolverSource::Index(_), SolverSource::Registry | SolverSource::Index(_)) => {}
             }
         }
     };
@@ -700,6 +722,9 @@ pub(crate) fn report_sources(error: &SolverTree) -> FxHashMap<PackageName, Solve
         }
     }
     sources
+        .into_iter()
+        .map(|(name, (source, _))| (name, source))
+        .collect()
 }
 
 /// Convert a shared source-aware derivation to the PEP 440 report without recursive traversal.
@@ -902,6 +927,9 @@ mod tests {
         let normal_only = CandidateSet::singleton(normal.clone());
         let editable_only = CandidateSet::singleton(editable.clone());
 
+        assert_eq!(directory.report_source(), Some((normal.source, false)));
+        assert_eq!(normal_only.report_source(), Some((normal.source, true)));
+        assert_eq!(editable_only.report_source(), Some((editable.source, true)));
         assert_eq!(directory, normal_only.union(&editable_only));
         assert!(normal_only.is_disjoint(&editable_only));
         assert_eq!(directory.difference(&normal_only), editable_only);

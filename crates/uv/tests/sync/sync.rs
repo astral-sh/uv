@@ -2581,6 +2581,8 @@ fn sync_extra_build_dependencies_setuptools_legacy() -> Result<()> {
              [stderr]
              Missing `anyio` module
 
+    hint: `child` was included because `parent` (v0.1.0) depends on `child`
+
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
 

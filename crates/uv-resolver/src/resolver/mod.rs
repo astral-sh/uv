@@ -489,20 +489,43 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     })
                                     .collect();
                                 let mut report_sources = sources_for_report(&err);
-                                report_sources.extend(grounding.indexes.iter().filter_map(
-                                    |(name, sources)| {
-                                        sources.first_key_value().map(|(source, _)| {
-                                            (name.clone(), SolverSource::Index(*source))
+                                report_sources.extend(
+                                    grounding
+                                        .indexes
+                                        .iter()
+                                        // A grounded URL will override the index. Keep its proof's
+                                        // mode available when its declaration accepts either mode.
+                                        .filter(|(name, _)| {
+                                            grounding.sources_for(name).next().is_none()
                                         })
-                                    },
-                                ));
-                                report_sources.extend(grounding.iter().filter_map(
-                                    |(name, sources)| {
-                                        sources.first_key_value().map(|(source, _)| {
-                                            (name.clone(), SolverSource::Url(source.normal()))
-                                        })
-                                    },
-                                ));
+                                        .filter_map(|(name, sources)| {
+                                            sources.first_key_value().map(|(source, _)| {
+                                                (name.clone(), SolverSource::Index(*source))
+                                            })
+                                        }),
+                                );
+                                for (name, sources) in grounding.iter() {
+                                    let Some((source, _)) = sources.first_key_value() else {
+                                        continue;
+                                    };
+                                    let candidate = if grounding.has_editable(*source) {
+                                        source.editable()
+                                    } else if urls::directory_mode(
+                                        &grounding.url(*source, &self.urls).parsed_url,
+                                    ) == Some(DirectoryMode::Normal)
+                                    {
+                                        source.normal()
+                                    } else if let Some(SolverSource::Url(candidate)) =
+                                        report_sources.get(name)
+                                        && candidate.source == *source
+                                    {
+                                        *candidate
+                                    } else {
+                                        source.normal()
+                                    };
+                                    report_sources
+                                        .insert(name.clone(), SolverSource::Url(candidate));
+                                }
                                 let fork_indexes = report_sources
                                     .iter()
                                     .filter_map(|(name, source)| match source {

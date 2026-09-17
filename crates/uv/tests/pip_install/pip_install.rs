@@ -10574,6 +10574,8 @@ fn install_build_isolation_package() -> Result<()> {
                File "<string>", line 8, in <module>
              ModuleNotFoundError: No module named 'hatchling'
 
+    hint: `iniconfig` was included because `project` (v0.1.0) depends on `iniconfig`
+
     hint: This error likely indicates that `iniconfig` depends on `hatchling`, but doesn't declare it as a build dependency. If `iniconfig` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
     [tool.uv.extra-build-dependencies]
