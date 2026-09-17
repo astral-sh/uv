@@ -338,9 +338,9 @@ impl NetworkSettings {
                 "The `UV_NATIVE_TLS` environment variable is deprecated and will be removed in a future release. Use `UV_SYSTEM_CERTS` instead."
             );
         }
-        if workspace
-            .and_then(|workspace| workspace.globals.native_tls)
-            .is_some()
+        if let Some(workspace) = workspace
+            && workspace.globals.native_tls.is_some()
+            && workspace.globals.system_certs.is_none()
         {
             warn_user_once!(
                 "The `native-tls` setting is deprecated and will be removed in a future release. Use `system-certs` instead."
