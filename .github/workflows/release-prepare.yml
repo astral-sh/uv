@@ -125,11 +125,13 @@ jobs:
               --jq '.[0].url'
           )"
           if [ -n "$pull_request" ]; then
+            gh pr edit "$pull_request" --add-assignee "$GITHUB_TRIGGERING_ACTOR"
             printf '%s\n' "$pull_request"
           else
             gh pr create \
               --base main \
               --head "$branch" \
+              --assignee "$GITHUB_TRIGGERING_ACTOR" \
               --fill-first
           fi
         env:
