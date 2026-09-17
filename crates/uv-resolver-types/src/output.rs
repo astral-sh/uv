@@ -408,7 +408,7 @@ impl Display for ConflictingDistributionError {
 
 /// A resolution with no unresolved forks and at most one base distribution per package.
 #[derive(Debug)]
-pub struct SingleEnvironmentResolution(ResolverOutput);
+struct SingleEnvironmentResolution(ResolverOutput);
 
 /// An error converting a [`ResolverOutput`] to a single-environment resolution.
 #[derive(Debug, thiserror::Error)]

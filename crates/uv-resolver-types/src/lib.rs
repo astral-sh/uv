@@ -12,6 +12,5 @@ pub use metadata::{DistributionMetadataIndex, MetadataResponse, MetadataUnavaila
 pub use options::{Flexibility, Options, OptionsBuilder};
 pub use output::{
     ConflictingDistributionError, ResolutionConversionError, ResolutionGraphNode, ResolverOutput,
-    SingleEnvironmentResolution,
 };
 pub use universal_marker::{ConflictMarker, ConflictMarkerError, UniversalMarker};
