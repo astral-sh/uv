@@ -1,5 +1,37 @@
 on:
   workflow_call:
+    inputs:
+      threat-models:
+        description: "Threat model directory in the caller repository"
+        type: string
+        default: agents/references
+      setup-command:
+        description: "Bash commands to run at the caller workflow revision before checking out the PR"
+        type: string
+        default: ""
+      runner:
+        description: "Linux x86-64 runner for the security review"
+        type: string
+        default: ubuntu-latest
+      helper-runner:
+        description: "Linux x86-64 runner for preparing and publishing findings"
+        type: string
+        default: ubuntu-latest
+      uv-version:
+        description: "uv version used for repository setup and review scripts"
+        type: string
+        required: true
+      uv-checksum:
+        description: "SHA-256 of the Linux x86-64 uv release archive"
+        type: string
+        required: true
+    outputs:
+      result:
+        description: "The security review result"
+        value: ${{ jobs.review.outputs.result }}
+      comments:
+        description: "The prepared GitHub review comments"
+        value: ${{ jobs.prepare.outputs.result }}
 
 permissions: {}
 
@@ -9,7 +41,7 @@ env:
 jobs:
   review:
     name: "security review"
-    runs-on: depot-ubuntu-24.04-16
+    runs-on: ${{ inputs.runner }}
     environment: automations
     timeout-minutes: 30
     permissions:
@@ -19,23 +51,39 @@ jobs:
     outputs:
       result: ${{ steps.review.outputs.final-message }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Checkout review implementation
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          sparse-checkout: agents/security-pr-review
+          persist-credentials: false
+
+      - name: Save review implementation
+        run: cp -R agents/security-pr-review "$RUNNER_TEMP/pull-request-review-source"
+
+      - name: Checkout caller repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Save toolchain configuration at the workflow revision
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: ${{ inputs.uv-version }}
+          checksum: ${{ inputs.uv-checksum }}
+
+      - name: Set up caller repository
+        if: inputs.setup-command != ''
         env:
-          REVIEW_TOOLCHAIN: ${{ runner.temp }}/pull-request-review/toolchain
-        run: |
-          mkdir -p "$REVIEW_TOOLCHAIN"
-          cp pyproject.toml uv.lock "$REVIEW_TOOLCHAIN/"
+          SETUP_COMMAND: ${{ inputs.setup-command }}
+        run: bash -euo pipefail -c "$SETUP_COMMAND"
 
       - name: Prepare review configuration
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          THREAT_MODELS: agents/references
-        run: bash agents/security-pr-review/scripts/setup.sh
+          THREAT_MODELS: ${{ inputs.threat-models }}
+        run: bash "$RUNNER_TEMP/pull-request-review-source/scripts/setup.sh"
 
       - name: "Checkout Codex Security plugin"
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -48,12 +96,6 @@ jobs:
             plugins/codex-security
           persist-credentials: false
 
-      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
-        with:
-          # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.12.13"
-          checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
-
       - name: "Install Codex Security plugin"
         run: '"$REVIEW_CONFIG/scripts/install-codex-security.sh" "$REVIEW_CONFIG/codex"'
 
@@ -64,11 +106,6 @@ jobs:
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-
-      - name: "Install cargo nextest"
-        run: |
-          uv sync --project "$REVIEW_CONFIG/toolchain" --only-dev
-          echo "$REVIEW_CONFIG/toolchain/.venv/bin" >> "$GITHUB_PATH"
 
       # codex-action configures these only on GitHub-hosted runners.
       - name: "Enable Linux user namespaces for bubblewrap"
@@ -120,22 +157,25 @@ jobs:
   prepare:
     needs: review
     if: needs.review.outputs.result != ''
-    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.helper-runner }}
     timeout-minutes: 5
     permissions:
       contents: read
     outputs:
       result: ${{ steps.comments.outputs.result }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Checkout review implementation
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          sparse-checkout: agents/security-pr-review
           persist-credentials: false
 
       - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
-          # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.12.13"
-          checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
+          version: ${{ inputs.uv-version }}
+          checksum: ${{ inputs.uv-checksum }}
 
       - name: "Prepare review findings"
         id: comments
@@ -147,19 +187,19 @@ jobs:
   report:
     needs: prepare
     if: needs.prepare.outputs.result != '' && fromJSON(needs.prepare.outputs.result).comments[0] != null
-    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.helper-runner }}
     environment: automations
     timeout-minutes: 5
     permissions:
       id-token: write # for the credential broker
     steps:
-      - name: "Get uv token"
+      - name: "Get repository token"
         id: token
         uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
         with:
           exchange-url: ${{ secrets.STS_API_URL }}/exchange
           audience: ${{ secrets.STS_API_URL }}
-          repository: astral-sh/uv
+          repository: ${{ github.repository }}
           permissions: |
             pull_requests: write
 
