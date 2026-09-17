@@ -64,65 +64,8 @@ explicitly created or updated using `uv lock`:
 $ uv lock
 ```
 
-### Locking build dependencies
-
-The `build-dependency-locking` [preview feature](../preview.md) records the isolated environments
-used to build source packages selected from a project's runtime lock. It is useful when a deployment
-must build packages without compatible wheels, or when a project needs to review changes to its
-build tools independently of its runtime dependencies.
-
-Create the build lock explicitly:
-
-```console
-$ uv lock --build-dependencies --preview-features build-dependency-locking
-```
-
-Enabling preview features alone does not change the lockfile format. Once created, the build lock is
-required by project operations even when the preview feature is not enabled. `uv sync`, `uv run`,
-and `uv build --wheel` from a locked source directory use the recorded environments. Missing
-coverage or changed build declarations cause an error instead of an unlocked build. Use
-`uv lock --build-dependencies` with the preview feature to rediscover the build requirements; add
-`--check` to check for changes without writing the result.
-
-Each source and build operation has an independent dependency graph. This permits two source
-packages to use incompatible versions of the same build tool. The requirements declared by the
-source and those reported by the backend hook are recorded separately, along with the bootstrap and
-final environments required by [PEP 517](https://peps.python.org/pep-0517/) and
-[PEP 660](https://peps.python.org/pep-0660/). Build-only packages are not installed in the project
-environment. The selected source archives and build-dependency wheels are hash-checked.
-
-An update prefers previously locked build-dependency versions when they still satisfy the
-requirements. `--upgrade` and `--upgrade-package` also apply to build dependencies, including
-version bounds supplied with `--upgrade-package`.
-
-!!! warning
-
-    A required build lock uses lockfile version 2. Older uv releases reject it. Coordinate the
-    migration with other writers of the lockfile, and allow already-running older uv commands to
-    finish first. To remove the requirement and return to the ordinary version-1 format, run
-    `uv lock --no-build-dependencies`. This does not make the old build environments available to
-    older uv releases.
-
-The initial preview has deliberately narrow coverage:
-
-- Sources with static runtime metadata in `pyproject.toml` or a standards-compliant `PKG-INFO`.
-  Runtime metadata that depends on executing a backend is not supported, because resolving it before
-  capturing the build environment could produce a different runtime graph.
-- One observed Python interpreter, ABI, and marker environment. The runtime dependency graph remains
-  universal, but builds on a different executor require a new build lock.
-- Isolated wheel and editable builds. Build dependencies must have compatible wheels; recursive
-  source builds are not supported.
-- Default build settings. Config settings, extra build dependencies or variables, and disabling
-  package sources are not supported. `uv build --wheel` requires the recorded build constraints.
-- Project and workspace locks. Tool installation, script-lock creation, ephemeral `uv run --with`
-  requirements, sdist creation, wheel builds from an sdist, file listing, and exporting the build
-  contract are not yet supported.
-
-The lock records dependency environments, not a hermetic build machine. A backend can still observe
-external tools, environment variables, and mutable local source files. uv checks a local source's
-`pyproject.toml` before reusing its locked build and checks hook-reported requirements when a new
-build is started, but does not promise byte-identical wheels or a complete snapshot of the source
-tree.
+The optional [build-dependency locking preview](../../reference/internals/build-dependencies.md)
+also records the isolated environments used to build selected source packages.
 
 ## Syncing the environment
 
