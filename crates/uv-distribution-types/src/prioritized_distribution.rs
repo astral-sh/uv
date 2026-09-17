@@ -928,15 +928,16 @@ fn implied_platform_markers(filename: &WheelFilename) -> MarkerTree {
 
 /// Translate a macOS deployment target into the corresponding Darwin kernel release.
 ///
-/// macOS 10.16 is the compatibility spelling of macOS 11. macOS 26 switched to year-based
-/// product versions without changing Darwin's release numbering.
+/// macOS 10.16 is the compatibility spelling of macOS 11. macOS 26 uses Darwin 25;
+/// starting with macOS 27, the major versions match.
 fn macos_darwin_release(major: u16, minor: u16) -> Option<Version> {
     let release = match (major, minor) {
         (10, 0) => [1, 3, 0],
         (10, 1) => [1, 4, 1],
         (10, 2..=16) => [u64::from(minor) + 4, 0, 0],
         (11..=15, 0) => [u64::from(major) + 9, 0, 0],
-        (26.., 0) => [u64::from(major) - 1, 0, 0],
+        (26, 0) => [25, 0, 0],
+        (27.., 0) => [u64::from(major), 0, 0],
         _ => return None,
     };
     Some(Version::new(release))
@@ -1214,6 +1215,10 @@ mod tests {
             (
                 "macosx_26_0_arm64",
                 "sys_platform == 'darwin' and platform_machine == 'arm64' and platform_release >= '25.0.0'",
+            ),
+            (
+                "macosx_27_0_arm64",
+                "sys_platform == 'darwin' and platform_machine == 'arm64' and platform_release >= '27.0.0'",
             ),
             (
                 "macosx_26_0_arm64.macosx_15_0_x86_64",
