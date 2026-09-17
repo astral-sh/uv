@@ -38,7 +38,7 @@ use uv_preview::Preview;
 use uv_pypi_types::Conflicts;
 use uv_python::{
     ConfigDiscovery, EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment,
-    PythonInstallation, PythonPreference, PythonRequest, PythonVariant, PythonVersionFile,
+    PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
     VersionFileDiscoveryOptions, VersionRequest,
 };
 use uv_requirements::RequirementsSpecification;
@@ -694,7 +694,9 @@ pub(crate) async fn refine_interpreter(
 
     let requires_python_request = PythonRequest::Version(VersionRequest::from_specifiers(
         VersionSpecifiers::from_iter([lower_bound, upper_bound]),
-        PythonVariant::default(),
+        python_request
+            .and_then(PythonRequest::variants)
+            .unwrap_or_default(),
     ));
 
     debug!("Refining interpreter with: {requires_python_request}");
