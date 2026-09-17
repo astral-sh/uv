@@ -1964,7 +1964,7 @@ fn simplify_range(
 #[cfg(test)]
 mod tests {
     use std::assert_matches;
-    use uv_resolver_types::PackageFacet;
+    use uv_resolver_types::PackageVariant;
 
     use super::*;
     use crate::resolver::UnavailableVersion;
@@ -1989,7 +1989,7 @@ mod tests {
     fn pubgrub_package(name: &str) -> PubGrubPackage {
         PubGrubPackage::from(PubGrubPackageInner::Package {
             name: package_name(name),
-            facet: PackageFacet::Base,
+            variant: PackageVariant::Base,
             marker: uv_pep508::MarkerTree::TRUE,
         })
     }

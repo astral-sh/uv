@@ -7,7 +7,7 @@ mod options;
 mod output;
 pub mod universal_marker;
 
-pub use distribution::{AnnotatedDist, PackageFacet};
+pub use distribution::{AnnotatedDist, PackageVariant};
 pub use metadata::{DistributionMetadataIndex, MetadataResponse, MetadataUnavailable};
 pub use options::{Flexibility, Options, OptionsBuilder};
 pub use output::{ConflictingDistributionError, ResolutionGraphNode, ResolverOutput};

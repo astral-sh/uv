@@ -604,10 +604,10 @@ impl PubGrubReportFormatter<'_> {
     fn format_workspace_member(&self, package: &PubGrubPackage) -> Option<Cow<'static, str>> {
         match &**package {
             // TODO(zanieb): Improve handling of dev and extra for single-project workspaces
-            PubGrubPackageInner::Package { name, facet, .. }
+            PubGrubPackageInner::Package { name, variant, .. }
                 if self.workspace_members.contains(name) =>
             {
-                if self.is_single_project_workspace() && facet.is_base() {
+                if self.is_single_project_workspace() && variant.is_base() {
                     Some(Cow::Borrowed("your project"))
                 } else {
                     Some(Cow::Owned(format!("{package}")))
@@ -632,10 +632,10 @@ impl PubGrubReportFormatter<'_> {
     fn is_single_project_workspace_member(&self, package: &PubGrubPackage) -> bool {
         match &**package {
             // TODO(zanieb): Improve handling of dev and extra for single-project workspaces
-            PubGrubPackageInner::Package { name, facet, .. }
+            PubGrubPackageInner::Package { name, variant, .. }
                 if self.workspace_members.contains(name) =>
             {
-                self.is_single_project_workspace() && facet.is_base()
+                self.is_single_project_workspace() && variant.is_base()
             }
             _ => false,
         }

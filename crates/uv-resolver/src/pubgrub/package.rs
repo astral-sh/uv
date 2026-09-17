@@ -4,7 +4,7 @@ use std::sync::Arc;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::MarkerTree;
 use uv_pypi_types::ConflictItemRef;
-use uv_resolver_types::PackageFacet;
+use uv_resolver_types::PackageVariant;
 
 use crate::python_requirement::PythonRequirement;
 
@@ -50,7 +50,7 @@ pub enum PubGrubPackageInner {
     /// A Python package.
     Package {
         name: PackageName,
-        facet: PackageFacet,
+        variant: PackageVariant,
         marker: MarkerTree,
     },
     /// A proxy package to represent a dependency with an extra (e.g., `black[colorama]`).
@@ -93,31 +93,35 @@ pub enum PubGrubPackageInner {
 }
 
 impl PubGrubPackage {
-    /// Create a [`PubGrubPackage`] from a package name and facet.
-    pub(crate) fn from_package(name: PackageName, facet: PackageFacet, marker: MarkerTree) -> Self {
+    /// Create a [`PubGrubPackage`] from a package name and variant.
+    pub(crate) fn from_package(
+        name: PackageName,
+        variant: PackageVariant,
+        marker: MarkerTree,
+    ) -> Self {
         // Remove all extra expressions from the marker, since we track extras
         // separately. This also avoids an issue where packages added via
         // extras end up having two distinct marker expressions, which in turn
         // makes them two distinct packages. This results in PubGrub being
         // unable to unify version constraints across such packages.
         let marker = marker.simplify_extras_with(|_| true);
-        match facet {
-            PackageFacet::Extra(extra) => Self(Arc::new(PubGrubPackageInner::Extra {
+        match variant {
+            PackageVariant::Extra(extra) => Self(Arc::new(PubGrubPackageInner::Extra {
                 name,
                 extra,
                 marker,
             })),
-            PackageFacet::Group(group) => Self(Arc::new(PubGrubPackageInner::Group {
+            PackageVariant::Group(group) => Self(Arc::new(PubGrubPackageInner::Group {
                 name,
                 group,
                 marker,
             })),
-            PackageFacet::Base if !marker.is_true() => {
+            PackageVariant::Base if !marker.is_true() => {
                 Self(Arc::new(PubGrubPackageInner::Marker { name, marker }))
             }
-            PackageFacet::Base => Self(Arc::new(PubGrubPackageInner::Package {
+            PackageVariant::Base => Self(Arc::new(PubGrubPackageInner::Package {
                 name,
-                facet,
+                variant,
                 marker,
             })),
         }
@@ -141,7 +145,7 @@ impl PubGrubPackage {
             PubGrubPackageInner::Extra { name, .. } | PubGrubPackageInner::Marker { name, .. } => {
                 Some(Self::from_package(
                     name.clone(),
-                    PackageFacet::Base,
+                    PackageVariant::Base,
                     MarkerTree::TRUE,
                 ))
             }
@@ -205,13 +209,13 @@ impl PubGrubPackage {
             | PubGrubPackageInner::Python(_)
             | PubGrubPackageInner::System(_)
             | PubGrubPackageInner::Package {
-                facet: PackageFacet::Base | PackageFacet::Group(_),
+                variant: PackageVariant::Base | PackageVariant::Group(_),
                 ..
             }
             | PubGrubPackageInner::Group { .. }
             | PubGrubPackageInner::Marker { .. } => None,
             PubGrubPackageInner::Package {
-                facet: PackageFacet::Extra(extra),
+                variant: PackageVariant::Extra(extra),
                 ..
             }
             | PubGrubPackageInner::Extra { extra, .. } => Some(extra),
@@ -230,13 +234,13 @@ impl PubGrubPackage {
             | PubGrubPackageInner::Python(_)
             | PubGrubPackageInner::System(_)
             | PubGrubPackageInner::Package {
-                facet: PackageFacet::Base | PackageFacet::Extra(_),
+                variant: PackageVariant::Base | PackageVariant::Extra(_),
                 ..
             }
             | PubGrubPackageInner::Extra { .. }
             | PubGrubPackageInner::Marker { .. } => None,
             PubGrubPackageInner::Package {
-                facet: PackageFacet::Group(group),
+                variant: PackageVariant::Group(group),
                 ..
             }
             | PubGrubPackageInner::Group { group, .. } => Some(group),
@@ -254,13 +258,13 @@ impl PubGrubPackage {
             | PubGrubPackageInner::System(_) => None,
             PubGrubPackageInner::Package {
                 name,
-                facet: PackageFacet::Base,
+                variant: PackageVariant::Base,
                 ..
             }
             | PubGrubPackageInner::Marker { name, .. } => Some(ConflictItemRef::from(name)),
             PubGrubPackageInner::Package {
                 name,
-                facet: PackageFacet::Extra(extra),
+                variant: PackageVariant::Extra(extra),
                 ..
             }
             | PubGrubPackageInner::Extra { name, extra, .. } => {
@@ -268,7 +272,7 @@ impl PubGrubPackage {
             }
             PubGrubPackageInner::Package {
                 name,
-                facet: PackageFacet::Group(group),
+                variant: PackageVariant::Group(group),
                 ..
             }
             | PubGrubPackageInner::Group { name, group, .. } => {
@@ -333,7 +337,7 @@ impl PubGrubPackage {
 
     /// Returns a new [`PubGrubPackage`] representing the base package with the given name.
     pub(crate) fn base(name: PackageName) -> Self {
-        Self::from_package(name, PackageFacet::Base, MarkerTree::TRUE)
+        Self::from_package(name, PackageVariant::Base, MarkerTree::TRUE)
     }
 }
 
@@ -359,7 +363,7 @@ impl std::fmt::Display for PubGrubPackageInner {
             Self::System(name) => write!(f, "system:{name}"),
             Self::Package {
                 name,
-                facet: PackageFacet::Base,
+                variant: PackageVariant::Base,
                 marker,
             } => {
                 if let Some(marker) = marker.contents() {
@@ -370,7 +374,7 @@ impl std::fmt::Display for PubGrubPackageInner {
             }
             Self::Package {
                 name,
-                facet: PackageFacet::Extra(extra),
+                variant: PackageVariant::Extra(extra),
                 marker,
             } => {
                 if let Some(marker) = marker.contents() {
@@ -381,7 +385,7 @@ impl std::fmt::Display for PubGrubPackageInner {
             }
             Self::Package {
                 name,
-                facet: PackageFacet::Group(dev),
+                variant: PackageVariant::Group(dev),
                 marker,
             } => {
                 if let Some(marker) = marker.contents() {

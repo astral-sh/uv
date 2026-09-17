@@ -35,7 +35,7 @@ use uv_pep508::{
 };
 use uv_platform_tags::{IncompatibleTag, Tags};
 use uv_pypi_types::{ConflictItem, ConflictItemRef, ConflictKindRef, Conflicts, VerbatimParsedUrl};
-use uv_resolver_types::PackageFacet;
+use uv_resolver_types::PackageVariant;
 use uv_static::EnvVars;
 use uv_torch::TorchStrategy;
 use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
@@ -1056,7 +1056,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         for (id, package, range) in packages {
             let PubGrubPackageInner::Package {
                 name,
-                facet: PackageFacet::Base,
+                variant: PackageVariant::Base,
                 marker: MarkerTree::TRUE,
             } = &**package
             else {
@@ -1805,7 +1805,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
             PubGrubPackageInner::Package {
                 name,
-                facet,
+                variant,
                 marker: _,
             } => {
                 // If we're excluding transitive dependencies, short-circuit.
@@ -1905,15 +1905,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     })
                     .map(PubGrubDependency::from);
 
-                let (requirements, context) = match facet {
-                    PackageFacet::Group(group) => (
+                let (requirements, context) = match variant {
+                    PackageVariant::Group(group) => (
                         metadata
                             .dependency_groups
                             .get(group)
                             .map_or(&[][..], AsRef::as_ref),
                         RequirementContext::Group { name, version },
                     ),
-                    PackageFacet::Extra(extra) => (
+                    PackageVariant::Extra(extra) => (
                         metadata.requires_dist.as_ref(),
                         RequirementContext::Extra {
                             name,
@@ -1921,7 +1921,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             extra,
                         },
                     ),
-                    PackageFacet::Base => (
+                    PackageVariant::Base => (
                         metadata.requires_dist.as_ref(),
                         RequirementContext::Package { name, version },
                     ),
@@ -1931,7 +1931,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 PubGrubDependency::from_requirements(
                     &self.conflicts,
                     requirements,
-                    facet.group(),
+                    variant.group(),
                     Some(package),
                 )
                 .map(|mut dependencies| {
@@ -1952,7 +1952,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         .map(move |marker| PubGrubDependency {
                             package: PubGrubPackage::from(PubGrubPackageInner::Package {
                                 name: name.clone(),
-                                facet: PackageFacet::Base,
+                                variant: PackageVariant::Base,
                                 marker,
                             }),
                             version: Range::singleton(version.clone()),
@@ -1979,9 +1979,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 .map(move |extra| PubGrubDependency {
                                     package: PubGrubPackage::from(PubGrubPackageInner::Package {
                                         name: name.clone(),
-                                        facet: extra
+                                        variant: extra
                                             .cloned()
-                                            .map_or(PackageFacet::Base, PackageFacet::Extra),
+                                            .map_or(PackageVariant::Base, PackageVariant::Extra),
                                         marker,
                                     }),
                                     version: Range::singleton(version.clone()),
@@ -2006,7 +2006,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         .map(|marker| PubGrubDependency {
                             package: PubGrubPackage::from(PubGrubPackageInner::Package {
                                 name: name.clone(),
-                                facet: PackageFacet::Group(group.clone()),
+                                variant: PackageVariant::Group(group.clone()),
                                 marker,
                             }),
                             version: Range::singleton(version.clone()),
@@ -3146,48 +3146,51 @@ impl ForkState {
                 let self_package = &self.pubgrub.package_store[self_package];
                 let dependency_package = &self.pubgrub.package_store[dependency_package];
 
-                let (self_name, self_facet) = match &**self_package {
+                let (self_name, self_variant) = match &**self_package {
                     PubGrubPackageInner::Package {
                         name: self_name,
-                        facet: self_facet,
+                        variant: self_variant,
                         marker: _,
-                    } => (Some(self_name), self_facet),
+                    } => (Some(self_name), self_variant),
 
-                    PubGrubPackageInner::Root(_) => (None, &PackageFacet::Base),
+                    PubGrubPackageInner::Root(_) => (None, &PackageVariant::Base),
 
                     _ => continue,
                 };
 
-                let (name, facet, marker) = match &**dependency_package {
+                let (name, variant, marker) = match &**dependency_package {
                     PubGrubPackageInner::Package {
                         name,
-                        facet,
+                        variant,
                         marker,
                     } => {
-                        debug_assert!(facet.is_base(), "Packages should depend on a facet proxy");
+                        debug_assert!(
+                            variant.is_base(),
+                            "Packages should depend on a variant proxy"
+                        );
 
                         // Ignore self-dependencies (e.g., `tensorflow-macos` depends on `tensorflow-macos`),
                         // but allow groups to depend on other groups, or on the package itself.
-                        if self_facet.group().is_none() && self_name == Some(name) {
+                        if self_variant.group().is_none() && self_name == Some(name) {
                             continue;
                         }
-                        (name, facet.clone(), *marker)
+                        (name, variant.clone(), *marker)
                     }
                     PubGrubPackageInner::Marker { name, marker } => {
-                        if self_facet.group().is_none() && self_name == Some(name) {
+                        if self_variant.group().is_none() && self_name == Some(name) {
                             continue;
                         }
-                        (name, PackageFacet::Base, *marker)
+                        (name, PackageVariant::Base, *marker)
                     }
                     PubGrubPackageInner::Extra {
                         name,
                         extra,
                         marker,
                     } => {
-                        if self_facet.group().is_none() {
+                        if self_variant.group().is_none() {
                             debug_assert!(self_name != Some(name), "Extras should be flattened");
                         }
-                        (name, PackageFacet::Extra(extra.clone()), *marker)
+                        (name, PackageVariant::Extra(extra.clone()), *marker)
                     }
                     PubGrubPackageInner::Group {
                         name,
@@ -3195,7 +3198,7 @@ impl ForkState {
                         marker,
                     } => {
                         debug_assert!(self_name != Some(name), "Groups should be flattened");
-                        (name, PackageFacet::Group(group.clone()), *marker)
+                        (name, PackageVariant::Group(group.clone()), *marker)
                     }
                     PubGrubPackageInner::Root(_)
                     | PubGrubPackageInner::Python(_)
@@ -3206,7 +3209,7 @@ impl ForkState {
                     ResolutionNode {
                         package: ResolutionPackage {
                             name: name.clone(),
-                            facet: self_facet.clone(),
+                            variant: self_variant.clone(),
                             url: url.cloned(),
                             index: index.cloned(),
                         },
@@ -3218,7 +3221,7 @@ impl ForkState {
                 let to = ResolutionNode {
                     package: ResolutionPackage {
                         name: name.clone(),
-                        facet,
+                        variant,
                         url: url.cloned(),
                         index: index.cloned(),
                     },
@@ -3230,7 +3233,7 @@ impl ForkState {
                 // only requires the group itself.
                 if let PubGrubPackageInner::Extra { .. } = &**dependency_package {
                     let mut base_edge = edge.clone();
-                    base_edge.to.package.facet = PackageFacet::Base;
+                    base_edge.to.package.variant = PackageVariant::Base;
                     edges.push(edge);
                     edges.push(base_edge);
                 } else {
@@ -3244,7 +3247,7 @@ impl ForkState {
             .filter_map(|(package, version)| {
                 if let PubGrubPackageInner::Package {
                     name,
-                    facet,
+                    variant,
                     marker: MarkerTree::TRUE,
                 } = &*self.pubgrub.package_store[package]
                 {
@@ -3252,7 +3255,7 @@ impl ForkState {
                     Some((
                         ResolutionPackage {
                             name: name.clone(),
-                            facet: facet.clone(),
+                            variant: variant.clone(),
                             url: url.cloned(),
                             index: index.cloned(),
                         },

@@ -60,7 +60,7 @@ impl ResolutionGraphNode {
         match self {
             Self::Root => None,
             Self::Dist(dist) => {
-                let extra = dist.facet.extra()?;
+                let extra = dist.variant.extra()?;
                 Some((&dist.name, extra))
             }
         }
@@ -70,7 +70,7 @@ impl ResolutionGraphNode {
         match self {
             Self::Root => None,
             Self::Dist(dist) => {
-                let group = dist.facet.group()?;
+                let group = dist.variant.group()?;
                 Some((&dist.name, group))
             }
         }
@@ -470,9 +470,9 @@ impl From<ResolverOutput> for uv_distribution_types::Resolution {
                     let source = inverse[&source_dist.name()];
                     let target = inverse[&target_dist.name()];
 
-                    let edge = if let Some(extra) = source_dist.facet.extra() {
+                    let edge = if let Some(extra) = source_dist.variant.extra() {
                         Edge::Optional(extra.clone())
-                    } else if let Some(group) = source_dist.facet.group() {
+                    } else if let Some(group) = source_dist.variant.group() {
                         Edge::Dev(group.clone())
                     } else {
                         Edge::Prod

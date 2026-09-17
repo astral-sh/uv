@@ -2527,7 +2527,7 @@ impl Lock {
             let ResolutionGraphNode::Dist(dist) = &resolution.graph[node_index] else {
                 continue;
             };
-            if let Some(extra) = dist.facet.extra() {
+            if let Some(extra) = dist.variant.extra() {
                 let id = PackageId::from_annotated_dist(dist, root)?;
                 let Some(package) = packages.get_mut(&id) else {
                     return Err(LockErrorKind::MissingExtraBase {
@@ -2554,7 +2554,7 @@ impl Lock {
                     root,
                 )?;
             }
-            if let Some(group) = dist.facet.group() {
+            if let Some(group) = dist.variant.group() {
                 let id = PackageId::from_annotated_dist(dist, root)?;
                 let Some(package) = packages.get_mut(&id) else {
                     return Err(LockErrorKind::MissingDevBase {
@@ -6353,7 +6353,7 @@ impl Package {
             };
 
             let package_id = PackageId::from_annotated_dist(distribution, root)?;
-            let extras = distribution.facet.extra().into_iter().cloned().collect();
+            let extras = distribution.variant.extra().into_iter().cloned().collect();
 
             // Preserve the distinction between an empty extra and an extra with dependencies.
             builder.add(
