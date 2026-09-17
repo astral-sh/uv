@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use thiserror::Error;
 
-use uv_fs::Simplified;
+use uv_fs::{Simplified, is_windows_absolute_path};
 use uv_pep508::split_scheme;
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 
@@ -84,13 +84,12 @@ impl FromStr for RequirementsInput {
     type Err = RequirementsInputError;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        let Some((scheme, rest)) = split_scheme(input) else {
+        if is_windows_absolute_path(input) {
             return Ok(PathBuf::from(input).into());
-        };
+        }
 
-        // Avoid interpreting Windows drive paths as URLs on other platforms.
-        if scheme.len() == 1 && (rest.starts_with('/') || rest.starts_with('\\')) {
-            return Ok(Self::Local(PathBuf::from(input)));
+        if split_scheme(input).is_none() {
+            return Ok(PathBuf::from(input).into());
         }
 
         let url = DisplaySafeUrl::parse(input)?;

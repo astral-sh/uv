@@ -23,11 +23,15 @@ fn parse_requirements_input() -> Result<()> {
         RequirementsInput::Local(relative_path.into())
     );
 
-    let windows_path = r"C:\Users\ferris\requirements.txt";
-    assert_eq!(
-        windows_path.parse::<RequirementsInput>()?,
-        RequirementsInput::Local(windows_path.into())
-    );
+    for windows_path in [
+        r"C:\Users\ferris\requirements.txt",
+        "C:/Users/ferris/requirements.txt",
+    ] {
+        assert_eq!(
+            windows_path.parse::<RequirementsInput>()?,
+            RequirementsInput::Local(windows_path.into())
+        );
+    }
 
     let absolute_path = std::env::current_dir()?.join("requirements.txt");
     let file_url =
