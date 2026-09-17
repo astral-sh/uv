@@ -8,7 +8,7 @@ use uv_normalize::{GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::RequirementOrigin;
 use uv_pypi_types::{ConflictItemRef, Conflicts, VerbatimParsedUrl};
-use uv_resolver_types::PackageVariant;
+use uv_resolver_types::PackageNodeKind;
 
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, Range};
 use crate::resolver::UnsatisfiableRequirement;
@@ -165,12 +165,12 @@ impl PubGrubDependency {
                 .iter()
                 .any(|extra| conflicts.contains(&requirement.name, extra))
             {
-                Either::Left(iter::once(PackageVariant::Base))
+                Either::Left(iter::once(PackageNodeKind::Base))
             } else {
                 Either::Right(iter::empty())
             };
             Either::Left(Either::Left(base.chain(
-                Box::into_iter(requirement.extras.clone()).map(PackageVariant::Extra),
+                Box::into_iter(requirement.extras.clone()).map(PackageNodeKind::Extra),
             )))
         } else if !requirement.groups.is_empty() {
             let base = if requirement
@@ -178,20 +178,20 @@ impl PubGrubDependency {
                 .iter()
                 .any(|group| conflicts.contains(&requirement.name, group))
             {
-                Either::Left(iter::once(PackageVariant::Base))
+                Either::Left(iter::once(PackageNodeKind::Base))
             } else {
                 Either::Right(iter::empty())
             };
             Either::Left(Either::Right(base.chain(
-                Box::into_iter(requirement.groups.clone()).map(PackageVariant::Group),
+                Box::into_iter(requirement.groups.clone()).map(PackageNodeKind::Group),
             )))
         } else {
-            Either::Right(iter::once(PackageVariant::Base))
+            Either::Right(iter::once(PackageNodeKind::Base))
         };
 
         // Add the package, plus any extra variants.
-        Ok(iter.map(move |variant| {
-            let pubgrub_requirement = PubGrubRequirement::from_requirement(&requirement, variant);
+        Ok(iter.map(move |kind| {
+            let pubgrub_requirement = PubGrubRequirement::from_requirement(&requirement, kind);
             let PubGrubRequirement {
                 package,
                 version,
@@ -273,22 +273,19 @@ struct PubGrubRequirement {
 }
 
 impl PubGrubRequirement {
-    fn package_for_requirement(
-        requirement: &Requirement,
-        variant: PackageVariant,
-    ) -> PubGrubPackage {
-        PubGrubPackage::from_package(requirement.name.clone(), variant, requirement.marker)
+    fn package_for_requirement(requirement: &Requirement, kind: PackageNodeKind) -> PubGrubPackage {
+        PubGrubPackage::from_package(requirement.name.clone(), kind, requirement.marker)
     }
 
     /// Convert a [`Requirement`] to a PubGrub-compatible package and range, while returning the URL
     /// on the [`Requirement`], if any.
-    fn from_requirement(requirement: &Requirement, variant: PackageVariant) -> Self {
+    fn from_requirement(requirement: &Requirement, kind: PackageNodeKind) -> Self {
         if let RequirementSource::Registry { specifier, .. } = &requirement.source {
-            return Self::from_registry_requirement(specifier, variant, requirement);
+            return Self::from_registry_requirement(specifier, kind, requirement);
         }
 
         Self {
-            package: Self::package_for_requirement(requirement, variant),
+            package: Self::package_for_requirement(requirement, kind),
             version: Range::full(),
             source: DependencySource::from_requirement(requirement),
         }
@@ -296,11 +293,11 @@ impl PubGrubRequirement {
 
     fn from_registry_requirement(
         specifier: &VersionSpecifiers,
-        variant: PackageVariant,
+        kind: PackageNodeKind,
         requirement: &Requirement,
     ) -> Self {
         Self {
-            package: Self::package_for_requirement(requirement, variant),
+            package: Self::package_for_requirement(requirement, kind),
             source: DependencySource::from_requirement(requirement),
             version: Range::from(specifier.clone()),
         }

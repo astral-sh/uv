@@ -5,7 +5,7 @@ use itertools::Itertools;
 use pubgrub::Term;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, trace};
-use uv_resolver_types::PackageVariant;
+use uv_resolver_types::PackageNodeKind;
 
 use crate::candidate_selector::CandidateSelector;
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, Range};
@@ -84,7 +84,7 @@ impl BatchPrefetcher {
     ) -> Result<(), ResolveError> {
         let PubGrubPackageInner::Package {
             name,
-            variant: PackageVariant::Base,
+            kind: PackageNodeKind::Base,
             marker: MarkerTree::TRUE,
         } = &**next
         else {
@@ -129,7 +129,7 @@ impl BatchPrefetcher {
         // Only track base packages, no virtual packages from extras.
         let PubGrubPackageInner::Package {
             name,
-            variant: PackageVariant::Base,
+            kind: PackageNodeKind::Base,
             marker: MarkerTree::TRUE,
         } = &**package
         else {
@@ -147,7 +147,7 @@ impl BatchPrefetcher {
     fn should_prefetch(&self, next: &PubGrubPackage) -> (usize, bool) {
         let PubGrubPackageInner::Package {
             name,
-            variant: PackageVariant::Base,
+            kind: PackageNodeKind::Base,
             marker: MarkerTree::TRUE,
         } = &**next
         else {

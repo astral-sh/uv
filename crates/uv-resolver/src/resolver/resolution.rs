@@ -8,7 +8,7 @@ use uv_normalize::PackageName;
 use uv_pep440::{MIN_VERSION, Version};
 use uv_pep508::MarkerTree;
 use uv_pypi_types::VerbatimParsedUrl;
-use uv_resolver_types::PackageVariant;
+use uv_resolver_types::PackageNodeKind;
 
 use crate::pins::FilePins;
 use crate::universal_marker::ConflictMarker;
@@ -61,14 +61,14 @@ impl Resolution {
             if let Some(extra) = edge
                 .from
                 .as_ref()
-                .and_then(|node| node.package.variant.extra())
+                .and_then(|node| node.package.kind.extra())
             {
                 write!(msg, " (extra: {extra})").unwrap();
             }
             if let Some(dev) = edge
                 .from
                 .as_ref()
-                .and_then(|node| node.package.variant.group())
+                .and_then(|node| node.package.kind.group())
             {
                 write!(msg, " (group: {dev})").unwrap();
             }
@@ -76,10 +76,10 @@ impl Resolution {
             write!(msg, " -> ").unwrap();
 
             write!(msg, "{}", edge.to.version).unwrap();
-            if let Some(extra) = edge.to.package.variant.extra() {
+            if let Some(extra) = edge.to.package.kind.extra() {
                 write!(msg, " (extra: {extra})").unwrap();
             }
-            if let Some(dev) = edge.to.package.variant.group() {
+            if let Some(dev) = edge.to.package.kind.group() {
                 write!(msg, " (group: {dev})").unwrap();
             }
             if let Some(marker) = edge.marker.contents() {
@@ -95,7 +95,7 @@ impl Resolution {
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub(crate) struct ResolutionPackage {
     pub(crate) name: PackageName,
-    pub(crate) variant: PackageVariant,
+    pub(crate) kind: PackageNodeKind,
     /// For registry packages, this is `None`; otherwise, the direct URL of the distribution.
     pub(crate) url: Option<VerbatimParsedUrl>,
     /// For URL packages, this is `None`; otherwise, the index URL of the distribution.

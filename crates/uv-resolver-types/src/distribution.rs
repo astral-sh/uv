@@ -13,14 +13,14 @@ use crate::UniversalMarker;
 
 /// The part of a package represented by a resolver graph node.
 #[derive(Debug, Clone, Default, Eq, Hash, PartialEq, PartialOrd, Ord)]
-pub enum PackageVariant {
+pub enum PackageNodeKind {
     #[default]
     Base,
     Group(GroupName),
     Extra(ExtraName),
 }
 
-impl PackageVariant {
+impl PackageNodeKind {
     pub fn extra(&self) -> Option<&ExtraName> {
         match self {
             Self::Extra(extra) => Some(extra),
@@ -51,7 +51,7 @@ pub struct AnnotatedDist {
     pub dist: ResolvedDist,
     pub name: PackageName,
     pub version: Version,
-    pub variant: PackageVariant,
+    pub kind: PackageNodeKind,
     pub hashes: HashDigests,
     pub metadata: Option<Metadata>,
     /// The "full" marker for this distribution. It precisely describes all
@@ -66,7 +66,7 @@ impl AnnotatedDist {
     /// Returns `true` if the [`AnnotatedDist`] is a base package (i.e., not an extra or a
     /// dependency group).
     pub(crate) fn is_base(&self) -> bool {
-        self.variant.is_base()
+        self.kind.is_base()
     }
 
     /// Returns the [`IndexUrl`] of the distribution, if it is from a registry.
