@@ -717,7 +717,14 @@ pub(crate) async fn check(
     let python_version = if let Some(python) = python {
         let request = PythonRequest::parse(&python);
         if let Some(venv) = venv.as_ref()
-            && request.satisfied(venv.interpreter(), cache)
+            && request
+                .satisfied_with_catalog(
+                    venv.interpreter(),
+                    &client_builder,
+                    cache,
+                    install_mirrors.python_downloads_json_url.as_deref(),
+                )
+                .await?
         {
             Some(venv.interpreter().python_minor_version())
         } else {
