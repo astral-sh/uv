@@ -4746,16 +4746,7 @@ fn system_certs_config_aliases() -> anyhow::Result<()> {
     "})?;
 
     diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.version())
-        .arg("--show-settings"), @"
-    ...
-             malware_check_url: None,
-         },
-     }
-    +
-    +----- stderr -----
-    +warning: The `native-tls` setting is deprecated and will be removed in a future release. Use `system-certs` instead.
-    ...
-    "
+        .arg("--show-settings"), @""
     );
 
     Ok(())
