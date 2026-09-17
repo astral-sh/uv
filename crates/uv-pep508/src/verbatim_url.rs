@@ -335,7 +335,7 @@ impl VerbatimUrl {
     pub fn as_path(&self) -> Result<PathBuf, VerbatimUrlError> {
         self.url
             .to_file_path()
-            .map_err(|()| VerbatimUrlError::PathConversion(self.url.clone()))
+            .map_err(|()| VerbatimUrlError::PathConversion(Box::new(self.url.clone())))
     }
 }
 
@@ -517,7 +517,7 @@ pub enum VerbatimUrlError {
 
     /// Received a URL that could not be converted to a path.
     #[error("URL could not be converted to a path: {0}")]
-    PathConversion(DisplaySafeUrl),
+    PathConversion(Box<DisplaySafeUrl>),
 
     /// Received a path that could not be normalized.
     #[error("path could not be normalized: {0}")]
