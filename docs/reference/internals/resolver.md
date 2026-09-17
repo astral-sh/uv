@@ -304,30 +304,43 @@ it is also authorized by an included first-party declaration, constraint, or ove
 activate an extra on an already authorized URL package; that package's own metadata may then declare
 further URLs. For Git, a different reference to the same repository, package location, and commit
 can use the authorized source. uv resolves the references to compare commits; it obtains package
-metadata only from an authorized source. This keeps the sources auditable: if only one index and no
-URL dependencies are provided, uv will not install any package from outside the index.
+metadata only from an authorized source. A selected declaration can require Git LFS even when
+another declaration of the same checkout omits it. Checkouts with and without LFS are separate
+candidates because the files and metadata available can differ. Metadata found only with LFS cannot
+enable LFS for its own checkout. This keeps the sources auditable: if only one index and no URL
+dependencies are provided, uv will not install any package from outside the index.
 
 The solver distinguishes registry and URL candidates even when their versions are identical: their
 metadata may be different. The same applies to different explicitly selected registries; an index
 declaration on an excluded package or extra no longer determines which registry supplies a package,
 and a declaration activated only on Linux does not determine the registry for other platforms.
 Hashes recorded for a registry pin are not reused for a selected URL merely because the versions
-match. Version requirements allow any source, including URLs not yet discovered. If the registry
-provides no suitable candidate but an authorized URL could still be introduced, the resolver
-continues processing other dependencies before rejecting the branch. It can revisit earlier
-candidate decisions, including extras, when a different selection might supply the missing URL.
-Small sets of universal registry wheels covering the active environment whose metadata all declare
-no dependencies cannot activate a URL provider and do not need to be revisited for that search. If a
-required URL cannot be fetched or its metadata is invalid, uv reports the underlying error; an error
-from an excluded candidate does not prevent resolution from succeeding. The same principle applies
-to first-party declarations that permit an explicit prerelease or a yanked version: the resolver can
-try such a candidate while other dependencies are undecided, but accepts it only if a selected
-first-party declaration actually permits it in the environments where the package is needed. A
-dependency of a selected local project can also make a package direct for
+match. Hashes authored on selected declarations of the same archive are retained; another included
+dependency spelling the URL without a hash cannot remove one. Version requirements allow any source,
+including URLs not yet discovered. If the registry provides no suitable candidate but an authorized
+URL could still be introduced, the resolver continues processing other dependencies before rejecting
+the branch. It can revisit earlier candidate decisions, including extras, when a different selection
+might supply the missing URL. For small sets of universal registry wheels covering the active
+environment, changing the registry version cannot help when every version has the same requirements
+and Python compatibility, or when none of those requirements can reach a possible first-party source
+or policy. Those candidates stay unrestricted while the search revisits the choices that can
+activate a source. If a required URL cannot be fetched or its metadata is invalid, uv reports the
+underlying error; an error from an excluded candidate does not prevent resolution from succeeding.
+The same principle applies to first-party declarations that permit an explicit prerelease or a
+yanked version: the resolver can try such a candidate while other dependencies are undecided, but
+accepts it only if a selected first-party declaration actually permits it in the environments where
+the package is needed. A dependency of a selected local project can also make a package direct for
 `--resolution lowest-direct`, even if another dependency was processed first. When a package is
 direct in only some environments, `--fork-strategy fewest` can reuse the lowest compatible version
 across environments; the default strategy prefers the highest version where the package is only
 transitive.
+
+Lockfile checks also follow current source authority. An immutable registry or Git package can sit
+on a path to a mutable dependency; when an independent source declaration, constraint, or global
+override authorizes that dependency, uv validates its current metadata. Source declarations on Git
+providers are retained so they can be checked offline. The metadata-free preview lock format also
+retains incoming requests for empty dependency extras, so adding a dependency to an activated extra
+can make a lock stale.
 
 ## Prioritization
 

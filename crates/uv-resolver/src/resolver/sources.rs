@@ -5,20 +5,23 @@ use pubgrub::{Id, State, VersionSet};
 use rustc_hash::{FxHashMap, FxHashSet};
 use uv_distribution_types::{DerivationChain, Requirement};
 use uv_git::GitResolver;
+use uv_git_types::GitLfs;
 use uv_normalize::PackageName;
 use uv_pep440::{MIN_VERSION, Version};
-use uv_pep508::MarkerTree;
-use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl, VerbatimParsedUrl};
+use uv_pep508::{MarkerTree, VerbatimUrl};
+use uv_pypi_types::{
+    HashDigest, HashDigests, Hashes, ParsedDirectoryUrl, ParsedUrl, VerbatimParsedUrl,
+};
 use uv_types::{HashStrategy, HashStrategyError};
 
 use crate::dependency_provider::UvDependencyProvider;
 use crate::pubgrub::{
-    CandidateSet, DirectoryMode, IndexId, PubGrubPackage, SolverSource, SolverVersion, SourceId,
-    UrlCandidate,
+    CandidateSet, IndexId, PubGrubPackage, SolverSource, SolverVersion, SourceId, UrlCandidate,
+    UrlMode,
 };
 use crate::python_requirement::PythonRequirement;
 use crate::resolver::environment::ResolverEnvironment;
-use crate::resolver::urls::Urls;
+use crate::resolver::urls::{Urls, declaration_mode};
 
 /// Optional source-search restrictions. They never introduce packages that the real root did not
 /// require: a missing package satisfies every restriction.
@@ -418,13 +421,12 @@ impl SourceDependencies {
                                 *previous = updated;
                                 changed = true;
                             }
-                            if let ParsedUrl::Directory(directory) = &declaration.url.parsed_url
-                                && directory.editable == Some(true)
-                                && directory.r#virtual != Some(true)
+                            if let Some(mode) = declaration_mode(&declaration.url.parsed_url)
+                                && mode != UrlMode::Normal
                             {
                                 let previous = grounding
-                                    .editables
-                                    .entry(declaration.source)
+                                    .modes
+                                    .entry((declaration.source, mode))
                                     .or_insert(MarkerTree::FALSE);
                                 let updated = previous.or(context);
                                 if updated != *previous {
@@ -455,7 +457,7 @@ impl SourceDependencies {
         }
 
         let mut directory_declarations = BTreeMap::<_, Vec<_>>::new();
-        let mut directory_presentations = BTreeMap::<_, Vec<_>>::new();
+        let mut source_presentations = BTreeMap::<_, Vec<_>>::new();
         for package in &grounding.reachable {
             let Some(candidate) = selected.get(package) else {
                 continue;
@@ -495,15 +497,15 @@ impl SourceDependencies {
                     }
                     if let Some(declaration) = &dependency.declaration {
                         if declaration.trusted {
+                            source_presentations
+                                .entry(declaration.source)
+                                .or_default()
+                                .push((
+                                    state.package_store[*package].clone(),
+                                    order,
+                                    declaration.url.clone(),
+                                ));
                             if let ParsedUrl::Directory(directory) = &declaration.url.parsed_url {
-                                directory_presentations
-                                    .entry(declaration.source)
-                                    .or_default()
-                                    .push((
-                                        state.package_store[*package].clone(),
-                                        order,
-                                        declaration.url.clone(),
-                                    ));
                                 if let Some(editable) = directory.editable
                                     && directory.r#virtual != Some(true)
                                     && let Some(name) =
@@ -520,12 +522,6 @@ impl SourceDependencies {
                                             edge_context,
                                         ));
                                 }
-                            } else {
-                                grounding
-                                    .presentations
-                                    .entry(declaration.source)
-                                    .and_modify(|url| merge_presentation(url, &declaration.url))
-                                    .or_insert_with(|| declaration.url.clone());
                             }
                         }
                         if let Some(requirement) = &declaration.hash_requirement {
@@ -574,17 +570,33 @@ impl SourceDependencies {
                 }
             }
         }
-        for (source, mut presentations) in directory_presentations {
+        for (source, mut presentations) in source_presentations {
             // Honor the final selected declaration from the same author. Root spellings take
             // precedence over transitive spellings, independent of decision and hash-map order.
-            presentations.sort_by(|a, b| {
-                (a.0.name_no_root().is_none(), &a.0, a.1).cmp(&(
-                    b.0.name_no_root().is_none(),
-                    &b.0,
-                    b.1,
-                ))
-            });
+            let root_name = state.package_store[state.root_package].name();
+            let priority = |author: &PubGrubPackage| {
+                (
+                    author.name_no_root().is_none(),
+                    root_name.is_some_and(|root| author.name_no_root() == Some(root)),
+                )
+            };
+            presentations
+                .sort_by(|a, b| (priority(&a.0), &a.0, a.1).cmp(&(priority(&b.0), &b.0, b.1)));
             for (_, _, incoming) in presentations {
+                if let ParsedUrl::Archive(_) | ParsedUrl::Path(_) = &incoming.parsed_url
+                    && let Some(fragment) = incoming.verbatim.fragment()
+                {
+                    let hashes = declared_url_hashes(fragment);
+                    // A root-authored digest takes precedence for the same algorithm. Put its
+                    // fragment first as installers may only read the first supported digest.
+                    if !hashes.is_empty() {
+                        let declared = grounding.declared_hashes.entry(source).or_default();
+                        for digest in hashes.into_iter().rev() {
+                            declared.retain(|existing| existing.algorithm() != digest.algorithm());
+                            declared.insert(0, digest);
+                        }
+                    }
+                }
                 grounding
                     .presentations
                     .entry(source)
@@ -647,8 +659,9 @@ pub(super) struct Grounding {
     pub(super) contexts: FxHashMap<Id<PubGrubPackage>, MarkerTree>,
     lowest_parents: FxHashMap<PackageName, FxHashSet<Id<PubGrubPackage>>>,
     urls: FxHashMap<PackageName, BTreeMap<SourceId, MarkerTree>>,
-    editables: FxHashMap<SourceId, MarkerTree>,
+    modes: FxHashMap<(SourceId, UrlMode), MarkerTree>,
     presentations: FxHashMap<SourceId, VerbatimParsedUrl>,
+    declared_hashes: FxHashMap<SourceId, Vec<HashDigest>>,
     pub(super) indexes: FxHashMap<PackageName, BTreeMap<IndexId, MarkerTree>>,
     source_contexts: BTreeSet<MarkerTree>,
     pub(super) directory_conflicts: Vec<DirectoryConflict>,
@@ -704,21 +717,21 @@ impl Grounding {
         }
     }
 
-    /// A speculative editable build can only expose dependencies after another selected edge has
-    /// authorized that build mode. Its own metadata cannot establish the missing authorization.
+    /// An alternative build can only expose dependencies after another selected edge has
+    /// authorized that mode. Its own metadata cannot establish the missing authorization.
     fn outgoing_marker(&self, name: &PackageName, source: SolverSource) -> MarkerTree {
         let marker = self.candidate_marker(name, source);
-        if let SolverSource::Url(candidate) = source
-            && candidate.mode == DirectoryMode::Editable
-        {
-            marker.and(
-                self.editables
-                    .get(&candidate.source)
-                    .copied()
-                    .unwrap_or(MarkerTree::FALSE),
-            )
-        } else {
-            marker
+        match source {
+            SolverSource::Url(candidate) => match candidate.mode {
+                UrlMode::Normal => marker,
+                UrlMode::Editable | UrlMode::GitLfs => marker.and(
+                    self.modes
+                        .get(&(candidate.source, candidate.mode))
+                        .copied()
+                        .unwrap_or(MarkerTree::FALSE),
+                ),
+            },
+            SolverSource::Registry | SolverSource::Index(_) => marker,
         }
     }
 
@@ -798,12 +811,15 @@ impl Grounding {
         urls: &Urls,
     ) -> Option<UrlCandidate> {
         self.urls.get(name)?.keys().find_map(|source| {
-            let modes = if !urls.is_directory(*source) {
-                [Some(source.normal()), None]
-            } else if self.has_editable(*source) {
-                [Some(source.editable()), Some(source.normal())]
+            let alternative = match urls.optional_mode(*source) {
+                Some(UrlMode::Editable) => Some(source.editable()),
+                Some(UrlMode::GitLfs) => Some(source.git_lfs()),
+                Some(UrlMode::Normal) | None => None,
+            };
+            let modes = if alternative.is_some_and(|candidate| self.has_mode(candidate)) {
+                [alternative, Some(source.normal())]
             } else {
-                [Some(source.normal()), Some(source.editable())]
+                [Some(source.normal()), alternative]
             };
             modes.into_iter().flatten().find(|candidate| {
                 *candidates.for_source(SolverSource::Url(*candidate))
@@ -813,25 +829,51 @@ impl Grounding {
     }
 
     pub(super) fn url(&self, source: SourceId, urls: &Urls) -> VerbatimParsedUrl {
-        self.presentations
+        let mut url = self
+            .presentations
             .get(&source)
             .cloned()
-            .unwrap_or_else(|| urls.get(source).as_ref().clone())
-    }
-
-    /// Read only the metadata belonging to the selected solver candidate, including during a
-    /// speculative editable choice that has yet to be supported by a declaration.
-    pub(super) fn metadata_url(&self, candidate: UrlCandidate, urls: &Urls) -> VerbatimParsedUrl {
-        let mut url = self.url(candidate.source, urls);
-        if let ParsedUrl::Directory(directory) = &mut url.parsed_url {
-            directory.editable = Some(candidate.mode == DirectoryMode::Editable);
+            .unwrap_or_else(|| urls.get(source).as_ref().clone());
+        if let Some(hashes) = self.declared_hashes.get(&source) {
+            url.verbatim = with_declared_hashes(url.verbatim, hashes);
         }
         url
     }
 
-    /// Whether an independently selected, installing declaration requires this directory editable.
-    pub(super) fn has_editable(&self, source: SourceId) -> bool {
-        self.editables.contains_key(&source)
+    /// Return the output presentation, including the Git checkout mode that the solver selected.
+    pub(super) fn selected_url(&self, candidate: UrlCandidate, urls: &Urls) -> VerbatimParsedUrl {
+        let mut url = self.url(candidate.source, urls);
+        let git = match &mut url.parsed_url {
+            ParsedUrl::GitDirectory(git) => Some(&mut git.url),
+            ParsedUrl::GitPath(git) => Some(&mut git.url),
+            ParsedUrl::Archive(_) | ParsedUrl::Directory(_) | ParsedUrl::Path(_) => None,
+        };
+        if let Some(git) = git {
+            let enabled = candidate.mode == UrlMode::GitLfs;
+            *git = git.clone().with_lfs(GitLfs::from(enabled));
+            url.verbatim = with_git_lfs(url.verbatim, enabled);
+        }
+        url
+    }
+
+    /// Read only the metadata belonging to the selected solver candidate, including during a
+    /// speculative alternative mode that has yet to be supported by a declaration.
+    pub(super) fn metadata_url(&self, candidate: UrlCandidate, urls: &Urls) -> VerbatimParsedUrl {
+        let mut url = self.selected_url(candidate, urls);
+        if let ParsedUrl::Directory(directory) = &mut url.parsed_url {
+            directory.editable = Some(candidate.mode == UrlMode::Editable);
+        }
+        url
+    }
+
+    /// Whether an independently selected declaration requires this candidate's metadata mode.
+    pub(super) fn has_mode(&self, candidate: UrlCandidate) -> bool {
+        match candidate.mode {
+            UrlMode::Normal => true,
+            UrlMode::Editable | UrlMode::GitLfs => {
+                self.modes.contains_key(&(candidate.source, candidate.mode))
+            }
+        }
     }
 
     pub(super) fn iter(
@@ -839,6 +881,73 @@ impl Grounding {
     ) -> impl Iterator<Item = (&PackageName, &BTreeMap<SourceId, MarkerTree>)> {
         self.urls.iter()
     }
+}
+
+/// Retain the hashes declared by selected authors when choosing a single URL spelling.
+fn with_declared_hashes(url: VerbatimUrl, declared: &[HashDigest]) -> VerbatimUrl {
+    let fragment = url.fragment().unwrap_or_default();
+    let existing = declared_url_hashes(fragment);
+    if existing.first() == declared.first()
+        && existing.len() == declared.len()
+        && declared.iter().all(|hash| existing.contains(hash))
+    {
+        return url;
+    }
+
+    let mut parameters: Vec<String> = declared
+        .iter()
+        .map(|hash| format!("{}={}", hash.algorithm(), hash.digest()))
+        .collect();
+    parameters.extend(
+        fragment
+            .split('&')
+            .filter(|parameter| !parameter.is_empty() && Hashes::parse_fragment(parameter).is_err())
+            .map(str::to_owned),
+    );
+    url.with_fragment(Some(&parameters.join("&")))
+}
+
+/// Read one valid digest per algorithm in authored fragment order; verification handles invalid ones.
+fn declared_url_hashes(fragment: &str) -> Vec<HashDigest> {
+    let mut hashes = Vec::<HashDigest>::new();
+    for parameter in fragment.split('&') {
+        if let Ok(parsed) = Hashes::parse_fragment(parameter)
+            && let Some(hash) = HashDigests::from(parsed).into_iter().next()
+            && !hashes
+                .iter()
+                .any(|existing| existing.algorithm() == hash.algorithm())
+        {
+            hashes.push(hash);
+        }
+    }
+    hashes
+}
+
+/// Distinguish checkout modes in the URL used to identify and cache Git metadata.
+fn with_git_lfs(url: VerbatimUrl, enabled: bool) -> VerbatimUrl {
+    let fragment = url.fragment().unwrap_or_default();
+    let current = fragment
+        .split('&')
+        .filter_map(|parameter| parameter.split_once('='))
+        .find_map(|(key, value)| (key == "lfs").then_some(value));
+    if (enabled && current == Some("true")) || (!enabled && current.is_none()) {
+        return url;
+    }
+
+    let mut parameters: Vec<_> = fragment
+        .split('&')
+        .filter(|parameter| {
+            !parameter.is_empty()
+                && parameter
+                    .split_once('=')
+                    .is_none_or(|(key, _)| key != "lfs")
+        })
+        .collect();
+    if enabled {
+        parameters.push("lfs=true");
+    }
+    let fragment = (!parameters.is_empty()).then(|| parameters.join("&"));
+    url.with_fragment(fragment.as_deref())
 }
 
 /// Reuse an authored requirement when its selected path leaves its marker unchanged.

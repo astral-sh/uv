@@ -19,30 +19,38 @@ impl SourceId {
     pub(crate) fn normal(self) -> UrlCandidate {
         UrlCandidate {
             source: self,
-            mode: DirectoryMode::Normal,
+            mode: UrlMode::Normal,
         }
     }
 
     pub(crate) fn editable(self) -> UrlCandidate {
         UrlCandidate {
             source: self,
-            mode: DirectoryMode::Editable,
+            mode: UrlMode::Editable,
+        }
+    }
+
+    pub(crate) fn git_lfs(self) -> UrlCandidate {
+        UrlCandidate {
+            source: self,
+            mode: UrlMode::GitLfs,
         }
     }
 }
 
-/// The metadata mode of a direct candidate. Archives and Git sources use only the normal mode.
+/// The metadata mode of a direct candidate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) enum DirectoryMode {
+pub(crate) enum UrlMode {
     Normal,
     Editable,
+    GitLfs,
 }
 
 /// A direct resource together with the build mode whose metadata belongs to the candidate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct UrlCandidate {
     pub(crate) source: SourceId,
-    pub(crate) mode: DirectoryMode,
+    pub(crate) mode: UrlMode,
 }
 
 /// The identity of an explicitly pinned registry, interned by the resolver.
@@ -174,6 +182,15 @@ impl CandidateSet {
     /// A directory declaration that leaves editability open accepts either build mode of the same
     /// physical resource. An editable candidate still needs an independently selected declaration.
     pub(crate) fn directory(source: SourceId, versions: Range<Version>) -> Self {
+        Self::modes(source.normal(), source.editable(), versions)
+    }
+
+    /// A Git declaration without LFS also accepts an independently selected LFS declaration.
+    pub(crate) fn git(source: SourceId, versions: Range<Version>) -> Self {
+        Self::modes(source.normal(), source.git_lfs(), versions)
+    }
+
+    fn modes(normal: UrlCandidate, alternative: UrlCandidate, versions: Range<Version>) -> Self {
         if versions == Range::empty() {
             return Self::empty();
         }
@@ -183,10 +200,7 @@ impl CandidateSet {
                 indexed: Range::empty(),
                 indexes: BTreeMap::new(),
                 direct: Range::empty(),
-                urls: BTreeMap::from([
-                    (source.normal(), versions.clone()),
-                    (source.editable(), versions),
-                ]),
+                urls: BTreeMap::from([(normal, versions.clone()), (alternative, versions)]),
             }),
         }
     }
@@ -946,6 +960,28 @@ mod tests {
     }
 
     #[test]
+    fn git_candidate_modes_are_independent() {
+        let version = Version::new([1]);
+        let source = SourceId(0);
+        let normal = SolverVersion::new(SolverSource::Url(source.normal()), version.clone());
+        let lfs = SolverVersion::new(SolverSource::Url(source.git_lfs()), version.clone());
+        let git = CandidateSet::git(source, Range::singleton(version.clone()));
+        let normal_only = CandidateSet::singleton(normal.clone());
+        let lfs_only = CandidateSet::singleton(lfs.clone());
+
+        assert_eq!(git.report_source(), Some((normal.source, false)));
+        assert_eq!(lfs_only.report_source(), Some((lfs.source, true)));
+        assert_eq!(git, normal_only.union(&lfs_only));
+        assert!(normal_only.is_disjoint(&lfs_only));
+        assert_eq!(git.difference(&normal_only), lfs_only);
+        assert!(!git.contains(&SolverVersion::new(
+            SolverSource::Url(source.editable()),
+            version,
+        )));
+        assert_eq!(git.union(&git.complement()), CandidateSet::full());
+    }
+
+    #[test]
     fn source_relationships_match_materialized_sets() {
         let one = Range::singleton(Version::new([1]));
         let two = Range::singleton(Version::new([2]));
@@ -955,6 +991,7 @@ mod tests {
         let second_index = SolverSource::Index(IndexId(1));
         let url = SolverSource::Url(SourceId(0).normal());
         let editable = SolverSource::Url(SourceId(0).editable());
+        let git_lfs = SolverSource::Url(SourceId(0).git_lfs());
         let second_url = SolverSource::Url(SourceId(1).normal());
         let mut sets = vec![
             CandidateSet::empty(),
@@ -969,6 +1006,8 @@ mod tests {
             CandidateSet::source(url, lower.clone()),
             CandidateSet::source(editable, higher.clone()),
             CandidateSet::directory(SourceId(0), one.clone()),
+            CandidateSet::source(git_lfs, two.clone()),
+            CandidateSet::git(SourceId(0), higher.clone()),
             CandidateSet::source(second_url, higher.clone()),
             CandidateSet::index_or_url(IndexId(1), two.clone()),
             CandidateSet::source(index, lower.clone())
@@ -984,10 +1023,13 @@ mod tests {
             SolverSource::Index(IndexId(99)),
             url,
             editable,
+            git_lfs,
             second_url,
             SolverSource::Url(SourceId(1).editable()),
+            SolverSource::Url(SourceId(1).git_lfs()),
             SolverSource::Url(SourceId(99).normal()),
             SolverSource::Url(SourceId(99).editable()),
+            SolverSource::Url(SourceId(99).git_lfs()),
         ];
         for left in &sets {
             for right in &sets {

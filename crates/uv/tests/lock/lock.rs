@@ -1,3 +1,5 @@
+#[cfg(feature = "test-universal")]
+use std::collections::BTreeMap;
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 use std::process::Command;
 
@@ -30,7 +32,7 @@ use uv_static::EnvVars;
 #[cfg(feature = "test-universal")]
 use uv_test::archive::write_tar_gz;
 #[cfg(feature = "test-universal")]
-use uv_test::packse::{PackseServer, scenario::Scenario};
+use uv_test::packse::{PackseServer, generate_wheel, scenario::Scenario};
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 use uv_test::{READ_ONLY_GITHUB_TOKEN, decode_token};
 use uv_test::{diff_snapshot, uv_snapshot};
@@ -125,7 +127,7 @@ fn lock_without_package_metadata(lock: &str) -> Result<toml_edit::DocumentMut> {
         }
         package.remove("metadata");
     }
-    lock["revision"] = toml_edit::value(4);
+    lock["revision"] = toml_edit::value(5);
     Ok(lock)
 }
 
@@ -20788,7 +20790,7 @@ fn lock_writes_without_package_metadata() -> Result<()> {
     let preview_lock = context.read("uv.lock");
     assert_snapshot!(preview_lock, @r#"
     version = 1
-    revision = 4
+    revision = 5
     requires-python = ">=3.12"
 
     [options]
@@ -23979,6 +23981,424 @@ fn lock_url_override_and_constraint_markers() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// A root URL constraint or override can authorize a mutable directory below immutable registries.
+/// Its name and activated extra must be refreshed for either lock format, including offline.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_url_constraint_and_override_validate_directory_below_registry() -> Result<()> {
+    insta::allow_duplicates! {
+        for setting in ["constraint-dependencies", "override-dependencies"] {
+            for metadata_free in [false, true] {
+                let context = uv_test::test_context!("3.12");
+                let wheels = context.temp_dir.child("wheels");
+                wheels.create_dir_all()?;
+                for (name, requirements) in [
+                    ("owner", vec!["middle"]),
+                    ("middle", vec!["target[feature]"]),
+                    ("added", vec![]),
+                ] {
+                    let requirements = requirements.iter().map(|requirement| requirement.parse()).collect::<Result<Vec<_>, _>>()?;
+                    let (filename, wheel) = generate_wheel(&name.parse()?, &"1.0.0".parse()?, &requirements, &BTreeMap::new(), None, "py3-none-any", &[]);
+                    wheels.child(filename).write_binary(&wheel)?;
+                }
+                let target = context.temp_dir.child("target");
+                let target_project = target.child("pyproject.toml");
+                let write_target = |name, dependencies| {
+                    target_project.write_str(&formatdoc! {r#"
+                        [project]
+                        name = "{name}"
+                        version = "1.0.0"
+                        requires-python = ">=3.12"
+
+                        [project.optional-dependencies]
+                        feature = [{dependencies}]
+                    "#})
+                };
+                write_target("target", "")?;
+                let target_url = Url::from_directory_path(target.path()).map_err(|()| anyhow!("target is not an absolute path"))?;
+                let extras = if setting == "override-dependencies" { "[feature]" } else { "" };
+                context.temp_dir.child("pyproject.toml").write_str(&formatdoc! {r#"
+                    [project]
+                    name = "project"
+                    version = "1.0.0"
+                    requires-python = ">=3.12"
+                    dependencies = ["owner"]
+
+                    [tool.uv]
+                    {setting} = ["target{extras} @ {target_url}"]
+                "#})?;
+                let lock = || {
+                    let mut command = context.lock();
+                    command.arg("--no-index").arg("--find-links").arg("wheels").arg("--offline").arg("--no-cache");
+                    if metadata_free {
+                        command.arg("--preview-features").arg("lock-without-metadata");
+                    }
+                    command
+                };
+                uv_snapshot!(context.filters(), lock(), @"
+                exit_code: 0 (success)
+                ----- stderr -----
+                Resolved 4 packages in [TIME]
+                ");
+                uv_snapshot!(context.filters(), lock().arg("--check"), @"
+                exit_code: 0 (success)
+                ----- stderr -----
+                Resolved 4 packages in [TIME]
+                ");
+
+                if metadata_free {
+                    let mut legacy = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+                    legacy["revision"] = toml_edit::value(4);
+                    let middle = legacy["package"].as_array_of_tables_mut().and_then(|packages| {
+                        packages.iter_mut().find(|package| package["name"].as_str() == Some("middle"))
+                    }).ok_or_else(|| anyhow!("lockfile did not contain middle"))?;
+                    let dependency = middle["dependencies"].as_array_mut().and_then(|dependencies| dependencies.get_mut(0))
+                        .and_then(toml_edit::Value::as_inline_table_mut).ok_or_else(|| anyhow!("middle did not depend on target"))?;
+                    if dependency.remove("extra").is_none() {
+                        anyhow::bail!("middle did not request the target extra");
+                    }
+                    context.temp_dir.child("uv.lock").write_str(&legacy.to_string())?;
+                    uv_snapshot!(context.filters(), lock().arg("--check"), @"
+                    exit_code: 1 (failure)
+                    ----- stderr -----
+                    Resolved 4 packages in [TIME]
+                    error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+
+                    hint: To update the lockfile, run `uv lock`.
+                    ");
+                    uv_snapshot!(context.filters(), lock(), @"
+                    exit_code: 0 (success)
+                    ----- stderr -----
+                    Resolved 4 packages in [TIME]
+                    ");
+                    uv_snapshot!(context.filters(), lock().arg("--check"), @"
+                    exit_code: 0 (success)
+                    ----- stderr -----
+                    Resolved 4 packages in [TIME]
+                    ");
+                }
+
+                write_target("target", r#""added""#)?;
+                uv_snapshot!(context.filters(), lock().arg("--check"), @"
+                exit_code: 1 (failure)
+                ----- stderr -----
+                Resolved 5 packages in [TIME]
+                error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+
+                hint: To update the lockfile, run `uv lock`.
+                ");
+                uv_snapshot!(context.filters(), lock(), @"
+                exit_code: 0 (success)
+                ----- stderr -----
+                Resolved 5 packages in [TIME]
+                Added added v1.0.0
+                ");
+                uv_snapshot!(context.filters(), context.export().arg("--frozen").arg("--no-header")
+                    .arg("--no-hashes").arg("--no-emit-project"), @"
+                exit_code: 0 (success)
+                ----- stdout -----
+                file://[TEMP_DIR]/target
+                    # via middle
+                added==1.0.0
+                    # via target
+                middle==1.0.0
+                    # via owner
+                owner==1.0.0
+                    # via project
+                ");
+
+                write_target("wrong-name", r#""added""#)?;
+                uv_snapshot!(context.filters(), lock().arg("--check"), @"
+                exit_code: 1 (failure)
+                ----- stderr -----
+                error: Failed to build `target @ file://[TEMP_DIR]/target`
+                  cause: Package metadata name `wrong-name` does not match given name `target`
+
+                hint: `target` was included because `project` (v1.0.0) depends on `owner` (v1.0.0) which depends on `middle` (v1.0.0) which depends on `target`
+                ");
+            }
+        }
+        Ok::<(), anyhow::Error>(())
+    }?;
+    Ok(())
+}
+
+/// LFS belongs to the selected Git candidate. An omitted declaration cannot erase it, and a late
+/// selected provider can recover after normal Git metadata fails without enabling an inactive extra.
+#[cfg(all(feature = "test-universal", feature = "test-git-lfs"))]
+#[test]
+fn lock_url_git_lfs_uses_selected_checkout_mode() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_git_lfs_config();
+    let repository = context.temp_dir.child("repository");
+    repository.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "target"
+        version = "1.0.0"
+    "#})?;
+    Command::new("git")
+        .arg("init")
+        .arg(repository.path())
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args(["lfs", "install", "--local", "--skip-repo"])
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args(["lfs", "track", "pyproject.toml"])
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args(["add", "."])
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args([
+            "-c",
+            "user.name=Example",
+            "-c",
+            "user.email=example@example.com",
+            "commit",
+            "-m",
+            "Initial commit",
+        ])
+        .env("GIT_AUTHOR_DATE", "2000-01-01T00:00:00Z")
+        .env("GIT_COMMITTER_DATE", "2000-01-01T00:00:00Z")
+        .assert()
+        .success();
+    let commit = String::from_utf8(
+        Command::new("git")
+            .arg("-C")
+            .arg(repository.path())
+            .args(["rev-parse", "HEAD"])
+            .output()?
+            .stdout,
+    )?
+    .trim()
+    .to_string();
+    let repository_url = Url::from_file_path(repository.path())
+        .map_err(|()| anyhow!("repository is not an absolute path"))?;
+    let context = context
+        .with_filter((commit.clone(), "[COMMIT]"))
+        .with_filter(("[az]-parent", "[PARENT]"));
+    let project = context.temp_dir.child("pyproject.toml");
+    let write_project = |parent, lfs| {
+        project.write_str(&formatdoc! {r#"
+            [project]
+            name = "project"
+            version = "1.0.0"
+            requires-python = ">=3.12"
+            dependencies = ["{parent}", "target"]
+
+            [tool.uv.sources]
+            {parent} = {{ path = "{parent}" }}
+            target = {{ git = "{repository_url}", rev = "{commit}"{lfs} }}
+        "#})
+    };
+    let lock = || {
+        let mut command = context.lock();
+        command.arg("--no-index").arg("--offline").arg("--no-cache");
+        command
+    };
+    let target_source = || -> Result<String> {
+        let lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+        let target = lock["package"]
+            .as_array_of_tables()
+            .and_then(|packages| {
+                packages
+                    .iter()
+                    .find(|package| package["name"].as_str() == Some("target"))
+            })
+            .ok_or_else(|| anyhow!("lockfile did not contain target"))?;
+        let source = target["source"]
+            .as_inline_table()
+            .ok_or_else(|| anyhow!("target has no source"))?;
+        Ok(source.to_string())
+    };
+    insta::allow_duplicates! {
+        for parent in ["a-parent", "z-parent"] {
+            context.temp_dir.child(parent).child("pyproject.toml").write_str(&formatdoc! {r#"
+                [project]
+                name = "{parent}"
+                version = "1.0.0"
+                dependencies = ["target"]
+
+                [tool.uv.sources]
+                target = {{ git = "{repository_url}", rev = "{commit}" }}
+            "#})?;
+            write_project(parent, ", lfs = true")?;
+            uv_snapshot!(context.filters(), lock().env(EnvVars::UV_INTERNAL__TEST_LFS_DISABLED, "1"), @"
+            exit_code: 1 (failure)
+            ----- stderr -----
+            error: Failed to download and build `target @ git+file://[TEMP_DIR]/repository@[COMMIT]#lfs=true`
+              cause: The source distribution `git+file://[TEMP_DIR]/repository@[COMMIT]#lfs=true` is missing Git LFS artifacts.
+              cause: Git LFS extension not found. Ensure that Git LFS is installed and available.
+
+            hint: `target` was included because `project` (v1.0.0) depends on `target`
+            ");
+            uv_snapshot!(context.filters(), lock(), @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Resolved 3 packages in [TIME]
+            ");
+            let source = target_source()?;
+            insta::with_settings!({ filters => context.filters() }, {
+                assert_snapshot!(source, @r#" { git = "file://[TEMP_DIR]/repository?lfs=true&rev=[COMMIT]#[COMMIT]" }"#);
+            });
+            uv_snapshot!(context.filters(), lock().arg("--check"), @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Resolved 3 packages in [TIME]
+            ");
+            let lockfile = context.temp_dir.child("uv.lock");
+            let valid = context.read("uv.lock");
+            let mut stale = valid.parse::<toml_edit::DocumentMut>()?;
+            let target = stale["package"].as_array_of_tables_mut().and_then(|packages| {
+                packages.iter_mut().find(|package| package["name"].as_str() == Some("target"))
+            }).ok_or_else(|| anyhow!("lockfile did not contain target"))?;
+            let git = target["source"]["git"].as_str().ok_or_else(|| anyhow!("target has no Git source"))?.replace("?lfs=true&", "?");
+            target["source"]["git"] = toml_edit::value(git);
+            lockfile.write_str(&stale.to_string())?;
+            uv_snapshot!(context.filters(), lock().arg("--check"), @"
+            exit_code: 1 (failure)
+            ----- stderr -----
+            Resolved 3 packages in [TIME]
+            error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+
+            hint: To update the lockfile, run `uv lock`.
+            ");
+            fs_err::remove_file(lockfile.path())?;
+        }
+        Ok::<(), anyhow::Error>(())
+    }?;
+
+    let provider = context.temp_dir.child("z-provider").child("pyproject.toml");
+    let write_provider = |dependencies| {
+        provider.write_str(&formatdoc! {r#"
+            [project]
+            name = "z-provider"
+            version = "1.0.0"
+            {dependencies}
+
+            [tool.uv.sources]
+            target = {{ git = "{repository_url}", rev = "{commit}", lfs = true }}
+        "#})
+    };
+    write_project("z-provider", "")?;
+    write_provider(r#"dependencies = ["target"]"#)?;
+    uv_snapshot!(context.filters(), lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    let source = target_source()?;
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(source, @r#" { git = "file://[TEMP_DIR]/repository?lfs=true&rev=[COMMIT]#[COMMIT]" }"#);
+    });
+    uv_snapshot!(context.filters(), lock().arg("--check"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    fs_err::remove_file(context.temp_dir.child("uv.lock").path())?;
+
+    write_provider(indoc! {r#"
+        dependencies = []
+        [project.optional-dependencies]
+        active = ["target"]
+    "#})?;
+    uv_snapshot!(context.filters(), lock(), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to download and build `target @ git+file://[TEMP_DIR]/repository@[COMMIT]`
+      cause: Failed to parse metadata from built wheel
+      cause: Invalid `pyproject.toml`
+      cause: TOML parse error at line 1, column 9
+               |
+             1 | version https://git-lfs.github.com/spec/v1
+               |         ^
+             key with no value, expected `=`
+
+    hint: `target` was included because `project` (v1.0.0) depends on `target`
+    ");
+
+    let git_provider = context.temp_dir.child("provider-repository");
+    git_provider
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "z-provider"
+        version = "1.0.0"
+        dependencies = ["target"]
+
+        [tool.uv.sources]
+        target = {{ git = "{repository_url}", rev = "{commit}", lfs = true }}
+    "#})?;
+    Command::new("git")
+        .arg("init")
+        .arg(git_provider.path())
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(git_provider.path())
+        .args(["add", "."])
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(git_provider.path())
+        .args([
+            "-c",
+            "user.name=Example",
+            "-c",
+            "user.email=example@example.com",
+            "commit",
+            "-m",
+            "Initial commit",
+        ])
+        .env("GIT_AUTHOR_DATE", "2000-01-01T00:00:00Z")
+        .env("GIT_COMMITTER_DATE", "2000-01-01T00:00:00Z")
+        .assert()
+        .success();
+    let provider_url = Url::from_directory_path(git_provider.path())
+        .map_err(|()| anyhow!("provider is not an absolute path"))?;
+    project.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["z-provider", "target"]
+
+        [tool.uv.sources]
+        z-provider = {{ git = "{provider_url}" }}
+        target = {{ git = "{repository_url}", rev = "{commit}" }}
+    "#})?;
+    uv_snapshot!(context.filters(), lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    fs_err::rename(
+        git_provider.path(),
+        context.temp_dir.child("unavailable-provider").path(),
+    )?;
+    uv_snapshot!(context.filters(), lock().arg("--check"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
     ");
     Ok(())
 }
@@ -34318,6 +34738,9 @@ fn lock_transitive_git() -> Result<()> {
         dependencies = [
             { name = "d" },
         ]
+
+        [package.metadata]
+        requires-dist = [{ name = "d", git = "https://github.com/astral-sh/workspace-virtual-root-test?subdirectory=packages%2Fd&rev=fac39c8d4c5d0ef32744e2bb309bbe34a759fd46" }]
 
         [[package]]
         name = "d"

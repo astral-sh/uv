@@ -57,9 +57,9 @@ use crate::preferences::{PreferenceSource, Preferences};
 use crate::prerelease::contains_prerelease;
 use crate::pubgrub::solver_version::{project_error, report_sources as sources_for_report};
 use crate::pubgrub::{
-    CandidateSet, DependencySource, DirectoryMode, IndexId, PubGrubDependency, PubGrubPackage,
+    CandidateSet, DependencySource, IndexId, PubGrubDependency, PubGrubPackage,
     PubGrubPackageInner, PubGrubPriorities, PubGrubPython, Range, SolverSource, SolverVersion,
-    UrlCandidate,
+    UrlCandidate, UrlMode,
 };
 use crate::python_requirement::PythonRequirement;
 use crate::resolution::ResolverOutput;
@@ -508,11 +508,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     let Some((source, _)) = sources.first_key_value() else {
                                         continue;
                                     };
-                                    let candidate = if grounding.has_editable(*source) {
+                                    let candidate = if grounding.has_mode(source.editable()) {
                                         source.editable()
-                                    } else if urls::directory_mode(
+                                    } else if grounding.has_mode(source.git_lfs()) {
+                                        source.git_lfs()
+                                    } else if urls::declaration_mode(
                                         &grounding.url(*source, &self.urls).parsed_url,
-                                    ) == Some(DirectoryMode::Normal)
+                                    ) == Some(UrlMode::Normal)
                                     {
                                         source.normal()
                                     } else if let Some(SolverSource::Url(candidate)) =
@@ -852,24 +854,23 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 forked_states.push(search);
                                 continue 'FORK;
                             }
-                            // A plain or virtual declaration leaves both modes in PubGrub. The
-                            // editable candidate may keep a branch alive after a normal build fails,
-                            // but only an independently selected installing declaration can justify
-                            // it in the completed solve. Retry other selections before excluding it
-                            // from this branch; they can supply a missing editable declaration.
-                            let unselected_editable =
+                            // An unspecified mode leaves both candidates in PubGrub. An alternative
+                            // can keep a branch alive after normal metadata fails, but only an
+                            // independently selected declaration can justify it in the completed
+                            // solve. Retry other selections before excluding it from this branch.
+                            let unselected_mode =
                                 state.pubgrub.partial_solution.extract_solution().find_map(
                                     |(id, candidate)| {
                                         let SolverSource::Url(direct) = candidate.source else {
                                             return None;
                                         };
-                                        (direct.mode == DirectoryMode::Editable
+                                        (direct.mode != UrlMode::Normal
                                             && grounding.reachable.contains(&id)
-                                            && !grounding.has_editable(direct.source))
+                                            && !grounding.has_mode(direct))
                                         .then_some((id, direct))
                                     },
                                 );
-                            if let Some((id, direct)) = unselected_editable {
+                            if let Some((id, direct)) = unselected_mode {
                                 let candidate =
                                     CandidateSet::source(SolverSource::Url(direct), Range::full());
                                 if state.pubgrub.package_store[id].name_no_root().is_some_and(
@@ -1347,20 +1348,24 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     continue;
                 }
                 if let SolverSource::Url(direct) = solver_source
-                    && direct.mode == DirectoryMode::Editable
-                    && !grounding.has_editable(direct.source)
+                    && direct.mode != UrlMode::Normal
+                    && !grounding.has_mode(direct)
                     && let Some(name) = next_package.name_no_root()
                 {
-                    let editable = CandidateSet::source(solver_source, Range::full());
-                    if !self.may_supply_url(name, &editable, &state.env, &state.python_requirement)
-                    {
-                        // A plain directory cannot select editable unless some independently
+                    let alternative = CandidateSet::source(solver_source, Range::full());
+                    if !self.may_supply_url(
+                        name,
+                        &alternative,
+                        &state.env,
+                        &state.python_requirement,
+                    ) {
+                        // An unspecified declaration cannot select this mode unless some independently
                         // reachable direct declaration may still require that mode.
                         state
                             .pubgrub
                             .add_incompatibility(Incompatibility::no_versions(
                                 next_id,
-                                Term::Positive(editable),
+                                Term::Positive(alternative),
                             ));
                         continue;
                     }
@@ -2068,7 +2073,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         search: &mut SourceSearch,
         requests: &MetadataRequests,
     ) {
-        let mut registry_leaves = FxHashMap::default();
+        let mut registry_choices = FxHashMap::default();
+        let mut registry_sources = FxHashMap::default();
+        let mut possible_sources = FxHashMap::default();
         let choices = state
             .pubgrub
             .partial_solution
@@ -2077,12 +2084,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 let package = &state.pubgrub.package_store[id];
                 let name = package.name_no_root()?;
                 if candidate.source == SolverSource::Registry
-                    && *registry_leaves.entry(name.clone()).or_insert_with(|| {
+                    && *registry_choices.entry(name.clone()).or_insert_with(|| {
                         self.registry_cannot_activate_source(
                             name,
                             &state.env,
                             &state.python_requirement,
                             requests,
+                            &mut registry_sources,
+                            &mut possible_sources,
                         )
                     })
                 {
@@ -2093,96 +2102,198 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         self.enqueue_policy_alternatives(state, search, choices, requests);
     }
 
-    /// Prove that every available registry version has no outgoing dependencies. Such packages
-    /// cannot activate an extra on a URL provider. They remain unrestricted in every retry: a
-    /// different URL or non-leaf registry selection can still replace or remove them. Unknown
-    /// metadata, larger version sets, and sources that require a build retain the exhaustive search.
+    /// Prove that changing the registry version cannot alter its outgoing requirements, or that all
+    /// its outgoing requirements only reach registries which cannot activate a first-party source
+    /// or policy. Unknown metadata, larger graphs, and builds retain the exhaustive search.
     fn registry_cannot_activate_source(
         &self,
         name: &PackageName,
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
         requests: &MetadataRequests,
+        registry_sources: &mut FxHashMap<PackageName, bool>,
+        possible_sources: &mut FxHashMap<PackageName, bool>,
     ) -> bool {
+        const MAX_PACKAGES: usize = 32;
         const MAX_VERSIONS: usize = 4;
 
-        if self.dependency_mode.is_direct()
-            || !self.installed_packages.get_packages(name).is_empty()
-        {
+        if self.dependency_mode.is_direct() {
             return false;
         }
-        let Some(response) = self.index.implicit().get(name) else {
-            return false;
-        };
-        let VersionsResponse::Found(version_maps) = response.as_ref() else {
-            return false;
-        };
-        let mut distributions = Vec::new();
-        let mut seen = FxHashSet::default();
-        let mut count = 0;
-        for version_map in version_maps {
-            for (version, handle) in version_map.iter(&Range::full()) {
-                count += 1;
-                if count > MAX_VERSIONS
-                    || !self.hasher.allows_package(name, version)
-                    || self
-                        .dependency_metadata
-                        .get(name, Some(version))
-                        .is_some_and(|metadata| !metadata.requires_dist.is_empty())
-                {
-                    return false;
-                }
-                let Some(dist @ CompatibleDist::CompatibleWheel { wheel, .. }) =
-                    handle.prioritized_dist().and_then(PrioritizedDist::get)
-                else {
-                    return false;
-                };
-                let wheel_marker = implied_markers(&wheel.filename);
-                let covers_environment = if let Some(markers) = env.marker_environment() {
-                    wheel_marker.evaluate(markers, &[])
-                } else {
-                    env.fork_markers().is_some_and(|fork| {
-                        fork.and(python_requirement.to_marker_tree())
-                            .is_disjoint(wheel_marker.negate())
-                    })
-                };
-                if !wheel.filename.platform_tags().contains(&PlatformTag::Any)
-                    || !covers_environment
-                {
-                    return false;
-                }
-                let dist = dist.for_resolution();
-                let id = dist.distribution_id();
-                if seen.insert(id.clone()) {
-                    distributions.push((id, Request::from(dist)));
-                }
-            }
+        if let Some(result) = registry_sources.get(name) {
+            return *result;
         }
-        if distributions.is_empty() {
-            return false;
-        }
-        for (id, request) in distributions {
-            if requests.request_metadata(id, || Ok(request)).is_err() {
-                return false;
-            }
-        }
-        let dependency_free = seen.into_iter().all(|id| {
-            requests
-                .wait_for_metadata(&id, || name.to_string())
-                .is_ok_and(|response| {
-                    if let MetadataResponse::Found(archive) = response.as_ref() {
-                        archive.metadata.name == *name
-                            && archive.metadata.requires_dist.is_empty()
-                            && archive.metadata.dependency_groups.is_empty()
-                    } else {
-                        false
+
+        let mut pending = VecDeque::from([name.clone()]);
+        let mut visited = FxHashSet::default();
+        let mut version_invariant = false;
+        let proof = (|| {
+            while let Some(package) = pending.pop_front() {
+                if let Some(result) = registry_sources.get(&package) {
+                    if !result {
+                        return None;
                     }
-                })
-        });
-        if dependency_free {
-            trace!(%name, "Registry wheels cannot activate a source because every available version has no dependencies");
+                    continue;
+                }
+                if !visited.insert(package.clone()) {
+                    continue;
+                }
+                if visited.len() > MAX_PACKAGES
+                    || !self.installed_packages.get_packages(&package).is_empty()
+                {
+                    return None;
+                }
+                requests.request_package(&package, None).ok()?;
+                let response = requests.wait_for_versions(&package, None).ok()?;
+                let VersionsResponse::Found(version_maps) = response.as_ref() else {
+                    return None;
+                };
+                let mut distributions = Vec::new();
+                let mut seen = FxHashSet::default();
+                let mut count = 0;
+                for version_map in version_maps {
+                    for (version, handle) in version_map.iter(&Range::full()) {
+                        count += 1;
+                        if count > MAX_VERSIONS
+                            || !self.hasher.allows_package(&package, version)
+                            || self
+                                .dependency_metadata
+                                .get(&package, Some(version))
+                                .is_some_and(|metadata| !metadata.requires_dist.is_empty())
+                        {
+                            return None;
+                        }
+                        let Some(dist @ CompatibleDist::CompatibleWheel { wheel, .. }) =
+                            handle.prioritized_dist().and_then(PrioritizedDist::get)
+                        else {
+                            return None;
+                        };
+                        let wheel_marker = implied_markers(&wheel.filename);
+                        let covers_environment = if let Some(markers) = env.marker_environment() {
+                            wheel_marker.evaluate(markers, &[])
+                        } else {
+                            env.fork_markers().is_some_and(|fork| {
+                                fork.and(python_requirement.to_marker_tree())
+                                    .is_disjoint(wheel_marker.negate())
+                            })
+                        };
+                        if !wheel.filename.platform_tags().contains(&PlatformTag::Any)
+                            || !covers_environment
+                        {
+                            return None;
+                        }
+                        let dist = dist.for_resolution();
+                        let id = dist.distribution_id();
+                        if seen.insert(id.clone()) {
+                            distributions.push((id, Request::from(dist)));
+                        }
+                    }
+                }
+                if distributions.is_empty() {
+                    return None;
+                }
+                for (id, request) in distributions {
+                    requests.request_metadata(id, || Ok(request)).ok()?;
+                }
+                let mut signatures = Vec::new();
+                for id in seen {
+                    let response = requests
+                        .wait_for_metadata(&id, || package.to_string())
+                        .ok()?;
+                    let MetadataResponse::Found(archive) = response.as_ref() else {
+                        return None;
+                    };
+                    if archive.metadata.name != package
+                        || !archive.metadata.dependency_groups.is_empty()
+                    {
+                        return None;
+                    }
+                    let requirements = self
+                        .overrides
+                        .apply_for(
+                            &package,
+                            &archive.metadata.version,
+                            &archive.metadata.requires_dist,
+                        )
+                        .filter(|requirement| {
+                            !self.excludes.contains_for_package(
+                                Some((&package, &archive.metadata.version)),
+                                &requirement.name,
+                            )
+                        })
+                        .map(Cow::into_owned)
+                        .collect::<BTreeSet<_>>();
+                    if requirements.iter().any(|requirement| {
+                        !matches!(
+                            requirement.source,
+                            RequirementSource::Registry { index: None, .. }
+                        )
+                    }) {
+                        return None;
+                    }
+                    let extras = archive
+                        .metadata
+                        .provides_extra
+                        .iter()
+                        .cloned()
+                        .collect::<BTreeSet<_>>();
+                    signatures.push((
+                        requirements,
+                        extras,
+                        archive.metadata.requires_python.clone(),
+                    ));
+                }
+                if &package == name
+                    && signatures
+                        .first()
+                        .is_some_and(|first| signatures.iter().all(|signature| signature == first))
+                {
+                    // This proves that changing this candidate cannot activate a source, even
+                    // when an unchanged dependency might itself activate one. Ancestors which
+                    // can change whether that dependency is present still need a reachability proof.
+                    version_invariant = true;
+                    return Some(());
+                }
+                for (requirements, _, _) in signatures {
+                    for requirement in requirements {
+                        let possible = possible_sources
+                            .entry(requirement.name.clone())
+                            .or_insert_with(|| {
+                                self.may_supply_url(
+                                    &requirement.name,
+                                    &CandidateSet::urls(Range::full()),
+                                    env,
+                                    python_requirement,
+                                ) || self.may_supply_index(
+                                    &requirement.name,
+                                    &CandidateSet::all(Range::full()),
+                                    env,
+                                    python_requirement,
+                                ) || self.may_supply_selection_policy(
+                                    &requirement.name,
+                                    env,
+                                    python_requirement,
+                                )
+                            });
+                        if *possible {
+                            return None;
+                        }
+                        pending.push_back(requirement.name.clone());
+                    }
+                }
+            }
+            Some(())
+        })();
+        if proof.is_some() {
+            trace!(%name, "Changing registry wheels cannot activate a first-party source or policy");
+            if !version_invariant {
+                registry_sources.extend(visited.into_iter().map(|package| (package, true)));
+            }
+            true
+        } else {
+            registry_sources.insert(name.clone(), false);
+            false
         }
-        dependency_free
     }
 
     /// Reconsider only the candidates sufficient to make a selected-path policy invalid. Every
@@ -2273,16 +2384,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         }
     }
 
-    /// Lookup the build mode a potential declaration can use to discover outgoing edges. A plain
-    /// or virtual directory uses normal metadata unless another potential declaration explicitly
-    /// selects it editable; that declaration is then traversed in the editable mode separately.
+    /// Lookup the mode a potential declaration can use to discover outgoing edges. An unspecified
+    /// declaration uses normal metadata; explicit alternatives are traversed separately.
     fn potential_sources(&self, name: &PackageName, url: &VerbatimParsedUrl) -> Vec<UrlCandidate> {
         self.urls
             .lookup(name, url, &self.git)
             .into_iter()
-            .map(|source| match urls::directory_mode(&url.parsed_url) {
-                Some(DirectoryMode::Editable) => source.editable(),
-                Some(DirectoryMode::Normal) | None => source.normal(),
+            .map(|source| match urls::declaration_mode(&url.parsed_url) {
+                Some(UrlMode::Editable) => source.editable(),
+                Some(UrlMode::GitLfs) => source.git_lfs(),
+                Some(UrlMode::Normal) | None => source.normal(),
             })
             .collect()
     }
@@ -2504,7 +2615,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         false
     }
 
-    /// Record all potentially applicable direct edges from fetched metadata. Directory build modes
+    /// Record all potentially applicable direct edges from fetched metadata. Direct metadata modes
     /// may supply different dependencies; either can expose a possibility, but never authorize it.
     fn remember_source_metadata(&self, source: UrlCandidate, metadata: &Metadata) {
         let potentials = self.source_potentials.pin();
@@ -4745,8 +4856,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .find(|b| {
                         (a.2 != b.2 || a.3 == b.3)
                             && (a.0.source != b.0.source
-                                || urls::directory_mode(&a.4)
-                                    .zip(urls::directory_mode(&b.4))
+                                || urls::declaration_mode(&a.4)
+                                    .zip(urls::declaration_mode(&b.4))
                                     .is_some_and(|(a, b)| a != b))
                     })
                     .map(|b| (a, b))
@@ -5734,7 +5845,7 @@ impl ForkState {
         grounding: &Grounding,
     ) -> (Option<VerbatimParsedUrl>, Option<&IndexUrl>) {
         match candidate.source {
-            SolverSource::Url(source) => (Some(grounding.url(source.source, urls)), None),
+            SolverSource::Url(source) => (Some(grounding.selected_url(source, urls)), None),
             SolverSource::Registry | SolverSource::Index(_) => (
                 None,
                 self.pins

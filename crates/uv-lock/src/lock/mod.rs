@@ -119,6 +119,9 @@ const REVISION: u32 = 3;
 /// The first lockfile revision that supports omitting package declaration metadata.
 const METADATA_FREE_REVISION: u32 = 4;
 
+/// The first metadata-free revision that retains incoming requests for empty mutable dependency extras.
+const PRESERVED_DEPENDENCY_EXTRAS_REVISION: u32 = 5;
+
 static LINUX_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let pep508 = MarkerTree::from_str("os_name == 'posix' and sys_platform == 'linux'").unwrap();
     UniversalMarker::new(pep508, ConflictMarker::TRUE)
@@ -1578,15 +1581,14 @@ struct DependencySources<'lock> {
     package_markers: PackageMarkers<'lock>,
 }
 
-/// Whether an active declaration constrains the resolved index or directory installation mode.
+/// Whether an active declaration constrains the resolved index or a direct metadata mode.
 fn requirement_has_source_policy(requirement: &Requirement) -> bool {
     match &requirement.source {
         RequirementSource::Registry { index, .. } => index.is_some(),
-        RequirementSource::Directory { .. } => true,
-        RequirementSource::Url { .. }
+        RequirementSource::Directory { .. }
         | RequirementSource::GitDirectory { .. }
-        | RequirementSource::GitPath { .. }
-        | RequirementSource::Path { .. } => false,
+        | RequirementSource::GitPath { .. } => true,
+        RequirementSource::Url { .. } | RequirementSource::Path { .. } => false,
     }
 }
 
@@ -2424,7 +2426,7 @@ impl Lock {
     /// Initialize a [`Lock`] from a [`ResolverOutput`] and [`ResolverManifest`], applying any
     /// index-specific hash requirements to registry artifacts.
     ///
-    /// Set `metadata_free` to return the metadata-free lock format. Selected registry extras
+    /// Set `metadata_free` to return the metadata-free lock format. Selected dependency extras
     /// retain their incoming edges even if they resolve to no dependencies, and Git packages
     /// retain their declaration metadata for offline source discovery.
     ///
@@ -2487,10 +2489,21 @@ impl Lock {
 
             let mut package =
                 Package::from_annotated_dist(dist, fork_markers, root, index_locations)?;
-            // Git declarations can introduce direct sources needed by offline freshness checks.
-            if metadata_free
-                && matches!(package.id.source, Source::Git(..))
+            // Git declarations can introduce sources needed by offline freshness checks. Ordinary
+            // Git packages only need retained metadata when they declare a URL or explicit index.
+            if matches!(package.id.source, Source::Git(..))
                 && let Some(metadata) = dist.metadata.as_ref()
+                && (metadata_free
+                    || metadata
+                        .requires_dist
+                        .iter()
+                        .chain(metadata.dependency_groups.values().flatten())
+                        .any(|requirement| {
+                            !matches!(
+                                requirement.source,
+                                RequirementSource::Registry { index: None, .. }
+                            )
+                        }))
             {
                 package.metadata = PackageMetadata::from_distribution(metadata, root)?;
             }
@@ -2540,9 +2553,14 @@ impl Lock {
                     }
                     .into());
                 };
-                if metadata_free && matches!(package.id.source, Source::Registry(_)) {
+                let is_workspace_package = manifest.members.contains(&package.id.name)
+                    || matches!(&package.id.source, Source::Editable(path) | Source::Virtual(path) if path.as_ref() == Path::new(""));
+                if metadata_free
+                    && (!is_workspace_package || package.metadata.provides_extra.contains(extra))
+                {
                     // A metadata-free lock must distinguish an extra that resolved to no
-                    // dependencies (including nonexistent extras) from one never requested.
+                    // dependencies (including nonexistent extras on dependencies) from one never
+                    // requested. Workspace declarations independently retain every declared extra.
                     // Keeping the section also preserves its incoming, marker-bearing edge.
                     package
                         .optional_dependencies
@@ -2783,7 +2801,7 @@ impl Lock {
     /// lockfile so freshness checks can determine offline whether a source is requested or stale.
     #[must_use]
     fn without_package_metadata(mut self) -> Self {
-        self.revision = METADATA_FREE_REVISION;
+        self.revision = PRESERVED_DEPENDENCY_EXTRAS_REVISION;
         let workspace_root = self.root().map(|package| package.id.clone());
         for package in &mut self.packages {
             if matches!(package.id.source, Source::Direct(..) | Source::Git(..)) {
@@ -2827,6 +2845,11 @@ impl Lock {
     /// Returns `true` if this [`Lock`] can validate packages without declaration metadata.
     pub fn supports_missing_package_metadata(&self) -> bool {
         (self.version(), self.revision()) >= (VERSION, METADATA_FREE_REVISION)
+    }
+
+    /// Whether incoming requests for empty extras on mutable dependencies remain available.
+    fn preserves_dependency_extra_requests(&self) -> bool {
+        (self.version(), self.revision()) >= (VERSION, PRESERVED_DEPENDENCY_EXTRAS_REVISION)
     }
 
     /// Returns `true` if this [`Lock`] includes entries for empty `dependency-group` metadata.
@@ -4070,7 +4093,7 @@ impl Lock {
             if let DependencyContext::Extra(extra) = context
                 && !expected.provides_extra.contains(extra)
             {
-                if missing_metadata {
+                if missing_metadata && !context.dependencies(package).is_empty() {
                     return Ok(SatisfiesResult::MismatchedPackageDependencies(
                         &package.id.name,
                         package.id.version.as_ref(),
@@ -4246,7 +4269,7 @@ impl Lock {
         }
 
         // Validate that the lockfile was generated with the same constraints.
-        let normalized_constraints = {
+        let normalized_constraints: BTreeSet<Requirement> = {
             let expected: BTreeSet<_> = constraints
                 .iter()
                 .cloned()
@@ -4439,6 +4462,13 @@ impl Lock {
         let has_source_policies = root_requirements
             .iter()
             .any(|requirement| requirement_has_source_policy(requirement))
+            || normalized_constraints
+                .iter()
+                .chain(source_overrides.global_requirements())
+                .any(|requirement| {
+                    requirement_has_source_policy(requirement)
+                        || !matches!(requirement.source, RequirementSource::Registry { .. })
+                })
             || self.packages.iter().any(|package| {
                 package
                     .metadata
@@ -4482,6 +4512,42 @@ impl Lock {
             match self.satisfied_directory_sources(&dependency_sources, root) {
                 SatisfiesResult::Satisfied => {}
                 result => return Ok(result),
+            }
+            match self.satisfied_git_sources(&dependency_sources, root)? {
+                SatisfiesResult::Satisfied => {}
+                result => return Ok(result),
+            }
+        }
+        if allow_missing_package_metadata && !self.preserves_dependency_extra_requests() {
+            for package in &self.packages {
+                if !package.id.source.is_immutable() {
+                    continue;
+                }
+                let Some(parent_marker) = dependency_sources.package_markers.get(&package.id)
+                else {
+                    continue;
+                };
+                for dependency in package.all_dependencies() {
+                    let target = self.package(dependency.index);
+                    if target.id.source.is_immutable() || self.is_workspace_package(target) {
+                        continue;
+                    }
+                    let Some(target_marker) = dependency_sources.package_markers.get(&target.id)
+                    else {
+                        continue;
+                    };
+                    let marker = parent_marker
+                        .and(dependency.complexified_marker.combined())
+                        .and(target_marker);
+                    if !marker_is_unreachable(&self.requires_python, marker) {
+                        // Older preview locks discarded incoming requests for empty dependency
+                        // extras. The mutable package cannot tell us what this immutable parent
+                        // requested; resolving again records that information before trusting it.
+                        return Ok(SatisfiesResult::MissingDependencyExtraRequests(
+                            &target.id.name,
+                        ));
+                    }
+                }
             }
         }
         for ((package_id, extra), marker) in &dependency_sources.package_markers.markers {
@@ -4611,6 +4677,22 @@ impl Lock {
             }
         }
 
+        // Immutable packages need no metadata refresh, but their selected dependencies can reach
+        // mutable sources authorized by current first-party declarations or root configuration.
+        // Use the guarded traversal to reach those sources without trusting a registry URL.
+        for (package_index, package) in self.packages.iter().enumerate() {
+            let package_index = PackageIndex(package_index);
+            if !package.id.source.is_immutable()
+                && dependency_sources
+                    .package_markers
+                    .get(&package.id)
+                    .is_some_and(|marker| !marker_is_unreachable(&self.requires_python, marker))
+                && seen.insert(package_index)
+            {
+                queue.push_back(package_index);
+            }
+        }
+
         while let Some(package_index) = queue.pop_front() {
             let package = self.package(package_index);
             // If the lockfile references an index that was not provided, we can't validate it.
@@ -4644,7 +4726,8 @@ impl Lock {
                 }
             }
 
-            // If the package is immutable, we don't need to validate it (or its dependencies).
+            // Immutable metadata does not need refreshing; authorized mutable descendants are
+            // queued separately even when they are reached through this package.
             if package.id.source.is_immutable() {
                 continue;
             }
@@ -5086,6 +5169,72 @@ impl Lock {
             }
         }
         SatisfiesResult::Satisfied
+    }
+
+    /// Check Git LFS against all current declarations of a reachable checkout. Unspecified Git
+    /// declarations accept LFS only where another independently selected declaration requires it.
+    fn satisfied_git_sources<'lock>(
+        &'lock self,
+        sources: &DependencySources<'_>,
+        root: &Path,
+    ) -> Result<SatisfiesResult<'lock>, LockError> {
+        for package in &self.packages {
+            let Source::Git(_, git) = &package.id.source else {
+                continue;
+            };
+            let Some(requirements) = sources.requirements.get(&package.id.name) else {
+                continue;
+            };
+            let locked = if package.fork_markers.is_empty() {
+                self.fork_markers_union()
+            } else {
+                package
+                    .fork_markers
+                    .iter()
+                    .fold(MarkerTree::FALSE, |marker, fork| marker.or(fork.combined()))
+            };
+            let mut declared = MarkerTree::FALSE;
+            let mut enabled = MarkerTree::FALSE;
+            for requirement in requirements {
+                let lfs = match &requirement.source {
+                    RequirementSource::GitDirectory { git, .. }
+                    | RequirementSource::GitPath { git, .. } => git.lfs().enabled(),
+                    RequirementSource::Registry { .. }
+                    | RequirementSource::Url { .. }
+                    | RequirementSource::Directory { .. }
+                    | RequirementSource::Path { .. } => continue,
+                };
+                if !package
+                    .id
+                    .source
+                    .satisfies_requirement_source_with_git_lfs(&requirement.source, root, false)?
+                {
+                    continue;
+                }
+                let marker = locked.and(requirement.marker);
+                declared = declared.or(marker);
+                if lfs {
+                    enabled = enabled.or(marker);
+                }
+            }
+            if marker_is_unreachable(&self.requires_python, declared) {
+                continue;
+            }
+            if git.lfs.enabled() {
+                if !marker_is_unreachable(&self.requires_python, declared.and(enabled.negate())) {
+                    return Ok(SatisfiesResult::MismatchedGitLfs(
+                        package.id.name.clone(),
+                        false,
+                    ));
+                }
+            } else if !marker_is_unreachable(&self.requires_python, enabled) {
+                return Ok(SatisfiesResult::MismatchedGitLfs(
+                    package.id.name.clone(),
+                    true,
+                ));
+            }
+        }
+        Ok(SatisfiesResult::Satisfied)
     }
 
     /// Return the part of the active context where an authorized direct source selects this package.
@@ -6313,6 +6462,10 @@ pub enum SatisfiesResult<'lock> {
     MismatchedVirtual(PackageName, bool),
     /// A source tree switched from editable to non-editable or vice versa.
     MismatchedEditable(PackageName, bool),
+    /// A Git checkout switched between enabling and disabling LFS.
+    MismatchedGitLfs(PackageName, bool),
+    /// An older metadata-free lock may omit incoming extra requests for a mutable dependency.
+    MissingDependencyExtraRequests(&'lock PackageName),
     /// A source tree switched from dynamic to non-dynamic or vice versa.
     MismatchedDynamic(&'lock PackageName, bool),
     /// The lockfile uses a different set of version for its workspace members.
@@ -8038,6 +8191,16 @@ impl Source {
         requirement: &RequirementSource,
         root: &Path,
     ) -> Result<bool, LockError> {
+        self.satisfies_requirement_source_with_git_lfs(requirement, root, true)
+    }
+
+    /// Compare Git checkout identities using the locked mode, optionally requiring declared LFS.
+    fn satisfies_requirement_source_with_git_lfs(
+        &self,
+        requirement: &RequirementSource,
+        root: &Path,
+        require_git_lfs: bool,
+    ) -> Result<bool, LockError> {
         let result = match (self, requirement) {
             (Self::Registry(_), RequirementSource::Registry { index: None, .. }) => true,
             (
@@ -8105,12 +8268,17 @@ impl Source {
                     git, subdirectory, ..
                 },
             ) => {
-                let mut expected = locked_git_url(git, subdirectory.as_deref(), None);
+                let mut expected = locked_git_url(
+                    &git.clone().with_lfs(source.lfs),
+                    subdirectory.as_deref(),
+                    None,
+                );
                 expected.set_fragment(None);
                 let mut actual = url.to_url().map_err(LockErrorKind::InvalidUrl)?;
                 actual.set_fragment(None);
                 expected == actual
                     && source.path.is_none()
+                    && (!require_git_lfs || !git.lfs().enabled() || source.lfs.enabled())
                     && git
                         .precise()
                         .as_ref()
@@ -8122,12 +8290,14 @@ impl Source {
                     git, install_path, ..
                 },
             ) => {
-                let mut expected = locked_git_url(git, None, Some(install_path));
+                let mut expected =
+                    locked_git_url(&git.clone().with_lfs(source.lfs), None, Some(install_path));
                 expected.set_fragment(None);
                 let mut actual = url.to_url().map_err(LockErrorKind::InvalidUrl)?;
                 actual.set_fragment(None);
                 expected == actual
                     && source.path.is_some()
+                    && (!require_git_lfs || !git.lfs().enabled() || source.lfs.enabled())
                     && git
                         .precise()
                         .as_ref()

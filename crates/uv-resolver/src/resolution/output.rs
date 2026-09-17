@@ -445,9 +445,9 @@ fn get_hashes(
         }
     }
 
-    // 2. Reuse a direct URL's declared hash when collecting hashes without validation.
+    // 2. Reuse a direct archive's declared hashes when collecting hashes without validation.
     if let Some(url) = url
-        && let ParsedUrl::Archive(_) = &url.parsed_url
+        && let ParsedUrl::Archive(_) | ParsedUrl::Path(_) = &url.parsed_url
         && hasher.collection() != HashCollection::None
         && !hasher
             .archive_policy_for_url(&url.verbatim)

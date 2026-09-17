@@ -12,7 +12,7 @@ use uv_pep440::Version;
 use uv_pep508::MarkerTree;
 use uv_pypi_types::{ParsedUrl, VerbatimParsedUrl};
 
-use crate::pubgrub::{CandidateSet, DirectoryMode, Range, SolverSource, SourceId};
+use crate::pubgrub::{CandidateSet, Range, SolverSource, SourceId, UrlMode};
 use crate::{DependencyMode, Manifest, ResolverEnvironment};
 
 /// Root URL inputs and shared identities for direct resources discovered during solving.
@@ -163,31 +163,35 @@ impl Urls {
             .clone()
     }
 
-    pub(super) fn is_directory(&self, source: SourceId) -> bool {
-        match &self.get(source).parsed_url {
-            ParsedUrl::Directory(_) => true,
-            ParsedUrl::Archive(_)
-            | ParsedUrl::GitDirectory(_)
-            | ParsedUrl::GitPath(_)
-            | ParsedUrl::Path(_) => false,
-        }
+    /// The metadata mode which must be enabled by an independently selected declaration.
+    pub(super) fn optional_mode(&self, source: SourceId) -> Option<UrlMode> {
+        optional_mode(&self.get(source).parsed_url)
     }
 
-    /// Limit a URL dependency to the modes its author specifies. Plain and virtual directories do
-    /// not choose an installation mode; archives and Git distributions always use their normal one.
+    /// Limit a URL dependency to the modes its author specifies. Unspecified modes accept an
+    /// alternative authorized by another selected declaration of the same resource.
     pub(super) fn declaration_candidates(
         source: SourceId,
         url: &ParsedUrl,
         versions: Range<Version>,
     ) -> CandidateSet {
-        match directory_mode(url) {
-            Some(DirectoryMode::Normal) => {
+        match declaration_mode(url) {
+            Some(UrlMode::Normal) => {
                 CandidateSet::source(SolverSource::Url(source.normal()), versions)
             }
-            Some(DirectoryMode::Editable) => {
+            Some(UrlMode::Editable) => {
                 CandidateSet::source(SolverSource::Url(source.editable()), versions)
             }
-            None => CandidateSet::directory(source, versions),
+            Some(UrlMode::GitLfs) => {
+                CandidateSet::source(SolverSource::Url(source.git_lfs()), versions)
+            }
+            None => match optional_mode(url) {
+                Some(UrlMode::Editable) => CandidateSet::directory(source, versions),
+                Some(UrlMode::GitLfs) => CandidateSet::git(source, versions),
+                Some(UrlMode::Normal) | None => {
+                    CandidateSet::source(SolverSource::Url(source.normal()), versions)
+                }
+            },
         }
     }
 
@@ -225,6 +229,9 @@ impl Urls {
                             .to_verbatim_parsed_url()
                             .is_some_and(|configured| {
                                 same_resource(&url.parsed_url, &configured.parsed_url, git)
+                                    && declaration_mode(&url.parsed_url).is_none_or(|mode| {
+                                        declaration_mode(&configured.parsed_url) == Some(mode)
+                                    })
                             })
                 })
             })
@@ -284,8 +291,8 @@ pub(super) fn same_resource(a: &ParsedUrl, b: &ParsedUrl, git: &GitResolver) -> 
     }
 }
 
-/// Return a direct declaration's explicit build mode; a plain or virtual directory leaves it open.
-pub(super) fn directory_mode(url: &ParsedUrl) -> Option<DirectoryMode> {
+/// Return a direct declaration's explicit metadata mode.
+pub(super) fn declaration_mode(url: &ParsedUrl) -> Option<UrlMode> {
     match url {
         ParsedUrl::Directory(directory) => {
             if directory.r#virtual == Some(true) {
@@ -293,17 +300,25 @@ pub(super) fn directory_mode(url: &ParsedUrl) -> Option<DirectoryMode> {
             } else {
                 directory.editable.map(|editable| {
                     if editable {
-                        DirectoryMode::Editable
+                        UrlMode::Editable
                     } else {
-                        DirectoryMode::Normal
+                        UrlMode::Normal
                     }
                 })
             }
         }
-        ParsedUrl::Archive(_)
-        | ParsedUrl::GitDirectory(_)
-        | ParsedUrl::GitPath(_)
-        | ParsedUrl::Path(_) => Some(DirectoryMode::Normal),
+        ParsedUrl::GitDirectory(git) => git.url.lfs().enabled().then_some(UrlMode::GitLfs),
+        ParsedUrl::GitPath(git) => git.url.lfs().enabled().then_some(UrlMode::GitLfs),
+        ParsedUrl::Archive(_) | ParsedUrl::Path(_) => Some(UrlMode::Normal),
+    }
+}
+
+/// Return the metadata mode available when enabled by a selected declaration of this resource.
+fn optional_mode(url: &ParsedUrl) -> Option<UrlMode> {
+    match url {
+        ParsedUrl::Directory(_) => Some(UrlMode::Editable),
+        ParsedUrl::GitDirectory(_) | ParsedUrl::GitPath(_) => Some(UrlMode::GitLfs),
+        ParsedUrl::Archive(_) | ParsedUrl::Path(_) => None,
     }
 }
 
