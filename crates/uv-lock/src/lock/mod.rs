@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::error::Error;
-use std::fmt::{Debug, Display, Formatter};
+use std::fmt::{Debug, Display};
 use std::io;
 use std::iter;
 use std::path::{Path, PathBuf};
@@ -56,7 +56,7 @@ use uv_platform_tags::{
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{
     ConflictItem, ConflictKindRef, ConflictSet, Conflicts, HashAlgorithm, HashDigest, HashDigests,
-    HashError, Hashes, ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml,
+    ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml,
 };
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_resolver_types::{
@@ -2926,7 +2926,7 @@ impl Lock {
             warn_index_hash_algorithm_preview();
 
             let mismatched =
-                |hash: Option<&Hash>| hash.is_none_or(|hash| hash.0.algorithm() != algorithm);
+                |hash: Option<&HashDigest>| hash.is_none_or(|hash| hash.algorithm() != algorithm);
 
             if package.sdist.iter().any(|sdist| mismatched(sdist.hash()))
                 || package
@@ -6383,7 +6383,7 @@ impl Package {
             if let Some(best_wheel_index) = self.find_best_wheel(tag_policy) {
                 let hashes = {
                     let wheel = &self.wheels[best_wheel_index];
-                    HashDigests::from(wheel.hash.iter().map(|h| h.0.clone()).collect::<Vec<_>>())
+                    HashDigests::from(wheel.hash.iter().cloned().collect::<Vec<_>>())
                 };
 
                 let dist = match &self.id.source {
@@ -6507,7 +6507,7 @@ impl Package {
                     .sdist
                     .as_ref()
                     .and_then(|s| s.hash())
-                    .map(|hash| HashDigests::from(vec![hash.0.clone()]))
+                    .map(|hash| HashDigests::from(vec![hash.clone()]))
                     .unwrap_or_else(|| HashDigests::from(vec![]));
                 return Ok(HashedDist {
                     dist: Dist::Source(sdist),
@@ -6765,9 +6765,9 @@ impl Package {
                 let file = Box::new(uv_distribution_types::File {
                     dist_info_metadata: None,
                     filename: SmallString::from(filename),
-                    hashes: sdist.hash().map_or(HashDigests::empty(), |hash| {
-                        HashDigests::from(hash.0.clone())
-                    }),
+                    hashes: sdist
+                        .hash()
+                        .map_or(HashDigests::empty(), |hash| HashDigests::from(hash.clone())),
                     requires_python: None,
                     size: sdist.size(),
                     upload_time_utc_ms: sdist.upload_time().map(Timestamp::as_millisecond),
@@ -6840,9 +6840,9 @@ impl Package {
                 let file = Box::new(uv_distribution_types::File {
                     dist_info_metadata: None,
                     filename: SmallString::from(filename),
-                    hashes: sdist.hash().map_or(HashDigests::empty(), |hash| {
-                        HashDigests::from(hash.0.clone())
-                    }),
+                    hashes: sdist
+                        .hash()
+                        .map_or(HashDigests::empty(), |hash| HashDigests::from(hash.clone())),
                     requires_python: None,
                     size: sdist.size(),
                     upload_time_utc_ms: sdist.upload_time().map(Timestamp::as_millisecond),
@@ -6966,11 +6966,11 @@ impl Package {
         );
         if let Some(ref sdist) = self.sdist {
             if let Some(hash) = sdist.hash() {
-                hashes.push(hash.0.clone());
+                hashes.push(hash.clone());
             }
         }
         for wheel in &self.wheels {
-            hashes.extend(wheel.hash.as_ref().map(|h| h.0.clone()));
+            hashes.extend(wheel.hash.clone());
         }
         HashDigests::from(hashes)
     }
@@ -7987,7 +7987,7 @@ enum GitSourceKind {
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct SourceDistMetadata {
     /// A hash of the source distribution.
-    hash: Option<Hash>,
+    hash: Option<HashDigest>,
     /// The size of the source distribution in bytes.
     ///
     /// This is only present for source distributions that come from registries.
@@ -8025,7 +8025,8 @@ impl<'de> serde::Deserialize<'de> for SourceDist {
         struct Fields {
             url: Option<UrlString>,
             path: Option<PortablePathBuf>,
-            hash: Option<Hash>,
+            #[serde(default, deserialize_with = "deserialize_optional_hash_digest")]
+            hash: Option<HashDigest>,
             size: Option<u64>,
             #[serde(alias = "upload_time")]
             upload_time: Option<Timestamp>,
@@ -8073,7 +8074,7 @@ impl SourceDist {
         }
     }
 
-    fn hash(&self) -> Option<&Hash> {
+    fn hash(&self) -> Option<&HashDigest> {
         match self {
             Self::Metadata { metadata } => metadata.hash.as_ref(),
             Self::Url { metadata, .. } => metadata.hash.as_ref(),
@@ -8260,7 +8261,7 @@ impl SourceDist {
     }
 
     fn from_direct_dist(id: &PackageId, hashes: &[HashDigest]) -> Result<Self, LockError> {
-        let Some(hash) = hashes.iter().max().cloned().map(Hash::from) else {
+        let Some(hash) = hashes.iter().max().cloned() else {
             let kind = LockErrorKind::Hash {
                 id: id.clone(),
                 artifact_type: "direct URL source distribution",
@@ -8278,7 +8279,7 @@ impl SourceDist {
     }
 
     fn from_path_dist(id: &PackageId, hashes: &[HashDigest]) -> Result<Self, LockError> {
-        let Some(hash) = hashes.iter().max().cloned().map(Hash::from) else {
+        let Some(hash) = hashes.iter().max().cloned() else {
             let kind = LockErrorKind::Hash {
                 id: id.clone(),
                 artifact_type: "path source distribution",
@@ -8296,7 +8297,7 @@ impl SourceDist {
     }
 
     fn from_git_path_dist(id: &PackageId, hashes: &[HashDigest]) -> Result<Self, LockError> {
-        let Some(hash) = hashes.iter().max().cloned().map(Hash::from) else {
+        let Some(hash) = hashes.iter().max().cloned() else {
             let kind = LockErrorKind::Hash {
                 id: id.clone(),
                 artifact_type: "Git archive source distribution",
@@ -8413,7 +8414,7 @@ struct Wheel {
     /// This is only present for wheels that come from registries and direct
     /// URLs. Wheels from git or path dependencies do not have hashes
     /// associated with them.
-    hash: Option<Hash>,
+    hash: Option<HashDigest>,
     /// The size of the built distribution in bytes.
     ///
     /// This is only present for wheels that come from registries.
@@ -8572,7 +8573,7 @@ impl Wheel {
             url: WheelWireSource::Url {
                 url: normalize_url(direct_dist.url.to_url()),
             },
-            hash: hashes.iter().max().cloned().map(Hash::from),
+            hash: hashes.iter().max().cloned(),
             size: None,
             upload_time: None,
             filename: direct_dist.filename.clone(),
@@ -8584,7 +8585,7 @@ impl Wheel {
             url: WheelWireSource::Filename {
                 filename: path_dist.filename.clone(),
             },
-            hash: hashes.iter().max().cloned().map(Hash::from),
+            hash: hashes.iter().max().cloned(),
             size: None,
             upload_time: None,
             filename: path_dist.filename.clone(),
@@ -8596,7 +8597,7 @@ impl Wheel {
             url: WheelWireSource::Filename {
                 filename: path_dist.filename.clone(),
             },
-            hash: hashes.iter().max().cloned().map(Hash::from),
+            hash: hashes.iter().max().cloned(),
             size: None,
             upload_time: None,
             filename: path_dist.filename.clone(),
@@ -8627,7 +8628,7 @@ impl Wheel {
                 let file = Box::new(uv_distribution_types::File {
                     dist_info_metadata: None,
                     filename: SmallString::from(filename.to_string()),
-                    hashes: self.hash.iter().map(|h| h.0.clone()).collect(),
+                    hashes: self.hash.iter().cloned().collect(),
                     requires_python: None,
                     size: self.size,
                     upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
@@ -8670,7 +8671,7 @@ impl Wheel {
                 let file = Box::new(uv_distribution_types::File {
                     dist_info_metadata: None,
                     filename: SmallString::from(filename.to_string()),
-                    hashes: self.hash.iter().map(|h| h.0.clone()).collect(),
+                    hashes: self.hash.iter().cloned().collect(),
                     requires_python: None,
                     size: self.size,
                     upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
@@ -8704,7 +8705,8 @@ struct WheelWire {
     /// This is only present for wheels that come from registries and direct
     /// URLs. Wheels from git or path dependencies do not have hashes
     /// associated with them.
-    hash: Option<Hash>,
+    #[serde(default, deserialize_with = "deserialize_optional_hash_digest")]
+    hash: Option<HashDigest>,
     /// The size of the built distribution in bytes.
     ///
     /// This is only present for wheels that come from registries.
@@ -8949,19 +8951,6 @@ impl DependencyWire {
     }
 }
 
-/// A single hash for a distribution artifact in a lockfile.
-///
-/// A hash is encoded as a single TOML string in the format
-/// `{algorithm}:{digest}`.
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct Hash(HashDigest);
-
-impl From<HashDigest> for Hash {
-    fn from(hd: HashDigest) -> Self {
-        Self(hd)
-    }
-}
-
 /// Select the configured hash algorithm for a registry artifact, preserving the default hash
 /// selection when the index has no requirement.
 ///
@@ -8971,9 +8960,9 @@ fn select_registry_hash(
     index: &IndexUrl,
     index_locations: &IndexLocations,
     filename: &str,
-) -> Result<Option<Hash>, LockError> {
+) -> Result<Option<HashDigest>, LockError> {
     let Some(algorithm) = index_locations.hash_algorithm_for(index) else {
-        return Ok(hashes.iter().max().cloned().map(Hash::from));
+        return Ok(hashes.iter().max().cloned());
     };
     warn_index_hash_algorithm_preview();
 
@@ -8981,7 +8970,6 @@ fn select_registry_hash(
         .iter()
         .find(|hash| hash.algorithm() == algorithm)
         .cloned()
-        .map(Hash::from)
         .map(Some)
         .ok_or_else(|| {
             LockErrorKind::MissingHashAlgorithm {
@@ -9003,47 +8991,14 @@ fn warn_index_hash_algorithm_preview() {
     }
 }
 
-impl FromStr for Hash {
-    type Err = HashError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        HashDigest::from_str(s).map(Self)
-    }
-}
-
-impl Display for Hash {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}:{}", self.0.algorithm(), self.0.digest())
-    }
-}
-
-impl<'de> serde::Deserialize<'de> for Hash {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::de::Deserializer<'de>,
-    {
-        struct Visitor;
-
-        impl serde::de::Visitor<'_> for Visitor {
-            type Value = Hash;
-
-            fn expecting(&self, f: &mut Formatter) -> std::fmt::Result {
-                f.write_str("a string")
-            }
-
-            fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
-                Hash::from_str(v).map_err(serde::de::Error::custom)
-            }
-        }
-
-        deserializer.deserialize_str(Visitor)
-    }
-}
-
-impl From<Hash> for Hashes {
-    fn from(value: Hash) -> Self {
-        Self::from(value.0)
-    }
+/// Deserialize an optional hash from the lockfile's `{algorithm}:{digest}` string format.
+fn deserialize_optional_hash_digest<'de, D>(deserializer: D) -> Result<Option<HashDigest>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let hash: Option<String> = serde::Deserialize::deserialize(deserializer)?;
+    hash.map(|hash| HashDigest::from_str(&hash).map_err(serde::de::Error::custom))
+        .transpose()
 }
 
 /// Convert a [`FileLocation`] into a normalized [`UrlString`].

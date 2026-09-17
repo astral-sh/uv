@@ -94,10 +94,8 @@ Ok(
                         ),
                         metadata: SourceDistMetadata {
                             hash: Some(
-                                Hash(
-                                    Sha256(
-                                        "37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3",
-                                    ),
+                                Sha256(
+                                    "37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3",
                                 ),
                             ),
                             size: Some(
@@ -141,10 +139,8 @@ Ok(
                         ),
                         metadata: SourceDistMetadata {
                             hash: Some(
-                                Hash(
-                                    Sha256(
-                                        "37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3",
-                                    ),
+                                Sha256(
+                                    "37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3",
                                 ),
                             ),
                             size: Some(
