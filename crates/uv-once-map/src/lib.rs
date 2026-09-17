@@ -1,3 +1,7 @@
+mod append_only;
+
+pub use append_only::{AppendOnlyOnceMap, RegisteredEntry, Registration};
+
 use std::borrow::Borrow;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{BuildHasher, Hash, RandomState};
@@ -80,6 +84,22 @@ impl<K: Eq + Hash + Clone, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
             }
         };
 
+        self.wait_pending(key, notify).await
+    }
+
+    /// Wait for an existing entry without registering a missing key.
+    async fn wait_registered(&self, key: &K) -> Option<V> {
+        let notify = {
+            let items = self.items.pin();
+            match items.get(key)? {
+                value @ Value::Filled(_) => return value.get(),
+                Value::Waiting(notify) => notify.clone(),
+            }
+        };
+        self.wait_pending(key, notify).await
+    }
+
+    async fn wait_pending(&self, key: &K, notify: Arc<Notify>) -> Option<V> {
         // Register the waiter for calls to `notify_waiters`.
         let notification = notify.notified();
 

@@ -1,4 +1,3 @@
-use std::fmt;
 use std::sync::Arc;
 
 use tokio::sync::mpsc::Sender;
@@ -7,10 +6,11 @@ use uv_distribution_types::{
     Dist, DistributionId, Identifier, IndexMetadata, IndexUrl, Name, ResolvedDistRef,
 };
 use uv_normalize::PackageName;
+use uv_once_map::Registration;
 use uv_pep440::Version;
-use uv_resolver_types::DistributionMetadataIndex;
 
 use crate::pubgrub::Range;
+use crate::resolver::index::FxRegisteredEntry;
 use crate::resolver::{InMemoryIndex, MetadataResponse, Request, VersionsResponse};
 use crate::{PythonRequirement, ResolveError};
 
@@ -53,56 +53,35 @@ impl Name for MetadataRequest<'_> {
 }
 
 /// A registered version-list request, bound to its package and index scope.
-pub(crate) struct PendingVersions<'a> {
-    index: &'a InMemoryIndex,
-    name: &'a PackageName,
-    scope: Option<&'a IndexUrl>,
+pub(crate) enum PendingVersions<'index> {
+    Implicit(FxRegisteredEntry<'index, PackageName, Arc<VersionsResponse>>),
+    Explicit(FxRegisteredEntry<'index, (PackageName, IndexUrl), Arc<VersionsResponse>>),
 }
 
 impl PendingVersions<'_> {
-    pub(crate) fn wait(self) -> Result<Arc<VersionsResponse>, ResolveError> {
-        if let Some(scope) = self.scope {
-            self.index
-                .explicit()
-                .wait_blocking(&(self.name.clone(), scope.clone()))
-                .map_err(|_| ResolveError::UnregisteredTask(self.name.to_string()))
-        } else {
-            self.index
-                .implicit()
-                .wait_blocking(self.name)
-                .map_err(|_| ResolveError::UnregisteredTask(self.name.to_string()))
+    pub(crate) fn wait(self) -> Arc<VersionsResponse> {
+        match self {
+            Self::Implicit(entry) => entry.wait_blocking(),
+            Self::Explicit(entry) => entry.wait_blocking(),
         }
     }
 }
 
 /// A distribution whose metadata was registered or supplied before resolution.
 ///
-/// Selected pins retain the cache and identity for repeated dependency queries. Borrowing the
-/// cache avoids reference-count updates when pins are cloned for a fork.
-#[derive(Clone)]
-pub(crate) struct RegisteredMetadata<'index> {
-    index: &'index DistributionMetadataIndex,
-    id: DistributionId,
-}
+/// Selected pins retain a registered entry that prevents cache removal while borrowed.
+#[derive(Clone, Debug)]
+pub(crate) struct RegisteredMetadata<'index>(
+    FxRegisteredEntry<'index, DistributionId, Arc<MetadataResponse>>,
+);
 
 impl RegisteredMetadata<'_> {
     pub(crate) fn id(&self) -> &DistributionId {
-        &self.id
+        self.0.key()
     }
 
-    pub(crate) fn wait(&self) -> Result<Arc<MetadataResponse>, ResolveError> {
-        self.index
-            .wait_blocking(&self.id)
-            .map_err(|_| ResolveError::UnregisteredTask(format!("{:?}", self.id)))
-    }
-}
-
-impl fmt::Debug for RegisteredMetadata<'_> {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_tuple("RegisteredMetadata")
-            .field(&self.id)
-            .finish()
+    pub(crate) fn wait(&self) -> Arc<MetadataResponse> {
+        self.0.wait_blocking()
     }
 }
 
@@ -132,17 +111,36 @@ impl MetadataRequests {
     }
 
     /// Request the versions of a package once for the selected index scope.
-    pub(crate) fn request_package<'a>(
-        &'a self,
-        name: &'a PackageName,
-        index: Option<&'a IndexMetadata>,
-    ) -> Result<PendingVersions<'a>, ResolveError> {
-        self.enqueue_package(name, index)?;
-        Ok(PendingVersions {
-            index: &self.index,
-            name,
-            scope: index.map(IndexMetadata::url),
-        })
+    pub(crate) fn request_package(
+        &self,
+        name: &PackageName,
+        index: Option<&IndexMetadata>,
+    ) -> Result<PendingVersions<'_>, ResolveError> {
+        if let Some(index) = index {
+            let entry = match self
+                .index
+                .explicit()
+                .register_entry((name.clone(), index.url().clone()))
+            {
+                Registration::New(entry) => {
+                    self.sender
+                        .blocking_send(Request::Package(name.clone(), Some(index.clone())))?;
+                    entry
+                }
+                Registration::Existing(entry) => entry,
+            };
+            Ok(PendingVersions::Explicit(entry))
+        } else {
+            let entry = match self.index.implicit().register_entry(name.clone()) {
+                Registration::New(entry) => {
+                    self.sender
+                        .blocking_send(Request::Package(name.clone(), None))?;
+                    entry
+                }
+                Registration::Existing(entry) => entry,
+            };
+            Ok(PendingVersions::Implicit(entry))
+        }
     }
 
     /// Schedule metadata retrieval without retaining or cloning its cache identity.
@@ -164,15 +162,15 @@ impl MetadataRequests {
         request: MetadataRequest<'_>,
         validate: impl FnOnce(&MetadataRequest<'_>) -> Result<(), ResolveError>,
     ) -> Result<RegisteredMetadata<'_>, ResolveError> {
-        let id = request.id();
-        if self.index.distributions().register(id.clone()) {
-            validate(&request)?;
-            self.sender.blocking_send(request.into_request())?;
-        }
-        Ok(RegisteredMetadata {
-            index: self.index.distributions(),
-            id,
-        })
+        let entry = match self.index.distributions().register_entry(request.id()) {
+            Registration::New(entry) => {
+                validate(&request)?;
+                self.sender.blocking_send(request.into_request())?;
+                entry
+            }
+            Registration::Existing(entry) => entry,
+        };
+        Ok(RegisteredMetadata(entry))
     }
 
     /// Schedule speculative candidate selection using an already-requested package version map.
@@ -190,24 +188,12 @@ impl MetadataRequests {
         Ok(())
     }
 
-    /// Read metadata registered during input preparation or package visitation, retaining its
-    /// registration for subsequent dependency queries.
-    pub(crate) fn wait_for_metadata(
-        &self,
-        dist: &Dist,
-    ) -> Result<(RegisteredMetadata<'_>, Arc<MetadataResponse>), ResolveError> {
-        let id = dist.distribution_id();
-        let response = self
-            .index
+    /// Acquire metadata registered during input preparation or package visitation.
+    pub(crate) fn metadata(&self, dist: &Dist) -> Result<RegisteredMetadata<'_>, ResolveError> {
+        self.index
             .distributions()
-            .wait_blocking(&id)
-            .map_err(|_| ResolveError::UnregisteredTask(dist.to_string()))?;
-        Ok((
-            RegisteredMetadata {
-                index: self.index.distributions(),
-                id,
-            },
-            response,
-        ))
+            .get_registered(dist.distribution_id())
+            .map(RegisteredMetadata)
+            .ok_or_else(|| ResolveError::UnregisteredTask(dist.to_string()))
     }
 }

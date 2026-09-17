@@ -1176,7 +1176,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         );
 
         let dist = Dist::from_url(name.clone(), url.clone())?;
-        let (registered, response) = requests.wait_for_metadata(&dist)?;
+        let registered = requests.metadata(&dist)?;
+        let response = registered.wait();
 
         // If we failed to fetch the metadata for a URL, we can't proceed.
         let metadata = match &*response {
@@ -1293,7 +1294,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         requests: &'index MetadataRequests,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
         // Wait for the metadata to be available.
-        let versions_response = requests.request_package(name, index)?.wait()?;
+        let versions_response = requests.request_package(name, index)?.wait();
         let index = index.map(IndexMetadata::url);
         visited.insert(name.clone());
 
@@ -1815,7 +1816,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
 
                 // Wait for the metadata to be available.
-                let response = registered.wait()?;
+                let response = registered.wait();
 
                 let metadata = match &*response {
                     MetadataResponse::Found(archive) => &archive.metadata,
@@ -2167,9 +2168,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 let versions_response = self
                     .index
                     .implicit()
-                    .wait(&package_name)
-                    .await
-                    .map_err(|_| ResolveError::UnregisteredTask(package_name.to_string()))?;
+                    .get_registered(package_name.clone())
+                    .ok_or_else(|| ResolveError::UnregisteredTask(package_name.to_string()))?
+                    .wait()
+                    .await;
 
                 let version_map = match *versions_response {
                     VersionsResponse::Found(ref version_map) => version_map,

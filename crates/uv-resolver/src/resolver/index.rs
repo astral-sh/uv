@@ -4,7 +4,7 @@ use std::sync::Arc;
 use rustc_hash::FxHasher;
 use uv_distribution_types::IndexUrl;
 use uv_normalize::PackageName;
-use uv_once_map::OnceMap;
+use uv_once_map::{AppendOnlyOnceMap, RegisteredEntry};
 use uv_resolver_types::DistributionMetadataIndex;
 
 use crate::resolver::provider::VersionsResponse;
@@ -25,7 +25,9 @@ struct SharedInMemoryIndex {
     distributions: DistributionMetadataIndex,
 }
 
-pub(crate) type FxOnceMap<K, V> = OnceMap<K, V, BuildHasherDefault<FxHasher>>;
+pub(crate) type FxOnceMap<K, V> = AppendOnlyOnceMap<K, V, BuildHasherDefault<FxHasher>>;
+pub(crate) type FxRegisteredEntry<'a, K, V> =
+    RegisteredEntry<'a, K, V, BuildHasherDefault<FxHasher>>;
 
 impl InMemoryIndex {
     /// Returns a reference to the package metadata map.
@@ -41,5 +43,10 @@ impl InMemoryIndex {
     /// Returns a reference to the distribution metadata map.
     pub fn distributions(&self) -> &DistributionMetadataIndex {
         &self.0.distributions
+    }
+
+    /// Return exclusive access to distribution metadata when no cloned index can use it.
+    pub fn distributions_mut(&mut self) -> Option<&mut DistributionMetadataIndex> {
+        Arc::get_mut(&mut self.0).map(|index| &mut index.distributions)
     }
 }

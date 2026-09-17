@@ -43,8 +43,8 @@ use uv_python::{
 };
 use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
 use uv_resolver::{
-    DependencyMode, FlatIndex, OptionsBuilder, Preference, PythonRequirement, ResolverEnvironment,
-    ResolverOutput,
+    DependencyMode, FlatIndex, InMemoryIndex, OptionsBuilder, Preference, PythonRequirement,
+    ResolverEnvironment, ResolverOutput,
 };
 use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
@@ -531,6 +531,11 @@ impl std::ops::Deref for UniversalState {
 }
 
 impl UniversalState {
+    /// Return mutable access to the index owner between lock operations.
+    pub(crate) fn index_mut(&mut self) -> &mut InMemoryIndex {
+        self.0.index_mut()
+    }
+
     /// Fork the [`UniversalState`] to create a [`PlatformState`].
     pub(crate) fn fork(&self) -> PlatformState {
         PlatformState(self.0.fork())

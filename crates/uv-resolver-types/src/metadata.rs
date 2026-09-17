@@ -4,12 +4,12 @@ use std::hash::BuildHasherDefault;
 use std::sync::Arc;
 use uv_distribution::ArchiveMetadata;
 use uv_distribution_types::{DistributionId, RequestedDist};
-use uv_once_map::OnceMap;
+use uv_once_map::AppendOnlyOnceMap;
 use uv_pep440::{Version, VersionSpecifiers};
 
 /// Metadata shared between resolution and lockfile validation.
 pub type DistributionMetadataIndex =
-    OnceMap<DistributionId, Arc<MetadataResponse>, BuildHasherDefault<FxHasher>>;
+    AppendOnlyOnceMap<DistributionId, Arc<MetadataResponse>, BuildHasherDefault<FxHasher>>;
 
 #[derive(Debug)]
 pub enum MetadataResponse {
