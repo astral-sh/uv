@@ -5362,6 +5362,30 @@ fn python_build_variant_revision_context(
     Ok((context, installation))
 }
 
+fn python_build_variant_multiple_revisions_context() -> anyhow::Result<(TestContext, ChildPath)> {
+    let (context, installation) = python_build_variant_revision_context("custom")?;
+    let catalog = context.temp_dir.child("python-downloads.json");
+    let mut metadata: serde_json::Value = serde_json::from_str(&fs_err::read_to_string(&catalog)?)?;
+    let downloads = metadata["downloads"]
+        .as_object_mut()
+        .context("Missing downloads")?;
+    let key = installation
+        .file_name()
+        .context("Missing installation key")?
+        .to_string_lossy();
+    let newer = downloads
+        .get_mut(key.as_ref())
+        .context("Missing custom build")?;
+    newer["default"] = serde_json::json!(false);
+    let mut older = newer.clone();
+    older["build"] = serde_json::json!("20260825");
+    older["default"] = serde_json::json!(true);
+    // Both records describe the same installation, with only the older revision as the default.
+    downloads.insert(format!("{key}-20260825"), older);
+    catalog.write_str(&serde_json::to_string(&metadata)?)?;
+    Ok((context, installation))
+}
+
 fn track_python_build_compilation(installation: &ChildPath) -> anyhow::Result<()> {
     let stdlib = if cfg!(windows) {
         installation.child("Lib")
@@ -5630,6 +5654,18 @@ fn python_install_build_variant_revision_overlapping_requests() -> anyhow::Resul
         allow_duplicates! {
             insta::assert_snapshot!(build, @"20260901");
         }
+        // Identical revision requirements can also share the installed build.
+        installation.child("marker").touch()?;
+        context
+            .python_install()
+            .args(requests)
+            .env(EnvVars::UV_PYTHON_BUILD, "20260901")
+            .env(EnvVars::UV_PYTHON_CPYTHON_BUILD, "20260901")
+            .assert()
+            .success();
+        installation
+            .child("marker")
+            .assert(predicate::path::exists());
         context
             .python_find()
             .arg("3.13+custom")
@@ -5637,6 +5673,88 @@ fn python_install_build_variant_revision_overlapping_requests() -> anyhow::Resul
             .env(EnvVars::UV_PYTHON_BUILD, "20260901")
             .assert()
             .success();
+    }
+    Ok(())
+}
+
+#[test]
+fn python_install_build_variant_conflicting_revisions() -> anyhow::Result<()> {
+    let (context, installation) = python_build_variant_multiple_revisions_context()?;
+    fs_err::remove_dir_all(&installation)?;
+
+    uv_snapshot!(context.filters(), context.python_install().args(["3.13", "3.13+custom"])
+        .env(EnvVars::UV_PYTHON_CPYTHON_BUILD, "20260825")
+        .env(EnvVars::UV_PYTHON_BUILD, "20260901"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Conflicting build revisions for `cpython-3.13.7+custom-[PLATFORM]`: `3.13` requires `20260825`, but `3.13+custom` requires `20260901`
+    ");
+    installation.assert(predicate::path::missing());
+
+    uv_snapshot!(context.filters(), context.python_install().args(["3.13+custom", "3.13"])
+        .env(EnvVars::UV_PYTHON_CPYTHON_BUILD, "20260825")
+        .env(EnvVars::UV_PYTHON_BUILD, "20260901"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Conflicting build revisions for `cpython-3.13.7+custom-[PLATFORM]`: `3.13+custom` requires `20260901`, but `3.13` requires `20260825`
+    ");
+    installation.assert(predicate::path::missing());
+    Ok(())
+}
+
+#[test]
+fn python_install_build_variant_conflicting_installed_revision() -> anyhow::Result<()> {
+    let (context, installation) = python_build_variant_multiple_revisions_context()?;
+    for requests in [["3.13", "3.13+custom"], ["3.13+custom", "3.13"]] {
+        allow_duplicates! {
+            uv_snapshot!(context.filters(), context.python_install().args(requests)
+                .env(EnvVars::UV_PYTHON_CPYTHON_BUILD, "20260825")
+                .env(EnvVars::UV_PYTHON_BUILD, "20260901"), @"
+            exit_code: 2 (failure)
+            ----- stderr -----
+            error: Conflicting build revisions for `cpython-3.13.7+custom-[PLATFORM]`: `3.13` requires `20260825`, but `3.13+custom` requires `20260901`
+            ");
+        }
+        let build = fs_err::read_to_string(installation.child("BUILD"))?;
+        allow_duplicates! {
+            insta::assert_snapshot!(build, @"20260825");
+        }
+        installation
+            .child("marker")
+            .assert(predicate::path::exists());
+    }
+    uv_snapshot!(context.filters(), context.python_install()
+        .args(["--reinstall", "3.13", "3.13+custom"])
+        .env(EnvVars::UV_PYTHON_CPYTHON_BUILD, "20260825")
+        .env(EnvVars::UV_PYTHON_BUILD, "20260901"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Conflicting build revisions for `cpython-3.13.7+custom-[PLATFORM]`: `3.13` requires `20260825`, but `3.13+custom` requires `20260901`
+    ");
+    installation
+        .child("marker")
+        .assert(predicate::path::exists());
+    insta::assert_snapshot!(fs_err::read_to_string(installation.child("BUILD"))?, @"20260825");
+    Ok(())
+}
+
+#[test]
+fn python_install_build_variant_revision_unpinned_overlap() -> anyhow::Result<()> {
+    for requests in [["3.13", "3.13+custom"], ["3.13+custom", "3.13"]] {
+        let (context, installation) = python_build_variant_multiple_revisions_context()?;
+        fs_err::remove_dir_all(&installation)?;
+
+        // The unqualified request may use either revision, so prefer the explicitly pinned one.
+        context
+            .python_install()
+            .args(requests)
+            .env(EnvVars::UV_PYTHON_BUILD, "20260901")
+            .assert()
+            .success();
+        let build = fs_err::read_to_string(installation.child("BUILD"))?;
+        allow_duplicates! {
+            insta::assert_snapshot!(build, @"20260901");
+        }
     }
     Ok(())
 }

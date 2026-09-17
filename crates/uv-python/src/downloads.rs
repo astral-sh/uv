@@ -483,6 +483,11 @@ impl PythonDownloadRequest {
         self.libc.as_ref()
     }
 
+    /// Return the requested build revision, if any.
+    pub fn build(&self) -> Option<&str> {
+        self.build.as_deref()
+    }
+
     pub fn take_version(&mut self) -> Option<VersionRequest> {
         self.version.take()
     }
