@@ -11,7 +11,9 @@ use uv_cache_key::CanonicalUrl;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, Constraints, DryRun, HashCheckingMode, TargetTriple};
 use uv_distribution::LoweredExtraBuildDependencies;
-use uv_distribution_types::{ExtraBuildRequires, Index, Name, Requirement, RequirementSource};
+use uv_distribution_types::{
+    ExtraBuildRequires, Index, Name, Requirement, RequirementSource, Resolution,
+};
 use uv_fs::{CWD, Simplified};
 use uv_installer::{InstallationStrategy, Planner, SitePackages};
 use uv_normalize::PackageName;
@@ -535,7 +537,7 @@ async fn upgrade_tool(
         let environment = installed_tools.create_environment(name, interpreter.clone())?;
         let environment = sync_environment(
             environment,
-            &resolution.try_into()?,
+            &Resolution::try_from(resolution)?,
             HashStrategy::default(),
             Modifications::Exact,
             build_constraints,

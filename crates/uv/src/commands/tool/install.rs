@@ -15,7 +15,7 @@ use uv_configuration::{
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
     ExtraBuildRequires, IndexCapabilities, NameRequirementSpecification, Requirement,
-    RequirementSource, UnresolvedRequirementSpecification,
+    RequirementSource, Resolution, UnresolvedRequirementSpecification,
 };
 use uv_installer::{InstallationStrategy, Planner, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
@@ -1000,7 +1000,7 @@ pub(crate) async fn install(
                 )?;
                 (resolution, interpreter, Some(tool_lock))
             } else {
-                (resolution.try_into()?, interpreter, None)
+                (Resolution::try_from(resolution)?, interpreter, None)
             }
         };
         let hash_strategy = if tool_lock.is_some() {
