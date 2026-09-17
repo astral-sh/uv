@@ -8,10 +8,9 @@ use tracing::{debug, trace};
 
 use crate::candidate_selector::CandidateSelector;
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, Range};
-use crate::resolver::Request;
-use crate::resolver::requests::MetadataRequests;
+use crate::resolver::requests::{MetadataRequest, MetadataRequests};
 use crate::{PythonRequirement, ResolveError, ResolverEnvironment, VersionsResponse};
-use uv_distribution_types::{CompatibleDist, Identifier, IndexCapabilities, IndexMetadata};
+use uv_distribution_types::{CompatibleDist, IndexCapabilities, IndexMetadata};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::MarkerTree;
@@ -101,7 +100,8 @@ impl BatchPrefetcher {
         let versions_response = self
             .prefetch_runner
             .requests
-            .wait_for_versions(name, index.map(IndexMetadata::url))?;
+            .request_package(name, index)?
+            .wait()?;
 
         let phase = BatchPrefetchStrategy::Compatible {
             compatible: current_range.clone(),
@@ -296,7 +296,7 @@ impl BatchPrefetcherRunner {
             prefetch_count += 1;
 
             self.requests
-                .request_metadata(dist.distribution_id(), || Ok(Request::from(dist)))?;
+                .request_metadata(MetadataRequest::Resolved(dist), || Ok(()))?;
         }
 
         match prefetch_count {

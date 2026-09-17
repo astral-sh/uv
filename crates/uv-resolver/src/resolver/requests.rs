@@ -2,7 +2,9 @@ use std::sync::Arc;
 
 use tokio::sync::mpsc::Sender;
 
-use uv_distribution_types::{DistributionId, IndexMetadata, IndexUrl};
+use uv_distribution_types::{
+    Dist, DistributionId, Identifier, IndexMetadata, IndexUrl, ResolvedDistRef,
+};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 
@@ -17,6 +19,66 @@ pub(crate) struct MetadataRequests {
     sender: Sender<Request>,
 }
 
+/// A distribution request whose cache identity is derived from the requested distribution.
+pub(crate) enum MetadataRequest<'a> {
+    Dist(Dist),
+    Resolved(ResolvedDistRef<'a>),
+}
+
+impl MetadataRequest<'_> {
+    fn id(&self) -> DistributionId {
+        match self {
+            Self::Dist(dist) => dist.distribution_id(),
+            Self::Resolved(dist) => dist.distribution_id(),
+        }
+    }
+
+    fn into_request(self) -> Request {
+        match self {
+            Self::Dist(dist) => Request::Dist(dist),
+            Self::Resolved(dist) => Request::from(dist),
+        }
+    }
+}
+
+/// A registered version-list request, bound to its package and index scope.
+pub(crate) struct PendingVersions {
+    index: InMemoryIndex,
+    name: PackageName,
+    scope: Option<IndexUrl>,
+}
+
+impl PendingVersions {
+    pub(crate) fn wait(self) -> Result<Arc<VersionsResponse>, ResolveError> {
+        if let Some(scope) = self.scope {
+            self.index
+                .explicit()
+                .wait_blocking(&(self.name.clone(), scope))
+                .map_err(|_| ResolveError::UnregisteredTask(self.name.to_string()))
+        } else {
+            self.index
+                .implicit()
+                .wait_blocking(&self.name)
+                .map_err(|_| ResolveError::UnregisteredTask(self.name.to_string()))
+        }
+    }
+}
+
+/// A registered distribution request, including metadata supplied before resolution.
+pub(crate) struct PendingMetadata {
+    index: InMemoryIndex,
+    id: DistributionId,
+}
+
+impl PendingMetadata {
+    pub(crate) fn wait(self) -> Result<Arc<MetadataResponse>, ResolveError> {
+        self.index
+            .distributions()
+            .wait_blocking(&self.id)
+            .map_err(|_| ResolveError::UnregisteredTask(format!("{:?}", self.id)))
+    }
+}
+
 impl MetadataRequests {
     pub(crate) fn new(index: InMemoryIndex, sender: Sender<Request>) -> Self {
         Self { index, sender }
@@ -27,7 +89,7 @@ impl MetadataRequests {
         &self,
         name: &PackageName,
         index: Option<&IndexMetadata>,
-    ) -> Result<(), ResolveError> {
+    ) -> Result<PendingVersions, ResolveError> {
         let registered = if let Some(index) = index {
             self.index
                 .explicit()
@@ -39,7 +101,11 @@ impl MetadataRequests {
             self.sender
                 .blocking_send(Request::Package(name.clone(), index.cloned()))?;
         }
-        Ok(())
+        Ok(PendingVersions {
+            index: self.index.clone(),
+            name: name.clone(),
+            scope: index.map(|index| index.url().clone()),
+        })
     }
 
     /// Request distribution metadata once, validating and constructing only new requests.
@@ -47,13 +113,18 @@ impl MetadataRequests {
     /// Metadata already fetched or scheduled by another path does not need a new request.
     pub(crate) fn request_metadata(
         &self,
-        id: DistributionId,
-        request: impl FnOnce() -> Result<Request, ResolveError>,
-    ) -> Result<(), ResolveError> {
-        if self.index.distributions().register(id) {
-            self.sender.blocking_send(request()?)?;
+        request: MetadataRequest<'_>,
+        validate: impl FnOnce() -> Result<(), ResolveError>,
+    ) -> Result<PendingMetadata, ResolveError> {
+        let id = request.id();
+        if self.index.distributions().register(id.clone()) {
+            validate()?;
+            self.sender.blocking_send(request.into_request())?;
         }
-        Ok(())
+        Ok(PendingMetadata {
+            index: self.index.clone(),
+            id,
+        })
     }
 
     /// Schedule speculative candidate selection using an already-requested package version map.
@@ -71,34 +142,18 @@ impl MetadataRequests {
         Ok(())
     }
 
-    /// Wait for the versions of a package previously requested in the selected index scope.
-    pub(crate) fn wait_for_versions(
-        &self,
-        name: &PackageName,
-        index: Option<&IndexUrl>,
-    ) -> Result<Arc<VersionsResponse>, ResolveError> {
-        if let Some(index) = index {
-            self.index
-                .explicit()
-                .wait_blocking(&(name.clone(), index.clone()))
-                .map_err(|_| ResolveError::UnregisteredTask(name.to_string()))
-        } else {
-            self.index
-                .implicit()
-                .wait_blocking(name)
-                .map_err(|_| ResolveError::UnregisteredTask(name.to_string()))
-        }
-    }
-
-    /// Wait for previously requested distribution metadata, naming an unregistered task on error.
-    pub(crate) fn wait_for_metadata(
+    /// Recover a handle for metadata registered by this solver or by input preparation.
+    pub(crate) fn metadata(
         &self,
         id: &DistributionId,
         description: impl FnOnce() -> String,
-    ) -> Result<Arc<MetadataResponse>, ResolveError> {
-        self.index
-            .distributions()
-            .wait_blocking(id)
-            .map_err(|_| ResolveError::UnregisteredTask(description()))
+    ) -> Result<PendingMetadata, ResolveError> {
+        if !self.index.distributions().contains_key(id) {
+            return Err(ResolveError::UnregisteredTask(description()));
+        }
+        Ok(PendingMetadata {
+            index: self.index.clone(),
+            id: id.clone(),
+        })
     }
 }

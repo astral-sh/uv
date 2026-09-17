@@ -74,7 +74,7 @@ pub use crate::resolver::provider::{
     VersionsResponse, WheelMetadataResult,
 };
 pub use crate::resolver::reporter::Reporter;
-use crate::resolver::requests::MetadataRequests;
+use crate::resolver::requests::{MetadataRequest, MetadataRequests};
 use crate::resolver::requirements::{RequirementContext, RequirementExpander};
 use crate::resolver::system::SystemDependency;
 pub(crate) use crate::resolver::urls::Urls;
@@ -1025,7 +1025,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                 // Emit a request to fetch the metadata for this distribution.
                 let dist = Dist::from_url(name.clone(), url.clone())?;
-                requests.request_metadata(dist.distribution_id(), || Ok(Request::Dist(dist)))?;
+                requests.request_metadata(MetadataRequest::Dist(dist), || Ok(()))?;
             }
             PackageSource::Registry(index) => {
                 requests.request_package(name, index)?;
@@ -1142,7 +1142,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     package,
                     id,
                     name,
-                    index.map(IndexMetadata::url),
+                    index,
                     range,
                     preferences,
                     env,
@@ -1176,7 +1176,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         let dist = Dist::from_url(name.clone(), url.clone())?;
         let distribution_id = dist.distribution_id();
-        let response = requests.wait_for_metadata(&distribution_id, || dist.to_string())?;
+        let response = requests
+            .metadata(&distribution_id, || dist.to_string())?
+            .wait()?;
 
         // If we failed to fetch the metadata for a URL, we can't proceed.
         let metadata = match &*response {
@@ -1281,7 +1283,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         package: &PubGrubPackage,
         id: Id<PubGrubPackage>,
         name: &PackageName,
-        index: Option<&IndexUrl>,
+        index: Option<&IndexMetadata>,
         range: &Range<Version>,
         preferences: &Preferences,
         env: &ResolverEnvironment,
@@ -1292,7 +1294,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         requests: &MetadataRequests,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
         // Wait for the metadata to be available.
-        let versions_response = requests.wait_for_versions(name, index)?;
+        let versions_response = requests.request_package(name, index)?.wait()?;
+        let index = index.map(IndexMetadata::url);
         visited.insert(name.clone());
 
         let version_maps = match *versions_response {
@@ -1675,7 +1678,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         if matches!(&**package, PubGrubPackageInner::Package { .. }) {
             if self.dependency_mode.is_transitive() {
                 let dist = dist.for_resolution();
-                requests.request_metadata(dist.distribution_id(), || {
+                requests.request_metadata(MetadataRequest::Resolved(dist.clone()), || {
                     if name != dist.name() {
                         return Err(ResolveError::MismatchedPackageName {
                             request: "distribution",
@@ -1691,7 +1694,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         return Err(ResolveError::UnhashedPackage(candidate.name().clone()));
                     }
 
-                    Ok(Request::from(dist))
+                    Ok(())
                 })?;
             }
         }
@@ -1845,8 +1848,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
 
                 // Wait for the metadata to be available.
-                let response =
-                    requests.wait_for_metadata(distribution_id, || format!("{name}=={version}"))?;
+                let response = requests
+                    .metadata(distribution_id, || format!("{name}=={version}"))?
+                    .wait()?;
 
                 let metadata = match &*response {
                     MetadataResponse::Found(archive) => &archive.metadata,

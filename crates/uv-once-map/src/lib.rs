@@ -125,6 +125,11 @@ impl<K: Eq + Hash + Clone, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
             .ok_or_else(|| UnregisteredTask(key.clone()))
     }
 
+    /// Return whether a job has been registered, including jobs that are still running.
+    pub fn contains_key(&self, key: &K) -> bool {
+        self.items.pin().contains_key(key)
+    }
+
     /// Return the result of a previous job, if any.
     pub fn get<Q: ?Sized + Hash + Eq>(&self, key: &Q) -> Option<V>
     where
