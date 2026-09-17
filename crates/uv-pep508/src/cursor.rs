@@ -9,7 +9,6 @@ pub(crate) struct Cursor<'a> {
     input: &'a str,
     chars: Chars<'a>,
     pos: usize,
-    pub(crate) artifact_markers: bool,
 }
 
 impl<'a> Cursor<'a> {
@@ -19,7 +18,6 @@ impl<'a> Cursor<'a> {
             input,
             chars: input.chars(),
             pos: 0,
-            artifact_markers: false,
         }
     }
 
@@ -29,7 +27,6 @@ impl<'a> Cursor<'a> {
             input: self.input,
             chars: self.input[pos..].chars(),
             pos,
-            artifact_markers: self.artifact_markers,
         }
     }
 

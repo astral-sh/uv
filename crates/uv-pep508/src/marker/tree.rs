@@ -16,11 +16,12 @@ use super::algebra::{Edges, INTERNER, NodeId, Variable};
 use super::simplify;
 #[cfg(test)]
 use crate::Pep508ErrorSource;
+#[cfg(test)]
 use crate::cursor::Cursor;
 use crate::marker::lowering::{
     CanonicalMarkerListPair, CanonicalMarkerValueString, CanonicalMarkerValueVersion,
 };
-use crate::marker::parse;
+use crate::marker::parse::{self, MarkerDialect};
 use crate::{CanonicalMarkerValueExtra, MarkerEnvironment, Pep508Error, Reporter, TracingReporter};
 
 /// Ways in which marker evaluation can fail
@@ -634,7 +635,8 @@ impl MarkerExpression {
     #[cfg(test)]
     fn parse_reporter(s: &str, reporter: &mut impl Reporter) -> Result<Option<Self>, Pep508Error> {
         let mut chars = Cursor::new(s);
-        let expression = parse::parse_marker_key_op_value(&mut chars, reporter)?;
+        let expression =
+            parse::parse_marker_key_op_value(&mut chars, MarkerDialect::Pep508, reporter)?;
         chars.eat_whitespace();
         if let Some((pos, unexpected)) = chars.next() {
             let input = chars.to_string();
@@ -798,17 +800,14 @@ impl FromStr for MarkerTree {
     type Err = Pep508Error;
 
     fn from_str(markers: &str) -> Result<Self, Self::Err> {
-        parse::parse_markers(markers, &mut TracingReporter)
+        parse::parse_markers(markers, MarkerDialect::Pep508, &mut TracingReporter)
     }
 }
 
 impl MarkerTree {
     /// Parse a required environment, allowing uv-only artifact coverage markers.
     pub fn parse_required_environment(markers: &str) -> Result<Self, Pep508Error> {
-        let mut cursor = Cursor::new(markers);
-        cursor.artifact_markers = true;
-        parse::parse_markers_cursor(&mut cursor, &mut TracingReporter)
-            .map(|marker| marker.unwrap_or(Self::TRUE))
+        parse::parse_markers(markers, MarkerDialect::Uv, &mut TracingReporter)
     }
 
     /// Project artifact coverage onto ordinary environments before creating resolution forks.
