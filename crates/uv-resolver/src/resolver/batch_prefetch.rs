@@ -101,7 +101,7 @@ impl BatchPrefetcher {
             .prefetch_runner
             .requests
             .request_package(name, index)?
-            .wait();
+            .wait()?;
 
         let phase = BatchPrefetchStrategy::Compatible {
             compatible: current_range.clone(),
@@ -296,7 +296,7 @@ impl BatchPrefetcherRunner {
             prefetch_count += 1;
 
             self.requests
-                .request_metadata(MetadataRequest::Resolved(dist), |_| Ok(()))?;
+                .enqueue_metadata(MetadataRequest::Resolved(dist))?;
         }
 
         match prefetch_count {

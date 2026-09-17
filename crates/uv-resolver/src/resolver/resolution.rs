@@ -15,18 +15,18 @@ use crate::{ResolverEnvironment, UniversalMarker};
 
 /// The resolution from a single fork including the virtual packages and the edges between them.
 #[derive(Debug)]
-pub(crate) struct Resolution {
+pub(crate) struct Resolution<'index> {
     pub(crate) nodes: FxHashMap<ResolutionPackage, Version>,
     /// The directed connections between the nodes, where the marker is the node weight. We don't
     /// store the requirement itself, but it can be retrieved from the package metadata.
     pub(crate) edges: Vec<ResolutionDependencyEdge>,
     /// Map each package name, version tuple from `packages` to a distribution.
-    pub(crate) pins: FilePins,
+    pub(crate) pins: FilePins<'index>,
     /// The environment setting this resolution was found under.
     pub(crate) env: ResolverEnvironment,
 }
 
-impl Resolution {
+impl Resolution<'_> {
     /// When trace level logging is enabled, we dump the final
     /// set of resolutions, including markers, to help with
     /// debugging. Namely, this tells use precisely the state
