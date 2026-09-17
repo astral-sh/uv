@@ -248,8 +248,7 @@ fn add_version<'a>(
 ) -> Result<(), ResolveError> {
     let ResolutionPackage {
         name,
-        extra,
-        dev: group,
+        facet,
         url,
         index,
     } = &package;
@@ -279,7 +278,7 @@ fn add_version<'a>(
 
     if let Some(metadata) = metadata.as_ref() {
         // Validate the extra.
-        if let Some(extra) = extra {
+        if let Some(extra) = facet.extra() {
             if !metadata.provides_extra.contains(extra) {
                 diagnostics.push(ResolutionDiagnostic::MissingExtra {
                     dist: dist.clone(),
@@ -289,7 +288,7 @@ fn add_version<'a>(
         }
 
         // Validate the development dependency group.
-        if let Some(dev) = group {
+        if let Some(dev) = facet.group() {
             if !metadata.dependency_groups.contains_key(dev) {
                 diagnostics.push(ResolutionDiagnostic::MissingGroup {
                     dist: dist.clone(),
@@ -304,8 +303,7 @@ fn add_version<'a>(
         dist,
         name: name.clone(),
         version: version.clone(),
-        extra: extra.clone(),
-        group: group.clone(),
+        facet: facet.clone(),
         hashes,
         metadata,
         marker: UniversalMarker::TRUE,

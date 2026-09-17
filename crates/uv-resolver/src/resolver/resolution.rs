@@ -4,10 +4,11 @@ use rustc_hash::FxHashMap;
 use tracing::{Level, trace};
 
 use uv_distribution_types::IndexUrl;
-use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_normalize::PackageName;
 use uv_pep440::{MIN_VERSION, Version};
 use uv_pep508::MarkerTree;
 use uv_pypi_types::VerbatimParsedUrl;
+use uv_resolver_types::PackageFacet;
 
 use crate::pins::FilePins;
 use crate::universal_marker::ConflictMarker;
@@ -60,14 +61,14 @@ impl Resolution {
             if let Some(extra) = edge
                 .from
                 .as_ref()
-                .and_then(|node| node.package.extra.as_ref())
+                .and_then(|node| node.package.facet.extra())
             {
                 write!(msg, " (extra: {extra})").unwrap();
             }
             if let Some(dev) = edge
                 .from
                 .as_ref()
-                .and_then(|node| node.package.dev.as_ref())
+                .and_then(|node| node.package.facet.group())
             {
                 write!(msg, " (group: {dev})").unwrap();
             }
@@ -75,10 +76,10 @@ impl Resolution {
             write!(msg, " -> ").unwrap();
 
             write!(msg, "{}", edge.to.version).unwrap();
-            if let Some(ref extra) = edge.to.package.extra {
+            if let Some(extra) = edge.to.package.facet.extra() {
                 write!(msg, " (extra: {extra})").unwrap();
             }
-            if let Some(ref dev) = edge.to.package.dev {
+            if let Some(dev) = edge.to.package.facet.group() {
                 write!(msg, " (group: {dev})").unwrap();
             }
             if let Some(marker) = edge.marker.contents() {
@@ -94,8 +95,7 @@ impl Resolution {
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub(crate) struct ResolutionPackage {
     pub(crate) name: PackageName,
-    pub(crate) extra: Option<ExtraName>,
-    pub(crate) dev: Option<GroupName>,
+    pub(crate) facet: PackageFacet,
     /// For registry packages, this is `None`; otherwise, the direct URL of the distribution.
     pub(crate) url: Option<VerbatimParsedUrl>,
     /// For URL packages, this is `None`; otherwise, the index URL of the distribution.

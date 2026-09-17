@@ -4,10 +4,11 @@ use std::iter;
 use either::Either;
 
 use uv_distribution_types::{IndexMetadata, Requirement, RequirementSource};
-use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_normalize::{GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::RequirementOrigin;
 use uv_pypi_types::{ConflictItemRef, Conflicts, VerbatimParsedUrl};
+use uv_resolver_types::PackageFacet;
 
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, Range};
 use crate::resolver::UnsatisfiableRequirement;
@@ -164,12 +165,12 @@ impl PubGrubDependency {
                 .iter()
                 .any(|extra| conflicts.contains(&requirement.name, extra))
             {
-                Either::Left(iter::once((None, None)))
+                Either::Left(iter::once(PackageFacet::Base))
             } else {
                 Either::Right(iter::empty())
             };
             Either::Left(Either::Left(base.chain(
-                Box::into_iter(requirement.extras.clone()).map(|extra| (Some(extra), None)),
+                Box::into_iter(requirement.extras.clone()).map(PackageFacet::Extra),
             )))
         } else if !requirement.groups.is_empty() {
             let base = if requirement
@@ -177,21 +178,20 @@ impl PubGrubDependency {
                 .iter()
                 .any(|group| conflicts.contains(&requirement.name, group))
             {
-                Either::Left(iter::once((None, None)))
+                Either::Left(iter::once(PackageFacet::Base))
             } else {
                 Either::Right(iter::empty())
             };
             Either::Left(Either::Right(base.chain(
-                Box::into_iter(requirement.groups.clone()).map(|group| (None, Some(group))),
+                Box::into_iter(requirement.groups.clone()).map(PackageFacet::Group),
             )))
         } else {
-            Either::Right(iter::once((None, None)))
+            Either::Right(iter::once(PackageFacet::Base))
         };
 
         // Add the package, plus any extra variants.
-        Ok(iter.map(move |(extra, group)| {
-            let pubgrub_requirement =
-                PubGrubRequirement::from_requirement(&requirement, extra, group);
+        Ok(iter.map(move |facet| {
+            let pubgrub_requirement = PubGrubRequirement::from_requirement(&requirement, facet);
             let PubGrubRequirement {
                 package,
                 version,
@@ -273,27 +273,19 @@ struct PubGrubRequirement {
 }
 
 impl PubGrubRequirement {
-    fn package_for_requirement(
-        requirement: &Requirement,
-        extra: Option<ExtraName>,
-        group: Option<GroupName>,
-    ) -> PubGrubPackage {
-        PubGrubPackage::from_package(requirement.name.clone(), extra, group, requirement.marker)
+    fn package_for_requirement(requirement: &Requirement, facet: PackageFacet) -> PubGrubPackage {
+        PubGrubPackage::from_package(requirement.name.clone(), facet, requirement.marker)
     }
 
     /// Convert a [`Requirement`] to a PubGrub-compatible package and range, while returning the URL
     /// on the [`Requirement`], if any.
-    fn from_requirement(
-        requirement: &Requirement,
-        extra: Option<ExtraName>,
-        group: Option<GroupName>,
-    ) -> Self {
+    fn from_requirement(requirement: &Requirement, facet: PackageFacet) -> Self {
         if let RequirementSource::Registry { specifier, .. } = &requirement.source {
-            return Self::from_registry_requirement(specifier, extra, group, requirement);
+            return Self::from_registry_requirement(specifier, facet, requirement);
         }
 
         Self {
-            package: Self::package_for_requirement(requirement, extra, group),
+            package: Self::package_for_requirement(requirement, facet),
             version: Range::full(),
             source: DependencySource::from_requirement(requirement),
         }
@@ -301,12 +293,11 @@ impl PubGrubRequirement {
 
     fn from_registry_requirement(
         specifier: &VersionSpecifiers,
-        extra: Option<ExtraName>,
-        group: Option<GroupName>,
+        facet: PackageFacet,
         requirement: &Requirement,
     ) -> Self {
         Self {
-            package: Self::package_for_requirement(requirement, extra, group),
+            package: Self::package_for_requirement(requirement, facet),
             source: DependencySource::from_requirement(requirement),
             version: Range::from(specifier.clone()),
         }

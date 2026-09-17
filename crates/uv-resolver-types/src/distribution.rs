@@ -11,6 +11,38 @@ use uv_pypi_types::HashDigests;
 
 use crate::UniversalMarker;
 
+/// The part of a package represented by a resolver graph node.
+#[derive(Debug, Clone, Default, Eq, Hash, PartialEq, PartialOrd, Ord)]
+pub enum PackageFacet {
+    #[default]
+    Base,
+    Group(GroupName),
+    Extra(ExtraName),
+}
+
+impl PackageFacet {
+    pub fn extra(&self) -> Option<&ExtraName> {
+        match self {
+            Self::Extra(extra) => Some(extra),
+            Self::Base | Self::Group(_) => None,
+        }
+    }
+
+    pub fn group(&self) -> Option<&GroupName> {
+        match self {
+            Self::Group(group) => Some(group),
+            Self::Base | Self::Extra(_) => None,
+        }
+    }
+
+    pub fn is_base(&self) -> bool {
+        match self {
+            Self::Base => true,
+            Self::Group(_) | Self::Extra(_) => false,
+        }
+    }
+}
+
 /// A pinned package with its resolved distribution and metadata. The [`ResolvedDist`] refers to a
 /// specific distribution (e.g., a specific wheel), while the [`Metadata23`] refers to the metadata
 /// for the package-version pair.
@@ -19,8 +51,7 @@ pub struct AnnotatedDist {
     pub dist: ResolvedDist,
     pub name: PackageName,
     pub version: Version,
-    pub extra: Option<ExtraName>,
-    pub group: Option<GroupName>,
+    pub facet: PackageFacet,
     pub hashes: HashDigests,
     pub metadata: Option<Metadata>,
     /// The "full" marker for this distribution. It precisely describes all
@@ -35,7 +66,7 @@ impl AnnotatedDist {
     /// Returns `true` if the [`AnnotatedDist`] is a base package (i.e., not an extra or a
     /// dependency group).
     pub(crate) fn is_base(&self) -> bool {
-        self.extra.is_none() && self.group.is_none()
+        self.facet.is_base()
     }
 
     /// Returns the [`IndexUrl`] of the distribution, if it is from a registry.
