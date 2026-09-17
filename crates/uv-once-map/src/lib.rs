@@ -28,7 +28,7 @@ impl<K: Debug + Display> std::error::Error for UnregisteredTask<K> {}
 /// Note that this always clones the value out of the underlying map. Because
 /// of this, it's common to wrap the `V` in an `Arc<V>` to make cloning cheap.
 pub struct OnceMap<K, V, S = RandomState> {
-    items: HashMap<K, Value<V>, S>,
+    items: HashMap<K, Arc<Value<V>>, S>,
 }
 
 impl<K: Eq + Hash + Debug, V: Debug, S: BuildHasher + Clone> Debug for OnceMap<K, V, S> {
@@ -46,8 +46,34 @@ impl<K: Eq + Hash + Clone, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
     pub fn register(&self, key: K) -> bool {
         self.items
             .pin()
-            .try_insert(key, Value::Waiting(Arc::new(Notify::new())))
+            .try_insert_with(key, || Arc::new(Value::new(None)))
             .is_ok()
+    }
+
+    /// Register a job and retain its result slot.
+    ///
+    /// [`Registration::New`] requires the caller to start the job and eventually call
+    /// [`OnceMap::done`]. [`Registration::Existing`] shares an already registered job.
+    pub fn register_entry(&self, key: K) -> Registration<V> {
+        match self
+            .items
+            .pin()
+            .try_insert_with(key, || Arc::new(Value::new(None)))
+        {
+            Ok(value) => Registration::New(RegisteredEntry(Arc::clone(value))),
+            Err(value) => Registration::Existing(RegisteredEntry(Arc::clone(value))),
+        }
+    }
+
+    /// Return a handle to a registered job, including one that has already completed.
+    pub fn entry<Q: ?Sized + Hash + Eq>(&self, key: &Q) -> Option<RegisteredEntry<V>>
+    where
+        K: Borrow<Q>,
+    {
+        self.items
+            .pin()
+            .get(key)
+            .map(|value| RegisteredEntry(Arc::clone(value)))
     }
 
     /// Register that you want to start a job, unless it was already started, then wait for its
@@ -69,41 +95,27 @@ impl<K: Eq + Hash + Clone, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
     /// }
     /// ```
     pub async fn register_or_wait(&self, key: &K) -> Option<V> {
-        let notify = {
+        let entry = {
             let items = self.items.pin();
-            match items.try_insert_with(key.clone(), || Value::Waiting(Arc::new(Notify::new()))) {
+            match items.try_insert_with(key.clone(), || Arc::new(Value::new(None))) {
                 Ok(_) => return None,
-                Err(value) => match value {
-                    Value::Filled(_) => return value.get(),
-                    Value::Waiting(notify) => notify.clone(),
-                },
+                Err(value) => {
+                    if let Some(value) = value.get() {
+                        return Some(value);
+                    }
+                    RegisteredEntry(Arc::clone(value))
+                }
             }
         };
-
-        // Register the waiter for calls to `notify_waiters`.
-        let notification = notify.notified();
-
-        // Make sure the value wasn't inserted in-between us checking the map and registering the waiter.
-        if let Some(value) = self.items.pin().get(key).expect("map is append-only").get() {
-            return Some(value);
-        }
-
-        // Wait until the value is inserted.
-        notification.await;
-
-        let items = self.items.pin();
-        let value = items.get(key).expect("map is append-only");
-        match value {
-            Value::Filled(_) => value.get(),
-            Value::Waiting(_) => unreachable!("notify was called"),
-        }
+        Some(entry.wait().await)
     }
 
     /// Submit the result of a job you registered.
     pub fn done(&self, key: K, value: V) {
-        if let Some(Value::Waiting(notify)) = self.items.pin().insert(key, Value::filled(value)) {
-            notify.notify_waiters();
-        }
+        let items = self.items.pin();
+        let entry = items.get_or_insert_with(key, || Arc::new(Value::new(None)));
+        *entry.lock() = Some(value);
+        entry.notify.notify_waiters();
     }
 
     /// Wait for the result of a job that is running.
@@ -125,11 +137,6 @@ impl<K: Eq + Hash + Clone, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
             .ok_or_else(|| UnregisteredTask(key.clone()))
     }
 
-    /// Return whether a job has been registered, including jobs that are still running.
-    pub fn contains_key(&self, key: &K) -> bool {
-        self.items.pin().contains_key(key)
-    }
-
     /// Return the result of a previous job, if any.
     pub fn get<Q: ?Sized + Hash + Eq>(&self, key: &Q) -> Option<V>
     where
@@ -140,12 +147,14 @@ impl<K: Eq + Hash + Clone, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
     }
 
     /// Remove the result of a previous job, if any.
+    ///
+    /// Existing handles retain the removed result. In-flight jobs must complete before removal.
     pub fn remove<Q: ?Sized + Hash + Eq>(&self, key: &Q) -> Option<V>
     where
         K: Borrow<Q>,
     {
         let items = self.items.pin();
-        items.remove(key)?.take()
+        items.remove(key)?.get()
     }
 }
 
@@ -169,41 +178,72 @@ where
         Self {
             items: iter
                 .into_iter()
-                .map(|(k, v)| (k, Value::filled(v)))
+                .map(|(k, v)| (k, Arc::new(Value::new(Some(v)))))
                 .collect(),
         }
     }
 }
 
+/// Whether a job needs to be started or was already registered.
 #[derive(Debug)]
-enum Value<V> {
-    Waiting(Arc<Notify>),
-    /// The mutex is a workaround to papaya always returning borrowed instead of owned values.
-    Filled(Mutex<Option<V>>),
+pub enum Registration<V> {
+    /// The caller must start the job and eventually call [`OnceMap::done`].
+    New(RegisteredEntry<V>),
+    /// The job is already running or has completed.
+    Existing(RegisteredEntry<V>),
+}
+
+/// A handle to a registered job's result, independent of subsequent map lookups.
+///
+/// Cloning a handle shares the result slot. Waiting can be repeated and cannot fail due to an
+/// unregistered key, but will hang if the job never completes.
+#[derive(Clone, Debug)]
+pub struct RegisteredEntry<V>(Arc<Value<V>>);
+
+impl<V: Clone> RegisteredEntry<V> {
+    /// Wait for the registered job to complete.
+    pub async fn wait(&self) -> V {
+        if let Some(value) = self.0.get() {
+            return value;
+        }
+        loop {
+            // Subscribe before checking the result so completion cannot miss this waiter.
+            let notification = self.0.notify.notified();
+            if let Some(value) = self.0.get() {
+                return value;
+            }
+            notification.await;
+        }
+    }
+
+    /// Wait for the registered job to complete in a blocking context.
+    pub fn wait_blocking(&self) -> V {
+        futures::executor::block_on(self.wait())
+    }
+}
+
+/// The notification and result share one allocation throughout the job's lifetime.
+#[derive(Debug)]
+struct Value<V> {
+    value: Mutex<Option<V>>,
+    notify: Notify,
 }
 
 impl<V> Value<V> {
-    fn filled(value: V) -> Self {
-        Self::Filled(Mutex::new(Some(value)))
-    }
-
-    fn lock(value: &Mutex<Option<V>>) -> MutexGuard<'_, Option<V>> {
-        value.lock().unwrap_or_else(PoisonError::into_inner)
-    }
-
-    fn take(&self) -> Option<V> {
-        match self {
-            Self::Filled(value) => Self::lock(value).take(),
-            Self::Waiting(_) => None,
+    fn new(value: Option<V>) -> Self {
+        Self {
+            value: Mutex::new(value),
+            notify: Notify::new(),
         }
+    }
+
+    fn lock(&self) -> MutexGuard<'_, Option<V>> {
+        self.value.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }
 
 impl<V: Clone> Value<V> {
     fn get(&self) -> Option<V> {
-        match self {
-            Self::Filled(value) => Self::lock(value).clone(),
-            Self::Waiting(_) => None,
-        }
+        self.lock().clone()
     }
 }

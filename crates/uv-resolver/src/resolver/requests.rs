@@ -4,11 +4,11 @@ use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
 
 use uv_distribution_types::{
-    Dist, DistributionId, Identifier, IndexMetadata, IndexUrl, Name, ResolvedDistRef,
+    Dist, DistributionId, Identifier, IndexMetadata, Name, ResolvedDistRef,
 };
 use uv_normalize::PackageName;
+use uv_once_map::{RegisteredEntry, Registration};
 use uv_pep440::Version;
-use uv_resolver_types::DistributionMetadataIndex;
 
 use crate::pubgrub::Range;
 use crate::resolver::{InMemoryIndex, MetadataResponse, Request, VersionsResponse};
@@ -53,51 +53,34 @@ impl Name for MetadataRequest<'_> {
 }
 
 /// A registered version-list request, bound to its package and index scope.
-pub(crate) struct PendingVersions {
-    index: InMemoryIndex,
-    name: PackageName,
-    scope: Option<IndexUrl>,
-}
+pub(crate) struct PendingVersions(RegisteredEntry<Arc<VersionsResponse>>);
 
 impl PendingVersions {
-    pub(crate) fn wait(self) -> Result<Arc<VersionsResponse>, ResolveError> {
-        if let Some(scope) = self.scope {
-            self.index
-                .explicit()
-                .wait_blocking(&(self.name.clone(), scope))
-                .map_err(|_| ResolveError::UnregisteredTask(self.name.to_string()))
-        } else {
-            self.index
-                .implicit()
-                .wait_blocking(&self.name)
-                .map_err(|_| ResolveError::UnregisteredTask(self.name.to_string()))
-        }
+    pub(crate) fn wait(self) -> Arc<VersionsResponse> {
+        self.0.wait_blocking()
     }
 }
 
 /// A registered distribution request, including metadata supplied before resolution.
 ///
-/// Selected pins retain this handle for repeated dependency queries. Borrowing the index avoids
-/// reference-count updates when pins are cloned for a fork.
+/// Selected pins retain the result slot for repeated dependency queries without map lookups.
 #[derive(Clone)]
-pub(crate) struct RegisteredMetadata<'index> {
-    index: &'index DistributionMetadataIndex,
+pub(crate) struct RegisteredMetadata {
+    entry: RegisteredEntry<Arc<MetadataResponse>>,
     id: DistributionId,
 }
 
-impl RegisteredMetadata<'_> {
+impl RegisteredMetadata {
     pub(crate) fn id(&self) -> &DistributionId {
         &self.id
     }
 
-    pub(crate) fn wait(&self) -> Result<Arc<MetadataResponse>, ResolveError> {
-        self.index
-            .wait_blocking(&self.id)
-            .map_err(|_| ResolveError::UnregisteredTask(format!("{:?}", self.id)))
+    pub(crate) fn wait(&self) -> Arc<MetadataResponse> {
+        self.entry.wait_blocking()
     }
 }
 
-impl fmt::Debug for RegisteredMetadata<'_> {
+impl fmt::Debug for RegisteredMetadata {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_tuple("RegisteredMetadata")
@@ -117,22 +100,22 @@ impl MetadataRequests {
         name: &PackageName,
         index: Option<&IndexMetadata>,
     ) -> Result<PendingVersions, ResolveError> {
-        let registered = if let Some(index) = index {
+        let registration = if let Some(index) = index {
             self.index
                 .explicit()
-                .register((name.clone(), index.url().clone()))
+                .register_entry((name.clone(), index.url().clone()))
         } else {
-            self.index.implicit().register(name.clone())
+            self.index.implicit().register_entry(name.clone())
         };
-        if registered {
-            self.sender
-                .blocking_send(Request::Package(name.clone(), index.cloned()))?;
-        }
-        Ok(PendingVersions {
-            index: self.index.clone(),
-            name: name.clone(),
-            scope: index.map(|index| index.url().clone()),
-        })
+        let entry = match registration {
+            Registration::New(entry) => {
+                self.sender
+                    .blocking_send(Request::Package(name.clone(), index.cloned()))?;
+                entry
+            }
+            Registration::Existing(entry) => entry,
+        };
+        Ok(PendingVersions(entry))
     }
 
     /// Request distribution metadata once, validating and constructing only new requests.
@@ -142,16 +125,17 @@ impl MetadataRequests {
         &self,
         request: MetadataRequest<'_>,
         validate: impl FnOnce(&MetadataRequest<'_>) -> Result<(), ResolveError>,
-    ) -> Result<RegisteredMetadata<'_>, ResolveError> {
+    ) -> Result<RegisteredMetadata, ResolveError> {
         let id = request.id();
-        if self.index.distributions().register(id.clone()) {
-            validate(&request)?;
-            self.sender.blocking_send(request.into_request())?;
-        }
-        Ok(RegisteredMetadata {
-            index: self.index.distributions(),
-            id,
-        })
+        let entry = match self.index.distributions().register_entry(id.clone()) {
+            Registration::New(entry) => {
+                validate(&request)?;
+                self.sender.blocking_send(request.into_request())?;
+                entry
+            }
+            Registration::Existing(entry) => entry,
+        };
+        Ok(RegisteredMetadata { entry, id })
     }
 
     /// Schedule speculative candidate selection using an already-requested package version map.
@@ -174,13 +158,12 @@ impl MetadataRequests {
         &self,
         id: DistributionId,
         description: impl FnOnce() -> String,
-    ) -> Result<RegisteredMetadata<'_>, ResolveError> {
-        if !self.index.distributions().contains_key(&id) {
-            return Err(ResolveError::UnregisteredTask(description()));
-        }
-        Ok(RegisteredMetadata {
-            index: self.index.distributions(),
-            id,
-        })
+    ) -> Result<RegisteredMetadata, ResolveError> {
+        let entry = self
+            .index
+            .distributions()
+            .entry(&id)
+            .ok_or_else(|| ResolveError::UnregisteredTask(description()))?;
+        Ok(RegisteredMetadata { entry, id })
     }
 }

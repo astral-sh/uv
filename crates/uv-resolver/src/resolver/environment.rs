@@ -348,10 +348,10 @@ impl ResolverEnvironment {
     /// with an initial set of forked resolver states (e.g., those present in
     /// a lock file), then this creates the initial set of forks from that
     /// configuration.
-    pub(crate) fn initial_forked_states<'index>(
+    pub(crate) fn initial_forked_states(
         &self,
-        init: ForkState<'index>,
-    ) -> Result<Vec<ForkState<'index>>, ResolveError> {
+        init: ForkState,
+    ) -> Result<Vec<ForkState>, ResolveError> {
         let Kind::Universal {
             ref initial_forks,
             markers: ref _markers,
