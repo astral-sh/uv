@@ -1103,7 +1103,7 @@ mod tests {
     fn assert_platform_markers(filename: &str, expected: &str) {
         let filename = WheelFilename::from_str(filename).unwrap();
         assert_eq!(
-            implied_platform_markers(&filename).without_artifact_markers(),
+            implied_platform_markers(&filename).without_libc_markers(),
             expected.parse::<MarkerTree>().unwrap()
         );
     }
@@ -1121,7 +1121,7 @@ mod tests {
     fn assert_implied_markers(filename: &str, expected: &str) {
         let filename = WheelFilename::from_str(filename).unwrap();
         assert_eq!(
-            implied_markers(&filename).without_artifact_markers(),
+            implied_markers(&filename).without_libc_markers(),
             expected.parse::<MarkerTree>().unwrap()
         );
     }

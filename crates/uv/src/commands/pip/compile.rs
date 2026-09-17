@@ -380,7 +380,7 @@ pub(crate) async fn pip_compile(
     };
 
     let artifact_environments = if universal {
-        if required_environments.has_artifact_markers()
+        if required_environments.has_libc_markers()
             && !preview.is_enabled(PreviewFeature::MinimumLibcVersion)
         {
             warn_user_once!(

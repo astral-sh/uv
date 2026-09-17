@@ -6146,7 +6146,7 @@ impl ResolverManifest {
     }
 }
 
-/// Read coverage requirements without accepting artifact-only markers in dependency edges.
+/// Read required environments without accepting libc markers in dependency edges.
 fn deserialize_required_markers<'de, D>(deserializer: D) -> Result<Vec<MarkerTree>, D::Error>
 where
     D: serde::Deserializer<'de>,

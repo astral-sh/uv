@@ -74,10 +74,10 @@ impl SupportedEnvironments {
     }
 
     /// Whether any environment requires a libc baseline, rather than only ordinary markers.
-    pub fn has_artifact_markers(&self) -> bool {
+    pub fn has_libc_markers(&self) -> bool {
         self.0
             .iter()
-            .any(|marker| *marker != marker.without_artifact_markers())
+            .any(|marker| *marker != marker.without_libc_markers())
     }
 }
 

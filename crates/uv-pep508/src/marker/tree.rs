@@ -52,7 +52,7 @@ pub enum MarkerWarningKind {
 /// Those environment markers with a PEP 440 version as value such as `python_version`
 #[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum MarkerValueVersion {
-    /// A uv-only libc artifact coverage baseline, unavailable in runtime environments.
+    /// A uv-only libc version requirement, unavailable in runtime environments.
     LibcVersion,
     /// `implementation_version`
     ImplementationVersion,
@@ -153,7 +153,7 @@ impl Display for MarkerValueList {
 /// <https://packaging.python.org/en/latest/specifications/dependency-specifiers/#environment-markers>
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub(crate) enum MarkerValue {
-    /// The libc implementation required by an artifact coverage target.
+    /// The libc implementation required by an environment.
     Libc,
     /// Those environment markers with a PEP 440 version as value such as `python_version`
     MarkerEnvVersion(MarkerValueVersion),
@@ -507,7 +507,7 @@ impl Display for MarkerValueExtra {
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 #[allow(missing_docs)]
 pub enum MarkerExpression {
-    /// A uv-only libc implementation comparison, used for artifact coverage.
+    /// A uv-only libc implementation comparison, used in required environments.
     Libc {
         operator: MarkerOperator,
         value: ArcStr,
@@ -817,15 +817,15 @@ impl FromStr for MarkerTree {
 }
 
 impl MarkerTree {
-    /// Parse a lockfile's required marker, allowing internal artifact coverage variables.
+    /// Parse a lockfile's required marker, allowing internal libc variables.
     pub fn parse_required_environment(markers: &str) -> Result<Self, Pep508Error> {
         parse::parse_markers(markers, MarkerDialect::Uv, &mut TracingReporter)
     }
 
-    /// Project artifact coverage onto ordinary environments before creating resolution forks.
+    /// Remove libc constraints before creating resolution forks.
     #[must_use]
-    pub fn without_artifact_markers(self) -> Self {
-        Self(INTERNER.lock().without_artifact_markers(self.0))
+    pub fn without_libc_markers(self) -> Self {
+        Self(INTERNER.lock().without_libc_markers(self.0))
     }
 
     /// An empty marker that always evaluates to `true`.
@@ -954,13 +954,13 @@ impl MarkerTree {
                     map,
                 })
             }
-            Variable::ArtifactVersion(key) => {
+            Variable::LibcVersion => {
                 let Edges::Version { edges: ref map } = node.children else {
                     return MarkerTreeKind::False;
                 };
-                MarkerTreeKind::ArtifactVersion(VersionMarkerTree {
+                MarkerTreeKind::LibcVersion(VersionMarkerTree {
                     id: self.0,
-                    key: *key,
+                    key: (),
                     map,
                 })
             }
@@ -1102,7 +1102,7 @@ impl MarkerTree {
             MarkerTreeKind::False => return false,
             // Coverage requirements are not runtime conditions. Fail closed if one escapes
             // into a dependency marker; normal dependency parsing rejects these markers.
-            MarkerTreeKind::Libc(_) | MarkerTreeKind::ArtifactVersion(_) => return false,
+            MarkerTreeKind::Libc(_) | MarkerTreeKind::LibcVersion(_) => return false,
             MarkerTreeKind::Version(marker) => {
                 for (range, tree) in marker.edges() {
                     if range.contains(env.get_version(marker.key())) {
@@ -1198,7 +1198,7 @@ impl MarkerTree {
             MarkerTreeKind::VersionString(marker) => {
                 marker.edges().any(|(_, tree)| tree.evaluate_extras(extras))
             }
-            MarkerTreeKind::ArtifactVersion(marker) => {
+            MarkerTreeKind::LibcVersion(marker) => {
                 marker.edges().any(|(_, tree)| tree.evaluate_extras(extras))
             }
             MarkerTreeKind::Libc(marker) => marker
@@ -1233,7 +1233,7 @@ impl MarkerTree {
             MarkerTreeKind::VersionString(marker) => marker
                 .edges()
                 .all(|(_, tree)| tree.evaluate_only_extras(extras)),
-            MarkerTreeKind::ArtifactVersion(marker) => marker
+            MarkerTreeKind::LibcVersion(marker) => marker
                 .edges()
                 .all(|(_, tree)| tree.evaluate_only_extras(extras)),
             MarkerTreeKind::Libc(marker) => marker
@@ -1482,7 +1482,7 @@ impl MarkerTree {
                         imp(tree, f);
                     }
                 }
-                MarkerTreeKind::ArtifactVersion(kind) => {
+                MarkerTreeKind::LibcVersion(kind) => {
                     for (tree, _) in simplify::collect_edges(kind.edges()) {
                         imp(tree, f);
                     }
@@ -1575,8 +1575,8 @@ impl Ord for MarkerTree {
 pub enum MarkerTreeKind<'a> {
     /// A uv-only libc implementation requirement, not used for runtime evaluation.
     Libc(StringMarkerTree<'a, ()>),
-    /// A uv-only version requirement used for artifact coverage, not runtime evaluation.
-    ArtifactVersion(VersionMarkerTree<'a, MarkerValueVersion>),
+    /// A uv-only libc version requirement, not used for runtime evaluation.
+    LibcVersion(VersionMarkerTree<'a, ()>),
     /// An empty marker that always evaluates to `true`.
     True,
     /// An unsatisfiable marker that always evaluates to `false`.
@@ -1965,9 +1965,9 @@ mod test {
         let marker = MarkerTree::parse_required_environment(
             "(platform_machine == 'x86_64' and uv:libc == 'glibc' and uv:libc_version == '2.31') or (platform_machine == 'aarch64' and uv:libc == 'musl' and uv:libc_version == '1.2')",
         ).unwrap();
-        let projected = marker.without_artifact_markers();
+        let projected = marker.without_libc_markers();
         assert_eq!(projected, "sys_platform == 'linux' and (platform_machine == 'x86_64' or platform_machine == 'aarch64')".parse().unwrap());
-        assert!(marker.negate().without_artifact_markers().is_true());
+        assert!(marker.negate().without_libc_markers().is_true());
         let glibc = MarkerTree::parse_required_environment("uv:libc == 'glibc'").unwrap();
         let musl = MarkerTree::parse_required_environment("uv:libc == 'musl'").unwrap();
         assert!(glibc.is_disjoint(musl));

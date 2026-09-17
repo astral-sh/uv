@@ -10,7 +10,9 @@ use version_ranges::Ranges;
 use uv_pep440::{Version, VersionSpecifier};
 
 use crate::marker::tree::ContainerOperator;
-use crate::{ExtraOperator, MarkerExpression, MarkerOperator, MarkerTree, MarkerTreeKind};
+use crate::{
+    ExtraOperator, MarkerExpression, MarkerOperator, MarkerTree, MarkerTreeKind, MarkerValueVersion,
+};
 
 /// Returns a simplified DNF expression for a given marker tree.
 ///
@@ -111,13 +113,13 @@ fn collect_dnf(
                 }
             }
         }
-        MarkerTreeKind::ArtifactVersion(marker) => {
+        MarkerTreeKind::LibcVersion(marker) => {
             for (tree, range) in collect_edges(marker.edges()) {
                 for bounds in range.iter() {
                     let current = path.len();
                     for specifier in VersionSpecifier::from_release_only_bounds(bounds) {
                         path.push(MarkerExpression::Version {
-                            key: marker.key(),
+                            key: MarkerValueVersion::LibcVersion,
                             specifier,
                         });
                     }

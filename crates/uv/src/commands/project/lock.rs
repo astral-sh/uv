@@ -707,7 +707,7 @@ async fn do_lock(
         None
     };
 
-    if required_environments.is_some_and(SupportedEnvironments::has_artifact_markers)
+    if required_environments.is_some_and(SupportedEnvironments::has_libc_markers)
         && !preview.is_enabled(PreviewFeature::MinimumLibcVersion)
     {
         warn_user_once!(

@@ -17,7 +17,7 @@ use crate::{
 pub(crate) enum MarkerDialect {
     /// Standard dependency markers.
     Pep508,
-    /// Standard markers and uv-only artifact coverage markers.
+    /// Standard markers and uv-only libc markers.
     Uv,
 }
 

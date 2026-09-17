@@ -196,10 +196,8 @@ impl InternerGuard<'_> {
             // to disjoint version ranges.
             MarkerExpression::Version { key, specifier } => match key {
                 MarkerValueVersion::LibcVersion => {
-                    let version = self.create_node(
-                        Variable::ArtifactVersion(key),
-                        Edges::from_specifier(specifier),
-                    );
+                    let version =
+                        self.create_node(Variable::LibcVersion, Edges::from_specifier(specifier));
                     let linux = self.expression(MarkerExpression::String {
                         key: MarkerValueString::SysPlatform,
                         operator: MarkerOperator::Equal,
@@ -234,7 +232,7 @@ impl InternerGuard<'_> {
                 operator,
             } => match key {
                 MarkerValueVersion::LibcVersion => (
-                    Variable::ArtifactVersion(key),
+                    Variable::LibcVersion,
                     Edges::from_versions(versions, operator),
                 ),
                 MarkerValueVersion::ImplementationVersion => (
@@ -613,12 +611,12 @@ impl InternerGuard<'_> {
         self.create_node(node.var.clone(), children)
     }
 
-    /// Existentially quantify artifact-only variables without changing ordinary environments.
-    pub(crate) fn without_artifact_markers(&mut self, i: NodeId) -> NodeId {
-        self.without_artifact_markers_cached(i, &mut FxHashMap::default())
+    /// Existentially quantify libc variables without changing ordinary environments.
+    pub(crate) fn without_libc_markers(&mut self, i: NodeId) -> NodeId {
+        self.without_libc_markers_cached(i, &mut FxHashMap::default())
     }
 
-    fn without_artifact_markers_cached(
+    fn without_libc_markers_cached(
         &mut self,
         i: NodeId,
         cache: &mut FxHashMap<NodeId, NodeId>,
@@ -630,17 +628,17 @@ impl InternerGuard<'_> {
             return result;
         }
         let node = self.shared.node(i);
-        let result = if let Variable::Libc | Variable::ArtifactVersion(_) = node.var {
+        let result = if let Variable::Libc | Variable::LibcVersion = node.var {
             let mut result = NodeId::FALSE;
             for child in node.children.nodes() {
-                let child = self.without_artifact_markers_cached(child.negate(i), cache);
+                let child = self.without_libc_markers_cached(child.negate(i), cache);
                 result = self.or(result, child);
             }
             result
         } else {
-            let children = node.children.map(i, |child| {
-                self.without_artifact_markers_cached(child, cache)
-            });
+            let children = node
+                .children
+                .map(i, |child| self.without_libc_markers_cached(child, cache));
             self.create_node(node.var.clone(), children)
         };
         cache.insert(i, result);
@@ -1258,10 +1256,10 @@ impl InternerGuard<'_> {
 /// impact.
 #[derive(PartialOrd, Ord, PartialEq, Eq, Hash, Clone, Debug)]
 pub(crate) enum Variable {
-    /// A libc implementation used only for artifact coverage.
+    /// A libc implementation used only in required environments.
     Libc,
-    /// A uv-only artifact coverage baseline, excluded from runtime forks.
-    ArtifactVersion(MarkerValueVersion),
+    /// A libc version used only in required environments.
+    LibcVersion,
     /// A string marker, such as `os_name`.
     String(CanonicalMarkerValueString),
     /// A string-valued marker interpreted as a version within a platform-specific scope.
