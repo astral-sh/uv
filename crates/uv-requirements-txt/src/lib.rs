@@ -364,7 +364,6 @@ impl RequirementsTxt {
                         .resolve(filename.as_ref(), working_dir)
                         .map_err(|source| RequirementsTxtParserError::RequirementsInput {
                             source: Box::new(source),
-                            input: filename.to_string(),
                             start,
                             end,
                         })?;
@@ -425,7 +424,6 @@ impl RequirementsTxt {
                         .resolve(filename.as_ref(), working_dir)
                         .map_err(|source| RequirementsTxtParserError::RequirementsInput {
                             source: Box::new(source),
-                            input: filename.to_string(),
                             start,
                             end,
                         })?;
@@ -832,7 +830,6 @@ fn parse_entry(
             Err(source) => {
                 return Err(RequirementsTxtParserError::RequirementsInput {
                     source: Box::new(source),
-                    input: given.to_string(),
                     start,
                     end: s.cursor(),
                 });
@@ -1134,7 +1131,6 @@ pub enum RequirementsTxtParserError {
     },
     RequirementsInput {
         source: Box<RequirementsInputError>,
-        input: String,
         start: usize,
         end: usize,
     },
@@ -1211,10 +1207,10 @@ impl Display for RequirementsTxtParserError {
             Self::FileUrl { url, start, .. } => {
                 write!(f, "Invalid file URL at position {start}: `{url}`")
             }
-            Self::RequirementsInput { input, start, .. } => {
+            Self::RequirementsInput { source, start, .. } => {
                 write!(
                     f,
-                    "Invalid requirements input at position {start}: `{input}`"
+                    "Invalid requirements input at position {start}: {source}"
                 )
             }
             Self::VerbatimUrl { url, start, .. } => {
@@ -1326,10 +1322,10 @@ impl Display for RequirementsTxtFileError {
                     self.file,
                 )
             }
-            RequirementsTxtParserError::RequirementsInput { input, start, .. } => {
+            RequirementsTxtParserError::RequirementsInput { source, start, .. } => {
                 write!(
                     f,
-                    "Invalid requirements input in `{}` at position {start}: `{input}`",
+                    "Invalid requirements input in `{}` at position {start}: {source}",
                     self.file,
                 )
             }
