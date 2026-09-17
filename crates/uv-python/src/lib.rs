@@ -121,6 +121,11 @@ pub enum MissingPythonHint {
     PreferenceOnlySystem(PythonRequest),
     /// uv is in offline mode.
     Offline(PythonRequest),
+    /// A newer patch release of the same minor version is available to download.
+    NewerPatchAvailable {
+        request: PythonRequest,
+        available: PythonVersion,
+    },
 }
 
 impl MissingPythonHint {
@@ -168,6 +173,13 @@ impl std::fmt::Display for MissingPythonHint {
                     f,
                     "A managed Python download is available{}, but uv is set to offline mode",
                     Self::for_request(request),
+                )
+            }
+            Self::NewerPatchAvailable { request, available } => {
+                write!(
+                    f,
+                    "Python `{}` is not available to download, but `{available}` is. Older patch releases are often not built; try requesting `{available}` instead.",
+                    request.to_canonical_string(),
                 )
             }
         }

@@ -243,6 +243,14 @@ impl PythonInstallation {
                     if matches!(request, PythonRequest::Default | PythonRequest::Any) {
                         return Err(err);
                     }
+                    // If an exact patch was requested but a newer patch of the same minor is
+                    // available, suggest it (e.g. `3.11.0` -> `3.11.14`).
+                    if let Some(download) = download_list.newer_patch(&download_request) {
+                        return Err(err.with_hint(MissingPythonHint::NewerPatchAvailable {
+                            request: request.clone(),
+                            available: download.key().version(),
+                        }));
+                    }
                     return Err(err.with_hint(MissingPythonHint::RequiresUpdate));
                 }
                 None
