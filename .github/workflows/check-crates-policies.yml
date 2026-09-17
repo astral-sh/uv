@@ -52,6 +52,11 @@ jobs:
           GH_TOKEN: ${{ steps.token.outputs.token }}
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
         run: |
+          assignees="$(gh pr view "$PULL_REQUEST_NUMBER" --repo "$GITHUB_REPOSITORY" \
+            --json assignees --jq '[.assignees[].login | "@" + .] | join(" ")')"
           printf -v body 'The [crates.io publishing policy check](%s/%s/actions/runs/%s/attempts/%s) failed. Register any newly publishable crates in [astral-sh/crates-policies](https://github.com/astral-sh/crates-policies). Re-run the check after the policy is updated.\n' \
             "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"
+          if [ -n "$assignees" ]; then
+            printf -v body '%s\n\n%s' "$assignees" "$body"
+          fi
           gh pr comment "$PULL_REQUEST_NUMBER" --repo "$GITHUB_REPOSITORY" --body "$body"
