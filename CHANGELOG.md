@@ -3,6 +3,38 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.12.16
+
+Released on 2026-09-17.
+
+### Python
+
+- Add Pyodide 314.0.7, 0.29.5, and 0.27.8 ([#21741](https://github.com/astral-sh/uv/pull/21741))
+
+### Enhancements
+
+- Verify downloaded wheels and source distributions against hashes supplied by package indexes ([#21562](https://github.com/astral-sh/uv/pull/21562))
+- Allow `build-constraint-dependencies` entries to include hashes for verifying downloaded build dependencies ([#21467](https://github.com/astral-sh/uv/pull/21467))
+- Honor Darwin `platform_release` markers in `required-environments` using macOS wheel deployment targets ([#21766](https://github.com/astral-sh/uv/pull/21766))
+- Reject unsupported Git URL schemes while parsing lockfiles instead of panicking during frozen exports ([#21779](https://github.com/astral-sh/uv/pull/21779))
+
+### Preview features
+
+- Support `lock-without-metadata` across all dependency types while retaining `package.metadata` for remote URL dependencies to enable offline validation ([#21163](https://github.com/astral-sh/uv/pull/21163))
+- Honor configured and command-line index settings, including credentials, in `uv upgrade` ([#21776](https://github.com/astral-sh/uv/pull/21776))
+- Allow `uv check` to run in projects that are not managed by uv and outside workspaces ([#21777](https://github.com/astral-sh/uv/pull/21777))
+- Respect `--python` and `UV_PYTHON` when selecting the Python version for `uv check` ([#21744](https://github.com/astral-sh/uv/pull/21744))
+
+### Bug fixes
+
+- Redact Azure shared access signatures from displayed and logged URLs ([#21755](https://github.com/astral-sh/uv/pull/21755))
+- Check archive sizes from `pylock.toml` before reusing cached distributions ([#21609](https://github.com/astral-sh/uv/pull/21609))
+- Keep user-authored local dependency paths relative in lockfiles when backend metadata reports absolute paths ([#20631](https://github.com/astral-sh/uv/pull/20631))
+- Use the bundled `uv_build` backend only when its version matches active version pins ([#21742](https://github.com/astral-sh/uv/pull/21742))
+- Handle malformed index URLs without panicking when credentials are configured ([#21784](https://github.com/astral-sh/uv/pull/21784))
+- Report a configuration error instead of panicking for proxy URLs without a host ([#21781](https://github.com/astral-sh/uv/pull/21781))
+- Return a credential-redacted error instead of panicking when a URL cannot be converted to a path ([#21783](https://github.com/astral-sh/uv/pull/21783))
+
 ## 0.12.15
 
 Released on 2026-09-15.
