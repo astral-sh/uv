@@ -115,6 +115,17 @@
     },
   ],
   customManagers: [
+    // uv release used by the reusable security review workflow.
+    {
+      customType: "regex",
+      managerFilePatterns: ["/^\\.github/workflows/ci\\.yml$/"],
+      matchStrings: [
+        '# renovate: datasource=github-release-attachments depName=astral-sh/uv\\s+uv-version: "(?<currentValue>[^"\\r\\n]+)"\\s+uv-checksum: "(?<currentDigest>[a-f0-9]{64})"',
+      ],
+      depNameTemplate: "astral-sh/uv",
+      datasourceTemplate: "github-release-attachments",
+      versioningTemplate: "semver",
+    },
     // Update major GitHub actions references in documentation.
     {
       customType: "regex",
