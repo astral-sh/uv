@@ -4,7 +4,7 @@ use serde::Deserialize;
 use serde::de::{MapAccess, Visitor, value::MapAccessDeserializer};
 
 use uv_pep440::{Version, VersionSpecifier};
-use uv_pep508::{MarkerExpression, MarkerTree, MarkerValueVersion};
+use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueVersion};
 
 /// An environment marker with optional libc coverage requirements.
 #[derive(Debug)]
@@ -30,36 +30,23 @@ impl RequiredEnvironment {
             } => (marker, libc),
         };
 
-        [
-            (
-                MarkerValueVersion::GlibcVersion,
-                MarkerValueVersion::MuslVersion,
-                libc.glibc,
-            ),
-            (
-                MarkerValueVersion::MuslVersion,
-                MarkerValueVersion::GlibcVersion,
-                libc.musl,
-            ),
-        ]
-        .into_iter()
-        .filter_map(|(key, other, version)| {
-            let version = version?;
-            // The other family is absent, not unconstrained. This keeps glibc and musl
-            // requirements disjoint, while requiring the selected package to cover both.
-            Some(
-                marker
-                    .and(MarkerTree::expression(MarkerExpression::Version {
-                        key,
-                        specifier: VersionSpecifier::equals_version(version.0),
-                    }))
-                    .and(MarkerTree::expression(MarkerExpression::Version {
-                        key: other,
-                        specifier: VersionSpecifier::equals_version(Version::new([0])),
-                    })),
-            )
-        })
-        .collect()
+        [("glibc", libc.glibc), ("musl", libc.musl)]
+            .into_iter()
+            .filter_map(|(family, version)| {
+                let version = version?;
+                Some(
+                    marker
+                        .and(MarkerTree::expression(MarkerExpression::Libc {
+                            operator: MarkerOperator::Equal,
+                            value: family.into(),
+                        }))
+                        .and(MarkerTree::expression(MarkerExpression::Version {
+                            key: MarkerValueVersion::LibcVersion,
+                            specifier: VersionSpecifier::equals_version(version.0),
+                        })),
+                )
+            })
+            .collect()
     }
 }
 
@@ -128,7 +115,7 @@ impl<'de> Deserialize<'de> for LibcVersions {
     }
 }
 
-/// A major.minor libc release with a nonzero major; zero denotes an absent implementation.
+/// A libc version expressed as a major and minor release.
 #[derive(Debug, Deserialize)]
 #[serde(try_from = "String")]
 struct LibcVersion(Version);

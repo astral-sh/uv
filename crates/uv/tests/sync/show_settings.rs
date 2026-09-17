@@ -3808,6 +3808,7 @@ fn preview_features() {
     +            ContentAddressedCache,
     +            MissingExcludeNewerPackageLock,
     +            BatchExport,
+    +            MinimumLibcVersion,
     +        ],
          },
          python_preference: Managed,

@@ -114,15 +114,13 @@ fn parse_marker_value<T: Pep508Url>(
                 !char.is_whitespace() && !matches!(char, '>' | '=' | '<' | '!' | '~' | ')')
             });
             let key = cursor.slice(start, len);
-            if dialect == MarkerDialect::Uv && key == "uv:glibc_version" {
+            if dialect == MarkerDialect::Uv && key == "uv:libc_version" {
                 return Ok(MarkerValue::MarkerEnvVersion(
-                    MarkerValueVersion::GlibcVersion,
+                    MarkerValueVersion::LibcVersion,
                 ));
             }
-            if dialect == MarkerDialect::Uv && key == "uv:musl_version" {
-                return Ok(MarkerValue::MarkerEnvVersion(
-                    MarkerValueVersion::MuslVersion,
-                ));
+            if dialect == MarkerDialect::Uv && key == "uv:libc" {
+                return Ok(MarkerValue::Libc);
             }
             MarkerValue::from_str(key)
                 .map_err(|_| Pep508Error {
@@ -202,30 +200,25 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
     let r_value = parse_marker_value(cursor, dialect, reporter)?;
     let len = cursor.pos() - start;
 
-    // Lockfile coverage requirements name a concrete baseline, or zero for an absent libc family.
-    if l_value == MarkerValue::MarkerEnvVersion(MarkerValueVersion::GlibcVersion)
-        || r_value == MarkerValue::MarkerEnvVersion(MarkerValueVersion::GlibcVersion)
-        || l_value == MarkerValue::MarkerEnvVersion(MarkerValueVersion::MuslVersion)
-        || r_value == MarkerValue::MarkerEnvVersion(MarkerValueVersion::MuslVersion)
+    // Lockfile coverage requirements name a concrete libc baseline.
+    if l_value == MarkerValue::MarkerEnvVersion(MarkerValueVersion::LibcVersion)
+        || r_value == MarkerValue::MarkerEnvVersion(MarkerValueVersion::LibcVersion)
     {
         let version = match (&l_value, &r_value) {
             (
-                MarkerValue::MarkerEnvVersion(
-                    MarkerValueVersion::GlibcVersion | MarkerValueVersion::MuslVersion,
-                ),
+                MarkerValue::MarkerEnvVersion(MarkerValueVersion::LibcVersion),
                 MarkerValue::QuotedString(value),
             )
             | (
                 MarkerValue::QuotedString(value),
-                MarkerValue::MarkerEnvVersion(
-                    MarkerValueVersion::GlibcVersion | MarkerValueVersion::MuslVersion,
-                ),
+                MarkerValue::MarkerEnvVersion(MarkerValueVersion::LibcVersion),
             ) => value.parse::<Version>().ok(),
             _ => None,
         };
         if operator != MarkerOperator::Equal
             || !version.as_ref().is_some_and(|version| {
                 version.release().len() <= 2
+                    && version.release()[0] > 0
                     && !version.any_prerelease()
                     && version.local().is_empty()
                     && version.epoch() == 0
@@ -234,7 +227,7 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
         {
             return Err(Pep508Error {
                 message: Pep508ErrorSource::String(
-                    "Expected an exact libc baseline, such as uv:glibc_version == '2.31'"
+                    "Expected an exact libc baseline, such as uv:libc_version == '2.31'"
                         .to_string(),
                 ),
                 start,
@@ -247,6 +240,7 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
     // Convert a `<marker_value> <marker_op> <marker_value>` expression into its
     // typed equivalent.
     let expr = match l_value {
+        MarkerValue::Libc => Some(parse_libc_expr(cursor, operator, r_value, start, len)?),
         // Either:
         // - `<version key> <version op> <quoted PEP 440 version>`
         // - `<version key> in <list of quoted PEP 440 versions>` and ("not in")
@@ -274,7 +268,8 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
         // The only sound choice for this is `<env key> <op> <string>`
         MarkerValue::MarkerEnvString(key) => {
             let value = match r_value {
-                MarkerValue::Extra
+                MarkerValue::Libc
+                | MarkerValue::Extra
                 | MarkerValue::MarkerEnvVersion(_)
                 | MarkerValue::MarkerEnvString(_)
                 | MarkerValue::MarkerEnvList(_) => {
@@ -319,7 +314,8 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
         // `extra == '...'`
         MarkerValue::Extra => {
             let value = match r_value {
-                MarkerValue::MarkerEnvVersion(_)
+                MarkerValue::Libc
+                | MarkerValue::MarkerEnvVersion(_)
                 | MarkerValue::MarkerEnvString(_)
                 | MarkerValue::MarkerEnvList(_)
                 | MarkerValue::Extra => {
@@ -340,6 +336,13 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
         // This is either MarkerEnvVersion, MarkerEnvString, Extra (inverted), or Extras
         MarkerValue::QuotedString(l_string) => {
             match r_value {
+                MarkerValue::Libc => Some(parse_libc_expr(
+                    cursor,
+                    operator.invert(),
+                    MarkerValue::QuotedString(l_string),
+                    start,
+                    len,
+                )?),
                 // The only sound choice for this is `<quoted PEP 440 version> <version op>` <version key>
                 MarkerValue::MarkerEnvVersion(key) => {
                     parse_inverted_version_expr(&l_string, operator, key, reporter)
@@ -431,6 +434,30 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
     };
 
     Ok(expr)
+}
+
+/// Parse an internal libc implementation comparison without the leniency of dependency markers.
+fn parse_libc_expr<T: Pep508Url>(
+    cursor: &Cursor,
+    operator: MarkerOperator,
+    value: MarkerValue,
+    start: usize,
+    len: usize,
+) -> Result<MarkerExpression, Pep508Error<T>> {
+    if let MarkerValue::QuotedString(value) = value
+        && (operator == MarkerOperator::Equal || operator == MarkerOperator::NotEqual)
+        && ["glibc", "musl"].contains(&value.as_str())
+    {
+        return Ok(MarkerExpression::Libc { operator, value });
+    }
+    Err(Pep508Error {
+        message: Pep508ErrorSource::String(
+            "Expected a libc implementation comparison, such as uv:libc == 'glibc'".to_string(),
+        ),
+        start,
+        len,
+        input: cursor.to_string(),
+    })
 }
 
 /// Creates an instance of [`MarkerExpression::VersionIn`] with the given values.

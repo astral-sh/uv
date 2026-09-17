@@ -42577,8 +42577,8 @@ fn lock_required_environment_glibc() -> Result<()> {
             "(platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')",
         ]
         required-markers = [
-            "uv:glibc_version == '2.31' and uv:musl_version == '0' and platform_machine == 'x86_64' and sys_platform == 'linux'",
-            "uv:glibc_version == '2.17' and uv:musl_version == '0' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+            "uv:libc == 'glibc' and uv:libc_version == '2.31' and platform_machine == 'x86_64' and sys_platform == 'linux'",
+            "uv:libc == 'glibc' and uv:libc_version == '2.17' and platform_machine == 'aarch64' and sys_platform == 'linux'",
         ]
 
         [options]
@@ -42715,8 +42715,8 @@ fn lock_required_environment_glibc() -> Result<()> {
             "platform_machine == 'x86_64' and sys_platform == 'linux'",
         ]
         required-markers = [
-            "uv:glibc_version == '2.31' and uv:musl_version == '0' and platform_machine == 'x86_64' and sys_platform == 'linux'",
-            "uv:glibc_version == '2.28' and uv:musl_version == '0' and platform_machine == 'x86_64' and sys_platform == 'linux'",
+            "uv:libc == 'glibc' and uv:libc_version == '2.31' and platform_machine == 'x86_64' and sys_platform == 'linux'",
+            "uv:libc == 'glibc' and uv:libc_version == '2.28' and platform_machine == 'x86_64' and sys_platform == 'linux'",
         ]
 
         [options]
@@ -42774,7 +42774,7 @@ fn lock_required_environment_glibc() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: No solution found when resolving dependencies for split (markers: platform_machine == 'x86_64' and sys_platform == 'linux')
-      cause: Because only a==3.0.0 is available and a==3.0.0 has no `uv:glibc_version == '2.31' and uv:musl_version == '0' and platform_machine == 'x86_64' and sys_platform == 'linux'`-compatible wheels, we can conclude that all versions of a cannot be used.
+      cause: Because only a==3.0.0 is available and a==3.0.0 has no `uv:libc == 'glibc' and uv:libc_version == '2.31' and platform_machine == 'x86_64' and sys_platform == 'linux'`-compatible wheels, we can conclude that all versions of a cannot be used.
              And because your project depends on a, we can conclude that your project's requirements are unsatisfiable.
     ");
     Ok(())
@@ -42843,7 +42843,7 @@ fn lock_required_environment_libc_invalid() -> Result<()> {
         .child("pyproject.toml")
         .write_str(&context.read("pyproject.toml").replace(
             "{ marker = \"sys_platform == 'linux'\", libc = {  } }",
-            "\"uv:glibc_version == '2.31'\"",
+            "\"uv:libc == 'glibc' and uv:libc_version == '2.31'\"",
         ))?;
     uv_snapshot!(context.filters(), context.lock(), @r#"
     exit_code: 2 (failure)
@@ -42851,20 +42851,20 @@ fn lock_required_environment_libc_invalid() -> Result<()> {
     warning: Failed to parse `pyproject.toml` during settings discovery:
       TOML parse error at line 7, column 5
         |
-      7 |     "uv:glibc_version == '2.31'",
-        |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      Expected a quoted string or a valid marker name, found `uv:glibc_version`
-      uv:glibc_version == '2.31'
-      ^^^^^^^^^^^^^^^^
+      7 |     "uv:libc == 'glibc' and uv:libc_version == '2.31'",
+        |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      Expected a quoted string or a valid marker name, found `uv:libc`
+      uv:libc == 'glibc' and uv:libc_version == '2.31'
+      ^^^^^^^
 
     error: Failed to parse: `pyproject.toml`
       cause: TOML parse error at line 7, column 5
                |
-             7 |     "uv:glibc_version == '2.31'",
-               |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-             Expected a quoted string or a valid marker name, found `uv:glibc_version`
-             uv:glibc_version == '2.31'
-             ^^^^^^^^^^^^^^^^
+             7 |     "uv:libc == 'glibc' and uv:libc_version == '2.31'",
+               |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+             Expected a quoted string or a valid marker name, found `uv:libc`
+             uv:libc == 'glibc' and uv:libc_version == '2.31'
+             ^^^^^^^
     "#);
     Ok(())
 }
@@ -42892,6 +42892,14 @@ fn lock_required_environment_libc() -> Result<()> {
         [packages.a.versions."3.0.0"]
         sdist = false
         wheel_tags = ["py3-none-manylinux_2_17_x86_64"]
+
+        [packages.b.versions."1.0.0"]
+        sdist = false
+        wheel_tags = ["py3-none-linux_x86_64"]
+
+        [packages.b.versions."2.0.0"]
+        sdist = false
+        wheel_tags = ["py3-none-linux_aarch64"]
     "#})?;
     let server = PackseServer::from_scenario(&scenario);
     let context = uv_test::test_context!("3.12").with_filters(
@@ -42907,7 +42915,7 @@ fn lock_required_environment_libc() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["a"]
+        dependencies = ["a", "b"]
 
         [tool.uv]
         environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
@@ -42922,7 +42930,7 @@ fn lock_required_environment_libc() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     warning: Setting `libc` in `required-environments` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
-    Resolved 2 packages in [TIME]
+    Resolved 3 packages in [TIME]
     ");
     insta::with_settings!({ filters => context.filters() }, {
         assert_snapshot!(context.read("uv.lock"), @r#"
@@ -42936,8 +42944,8 @@ fn lock_required_environment_libc() -> Result<()> {
             "platform_machine == 'x86_64' and sys_platform == 'linux'",
         ]
         required-markers = [
-            "uv:glibc_version == '2.31' and uv:musl_version == '0' and platform_machine == 'x86_64' and sys_platform == 'linux'",
-            "uv:glibc_version == '0' and uv:musl_version == '1.1' and platform_machine == 'x86_64' and sys_platform == 'linux'",
+            "uv:libc == 'glibc' and uv:libc_version == '2.31' and platform_machine == 'x86_64' and sys_platform == 'linux'",
+            "uv:libc == 'musl' and uv:libc_version == '1.1' and platform_machine == 'x86_64' and sys_platform == 'linux'",
             "sys_platform == 'darwin'",
         ]
 
@@ -42956,15 +42964,27 @@ fn lock_required_environment_libc() -> Result<()> {
         ]
 
         [[package]]
+        name = "b"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/b-1.0.0-py3-none-linux_x86_64.whl", hash = "sha256:[SHA256:b-1.0.0-py3-none-linux_x86_64.whl]", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
         name = "project"
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
             { name = "a" },
+            { name = "b" },
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "a" }]
+        requires-dist = [
+            { name = "a" },
+            { name = "b" },
+        ]
         "#);
     });
     uv_snapshot!(context.filters(), context.lock()
@@ -42973,7 +42993,7 @@ fn lock_required_environment_libc() -> Result<()> {
         .arg("--index-url").arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 2 packages in [TIME]
+    Resolved 3 packages in [TIME]
     ");
     uv_snapshot!(context.filters(), context.export().arg("--frozen").arg("--no-hashes"), @"
     exit_code: 0 (success)
@@ -42981,6 +43001,8 @@ fn lock_required_environment_libc() -> Result<()> {
     # This file was autogenerated by uv via the following command:
     #    uv export --cache-dir [CACHE_DIR] --frozen --no-hashes
     a==1.0.0 ; platform_machine == 'x86_64' and sys_platform == 'linux'
+        # via project
+    b==1.0.0 ; platform_machine == 'x86_64' and sys_platform == 'linux'
         # via project
     ");
 
@@ -42996,9 +43018,11 @@ fn lock_required_environment_libc() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] pyproject.toml --universal --preview-features minimum-libc-version
     a==1.0.0 ; platform_machine == 'x86_64' and sys_platform == 'linux'
         # via project (pyproject.toml)
+    b==1.0.0 ; platform_machine == 'x86_64' and sys_platform == 'linux'
+        # via project (pyproject.toml)
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
+    Resolved 2 packages in [TIME]
     ");
 
     // A musl baseline alone does not accept a manylinux-only release.
@@ -43013,7 +43037,7 @@ fn lock_required_environment_libc() -> Result<()> {
         .arg("--index-url").arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 2 packages in [TIME]
+    Resolved 3 packages in [TIME]
     Updated a v1.0.0 -> v2.0.0
     ");
     uv_snapshot!(context.filters(), context.lock()
@@ -43022,7 +43046,7 @@ fn lock_required_environment_libc() -> Result<()> {
         .arg("--index-url").arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 2 packages in [TIME]
+    Resolved 3 packages in [TIME]
     ");
 
     Ok(())

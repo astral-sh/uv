@@ -165,10 +165,37 @@ impl InternerGuard<'_> {
     /// Returns a decision node for a single marker expression.
     pub(crate) fn expression(&mut self, expr: MarkerExpression) -> NodeId {
         let (var, children) = match expr {
+            MarkerExpression::Libc { operator, value } => {
+                let range = match operator {
+                    MarkerOperator::Equal => Ranges::singleton(value),
+                    MarkerOperator::NotEqual => Ranges::singleton(value).complement(),
+                    MarkerOperator::GreaterThan => Ranges::strictly_higher_than(value),
+                    MarkerOperator::GreaterEqual => Ranges::higher_than(value),
+                    MarkerOperator::LessThan => Ranges::strictly_lower_than(value),
+                    MarkerOperator::LessEqual => Ranges::lower_than(value),
+                    MarkerOperator::TildeEqual
+                    | MarkerOperator::In
+                    | MarkerOperator::NotIn
+                    | MarkerOperator::Contains
+                    | MarkerOperator::NotContains => return NodeId::FALSE,
+                };
+                let libc = self.create_node(
+                    Variable::Libc,
+                    Edges::String {
+                        edges: Edges::from_range(&range),
+                    },
+                );
+                let linux = self.expression(MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: arcstr::literal!("linux"),
+                });
+                return self.and(linux, libc);
+            }
             // A variable representing the output of a version key. Edges correspond
             // to disjoint version ranges.
             MarkerExpression::Version { key, specifier } => match key {
-                MarkerValueVersion::GlibcVersion | MarkerValueVersion::MuslVersion => {
+                MarkerValueVersion::LibcVersion => {
                     let version = self.create_node(
                         Variable::ArtifactVersion(key),
                         Edges::from_specifier(specifier),
@@ -206,7 +233,7 @@ impl InternerGuard<'_> {
                 versions,
                 operator,
             } => match key {
-                MarkerValueVersion::GlibcVersion | MarkerValueVersion::MuslVersion => (
+                MarkerValueVersion::LibcVersion => (
                     Variable::ArtifactVersion(key),
                     Edges::from_versions(versions, operator),
                 ),
@@ -603,7 +630,7 @@ impl InternerGuard<'_> {
             return result;
         }
         let node = self.shared.node(i);
-        let result = if let Variable::ArtifactVersion(_) = node.var {
+        let result = if let Variable::Libc | Variable::ArtifactVersion(_) = node.var {
             let mut result = NodeId::FALSE;
             for child in node.children.nodes() {
                 let child = self.without_artifact_markers_cached(child.negate(i), cache);
@@ -1231,6 +1258,8 @@ impl InternerGuard<'_> {
 /// impact.
 #[derive(PartialOrd, Ord, PartialEq, Eq, Hash, Clone, Debug)]
 pub(crate) enum Variable {
+    /// A libc implementation used only for artifact coverage.
+    Libc,
     /// A uv-only artifact coverage baseline, excluded from runtime forks.
     ArtifactVersion(MarkerValueVersion),
     /// A string marker, such as `os_name`.

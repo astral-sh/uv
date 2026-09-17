@@ -916,44 +916,39 @@ fn implied_platform_markers(filename: &WheelFilename) -> MarkerTree {
                     operator: MarkerOperator::Equal,
                     value: ArcStr::from(arch.name()),
                 }));
-                let (glibc, musl) = match platform_tag {
+                let libc = match platform_tag {
                     PlatformTag::Manylinux { major, minor, .. } => {
-                        (Some([u64::from(*major), u64::from(*minor)]), None)
+                        Some(("glibc", [u64::from(*major), u64::from(*minor)]))
                     }
-                    PlatformTag::Manylinux1 { .. } => (Some([2, 5]), None),
-                    PlatformTag::Manylinux2010 { .. } => (Some([2, 12]), None),
-                    PlatformTag::Manylinux2014 { .. } => (Some([2, 17]), None),
+                    PlatformTag::Manylinux1 { .. } => Some(("glibc", [2, 5])),
+                    PlatformTag::Manylinux2010 { .. } => Some(("glibc", [2, 12])),
+                    PlatformTag::Manylinux2014 { .. } => Some(("glibc", [2, 17])),
                     PlatformTag::Musllinux { major, minor, .. } => {
-                        (None, Some([u64::from(*major), u64::from(*minor)]))
+                        Some(("musl", [u64::from(*major), u64::from(*minor)]))
                     }
-                    // Unversioned Linux tags promise no libc baseline.
-                    _ => (None, None),
+                    // Generic Linux tags are accepted by both glibc and musl installation targets.
+                    _ => None,
                 };
-                for (key, version) in [
-                    (MarkerValueVersion::GlibcVersion, glibc),
-                    (MarkerValueVersion::MuslVersion, musl),
-                ] {
-                    let specifier = version.map_or_else(
-                        || VersionSpecifier::equals_version(Version::new([0])),
-                        |version| {
-                            VersionSpecifier::greater_than_equal_version(Version::new(version))
-                        },
-                    );
+                if let Some((family, [major, minor])) = libc {
+                    tag_marker = tag_marker.and(MarkerTree::expression(MarkerExpression::Libc {
+                        operator: MarkerOperator::Equal,
+                        value: family.into(),
+                    }));
                     tag_marker =
                         tag_marker.and(MarkerTree::expression(MarkerExpression::Version {
-                            key,
-                            specifier,
+                            key: MarkerValueVersion::LibcVersion,
+                            specifier: VersionSpecifier::greater_than_equal_version(Version::new(
+                                [major, minor],
+                            )),
                         }));
-                    if let Some([major, _]) = version {
-                        // Installation tags only include releases from the same libc major.
-                        tag_marker =
-                            tag_marker.and(MarkerTree::expression(MarkerExpression::Version {
-                                key,
-                                specifier: VersionSpecifier::less_than_version(Version::new([
-                                    major + 1,
-                                ])),
-                            }));
-                    }
+                    // Installation tags only include releases from the same libc major.
+                    tag_marker =
+                        tag_marker.and(MarkerTree::expression(MarkerExpression::Version {
+                            key: MarkerValueVersion::LibcVersion,
+                            specifier: VersionSpecifier::less_than_version(Version::new([
+                                major + 1
+                            ])),
+                        }));
                 }
                 marker = marker.or(tag_marker);
             }
@@ -1133,8 +1128,14 @@ mod tests {
 
     #[test]
     fn test_libc_coverage() {
-        let glibc = MarkerTree::parse_required_environment("uv:glibc_version == '2.17'").unwrap();
-        let musl = MarkerTree::parse_required_environment("uv:musl_version == '1.2'").unwrap();
+        let glibc = MarkerTree::parse_required_environment(
+            "uv:libc == 'glibc' and uv:libc_version == '2.17'",
+        )
+        .unwrap();
+        let musl = MarkerTree::parse_required_environment(
+            "uv:libc == 'musl' and uv:libc_version == '1.2'",
+        )
+        .unwrap();
         for (tag, glibc_covered, musl_covered) in [
             ("manylinux1_x86_64", true, false),
             ("manylinux2010_x86_64", true, false),
@@ -1145,8 +1146,9 @@ mod tests {
             ("musllinux_1_1_x86_64", false, true),
             ("musllinux_1_2_x86_64", false, true),
             ("musllinux_1_3_x86_64", false, false),
+            ("musllinux_2_0_x86_64", false, false),
             ("musllinux_0_1_x86_64", false, false),
-            ("linux_x86_64", false, false),
+            ("linux_x86_64", true, true),
             ("any", true, true),
         ] {
             let filename =

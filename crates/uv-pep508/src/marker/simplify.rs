@@ -126,39 +126,22 @@ fn collect_dnf(
                 }
             }
         }
-        MarkerTreeKind::String(marker) => {
-            for (tree, range) in collect_edges(marker.children()) {
-                // Detect whether the range for this edge can be simplified as an inequality.
-                if let Some(excluded) = range_inequality(&range) {
-                    let current = path.len();
-                    for value in excluded {
-                        path.push(MarkerExpression::String {
-                            key: marker.key().into(),
-                            operator: MarkerOperator::NotEqual,
-                            value: value.clone(),
-                        });
-                    }
-
-                    collect_dnf(tree, dnf, path);
-                    path.truncate(current);
-                    continue;
-                }
-
-                for bounds in range.iter() {
-                    let current = path.len();
-                    for (operator, value) in MarkerOperator::from_bounds(bounds) {
-                        path.push(MarkerExpression::String {
-                            key: marker.key().into(),
-                            operator,
-                            value: value.clone(),
-                        });
-                    }
-
-                    collect_dnf(tree, dnf, path);
-                    path.truncate(current);
-                }
-            }
-        }
+        MarkerTreeKind::Libc(marker) => collect_string_dnf(
+            marker.children(),
+            |operator, value| MarkerExpression::Libc { operator, value },
+            dnf,
+            path,
+        ),
+        MarkerTreeKind::String(marker) => collect_string_dnf(
+            marker.children(),
+            |operator, value| MarkerExpression::String {
+                key: marker.key().into(),
+                operator,
+                value,
+            },
+            dnf,
+            path,
+        ),
         MarkerTreeKind::In(marker) => {
             for (value, tree) in marker.children() {
                 let operator = if value {
@@ -230,6 +213,36 @@ fn collect_dnf(
                 collect_dnf(tree, dnf, path);
                 path.pop();
             }
+        }
+    }
+}
+
+/// Collect string-valued branches, sharing range simplification across marker kinds.
+fn collect_string_dnf<'a>(
+    children: impl ExactSizeIterator<Item = (&'a Ranges<ArcStr>, MarkerTree)>,
+    expression: impl Fn(MarkerOperator, ArcStr) -> MarkerExpression,
+    dnf: &mut Vec<Vec<MarkerExpression>>,
+    path: &mut Vec<MarkerExpression>,
+) {
+    for (tree, range) in collect_edges(children) {
+        // Detect whether the range for this edge can be simplified as an inequality.
+        if let Some(excluded) = range_inequality(&range) {
+            let current = path.len();
+            for value in excluded {
+                path.push(expression(MarkerOperator::NotEqual, value.clone()));
+            }
+            collect_dnf(tree, dnf, path);
+            path.truncate(current);
+            continue;
+        }
+
+        for bounds in range.iter() {
+            let current = path.len();
+            for (operator, value) in MarkerOperator::from_bounds(bounds) {
+                path.push(expression(operator, value.clone()));
+            }
+            collect_dnf(tree, dnf, path);
+            path.truncate(current);
         }
     }
 }
@@ -429,6 +442,19 @@ fn star_range_specifier(range: &Ranges<Version>) -> Option<VersionSpecifier> {
 /// Returns `true` if the LHS is the negation of the RHS, or vice versa.
 fn is_negation(left: &MarkerExpression, right: &MarkerExpression) -> bool {
     match left {
+        MarkerExpression::Libc { operator, value } => {
+            let MarkerExpression::Libc {
+                operator: other_operator,
+                value: other_value,
+            } = right
+            else {
+                return false;
+            };
+            value == other_value
+                && operator
+                    .negate()
+                    .is_some_and(|negated| negated == *other_operator)
+        }
         MarkerExpression::Version { key, specifier } => {
             let MarkerExpression::Version {
                 key: key2,

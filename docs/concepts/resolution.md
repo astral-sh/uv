@@ -251,6 +251,9 @@ implementation does not exclude its wheels.
 To require both implementations, use `libc = { glibc = "2.31", musl = "1.2" }`. The selected package
 version must support both; uv does not select different versions based on libc.
 
+Generic Linux wheels, such as `linux_x86_64`, do not constrain libc and can satisfy either
+implementation, matching installation behavior.
+
 ## Common marker values
 
 The `environments` and `required-environments` settings accept
