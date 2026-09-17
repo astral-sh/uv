@@ -120,6 +120,18 @@ fn check_python_version() -> Result<()> {
     Running `ty check --color auto --python-version 3.12 -- ''`
     ");
 
+    // Retaining the stock environment is enough to determine a custom build's language version.
+    uv_snapshot!(context.filters(), check().arg("--no-sync").arg("--frozen").arg("--python").arg("3.12+custom"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    main.py:4:13: info[revealed-type] Revealed type: `Literal[12]`
+    Found 1 diagnostic
+
+    ----- stderr -----
+    warning: Using incompatible environment (`.venv`) due to `--no-sync` (The project environment's Python version does not satisfy the request: `Python 3.12+custom`)
+    Running `ty check --color auto --python-version 3.12 -- ''`
+    ");
+
     uv_snapshot!(context.filters(), check().env(EnvVars::UV_PYTHON, context.interpreter()), @"
     exit_code: 0 (success)
     ----- stdout -----

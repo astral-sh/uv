@@ -2454,7 +2454,7 @@ impl PythonRequest {
         cache: &Cache,
         python_downloads_json_url: Option<&str>,
     ) -> Result<bool, crate::Error> {
-        if !self.satisfied(interpreter, cache) {
+        if !self.satisfied_by_interpreter(interpreter, cache) {
             return Ok(false);
         }
         let Some(request) = PythonDownloadRequest::from_request(self) else {
@@ -2483,9 +2483,9 @@ impl PythonRequest {
 
     /// Check the interpreter's reported properties or executable path against this request.
     ///
-    /// Managed installation identity and catalog selection are checked by
-    /// [`Self::satisfied_with_catalog`].
-    fn satisfied(&self, interpreter: &Interpreter, cache: &Cache) -> bool {
+    /// Build variants and catalog selection are not checked. Use [`Self::satisfied_with_catalog`]
+    /// when deciding whether to reuse an environment.
+    pub fn satisfied_by_interpreter(&self, interpreter: &Interpreter, cache: &Cache) -> bool {
         /// Returns `true` if the two paths refer to the same interpreter executable.
         fn is_same_executable(path1: &Path, path2: &Path) -> bool {
             path1 == path2 || is_same_file(path1, path2).unwrap_or(false)
