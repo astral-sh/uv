@@ -715,7 +715,6 @@ pub struct VersionArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -1532,16 +1531,6 @@ fn parse_file_path(input: &str) -> Result<PathBuf, String> {
     }
 }
 
-// Parse a string, mapping the empty string to `None`.
-#[expect(clippy::unnecessary_wraps)]
-fn parse_maybe_string(input: &str) -> Result<Maybe<String>, String> {
-    if input.is_empty() {
-        Ok(Maybe::None)
-    } else {
-        Ok(Maybe::Some(input.to_string()))
-    }
-}
-
 #[derive(Args)]
 #[command(group = clap::ArgGroup::new("sources").required(true).multiple(true))]
 pub struct PipCompileArgs {
@@ -1745,7 +1734,6 @@ pub struct PipCompileArgs {
         short,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -2029,7 +2017,6 @@ pub struct PipSyncArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -2371,7 +2358,6 @@ pub struct PipInstallArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -2585,7 +2571,6 @@ pub struct PipUninstallArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -2681,7 +2666,6 @@ pub struct PipFreezeArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -2769,7 +2753,6 @@ pub struct PipListArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -2816,7 +2799,6 @@ pub struct PipCheckArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -2895,7 +2877,6 @@ pub struct PipShowArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -2960,7 +2941,6 @@ pub struct PipTreeArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -3114,7 +3094,6 @@ pub struct BuildArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -3143,7 +3122,6 @@ pub struct VenvArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -3500,7 +3478,6 @@ pub struct InitArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -3740,7 +3717,6 @@ pub struct RunArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -4036,7 +4012,6 @@ pub struct SyncArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -4155,7 +4130,6 @@ pub struct LockArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -4395,7 +4369,6 @@ pub struct AddArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -4632,7 +4605,6 @@ pub struct RemoveArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -4727,7 +4699,6 @@ pub struct TreeArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -5006,7 +4977,6 @@ pub struct ExportArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -5215,7 +5185,6 @@ pub struct CheckArgs {
         long,
         short,
         env = EnvVars::UV_PYTHON,
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -5662,7 +5631,6 @@ pub struct ToolRunArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -5858,7 +5826,6 @@ pub struct ToolInstallArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -6008,7 +5975,6 @@ pub struct ToolUpgradeArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -7917,7 +7883,6 @@ pub struct MetadataArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
