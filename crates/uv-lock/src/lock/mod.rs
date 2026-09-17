@@ -7164,6 +7164,15 @@ impl PackageWire {
             .into());
         }
 
+        if let Source::Git(_, git) = &self.id.source
+            && let Some(path) = &git.path
+        {
+            DistExtension::from_path(path).map_err(|err| LockErrorKind::MissingExtension {
+                id: self.id.clone(),
+                err,
+            })?;
+        }
+
         let unwire_deps = |deps: Vec<DependencyWire>| -> Result<Vec<Dependency>, LockError> {
             deps.into_iter()
                 .map(|dep| {

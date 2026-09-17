@@ -1548,6 +1548,49 @@ fn virtual_dependency_group() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
+#[test]
+fn requirements_txt_frozen_invalid_git_path() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["example"]
+    "#})?;
+
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "example"
+        version = "1.0.0"
+        source = { git = "https://example.com/pkg.git?path=foo#0000000000000000000000000000000000000000" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [{ name = "example" }]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.export().arg("--frozen").arg("--offline"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to parse `uv.lock`
+      cause: Failed to parse file extension for `example==1.0.0 @ git+https://example.com/pkg.git?path=foo#0000000000000000000000000000000000000000`; expected one of: `.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`
+    ");
+
+    Ok(())
+}
+
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]
 fn requirements_txt_https_git_credentials() -> Result<()> {
