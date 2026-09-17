@@ -804,6 +804,36 @@ async fn proxy_invalid_url_not_a_url_in_uv_toml() {
     "#);
 }
 
+/// Test that a SOCKS proxy URL without a host produces a configuration error.
+#[test]
+fn proxy_url_without_host() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("proxy.toml")
+        .write_str("http-proxy = \"socks5:foo\"\n")?;
+    context.temp_dir.child("requirements.in").write_str("")?;
+
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("requirements.in")
+        .arg("--offline")
+        .arg("--config-file")
+        .arg("proxy.toml"), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to parse: `proxy.toml`
+      cause: TOML parse error at line 1, column 14
+               |
+             1 | http-proxy = "socks5:foo"
+               |              ^^^^^^^^^^^^
+             invalid proxy URL: empty host
+    "#);
+
+    Ok(())
+}
+
 /// Test that valid proxy URL in uv.toml routes requests through the proxy.
 #[cfg(feature = "test-pypi")]
 #[tokio::test]
