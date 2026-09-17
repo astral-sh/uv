@@ -4714,6 +4714,31 @@ fn system_certs_cli_aliases_override_env() {
     windows,
     ignore = "Configuration tests are not yet supported on Windows"
 )]
+fn system_certs_env_overrides_native_tls() {
+    let context = uv_test::test_context_with_versions!(&[]);
+    let mut command = add_shared_args(context.version());
+    command
+        .arg("--show-settings")
+        .env(EnvVars::UV_SYSTEM_CERTS, "0")
+        .env_remove(EnvVars::UV_NATIVE_TLS);
+    let baseline = capture_uv_snapshot!(context.filters(), &mut command);
+
+    for native_tls in ["1", "invalid"] {
+        assert_eq!(
+            baseline,
+            capture_uv_snapshot!(
+                context.filters(),
+                command.env(EnvVars::UV_NATIVE_TLS, native_tls)
+            )
+        );
+    }
+}
+
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
 fn system_certs_config_aliases() -> anyhow::Result<()> {
     let context = uv_test::test_context!("3.12");
 
