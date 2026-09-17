@@ -3,6 +3,39 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.12.16
+
+Released on 2026-09-17.
+
+### Enhancements
+
+- Allow manually specifying build dependency hashes in configuration ([#21467](https://github.com/astral-sh/uv/pull/21467))
+- Infer Darwin release markers from macOS wheel tags ([#21766](https://github.com/astral-sh/uv/pull/21766))
+- Reject unsupported Git URL schemes in lockfiles ([#21779](https://github.com/astral-sh/uv/pull/21779))
+- Verify distribution hashes ([#21562](https://github.com/astral-sh/uv/pull/21562))
+
+### Preview features
+
+- Forward explicit Python requests from uv check to ty ([#21744](https://github.com/astral-sh/uv/pull/21744))
+- Reimplement `package.metadata`-less lockfiles ([#21163](https://github.com/astral-sh/uv/pull/21163))
+- Respect configured index credentials in `uv upgrade` ([#21776](https://github.com/astral-sh/uv/pull/21776))
+
+### Bug fixes
+
+- Avoid panics for non-base index URLs ([#21784](https://github.com/astral-sh/uv/pull/21784))
+- Redact Azure shared access signatures in displayed URLs ([#21755](https://github.com/astral-sh/uv/pull/21755))
+- Reject proxy URLs without a host ([#21781](https://github.com/astral-sh/uv/pull/21781))
+- Skip `uv_build` fast path when pinned version differs ([#21742](https://github.com/astral-sh/uv/pull/21742))
+- Validate archive sizes before reusing cached distributions ([#21609](https://github.com/astral-sh/uv/pull/21609))
+
+### Other changes
+
+- Fix `uv check` without a workspace ([#21777](https://github.com/astral-sh/uv/pull/21777))
+- Preserve local path intent when merging dependency metadata ([#20631](https://github.com/astral-sh/uv/pull/20631))
+- Return an error for failed VerbatimUrl path conversions ([#21783](https://github.com/astral-sh/uv/pull/21783))
+- Update Python metadata for Pyodide 314.0.7, 0.29.5, 0.27.8 ([#21741](https://github.com/astral-sh/uv/pull/21741))
+- cargo-deny: ban wildcards, bump two deps ([#21760](https://github.com/astral-sh/uv/pull/21760))
+
 ## 0.12.15
 
 Released on 2026-09-15.
