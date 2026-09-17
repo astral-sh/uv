@@ -22,9 +22,9 @@ use uv_configuration::IndexStrategy;
 use uv_configuration::KeyringProviderType;
 use uv_distribution_filename::{DistFilename, WheelFilename};
 use uv_distribution_types::{
-    BuiltDist, File, FileLocation, IndexCapabilities, IndexFormat, IndexLocations,
-    IndexMetadataRef, IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, Name,
-    RegistryBuiltWheel,
+    BuiltDist, File, FileLocation, IndexCapabilities, IndexEntryFilename, IndexFormat,
+    IndexLocations, IndexMetadataRef, IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl,
+    Name, RegistryBuiltWheel, RegistryVariantsJson,
 };
 use uv_extract::hash::Hasher;
 use uv_git::{GIT_LFS, GitError, GitHttpSettings, GitResolver, Reporter};
@@ -38,6 +38,7 @@ use uv_pypi_types::{PypiSimpleDetail, PypiSimpleIndex, ResolutionMetadata};
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 use uv_torch::TorchStrategy;
+use uv_variants::variants_json::VariantsJsonContent;
 
 use crate::base_client::{BaseClientBuilder, ClientBuildError, ExtraMiddleware, RedirectPolicy};
 use crate::cached_client::CacheControl;
@@ -922,6 +923,86 @@ impl RegistryClient {
         OwnedArchive::from_unarchived(&metadata)
     }
 
+    /// Fetch the variants.json contents from a remote index (cached) a local index.
+    pub async fn fetch_variants_json(
+        &self,
+        variants_json: &RegistryVariantsJson,
+    ) -> Result<VariantsJsonContent, Error> {
+        let url = variants_json
+            .file
+            .url
+            .to_url()
+            .map_err(ErrorKind::InvalidUrl)?;
+
+        // If the URL is a file URL, load the variants directly from the file system.
+        let variants_json = if url.scheme() == "file" {
+            let path = url
+                .to_file_path()
+                .map_err(|()| ErrorKind::NonFileUrl(url.clone()))?;
+            let bytes = match fs_err::tokio::read(&path).await {
+                Ok(text) => text,
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                    return Err(Error::from(ErrorKind::VariantsJsonNotFile(
+                        variants_json.filename.clone(),
+                    )));
+                }
+                Err(err) => {
+                    return Err(Error::from(ErrorKind::Io(err)));
+                }
+            };
+            info_span!("parse_variants_json")
+                .in_scope(|| serde_json::from_slice::<VariantsJsonContent>(&bytes))
+                .map_err(|err| ErrorKind::VariantsJsonFormat(url, err))?
+        } else {
+            let cache_entry = self.cache.entry(
+                CacheBucket::Wheels,
+                WheelCache::Index(&variants_json.index)
+                    .wheel_dir(variants_json.filename.name.as_ref()),
+                format!("variants-{}.msgpack", variants_json.filename.cache_key()),
+            );
+
+            let cache_control = match self.connectivity {
+                Connectivity::Online => {
+                    if let Some(header) = self
+                        .indexes
+                        .artifact_cache_control_for(&variants_json.index)
+                    {
+                        CacheControl::Override(header)
+                    } else {
+                        CacheControl::from(
+                            self.cache
+                                .freshness(&cache_entry, Some(&variants_json.filename.name), None)
+                                .map_err(ErrorKind::Io)?,
+                        )
+                    }
+                }
+                Connectivity::Offline => CacheControl::AllowStale,
+            };
+
+            let response_callback = async |response: Response, _: &mut RetryState| {
+                let bytes = response.bytes().await.map_err(|err| {
+                    ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
+                })?;
+
+                info_span!("parse_variants_json")
+                    .in_scope(|| serde_json::from_slice::<VariantsJsonContent>(&bytes))
+                    .map_err(|err| Error::from(ErrorKind::VariantsJsonFormat(url.clone(), err)))
+            };
+
+            let req = self
+                .uncached_client(&url)
+                .get(Url::from(url.clone()))
+                .build()
+                .map_err(|err| {
+                    ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
+                })?;
+            self.cached_client()
+                .get_serde_with_retry(req, &cache_entry, cache_control, response_callback)
+                .await?
+        };
+        Ok(variants_json)
+    }
+
     /// Fetch the metadata for a remote wheel file.
     ///
     /// For a remote wheel, we try the following ways to fetch the metadata:
@@ -1390,14 +1471,20 @@ type FlatIndexSlot = Arc<Mutex<Option<FlatIndexEntriesByPackage>>>;
 pub struct VersionFiles {
     pub wheels: Vec<CachedFile>,
     pub source_dists: Vec<CachedFile>,
+    pub variant_jsons: Vec<CachedFile>,
 }
 
 impl VersionFiles {
-    fn push(&mut self, filename: &DistFilename, file: File) {
+    fn push(&mut self, filename: &IndexEntryFilename, file: File) {
         let file = CachedFile::from(file);
         match filename {
-            DistFilename::WheelFilename(_) => self.wheels.push(file),
-            DistFilename::SourceDistFilename(_) => self.source_dists.push(file),
+            IndexEntryFilename::DistFilename(DistFilename::WheelFilename(_)) => {
+                self.wheels.push(file);
+            }
+            IndexEntryFilename::DistFilename(DistFilename::SourceDistFilename(_)) => {
+                self.source_dists.push(file);
+            }
+            IndexEntryFilename::VariantJson(_) => self.variant_jsons.push(file),
         }
     }
 
@@ -1408,6 +1495,21 @@ impl VersionFiles {
             .filter_map(|file| {
                 let file = File::from(file);
                 let filename = DistFilename::try_from_filename(&file.filename, package_name)?;
+                Some((filename, file))
+            })
+    }
+
+    pub fn all_entries(
+        self,
+        package_name: &PackageName,
+    ) -> impl Iterator<Item = (IndexEntryFilename, File)> {
+        self.source_dists
+            .into_iter()
+            .chain(self.wheels)
+            .chain(self.variant_jsons)
+            .filter_map(|file| {
+                let file = File::from(file);
+                let filename = IndexEntryFilename::try_from_filename(&file.filename, package_name)?;
                 Some((filename, file))
             })
     }
@@ -1655,17 +1757,12 @@ impl SimpleDetailMetadata {
 
         // Group the distributions by version and kind
         for file in files {
-            let filename =
-                match DistFilename::try_from_filename_with_reason(&file.filename, package_name) {
-                    Ok(filename) => filename,
-                    Err(err) => {
-                        debug!(
-                            "Skipping file for {package_name}: {:?} ({err})",
-                            file.filename
-                        );
-                        continue;
-                    }
-                };
+            let Some(filename) =
+                IndexEntryFilename::try_from_filename(&file.filename, package_name)
+            else {
+                warn!("Skipping file for {package_name}: {}", file.filename);
+                continue;
+            };
             let file = match File::try_from_pypi(file, &base) {
                 Ok(file) => file,
                 Err(err) => {
@@ -2232,6 +2329,45 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn pep825_index_metadata_attributes() -> Result<(), Error> {
+        let data: PypiSimpleDetail = serde_json::from_str(
+            r#"{
+            "files": [{
+                "filename": "example-1.0.0-variants.json",
+                "url": "https://example.com/arbitrary-metadata-location",
+                "hashes": {},
+                "requires-python": "not a version specifier",
+                "core-metadata": true,
+                "yanked": "does not apply"
+            }]
+        }"#,
+        )?;
+        let package_name = PackageName::from_str("example")?;
+        let metadata = SimpleDetailMetadata::from_pypi_files(
+            data.files,
+            &package_name,
+            data.project_status,
+            &Url::parse("https://example.com/simple/")?,
+        );
+        let entries = metadata
+            .versions
+            .into_iter()
+            .flat_map(|datum| datum.files.all_entries(&package_name))
+            .collect::<Vec<_>>();
+        assert_eq!(entries.len(), 1);
+        let (filename, file) = &entries[0];
+        assert_eq!(filename.to_string(), "example-1.0.0-variants.json");
+        assert_eq!(
+            file.url.to_url()?.as_str(),
+            "https://example.com/arbitrary-metadata-location"
+        );
+        assert!(file.requires_python.is_none());
+        assert!(file.yanked.is_none());
+        assert!(file.dist_info_metadata.is_none());
+        Ok(())
+    }
+
     /// Test for project statuses from PyPI's JSON detail response.
     #[test]
     fn project_status_pypi_json() {
@@ -2319,6 +2455,7 @@ mod tests {
                                 has_upload_time: true,
                             },
                         ],
+                        variant_jsons: [],
                     },
                     metadata: None,
                 },
@@ -2391,6 +2528,7 @@ mod tests {
                                 has_upload_time: false,
                             },
                         ],
+                        variant_jsons: [],
                     },
                     metadata: None,
                 },

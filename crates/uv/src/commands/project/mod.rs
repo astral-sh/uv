@@ -331,6 +331,9 @@ pub(crate) enum ProjectError {
     DefaultGroups(#[from] uv_workspace::DefaultGroupsError),
 
     #[error(transparent)]
+    Distribution(#[from] uv_distribution::Error),
+
+    #[error(transparent)]
     PyprojectMut(#[from] uv_workspace::pyproject_mut::Error),
 
     #[error(transparent)]
@@ -2842,6 +2845,7 @@ pub(crate) async fn sync_environment(
         compile_bytecode.then_some(pip::operations::BytecodeCompilation::All),
         &hasher,
         tags,
+        interpreter.markers(),
         &client,
         state.in_flight(),
         concurrency,
@@ -3134,6 +3138,7 @@ pub(crate) async fn update_environment(
         (*compile_bytecode).then_some(pip::operations::BytecodeCompilation::All),
         &hasher,
         &tags,
+        marker_env.markers(),
         &client,
         state.in_flight(),
         concurrency,

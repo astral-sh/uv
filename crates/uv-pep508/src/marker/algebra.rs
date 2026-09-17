@@ -46,6 +46,7 @@
 //! merged to be applied globally.
 
 use std::cmp::Ordering;
+use std::collections::BTreeSet;
 use std::fmt;
 use std::ops::Bound;
 use std::sync::{LazyLock, Mutex, MutexGuard};
@@ -315,10 +316,10 @@ impl InternerGuard<'_> {
                         CanonicalMarkerValueString::SysPlatform,
                         arcstr::literal!("android"),
                     ),
-                    _ => (key.into(), value),
+                    (key, _) => (key.into(), value),
                 };
                 (
-                    Variable::String(key),
+                    Variable::String(key.clone()),
                     Edges::from_string(key, operator, value),
                 )
             }
@@ -694,6 +695,63 @@ impl InternerGuard<'_> {
         };
         cache.insert(original, result);
         result
+    }
+
+    /// Contract: The type of variable remains the same.
+    pub(crate) fn edit_variable(
+        &mut self,
+        i: NodeId,
+        f: &impl Fn(&Variable) -> Option<Variable>,
+    ) -> NodeId {
+        if matches!(i, NodeId::TRUE | NodeId::FALSE) {
+            return i;
+        }
+
+        // Restrict all nodes recursively.
+        let node = self.shared.node(i);
+        let children = node.children.map(i, |node| self.edit_variable(node, f));
+
+        let var = f(&node.var).unwrap_or_else(|| node.var.clone());
+        if children
+            .nodes()
+            .all(|child| child.is_true() || child.is_false() || var < self.shared.node(child).var)
+        {
+            return self.create_node(var, children);
+        }
+
+        // Scoping a marker may move its variable after one of its children, or merge it
+        // with a child's variable. Recombine the branches through the ordered operations
+        // instead of constructing a node with an invalid variable order.
+        let mut result = NodeId::FALSE;
+        for child in children.nodes().filter(|child| !child.is_false()) {
+            let condition = children.map(NodeId::TRUE, |other| {
+                if other == child {
+                    NodeId::TRUE
+                } else {
+                    NodeId::FALSE
+                }
+            });
+            let condition = self.create_node(var.clone(), condition);
+            let branch = self.and(condition, child);
+            result = self.or(result, branch);
+        }
+        result
+    }
+
+    pub(crate) fn collect_variant_bases(&mut self, i: NodeId, bases: &mut BTreeSet<String>) {
+        if matches!(i, NodeId::TRUE | NodeId::FALSE) {
+            return;
+        }
+
+        // Restrict all nodes recursively.
+        let node = self.shared.node(i);
+        if let Some(base) = node.var.variant_base() {
+            bases.insert(base.to_string());
+        }
+
+        for child in node.children.nodes() {
+            self.collect_variant_bases(child, bases);
+        }
     }
 
     /// Returns a new tree where the only nodes remaining are `extra` nodes.
@@ -1203,6 +1261,20 @@ impl Variable {
             return false;
         };
         marker.is_conflicting()
+    }
+
+    fn variant_base(&self) -> Option<&str> {
+        match self {
+            Self::String(key) | Self::In { key, .. } | Self::Contains { key, .. } => {
+                key.variant_base()
+            }
+            Self::List(
+                CanonicalMarkerListPair::VariantNamespaces { base, .. }
+                | CanonicalMarkerListPair::VariantFeatures { base, .. }
+                | CanonicalMarkerListPair::VariantProperties { base, .. },
+            ) => base.as_deref(),
+            _ => None,
+        }
     }
 }
 

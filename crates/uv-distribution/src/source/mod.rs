@@ -794,6 +794,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             match StaticMetadata::read(source, source_dist_entry.path(), subdirectory).await? {
                 StaticMetadata::Some(metadata) => {
                     return Ok(ArchiveMetadata {
+                        variant: None,
                         metadata: Metadata::from_metadata23(metadata),
                         hashes: revision.into_hashes(),
                     });
@@ -809,6 +810,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 if metadata.matches(source.name(), source.version()) {
                     debug!("Using cached metadata for: {source}");
                     return Ok(ArchiveMetadata {
+                        variant: None,
                         metadata: Metadata::from_metadata23(metadata.into()),
                         hashes: revision.into_hashes(),
                     });
@@ -879,6 +881,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .map_err(Error::CacheWrite)?;
 
             return Ok(ArchiveMetadata {
+                variant: None,
                 metadata: Metadata::from_metadata23(metadata),
                 hashes: revision.into_hashes(),
             });
@@ -936,6 +939,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheWrite)?;
 
         Ok(ArchiveMetadata {
+            variant: None,
             metadata: Metadata::from_metadata23(metadata),
             hashes: revision.into_hashes(),
         })
@@ -1193,6 +1197,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let dynamic = match StaticMetadata::read(source, source_entry.path(), None).await? {
             StaticMetadata::Some(metadata) => {
                 return Ok(ArchiveMetadata {
+                    variant: None,
                     metadata: Metadata::from_metadata23(metadata),
                     hashes: revision.into_hashes(),
                 });
@@ -1208,6 +1213,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 if metadata.matches(source.name(), source.version()) {
                     debug!("Using cached metadata for: {source}");
                     return Ok(ArchiveMetadata {
+                        variant: None,
                         metadata: Metadata::from_metadata23(metadata.into()),
                         hashes: revision.into_hashes(),
                     });
@@ -1253,6 +1259,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .map_err(Error::CacheWrite)?;
 
             return Ok(ArchiveMetadata {
+                variant: None,
                 metadata: Metadata::from_metadata23(metadata),
                 hashes: revision.into_hashes(),
             });
@@ -1310,6 +1317,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheWrite)?;
 
         Ok(ArchiveMetadata {
+            variant: None,
             metadata: Metadata::from_metadata23(metadata),
             hashes: revision.into_hashes(),
         })
@@ -2012,6 +2020,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let dynamic = match StaticMetadata::read(source, source_entry.path(), None).await? {
             StaticMetadata::Some(metadata) => {
                 return Ok(ArchiveMetadata {
+                    variant: None,
                     metadata: Metadata::from_metadata23(metadata),
                     hashes: revision.into_hashes(),
                 });
@@ -2027,6 +2036,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 if metadata.matches(source.name(), source.version()) {
                     debug!("Using cached metadata for: {source}");
                     return Ok(ArchiveMetadata {
+                        variant: None,
                         metadata: Metadata::from_metadata23(metadata.into()),
                         hashes: revision.into_hashes(),
                     });
@@ -2064,6 +2074,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .map_err(Error::CacheWrite)?;
 
             return Ok(ArchiveMetadata {
+                variant: None,
                 metadata: Metadata::from_metadata23(metadata),
                 hashes: revision.into_hashes(),
             });
@@ -2121,6 +2132,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheWrite)?;
 
         Ok(ArchiveMetadata {
+            variant: None,
             metadata: Metadata::from_metadata23(metadata),
             hashes: revision.into_hashes(),
         })
@@ -2302,6 +2314,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                                         "Found static metadata via GitHub fast path for: {source}"
                                     );
                                     return Ok(ArchiveMetadata {
+                                        variant: None,
                                         metadata: Metadata::from_metadata23(metadata),
                                         hashes: HashDigests::empty(),
                                     });

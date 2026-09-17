@@ -5886,6 +5886,7 @@ dependencies = [
  "uv-trampoline-builder",
  "uv-types",
  "uv-unix",
+ "uv-variants",
  "uv-version",
  "uv-virtualenv",
  "uv-warnings",
@@ -6294,6 +6295,7 @@ dependencies = [
  "uv-small-str",
  "uv-static",
  "uv-torch",
+ "uv-variants",
  "uv-version",
  "uv-warnings",
  "webpki-root-certs",
@@ -6444,6 +6446,8 @@ dependencies = [
  "uv-requirements",
  "uv-resolver",
  "uv-types",
+ "uv-variant-frontend",
+ "uv-variants",
  "uv-version",
  "uv-workspace",
 ]
@@ -6460,12 +6464,14 @@ dependencies = [
  "http-content-range",
  "indoc",
  "insta",
+ "itertools 0.14.0",
  "owo-colors",
  "rayon",
  "reqwest",
  "rmp-serde",
  "rustc-hash",
  "serde",
+ "serde_json",
  "tempfile",
  "thiserror",
  "tokio",
@@ -6490,6 +6496,7 @@ dependencies = [
  "uv-install-wheel",
  "uv-metadata",
  "uv-normalize",
+ "uv-once-map",
  "uv-pep440",
  "uv-pep508",
  "uv-platform-tags",
@@ -6498,6 +6505,7 @@ dependencies = [
  "uv-python",
  "uv-redacted",
  "uv-types",
+ "uv-variants",
  "uv-workspace",
  "walkdir",
 ]
@@ -6558,6 +6566,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-redacted",
  "uv-small-str",
+ "uv-variants",
  "uv-warnings",
 ]
 
@@ -6767,6 +6776,7 @@ dependencies = [
  "rayon",
  "rustc-hash",
  "same-file",
+ "serde_json",
  "tempfile",
  "thiserror",
  "tokio",
@@ -6793,6 +6803,7 @@ dependencies = [
  "uv-redacted",
  "uv-static",
  "uv-types",
+ "uv-variants",
  "uv-warnings",
  "walkdir",
 ]
@@ -6828,17 +6839,20 @@ dependencies = [
  "owo-colors",
  "percent-encoding",
  "petgraph",
+ "reqwest",
  "rustc-hash",
  "serde",
  "serde_json",
  "smallvec",
  "thiserror",
+ "tokio-util",
  "toml",
  "toml_edit",
  "toml_parser",
  "toml_writer",
  "tracing",
  "url",
+ "uv-cache",
  "uv-cache-key",
  "uv-client",
  "uv-configuration",
@@ -6851,6 +6865,7 @@ dependencies = [
  "uv-fs",
  "uv-git",
  "uv-git-types",
+ "uv-metadata",
  "uv-normalize",
  "uv-pep440",
  "uv-pep508",
@@ -6862,6 +6877,7 @@ dependencies = [
  "uv-resolver-types",
  "uv-small-str",
  "uv-types",
+ "uv-variants",
  "uv-version",
  "uv-warnings",
  "uv-workspace",
@@ -7095,6 +7111,7 @@ dependencies = [
  "anyhow",
  "hashbrown 0.17.1",
  "indexmap",
+ "indoc",
  "insta",
  "itertools 0.14.0",
  "jiff",
@@ -7226,6 +7243,7 @@ dependencies = [
  "uv-resolver",
  "uv-scripts",
  "uv-types",
+ "uv-variants",
  "uv-warnings",
 ]
 
@@ -7303,6 +7321,7 @@ dependencies = [
  "uv-pep440",
  "uv-pep508",
  "uv-platform-tags",
+ "uv-preview",
  "uv-pypi-types",
  "uv-python",
  "uv-redacted",
@@ -7311,6 +7330,7 @@ dependencies = [
  "uv-static",
  "uv-torch",
  "uv-types",
+ "uv-variants",
  "uv-warnings",
 ]
 
@@ -7457,6 +7477,7 @@ dependencies = [
  "hex",
  "http",
  "ignore",
+ "indexmap",
  "indoc",
  "insta",
  "itertools 0.14.0",
@@ -7484,6 +7505,7 @@ dependencies = [
  "uv-preview",
  "uv-python",
  "uv-static",
+ "uv-variants",
  "uv-version",
  "walkdir",
  "wiremock",
@@ -7583,9 +7605,11 @@ dependencies = [
  "uv-normalize",
  "uv-once-map",
  "uv-pep440",
+ "uv-pep508",
  "uv-pypi-types",
  "uv-python",
  "uv-redacted",
+ "uv-variants",
  "uv-workspace",
 ]
 
@@ -7595,6 +7619,52 @@ version = "0.0.82"
 dependencies = [
  "nix 0.31.3",
  "thiserror",
+]
+
+[[package]]
+name = "uv-variant-frontend"
+version = "0.0.3"
+dependencies = [
+ "anstream",
+ "anyhow",
+ "fs-err",
+ "indoc",
+ "owo-colors",
+ "rustc-hash",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "uv-configuration",
+ "uv-distribution-types",
+ "uv-fs",
+ "uv-preview",
+ "uv-python",
+ "uv-static",
+ "uv-types",
+ "uv-variants",
+ "uv-virtualenv",
+]
+
+[[package]]
+name = "uv-variants"
+version = "0.0.3"
+dependencies = [
+ "indexmap",
+ "insta",
+ "itertools 0.14.0",
+ "rustc-hash",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tracing",
+ "uv-distribution-filename",
+ "uv-normalize",
+ "uv-once-map",
+ "uv-pep440",
+ "uv-pep508",
+ "uv-pypi-types",
 ]
 
 [[package]]
