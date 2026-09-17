@@ -11,6 +11,8 @@ use uv_small_str::SmallString;
 mod dist_info_name;
 mod extra_name;
 mod group_name;
+#[cfg(any(target_arch = "aarch64", target_arch = "x86", target_arch = "x86_64"))]
+mod normalized_simd;
 mod package_name;
 
 /// Validate and normalize an unowned package or extra name.
@@ -66,13 +68,36 @@ fn normalize(name: &str) -> Result<String, InvalidNameError> {
 
 /// Returns `true` if the name is already normalized.
 fn is_normalized(name: impl AsRef<str>) -> Result<bool, InvalidNameError> {
+    let name = name.as_ref();
+
     // An empty string is not a valid package, extra, or group name.
-    if name.as_ref().is_empty() {
-        return Err(InvalidNameError(name.as_ref().to_string()));
+    if name.is_empty() {
+        return Err(InvalidNameError(name.to_string()));
     }
 
-    let mut last = None;
-    for char in name.as_ref().bytes() {
+    is_normalized_bytes(name.as_bytes()).map_err(|()| InvalidNameError(name.to_string()))
+}
+
+/// Returns `true` if the bytes contain an already-normalized name.
+///
+/// The caller is responsible for rejecting an empty name.
+fn is_normalized_bytes(name: &[u8]) -> Result<bool, ()> {
+    #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
+    if name.len() >= normalized_simd::MIN_LEN {
+        return normalized_simd::is_normalized(name);
+    }
+
+    #[cfg(target_arch = "x86")]
+    if name.len() >= normalized_simd::MIN_LEN && std::arch::is_x86_feature_detected!("sse2") {
+        return normalized_simd::is_normalized(name);
+    }
+
+    is_normalized_scalar(name, None)
+}
+
+/// Returns `true` if the remaining bytes contain an already-normalized name.
+fn is_normalized_scalar(name: &[u8], mut last: Option<u8>) -> Result<bool, ()> {
+    for &char in name {
         match char {
             b'A'..=b'Z' => {
                 // Uppercase characters need to be converted to lowercase.
@@ -86,7 +111,7 @@ fn is_normalized(name: impl AsRef<str>) -> Result<bool, InvalidNameError> {
             b'-' => {
                 match last {
                     // Names can't start with punctuation.
-                    None => return Err(InvalidNameError(name.as_ref().to_string())),
+                    None => return Err(()),
                     Some(b'-') => {
                         // Runs of `-` are normalized to a single `-`.
                         return Ok(false);
@@ -94,14 +119,14 @@ fn is_normalized(name: impl AsRef<str>) -> Result<bool, InvalidNameError> {
                     Some(_) => {}
                 }
             }
-            _ => return Err(InvalidNameError(name.as_ref().to_string())),
+            _ => return Err(()),
         }
         last = Some(char);
     }
 
     // Names can't end with punctuation.
     if matches!(last, Some(b'-' | b'_' | b'.')) {
-        return Err(InvalidNameError(name.as_ref().to_string()));
+        return Err(());
     }
 
     Ok(true)
@@ -235,6 +260,54 @@ mod tests {
         for input in failures {
             assert!(validate_and_normalize_ref(input).is_err());
             assert!(is_normalized(input).is_err());
+        }
+    }
+
+    #[cfg(any(target_arch = "aarch64", target_arch = "x86", target_arch = "x86_64"))]
+    #[test]
+    fn check_simd_matches_scalar() {
+        fn assert_matches(input: &[u8]) {
+            assert_eq!(
+                normalized_simd::is_normalized(input),
+                is_normalized_scalar(input, None),
+                "input: {input:?}",
+            );
+        }
+
+        #[cfg(target_arch = "x86")]
+        if !std::arch::is_x86_feature_detected!("sse2") {
+            return;
+        }
+
+        for length in normalized_simd::MIN_LEN..=80 {
+            let input = vec![b'a'; length];
+            assert_matches(&input);
+
+            for index in 0..length {
+                for byte in [b'z', b'0', b'9', b'-', b'_', b'.', b'A', b'Z', b'!', 0x80] {
+                    let mut input = vec![b'a'; length];
+                    input[index] = byte;
+                    assert_matches(&input);
+                }
+
+                if index + 1 < length {
+                    let mut input = vec![b'a'; length];
+                    input[index] = b'-';
+                    input[index + 1] = b'-';
+                    assert_matches(&input);
+                }
+            }
+        }
+
+        for input in [
+            &b"A!aaaaaaaaaaaaaa"[..],
+            &b"!Aaaaaaaaaaaaaaa"[..],
+            &b"a--!aaaaaaaaaaaa"[..],
+            &b"a!--aaaaaaaaaaaa"[..],
+            &b"aaaaaaaaaaaaaaa--"[..],
+            &b"aaaaaaaaaaaaaaa!-"[..],
+        ] {
+            assert_matches(input);
         }
     }
 }
