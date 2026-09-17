@@ -368,7 +368,7 @@ pub(crate) async fn check(
 
     // Select an environment and, if we found a project, sync it before running checks.
     let mut locked_ty_path = None;
-    let venv_path = if let Some(script) = &script {
+    let venv = if let Some(script) = &script {
         let extras = extras.with_defaults(DefaultExtras::default());
         let venv = if let Some(venv) = isolated_venv {
             venv
@@ -490,7 +490,7 @@ pub(crate) async fn check(
             );
         }
 
-        Some(venv.root().to_owned())
+        Some(venv)
     } else if let Some(project) = &project {
         let extras = extras.with_defaults(DefaultExtras::default());
         let mut malware_context = project::sync::MalwareCheckContext::from(&malware_settings);
@@ -708,9 +708,38 @@ pub(crate) async fn check(
             }
         }
 
-        Some(venv.root().to_owned())
+        Some(venv)
     } else {
-        isolated_venv.map(|venv| venv.root().to_owned())
+        isolated_venv
+    };
+
+    // Forward the user's explicit Python request so ty can apply its own version selection rules.
+    let python_version = if let Some(python) = python {
+        let request = PythonRequest::parse(&python);
+        if let Some(venv) = venv.as_ref()
+            && request.satisfied(venv.interpreter(), cache)
+        {
+            Some(venv.interpreter().python_minor_version())
+        } else {
+            // Without syncing, the environment may not satisfy the explicit request.
+            let reporter = PythonDownloadReporter::single(printer);
+            let installation = PythonInstallation::find_or_download(
+                Some(&request),
+                EnvironmentPreference::Any,
+                python_preference,
+                python_downloads,
+                &client_builder,
+                cache,
+                Some(&reporter),
+                install_mirrors.python_install_mirror.as_deref(),
+                install_mirrors.pypy_install_mirror.as_deref(),
+                install_mirrors.python_downloads_json_url.as_deref(),
+            )
+            .await?;
+            Some(installation.interpreter().python_minor_version())
+        }
+    } else {
+        None
     };
 
     let exclude_newer = settings
@@ -729,7 +758,8 @@ pub(crate) async fn check(
         &check_targets,
         &excluded_targets,
         explicit_targets,
-        venv_path.as_deref(),
+        venv.as_ref().map(PythonEnvironment::root),
+        python_version.as_ref(),
         exclude_newer,
         show_version,
         show_command,

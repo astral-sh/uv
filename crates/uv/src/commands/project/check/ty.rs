@@ -32,6 +32,7 @@ pub(super) async fn run(
     excluded_targets: &[PathBuf],
     explicit_targets: bool,
     venv_path: Option<&Path>,
+    python_version: Option<&Version>,
     exclude_newer: Option<jiff::Timestamp>,
     show_version: bool,
     show_command: bool,
@@ -153,6 +154,11 @@ pub(super) async fn run(
     }
     if fix {
         command.arg("--fix");
+    }
+    if let Some(python_version) = python_version {
+        command
+            .arg("--python-version")
+            .arg(python_version.to_string());
     }
     // PEP 723 scripts have independent environments and must be checked explicitly with
     // `uv check --script`. This still allows explicitly selected script paths to be checked.
