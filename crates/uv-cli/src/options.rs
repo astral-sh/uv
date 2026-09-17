@@ -9,6 +9,7 @@ use uv_configuration::{
     BuildIsolation, ExcludeNewerPackage, PrereleaseMode, PrereleasePackage, Reinstall, Upgrade,
 };
 use uv_distribution_types::{ConfigSettings, Index, PackageConfigSettings, Requirement};
+use uv_normalize::PackageName;
 use uv_settings::{
     Combine, EnvFlag, IndexOptions, PipOptions, ResolverInstallerOptions, ResolverOptions,
 };
@@ -18,7 +19,7 @@ use crate::{
     BuildIsolationArgs, BuildOptionsArgs, CompileBytecodeArgs, ExcludeNewerArgs, FetchArgs,
     IndexArgs, InstallerArgs, Maybe, PackageBuildIsolationArgs, PackageExcludeNewerArgs,
     RefreshArgs, RegistryClientArgs, ReinstallArgs, ResolverArgs, ResolverInstallerArgs,
-    SourcesArgs, VersionSelectionArgs,
+    SourcesArgs, UpgradeArgs, VersionSelectionArgs,
 };
 
 /// An error caused by an invalid combination of command-line arguments.
@@ -690,6 +691,33 @@ pub fn resolver_options(
     }
     .relative_to(&env::current_dir()?)
     .map_err(Into::into)
+}
+
+/// Construct the [`ResolverOptions`] for an [`UpgradeArgs`] invocation.
+pub fn upgrade_options(
+    args: UpgradeArgs,
+    configured_indexes: &[Index],
+) -> anyhow::Result<(Vec<PackageName>, Vec<PackageName>, ResolverOptions)> {
+    let UpgradeArgs {
+        packages,
+        exclude,
+        index_args,
+        registry_client:
+            RegistryClientArgs {
+                index_strategy,
+                keyring_provider,
+            },
+    } = args;
+
+    let options = ResolverOptions {
+        indexes: index_args.resolve(configured_indexes)?,
+        index_strategy,
+        keyring_provider,
+        ..ResolverOptions::default()
+    }
+    .relative_to(&env::current_dir()?)?;
+
+    Ok((packages, exclude, options))
 }
 
 /// Construct the [`ResolverInstallerOptions`] from the [`ResolverInstallerArgs`] and [`BuildOptionsArgs`].

@@ -4175,6 +4175,12 @@ pub struct UpgradeArgs {
     /// Exclude the named package from upgrades.
     #[arg(long, value_hint = ValueHint::Other)]
     pub exclude: Vec<PackageName>,
+
+    #[command(flatten)]
+    pub index_args: IndexArgs,
+
+    #[command(flatten)]
+    pub registry_client: RegistryClientArgs,
 }
 
 #[derive(Args)]
