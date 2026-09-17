@@ -111,6 +111,21 @@ fn collect_dnf(
                 }
             }
         }
+        MarkerTreeKind::ArtifactVersion(marker) => {
+            for (tree, range) in collect_edges(marker.edges()) {
+                for bounds in range.iter() {
+                    let current = path.len();
+                    for specifier in VersionSpecifier::from_release_only_bounds(bounds) {
+                        path.push(MarkerExpression::Version {
+                            key: marker.key(),
+                            specifier,
+                        });
+                    }
+                    collect_dnf(tree, dnf, path);
+                    path.truncate(current);
+                }
+            }
+        }
         MarkerTreeKind::String(marker) => {
             for (tree, range) in collect_edges(marker.children()) {
                 // Detect whether the range for this edge can be simplified as an inequality.

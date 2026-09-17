@@ -515,10 +515,11 @@
       }
     },
     "required-environments": {
-      "description": "A list of environment markers, e.g., `sys_platform == 'darwin'.",
+      "description": "A list of environment markers or tables with libc coverage requirements.",
       "type": ["array", "null"],
+      "default": null,
       "items": {
-        "type": "string"
+        "$ref": "#/definitions/RequiredEnvironment"
       }
     },
     "required-version": {
@@ -1210,6 +1211,20 @@
         }
       ]
     },
+    "LibcVersions": {
+      "description": "The oldest required release of each specified libc implementation.",
+      "type": "object",
+      "properties": {
+        "glibc": {
+          "type": ["string", "null"]
+        },
+        "musl": {
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": false,
+      "minProperties": 1
+    },
     "LinkMode": {
       "description": "The method to use when linking.\n\nDefaults to [`LinkMode::Clone`] on macOS and Linux (which support copy-on-write on\nAPFS and btrfs/xfs/bcachefs respectively), and [`LinkMode::Hardlink`] on other\nplatforms.",
       "oneOf": [
@@ -1859,7 +1874,8 @@
             "artifact-hash-filtering",
             "content-addressed-cache",
             "missing-exclude-newer-package-lock",
-            "batch-export"
+            "batch-export",
+            "minimum-libc-version"
           ]
         },
         {
@@ -1933,6 +1949,34 @@
       "description": "A Python version specifier, e.g. `3.11` or `3.12.4`.",
       "type": "string",
       "pattern": "^3\\.\\d+(\\.\\d+)?$"
+    },
+    "RequiredEnvironment": {
+      "description": "An environment marker with optional libc coverage requirements.",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "libc": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/LibcVersions"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "marker": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["marker"]
+        }
+      ]
     },
     "RequiredVersion": {
       "description": "A version specifier, e.g. `>=0.5.0` or `==0.5.0`.",

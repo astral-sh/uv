@@ -42513,6 +42513,521 @@ fn lock_required_environment_python_fork() -> Result<()> {
     Ok(())
 }
 
+/// Glibc baselines constrain coverage without becoming runtime fork conditions.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_required_environment_glibc() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "required-environment-glibc"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.a.versions."1.0.0"]
+        sdist = false
+        wheel_tags = ["py3-none-manylinux2014_aarch64"]
+
+        [packages.a.versions."2.0.0"]
+        sdist = false
+        wheel_tags = ["py3-none-manylinux_2_28_x86_64", "py3-none-manylinux_2_34_x86_64", "py3-none-musllinux_1_2_x86_64", "py3-none-manylinux_2_28_aarch64"]
+
+        [packages.a.versions."3.0.0"]
+        sdist = false
+        wheel_tags = ["py3-none-manylinux_2_34_x86_64", "py3-none-musllinux_1_2_x86_64", "py3-none-manylinux_2_34_aarch64"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12").with_filters(
+        server
+            .files()
+            .map(|(filename, hash)| (hash.to_owned(), format!("[SHA256:{filename}]"))),
+    );
+    context.temp_dir.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a"]
+
+        [tool.uv]
+        preview-features = ["minimum-libc-version"]
+        environments = ["sys_platform == 'linux' and (platform_machine == 'x86_64' or platform_machine == 'aarch64')"]
+        required-environments = [
+            { marker = "platform_machine == 'x86_64'", libc = { glibc = "2.31" } },
+            { marker = "platform_machine == 'aarch64'", libc = { glibc = "2.17" } },
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "platform_machine == 'aarch64' and sys_platform == 'linux'",
+            "platform_machine == 'x86_64' and sys_platform == 'linux'",
+        ]
+        supported-markers = [
+            "(platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')",
+        ]
+        required-markers = [
+            "uv:glibc_version == '2.31' and uv:musl_version == '0' and platform_machine == 'x86_64' and sys_platform == 'linux'",
+            "uv:glibc_version == '2.17' and uv:musl_version == '0' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "platform_machine == 'aarch64' and sys_platform == 'linux'",
+        ]
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-manylinux2014_aarch64.whl", hash = "sha256:[SHA256:a-1.0.0-py3-none-manylinux2014_aarch64.whl]", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "a"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "platform_machine == 'x86_64' and sys_platform == 'linux'",
+        ]
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-2.0.0-py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:[SHA256:a-2.0.0-py3-none-manylinux_2_28_x86_64.whl]", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/a-2.0.0-py3-none-manylinux_2_34_x86_64.whl", hash = "sha256:[SHA256:a-2.0.0-py3-none-manylinux_2_34_x86_64.whl]", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/a-2.0.0-py3-none-musllinux_1_2_x86_64.whl", hash = "sha256:[SHA256:a-2.0.0-py3-none-musllinux_1_2_x86_64.whl]", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "platform_machine != 'x86_64'" },
+            { name = "a", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "platform_machine == 'x86_64'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "a" }]
+        "#);
+    });
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.export().arg("--frozen").arg("--no-hashes"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv export --cache-dir [CACHE_DIR] --frozen --no-hashes
+    a==1.0.0 ; platform_machine == 'aarch64' and sys_platform == 'linux'
+        # via project
+    a==2.0.0 ; platform_machine == 'x86_64' and sys_platform == 'linux'
+        # via project
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--frozen")
+        .arg("--python-platform")
+        .arg("x86_64-manylinux_2_31"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==2.0.0
+    ");
+    let wheel_metadata = context.site_packages().join("a-2.0.0.dist-info/WHEEL");
+    assert_snapshot!(fs_err::read_to_string(&wheel_metadata)?, @"
+    Wheel-Version: 1.0
+    Generator: uv-test
+    Root-Is-Purelib: true
+    Tag: py3-none-manylinux_2_28_x86_64
+    ");
+
+    // A newer host can install the newer wheel from the same frozen lockfile.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--frozen")
+        .arg("--reinstall-package").arg("a")
+        .arg("--python-platform")
+        .arg("x86_64-manylinux_2_34"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ a==2.0.0
+    ");
+    assert_snapshot!(fs_err::read_to_string(&wheel_metadata)?, @"
+    Wheel-Version: 1.0
+    Generator: uv-test
+    Root-Is-Purelib: true
+    Tag: py3-none-manylinux_2_34_x86_64
+    ");
+
+    // Requiring both baselines on x86 selects one version, rather than forking on glibc.
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(
+        &context
+            .read("pyproject.toml")
+            .replace(
+                "{ marker = \"platform_machine == 'aarch64'\", libc = { glibc = \"2.17\" } }",
+                "{ marker = \"platform_machine == 'x86_64'\", libc = { glibc = \"2.28\" } }",
+            )
+            .replace(
+                "(platform_machine == 'x86_64' or platform_machine == 'aarch64')",
+                "platform_machine == 'x86_64'",
+            ),
+    )?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Updated a v1.0.0, v2.0.0 -> v2.0.0
+    ");
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "platform_machine == 'x86_64' and sys_platform == 'linux'",
+        ]
+        supported-markers = [
+            "platform_machine == 'x86_64' and sys_platform == 'linux'",
+        ]
+        required-markers = [
+            "uv:glibc_version == '2.31' and uv:musl_version == '0' and platform_machine == 'x86_64' and sys_platform == 'linux'",
+            "uv:glibc_version == '2.28' and uv:musl_version == '0' and platform_machine == 'x86_64' and sys_platform == 'linux'",
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "a"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-2.0.0-py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:[SHA256:a-2.0.0-py3-none-manylinux_2_28_x86_64.whl]", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/a-2.0.0-py3-none-manylinux_2_34_x86_64.whl", hash = "sha256:[SHA256:a-2.0.0-py3-none-manylinux_2_34_x86_64.whl]", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/a-2.0.0-py3-none-musllinux_1_2_x86_64.whl", hash = "sha256:[SHA256:a-2.0.0-py3-none-musllinux_1_2_x86_64.whl]", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "a" }]
+        "#);
+    });
+
+    // Direct wheels must also satisfy the baseline.
+    let wheel = server.file_url("a-3.0.0-py3-none-manylinux_2_34_x86_64.whl");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a @ {wheel}"]
+
+        [tool.uv]
+        preview-features = ["minimum-libc-version"]
+        environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+        required-environments = [{{ marker = "platform_machine == 'x86_64'", libc = {{ glibc = "2.31" }} }}]
+    "#})?;
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .chain([(
+            r"\nhint: The resolution failed for an environment that is not the current one[^\n]*",
+            "",
+        )])
+        .collect();
+    uv_snapshot!(filters, context.lock(), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies for split (markers: platform_machine == 'x86_64' and sys_platform == 'linux')
+      cause: Because only a==3.0.0 is available and a==3.0.0 has no `uv:glibc_version == '2.31' and uv:musl_version == '0' and platform_machine == 'x86_64' and sys_platform == 'linux'`-compatible wheels, we can conclude that all versions of a cannot be used.
+             And because your project depends on a, we can conclude that your project's requirements are unsatisfiable.
+    ");
+    Ok(())
+}
+
+/// Structured libc settings reject invalid versions and do not expose internal marker syntax.
+#[test]
+fn lock_required_environment_libc_invalid() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+
+        [tool.uv]
+        required-environments = [
+            { marker = "sys_platform == 'linux'", libc = { glibc = "2.31.1" } },
+        ]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock(), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: Failed to parse `pyproject.toml` during settings discovery:
+      TOML parse error at line 7, column 60
+        |
+      7 |     { marker = "sys_platform == 'linux'", libc = { glibc = "2.31.1" } },
+        |                                                            ^^^^^^^^
+      expected a libc version in the form `<major>.<minor>` (e.g., `2.31` or `1.2`)
+
+    error: Failed to parse: `pyproject.toml`
+      cause: TOML parse error at line 7, column 60
+               |
+             7 |     { marker = "sys_platform == 'linux'", libc = { glibc = "2.31.1" } },
+               |                                                            ^^^^^^^^
+             expected a libc version in the form `<major>.<minor>` (e.g., `2.31` or `1.2`)
+    "#);
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        &context
+            .read("pyproject.toml")
+            .replace("glibc = \"2.31.1\"", ""),
+    )?;
+    uv_snapshot!(context.filters(), context.lock(), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: Failed to parse `pyproject.toml` during settings discovery:
+      TOML parse error at line 7, column 50
+        |
+      7 |     { marker = "sys_platform == 'linux'", libc = {  } },
+        |                                                  ^^^^
+      at least one of `glibc` or `musl` must be specified
+
+    error: Failed to parse: `pyproject.toml`
+      cause: TOML parse error at line 7, column 50
+               |
+             7 |     { marker = "sys_platform == 'linux'", libc = {  } },
+               |                                                  ^^^^
+             at least one of `glibc` or `musl` must be specified
+    "#);
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&context.read("pyproject.toml").replace(
+            "{ marker = \"sys_platform == 'linux'\", libc = {  } }",
+            "\"uv:glibc_version == '2.31'\"",
+        ))?;
+    uv_snapshot!(context.filters(), context.lock(), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: Failed to parse `pyproject.toml` during settings discovery:
+      TOML parse error at line 7, column 5
+        |
+      7 |     "uv:glibc_version == '2.31'",
+        |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      Expected a quoted string or a valid marker name, found `uv:glibc_version`
+      uv:glibc_version == '2.31'
+      ^^^^^^^^^^^^^^^^
+
+    error: Failed to parse: `pyproject.toml`
+      cause: TOML parse error at line 7, column 5
+               |
+             7 |     "uv:glibc_version == '2.31'",
+               |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+             Expected a quoted string or a valid marker name, found `uv:glibc_version`
+             uv:glibc_version == '2.31'
+             ^^^^^^^^^^^^^^^^
+    "#);
+    Ok(())
+}
+
+/// Glibc and musl requirements must be covered by the same package version.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_required_environment_libc() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "required-environment-libc"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.a.versions."1.0.0"]
+        sdist = false
+        wheel_tags = ["py3-none-manylinux_2_17_x86_64", "py3-none-manylinux_2_34_x86_64", "py3-none-musllinux_1_1_x86_64", "py3-none-musllinux_1_2_x86_64"]
+
+        [packages.a.versions."2.0.0"]
+        sdist = false
+        wheel_tags = ["py3-none-manylinux_2_17_x86_64", "py3-none-musllinux_1_2_x86_64"]
+
+        [packages.a.versions."3.0.0"]
+        sdist = false
+        wheel_tags = ["py3-none-manylinux_2_17_x86_64"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12").with_filters(
+        server
+            .files()
+            .map(|(filename, hash)| (hash.to_owned(), format!("[SHA256:{filename}]"))),
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a"]
+
+        [tool.uv]
+        environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+        required-environments = [
+            { marker = "platform_machine == 'x86_64'", libc = { glibc = "2.31", musl = "1.1" } },
+            "sys_platform == 'darwin'",
+        ]
+    "#})?;
+
+    // The feature warning is suppressed by the standard preview flag.
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Setting `libc` in `required-environments` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
+    Resolved 2 packages in [TIME]
+    ");
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "platform_machine == 'x86_64' and sys_platform == 'linux'",
+        ]
+        supported-markers = [
+            "platform_machine == 'x86_64' and sys_platform == 'linux'",
+        ]
+        required-markers = [
+            "uv:glibc_version == '2.31' and uv:musl_version == '0' and platform_machine == 'x86_64' and sys_platform == 'linux'",
+            "uv:glibc_version == '0' and uv:musl_version == '1.1' and platform_machine == 'x86_64' and sys_platform == 'linux'",
+            "sys_platform == 'darwin'",
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:[SHA256:a-1.0.0-py3-none-manylinux_2_17_x86_64.whl]", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-manylinux_2_34_x86_64.whl", hash = "sha256:[SHA256:a-1.0.0-py3-none-manylinux_2_34_x86_64.whl]", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-musllinux_1_1_x86_64.whl", hash = "sha256:[SHA256:a-1.0.0-py3-none-musllinux_1_1_x86_64.whl]", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-musllinux_1_2_x86_64.whl", hash = "sha256:[SHA256:a-1.0.0-py3-none-musllinux_1_2_x86_64.whl]", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "a" }]
+        "#);
+    });
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--preview-features").arg("minimum-libc-version")
+        .arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.export().arg("--frozen").arg("--no-hashes"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv export --cache-dir [CACHE_DIR] --frozen --no-hashes
+    a==1.0.0 ; platform_machine == 'x86_64' and sys_platform == 'linux'
+        # via project
+    ");
+
+    // The same lowering applies to universal requirements compilation.
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("pyproject.toml")
+        .arg("--universal")
+        .arg("--preview-features").arg("minimum-libc-version")
+        .arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] pyproject.toml --universal --preview-features minimum-libc-version
+    a==1.0.0 ; platform_machine == 'x86_64' and sys_platform == 'linux'
+        # via project (pyproject.toml)
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // A musl baseline alone does not accept a manylinux-only release.
+    context.temp_dir.child("pyproject.toml").write_str(
+        &context
+            .read("pyproject.toml")
+            .replace("glibc = \"2.31\", musl = \"1.1\"", "musl = \"1.2\""),
+    )?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--upgrade")
+        .arg("--preview-features").arg("minimum-libc-version")
+        .arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Updated a v1.0.0 -> v2.0.0
+    ");
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--preview-features").arg("minimum-libc-version")
+        .arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// A required Darwin release must have a compatible wheel, without removing newer wheels.
 #[cfg(feature = "test-universal")]
 #[test]

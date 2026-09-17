@@ -50,7 +50,7 @@ use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_torch::{AmdGpuArchitecture, TorchMode, TorchStrategy};
 use uv_types::{EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy};
-use uv_warnings::warn_user;
+use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 
@@ -380,6 +380,14 @@ pub(crate) async fn pip_compile(
     };
 
     let artifact_environments = if universal {
+        if required_environments.has_artifact_markers()
+            && !preview.is_enabled(PreviewFeature::MinimumLibcVersion)
+        {
+            warn_user_once!(
+                "Setting `libc` in `required-environments` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+                PreviewFeature::MinimumLibcVersion
+            );
+        }
         SupportedEnvironments::from_markers(
             environments
                 .iter()

@@ -707,6 +707,15 @@ async fn do_lock(
         None
     };
 
+    if required_environments.is_some_and(SupportedEnvironments::has_artifact_markers)
+        && !preview.is_enabled(PreviewFeature::MinimumLibcVersion)
+    {
+        warn_user_once!(
+            "Setting `libc` in `required-environments` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeature::MinimumLibcVersion
+        );
+    }
+
     // Determine the supported Python range. If no range is defined, and warn and default to the
     // current minor version.
     let requires_python = target.requires_python()?;

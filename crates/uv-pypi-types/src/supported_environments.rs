@@ -4,11 +4,50 @@ use serde::ser::SerializeSeq;
 
 use uv_pep508::MarkerTree;
 
+use crate::RequiredEnvironment;
+
 /// A list of supported marker environments.
 #[derive(Debug, Default, Clone, Eq, PartialEq)]
 pub struct SupportedEnvironments(Vec<MarkerTree>);
 
 impl SupportedEnvironments {
+    /// Deserialize strings or structured environments, lowering libc requirements into markers.
+    pub fn deserialize_required<'de, D>(deserializer: D) -> Result<Option<Self>, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct RequiredEnvironmentsVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for RequiredEnvironmentsVisitor {
+            type Value = SupportedEnvironments;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a marker string or a list of marker strings and tables")
+            }
+
+            fn visit_str<E: serde::de::Error>(self, value: &str) -> Result<Self::Value, E> {
+                Ok(SupportedEnvironments(vec![
+                    value.parse().map_err(E::custom)?,
+                ]))
+            }
+
+            fn visit_seq<A: serde::de::SeqAccess<'de>>(
+                self,
+                mut seq: A,
+            ) -> Result<Self::Value, A::Error> {
+                let mut markers = Vec::new();
+                while let Some(environment) = seq.next_element::<RequiredEnvironment>()? {
+                    markers.extend(environment.into_markers());
+                }
+                Ok(SupportedEnvironments(markers))
+            }
+        }
+
+        deserializer
+            .deserialize_any(RequiredEnvironmentsVisitor)
+            .map(Some)
+    }
+
     /// Create a new [`SupportedEnvironments`] struct from a list of marker trees.
     pub fn from_markers(markers: Vec<MarkerTree>) -> Self {
         Self(markers)
@@ -32,6 +71,13 @@ impl SupportedEnvironments {
     /// Returns `true` if there are no supported environments.
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
+    }
+
+    /// Whether any environment requires a libc baseline, rather than only ordinary markers.
+    pub fn has_artifact_markers(&self) -> bool {
+        self.0
+            .iter()
+            .any(|marker| *marker != marker.without_artifact_markers())
     }
 }
 

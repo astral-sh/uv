@@ -168,6 +168,18 @@ impl InternerGuard<'_> {
             // A variable representing the output of a version key. Edges correspond
             // to disjoint version ranges.
             MarkerExpression::Version { key, specifier } => match key {
+                MarkerValueVersion::GlibcVersion | MarkerValueVersion::MuslVersion => {
+                    let version = self.create_node(
+                        Variable::ArtifactVersion(key),
+                        Edges::from_specifier(specifier),
+                    );
+                    let linux = self.expression(MarkerExpression::String {
+                        key: MarkerValueString::SysPlatform,
+                        operator: MarkerOperator::Equal,
+                        value: arcstr::literal!("linux"),
+                    });
+                    return self.and(linux, version);
+                }
                 MarkerValueVersion::ImplementationVersion => (
                     Variable::Version(CanonicalMarkerValueVersion::ImplementationVersion),
                     Edges::from_specifier(specifier),
@@ -194,6 +206,10 @@ impl InternerGuard<'_> {
                 versions,
                 operator,
             } => match key {
+                MarkerValueVersion::GlibcVersion | MarkerValueVersion::MuslVersion => (
+                    Variable::ArtifactVersion(key),
+                    Edges::from_versions(versions, operator),
+                ),
                 MarkerValueVersion::ImplementationVersion => (
                     Variable::Version(CanonicalMarkerValueVersion::ImplementationVersion),
                     Edges::from_versions(versions, operator),
@@ -568,6 +584,40 @@ impl InternerGuard<'_> {
         // Restrict all nodes recursively.
         let children = node.children.map(i, |node| self.restrict_by(node, f));
         self.create_node(node.var.clone(), children)
+    }
+
+    /// Existentially quantify artifact-only variables without changing ordinary environments.
+    pub(crate) fn without_artifact_markers(&mut self, i: NodeId) -> NodeId {
+        self.without_artifact_markers_cached(i, &mut FxHashMap::default())
+    }
+
+    fn without_artifact_markers_cached(
+        &mut self,
+        i: NodeId,
+        cache: &mut FxHashMap<NodeId, NodeId>,
+    ) -> NodeId {
+        if i.is_true() || i.is_false() {
+            return i;
+        }
+        if let Some(&result) = cache.get(&i) {
+            return result;
+        }
+        let node = self.shared.node(i);
+        let result = if let Variable::ArtifactVersion(_) = node.var {
+            let mut result = NodeId::FALSE;
+            for child in node.children.nodes() {
+                let child = self.without_artifact_markers_cached(child.negate(i), cache);
+                result = self.or(result, child);
+            }
+            result
+        } else {
+            let children = node.children.map(i, |child| {
+                self.without_artifact_markers_cached(child, cache)
+            });
+            self.create_node(node.var.clone(), children)
+        };
+        cache.insert(i, result);
+        result
     }
 
     /// Restrict a marker by assuming that another marker is true.
@@ -1181,6 +1231,8 @@ impl InternerGuard<'_> {
 /// impact.
 #[derive(PartialOrd, Ord, PartialEq, Eq, Hash, Clone, Debug)]
 pub(crate) enum Variable {
+    /// A uv-only artifact coverage baseline, excluded from runtime forks.
+    ArtifactVersion(MarkerValueVersion),
     /// A string marker, such as `os_name`.
     String(CanonicalMarkerValueString),
     /// A string-valued marker interpreted as a version within a platform-specific scope.

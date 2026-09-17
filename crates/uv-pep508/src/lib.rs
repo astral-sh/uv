@@ -33,6 +33,7 @@ use uv_normalize::{ExtraName, PackageName};
 
 use crate::cursor::Cursor;
 pub(crate) use crate::marker::MarkerValue;
+use crate::marker::parse::MarkerDialect;
 pub use crate::marker::{
     CanonicalMarkerValueExtra, CanonicalMarkerValueString, CanonicalMarkerValueVersion,
     ContainsMarkerTree, ExtraMarkerTree, ExtraOperator, InMarkerTree, MarkerEnvironment,
@@ -991,7 +992,7 @@ fn parse_pep508_requirement<T: Pep508Url>(
     let marker = if cursor.peek_char() == Some(';') {
         // Skip past the semicolon
         cursor.next();
-        marker::parse::parse_markers_cursor(cursor, reporter)?
+        marker::parse::parse_markers_cursor(cursor, MarkerDialect::Pep508, reporter)?
     } else {
         None
     };
@@ -1074,6 +1075,7 @@ mod tests {
     use uv_pep440::{Operator, Version, VersionPattern, VersionSpecifier};
 
     use crate::cursor::Cursor;
+    use crate::marker::parse::MarkerDialect;
     use crate::marker::{MarkerExpression, MarkerTree, MarkerValueVersion, parse};
     use crate::{
         MarkerOperator, MarkerValueString, Requirement, TracingReporter, VerbatimUrl, VersionOrUrl,
@@ -1499,6 +1501,7 @@ mod tests {
         let marker = r#"python_version == "2.7" and (sys_platform == "win32" or (os_name == "linux" and implementation_name == 'cpython'))"#;
         let actual = parse::parse_markers_cursor::<VerbatimUrl>(
             &mut Cursor::new(marker),
+            MarkerDialect::Pep508,
             &mut TracingReporter,
         )
         .unwrap()

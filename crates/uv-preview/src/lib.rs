@@ -340,6 +340,8 @@ pub enum PreviewFeature {
     MissingExcludeNewerPackageLock,
     /// Allows using `uv export --batch`.
     BatchExport,
+    /// Allows setting minimum libc versions in required environments.
+    MinimumLibcVersion,
 }
 
 impl Display for PreviewFeature {

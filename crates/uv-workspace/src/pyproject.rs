@@ -682,16 +682,21 @@ pub struct ToolUv {
     /// macOS (and ignoring Linux and Windows). On the other hand, `required-environments = ["sys_platform == 'darwin'"]`
     /// would _require_ that any package without a source distribution include a wheel for macOS in
     /// order to be installable.
+    ///
+    /// Use a table with `marker` and `libc` to require a glibc or musl baseline. For example,
+    /// `{ marker = "sys_platform == 'linux'", libc = { glibc = "2.31" } }` requires a wheel
+    /// compatible with glibc 2.31. Newer manylinux and musllinux wheels remain in the lockfile.
+    /// When both `glibc` and `musl` are specified, both must be supported.
     #[cfg_attr(
         feature = "schemars",
         schemars(
-            with = "Option<Vec<String>>",
-            description = "A list of environment markers, e.g., `sys_platform == 'darwin'."
+            with = "Option<Vec<uv_pypi_types::RequiredEnvironment>>",
+            description = "A list of environment markers or tables with libc coverage requirements."
         )
     )]
     #[option(
         default = "[]",
-        value_type = "str | list[str]",
+        value_type = "str | list[str | dict]",
         example = r#"
             # Require that the package is available on the following platforms:
             required-environments = [
@@ -701,8 +706,14 @@ pub struct ToolUv {
                 "sys_platform == 'linux' and platform_machine == 'x86_64'",
                 # Windows on x86_64 (Intel/AMD)
                 "sys_platform == 'win32' and platform_machine == 'AMD64'",
+                # Linux on ARM, compatible with glibc 2.31
+                { marker = "sys_platform == 'linux' and platform_machine == 'aarch64'", libc = { glibc = "2.31" } },
             ]
         "#
+    )]
+    #[serde(
+        default,
+        deserialize_with = "SupportedEnvironments::deserialize_required"
     )]
     pub(crate) required_environments: Option<SupportedEnvironments>,
 

@@ -12,6 +12,15 @@ use crate::{
     MarkerValueVersion, MarkerWarningKind, Pep508Error, Pep508ErrorSource, Pep508Url, Reporter,
 };
 
+/// The marker syntax accepted by the parser.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum MarkerDialect {
+    /// Standard dependency markers.
+    Pep508,
+    /// Standard markers and uv-only artifact coverage markers.
+    Uv,
+}
+
 /// ```text
 /// version_cmp   = wsp* <'<=' | '<' | '!=' | '==' | '>=' | '>' | '~=' | '==='>
 /// marker_op     = version_cmp | (wsp* 'in') | (wsp* 'not' wsp+ 'in')
@@ -74,6 +83,7 @@ fn parse_marker_operator<T: Pep508Url>(
 /// '`implementation_version`', 'extra'
 fn parse_marker_value<T: Pep508Url>(
     cursor: &mut Cursor,
+    dialect: MarkerDialect,
     reporter: &mut impl Reporter,
 ) -> Result<MarkerValue, Pep508Error<T>> {
     // > User supplied constants are always encoded as strings with either ' or " quote marks. Note
@@ -104,6 +114,16 @@ fn parse_marker_value<T: Pep508Url>(
                 !char.is_whitespace() && !matches!(char, '>' | '=' | '<' | '!' | '~' | ')')
             });
             let key = cursor.slice(start, len);
+            if dialect == MarkerDialect::Uv && key == "uv:glibc_version" {
+                return Ok(MarkerValue::MarkerEnvVersion(
+                    MarkerValueVersion::GlibcVersion,
+                ));
+            }
+            if dialect == MarkerDialect::Uv && key == "uv:musl_version" {
+                return Ok(MarkerValue::MarkerEnvVersion(
+                    MarkerValueVersion::MuslVersion,
+                ));
+            }
             MarkerValue::from_str(key)
                 .map_err(|_| Pep508Error {
                     message: Pep508ErrorSource::String(format!(
@@ -167,19 +187,62 @@ fn parse_marker_value<T: Pep508Url>(
 /// ```
 pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
     cursor: &mut Cursor,
+    dialect: MarkerDialect,
     reporter: &mut impl Reporter,
 ) -> Result<Option<MarkerExpression>, Pep508Error<T>> {
     cursor.eat_whitespace();
     let start = cursor.pos();
-    let l_value = parse_marker_value(cursor, reporter)?;
+    let l_value = parse_marker_value(cursor, dialect, reporter)?;
     cursor.eat_whitespace();
     // "not in" and "in" must be preceded by whitespace. We must already have matched a whitespace
     // when we're here because other `parse_marker_key` would have pulled the characters in and
     // errored
     let operator = parse_marker_operator(cursor)?;
     cursor.eat_whitespace();
-    let r_value = parse_marker_value(cursor, reporter)?;
+    let r_value = parse_marker_value(cursor, dialect, reporter)?;
     let len = cursor.pos() - start;
+
+    // Lockfile coverage requirements name a concrete baseline, or zero for an absent libc family.
+    if l_value == MarkerValue::MarkerEnvVersion(MarkerValueVersion::GlibcVersion)
+        || r_value == MarkerValue::MarkerEnvVersion(MarkerValueVersion::GlibcVersion)
+        || l_value == MarkerValue::MarkerEnvVersion(MarkerValueVersion::MuslVersion)
+        || r_value == MarkerValue::MarkerEnvVersion(MarkerValueVersion::MuslVersion)
+    {
+        let version = match (&l_value, &r_value) {
+            (
+                MarkerValue::MarkerEnvVersion(
+                    MarkerValueVersion::GlibcVersion | MarkerValueVersion::MuslVersion,
+                ),
+                MarkerValue::QuotedString(value),
+            )
+            | (
+                MarkerValue::QuotedString(value),
+                MarkerValue::MarkerEnvVersion(
+                    MarkerValueVersion::GlibcVersion | MarkerValueVersion::MuslVersion,
+                ),
+            ) => value.parse::<Version>().ok(),
+            _ => None,
+        };
+        if operator != MarkerOperator::Equal
+            || !version.as_ref().is_some_and(|version| {
+                version.release().len() <= 2
+                    && !version.any_prerelease()
+                    && version.local().is_empty()
+                    && version.epoch() == 0
+                    && version.post().is_none()
+            })
+        {
+            return Err(Pep508Error {
+                message: Pep508ErrorSource::String(
+                    "Expected an exact libc baseline, such as uv:glibc_version == '2.31'"
+                        .to_string(),
+                ),
+                start,
+                len,
+                input: cursor.to_string(),
+            });
+        }
+    }
 
     // Convert a `<marker_value> <marker_op> <marker_value>` expression into its
     // typed equivalent.
@@ -577,15 +640,16 @@ fn parse_extra_expr(
 /// ```
 fn parse_marker_expr<T: Pep508Url>(
     cursor: &mut Cursor,
+    dialect: MarkerDialect,
     reporter: &mut impl Reporter,
 ) -> Result<Option<MarkerTree>, Pep508Error<T>> {
     cursor.eat_whitespace();
     if let Some(start_pos) = cursor.eat_char('(') {
-        let marker = parse_marker_or(cursor, reporter)?;
+        let marker = parse_marker_or(cursor, dialect, reporter)?;
         cursor.next_expect_char(')', start_pos)?;
         Ok(marker)
     } else {
-        Ok(parse_marker_key_op_value(cursor, reporter)?.map(MarkerTree::expression))
+        Ok(parse_marker_key_op_value(cursor, dialect, reporter)?.map(MarkerTree::expression))
     }
 }
 
@@ -595,9 +659,17 @@ fn parse_marker_expr<T: Pep508Url>(
 /// ```
 fn parse_marker_and<T: Pep508Url>(
     cursor: &mut Cursor,
+    dialect: MarkerDialect,
     reporter: &mut impl Reporter,
 ) -> Result<Option<MarkerTree>, Pep508Error<T>> {
-    parse_marker_op(cursor, "and", MarkerTree::and, parse_marker_expr, reporter)
+    parse_marker_op(
+        cursor,
+        dialect,
+        "and",
+        MarkerTree::and,
+        parse_marker_expr,
+        reporter,
+    )
 }
 
 /// ```text
@@ -606,13 +678,15 @@ fn parse_marker_and<T: Pep508Url>(
 /// ```
 fn parse_marker_or<T: Pep508Url>(
     cursor: &mut Cursor,
+    dialect: MarkerDialect,
     reporter: &mut impl Reporter,
 ) -> Result<Option<MarkerTree>, Pep508Error<T>> {
     parse_marker_op(
         cursor,
+        dialect,
         "or",
         MarkerTree::or,
-        |cursor, reporter| parse_marker_and(cursor, reporter),
+        |cursor, dialect, reporter| parse_marker_and(cursor, dialect, reporter),
         reporter,
     )
 }
@@ -621,15 +695,20 @@ fn parse_marker_or<T: Pep508Url>(
 #[expect(clippy::type_complexity)]
 fn parse_marker_op<T: Pep508Url, R: Reporter>(
     cursor: &mut Cursor,
+    dialect: MarkerDialect,
     op: &str,
     apply: fn(MarkerTree, MarkerTree) -> MarkerTree,
-    parse_inner: fn(&mut Cursor, &mut R) -> Result<Option<MarkerTree>, Pep508Error<T>>,
+    parse_inner: fn(
+        &mut Cursor,
+        MarkerDialect,
+        &mut R,
+    ) -> Result<Option<MarkerTree>, Pep508Error<T>>,
     reporter: &mut R,
 ) -> Result<Option<MarkerTree>, Pep508Error<T>> {
     let mut tree = None;
 
     // marker_and or marker_expr
-    let first_element = parse_inner(cursor, reporter)?;
+    let first_element = parse_inner(cursor, dialect, reporter)?;
 
     if let Some(expression) = first_element {
         tree = Some(match tree {
@@ -647,7 +726,7 @@ fn parse_marker_op<T: Pep508Url, R: Reporter>(
             value if value == op => {
                 cursor.take_while(|c| !c.is_whitespace());
 
-                if let Some(expression) = parse_inner(cursor, reporter)? {
+                if let Some(expression) = parse_inner(cursor, dialect, reporter)? {
                     tree = Some(match tree {
                         Some(tree) => apply(tree, expression),
                         None => expression,
@@ -664,9 +743,10 @@ fn parse_marker_op<T: Pep508Url, R: Reporter>(
 /// ```
 pub(crate) fn parse_markers_cursor<T: Pep508Url>(
     cursor: &mut Cursor,
+    dialect: MarkerDialect,
     reporter: &mut impl Reporter,
 ) -> Result<Option<MarkerTree>, Pep508Error<T>> {
-    let marker = parse_marker_or(cursor, reporter)?;
+    let marker = parse_marker_or(cursor, dialect, reporter)?;
     cursor.eat_whitespace();
     if let Some((pos, unexpected)) = cursor.next() {
         // If we're here, both parse_marker_or and parse_marker_and returned because the next
@@ -689,11 +769,13 @@ pub(crate) fn parse_markers_cursor<T: Pep508Url>(
 /// `python_version == "3.10" and (sys_platform == "win32" or (os_name == "linux" and implementation_name == 'cpython'))`
 pub(crate) fn parse_markers<T: Pep508Url>(
     markers: &str,
+    dialect: MarkerDialect,
     reporter: &mut impl Reporter,
 ) -> Result<MarkerTree, Pep508Error<T>> {
     let mut chars = Cursor::new(markers);
 
     // If the tree consisted entirely of arbitrary expressions
     // that were ignored, it evaluates to true.
-    parse_markers_cursor(&mut chars, reporter).map(|result| result.unwrap_or(MarkerTree::TRUE))
+    parse_markers_cursor(&mut chars, dialect, reporter)
+        .map(|result| result.unwrap_or(MarkerTree::TRUE))
 }

@@ -6,7 +6,9 @@ use tracing::debug;
 
 use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
-use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
+use uv_pep508::{
+    MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString, MarkerValueVersion,
+};
 use uv_platform_tags::{
     AbiTag, BinaryFormat, IncompatibleTag, LanguageTag, PlatformTag, TagPriority, Tags,
 };
@@ -914,6 +916,45 @@ fn implied_platform_markers(filename: &WheelFilename) -> MarkerTree {
                     operator: MarkerOperator::Equal,
                     value: ArcStr::from(arch.name()),
                 }));
+                let (glibc, musl) = match platform_tag {
+                    PlatformTag::Manylinux { major, minor, .. } => {
+                        (Some([u64::from(*major), u64::from(*minor)]), None)
+                    }
+                    PlatformTag::Manylinux1 { .. } => (Some([2, 5]), None),
+                    PlatformTag::Manylinux2010 { .. } => (Some([2, 12]), None),
+                    PlatformTag::Manylinux2014 { .. } => (Some([2, 17]), None),
+                    PlatformTag::Musllinux { major, minor, .. } => {
+                        (None, Some([u64::from(*major), u64::from(*minor)]))
+                    }
+                    // Unversioned Linux tags promise no libc baseline.
+                    _ => (None, None),
+                };
+                for (key, version) in [
+                    (MarkerValueVersion::GlibcVersion, glibc),
+                    (MarkerValueVersion::MuslVersion, musl),
+                ] {
+                    let specifier = version.map_or_else(
+                        || VersionSpecifier::equals_version(Version::new([0])),
+                        |version| {
+                            VersionSpecifier::greater_than_equal_version(Version::new(version))
+                        },
+                    );
+                    tag_marker =
+                        tag_marker.and(MarkerTree::expression(MarkerExpression::Version {
+                            key,
+                            specifier,
+                        }));
+                    if let Some([major, _]) = version {
+                        // Installation tags only include releases from the same libc major.
+                        tag_marker =
+                            tag_marker.and(MarkerTree::expression(MarkerExpression::Version {
+                                key,
+                                specifier: VersionSpecifier::less_than_version(Version::new([
+                                    major + 1,
+                                ])),
+                            }));
+                    }
+                }
                 marker = marker.or(tag_marker);
             }
 
@@ -1067,7 +1108,7 @@ mod tests {
     fn assert_platform_markers(filename: &str, expected: &str) {
         let filename = WheelFilename::from_str(filename).unwrap();
         assert_eq!(
-            implied_platform_markers(&filename),
+            implied_platform_markers(&filename).without_artifact_markers(),
             expected.parse::<MarkerTree>().unwrap()
         );
     }
@@ -1085,9 +1126,40 @@ mod tests {
     fn assert_implied_markers(filename: &str, expected: &str) {
         let filename = WheelFilename::from_str(filename).unwrap();
         assert_eq!(
-            implied_markers(&filename),
+            implied_markers(&filename).without_artifact_markers(),
             expected.parse::<MarkerTree>().unwrap()
         );
+    }
+
+    #[test]
+    fn test_libc_coverage() {
+        let glibc = MarkerTree::parse_required_environment("uv:glibc_version == '2.17'").unwrap();
+        let musl = MarkerTree::parse_required_environment("uv:musl_version == '1.2'").unwrap();
+        for (tag, glibc_covered, musl_covered) in [
+            ("manylinux1_x86_64", true, false),
+            ("manylinux2010_x86_64", true, false),
+            ("manylinux2014_x86_64", true, false),
+            ("manylinux_2_17_x86_64", true, false),
+            ("manylinux_2_28_x86_64", false, false),
+            ("manylinux_1_0_x86_64", false, false),
+            ("musllinux_1_1_x86_64", false, true),
+            ("musllinux_1_2_x86_64", false, true),
+            ("musllinux_1_3_x86_64", false, false),
+            ("musllinux_0_1_x86_64", false, false),
+            ("linux_x86_64", false, false),
+            ("any", true, true),
+        ] {
+            let filename =
+                WheelFilename::from_str(&format!("example-1.0-py3-none-{tag}.whl")).unwrap();
+            assert_eq!(
+                (
+                    !implied_markers(&filename).is_disjoint(glibc),
+                    !implied_markers(&filename).is_disjoint(musl)
+                ),
+                (glibc_covered, musl_covered),
+                "{tag}"
+            );
+        }
     }
 
     #[test]

@@ -231,6 +231,26 @@ Use `==` to require coverage at the baseline. A range like `>= '24.0.0'` can be 
 that only supports a newer release. Wheels targeting newer releases are still retained in the
 lockfile.
 
+### Libc compatibility
+
+Use `libc` in a required environment to set the oldest glibc or musl release that must be supported:
+
+```toml title="pyproject.toml"
+[tool.uv]
+preview-features = ["minimum-libc-version"]
+required-environments = [
+    { marker = "sys_platform == 'linux' and platform_machine == 'x86_64'", libc = { glibc = "2.31" } },
+    { marker = "sys_platform == 'linux' and platform_machine == 'aarch64'", libc = { glibc = "2.17" } },
+]
+```
+
+If a package has no wheel compatible with the baseline or usable source distribution, uv selects
+another version. Newer manylinux and musllinux wheels remain in the lockfile. Omitting a libc
+implementation does not exclude its wheels.
+
+To require both implementations, use `libc = { glibc = "2.31", musl = "1.2" }`. The selected package
+version must support both; uv does not select different versions based on libc.
+
 ## Common marker values
 
 The `environments` and `required-environments` settings accept

@@ -21,7 +21,7 @@ use crate::cursor::Cursor;
 use crate::marker::lowering::{
     CanonicalMarkerListPair, CanonicalMarkerValueString, CanonicalMarkerValueVersion,
 };
-use crate::marker::parse;
+use crate::marker::parse::{self, MarkerDialect};
 use crate::{CanonicalMarkerValueExtra, MarkerEnvironment, Pep508Error, Reporter, TracingReporter};
 
 /// Ways in which marker evaluation can fail
@@ -52,6 +52,10 @@ pub enum MarkerWarningKind {
 /// Those environment markers with a PEP 440 version as value such as `python_version`
 #[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum MarkerValueVersion {
+    /// A uv-only glibc artifact coverage requirement, unavailable in runtime environments.
+    GlibcVersion,
+    /// A uv-only musl artifact coverage requirement, unavailable in runtime environments.
+    MuslVersion,
     /// `implementation_version`
     ImplementationVersion,
     /// `python_full_version`
@@ -63,6 +67,8 @@ pub enum MarkerValueVersion {
 impl Display for MarkerValueVersion {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
+            Self::GlibcVersion => f.write_str("uv:glibc_version"),
+            Self::MuslVersion => f.write_str("uv:musl_version"),
             Self::ImplementationVersion => f.write_str("implementation_version"),
             Self::PythonFullVersion => f.write_str("python_full_version"),
             Self::PythonVersion => f.write_str("python_version"),
@@ -632,7 +638,8 @@ impl MarkerExpression {
     #[cfg(test)]
     fn parse_reporter(s: &str, reporter: &mut impl Reporter) -> Result<Option<Self>, Pep508Error> {
         let mut chars = Cursor::new(s);
-        let expression = parse::parse_marker_key_op_value(&mut chars, reporter)?;
+        let expression =
+            parse::parse_marker_key_op_value(&mut chars, MarkerDialect::Pep508, reporter)?;
         chars.eat_whitespace();
         if let Some((pos, unexpected)) = chars.next() {
             let input = chars.to_string();
@@ -796,11 +803,22 @@ impl FromStr for MarkerTree {
     type Err = Pep508Error;
 
     fn from_str(markers: &str) -> Result<Self, Self::Err> {
-        parse::parse_markers(markers, &mut TracingReporter)
+        parse::parse_markers(markers, MarkerDialect::Pep508, &mut TracingReporter)
     }
 }
 
 impl MarkerTree {
+    /// Parse a lockfile's required marker, allowing internal artifact coverage variables.
+    pub fn parse_required_environment(markers: &str) -> Result<Self, Pep508Error> {
+        parse::parse_markers(markers, MarkerDialect::Uv, &mut TracingReporter)
+    }
+
+    /// Project artifact coverage onto ordinary environments before creating resolution forks.
+    #[must_use]
+    pub fn without_artifact_markers(self) -> Self {
+        Self(INTERNER.lock().without_artifact_markers(self.0))
+    }
+
     /// An empty marker that always evaluates to `true`.
     pub const TRUE: Self = Self(NodeId::TRUE);
 
@@ -917,6 +935,16 @@ impl MarkerTree {
 
         let node = INTERNER.shared.node(self.0);
         match &node.var {
+            Variable::ArtifactVersion(key) => {
+                let Edges::Version { edges: ref map } = node.children else {
+                    return MarkerTreeKind::False;
+                };
+                MarkerTreeKind::ArtifactVersion(VersionMarkerTree {
+                    id: self.0,
+                    key: *key,
+                    map,
+                })
+            }
             Variable::Version(key) => {
                 let Edges::Version { edges: ref map } = node.children else {
                     unreachable!()
@@ -1053,6 +1081,9 @@ impl MarkerTree {
         match self.kind() {
             MarkerTreeKind::True => return true,
             MarkerTreeKind::False => return false,
+            // Coverage requirements are not runtime conditions. Fail closed if one escapes
+            // into a dependency marker; normal dependency parsing rejects these markers.
+            MarkerTreeKind::ArtifactVersion(_) => return false,
             MarkerTreeKind::Version(marker) => {
                 for (range, tree) in marker.edges() {
                     if range.contains(env.get_version(marker.key())) {
@@ -1148,6 +1179,9 @@ impl MarkerTree {
             MarkerTreeKind::VersionString(marker) => {
                 marker.edges().any(|(_, tree)| tree.evaluate_extras(extras))
             }
+            MarkerTreeKind::ArtifactVersion(marker) => {
+                marker.edges().any(|(_, tree)| tree.evaluate_extras(extras))
+            }
             MarkerTreeKind::String(marker) => marker
                 .children()
                 .any(|(_, tree)| tree.evaluate_extras(extras)),
@@ -1175,6 +1209,9 @@ impl MarkerTree {
                 .edges()
                 .all(|(_, tree)| tree.evaluate_only_extras(extras)),
             MarkerTreeKind::VersionString(marker) => marker
+                .edges()
+                .all(|(_, tree)| tree.evaluate_only_extras(extras)),
+            MarkerTreeKind::ArtifactVersion(marker) => marker
                 .edges()
                 .all(|(_, tree)| tree.evaluate_only_extras(extras)),
             MarkerTreeKind::String(marker) => marker
@@ -1420,6 +1457,11 @@ impl MarkerTree {
                         imp(tree, f);
                     }
                 }
+                MarkerTreeKind::ArtifactVersion(kind) => {
+                    for (tree, _) in simplify::collect_edges(kind.edges()) {
+                        imp(tree, f);
+                    }
+                }
                 MarkerTreeKind::String(kind) => {
                     for (tree, _) in simplify::collect_edges(kind.children()) {
                         imp(tree, f);
@@ -1501,6 +1543,8 @@ impl Ord for MarkerTree {
 /// a value to that variable.
 #[derive(PartialEq, Eq, Clone, Debug, PartialOrd, Ord)]
 pub enum MarkerTreeKind<'a> {
+    /// A uv-only version requirement used for artifact coverage, not runtime evaluation.
+    ArtifactVersion(VersionMarkerTree<'a, MarkerValueVersion>),
     /// An empty marker that always evaluates to `true`.
     True,
     /// An unsatisfiable marker that always evaluates to `false`.
@@ -1882,6 +1926,29 @@ mod test {
 
     fn m(s: &str) -> MarkerTree {
         s.parse().unwrap()
+    }
+
+    #[test]
+    fn glibc_coverage_marker() {
+        let marker = MarkerTree::parse_required_environment(
+            "(platform_machine == 'x86_64' and uv:glibc_version == '2.31') or (platform_machine == 'aarch64' and uv:glibc_version == '2.17')",
+        ).unwrap();
+        let projected = marker.without_artifact_markers();
+        assert_eq!(projected, "sys_platform == 'linux' and (platform_machine == 'x86_64' or platform_machine == 'aarch64')".parse().unwrap());
+        assert_eq!(
+            marker,
+            MarkerTree::parse_required_environment(&marker.try_to_string().unwrap()).unwrap()
+        );
+        assert!("uv:glibc_version == '2.31'".parse::<MarkerTree>().is_err());
+        assert!(MarkerTree::parse_required_environment("glibc_version == '2.31'").is_err());
+        assert!(MarkerTree::parse_required_environment("uv:glibc_version >= '2.31'").is_err());
+        assert!(MarkerTree::parse_required_environment("uv:glibc_version == '0'").is_ok());
+        assert!(MarkerTree::parse_required_environment("uv:glibc_version == 'invalid'").is_err());
+        let marker = MarkerTree::parse_required_environment("uv:glibc_version == '2.0'").unwrap();
+        assert_eq!(
+            marker,
+            MarkerTree::parse_required_environment(&marker.try_to_string().unwrap()).unwrap()
+        );
     }
 
     #[test]
