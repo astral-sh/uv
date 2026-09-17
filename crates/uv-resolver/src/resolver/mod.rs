@@ -385,7 +385,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     err,
                                     state.fork_urls,
                                     state.fork_indexes,
-                                    &state.known_versions.0,
+                                    &state.known_versions.versions(),
                                     state.env,
                                     self.current_environment.clone(),
                                     &visited,
@@ -2547,7 +2547,54 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 /// All known versions for each package, from the version maps and the installed packages,
 /// used to keep the version sets in the partial solution minimal.
 #[derive(Clone, Default)]
-struct KnownVersions(FxHashMap<PackageName, Arc<[Version]>>);
+struct KnownVersions(FxHashMap<PackageName, CandidateUniverse>);
+
+/// The conservative set of selectable versions for one registry source scope.
+///
+/// Only the full version maps and installed distributions can construct this set. Filtering it to
+/// compatible or preferred candidates would make widening across the omitted versions unsound.
+#[derive(Clone)]
+struct CandidateUniverse {
+    index: Option<IndexUrl>,
+    versions: Arc<[Version]>,
+}
+
+impl CandidateUniverse {
+    fn from_registry<InstalledPackages: InstalledPackagesProvider>(
+        name: &PackageName,
+        index: Option<&IndexMetadata>,
+        version_maps: &[VersionMap],
+        installed_packages: &InstalledPackages,
+    ) -> Self {
+        let mut versions: Vec<Version> = version_maps
+            .iter()
+            .flat_map(|version_map| version_map.included_versions().cloned())
+            .chain(
+                installed_packages
+                    .get_packages(name)
+                    .iter()
+                    .map(|dist| dist.version().clone()),
+            )
+            .collect();
+        versions.sort_unstable();
+        versions.dedup();
+        Self {
+            index: index.map(|index| index.url().clone()),
+            versions: versions.into(),
+        }
+    }
+
+    /// Widen across gaps containing no other selectable version.
+    fn widen(&self, version: &Version) -> Range<Version> {
+        let versions = Range::singleton(version.clone());
+        if self.versions.is_empty() {
+            // An empty list would otherwise widen to the full range.
+            versions
+        } else {
+            versions.widen_versions(&self.versions)
+        }
+    }
+}
 
 impl KnownVersions {
     /// Returns the sorted, deduplicated candidate universe used to widen version sets.
@@ -2568,13 +2615,15 @@ impl KnownVersions {
         installed_packages: &InstalledPackages,
         source: PackageSource<'_>,
         package: &PubGrubPackage,
-    ) -> Option<&'a [Version]> {
+    ) -> Option<&'a CandidateUniverse> {
         let name = package.name_no_root()?;
         // Versions of packages from a URL or the workspace are not registry versions.
         let PackageSource::Registry(index_metadata) = source else {
             return None;
         };
-        if !self.0.contains_key(name) {
+        if self.0.get(name).is_none_or(|universe| {
+            universe.index.as_ref() != index_metadata.map(IndexMetadata::url)
+        }) {
             let response = if let Some(index_metadata) = index_metadata {
                 index
                     .explicit()
@@ -2585,21 +2634,25 @@ impl KnownVersions {
             let VersionsResponse::Found(ref version_maps) = *response else {
                 return None;
             };
-            let mut versions: Vec<Version> = version_maps
-                .iter()
-                .flat_map(|version_map| version_map.included_versions().cloned())
-                .chain(
-                    installed_packages
-                        .get_packages(name)
-                        .iter()
-                        .map(|dist| dist.version().clone()),
-                )
-                .collect();
-            versions.sort_unstable();
-            versions.dedup();
-            self.0.insert(name.clone(), versions.into());
+            self.0.insert(
+                name.clone(),
+                CandidateUniverse::from_registry(
+                    name,
+                    index_metadata,
+                    version_maps,
+                    installed_packages,
+                ),
+            );
         }
-        Some(&self.0[name][..])
+        self.0.get(name)
+    }
+
+    /// Recover the candidate versions used to explain widened incompatibilities.
+    fn versions(&self) -> FxHashMap<PackageName, Arc<[Version]>> {
+        self.0
+            .iter()
+            .map(|(name, universe)| (name.clone(), Arc::clone(&universe.versions)))
+            .collect()
     }
 }
 
@@ -3293,14 +3346,11 @@ impl ForkState {
 ///
 /// Returns the singleton range when the known versions are unavailable, as for a URL or workspace
 /// package, and for an empty list, which would otherwise widen to the full range.
-fn widen_to_gap(version: &Version, known_versions: Option<&[Version]>) -> Range<Version> {
-    let versions = Range::singleton(version.clone());
-    match known_versions {
-        Some(known_versions) if !known_versions.is_empty() => {
-            versions.widen_versions(known_versions)
-        }
-        _ => versions,
-    }
+fn widen_to_gap(version: &Version, universe: Option<&CandidateUniverse>) -> Range<Version> {
+    universe.map_or_else(
+        || Range::singleton(version.clone()),
+        |universe| universe.widen(version),
+    )
 }
 
 /// Fetch the metadata for an item
@@ -4040,7 +4090,10 @@ mod tests {
 
     #[test]
     fn widens_a_version_to_its_gap() {
-        let known_versions = versions(&["1.0", "2.0", "3.0"]);
+        let known_versions = CandidateUniverse {
+            index: None,
+            versions: versions(&["1.0", "2.0", "3.0"]).into(),
+        };
         let version: Version = "2.0".parse().expect("valid version");
 
         // A version between two others widens to the open interval between them.
@@ -4073,6 +4126,13 @@ mod tests {
         );
 
         // An empty list would otherwise widen to the full range.
-        assert_eq!(widen_to_gap(&version, Some(&[])), Range::singleton(version));
+        let universe = CandidateUniverse {
+            index: None,
+            versions: Arc::from([]),
+        };
+        assert_eq!(
+            widen_to_gap(&version, Some(&universe)),
+            Range::singleton(version)
+        );
     }
 }
