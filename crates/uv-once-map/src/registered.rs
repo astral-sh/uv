@@ -4,15 +4,16 @@ use std::hash::{BuildHasher, Hash, RandomState};
 
 use crate::OnceMap;
 
-/// A [`OnceMap`] whose entries can only be removed with exclusive access.
+/// A [`OnceMap`] with registered entry handles.
+/// Entries can only be removed with exclusive access.
 ///
 /// Registration and completion use shared references, so jobs can run concurrently. Registered
 /// handles borrow the map, preventing removal until they are dropped.
 ///
 /// ```compile_fail,E0502
-/// use uv_once_map::AppendOnlyOnceMap;
+/// use uv_once_map::RegisteredOnceMap;
 ///
-/// let mut map = AppendOnlyOnceMap::<_, _>::default();
+/// let mut map = RegisteredOnceMap::<_, _>::default();
 /// map.done("package", 42);
 /// let entry = map.get_registered("package").expect("completed entry");
 /// map.remove(&"package"); // Cannot remove entries while a handle borrows the map.
@@ -23,22 +24,22 @@ use crate::OnceMap;
 ///
 /// ```compile_fail,E0596
 /// use std::sync::Arc;
-/// use uv_once_map::AppendOnlyOnceMap;
+/// use uv_once_map::RegisteredOnceMap;
 ///
-/// let map = Arc::new(AppendOnlyOnceMap::<_, _>::default());
+/// let map = Arc::new(RegisteredOnceMap::<_, _>::default());
 /// map.done("package", 42);
 /// let mut alias = Arc::clone(&map);
 /// alias.remove(&"package"); // Requires exclusive access to the backing map.
 /// ```
-pub struct AppendOnlyOnceMap<K, V, S = RandomState>(OnceMap<K, V, S>);
+pub struct RegisteredOnceMap<K, V, S = RandomState>(OnceMap<K, V, S>);
 
-impl<K: Eq + Hash + Debug, V: Debug, S: BuildHasher + Clone> Debug for AppendOnlyOnceMap<K, V, S> {
+impl<K: Eq + Hash + Debug, V: Debug, S: BuildHasher + Clone> Debug for RegisteredOnceMap<K, V, S> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0.fmt(formatter)
     }
 }
 
-impl<K: Eq + Hash + Clone, V: Clone, S: BuildHasher + Clone> AppendOnlyOnceMap<K, V, S> {
+impl<K: Eq + Hash + Clone, V: Clone, S: BuildHasher + Clone> RegisteredOnceMap<K, V, S> {
     /// Register a job without retaining a handle. A `true` result requires the caller to start
     /// the job and eventually call [`Self::done`].
     pub fn register(&self, key: K) -> bool {
@@ -94,7 +95,7 @@ impl<K: Eq + Hash + Clone, V: Clone, S: BuildHasher + Clone> AppendOnlyOnceMap<K
 }
 
 impl<K: Eq + Hash + Clone, V, S: Default + BuildHasher + Clone> Default
-    for AppendOnlyOnceMap<K, V, S>
+    for RegisteredOnceMap<K, V, S>
 {
     fn default() -> Self {
         Self(OnceMap::default())
@@ -102,7 +103,7 @@ impl<K: Eq + Hash + Clone, V, S: Default + BuildHasher + Clone> Default
 }
 
 impl<K: Eq + Hash, V, S: Default + BuildHasher + Clone> FromIterator<(K, V)>
-    for AppendOnlyOnceMap<K, V, S>
+    for RegisteredOnceMap<K, V, S>
 {
     fn from_iter<T: IntoIterator<Item = (K, V)>>(iter: T) -> Self {
         Self(OnceMap::from_iter(iter))
@@ -137,9 +138,9 @@ impl<K: Eq + Hash + Clone, V: Clone, S: BuildHasher + Clone> RegisteredEntry<'_,
         &self.key
     }
 
-    /// Wait for the registered job. The producer must eventually call [`AppendOnlyOnceMap::done`].
+    /// Wait for the registered job. The producer must eventually call [`RegisteredOnceMap::done`].
     pub async fn wait(&self) -> V {
-        // Only AppendOnlyOnceMap constructs handles, and removal requires an exclusive borrow.
+        // Only RegisteredOnceMap constructs handles, and removal requires an exclusive borrow.
         self.map
             .wait_registered(&self.key)
             .await

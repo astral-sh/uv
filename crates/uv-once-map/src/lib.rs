@@ -1,6 +1,6 @@
-mod append_only;
+mod registered;
 
-pub use append_only::{AppendOnlyOnceMap, RegisteredEntry, Registration};
+pub use registered::{RegisteredEntry, RegisteredOnceMap, Registration};
 
 use std::borrow::Borrow;
 use std::fmt::{Debug, Display, Formatter};

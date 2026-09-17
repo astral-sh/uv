@@ -4,7 +4,7 @@ use std::sync::Arc;
 use rustc_hash::FxHasher;
 use uv_distribution_types::IndexUrl;
 use uv_normalize::PackageName;
-use uv_once_map::{AppendOnlyOnceMap, RegisteredEntry};
+use uv_once_map::{RegisteredEntry, RegisteredOnceMap};
 use uv_resolver_types::DistributionMetadataIndex;
 
 use crate::resolver::provider::VersionsResponse;
@@ -25,7 +25,7 @@ struct SharedInMemoryIndex {
     distributions: DistributionMetadataIndex,
 }
 
-pub(crate) type FxOnceMap<K, V> = AppendOnlyOnceMap<K, V, BuildHasherDefault<FxHasher>>;
+pub(crate) type FxOnceMap<K, V> = RegisteredOnceMap<K, V, BuildHasherDefault<FxHasher>>;
 pub(crate) type FxRegisteredEntry<'a, K, V> =
     RegisteredEntry<'a, K, V, BuildHasherDefault<FxHasher>>;
 

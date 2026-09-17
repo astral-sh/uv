@@ -3,11 +3,11 @@ use std::pin::pin;
 use std::sync::Arc;
 
 use futures::poll;
-use uv_once_map::{AppendOnlyOnceMap, Registration};
+use uv_once_map::{RegisteredOnceMap, Registration};
 
 #[tokio::test]
 async fn registered_waiters() -> Result<(), Box<dyn Error>> {
-    let mut map = AppendOnlyOnceMap::<_, _>::default();
+    let mut map = RegisteredOnceMap::<_, _>::default();
     assert!(map.get_registered("package").is_none());
     {
         let Registration::New(first) = map.register_entry("package") else {
@@ -36,7 +36,7 @@ async fn registered_waiters() -> Result<(), Box<dyn Error>> {
 
 #[test]
 fn preloaded_entry() -> Result<(), Box<dyn Error>> {
-    let mut map = AppendOnlyOnceMap::<_, _>::from_iter([("package", Arc::new(42))]);
+    let mut map = RegisteredOnceMap::<_, _>::from_iter([("package", Arc::new(42))]);
     {
         let entry = map
             .get_registered("package")
@@ -52,7 +52,7 @@ fn preloaded_entry() -> Result<(), Box<dyn Error>> {
 
 #[tokio::test]
 async fn register_or_wait() {
-    let map = AppendOnlyOnceMap::<_, _>::default();
+    let map = RegisteredOnceMap::<_, _>::default();
     assert_eq!(map.register_or_wait(&"package").await, None);
     let mut wait = pin!(map.register_or_wait(&"package"));
     assert!(poll!(&mut wait).is_pending());
