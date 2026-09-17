@@ -8274,6 +8274,49 @@ fn index_url_from_command_line() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn opaque_index_url_credentials() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.touch()?;
+    context.temp_dir.child("index.toml").write_str(indoc! { r#"
+        [[index]]
+        name = "my-index"
+        url = "git+https:foo"
+    "# })?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--offline")
+        .arg("--no-header")
+        .arg("--config-file")
+        .arg("index.toml")
+        .env(EnvVars::UV_INDEX_MY_INDEX_USERNAME, "username")
+        .env(EnvVars::UV_INDEX_MY_INDEX_PASSWORD, "password"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Requirements file `requirements.in` does not contain any dependencies
+    Resolved in [TIME]
+    ");
+
+    requirements_in.write_str("anyio")?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--offline")
+        .arg("--no-header")
+        .arg("--config-file")
+        .arg("index.toml")
+        .env(EnvVars::UV_INDEX_MY_INDEX_USERNAME, "username")
+        .env(EnvVars::UV_INDEX_MY_INDEX_PASSWORD, "password"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Expected an index URL, but received non-base URL: git+https:foo
+    ");
+
+    Ok(())
+}
+
 /// Resolve a package from a `requirements.in` file with a dependency that uses an unsupported
 /// scheme.
 #[test]
