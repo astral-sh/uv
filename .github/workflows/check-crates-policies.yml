@@ -54,8 +54,13 @@ jobs:
         run: |
           assignees="$(gh pr view "$PULL_REQUEST_NUMBER" --repo "$GITHUB_REPOSITORY" \
             --json assignees --jq '[.assignees[].login | "@" + .] | join(" ")')"
-          printf -v body 'The [crates.io publishing policy check](%s/%s/actions/runs/%s/attempts/%s) failed. Register any newly publishable crates in [astral-sh/crates-policies](https://github.com/astral-sh/crates-policies). Re-run the check after the policy is updated.\n' \
-            "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"
+          body="$(cat <<EOF
+          The [crates.io publishing policy check]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT) failed.
+
+          Register any newly publishable crates in [astral-sh/crates-policies](https://github.com/astral-sh/crates-policies).
+          Re-run the check after the policy is updated.
+          EOF
+          )"
           if [ -n "$assignees" ]; then
             printf -v body '%s\n\n%s' "$assignees" "$body"
           fi
