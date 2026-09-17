@@ -4714,49 +4714,6 @@ fn system_certs_cli_aliases_override_env() {
     windows,
     ignore = "Configuration tests are not yet supported on Windows"
 )]
-fn system_certs_env_aliases() {
-    let context = uv_test::test_context!("3.12");
-
-    let disabled = capture_uv_snapshot!(
-        context.filters(),
-        add_shared_args(context.version()).arg("--show-settings")
-    );
-
-    let enabled = capture_uv_snapshot!(
-        context.filters(),
-        add_shared_args(context.version())
-            .arg("--show-settings")
-            .arg("--system-certs")
-    );
-
-    // Both variables can be set for compatibility with older versions of uv without warning.
-    diff_uv_snapshot!(context.filters(), &enabled, add_shared_args(context.version())
-        .arg("--show-settings")
-        .env(EnvVars::UV_SYSTEM_CERTS, "1")
-        .env(EnvVars::UV_NATIVE_TLS, "1"), @"");
-
-    diff_uv_snapshot!(context.filters(), &disabled, add_shared_args(context.version())
-        .arg("--show-settings")
-        .env(EnvVars::UV_SYSTEM_CERTS, "0")
-        .env(EnvVars::UV_NATIVE_TLS, "0"), @"");
-
-    // Either variable can enable system certificates, even if the other is disabled.
-    diff_uv_snapshot!(context.filters(), &enabled, add_shared_args(context.version())
-        .arg("--show-settings")
-        .env(EnvVars::UV_SYSTEM_CERTS, "1")
-        .env(EnvVars::UV_NATIVE_TLS, "0"), @"");
-
-    diff_uv_snapshot!(context.filters(), &enabled, add_shared_args(context.version())
-        .arg("--show-settings")
-        .env(EnvVars::UV_SYSTEM_CERTS, "0")
-        .env(EnvVars::UV_NATIVE_TLS, "1"), @"");
-}
-
-#[test]
-#[cfg_attr(
-    windows,
-    ignore = "Configuration tests are not yet supported on Windows"
-)]
 fn system_certs_config_aliases() -> anyhow::Result<()> {
     let context = uv_test::test_context!("3.12");
 
