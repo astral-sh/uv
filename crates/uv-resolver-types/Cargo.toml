@@ -16,7 +16,6 @@ doctest = false
 workspace = true
 
 [dependencies]
-uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-distribution = { workspace = true }
 uv-distribution-types = { workspace = true }
@@ -28,7 +27,6 @@ uv-pep508 = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-torch = { workspace = true }
 
-futures = { workspace = true }
 indexmap = { workspace = true }
 itertools = { workspace = true }
 petgraph = { workspace = true }

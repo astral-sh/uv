@@ -332,7 +332,7 @@
       "type": ["boolean", "null"]
     },
     "minimum-libc-version": {
-      "description": "The minimum libc versions to support when resolving for Linux.\n\nDuring universal resolution, wheels must support the configured libc versions to satisfy\n`required-environments`. For example, `{ glibc = \"2.31\" }` accepts `manylinux_2_17` wheels\nas coverage, but not `manylinux_2_34` wheels. Both are retained in the lockfile so installation\ncan select the best wheel for the current machine. An omitted libc is unconstrained; set it\nto `false` to exclude its wheels, as in `{ glibc = \"2.31\", musl = false }`.\n\nUse `required-environments` to specify the Linux architectures to support. Each configured\nlibc version needs compatible artifacts for those environments; wheels for another libc\ndo not provide coverage. Packages with a usable source distribution can still be selected.\n\nThis setting is respected by `uv lock` and `uv pip compile --universal`.\n\nThis option is in preview and may change in any future release. Use\n`--preview-features minimum-libc-version` or configure\n`preview-features = [\"minimum-libc-version\"]` to disable the warning.",
+      "description": "The minimum libc versions to support when resolving for Linux.\n\nDuring universal resolution, wheels must support the configured libc versions to satisfy\n`required-environments`. For example, `{ glibc = \"2.31\" }` accepts `manylinux_2_17` wheels\nas coverage, but not `manylinux_2_34` wheels. Both are retained in the lockfile so installation\ncan select the best wheel for the current machine. An omitted libc is not required.\n\nUse `required-environments` to specify the Linux architectures to support. Each configured\nlibc version needs compatible wheels for those environments. Generic Linux wheels do not\nconstrain libc and can satisfy either implementation. Packages with a usable source\ndistribution can still be selected.\n\nThis setting is respected by `uv lock` and `uv pip compile --universal`.\n\nThis option is in preview and may change in any future release. Use\n`--preview-features minimum-libc-version` or configure\n`preview-features = [\"minimum-libc-version\"]` to disable the warning.",
       "anyOf": [
         {
           "$ref": "#/definitions/MinimumLibcVersion"
@@ -1221,16 +1221,6 @@
         }
       ]
     },
-    "LibcConstraint": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "const": false
-        }
-      ]
-    },
     "LinkMode": {
       "description": "The method to use when linking.\n\nDefaults to [`LinkMode::Clone`] on macOS and Linux (which support copy-on-write on\nAPFS and btrfs/xfs/bcachefs respectively), and [`LinkMode::Hardlink`] on other\nplatforms.",
       "oneOf": [
@@ -1261,28 +1251,14 @@
       "type": "string"
     },
     "MinimumLibcVersion": {
-      "description": "The oldest supported release of each Linux libc, or an explicit exclusion.",
+      "description": "The oldest required release of each Linux libc.",
       "type": "object",
       "properties": {
         "glibc": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/LibcConstraint"
-            },
-            {
-              "type": "null"
-            }
-          ]
+          "type": ["string", "null"]
         },
         "musl": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/LibcConstraint"
-            },
-            {
-              "type": "null"
-            }
-          ]
+          "type": ["string", "null"]
         }
       },
       "additionalProperties": false

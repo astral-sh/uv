@@ -501,7 +501,7 @@ struct VersionMapLazy {
     hasher: HashStrategy,
     /// The `requires-python` constraint for the resolution.
     requires_python: RequiresPython,
-    /// The libc cutoff applied to Linux wheels during universal resolution.
+    /// The libc baselines required during universal resolution.
     minimum_libc_version: Option<MinimumLibcVersion>,
 }
 
@@ -800,12 +800,6 @@ impl VersionMapLazy {
         // Check if after upload time cutoff
         if excluded {
             return WheelCompatibility::Incompatible(IncompatibleWheel::ExcludeNewer(upload_time));
-        }
-
-        if let Some(version) = self.minimum_libc_version
-            && !version.allows_wheel(filename)
-        {
-            return WheelCompatibility::Incompatible(IncompatibleWheel::LibcVersion(version));
         }
 
         // Check if binaries are disabled

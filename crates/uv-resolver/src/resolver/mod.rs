@@ -1217,17 +1217,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 BuiltDist::Path(dist) => &dist.filename,
             };
 
-            // Explicit libc exclusions apply to direct wheels as well as registry wheels.
-            if let Some(minimum_libc_version) = self.options.minimum_libc_version
-                && !minimum_libc_version.allows_wheel(filename)
-            {
-                return Ok(Some(ResolverVersion::Unavailable(
-                    version.clone(),
-                    UnavailableVersion::IncompatibleDist(IncompatibleDist::Wheel(
-                        IncompatibleWheel::LibcVersion(minimum_libc_version),
-                    )),
-                )));
-            }
             // If the wheel does not cover a required environment, it is incompatible.
             if env.marker_environment().is_none() && !self.options.artifact_environments.is_empty()
             {

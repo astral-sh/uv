@@ -131,7 +131,6 @@ impl FlatDistributions {
                     tags,
                     hasher,
                     build_options,
-                    minimum_libc_version,
                 );
                 let dist = RegistryBuiltWheel {
                     filename,
@@ -213,14 +212,7 @@ impl FlatDistributions {
         tags: Option<&Tags>,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
-        minimum_libc_version: Option<MinimumLibcVersion>,
     ) -> WheelCompatibility {
-        if let Some(version) = minimum_libc_version
-            && !version.allows_wheel(filename)
-        {
-            return WheelCompatibility::Incompatible(IncompatibleWheel::LibcVersion(version));
-        }
-
         // Check if binaries are allowed for this package.
         if build_options.no_binary_package(&filename.name) {
             return WheelCompatibility::Incompatible(IncompatibleWheel::NoBinary);

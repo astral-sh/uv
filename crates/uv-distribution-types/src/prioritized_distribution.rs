@@ -33,7 +33,7 @@ struct PrioritizedDistInner {
     wheels: Vec<(RegistryBuiltWheel, WheelCompatibility)>,
     /// The hashes for each distribution.
     hashes: Vec<HashDigest>,
-    /// Coverage for the glibc and musl baselines, unioned over compatible artifacts separately.
+    /// Coverage for the glibc and musl baselines, unioned over compatible wheels separately.
     /// Unconfigured baselines use ordinary platform coverage. Intersect only after unioning, so
     /// separate glibc and musl wheels can jointly satisfy both baselines.
     markers: [MarkerTree; 2],
@@ -132,7 +132,6 @@ impl IncompatibleDist {
         match self {
             Self::Wheel(incompatibility) => match incompatibility {
                 IncompatibleWheel::NoBinary => format!("has {self}"),
-                IncompatibleWheel::LibcVersion(_) => format!("has {self}"),
                 IncompatibleWheel::Tag(_) => format!("has {self}"),
                 IncompatibleWheel::Yanked(_) => format!("was {self}"),
                 IncompatibleWheel::ExcludeNewer(ts) => match ts {
@@ -162,7 +161,6 @@ impl IncompatibleDist {
         match self {
             Self::Wheel(incompatibility) => match incompatibility {
                 IncompatibleWheel::NoBinary => format!("have {self}"),
-                IncompatibleWheel::LibcVersion(_) => format!("have {self}"),
                 IncompatibleWheel::Tag(_) => format!("have {self}"),
                 IncompatibleWheel::Yanked(_) => format!("were {self}"),
                 IncompatibleWheel::ExcludeNewer(ts) => match ts {
@@ -214,7 +212,6 @@ impl IncompatibleDist {
                 }
                 IncompatibleWheel::Tag(IncompatibleTag::Invalid) => None,
                 IncompatibleWheel::NoBinary => None,
-                IncompatibleWheel::LibcVersion(_) => None,
                 IncompatibleWheel::Yanked(..) => None,
                 IncompatibleWheel::ExcludeNewer(..) => None,
                 IncompatibleWheel::RequiresPython(..) => None,
@@ -231,9 +228,6 @@ impl Display for IncompatibleDist {
         match self {
             Self::Wheel(incompatibility) => match incompatibility {
                 IncompatibleWheel::NoBinary => f.write_str("no source distribution"),
-                IncompatibleWheel::LibcVersion(version) => {
-                    write!(f, "no wheels compatible with {version}")
-                }
                 IncompatibleWheel::Tag(tag) => match tag {
                     IncompatibleTag::Invalid => f.write_str("no wheels with valid tags"),
                     IncompatibleTag::Python => {
@@ -319,8 +313,6 @@ pub enum WheelCompatibility {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum IncompatibleWheel {
-    /// The wheel requires an excluded libc implementation or version.
-    LibcVersion(MinimumLibcVersion),
     /// The wheel was published after the exclude newer time.
     ExcludeNewer(Option<i64>),
     /// The wheel tags do not match those of the target Python platform.
@@ -678,12 +670,7 @@ impl WheelCompatibility {
 
     /// Return `true` if the distribution is excluded.
     fn is_excluded(&self) -> bool {
-        matches!(
-            self,
-            Self::Incompatible(
-                IncompatibleWheel::ExcludeNewer(_) | IncompatibleWheel::LibcVersion(_)
-            )
-        )
+        matches!(self, Self::Incompatible(IncompatibleWheel::ExcludeNewer(_)))
     }
 
     /// Return `true` if the current compatibility is more compatible than another.
@@ -773,14 +760,6 @@ impl IncompatibleSource {
 impl IncompatibleWheel {
     fn is_more_compatible(&self, other: &Self) -> bool {
         match self {
-            Self::LibcVersion(_) => match other {
-                Self::ExcludeNewer(_) | Self::LibcVersion(_) => false,
-                Self::Tag(_)
-                | Self::RequiresPython(_, _)
-                | Self::Yanked(_)
-                | Self::NoBinary
-                | Self::MissingPlatform(_) => true,
-            },
             Self::ExcludeNewer(timestamp_self) => match other {
                 // Smaller timestamps are closer to the cut-off time
                 Self::ExcludeNewer(timestamp_other) => match (timestamp_self, timestamp_other) {
@@ -791,14 +770,13 @@ impl IncompatibleWheel {
                     }
                 },
                 Self::MissingPlatform(_)
-                | Self::LibcVersion(_)
                 | Self::NoBinary
                 | Self::RequiresPython(_, _)
                 | Self::Tag(_)
                 | Self::Yanked(_) => true,
             },
             Self::Tag(tag_self) => match other {
-                Self::ExcludeNewer(_) | Self::LibcVersion(_) => false,
+                Self::ExcludeNewer(_) => false,
                 Self::Tag(tag_other) => tag_self > tag_other,
                 Self::MissingPlatform(_)
                 | Self::NoBinary
@@ -806,23 +784,19 @@ impl IncompatibleWheel {
                 | Self::Yanked(_) => true,
             },
             Self::RequiresPython(_, _) => match other {
-                Self::ExcludeNewer(_) | Self::LibcVersion(_) | Self::Tag(_) => false,
+                Self::ExcludeNewer(_) | Self::Tag(_) => false,
                 // Version specifiers cannot be reasonably compared
                 Self::RequiresPython(_, _) => false,
                 Self::MissingPlatform(_) | Self::NoBinary | Self::Yanked(_) => true,
             },
             Self::Yanked(_) => match other {
-                Self::ExcludeNewer(_)
-                | Self::LibcVersion(_)
-                | Self::Tag(_)
-                | Self::RequiresPython(_, _) => false,
+                Self::ExcludeNewer(_) | Self::Tag(_) | Self::RequiresPython(_, _) => false,
                 // Yanks with a reason are more helpful for errors
                 Self::Yanked(yanked_other) => matches!(yanked_other, Yanked::Reason(_)),
                 Self::MissingPlatform(_) | Self::NoBinary => true,
             },
             Self::NoBinary => match other {
                 Self::ExcludeNewer(_)
-                | Self::LibcVersion(_)
                 | Self::Tag(_)
                 | Self::RequiresPython(_, _)
                 | Self::Yanked(_) => false,
@@ -845,8 +819,7 @@ pub fn implied_markers(
     glibc.and(musl)
 }
 
-/// Infer coverage for each libc before combining wheels, excluding tags that do not satisfy that
-/// baseline even if the wheel is retained for another platform or libc.
+/// Infer coverage for each libc independently so separate wheels can satisfy each baseline.
 fn implied_libc_markers(
     filename: &WheelFilename,
     minimum_libc_version: Option<MinimumLibcVersion>,
@@ -855,23 +828,19 @@ fn implied_libc_markers(
     let Some(minimum_libc_version) = minimum_libc_version else {
         return [implied_platform_markers(filename.platform_tags()).and(python); 2];
     };
-    let [glibc, musl] = minimum_libc_version.coverage();
-    let markers = |version: MinimumLibcVersion| {
-        implied_platform_markers(
-            filename
-                .platform_tags()
-                .iter()
-                .filter(|tag| version.supports_platform(tag)),
-        )
-        .and(python)
-    };
-    let glibc_markers = markers(glibc);
-    let musl_markers = if glibc == musl {
-        glibc_markers
-    } else {
-        markers(musl)
-    };
-    [glibc_markers, musl_markers]
+    let mut markers = [MarkerTree::FALSE; 2];
+    for tag in filename.platform_tags() {
+        let platform = implied_platform_markers([tag]).and(python);
+        for (markers, supported) in markers
+            .iter_mut()
+            .zip(minimum_libc_version.platform_coverage(tag))
+        {
+            if supported {
+                *markers = markers.or(platform);
+            }
+        }
+    }
+    markers
 }
 
 /// Infer the environments described by a set of platform tags.
@@ -1303,7 +1272,7 @@ mod tests {
             let filename =
                 WheelFilename::from_str(&format!("example-1.0-py3-none-{tag}.whl")).unwrap();
             assert_eq!(
-                implied_platform_markers(&filename),
+                implied_platform_markers(filename.platform_tags()),
                 MarkerTree::from_str(expected).unwrap()
             );
         }

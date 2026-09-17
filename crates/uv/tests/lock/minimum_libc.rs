@@ -5,11 +5,10 @@ use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
-use sha2::{Digest, Sha256};
 
 use uv_test::archive::write_tar_gz;
 use uv_test::find_links::FindLinksServer;
-use uv_test::packse::generate_wheel;
+use uv_test::packse::{PackseServer, generate_wheel, scenario::Scenario};
 use uv_test::{TestContext, uv_snapshot};
 
 fn wheel(context: &TestContext, name: &str, version: &str, tag: &str) -> Result<ChildPath> {
@@ -29,77 +28,31 @@ fn wheel(context: &TestContext, name: &str, version: &str, tag: &str) -> Result<
     Ok(wheel)
 }
 
-/// A libc baseline preserves newer wheels; only explicit exclusions remove artifacts.
+/// A libc baseline preserves all wheels and hashes, including wheels for newer hosts.
 #[test]
 fn minimum_libc_retains_locked_wheels() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    for tag in [
-        "cp312-cp312-manylinux_2_17_x86_64",
-        "cp312-cp312-manylinux_2_34_x86_64",
-        "cp312-cp312-musllinux_1_2_x86_64",
-        "cp312-cp312-macosx_11_0_arm64",
-        "cp312-cp312-win_amd64",
-    ] {
-        wheel(&context, "demo", "1.0.0", tag)?;
-    }
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "minimum-libc-retains-wheels"
 
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! {r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = ["demo"]
+        [root]
 
-        [tool.uv]
-        no-index = true
-        find-links = ["links"]
-        required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+        [expected]
+        satisfiable = true
+
+        [packages.demo.versions."1.0.0"]
+        sdist = false
+        wheel_tags = ["py3-none-manylinux_2_17_x86_64", "py3-none-manylinux_2_34_x86_64", "py3-none-musllinux_1_2_x86_64", "py3-none-macosx_11_0_arm64", "py3-none-win_amd64"]
     "#})?;
-    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @r"
-        exit_code: 0 (success)
-        ----- stderr -----
-        Resolved 2 packages in [TIME]
-    ");
-    let lock = context.read("uv.lock");
-    insta::with_settings!({filters => context.filters()}, {
-        assert_snapshot!(lock, @r#"
-        version = 1
-        revision = 3
-        requires-python = ">=3.12"
-        required-markers = [
-            "platform_machine == 'x86_64' and sys_platform == 'linux'",
-        ]
-
-        [options]
-        exclude-newer = "2024-03-25T00:00:00Z"
-
-        [[package]]
-        name = "demo"
-        version = "1.0.0"
-        source = { registry = "links" }
-        wheels = [
-            { path = "demo-1.0.0-cp312-cp312-manylinux_2_17_x86_64.whl" },
-            { path = "demo-1.0.0-cp312-cp312-manylinux_2_34_x86_64.whl" },
-            { path = "demo-1.0.0-cp312-cp312-musllinux_1_2_x86_64.whl" },
-            { path = "demo-1.0.0-cp312-cp312-macosx_11_0_arm64.whl" },
-            { path = "demo-1.0.0-cp312-cp312-win_amd64.whl" },
-        ]
-
-        [[package]]
-        name = "project"
-        version = "0.1.0"
-        source = { virtual = "." }
-        dependencies = [
-            { name = "demo" },
-        ]
-
-        [package.metadata]
-        requires-dist = [{ name = "demo" }]
-        "#);
-    });
-
-    pyproject_toml.write_str(indoc! {r#"
+    let server = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12").with_filters(
+        server
+            .files()
+            .map(|(filename, hash)| (hash.to_owned(), format!("[SHA256:{filename}]"))),
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -107,20 +60,17 @@ fn minimum_libc_retains_locked_wheels() -> Result<()> {
         dependencies = ["demo"]
 
         [tool.uv]
-        no-index = true
-        find-links = ["links"]
+        preview-features = ["minimum-libc-version"]
         required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
         minimum-libc-version = { glibc = "2.31" }
     "#})?;
-    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
     Resolved 2 packages in [TIME]
     ");
-    let lock = context.read("uv.lock");
     insta::with_settings!({filters => context.filters()}, {
-        assert_snapshot!(lock, @r#"
+        assert_snapshot!(context.read("uv.lock"), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12"
@@ -135,13 +85,13 @@ fn minimum_libc_retains_locked_wheels() -> Result<()> {
         [[package]]
         name = "demo"
         version = "1.0.0"
-        source = { registry = "links" }
+        source = { registry = "http://[LOCALHOST]/simple/" }
         wheels = [
-            { path = "demo-1.0.0-cp312-cp312-manylinux_2_17_x86_64.whl" },
-            { path = "demo-1.0.0-cp312-cp312-manylinux_2_34_x86_64.whl" },
-            { path = "demo-1.0.0-cp312-cp312-musllinux_1_2_x86_64.whl" },
-            { path = "demo-1.0.0-cp312-cp312-macosx_11_0_arm64.whl" },
-            { path = "demo-1.0.0-cp312-cp312-win_amd64.whl" },
+            { url = "http://[LOCALHOST]/files/demo-1.0.0-py3-none-macosx_11_0_arm64.whl", hash = "sha256:[SHA256:demo-1.0.0-py3-none-macosx_11_0_arm64.whl]", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/demo-1.0.0-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:[SHA256:demo-1.0.0-py3-none-manylinux_2_17_x86_64.whl]", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/demo-1.0.0-py3-none-manylinux_2_34_x86_64.whl", hash = "sha256:[SHA256:demo-1.0.0-py3-none-manylinux_2_34_x86_64.whl]", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/demo-1.0.0-py3-none-musllinux_1_2_x86_64.whl", hash = "sha256:[SHA256:demo-1.0.0-py3-none-musllinux_1_2_x86_64.whl]", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/demo-1.0.0-py3-none-win_amd64.whl", hash = "sha256:[SHA256:demo-1.0.0-py3-none-win_amd64.whl]", upload-time = "2024-03-24T00:00:00Z" },
         ]
 
         [[package]]
@@ -156,28 +106,41 @@ fn minimum_libc_retains_locked_wheels() -> Result<()> {
         requires-dist = [{ name = "demo" }]
         "#);
     });
-
-    uv_snapshot!(context.filters(), context.lock().args(["--offline", "--locked", "--preview-features", "minimum-libc-version"]), @r"
-        exit_code: 0 (success)
-        ----- stderr -----
-        Resolved 2 packages in [TIME]
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.export().arg("--frozen"), @r"
+    exit_code: 0 (success)
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv export --cache-dir [CACHE_DIR] --frozen
+    demo==1.0.0 \
+        --hash=sha256:[SHA256:demo-1.0.0-py3-none-win_amd64.whl] \
+        --hash=sha256:[SHA256:demo-1.0.0-py3-none-manylinux_2_34_x86_64.whl] \
+        --hash=sha256:[SHA256:demo-1.0.0-py3-none-musllinux_1_2_x86_64.whl] \
+        --hash=sha256:[SHA256:demo-1.0.0-py3-none-manylinux_2_17_x86_64.whl] \
+        --hash=sha256:[SHA256:demo-1.0.0-py3-none-macosx_11_0_arm64.whl]
+        # via project
     ");
 
-    uv_snapshot!(context.filters(), context.sync().args(["--frozen", "--offline", "--python-platform", "x86_64-manylinux_2_31", "--preview-features", "minimum-libc-version"]), @"
+    uv_snapshot!(context.filters(), context.sync().args(["--frozen", "--python-platform", "x86_64-manylinux_2_31"]), @"
     exit_code: 0 (success)
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + demo==1.0.0
     ");
-    assert_snapshot!(fs_err::read_to_string(context.site_packages().join("demo-1.0.0.dist-info/WHEEL"))?, @"
+    let wheel_metadata = context.site_packages().join("demo-1.0.0.dist-info/WHEEL");
+    assert_snapshot!(fs_err::read_to_string(&wheel_metadata)?, @"
     Wheel-Version: 1.0
     Generator: uv-test
     Root-Is-Purelib: true
-    Tag: cp312-cp312-manylinux_2_17_x86_64
+    Tag: py3-none-manylinux_2_17_x86_64
     ");
 
-    uv_snapshot!(context.filters(), context.sync().args(["--frozen", "--offline", "--reinstall", "--python-platform", "x86_64-manylinux_2_34", "--preview-features", "minimum-libc-version"]), @"
+    uv_snapshot!(context.filters(), context.sync().args(["--frozen", "--reinstall", "--python-platform", "x86_64-manylinux_2_34"]), @"
     exit_code: 0 (success)
     ----- stderr -----
     Prepared 1 package in [TIME]
@@ -185,122 +148,31 @@ fn minimum_libc_retains_locked_wheels() -> Result<()> {
     Installed 1 package in [TIME]
      ~ demo==1.0.0
     ");
-    assert_snapshot!(fs_err::read_to_string(context.site_packages().join("demo-1.0.0.dist-info/WHEEL"))?, @"
+    assert_snapshot!(fs_err::read_to_string(&wheel_metadata)?, @"
     Wheel-Version: 1.0
     Generator: uv-test
     Root-Is-Purelib: true
-    Tag: cp312-cp312-manylinux_2_34_x86_64
+    Tag: py3-none-manylinux_2_34_x86_64
     ");
 
-    uv_snapshot!(context.filters(), context.pip_compile().args(["pyproject.toml", "--universal", "--format", "pylock.toml", "--offline", "--no-header", "--preview-features", "minimum-libc-version"]), @r#"
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("pyproject.toml")
+        .arg("--universal")
+        .arg("--generate-hashes")
+        .arg("--index-url").arg(server.index_url()), @r"
     exit_code: 0 (success)
     ----- stdout -----
-    lock-version = "1.0"
-    created-by = "uv"
-    requires-python = ">=3.12"
-
-    [[packages]]
-    name = "demo"
-    version = "1.0.0"
-    wheels = [
-        { url = "file://[TEMP_DIR]/links/demo-1.0.0-cp312-cp312-manylinux_2_17_x86_64.whl", hashes = { sha256 = "eb2ff51027ef5001a478ca15a93fbd009fdda87e36238238a52f1d4019502428" } },
-        { url = "file://[TEMP_DIR]/links/demo-1.0.0-cp312-cp312-manylinux_2_34_x86_64.whl", hashes = { sha256 = "323b83a192c357544c5a13f7f75beefb121ed3cddf6307d7811c062072530a81" } },
-        { url = "file://[TEMP_DIR]/links/demo-1.0.0-cp312-cp312-musllinux_1_2_x86_64.whl", hashes = { sha256 = "194d18836a1a5cc527c87a7f315f12cb4b69516977e26583a6d7ca72ef2ee6de" } },
-        { url = "file://[TEMP_DIR]/links/demo-1.0.0-cp312-cp312-macosx_11_0_arm64.whl", hashes = { sha256 = "ed676c33c75c4e3d56b53b061173a4ec378e289013cef527ae68ce525f30be80" } },
-        { url = "file://[TEMP_DIR]/links/demo-1.0.0-cp312-cp312-win_amd64.whl", hashes = { sha256 = "c0b5946665f8aebba3d880c4e5658f346e3971ec2cc0013780eab4dafbbfcad6" } },
-    ]
-
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    "#);
-    uv_snapshot!(context.filters(), context.pip_compile().args(["pyproject.toml", "--universal", "--generate-hashes", "--offline", "--no-header", "--no-annotate"]), @r"
-    exit_code: 0 (success)
-    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] pyproject.toml --universal --generate-hashes
     demo==1.0.0 \
-        --hash=sha256:194d18836a1a5cc527c87a7f315f12cb4b69516977e26583a6d7ca72ef2ee6de \
-        --hash=sha256:323b83a192c357544c5a13f7f75beefb121ed3cddf6307d7811c062072530a81 \
-        --hash=sha256:c0b5946665f8aebba3d880c4e5658f346e3971ec2cc0013780eab4dafbbfcad6 \
-        --hash=sha256:eb2ff51027ef5001a478ca15a93fbd009fdda87e36238238a52f1d4019502428 \
-        --hash=sha256:ed676c33c75c4e3d56b53b061173a4ec378e289013cef527ae68ce525f30be80
+        --hash=sha256:[SHA256:demo-1.0.0-py3-none-win_amd64.whl] \
+        --hash=sha256:[SHA256:demo-1.0.0-py3-none-manylinux_2_34_x86_64.whl] \
+        --hash=sha256:[SHA256:demo-1.0.0-py3-none-musllinux_1_2_x86_64.whl] \
+        --hash=sha256:[SHA256:demo-1.0.0-py3-none-manylinux_2_17_x86_64.whl] \
+        --hash=sha256:[SHA256:demo-1.0.0-py3-none-macosx_11_0_arm64.whl]
+        # via project (pyproject.toml)
 
     ----- stderr -----
-    warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
-    Resolved 1 package in [TIME]
-    ");
-
-    pyproject_toml.write_str(indoc! {r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = ["demo"]
-
-        [tool.uv]
-        no-index = true
-        find-links = ["links"]
-        required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
-        minimum-libc-version = { glibc = "2.31", musl = false }
-    "#})?;
-    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
-    Resolved 2 packages in [TIME]
-    ");
-    let lock = context.read("uv.lock");
-    insta::with_settings!({filters => context.filters()}, {
-        assert_snapshot!(lock, @r#"
-        version = 1
-        revision = 3
-        requires-python = ">=3.12"
-        required-markers = [
-            "platform_machine == 'x86_64' and sys_platform == 'linux'",
-        ]
-
-        [options]
-        minimum-libc-version = { glibc = "2.31", musl = false }
-        exclude-newer = "2024-03-25T00:00:00Z"
-
-        [[package]]
-        name = "demo"
-        version = "1.0.0"
-        source = { registry = "links" }
-        wheels = [
-            { path = "demo-1.0.0-cp312-cp312-manylinux_2_17_x86_64.whl" },
-            { path = "demo-1.0.0-cp312-cp312-manylinux_2_34_x86_64.whl" },
-            { path = "demo-1.0.0-cp312-cp312-macosx_11_0_arm64.whl" },
-            { path = "demo-1.0.0-cp312-cp312-win_amd64.whl" },
-        ]
-
-        [[package]]
-        name = "project"
-        version = "0.1.0"
-        source = { virtual = "." }
-        dependencies = [
-            { name = "demo" },
-        ]
-
-        [package.metadata]
-        requires-dist = [{ name = "demo" }]
-        "#);
-    });
-    uv_snapshot!(context.filters(), context.lock().args(["--offline", "--locked"]), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
-    Resolved 2 packages in [TIME]
-    ");
-    uv_snapshot!(context.filters(), context.pip_compile().args(["pyproject.toml", "--universal", "--generate-hashes", "--offline", "--no-header", "--no-annotate"]), @r"
-    exit_code: 0 (success)
-    ----- stdout -----
-    demo==1.0.0 \
-        --hash=sha256:323b83a192c357544c5a13f7f75beefb121ed3cddf6307d7811c062072530a81 \
-        --hash=sha256:c0b5946665f8aebba3d880c4e5658f346e3971ec2cc0013780eab4dafbbfcad6 \
-        --hash=sha256:eb2ff51027ef5001a478ca15a93fbd009fdda87e36238238a52f1d4019502428 \
-        --hash=sha256:ed676c33c75c4e3d56b53b061173a4ec378e289013cef527ae68ce525f30be80
-
-    ----- stderr -----
-    warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
     Resolved 1 package in [TIME]
     ");
     Ok(())
@@ -475,74 +347,21 @@ fn minimum_libc_switch_families() -> Result<()> {
     error: No solution found when resolving dependencies for split (markers: python_full_version >= '3.12' and platform_machine == 'x86_64' and sys_platform == 'linux')
       cause: Because demo>=2.0.0 has no `platform_machine == 'x86_64' and sys_platform == 'linux'`-compatible wheels and your project depends on demo>=2, we can conclude that your project's requirements are unsatisfiable.
     ");
-    Ok(())
-}
 
-/// Recompiling against an unhashed index keeps all retained artifacts' hashes.
-#[test]
-fn minimum_libc_unhashed_index_hashes() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let mut hashes = Vec::new();
-    for tag in [
-        "cp312-cp312-manylinux_2_17_x86_64",
-        "cp312-cp312-manylinux_2_34_x86_64",
-        "cp312-cp312-manylinux_2_28_x86_64",
-        "cp312-cp312-musllinux_1_2_x86_64",
-    ] {
-        let wheel = wheel(&context, "demo", "1.0.0", tag)?;
-        hashes.push(hex::encode(Sha256::digest(fs_err::read(wheel)?)));
-    }
-    let context = context.with_filters([
-        (hashes[0].clone(), "[GLIBC_2_17_HASH]".to_string()),
-        (hashes[1].clone(), "[GLIBC_2_34_HASH]".to_string()),
-        (hashes[2].clone(), "[GLIBC_2_28_HASH]".to_string()),
-        (hashes[3].clone(), "[MUSL_HASH]".to_string()),
-    ]);
-    context
-        .temp_dir
-        .child("pyproject.toml")
-        .write_str(indoc! {r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = ["demo"]
-
-        [tool.uv]
-        no-index = true
-        find-links = ["links"]
-        minimum-libc-version = { glibc = "2.31", musl = false }
-    "#})?;
-    context
-        .temp_dir
-        .child("requirements.txt")
-        .write_str(&format!(
-            "demo==1.0.0 --hash=sha256:{} --hash=sha256:{} --hash=sha256:{} --hash=sha256:{}\n",
-            hashes[0], hashes[1], hashes[2], hashes[3],
-        ))?;
-
-    uv_snapshot!(context.filters(), context.pip_compile().args(["pyproject.toml", "--universal", "--generate-hashes", "--offline", "--no-header", "--no-annotate", "--output-file", "requirements.txt", "--preview-features", "minimum-libc-version"]), @r"
+    // Generic Linux wheels cover both baselines, but must still match the architecture.
+    wheel(&context, "generic", "1.0.0", "py3-none-linux_x86_64")?;
+    wheel(&context, "generic", "2.0.0", "py3-none-linux_aarch64")?;
+    pyproject_toml.write_str(&context.read("pyproject.toml").replace(
+        "dependencies = [\"demo>=2\"]",
+        "dependencies = [\"generic\"]",
+    ))?;
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
     exit_code: 0 (success)
-    ----- stdout -----
-    demo==1.0.0 \
-        --hash=sha256:[GLIBC_2_34_HASH] \
-        --hash=sha256:[GLIBC_2_28_HASH] \
-        --hash=sha256:[GLIBC_2_17_HASH]
-
     ----- stderr -----
-    Resolved 1 package in [TIME]
-    ");
-    // Recompiling retains the newer wheel's hash too.
-    uv_snapshot!(context.filters(), context.pip_compile().args(["pyproject.toml", "--universal", "--generate-hashes", "--offline", "--no-header", "--no-annotate", "--output-file", "requirements.txt", "--preview-features", "minimum-libc-version"]), @r"
-    exit_code: 0 (success)
-    ----- stdout -----
-    demo==1.0.0 \
-        --hash=sha256:[GLIBC_2_34_HASH] \
-        --hash=sha256:[GLIBC_2_28_HASH] \
-        --hash=sha256:[GLIBC_2_17_HASH]
-
-    ----- stderr -----
-    Resolved 1 package in [TIME]
+    warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
+    Resolved 2 packages in [TIME]
+    Removed demo v1.0.0
+    Added generic v1.0.0
     ");
     Ok(())
 }
@@ -878,7 +697,7 @@ fn minimum_libc_no_compatible_version() -> Result<()> {
              And because your project depends on demo, we can conclude that your project's requirements are unsatisfiable.
     ");
     assert!(!context.temp_dir.child("uv.lock").exists());
-    // A concrete target uses its platform tags instead of the universal libc cutoff.
+    // A concrete target uses its platform tags instead of the universal libc baseline.
     uv_snapshot!(context.filters(), context.pip_compile().args(["pyproject.toml", "--python-platform", "x86_64-manylinux_2_34", "--offline", "--no-header", "--no-annotate"]), @"
     exit_code: 0 (success)
     ----- stdout -----
@@ -995,41 +814,6 @@ fn minimum_libc_allows_sdist_fallback() -> Result<()> {
              And because your project depends on demo, we can conclude that your project's requirements are unsatisfiable.
     ");
 
-    // With binaries disabled, a permitted wheel can provide metadata, but its hash must not
-    // replace the source archive's hash in the compiled requirements.
-    wheel(
-        &context,
-        "demo",
-        "2.0.0",
-        "cp312-cp312-manylinux_2_17_x86_64",
-    )?;
-    let source_hash = hex::encode(Sha256::digest(fs_err::read(
-        context.temp_dir.child("links/demo-2.0.0.tar.gz"),
-    )?));
-    let wheel_hash = hex::encode(Sha256::digest(fs_err::read(
-        context
-            .temp_dir
-            .child("links/demo-2.0.0-cp312-cp312-manylinux_2_17_x86_64.whl"),
-    )?));
-    let context = context.with_filters([
-        (source_hash.clone(), "[SOURCE_HASH]".to_string()),
-        (wheel_hash.clone(), "[WHEEL_HASH]".to_string()),
-    ]);
-    context
-        .temp_dir
-        .child("requirements.txt")
-        .write_str(&format!(
-            "demo==2.0.0 --hash=sha256:{source_hash} --hash=sha256:{wheel_hash}\n"
-        ))?;
-    uv_snapshot!(context.filters(), context.pip_compile().args(["pyproject.toml", "--universal", "--generate-hashes", "--offline", "--no-binary", ":all:", "--no-header", "--no-annotate", "--output-file", "requirements.txt", "--preview-features", "minimum-libc-version"]), @r"
-    exit_code: 0 (success)
-    ----- stdout -----
-    demo==2.0.0 \
-        --hash=sha256:[SOURCE_HASH]
-
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    ");
     Ok(())
 }
 
@@ -1299,7 +1083,7 @@ fn minimum_libc_invalid_configuration() -> Result<()> {
         dependencies = []
 
         [tool.uv]
-        minimum-libc-version = { musl = true }
+        minimum-libc-version = { musl = false }
     "#})?;
     uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
     exit_code: 2 (failure)
@@ -1307,16 +1091,16 @@ fn minimum_libc_invalid_configuration() -> Result<()> {
     warning: Failed to parse `pyproject.toml` during settings discovery:
       TOML parse error at line 8, column 33
         |
-      8 | minimum-libc-version = { musl = true }
-        |                                 ^^^^
-      invalid value: boolean `true`, expected a libc version string or `false`
+      8 | minimum-libc-version = { musl = false }
+        |                                 ^^^^^
+      invalid type: boolean `false`, expected a libc version string in the form `<major>.<minor>`
 
     error: Failed to parse: `pyproject.toml`
       cause: TOML parse error at line 8, column 33
                |
-             8 | minimum-libc-version = { musl = true }
-               |                                 ^^^^
-             invalid value: boolean `true`, expected a libc version string or `false`
+             8 | minimum-libc-version = { musl = false }
+               |                                 ^^^^^
+             invalid type: boolean `false`, expected a libc version string in the form `<major>.<minor>`
     ");
 
     pyproject_toml.write_str(indoc! {r#"
@@ -1337,14 +1121,14 @@ fn minimum_libc_invalid_configuration() -> Result<()> {
         |
       8 | minimum-libc-version = { glibc = 2.31 }
         |                                  ^^^^
-      invalid type: floating point `2.31`, expected a libc version string or `false`
+      invalid type: floating point `2.31`, expected a libc version string in the form `<major>.<minor>`
 
     error: Failed to parse: `pyproject.toml`
       cause: TOML parse error at line 8, column 34
                |
              8 | minimum-libc-version = { glibc = 2.31 }
                |                                  ^^^^
-             invalid type: floating point `2.31`, expected a libc version string or `false`
+             invalid type: floating point `2.31`, expected a libc version string in the form `<major>.<minor>`
     ");
 
     pyproject_toml.write_str(indoc! {r#"

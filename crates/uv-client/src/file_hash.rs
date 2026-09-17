@@ -4,7 +4,6 @@ use futures::TryStreamExt;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use url::Url;
 
-use uv_distribution_types::ToUrlError;
 use uv_extract::hash::{HashReader, Hasher};
 use uv_pypi_types::{HashAlgorithm, HashDigest};
 use uv_redacted::DisplaySafeUrl;
@@ -14,8 +13,6 @@ use crate::{RegistryClient, WrappedReqwestError};
 /// An error while reading or downloading a distribution file to compute its hash.
 #[derive(Debug, thiserror::Error)]
 pub enum FileHashError {
-    #[error(transparent)]
-    InvalidUrl(#[from] ToUrlError),
     #[error("Failed to convert URL to path")]
     UrlToPath,
     // Request and status errors use `WrappedReqwestError`, while errors reading the response body
