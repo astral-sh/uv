@@ -73,12 +73,14 @@ pub use crate::lock::export::RequirementsTxtExport;
 pub use crate::lock::export::{
     Metadata, PylockToml, PylockTomlError, PylockTomlErrorKind, PythonReport, cyclonedx_json,
 };
+use crate::lock::id::{PackageId, PackageIdWire};
 pub use crate::lock::installable::{Installable, InstallableRootKind};
 pub use crate::lock::map::PackageMap;
 pub use crate::lock::tree::{TreeDisplay, TreeJsonTarget};
 
 mod deserialize;
 pub(crate) mod export;
+mod id;
 mod installable;
 mod map;
 mod serialize;
@@ -4402,30 +4404,22 @@ impl Lock {
         while let Some(package_index) = queue.pop_front() {
             let package = self.package(package_index);
             // If the lockfile references an index that was not provided, we can't validate it.
-            if let Source::Registry(index) = &package.id.source {
-                match index {
+            if let Some(registry) = package.id.registry() {
+                match registry.source {
                     RegistrySource::Url(url) => {
                         if remotes
                             .as_ref()
                             .is_some_and(|remotes| !remotes.contains(url))
                         {
-                            let name = &package.id.name;
-                            let version = &package
-                                .id
-                                .version
-                                .as_ref()
-                                .expect("version for registry source");
+                            let name = registry.name;
+                            let version = registry.version;
                             return Ok(SatisfiesResult::MissingRemoteIndex(name, version, url));
                         }
                     }
                     RegistrySource::Path(path) => {
                         if locals.as_ref().is_some_and(|locals| !locals.contains(path)) {
-                            let name = &package.id.name;
-                            let version = &package
-                                .id
-                                .version
-                                .as_ref()
-                                .expect("version for registry source");
+                            let name = registry.name;
+                            let version = registry.version;
                             return Ok(SatisfiesResult::MissingLocalIndex(name, version, path));
                         }
                     }
@@ -6179,7 +6173,8 @@ impl TryFrom<LockWire> for Lock {
         // there's only one source for a particular package name (the
         // overwhelmingly common case), we can omit some data (like source and
         // version) on dependency edges since it is strictly redundant.
-        let mut unambiguous_package_ids: FxHashMap<PackageName, PackageId> = FxHashMap::default();
+        let mut unambiguous_package_ids: FxHashMap<PackageName, PackageIdWire> =
+            FxHashMap::default();
         let mut ambiguous = FxHashSet::default();
         for dist in &wire.packages {
             if ambiguous.contains(&dist.id.name) {
@@ -7069,7 +7064,7 @@ fn absolute_path(workspace_root: &Path, path: &Path) -> Result<PathBuf, LockErro
 #[serde(rename_all = "kebab-case")]
 struct PackageWire {
     #[serde(flatten)]
-    id: PackageId,
+    id: PackageIdWire,
     #[serde(default)]
     metadata: PackageMetadata,
     #[serde(default)]
@@ -7134,7 +7129,7 @@ impl PackageWire {
         requires_python: &RequiresPython,
         environment: SimplifiedMarkerTree,
         default: UniversalMarker,
-        unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
+        unambiguous_package_ids: &FxHashMap<PackageName, PackageIdWire>,
     ) -> Result<Package, LockError> {
         // Consistency check
         if !uv_flags::contains(uv_flags::EnvironmentFlags::SKIP_WHEEL_FILENAME_CHECK) {
@@ -7155,15 +7150,6 @@ impl PackageWire {
             }
         }
 
-        // A registry-source package must carry a version; downstream conversions
-        // (e.g. `to_source_dist`, `satisfies`) rely on it.
-        if matches!(self.id.source, Source::Registry(_)) && self.id.version.is_none() {
-            return Err(LockErrorKind::MissingPackageVersion {
-                name: self.id.name.clone(),
-            }
-            .into());
-        }
-
         let unwire_deps = |deps: Vec<DependencyWire>| -> Result<Vec<Dependency>, LockError> {
             deps.into_iter()
                 .map(|dep| {
@@ -7178,7 +7164,7 @@ impl PackageWire {
         };
 
         Ok(Package {
-            id: self.id,
+            id: self.id.try_into()?,
             metadata: self.metadata,
             sdist: self.sdist,
             wheels: self.wheels,
@@ -7203,16 +7189,6 @@ impl PackageWire {
     }
 }
 
-/// Inside the lockfile, we match a dependency entry to a package entry through a key made up
-/// of the name, the version and the source url.
-#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub(crate) struct PackageId {
-    name: PackageName,
-    version: Option<Version>,
-    source: Source,
-}
-
 impl PackageId {
     fn from_annotated_dist(annotated_dist: &AnnotatedDist, root: &Path) -> Result<Self, LockError> {
         // Identify the source of the package.
@@ -7229,11 +7205,12 @@ impl PackageId {
             Some(annotated_dist.version.clone())
         };
         let name = annotated_dist.name.clone();
-        Ok(Self {
+        PackageIdWire {
             name,
             version,
             source,
-        })
+        }
+        .try_into()
     }
 }
 
@@ -7258,7 +7235,7 @@ struct PackageIdForDependency {
 impl PackageIdForDependency {
     fn unwire(
         self,
-        unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
+        unambiguous_package_ids: &FxHashMap<PackageName, PackageIdWire>,
     ) -> Result<PackageId, LockError> {
         let unambiguous_package_id = unambiguous_package_ids.get(&self.name);
         let source = self.source.map(Ok::<_, LockError>).unwrap_or_else(|| {
@@ -7288,16 +7265,18 @@ impl PackageIdForDependency {
                 }
             }
         };
-        Ok(PackageId {
+        PackageIdWire {
             name: self.name,
             version,
             source,
-        })
+        }
+        .try_into()
     }
 }
 
 impl From<PackageId> for PackageIdForDependency {
     fn from(id: PackageId) -> Self {
+        let id = id.into_wire();
         Self {
             name: id.name,
             version: id.version,
@@ -8940,7 +8919,7 @@ impl DependencyWire {
         requires_python: &RequiresPython,
         environment: SimplifiedMarkerTree,
         default: UniversalMarker,
-        unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
+        unambiguous_package_ids: &FxHashMap<PackageName, PackageIdWire>,
     ) -> Result<Dependency, LockError> {
         let (simplified_marker, complexified_marker) =
             if self.marker.as_simplified_marker_tree().is_true() {
