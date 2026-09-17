@@ -1,6 +1,7 @@
 use std::process::Command;
 
 use assert_fs::prelude::*;
+use insta::allow_duplicates;
 use url::Url;
 use uv_static::EnvVars;
 
@@ -4707,6 +4708,86 @@ fn system_certs_cli_aliases_override_env() {
     ...
     "
     );
+}
+
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn system_certs_env_aliases() {
+    let context = uv_test::test_context_with_versions!(&[]);
+    let show_settings = || {
+        let mut command = add_shared_args(context.version());
+        command
+            .arg("--show-settings")
+            .env_remove(EnvVars::UV_NATIVE_TLS)
+            .env_remove(EnvVars::UV_SYSTEM_CERTS);
+        command
+    };
+
+    let disabled = capture_uv_snapshot!(context.filters(), show_settings());
+    let enabled = diff_uv_snapshot!(context.filters(), &disabled, show_settings()
+        .env(EnvVars::UV_SYSTEM_CERTS, "1"), @"
+    ...
+         network_settings: NetworkSettings {
+             connectivity: Online,
+             offline: Disabled,
+    -        system_certs: false,
+    +        system_certs: true,
+             custom_certificates: [CERTIFICATES],
+             http_proxy: None,
+             https_proxy: None,
+    ...
+    ");
+
+    // The replacement variable makes the deprecated variable irrelevant, including invalid values.
+    for (system_certs, expected) in [("0", &disabled), ("1", &enabled)] {
+        for native_tls in ["0", "1", "invalid"] {
+            assert_eq!(
+                *expected,
+                capture_uv_snapshot!(
+                    context.filters(),
+                    show_settings()
+                        .env(EnvVars::UV_SYSTEM_CERTS, system_certs)
+                        .env(EnvVars::UV_NATIVE_TLS, native_tls)
+                ),
+                "UV_SYSTEM_CERTS={system_certs}, UV_NATIVE_TLS={native_tls}"
+            );
+        }
+    }
+
+    // The deprecated variable is still used and warned about when set on its own.
+    allow_duplicates! {
+        for (native_tls, expected) in [("0", &disabled), ("1", &enabled)] {
+            diff_uv_snapshot!(context.filters(), expected, show_settings()
+                .env(EnvVars::UV_NATIVE_TLS, native_tls), @"
+            ...
+                     malware_check_url: None,
+                 },
+             }
+            +
+            +----- stderr -----
+            +warning: The `UV_NATIVE_TLS` environment variable is deprecated and will be removed in a future release. Use `UV_SYSTEM_CERTS` instead.
+            ...
+            ");
+        }
+    }
+
+    uv_snapshot!(context.filters(), show_settings()
+        .env(EnvVars::UV_NATIVE_TLS, "invalid"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to parse environment variable `UV_NATIVE_TLS` with invalid value `invalid`: expected a boolish value
+    ");
+
+    uv_snapshot!(context.filters(), show_settings()
+        .env(EnvVars::UV_SYSTEM_CERTS, "invalid")
+        .env(EnvVars::UV_NATIVE_TLS, "1"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to parse environment variable `UV_SYSTEM_CERTS` with invalid value `invalid`: expected a boolish value
+    ");
 }
 
 #[test]

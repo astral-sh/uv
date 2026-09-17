@@ -804,6 +804,17 @@ impl EnvironmentOptions {
         )?)
         .map(Duration::from_secs);
 
+        // Ignore the deprecated variable entirely when its replacement is set, even to false.
+        let system_certs = EnvFlag::new(EnvVars::UV_SYSTEM_CERTS)?;
+        let native_tls = if system_certs.value.is_some() {
+            EnvFlag {
+                value: None,
+                env_var: EnvVars::UV_NATIVE_TLS,
+            }
+        } else {
+            EnvFlag::new(EnvVars::UV_NATIVE_TLS)?
+        };
+
         Ok(Self {
             ruff_path: parse_path_environment_variable(EnvVars::RUFF),
             ty_path: parse_path_environment_variable(EnvVars::TY),
@@ -881,8 +892,8 @@ impl EnvironmentOptions {
             no_sync: EnvFlag::new(EnvVars::UV_NO_SYNC)?,
             managed_python: EnvFlag::new(EnvVars::UV_MANAGED_PYTHON)?,
             no_managed_python: EnvFlag::new(EnvVars::UV_NO_MANAGED_PYTHON)?,
-            native_tls: EnvFlag::new(EnvVars::UV_NATIVE_TLS)?,
-            system_certs: EnvFlag::new(EnvVars::UV_SYSTEM_CERTS)?,
+            native_tls,
+            system_certs,
             preview: EnvFlag::new(EnvVars::UV_PREVIEW)?,
             isolated: EnvFlag::new(EnvVars::UV_ISOLATED)?,
             no_progress: EnvFlag::new(EnvVars::UV_NO_PROGRESS)?,
