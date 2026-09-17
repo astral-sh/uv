@@ -937,6 +937,16 @@ impl MarkerTree {
                     map,
                 })
             }
+            Variable::VersionString(key) => {
+                let Edges::Version { edges: ref map } = node.children else {
+                    unreachable!()
+                };
+                MarkerTreeKind::VersionString(VersionMarkerTree {
+                    id: self.0,
+                    key: *key,
+                    map,
+                })
+            }
             Variable::In { key, value } => {
                 let Edges::Boolean { low, high } = node.children else {
                     unreachable!()
@@ -1081,6 +1091,16 @@ impl MarkerTree {
                     }
                 }
             }
+            MarkerTreeKind::VersionString(marker) => {
+                let Ok(version) = env.get_string(marker.key()).parse::<Version>() else {
+                    return false;
+                };
+                for (range, tree) in marker.edges() {
+                    if range.contains(&version) {
+                        return tree.evaluate_reporter_impl(env, extras, reporter);
+                    }
+                }
+            }
             MarkerTreeKind::In(marker) => {
                 return marker
                     .edge(marker.value().contains(env.get_string(marker.key())))
@@ -1125,6 +1145,9 @@ impl MarkerTree {
             MarkerTreeKind::Version(marker) => {
                 marker.edges().any(|(_, tree)| tree.evaluate_extras(extras))
             }
+            MarkerTreeKind::VersionString(marker) => {
+                marker.edges().any(|(_, tree)| tree.evaluate_extras(extras))
+            }
             MarkerTreeKind::String(marker) => marker
                 .children()
                 .any(|(_, tree)| tree.evaluate_extras(extras)),
@@ -1149,6 +1172,9 @@ impl MarkerTree {
             MarkerTreeKind::True => true,
             MarkerTreeKind::False => false,
             MarkerTreeKind::Version(marker) => marker
+                .edges()
+                .all(|(_, tree)| tree.evaluate_only_extras(extras)),
+            MarkerTreeKind::VersionString(marker) => marker
                 .edges()
                 .all(|(_, tree)| tree.evaluate_only_extras(extras)),
             MarkerTreeKind::String(marker) => marker
@@ -1389,6 +1415,11 @@ impl MarkerTree {
                         imp(tree, f);
                     }
                 }
+                MarkerTreeKind::VersionString(kind) => {
+                    for (tree, _) in simplify::collect_edges(kind.edges()) {
+                        imp(tree, f);
+                    }
+                }
                 MarkerTreeKind::String(kind) => {
                     for (tree, _) in simplify::collect_edges(kind.children()) {
                         imp(tree, f);
@@ -1476,6 +1507,8 @@ pub enum MarkerTreeKind<'a> {
     False,
     /// A version expression.
     Version(VersionMarkerTree<'a>),
+    /// A string-valued marker interpreted as a version within a platform-specific scope.
+    VersionString(VersionMarkerTree<'a, CanonicalMarkerValueString>),
     /// A string expression.
     String(StringMarkerTree<'a>),
     /// A string expression with the `in` operator.
@@ -1490,15 +1523,15 @@ pub enum MarkerTreeKind<'a> {
 
 /// A version marker node, such as `python_version < '3.7'`.
 #[derive(PartialEq, Eq, Clone, Debug)]
-pub struct VersionMarkerTree<'a> {
+pub struct VersionMarkerTree<'a, K = CanonicalMarkerValueVersion> {
     id: NodeId,
-    key: CanonicalMarkerValueVersion,
+    key: K,
     map: &'a [(Ranges<Version>, NodeId)],
 }
 
-impl VersionMarkerTree<'_> {
+impl<K: Copy> VersionMarkerTree<'_, K> {
     /// The key for this node.
-    pub fn key(&self) -> CanonicalMarkerValueVersion {
+    pub fn key(&self) -> K {
         self.key
     }
 
@@ -1510,13 +1543,13 @@ impl VersionMarkerTree<'_> {
     }
 }
 
-impl PartialOrd for VersionMarkerTree<'_> {
+impl<K: Copy + Ord> PartialOrd for VersionMarkerTree<'_, K> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl Ord for VersionMarkerTree<'_> {
+impl<K: Copy + Ord> Ord for VersionMarkerTree<'_, K> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.key()
             .cmp(&other.key())
@@ -1849,6 +1882,29 @@ mod test {
 
     fn m(s: &str) -> MarkerTree {
         s.parse().unwrap()
+    }
+
+    #[test]
+    fn darwin_platform_release() {
+        let baseline = m("sys_platform == 'darwin' and platform_release == '24.0.0'");
+        assert!(!baseline.is_disjoint(m("platform_release >= '9.0.0'")));
+        assert!(baseline.is_disjoint(m("platform_release >= '25.0.0'")));
+        assert_eq!(
+            baseline,
+            m("sys_platform == 'darwin' and platform_release == '24'")
+        );
+
+        let env = env37()
+            .with_sys_platform("darwin")
+            .with_platform_release("24.10.0");
+        let marker = m("sys_platform == 'darwin' and platform_release >= '24.9.0'");
+        assert!(marker.evaluate(&env, &[]));
+        assert!(!marker.negate().evaluate(&env, &[]));
+        assert_eq!(marker, m(&marker.try_to_string().unwrap()));
+        assert_eq!(
+            marker.negate(),
+            m(&marker.negate().try_to_string().unwrap())
+        );
     }
 
     fn env37() -> MarkerEnvironment {

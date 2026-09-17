@@ -7,7 +7,9 @@ use tracing::debug;
 use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
-use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagPriority, Tags};
+use uv_platform_tags::{
+    AbiTag, BinaryFormat, IncompatibleTag, LanguageTag, PlatformTag, TagPriority, Tags,
+};
 use uv_pypi_types::{HashDigest, Yanked};
 
 use crate::{
@@ -854,7 +856,14 @@ fn implied_platform_markers(filename: &WheelFilename) -> MarkerTree {
             }
 
             // macOS
-            PlatformTag::Macos { binary_format, .. } => {
+            PlatformTag::Macos {
+                major,
+                minor,
+                binary_format,
+            } => {
+                let Some(release) = macos_darwin_release(*major, *minor) else {
+                    continue;
+                };
                 let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::SysPlatform,
                     operator: MarkerOperator::Equal,
@@ -864,12 +873,24 @@ fn implied_platform_markers(filename: &WheelFilename) -> MarkerTree {
                 // Extract the architecture from the end of the tag.
                 let mut arch_marker = MarkerTree::FALSE;
                 for arch in binary_format.platform_machine() {
-                    arch_marker =
-                        arch_marker.or(MarkerTree::expression(MarkerExpression::String {
-                            key: MarkerValueString::PlatformMachine,
-                            operator: MarkerOperator::Equal,
-                            value: ArcStr::from(arch.name()),
-                        }));
+                    // A universal2 wheel can target an older macOS on Intel, but its ARM
+                    // slice requires macOS 11 (Darwin 20) or later.
+                    let release = if *arch == BinaryFormat::Arm64 {
+                        release.clone().max(Version::new([20, 0, 0]))
+                    } else {
+                        release.clone()
+                    };
+                    let architecture = MarkerTree::expression(MarkerExpression::String {
+                        key: MarkerValueString::PlatformMachine,
+                        operator: MarkerOperator::Equal,
+                        value: ArcStr::from(arch.name()),
+                    });
+                    let release = MarkerTree::expression(MarkerExpression::String {
+                        key: MarkerValueString::PlatformRelease,
+                        operator: MarkerOperator::GreaterEqual,
+                        value: ArcStr::from(release.to_string()),
+                    });
+                    arch_marker = arch_marker.or(architecture.and(release));
                 }
                 tag_marker = tag_marker.and(arch_marker);
 
@@ -903,6 +924,24 @@ fn implied_platform_markers(filename: &WheelFilename) -> MarkerTree {
     }
 
     marker
+}
+
+/// Translate a macOS deployment target into the corresponding
+/// [Darwin kernel release](<https://en.wikipedia.org/wiki/Darwin_(operating_system)#Darwin_20_onwards>).
+///
+/// macOS 10.16 is the compatibility spelling of macOS 11. macOS 26 uses Darwin 25;
+/// starting with macOS 27, the major versions match.
+fn macos_darwin_release(major: u16, minor: u16) -> Option<Version> {
+    let release = match (major, minor) {
+        (10, 0) => [1, 3, 0],
+        (10, 1) => [1, 4, 1],
+        (10, 2..=16) => [u64::from(minor) + 4, 0, 0],
+        (11..=15, 0) => [u64::from(major) + 9, 0, 0],
+        (26, 0) => [25, 0, 0],
+        (27.., 0) => [u64::from(major), 0, 0],
+        _ => return None,
+    };
+    Some(Version::new(release))
 }
 
 /// Given a wheel filename, determine the set of supported Python versions, in terms of their markers.
@@ -1082,15 +1121,15 @@ mod tests {
         );
         assert_platform_markers(
             "numpy-2.2.1-cp310-cp310-macosx_14_0_x86_64.whl",
-            "sys_platform == 'darwin' and platform_machine == 'x86_64'",
+            "sys_platform == 'darwin' and platform_machine == 'x86_64' and platform_release >= '23.0.0'",
         );
         assert_platform_markers(
             "numpy-2.2.1-cp310-cp310-macosx_10_9_x86_64.whl",
-            "sys_platform == 'darwin' and platform_machine == 'x86_64'",
+            "sys_platform == 'darwin' and platform_machine == 'x86_64' and platform_release >= '13.0.0'",
         );
         assert_platform_markers(
             "numpy-2.2.1-cp310-cp310-macosx_11_0_arm64.whl",
-            "sys_platform == 'darwin' and platform_machine == 'arm64'",
+            "sys_platform == 'darwin' and platform_machine == 'arm64' and platform_release >= '20.0.0'",
         );
     }
 
@@ -1156,6 +1195,47 @@ mod tests {
     }
 
     #[test]
+    fn test_macos_platform_markers() {
+        for (tag, expected) in [
+            (
+                "macosx_10_5_x86_64",
+                "sys_platform == 'darwin' and platform_machine == 'x86_64' and platform_release >= '9.0.0'",
+            ),
+            (
+                "macosx_10_9_universal2",
+                "sys_platform == 'darwin' and ((platform_machine == 'x86_64' and platform_release >= '13.0.0') or (platform_machine == 'arm64' and platform_release >= '20.0.0'))",
+            ),
+            (
+                "macosx_10_16_universal2",
+                "sys_platform == 'darwin' and (platform_machine == 'arm64' or platform_machine == 'x86_64') and platform_release >= '20.0.0'",
+            ),
+            (
+                "macosx_15_0_arm64",
+                "sys_platform == 'darwin' and platform_machine == 'arm64' and platform_release >= '24.0.0'",
+            ),
+            (
+                "macosx_26_0_arm64",
+                "sys_platform == 'darwin' and platform_machine == 'arm64' and platform_release >= '25.0.0'",
+            ),
+            (
+                "macosx_27_0_arm64",
+                "sys_platform == 'darwin' and platform_machine == 'arm64' and platform_release >= '27.0.0'",
+            ),
+            (
+                "macosx_26_0_arm64.macosx_15_0_x86_64",
+                "sys_platform == 'darwin' and ((platform_machine == 'arm64' and platform_release >= '25.0.0') or (platform_machine == 'x86_64' and platform_release >= '24.0.0'))",
+            ),
+        ] {
+            let filename =
+                WheelFilename::from_str(&format!("example-1.0-py3-none-{tag}.whl")).unwrap();
+            assert_eq!(
+                implied_platform_markers(&filename),
+                MarkerTree::from_str(expected).unwrap()
+            );
+        }
+    }
+
+    #[test]
     fn test_implied_markers() {
         assert_implied_markers(
             "numpy-1.0-cp310-cp310-win32.whl",
@@ -1167,7 +1247,7 @@ mod tests {
         );
         assert_implied_markers(
             "numpy-1.0-cp311-cp311-macosx_10_9_x86_64.whl",
-            "python_full_version == '3.11.*' and platform_python_implementation == 'CPython' and sys_platform == 'darwin' and platform_machine == 'x86_64'",
+            "python_full_version == '3.11.*' and platform_python_implementation == 'CPython' and sys_platform == 'darwin' and platform_machine == 'x86_64' and platform_release >= '13.0.0'",
         );
         assert_implied_markers(
             "numpy-1.0-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",

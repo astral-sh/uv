@@ -216,6 +216,21 @@ required-environments = [
 ]
 ```
 
+To require a macOS release, use its
+[Darwin kernel version](<https://en.wikipedia.org/wiki/Darwin_(operating_system)#Darwin_20_onwards>)
+in `platform_release`. For example, macOS 15 uses Darwin 24:
+
+```toml title="pyproject.toml"
+[tool.uv]
+required-environments = [
+    "sys_platform == 'darwin' and platform_machine == 'arm64' and platform_release == '24.0.0'"
+]
+```
+
+Use `==` to require coverage at the baseline. A range like `>= '24.0.0'` can be satisfied by a wheel
+that only supports a newer release. Wheels targeting newer releases are still retained in the
+lockfile.
+
 ## Common marker values
 
 The `environments` and `required-environments` settings accept
