@@ -52,6 +52,7 @@ pub(crate) async fn read_pylock_toml(
         }
     };
 
+    let pylock = pylock.user_display();
     let lock = info_span!("toml::from_str pylock.toml", path = %pylock)
         .in_scope(|| toml::from_str::<PylockToml>(&content))
         .with_context(|| format!("Not a valid `pylock.toml` file: {pylock}"))?;

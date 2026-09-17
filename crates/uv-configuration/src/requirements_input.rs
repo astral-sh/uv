@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -19,6 +20,15 @@ pub enum RequirementsInput {
 }
 
 impl RequirementsInput {
+    /// Render this input for user-facing display.
+    pub fn user_display(&self) -> impl Display + '_ {
+        std::fmt::from_fn(|f| match self {
+            Self::Stdin => f.write_str("-"),
+            Self::Local(path) => path.user_display().fmt(f),
+            Self::Remote(url) => url.fmt(f),
+        })
+    }
+
     /// Resolve a local path relative to this input.
     ///
     /// Returns `None` when this input is remote.
@@ -100,16 +110,6 @@ impl FromStr for RequirementsInput {
             Ok(Self::Local(path))
         } else {
             Ok(Self::Remote(url))
-        }
-    }
-}
-
-impl std::fmt::Display for RequirementsInput {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Stdin => f.write_str("-"),
-            Self::Local(path) => path.user_display().fmt(f),
-            Self::Remote(url) => url.fmt(f),
         }
     }
 }

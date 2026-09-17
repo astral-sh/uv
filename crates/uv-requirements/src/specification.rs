@@ -285,7 +285,10 @@ impl RequirementsSpecification {
                         .await?;
 
                 if requirements_txt == RequirementsTxt::default() {
-                    warn_user!("Requirements file `{input}` does not contain any dependencies");
+                    warn_user!(
+                        "Requirements file `{}` does not contain any dependencies",
+                        input.user_display()
+                    );
                 }
 
                 Self::from_requirements_txt(requirements_txt)
@@ -325,7 +328,8 @@ impl RequirementsSpecification {
                     Ok(Some(script)) => script,
                     Ok(None) => {
                         return Err(anyhow::anyhow!(
-                            "`{input}` does not contain inline script metadata",
+                            "`{}` does not contain inline script metadata",
+                            input.user_display(),
                         ));
                     }
                     Err(err) => return Err(err.into()),
@@ -367,7 +371,8 @@ impl RequirementsSpecification {
             }
             RequirementsSource::EnvironmentYml(input) => {
                 return Err(anyhow::anyhow!(
-                    "Conda environment files (i.e., `{input}`) are not supported"
+                    "Conda environment files (i.e., `{}`) are not supported",
+                    input.user_display()
                 ));
             }
             RequirementsSource::Extensionless(input) => {
@@ -400,7 +405,8 @@ impl RequirementsSpecification {
                             }
                             RequirementsInput::Local(_) | RequirementsInput::Remote(_) => {
                                 warn_user!(
-                                    "Requirements file `{input}` does not contain any dependencies"
+                                    "Requirements file `{}` does not contain any dependencies",
+                                    input.user_display()
                                 );
                             }
                         }
@@ -433,7 +439,8 @@ impl RequirementsSpecification {
             }
         }) {
             return Err(anyhow::anyhow!(
-                "Cannot use `{pylock_toml}` as a constraint file"
+                "Cannot use `{}` as a constraint file",
+                pylock_toml.user_display()
             ));
         }
 
@@ -446,7 +453,8 @@ impl RequirementsSpecification {
             }
         }) {
             return Err(anyhow::anyhow!(
-                "Cannot use `{pylock_toml}` as an override file"
+                "Cannot use `{}` as an override file",
+                pylock_toml.user_display()
             ));
         }
 
@@ -459,7 +467,8 @@ impl RequirementsSpecification {
             }
         }) {
             return Err(anyhow::anyhow!(
-                "Cannot use `{pylock_toml}` as an exclude file"
+                "Cannot use `{}` as an exclude file",
+                pylock_toml.user_display()
             ));
         }
 
@@ -562,7 +571,9 @@ impl RequirementsSpecification {
             if let Some(pylock) = source.pylock {
                 if let Some(existing) = spec.pylock {
                     return Err(anyhow::anyhow!(
-                        "Multiple `pylock.toml` files specified: `{existing}` vs. `{pylock}`",
+                        "Multiple `pylock.toml` files specified: `{}` vs. `{}`",
+                        existing.user_display(),
+                        pylock.user_display(),
                     ));
                 }
                 spec.pylock = Some(pylock);

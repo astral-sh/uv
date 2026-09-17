@@ -71,7 +71,8 @@ impl RequirementsSource {
                 } else if extension.is_some_and(|extension| extension.eq_ignore_ascii_case("toml"))
                 {
                     Err(anyhow::anyhow!(
-                        "`{input}` is not a valid PEP 751 filename: expected `pylock.toml` or `pylock.<name>.toml`, where `<name>` is non-empty and contains no dots",
+                        "`{}` is not a valid PEP 751 filename: expected `pylock.toml` or `pylock.<name>.toml`, where `<name>` is non-empty and contains no dots",
+                        input.user_display(),
                     ))
                 } else if extension.is_some() {
                     Ok(Self::RequirementsTxt(input))
@@ -144,13 +145,15 @@ impl RequirementsSource {
         for file_name in ["pyproject.toml", "setup.py", "setup.cfg"] {
             if filename == Some(file_name) {
                 return Err(anyhow::anyhow!(
-                    "The file `{input}` appears to be a `{file_name}` file, but {kind} must be specified in `requirements.txt` format",
+                    "The file `{}` appears to be a `{file_name}` file, but {kind} must be specified in `requirements.txt` format",
+                    input.user_display(),
                 ));
             }
         }
         if filename.is_some_and(is_pylock_toml) {
             return Err(anyhow::anyhow!(
-                "The file `{input}` appears to be a `pylock.toml` file, but {kind} must be specified in `requirements.txt` format",
+                "The file `{}` appears to be a `pylock.toml` file, but {kind} must be specified in `requirements.txt` format",
+                input.user_display(),
             ));
         } else if filename
             .and_then(|filename| filename.rsplit_once('.'))
@@ -158,7 +161,8 @@ impl RequirementsSource {
             .is_some_and(|(_, extension)| extension.eq_ignore_ascii_case("toml"))
         {
             return Err(anyhow::anyhow!(
-                "The file `{input}` appears to be a TOML file, but {kind} must be specified in `requirements.txt` format",
+                "The file `{}` appears to be a TOML file, but {kind} must be specified in `requirements.txt` format",
+                input.user_display(),
             ));
         }
         Ok(Self::RequirementsTxt(input))
@@ -298,7 +302,7 @@ impl std::fmt::Display for RequirementsSource {
             | Self::RequirementsTxt(path)
             | Self::Pep723Script(path)
             | Self::EnvironmentYml(path)
-            | Self::Extensionless(path) => path.fmt(f),
+            | Self::Extensionless(path) => path.user_display().fmt(f),
             Self::PyprojectToml(path) | Self::SetupPy(path) | Self::SetupCfg(path) => {
                 path.display().fmt(f)
             }

@@ -240,7 +240,7 @@ impl RequirementsTxt {
     }
 
     /// See module level documentation
-    #[instrument(skip_all, fields(requirements_txt = %requirements_txt))]
+    #[instrument(skip_all, fields(requirements_txt = %requirements_txt.user_display()))]
     async fn parse_impl(
         requirements_txt: &RequirementsInput,
         working_dir: impl AsRef<Path>,
@@ -531,13 +531,13 @@ impl RequirementsTxt {
                         if flag.cli() {
                             uv_warnings::warn_user!(
                                 "Ignoring unsupported option in `{path}`: `{flag}` (hint: pass `{flag}` on the command line instead)",
-                                path = requirements_txt.to_string().cyan(),
+                                path = requirements_txt.user_display().cyan(),
                                 flag = flag.green()
                             );
                         } else {
                             uv_warnings::warn_user!(
                                 "Ignoring unsupported option in `{path}`: `{flag}`",
-                                path = requirements_txt.to_string().cyan(),
+                                path = requirements_txt.user_display().cyan(),
                                 flag = flag.green()
                             );
                         }
@@ -1306,44 +1306,34 @@ impl std::error::Error for RequirementsTxtParserError {
 
 impl Display for RequirementsTxtFileError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let file = self.file.user_display();
         match &self.error {
             RequirementsTxtParserError::Io(err) => err.fmt(f),
             RequirementsTxtParserError::Url { url, start, .. } => {
-                write!(
-                    f,
-                    "Invalid URL in `{}` at position {start}: `{url}`",
-                    self.file,
-                )
+                write!(f, "Invalid URL in `{file}` at position {start}: `{url}`")
             }
             RequirementsTxtParserError::FileUrl { url, start, .. } => {
                 write!(
                     f,
-                    "Invalid file URL in `{}` at position {start}: `{url}`",
-                    self.file,
+                    "Invalid file URL in `{file}` at position {start}: `{url}`",
                 )
             }
             RequirementsTxtParserError::RequirementsInput { source, start, .. } => {
                 write!(
                     f,
-                    "Invalid requirements input in `{}` at position {start}: {source}",
-                    self.file,
+                    "Invalid requirements input in `{file}` at position {start}: {source}",
                 )
             }
             RequirementsTxtParserError::VerbatimUrl { url, start, .. } => {
-                write!(
-                    f,
-                    "Invalid URL in `{}` at position {start}: `{url}`",
-                    self.file,
-                )
+                write!(f, "Invalid URL in `{file}` at position {start}: `{url}`")
             }
             RequirementsTxtParserError::UrlConversion(given) => {
-                write!(f, "Unable to convert URL to path `{}`: {given}", self.file)
+                write!(f, "Unable to convert URL to path `{file}`: {given}")
             }
             RequirementsTxtParserError::UnsupportedUrl(url) => {
                 write!(
                     f,
-                    "Unsupported URL (expected a `file://` scheme) in `{}`: `{url}`",
-                    self.file,
+                    "Unsupported URL (expected a `file://` scheme) in `{file}`: `{url}`",
                 )
             }
             RequirementsTxtParserError::NonEditable {
@@ -1351,36 +1341,31 @@ impl Display for RequirementsTxtFileError {
             } => {
                 write!(
                     f,
-                    "Unsupported editable requirement in `{}` at line {line}: `{requirement}`",
-                    self.file,
+                    "Unsupported editable requirement in `{file}` at line {line}: `{requirement}`",
                 )
             }
             RequirementsTxtParserError::MissingRequirementPrefix(given) => {
                 write!(
                     f,
-                    "Requirement `{given}` in `{}` looks like a requirements file but was passed as a package name. Did you mean `-r {given}`?",
-                    self.file,
+                    "Requirement `{given}` in `{file}` looks like a requirements file but was passed as a package name. Did you mean `-r {given}`?",
                 )
             }
             RequirementsTxtParserError::NoBinary { specifier, .. } => {
                 write!(
                     f,
-                    "Invalid specifier for `--no-binary` in `{}`: {specifier}",
-                    self.file,
+                    "Invalid specifier for `--no-binary` in `{file}`: {specifier}",
                 )
             }
             RequirementsTxtParserError::OnlyBinary { specifier, .. } => {
                 write!(
                     f,
-                    "Invalid specifier for `--only-binary` in `{}`: {specifier}",
-                    self.file,
+                    "Invalid specifier for `--only-binary` in `{file}`: {specifier}",
                 )
             }
             RequirementsTxtParserError::UnnamedConstraint { .. } => {
                 write!(
                     f,
-                    "Unnamed requirements are not allowed as constraints in `{}`",
-                    self.file,
+                    "Unnamed requirements are not allowed as constraints in `{file}`",
                 )
             }
             RequirementsTxtParserError::Parser {
@@ -1388,34 +1373,24 @@ impl Display for RequirementsTxtFileError {
                 line,
                 column,
             } => {
-                write!(f, "{message} at {}:{line}:{column}", self.file)
+                write!(f, "{message} at {file}:{line}:{column}")
             }
             RequirementsTxtParserError::UnsupportedRequirement { start, .. } => {
-                write!(
-                    f,
-                    "Unsupported requirement in {} at position {start}",
-                    self.file,
-                )
+                write!(f, "Unsupported requirement in {file} at position {start}")
             }
             RequirementsTxtParserError::Pep508 { start, .. } => {
                 write!(
                     f,
-                    "Couldn't parse requirement in `{}` at position {start}",
-                    self.file,
+                    "Couldn't parse requirement in `{file}` at position {start}",
                 )
             }
             RequirementsTxtParserError::ParsedUrl { start, .. } => {
-                write!(
-                    f,
-                    "Couldn't parse URL in `{}` at position {start}",
-                    self.file,
-                )
+                write!(f, "Couldn't parse URL in `{file}` at position {start}")
             }
             RequirementsTxtParserError::Subfile { start, .. } => {
                 write!(
                     f,
-                    "Error parsing included file in `{}` at position {start}",
-                    self.file,
+                    "Error parsing included file in `{file}` at position {start}",
                 )
             }
             #[cfg(feature = "http")]
