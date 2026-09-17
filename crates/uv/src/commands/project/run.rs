@@ -92,6 +92,7 @@ pub(crate) async fn run(
     script: Option<Pep723Item>,
     command: Option<RunCommand>,
     requirements: Vec<RequirementsSource>,
+    overrides: Vec<RequirementsSource>,
     show_resolution: bool,
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,
@@ -726,7 +727,7 @@ pub(crate) async fn run(
 
                 // If we're not syncing, we should still attempt to respect the locked preferences
                 // in any `--with` requirements.
-                if !isolated && !requirements.is_empty() {
+                if !isolated && (!requirements.is_empty() || !overrides.is_empty()) {
                     base_lock = LockTarget::from(project.workspace())
                         .read()
                         .await
@@ -948,11 +949,18 @@ pub(crate) async fn run(
     );
 
     // Read the requirements.
-    let spec = if requirements.is_empty() {
+    let spec = if requirements.is_empty() && overrides.is_empty() {
         None
     } else {
-        let spec =
-            RequirementsSpecification::from_simple_sources(&requirements, &client_builder).await?;
+        let spec = RequirementsSpecification::from_sources(
+            &requirements,
+            &[],
+            &overrides,
+            &[],
+            None,
+            &client_builder,
+        )
+        .await?;
 
         Some(spec)
     };

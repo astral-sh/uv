@@ -3622,6 +3622,27 @@ pub struct RunArgs {
     #[arg(long, value_delimiter = ',', value_parser = parse_maybe_file_path, value_hint = ValueHint::FilePath)]
     pub with_requirements: Vec<Maybe<PathBuf>>,
 
+    /// Override versions using the given requirements files.
+    ///
+    /// Overrides files are `requirements.txt`-like files that force a specific version of a
+    /// requirement to be installed, regardless of the requirements declared by any constituent
+    /// package, and regardless of whether this would be considered an invalid resolution.
+    ///
+    /// While constraints are _additive_, in that they're combined with the requirements of the
+    /// constituent packages, overrides are _absolute_, in that they completely replace the
+    /// requirements of the constituent packages.
+    ///
+    /// The same environment semantics as `--with` apply.
+    #[arg(
+        long,
+        alias = "override",
+        env = EnvVars::UV_OVERRIDE,
+        value_delimiter = ' ',
+        value_parser = parse_maybe_file_path,
+        value_hint = ValueHint::FilePath,
+    )]
+    pub overrides: Vec<Maybe<PathBuf>>,
+
     /// Run the command in an isolated virtual environment [env: UV_ISOLATED=]
     ///
     /// Usually, the project environment is reused for performance. This option forces a fresh

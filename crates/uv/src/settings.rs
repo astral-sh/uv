@@ -769,6 +769,7 @@ pub(crate) struct RunSettings {
     pub(crate) with: Vec<String>,
     pub(crate) with_editable: Vec<String>,
     pub(crate) with_requirements: Vec<PathBuf>,
+    pub(crate) overrides: Vec<PathBuf>,
     pub(crate) isolated: bool,
     pub(crate) show_resolution: bool,
     pub(crate) all_packages: bool,
@@ -829,6 +830,7 @@ impl RunSettings {
             with,
             with_editable,
             with_requirements,
+            overrides,
             isolated,
             active,
             no_active,
@@ -928,6 +930,10 @@ impl RunSettings {
                 .flat_map(CommaSeparatedRequirements::into_iter)
                 .collect(),
             with_requirements: with_requirements
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
+            overrides: overrides
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
