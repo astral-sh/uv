@@ -222,11 +222,12 @@ impl<T> UrlTrie<T> {
     }
 
     fn get(&self, url: &Url) -> Option<&T> {
+        let segments = url.path_segments()?;
         let mut state = 0;
         let realm = Realm::from(url).to_string();
         for component in [realm.as_str()]
             .into_iter()
-            .chain(url.path_segments().unwrap().filter(|item| !item.is_empty()))
+            .chain(segments.filter(|item| !item.is_empty()))
         {
             state = self.states[state].get(component)?;
             if let Some(ref value) = self.states[state].value {
@@ -237,11 +238,15 @@ impl<T> UrlTrie<T> {
     }
 
     fn insert(&mut self, url: &Url, value: T) {
+        // Opaque URLs have no path hierarchy for prefix matching.
+        let Some(segments) = url.path_segments() else {
+            return;
+        };
         let mut state = 0;
         let realm = Realm::from(url).to_string();
         for component in [realm.as_str()]
             .into_iter()
-            .chain(url.path_segments().unwrap().filter(|item| !item.is_empty()))
+            .chain(segments.filter(|item| !item.is_empty()))
         {
             match self.states[state].index(component) {
                 Ok(i) => state = self.states[state].children[i].1,
@@ -278,6 +283,8 @@ impl<T> TrieState<T> {
 
 #[cfg(test)]
 mod tests {
+    use url::ParseError;
+
     use crate::Credentials;
     use crate::credentials::Password;
 
@@ -344,6 +351,27 @@ mod tests {
 
         let url = Url::parse("https://example.com/foobar").unwrap();
         assert_eq!(trie.get(&url), None);
+    }
+
+    #[test]
+    fn test_trie_opaque_url() -> Result<(), ParseError> {
+        let mut trie = UrlTrie::new();
+        let url = Url::parse("git+https:foo")?;
+        let credentials =
+            Credentials::basic(Some("username".to_string()), Some("password".to_string()));
+
+        assert_eq!(trie.get(&url), None);
+        trie.insert(&url, credentials.clone());
+        assert_eq!(trie.get(&url), None);
+
+        // Opaque URLs must not share credentials with hierarchical URLs in the same realm.
+        let base_url = Url::parse("git+https:/")?;
+        assert_eq!(trie.get(&base_url), None);
+        trie.insert(&base_url, credentials.clone());
+        assert_eq!(trie.get(&url), None);
+        assert_eq!(trie.get(&base_url), Some(&credentials));
+
+        Ok(())
     }
 
     #[test]
