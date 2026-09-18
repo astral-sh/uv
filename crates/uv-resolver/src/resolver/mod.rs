@@ -1472,9 +1472,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         requests: &'index MetadataRequests,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
         // This only applies to universal resolutions.
-        if env.marker_environment().is_some() {
+        let Some(fork_markers) = env.fork_markers() else {
             return Ok(None);
-        }
+        };
 
         // If the package is already compatible with all environments (as is the case for
         // packages that include a source distribution), we don't need to fork.
@@ -1491,11 +1491,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 if !env.included_by_marker(dist.implied_markers().and(marker))
                     && env.included_by_marker(find_environments(id, pubgrub).and(marker))
                 {
-                    // Separate the required environment from the candidate's wheel coverage,
-                    // allowing environments in neither set to fall on either side. For example,
-                    // Darwin == 24 becomes Darwin < 25 when the wheels require Darwin >= 25.
-                    // This avoids introducing forks for unrelated wheel tags.
-                    let split = marker.restrict(marker.or(dist.implied_markers()));
+                    // Separate the required environment from the candidate's wheel coverage in
+                    // this fork, allowing environments in neither set to fall on either side.
+                    // For example, Darwin == 24 becomes Darwin < 25 when the wheels require
+                    // Darwin >= 25. This avoids introducing forks for unrelated wheel tags.
+                    let coverage = dist.implied_markers().and(fork_markers);
+                    let split = marker.restrict(marker.or(coverage));
                     let Some((left, right)) = fork_version_by_marker(env, split) else {
                         return Ok(Some(ResolverVersion::Unavailable(
                             candidate.version().clone(),

@@ -42653,6 +42653,125 @@ fn lock_required_environment_macos_release() -> Result<()> {
     Ok(())
 }
 
+/// Wheels for another Python version must not determine the Darwin release split in this fork.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_required_environment_macos_release_python_fork() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "required-environment-macos-release-python-fork"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.a.versions."1.0.0"]
+        sdist = false
+        wheel_tags = ["cp312-cp312-macosx_14_0_arm64", "cp313-cp313-macosx_14_0_arm64"]
+
+        [packages.a.versions."2.0.0"]
+        sdist = false
+        wheel_tags = ["cp312-cp312-macosx_14_0_arm64", "cp313-cp313-macosx_26_0_arm64"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12").with_filters(
+        server
+            .files()
+            .map(|(filename, hash)| (hash.to_owned(), format!("[SHA256:{filename}]"))),
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12,<3.14"
+        dependencies = ["a"]
+
+        [tool.uv]
+        environments = [
+            "sys_platform == 'darwin' and platform_machine == 'arm64' and python_version < '3.13'",
+            "sys_platform == 'darwin' and platform_machine == 'arm64' and python_version >= '3.13'",
+        ]
+        required-environments = ["sys_platform == 'darwin' and platform_machine == 'arm64' and platform_release == '24.0.0'"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12, <3.14"
+        resolution-markers = [
+            "python_full_version >= '3.13' and platform_machine == 'arm64' and platform_release >= '25' and sys_platform == 'darwin'",
+            "python_full_version >= '3.13' and platform_machine == 'arm64' and platform_release < '25' and sys_platform == 'darwin'",
+            "python_full_version < '3.13' and platform_machine == 'arm64' and sys_platform == 'darwin'",
+        ]
+        supported-markers = [
+            "python_full_version < '3.13' and platform_machine == 'arm64' and sys_platform == 'darwin'",
+            "python_full_version >= '3.13' and platform_machine == 'arm64' and sys_platform == 'darwin'",
+        ]
+        required-markers = [
+            "platform_machine == 'arm64' and platform_release == '24' and sys_platform == 'darwin'",
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "python_full_version >= '3.13' and platform_machine == 'arm64' and platform_release < '25' and sys_platform == 'darwin'",
+        ]
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-cp312-cp312-macosx_14_0_arm64.whl", hash = "sha256:[SHA256:a-1.0.0-cp312-cp312-macosx_14_0_arm64.whl]", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/a-1.0.0-cp313-cp313-macosx_14_0_arm64.whl", hash = "sha256:[SHA256:a-1.0.0-cp313-cp313-macosx_14_0_arm64.whl]", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "a"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "python_full_version >= '3.13' and platform_machine == 'arm64' and platform_release >= '25' and sys_platform == 'darwin'",
+            "python_full_version < '3.13' and platform_machine == 'arm64' and sys_platform == 'darwin'",
+        ]
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-2.0.0-cp312-cp312-macosx_14_0_arm64.whl", hash = "sha256:[SHA256:a-2.0.0-cp312-cp312-macosx_14_0_arm64.whl]", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/a-2.0.0-cp313-cp313-macosx_26_0_arm64.whl", hash = "sha256:[SHA256:a-2.0.0-cp313-cp313-macosx_26_0_arm64.whl]", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "python_full_version >= '3.13' and platform_release < '25'" },
+            { name = "a", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "python_full_version < '3.13' or platform_release >= '25'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "a" }]
+        "#);
+    });
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// A direct wheel must support the required platform within the current architecture fork.
 #[cfg(feature = "test-universal")]
 #[test]
