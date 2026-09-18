@@ -93,16 +93,14 @@ from sigstore.sign import SigningContext
 TEST_PYPI_PUBLISH_URL = "https://test.pypi.org/legacy/"
 TEST_PYPI_INDEX_URL = "https://test.pypi.org/simple/"
 PYTHON_VERSION = os.environ.get("UV_TEST_PUBLISH_PYTHON_VERSION", "3.12")
-# `pyproject.toml` contents using all supported metadata fields, except for the
-# generated header with `[project]`, name and version.
-PYPROJECT_TAIL = """
+# Static `pyproject.toml` contents using all supported metadata fields.
+PYPROJECT_METADATA = """
 authors = [{ name = "konstin", email = "konstin@mailbox.org" }]
 classifiers = ["Topic :: Software Development :: Testing"]
 # Empty for simplicity with the `uv compile` check, anyio still tests,
 # optional-dependencies still test the `Requires-Dist` field.
 dependencies = []
 description = "Add your description here"
-dynamic = ["gui-scripts", "scripts"]
 keywords = ["test", "publish"]
 license = "MIT OR Apache-2.0"
 license-files = ["LICENSE*"]
@@ -112,10 +110,9 @@ readme = "README.md"
 requires-python = ">=3.12"
 urls = { "github" = "https://github.com/astral-sh/uv" }
 
-# https://github.com/pypa/hatch/issues/1828
 [build-system]
-requires = ["pdm-backend"]
-build-backend = "pdm.backend"
+requires = ["uv_build>=0.12,<0.13"]
+build-backend = "uv_build"
 """.lstrip()
 
 SCRIPT_DIR = Path(__file__).parent
@@ -576,7 +573,7 @@ class PublishTest:
             "[project]\n"
             + f'name = "{project_name}"\n'
             + f'version = "{version}"\n'
-            + PYPROJECT_TAIL
+            + PYPROJECT_METADATA
         )
         project_root.joinpath("pyproject.toml").write_text(toml)
         shutil.copy(
@@ -594,16 +591,7 @@ class PublishTest:
             )
             init_py.write_text("x = 1")
 
-        self.session.run_command(
-            [
-                self.session.uv,
-                "build",
-                "--build-constraint",
-                SCRIPT_DIR / "build-requirements.txt",
-                "--require-hashes",
-            ],
-            cwd=project_root,
-        )
+        self.session.run_command([self.session.uv, "build"], cwd=project_root)
         # Publication-only indexes must not participate in building fixtures.
         if index_declaration := self.target.index_declaration():
             project_root.joinpath("pyproject.toml").write_text(toml + index_declaration)
