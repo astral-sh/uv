@@ -10,7 +10,6 @@ authors = { workspace = true }
 license = { workspace = true }
 
 [lib]
-doctest = false
 test = false
 
 [lints]

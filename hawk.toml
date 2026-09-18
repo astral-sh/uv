@@ -15,6 +15,9 @@ reason = "developer binary shipped from this workspace"
 # Keep this list in sync with workspace packages that define doctests.
 
 [[doctest]]
+package = "uv-once-map"
+
+[[doctest]]
 package = "uv-pep440"
 
 [[doctest]]

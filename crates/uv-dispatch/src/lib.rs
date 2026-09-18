@@ -714,6 +714,12 @@ impl SharedState {
         &self.index
     }
 
+    /// Return mutable access to the index owner. Removing cached entries additionally requires
+    /// exclusive access to the index's shared storage.
+    pub fn index_mut(&mut self) -> &mut InMemoryIndex {
+        &mut self.index
+    }
+
     /// Return the [`InFlight`] used by the [`SharedState`].
     pub fn in_flight(&self) -> &InFlight {
         &self.in_flight

@@ -75,7 +75,8 @@ pub use crate::resolver::provider::{
     VersionsResponse, WheelMetadataResult,
 };
 pub use crate::resolver::reporter::Reporter;
-use crate::resolver::requests::MetadataRequests;
+pub(crate) use crate::resolver::requests::RegisteredMetadata;
+use crate::resolver::requests::{MetadataRequest, MetadataRequests};
 use crate::resolver::requirements::{RequirementContext, RequirementExpander};
 use crate::resolver::system::SystemDependency;
 pub(crate) use crate::resolver::urls::Urls;
@@ -658,11 +659,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     next_package,
                     &version,
                     &state.pins,
-                    &state.fork_urls,
                     &state.env,
                     &state.python_requirement,
                     &state.pubgrub,
-                    requests,
                 )?;
 
                 match forked_deps {
@@ -869,14 +868,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     }
 
     /// Convert the dependency [`Fork`]s into [`ForkState`]s.
-    fn forks_to_fork_states<'a>(
+    fn forks_to_fork_states<'a, 'index: 'a>(
         &'a self,
-        current_state: ForkState,
+        current_state: ForkState<'index>,
         version: &'a Version,
         forks: Vec<Fork>,
         requests: &'a MetadataRequests,
         diverging_packages: &'a BTreeSet<PackageName>,
-    ) -> impl Iterator<Item = Result<ForkState, ResolveError>> + 'a {
+    ) -> impl Iterator<Item = Result<ForkState<'index>, ResolveError>> + 'a {
         debug!(
             "Splitting resolution on {}=={} over {} into {} resolution{} with separate markers",
             current_state.pubgrub.package_store[current_state.next],
@@ -948,11 +947,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
     /// Convert the dependency [`Fork`]s into [`ForkState`]s.
     #[expect(clippy::unused_self)]
-    fn version_forks_to_fork_states(
+    fn version_forks_to_fork_states<'index>(
         &self,
-        current_state: ForkState,
+        current_state: ForkState<'index>,
         forks: Vec<VersionFork>,
-    ) -> impl Iterator<Item = ForkState> + '_ {
+    ) -> impl Iterator<Item = ForkState<'index>> {
         // This is a somewhat tortured technique to ensure
         // that our resolver state is only cloned as much
         // as it needs to be. We basically move the state
@@ -1026,10 +1025,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                 // Emit a request to fetch the metadata for this distribution.
                 let dist = Dist::from_url(name.clone(), url.clone())?;
-                requests.request_metadata(dist.distribution_id(), || Ok(Request::Dist(dist)))?;
+                requests.enqueue_metadata(MetadataRequest::Dist(dist))?;
             }
             PackageSource::Registry(index) => {
-                requests.request_package(name, index)?;
+                requests.enqueue_package(name, index)?;
             }
         }
         Ok(())
@@ -1090,19 +1089,19 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     // tracing-durations-export diagrams, but it took ~5% resolver thread runtime for apache-airflow
     // when I last measured.
     #[cfg_attr(feature = "tracing-durations-export", instrument(skip_all, fields(%package)))]
-    fn choose_version(
+    fn choose_version<'index>(
         &self,
         package: &PubGrubPackage,
         id: Id<PubGrubPackage>,
         source: PackageSource<'_>,
         range: &Range<Version>,
-        pins: &mut FilePins,
+        pins: &mut FilePins<'index>,
         preferences: &Preferences,
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
         visited: &mut FxHashSet<PackageName>,
-        requests: &MetadataRequests,
+        requests: &'index MetadataRequests,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
         match &**package {
             PubGrubPackageInner::Root(_) => {
@@ -1136,13 +1135,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     env,
                     python_requirement,
                     pubgrub,
+                    pins,
                     requests,
                 ),
                 PackageSource::Registry(index) => self.choose_version_registry(
                     package,
                     id,
                     name,
-                    index.map(IndexMetadata::url),
+                    index,
                     range,
                     preferences,
                     env,
@@ -1158,7 +1158,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
     /// Select a version for a URL requirement. Since there is only one version per URL, we return
     /// that version if it is in range and `None` otherwise.
-    fn choose_version_url(
+    fn choose_version_url<'index>(
         &self,
         id: Id<PubGrubPackage>,
         name: &PackageName,
@@ -1167,7 +1167,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
-        requests: &MetadataRequests,
+        pins: &mut FilePins<'index>,
+        requests: &'index MetadataRequests,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
         debug!(
             "Searching for a compatible version of {name} @ {} ({range})",
@@ -1175,8 +1176,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         );
 
         let dist = Dist::from_url(name.clone(), url.clone())?;
-        let distribution_id = dist.distribution_id();
-        let response = requests.wait_for_metadata(&distribution_id, || dist.to_string())?;
+        let registered = requests.metadata(&dist)?;
+        let response = registered.wait();
 
         // If we failed to fetch the metadata for a URL, we can't proceed.
         let metadata = match &*response {
@@ -1271,28 +1272,30 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
         }
 
+        pins.insert_url(name, version, registered);
         Ok(Some(ResolverVersion::Unforked(version.clone())))
     }
 
     /// Given a candidate registry requirement, choose the next version in range to try, or `None`
     /// if there is no version in this range.
-    fn choose_version_registry(
+    fn choose_version_registry<'index>(
         &self,
         package: &PubGrubPackage,
         id: Id<PubGrubPackage>,
         name: &PackageName,
-        index: Option<&IndexUrl>,
+        index: Option<&IndexMetadata>,
         range: &Range<Version>,
         preferences: &Preferences,
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
-        pins: &mut FilePins,
+        pins: &mut FilePins<'index>,
         visited: &mut FxHashSet<PackageName>,
-        requests: &MetadataRequests,
+        requests: &'index MetadataRequests,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
         // Wait for the metadata to be available.
-        let versions_response = requests.wait_for_versions(name, index)?;
+        let versions_response = requests.request_package(name, index)?.wait();
+        let index = index.map(IndexMetadata::url);
         visited.insert(name.clone());
 
         let version_maps = match *versions_response {
@@ -1448,7 +1451,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     /// 2. Platforms that the user explicitly marks as "required" (opt-in). For example, the user
     ///    might require that the generated resolution always includes wheels for x86 macOS, and
     ///    fails entirely if the platform is unsupported.
-    fn fork_version_registry(
+    fn fork_version_registry<'index>(
         &self,
         candidate: &Candidate,
         dist: &CompatibleDist,
@@ -1461,8 +1464,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         preferences: &Preferences,
         env: &ResolverEnvironment,
         pubgrub: &State<UvDependencyProvider>,
-        pins: &mut FilePins,
-        requests: &MetadataRequests,
+        pins: &mut FilePins<'index>,
+        requests: &'index MetadataRequests,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
         // This only applies to universal resolutions.
         if env.marker_environment().is_some() {
@@ -1658,45 +1661,44 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     }
 
     /// Visit a selected candidate.
-    fn visit_candidate(
+    fn visit_candidate<'index>(
         &self,
         candidate: &Candidate,
         dist: &CompatibleDist,
         package: &PubGrubPackage,
         name: &PackageName,
-        pins: &mut FilePins,
-        requests: &MetadataRequests,
+        pins: &mut FilePins<'index>,
+        requests: &'index MetadataRequests,
     ) -> Result<(), ResolveError> {
-        // We want to return a package pinned to a specific version; but we _also_ want to
-        // store the exact file that we selected to satisfy that version.
-        pins.insert(candidate, dist);
-
-        // Emit a request to fetch the metadata for this version.
-        if matches!(&**package, PubGrubPackageInner::Package { .. }) {
-            if self.dependency_mode.is_transitive() {
-                let dist = dist.for_resolution();
-                requests.request_metadata(dist.distribution_id(), || {
-                    if name != dist.name() {
-                        return Err(ResolveError::MismatchedPackageName {
-                            request: "distribution",
-                            expected: name.clone(),
-                            actual: dist.name().clone(),
-                        });
-                    }
-                    // Verify that the package is allowed under the hash-checking policy.
-                    if !self
-                        .hasher
-                        .allows_package(candidate.name(), candidate.version())
-                    {
-                        return Err(ResolveError::UnhashedPackage(candidate.name().clone()));
-                    }
-
-                    Ok(Request::from(dist))
-                })?;
-            }
-        }
-
-        Ok(())
+        let request = if matches!(&**package, PubGrubPackageInner::Package { .. })
+            && self.dependency_mode.is_transitive()
+        {
+            Some(|| {
+                requests.request_metadata(
+                    MetadataRequest::Resolved(dist.for_resolution()),
+                    |request| {
+                        if name != request.name() {
+                            return Err(ResolveError::MismatchedPackageName {
+                                request: "distribution",
+                                expected: name.clone(),
+                                actual: request.name().clone(),
+                            });
+                        }
+                        // Verify that the package is allowed under the hash-checking policy.
+                        if !self
+                            .hasher
+                            .allows_package(candidate.name(), candidate.version())
+                        {
+                            return Err(ResolveError::UnhashedPackage(candidate.name().clone()));
+                        }
+                        Ok(())
+                    },
+                )
+            })
+        } else {
+            None
+        };
+        pins.insert(candidate, dist, request)
     }
 
     /// Check if the distribution is incompatible with the Python requirement, and if so, return
@@ -1739,23 +1741,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         package: &PubGrubPackage,
         version: &Version,
         pins: &FilePins,
-        fork_urls: &ForkUrls,
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
-        requests: &MetadataRequests,
     ) -> Result<ForkedDependencies, ResolveError> {
-        let dependencies = self.get_dependencies(
-            id,
-            package,
-            version,
-            pins,
-            fork_urls,
-            env,
-            python_requirement,
-            pubgrub,
-            requests,
-        )?;
+        let dependencies =
+            self.get_dependencies(id, package, version, pins, env, python_requirement, pubgrub)?;
         if env.marker_environment().is_some() {
             Ok(ForkedDependencies::from_dependencies_platform_specific(
                 dependencies,
@@ -1778,11 +1769,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         package: &PubGrubPackage,
         version: &Version,
         pins: &FilePins,
-        fork_urls: &ForkUrls,
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
-        requests: &MetadataRequests,
     ) -> Result<Dependencies, ResolveError> {
         let expander = RequirementExpander::new(
             &self.constraints,
@@ -1813,23 +1802,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     return Ok(Dependencies::Unforkable(Vec::default()));
                 }
 
-                // Look up the distribution ID from the pins (common case) or fork URLs.
-                let owned_id;
-                let distribution_id = if let Some((_, metadata_id)) =
-                    pins.dist_and_id(name, version)
-                {
-                    metadata_id
-                } else if let Some(url) = fork_urls.get(name) {
-                    let dist = Dist::from_url(name.clone(), url.clone())?;
-                    owned_id = dist.distribution_id();
-                    &owned_id
-                } else {
-                    debug_assert!(
-                        false,
-                        "Dependencies were requested for a package without a pinned distribution"
-                    );
-                    return Err(ResolveError::UnregisteredTask(format!("{name}=={version}")));
-                };
+                let registered = pins
+                    .metadata(name, version)
+                    .ok_or_else(|| ResolveError::UnregisteredTask(format!("{name}=={version}")))?;
 
                 // If the package does not exist in the registry or locally, we cannot fetch its dependencies
                 if self.dependency_mode.is_transitive()
@@ -1844,8 +1819,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
 
                 // Wait for the metadata to be available.
-                let response =
-                    requests.wait_for_metadata(distribution_id, || format!("{name}=={version}"))?;
+                let response = registered.wait();
 
                 let metadata = match &*response {
                     MetadataResponse::Found(archive) => &archive.metadata,
@@ -2193,9 +2167,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 let versions_response = self
                     .index
                     .implicit()
-                    .wait(&package_name)
-                    .await
-                    .map_err(|_| ResolveError::UnregisteredTask(package_name.to_string()))?;
+                    .get_registered(package_name.clone())
+                    .ok_or_else(|| ResolveError::UnregisteredTask(package_name.to_string()))?
+                    .wait()
+                    .await;
 
                 let version_map = match *versions_response {
                     VersionsResponse::Found(ref version_map) => version_map,
@@ -2615,7 +2590,7 @@ enum ForkContinuation {
 
 /// State that is used during unit propagation in the resolver, one instance per fork.
 #[derive(Clone)]
-pub(crate) struct ForkState {
+pub(crate) struct ForkState<'index> {
     /// The internal state used by the resolver.
     ///
     /// Note that not all parts of this state are strictly internal. For
@@ -2636,7 +2611,7 @@ pub(crate) struct ForkState {
     /// concrete distribution whose metadata was used during resolution.
     /// After resolution is finished, this map is consulted to recover both the
     /// locked artifact and the metadata backing the resolved dependency edges.
-    pins: FilePins,
+    pins: FilePins<'index>,
     /// Ensure we don't have duplicate URLs in any branch.
     ///
     /// Unlike [`Urls`], we add only the URLs we have seen in this branch, and there can be only
@@ -2700,7 +2675,7 @@ pub(crate) struct ForkState {
     prefetcher: BatchPrefetcher,
 }
 
-impl ForkState {
+impl<'index> ForkState<'index> {
     fn new(
         pubgrub: State<UvDependencyProvider>,
         env: ResolverEnvironment,
@@ -3107,7 +3082,7 @@ impl ForkState {
         (url, index)
     }
 
-    fn into_resolution(self) -> Resolution {
+    fn into_resolution(self) -> Resolution<'index> {
         let solution: FxHashMap<_, _> = self.pubgrub.partial_solution.extract_solution().collect();
         let edge_count: usize = solution
             .keys()

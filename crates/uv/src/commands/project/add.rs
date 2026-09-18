@@ -6,7 +6,7 @@ use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
@@ -1069,7 +1069,7 @@ async fn lock_and_sync(
     mut target: AddTarget,
     toml: &mut PyProjectTomlMut,
     edits: &[DependencyEdit],
-    lock_state: UniversalState,
+    mut lock_state: UniversalState,
     sync_state: PlatformState,
     lock_check: LockCheck,
     no_install_project: bool,
@@ -1214,7 +1214,11 @@ async fn lock_and_sync(
                 let url = DisplaySafeUrl::from_file_path(project.project_root())
                     .expect("project root is a valid URL");
                 let distribution_id = url.distribution_id();
-                let existing = lock_state.index().distributions().remove(&distribution_id);
+                let existing = lock_state
+                    .index_mut()
+                    .distributions_mut()
+                    .context("Cannot invalidate project metadata while the cache is in use")?
+                    .remove(&distribution_id);
                 // TODO: Allow an absent entry after reusing a metadata-free lock.
                 debug_assert!(existing.is_some(), "distribution should exist");
             }
