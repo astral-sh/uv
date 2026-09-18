@@ -80,7 +80,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from subprocess import CalledProcessError, CompletedProcess, check_call, run
 from tempfile import SpooledTemporaryFile, TemporaryDirectory, gettempdir
-from typing import TextIO
+from typing import IO
 
 import httpx
 from keyrings.alt.file import PlaintextKeyring
@@ -261,7 +261,7 @@ class TargetSession:
         self._previous_handlers: list[logging.Handler] = []
         self._previous_level = self._root_logger.level
         self._handler: logging.Handler | None = None
-        self.output: TextIO
+        self.output: IO[str]
 
     def __enter__(self):
         self.output = self._output_stack.enter_context(
