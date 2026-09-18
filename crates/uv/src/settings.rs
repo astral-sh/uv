@@ -25,8 +25,8 @@ use uv_cli::{
 };
 use uv_cli::{
     AuthorFrom, BuildArgs, BuildOptionsArgs, CheckArgs, ExcludeNewerArgs, ExportArgs, FormatArgs,
-    HashCheckingArgs, PackageExcludeNewerArgs, PublishArgs, PythonDirArgs, RegistryClientArgs,
-    ResolverArgs, ResolverInstallerArgs, ToolUpgradeArgs,
+    HashCheckingArgs, PackageExcludeNewerArgs, PublishArgs, PublishOutputFormat, PythonDirArgs,
+    RegistryClientArgs, ResolverArgs, ResolverInstallerArgs, ToolUpgradeArgs,
     options::{
         Flag, FlagSource, IntoPipOptions, check_conflicts, flag, resolve_flag, resolve_flag_pair,
         resolver_installer_options, resolver_options, upgrade_options,
@@ -5270,6 +5270,7 @@ pub(crate) struct PublishSettings {
     pub(crate) username: Option<String>,
     pub(crate) password: Option<String>,
     pub(crate) index: Option<String>,
+    pub(crate) output_format: PublishOutputFormat,
     pub(crate) dry_run: bool,
     pub(crate) no_attestations: bool,
 
@@ -5290,6 +5291,7 @@ impl fmt::Debug for PublishSettings {
             .field("username", &self.username)
             .field("password", &self.password.as_ref().map(|_| "****"))
             .field("index", &self.index)
+            .field("output_format", &self.output_format)
             .field("dry_run", &self.dry_run)
             .field("no_attestations", &self.no_attestations)
             .field("publish_url", &self.publish_url)
@@ -5334,6 +5336,7 @@ impl PublishSettings {
             files: args.files,
             username,
             password,
+            output_format: args.output_format,
             dry_run: args.dry_run,
             no_attestations: args.no_attestations,
             publish_url: args
