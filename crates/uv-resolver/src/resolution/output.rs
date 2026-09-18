@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, hash_map::Entry};
 
 use petgraph::{
     Directed, Direction,
@@ -22,20 +22,14 @@ use crate::preferences::Preferences;
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode, ResolverOutput};
 use crate::resolution_mode::ResolutionStrategy;
 use crate::resolver::{
-    ResolutionDependencyEdge, ResolutionPackage, ResolvedFork, SelectedDistribution,
+    ResolutionDependencyEdge, ResolutionNode, ResolutionPackage, ResolvedFork, SelectedDistribution,
 };
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::{InMemoryIndex, MetadataResponse, Options, ResolveError, VersionsResponse};
 
-#[derive(Debug, Eq, PartialEq, Hash)]
-struct PackageRef<'a> {
-    package: &'a ResolutionPackage,
-    version: &'a Version,
-}
-
 /// Create a new [`ResolverOutput`] from the resolved PubGrub state.
 pub(crate) fn from_state(
-    resolutions: &[ResolvedFork],
+    mut resolutions: Vec<ResolvedFork>,
     project: Option<&PackageName>,
     workspace_members: &BTreeSet<PackageName>,
     requirements: Vec<Requirement>,
@@ -52,25 +46,27 @@ pub(crate) fn from_state(
     let size_guess = resolutions[0].nodes.len();
     let mut graph: Graph<ResolutionGraphNode, UniversalMarker, Directed> =
         Graph::with_capacity(size_guess, size_guess);
-    let mut inverse: FxHashMap<PackageRef, NodeIndex<u32>> =
+    let mut inverse: FxHashMap<ResolutionNode, NodeIndex<u32>> =
         FxHashMap::with_capacity_and_hasher(size_guess, FxBuildHasher);
     let mut diagnostics = Vec::new();
 
     // Add the root node.
     let root_index = graph.add_node(ResolutionGraphNode::Root);
 
-    let mut seen = FxHashSet::default();
-    for resolution in resolutions {
+    for resolution in &mut resolutions {
         // Add every package to the graph.
-        for (package, selected) in &resolution.nodes {
-            let version = selected.version();
-            if !seen.insert((package, version)) {
+        for (package, selected) in resolution.nodes.drain(..) {
+            let node = ResolutionNode {
+                package,
+                version: selected.version().clone(),
+            };
+            let Entry::Vacant(entry) = inverse.entry(node) else {
                 // Insert each node only once.
                 continue;
-            }
-            add_version(
+            };
+            let package = &entry.key().package;
+            let node = add_version(
                 &mut graph,
-                &mut inverse,
                 &mut diagnostics,
                 preferences,
                 hasher,
@@ -79,11 +75,12 @@ pub(crate) fn from_state(
                 selected,
                 project == Some(&package.name) || workspace_members.contains(&package.name),
             );
+            entry.insert(node);
         }
     }
 
     let mut seen = FxHashSet::default();
-    for resolution in resolutions {
+    for resolution in &resolutions {
         let marker = resolution.env.try_universal_markers().unwrap_or_default();
 
         // Add every edge to the graph, propagating the marker for the current fork, if
@@ -94,11 +91,11 @@ pub(crate) fn from_state(
                 continue;
             }
 
-            add_edge(&mut graph, &mut inverse, root_index, edge, marker);
+            add_edge(&mut graph, &inverse, root_index, edge, marker);
         }
     }
 
-    let fork_markers: Vec<UniversalMarker> = if let [resolution] = resolutions {
+    let fork_markers: Vec<UniversalMarker> = if let [resolution] = resolutions.as_slice() {
         // In the case of a singleton marker, we only include it if it's not
         // always true. Otherwise, we keep our `fork_markers` empty as there
         // are no forks.
@@ -194,21 +191,13 @@ pub(crate) fn from_state(
 
 fn add_edge(
     graph: &mut Graph<ResolutionGraphNode, UniversalMarker>,
-    inverse: &mut FxHashMap<PackageRef<'_>, NodeIndex>,
+    inverse: &FxHashMap<ResolutionNode, NodeIndex>,
     root_index: NodeIndex,
     edge: &ResolutionDependencyEdge,
     marker: UniversalMarker,
 ) {
-    let from_index = edge.from.as_ref().map_or(root_index, |from| {
-        inverse[&PackageRef {
-            package: &from.package,
-            version: &from.version,
-        }]
-    });
-    let to_index = inverse[&PackageRef {
-        package: &edge.to.package,
-        version: &edge.to.version,
-    }];
+    let from_index = edge.from.as_ref().map_or(root_index, |from| inverse[from]);
+    let to_index = inverse[&edge.to];
 
     let edge_marker = {
         let mut edge_marker = edge.universal_marker();
@@ -228,36 +217,33 @@ fn add_edge(
     }
 }
 
-fn add_version<'a>(
+fn add_version(
     graph: &mut Graph<ResolutionGraphNode, UniversalMarker>,
-    inverse: &mut FxHashMap<PackageRef<'a>, NodeIndex>,
     diagnostics: &mut Vec<ResolutionDiagnostic>,
     preferences: &Preferences,
     hasher: &HashStrategy,
     in_memory: &InMemoryIndex,
-    package: &'a ResolutionPackage,
-    selected: &'a SelectedDistribution,
+    package: &ResolutionPackage,
+    selected: SelectedDistribution,
     is_workspace_member: bool,
-) {
+) -> NodeIndex {
     let ResolutionPackage {
         name,
         kind,
         url,
         index,
     } = &package;
-    let version = selected.version();
-    let dist = selected.dist().clone();
     let hashes = get_hashes(
         name,
         index.as_ref(),
         url.as_ref(),
         &selected.hashes_id(),
-        version,
+        selected.version(),
         preferences,
         hasher,
         in_memory,
     );
-    let metadata = selected.metadata().cloned();
+    let (version, dist, metadata) = selected.into_parts();
 
     // Track yanks for registry distributions.
     match dist.yanked() {
@@ -305,16 +291,15 @@ fn add_version<'a>(
     }
 
     // Add the distribution to the graph.
-    let node = graph.add_node(ResolutionGraphNode::Dist(AnnotatedDist {
+    graph.add_node(ResolutionGraphNode::Dist(AnnotatedDist {
         dist,
         name: name.clone(),
-        version: version.clone(),
+        version,
         kind: kind.clone(),
         hashes,
         metadata,
         marker: UniversalMarker::TRUE,
-    }));
-    inverse.insert(PackageRef { package, version }, node);
+    }))
 }
 
 /// Identify the hashes for a concrete distribution, preserving any hashes that were provided

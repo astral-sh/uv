@@ -855,7 +855,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             .map(|resolution| resolution.finalize(&self.index, &self.git))
             .collect::<Result<Vec<_>, _>>()?;
         crate::resolution::from_state(
-            &resolutions,
+            resolutions,
             self.project.as_ref(),
             &self.workspace_members,
             self.requirements.clone(),

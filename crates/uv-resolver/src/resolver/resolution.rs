@@ -34,7 +34,7 @@ pub(crate) struct Resolution<'index> {
 /// A completed fork whose selected artifacts and metadata have been recovered.
 #[derive(Debug)]
 pub(crate) struct ResolvedFork {
-    pub(crate) nodes: FxHashMap<ResolutionPackage, SelectedDistribution>,
+    pub(crate) nodes: Vec<(ResolutionPackage, SelectedDistribution)>,
     pub(crate) edges: Vec<ResolutionDependencyEdge>,
     pub(crate) env: ResolverEnvironment,
 }
@@ -113,16 +113,11 @@ impl SelectedDistribution {
         &self.version
     }
 
-    pub(crate) fn dist(&self) -> &ResolvedDist {
-        match &self.source {
-            SelectedSource::Url { dist, .. } | SelectedSource::Registry { dist, .. } => dist,
-        }
-    }
-
-    pub(crate) fn metadata(&self) -> Option<&Metadata> {
-        match &self.source {
-            SelectedSource::Url { metadata, .. } => Some(metadata),
-            SelectedSource::Registry { metadata, .. } => metadata.as_ref(),
+    /// Move the selected artifact and metadata into the output graph.
+    pub(crate) fn into_parts(self) -> (Version, ResolvedDist, Option<Metadata>) {
+        match self.source {
+            SelectedSource::Url { dist, metadata, .. } => (self.version, dist, Some(metadata)),
+            SelectedSource::Registry { dist, metadata, .. } => (self.version, dist, metadata),
         }
     }
 
