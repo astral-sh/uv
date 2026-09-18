@@ -7841,9 +7841,6 @@ pub struct WorkspaceNamespace {
 pub enum WorkspaceCommand {
     /// View metadata about the current workspace.
     ///
-    /// By default, uv validates the lockfile and resolves dependencies as needed without writing
-    /// changes to it. The lockfile is only created or updated when `--sync` is provided.
-    ///
     /// The output of this command is not yet stable.
     Metadata(Box<MetadataArgs>),
     /// Display the path of a workspace member.
@@ -7885,20 +7882,6 @@ pub struct MetadataArgs {
     /// Disable frozen mode, overriding `UV_FROZEN`.
     #[arg(long, overrides_with = "frozen", hide = true)]
     pub no_frozen: bool,
-
-    /// Perform a dry run, without writing the lockfile.
-    ///
-    /// In dry-run mode, uv will resolve the project's dependencies and report on the resulting
-    /// changes, but will not write the lockfile to disk.
-    ///
-    /// This is the default behavior.
-    #[arg(
-        long,
-        conflicts_with = "frozen",
-        conflicts_with = "locked",
-        conflicts_with = "sync"
-    )]
-    pub dry_run: bool,
 
     #[command(flatten)]
     pub resolver: ResolverArgs,

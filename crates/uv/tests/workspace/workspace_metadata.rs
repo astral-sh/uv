@@ -321,56 +321,6 @@ fn workspace_metadata_lockfile() -> Result<()> {
 }
 
 #[test]
-fn workspace_metadata_script_lockfile() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let script = context.temp_dir.child("script.py");
-    script.write_str(indoc! {r#"
-        # /// script
-        # requires-python = ">=3.12"
-        # dependencies = []
-        # ///
-    "#})?;
-
-    context
-        .workspace_metadata()
-        .arg("--script")
-        .arg(script.path())
-        .assert()
-        .success();
-    assert!(!context.temp_dir.child("script.py.lock").exists());
-
-    context
-        .lock()
-        .arg("--script")
-        .arg(script.path())
-        .assert()
-        .success();
-    let lockfile = context.read("script.py.lock");
-    script.write_str(&context.read("script.py").replace(">=3.12", ">=3.11"))?;
-
-    let assert = context
-        .workspace_metadata()
-        .arg("--script")
-        .arg(script.path())
-        .assert()
-        .success();
-    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
-    insta::assert_json_snapshot!(metadata["requires_python"], @r#"">=3.11""#);
-    assert_eq!(lockfile, context.read("script.py.lock"));
-
-    context
-        .workspace_metadata()
-        .arg("--script")
-        .arg(script.path())
-        .arg("--sync")
-        .assert()
-        .success();
-    assert_ne!(lockfile, context.read("script.py.lock"));
-
-    Ok(())
-}
-
-#[test]
 #[cfg(feature = "test-pypi")]
 fn workspace_metadata_script() -> Result<()> {
     let context = uv_test::test_context!("3.12")

@@ -2077,7 +2077,6 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                     &project_dir,
                     args.lock_check,
                     args.frozen,
-                    args.dry_run,
                     args.refresh,
                     args.sync,
                     args.active,
