@@ -46,7 +46,7 @@ impl<K: Eq + Hash + Clone, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
     pub fn register(&self, key: K) -> bool {
         self.items
             .pin()
-            .try_insert(key, Value::Waiting(Arc::new(Notify::new())))
+            .try_insert_with(key, || Value::Waiting(Arc::new(Notify::new())))
             .is_ok()
     }
 
