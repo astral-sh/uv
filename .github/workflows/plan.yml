@@ -114,6 +114,10 @@ jobs:
         shell: bash
         env:
           GH_REF: ${{ github.ref }}
+          GH_REPOSITORY: ${{ github.repository }}
+          GH_EVENT_NAME: ${{ github.event_name }}
+          GH_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          GH_BASE_REF: ${{ github.base_ref }}
           HAS_SKIP_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:skip') }}
           HAS_INTEGRATION_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:integration') }}
           HAS_SYSTEM_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:system') }}
@@ -130,6 +134,10 @@ jobs:
           HEAD_SHA: ${{ inputs.head-sha || github.event.pull_request.head.sha }}
         run: |
           [[ "$GH_REF" == "refs/heads/main" ]] && on_main_branch=1
+          [[ "$GH_REPOSITORY" == "astral-sh/uv" ]] && is_uv=1
+          [[ "$GH_EVENT_NAME" == "pull_request" ]] && is_pull_request=1
+          [[ "$GH_HEAD_REPOSITORY" == "$GH_REPOSITORY" ]] && is_same_repository=1
+          [[ "$GH_BASE_REF" == "main" ]] && targets_main_branch=1
           [[ "$HAS_SKIP_LABEL" == "true" ]] && has_skip_label=1
           [[ "$HAS_INTEGRATION_LABEL" == "true" ]] && has_integration_label=1
           [[ "$HAS_SYSTEM_LABEL" == "true" ]] && has_system_label=1
@@ -190,6 +198,7 @@ jobs:
           done <<< "$(git diff --no-ext-diff --no-textconv --name-only "${BASE_SHA:-origin/main}...HEAD")"
 
           # Derived groups
+          [[ $is_uv && $is_pull_request && $is_same_repository && $targets_main_branch && $uv_version_changed ]] && is_release_pr=1
           [[ $rust_code_changed || $rust_deps_changed || $rust_config_changed ]] && any_rust_changed=1
           [[ $python_config_changed || $rust_deps_changed || $rust_config_changed || $uv_build_changed || $release_workflow_changed ]] && release_build_changed=1
           [[ $publish_code_changed || $ci_workflow_changed ]] && publish_changed=1
@@ -200,7 +209,7 @@ jobs:
           [[ ! $has_skip_label && ($any_code_changed || $on_main_branch) ]] && test_code=1
           [[ $any_code_changed ]] && review_security=1
           [[ $schema_changed ]] && check_schema=1
-          [[ $uv_version_changed ]] && check_crates_policies=1
+          [[ $is_release_pr ]] && check_crates_policies=1
           [[ ! $has_skip_label && ! $has_build_skip_label && ! $has_build_skip_release_label && ($release_build_changed || $has_build_release_label) ]] && build_release_binaries=1
           [[ ! $has_skip_label ]] && run_checks=1
           [[ $publish_changed || $has_publish_label || $has_extended_label || $on_main_branch ]] && test_publish=1

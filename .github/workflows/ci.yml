@@ -67,7 +67,7 @@ jobs:
 
   check-crates-policies:
     needs: plan
-    if: ${{ github.event_name == 'pull_request' && github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.full_name == github.repository && github.base_ref == 'main' && needs.plan.outputs.check-crates-policies == 'true' }}
+    if: ${{ needs.plan.outputs.check-crates-policies == 'true' }}
     uses: $/.github/workflows/check-crates-policies.yml
     secrets: inherit
     permissions:
