@@ -54,7 +54,7 @@ Released on 2026-09-15.
 ### Enhancements
 
 - Resume interrupted downloads with HTTP Range requests when supported ([#21570](https://github.com/astral-sh/uv/pull/21570))
-- Use uv's standard diagnostics and hints for package-operation errors ([#17110](https://github.com/astral-sh/uv/pull/17110))
+- Use a consistent format for error rendering ([#17110](https://github.com/astral-sh/uv/pull/17110))
 - Render error and warning causes with compact `cause:` labels ([#21599](https://github.com/astral-sh/uv/pull/21599), [#21603](https://github.com/astral-sh/uv/pull/21603))
 - Show underlying causes and hints in user warnings ([#21565](https://github.com/astral-sh/uv/pull/21565))
 - Show resolver hints for failed `uv tool upgrade` operations ([#21566](https://github.com/astral-sh/uv/pull/21566))
