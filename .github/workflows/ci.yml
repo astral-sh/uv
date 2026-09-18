@@ -18,6 +18,8 @@ env:
 
 jobs:
   plan:
+    # CI on main is redundant in the security repository.
+    if: ${{ github.repository != 'astral-sh/uv-security' || github.ref != 'refs/heads/main' }}
     uses: $/.github/workflows/plan.yml
 
   check-fmt:
@@ -293,7 +295,7 @@ jobs:
 
   required-checks-passed:
     name: "all required jobs passed"
-    if: always()
+    if: ${{ always() && github.ref != 'refs/heads/main' }}
     needs:
       - plan
       - check-fmt
