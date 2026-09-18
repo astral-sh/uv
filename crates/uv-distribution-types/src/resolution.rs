@@ -1,4 +1,5 @@
 use petgraph::algo::tarjan_scc;
+use rustc_hash::FxHashMap;
 
 use uv_distribution_filename::DistExtension;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -89,12 +90,13 @@ impl Resolution {
         // Resolution edges point from a distribution to its dependencies. Tarjan's reverse
         // topological order therefore puts dependencies before their dependents.
         let components = tarjan_scc(&self.graph);
-        let mut component_by_node = vec![0; self.graph.node_count()];
-        for (component_index, component) in components.iter().enumerate() {
-            for node in component {
-                component_by_node[node.index()] = component_index;
-            }
-        }
+        let component_by_node = components
+            .iter()
+            .enumerate()
+            .flat_map(|(component_index, component)| {
+                component.iter().map(move |node| (*node, component_index))
+            })
+            .collect::<FxHashMap<_, _>>();
 
         components
             .iter()
@@ -112,7 +114,7 @@ impl Resolution {
                 let mut dependencies = component
                     .iter()
                     .flat_map(|node| self.graph.neighbors(*node))
-                    .map(|node| component_by_node[node.index()])
+                    .map(|node| component_by_node[&node])
                     .filter(|dependency| *dependency != component_index)
                     .collect::<Vec<_>>();
                 dependencies.sort_unstable();
