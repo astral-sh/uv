@@ -91,6 +91,7 @@ from sigstore.models import ClientTrustConfig
 from sigstore.sign import SigningContext
 
 TEST_PYPI_PUBLISH_URL = "https://test.pypi.org/legacy/"
+TEST_PYPI_INDEX_URL = "https://test.pypi.org/simple/"
 PYTHON_VERSION = os.environ.get("UV_TEST_PUBLISH_PYTHON_VERSION", "3.12")
 # `pyproject.toml` contents using all supported metadata fields, except for the
 # generated header with `[project]`, name and version.
@@ -163,28 +164,28 @@ TARGETS: dict[str, Target] = {
     "pypi-token": Target(
         "astral-test-token",
         TEST_PYPI_PUBLISH_URL,
-        "https://test.pypi.org/simple/",
+        TEST_PYPI_INDEX_URL,
         index="test-pypi",
         secrets=(("UV_PUBLISH_TOKEN", "UV_TEST_PUBLISH_TOKEN"),),
     ),
     "pypi-password-env": Target(
         "astral-test-password",
         TEST_PYPI_PUBLISH_URL,
-        "https://test.pypi.org/simple/",
+        TEST_PYPI_INDEX_URL,
         publish_args=("--username", "__token__"),
         secrets=(("UV_PUBLISH_PASSWORD", "UV_TEST_PUBLISH_PASSWORD"),),
     ),
     "pypi-keyring": Target(
         "astral-test-keyring",
         "https://test.pypi.org/legacy/?astral-test-keyring",
-        "https://test.pypi.org/simple/",
+        TEST_PYPI_INDEX_URL,
         publish_args=("--username", "__token__", "--keyring-provider", "subprocess"),
         keyring_variable="UV_TEST_PUBLISH_KEYRING",
     ),
     "pypi-text-store": Target(
         "astral-test-text-store",
         "https://test.pypi.org/legacy/?astral-test-text-store",
-        "https://test.pypi.org/simple/",
+        TEST_PYPI_INDEX_URL,
         publish_args=("--username", "__token__"),
     ),
     "gitlab": Target(
@@ -212,8 +213,7 @@ TARGETS: dict[str, Target] = {
     "pypi-trusted-publishing-github": Target(
         "astral-test-trusted-publishing",
         TEST_PYPI_PUBLISH_URL,
-        "https://test.pypi.org/simple/",
-        index=None,
+        TEST_PYPI_INDEX_URL,
         publish_args=("--trusted-publishing", "always"),
         attestations=True,
         local=False,
@@ -221,8 +221,7 @@ TARGETS: dict[str, Target] = {
     "pypi-trusted-publishing-gitlab": Target(
         "astral-test-pypi-trusted-publishing-gitlab",
         publish_url=TEST_PYPI_PUBLISH_URL,
-        index_url="https://test.pypi.org/simple/",
-        index=None,
+        index_url=TEST_PYPI_INDEX_URL,
         publish_args=("--trusted-publishing", "always"),
         environment=(
             ("CI", "true"),
@@ -294,9 +293,9 @@ class TargetSession:
         return self
 
     def __exit__(self, _exception_type, exception, _exception_traceback) -> bool:
-        if exception is not None:
+        self.failed = exception is not None
+        if self.failed:
             traceback.print_exception(exception, file=self.output)
-            self.failed = True
 
         if self._handler is not None:
             self._handler.flush()
@@ -319,7 +318,7 @@ class TargetSession:
         if self._grouped:
             print("::endgroup::", flush=True)
 
-        return exception is not None and isinstance(exception, Exception)
+        return isinstance(exception, Exception)
 
     def run_command(
         self,
@@ -328,6 +327,7 @@ class TargetSession:
         cwd: str | Path,
         input: str | None = None,
         check: bool = True,
+        use_credentials: bool = False,
     ) -> CompletedProcess[str]:
         """Run and record a subprocess without streaming its output."""
         self.output.write(f"$ {shlex.join(str(argument) for argument in command)}\n")
@@ -335,7 +335,7 @@ class TargetSession:
             result = run(
                 command,
                 cwd=cwd,
-                env=self.full_environment(),
+                env=self.full_environment() if use_credentials else None,
                 text=True,
                 input=input,
                 capture_output=True,
@@ -362,6 +362,7 @@ class TargetSession:
             [self.uv, "publish", *destination, *self.target.publish_args],
             cwd=project.root,
             check=check,
+            use_credentials=True,
         )
 
     def full_environment(self) -> dict[str, str]:
@@ -461,15 +462,12 @@ class PublishTest:
             ("--publish-url", self.target.publish_url),
         )
         output = result.stderr or ""
-        if (
-            output.count("Uploading") != len(project.filenames)
-            or output.count("already exists") != 0
-        ):
+        uploads, existing = self._publish_output_counts(output)
+        if (uploads, existing) != (len(project.filenames), 0):
             raise RuntimeError(
                 f"PyPI re-upload of the same files failed for {self.session.name} "
                 f"({self.target.publish_url}): "
-                f"{output.count('Uploading')} != {len(project.filenames)}, "
-                f"{output.count('already exists')} != 0\n"
+                f"{uploads} != {len(project.filenames)}, {existing} != 0\n"
                 f"---\n{output}\n---"
             )
 
@@ -495,19 +493,18 @@ class PublishTest:
             )
 
         output = ""
+        uploads = existing = 0
         for _ in self._index_attempts(project.version, "check URL upload"):
             result = self.session.publish(project, destination)
             output = result.stderr or ""
-            if output.count("Uploading") == 0 and output.count("already exists") == len(
-                project.filenames
-            ):
+            uploads, existing = self._publish_output_counts(output)
+            if (uploads, existing) == (0, len(project.filenames)):
                 return
 
         raise RuntimeError(
             f"Re-upload with check URL failed for {self.session.name} "
             f"({self.target.publish_url}): "
-            f"{output.count('Uploading')} != 0, "
-            f"{output.count('already exists')} != {len(project.filenames)}\n"
+            f"{uploads} != 0, {existing} != {len(project.filenames)}\n"
             f"---\n{output}\n---"
         )
 
@@ -650,6 +647,7 @@ class PublishTest:
                 # version that was just published.
                 cwd=gettempdir(),
                 check=False,
+                use_credentials=True,
             )
             if result.returncode != 0:
                 consecutive_successes = 0
@@ -687,6 +685,11 @@ class PublishTest:
                     f"retrying {operation} ({attempt + 1}/4)",
                     file=sys.stderr,
                 )
+
+    @staticmethod
+    def _publish_output_counts(output: str) -> tuple[int, int]:
+        """Count uploaded and skipped distributions."""
+        return output.count("Uploading"), output.count("already exists")
 
     def _check_index_for_provenance(self, project: BuiltProject):
         """Check that every uploaded distribution has provenance."""
