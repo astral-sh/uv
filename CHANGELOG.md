@@ -45,8 +45,7 @@ Released on 2026-09-15.
 
 ### Bug fixes
 
-- Fix a regression in `0.12.14` that rejected `uv pip install --system` for wheels with man pages in official Python Docker images ([#21699](https://github.com/astral-sh/uv/pull/21699))
-- Fix a regression in `0.12.14` that rejected `uv pip install --target .` ([#21699](https://github.com/astral-sh/uv/pull/21699))
+- Fix regressions in `0.12.14` when installing to symlinked destinations or using `uv pip install --target .` ([#21699](https://github.com/astral-sh/uv/pull/21699))
 
 ## 0.12.14
 
