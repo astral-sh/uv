@@ -394,11 +394,16 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 })
                 .flatten()
             {
-                if validate_conflicts && dep.complexified_marker.has_conflict_marker() {
+                if validate_conflicts
+                    && dep
+                        .complexified_marker
+                        .in_parent_context()
+                        .has_conflict_marker()
+                {
                     dependencies_for_conflict_validation.push((dist, dep));
                 }
                 let additional_activated_extras = newly_activated_extras(dep, &activated_extras);
-                if !dep.complexified_marker.evaluate(
+                if !dep.complexified_marker.in_parent_context().evaluate(
                     marker_env,
                     activated_projects.iter().copied(),
                     activated_extras
@@ -465,7 +470,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 add_reachability(
                     &mut conflict_reachability,
                     (dep.index, None),
-                    dep.complexified_marker,
+                    dep.complexified_marker.in_parent_context(),
                 );
                 if seen.insert((dep.index, None)) {
                     queue.push_back((dep.index, None));
@@ -474,7 +479,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
                     add_reachability(
                         &mut conflict_reachability,
                         (dep.index, Some(extra)),
-                        dep.complexified_marker,
+                        dep.complexified_marker.in_parent_context(),
                     );
                     if seen.insert((dep.index, Some(extra))) {
                         queue.push_back((dep.index, Some(extra)));
@@ -673,8 +678,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
                     continue;
                 };
                 for dep in package_dependencies(package, extra) {
-                    let mut dep_reachability = dep.complexified_marker;
-                    dep_reachability.and(parent_reachability);
+                    let dep_reachability = dep.complexified_marker.within(parent_reachability);
                     let additional_activated_extras =
                         newly_activated_extras(dep, &activated_extras);
                     if !dep_reachability.evaluate(
@@ -754,11 +758,17 @@ trait InstallableExt<'lock>: Installable<'lock> {
         while let Some((package_index, extra)) = queue.pop_front() {
             let package = self.lock().package(package_index);
             for dep in package_dependencies(package, extra) {
-                if validate_conflicts && dep.complexified_marker.has_conflict_marker() {
+                if validate_conflicts
+                    && dep
+                        .complexified_marker
+                        .in_parent_context()
+                        .has_conflict_marker()
+                {
                     dependencies_for_conflict_validation.push((package, dep));
                 }
                 if !dep
                     .complexified_marker
+                    .in_parent_context()
                     .evaluate_activated(marker_env, &activated)
                 {
                     continue;
@@ -836,7 +846,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 if !validated_markers.insert(dependency.complexified_marker) {
                     continue;
                 }
-                let mut marker = dependency.complexified_marker;
+                let mut marker = dependency.complexified_marker.in_parent_context();
                 for item in self.lock().conflicts().iter().flat_map(ConflictSet::iter) {
                     if selection_context_package != Some(item.package())
                         && !subgraph_packages.contains(item.package())
