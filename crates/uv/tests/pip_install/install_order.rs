@@ -54,6 +54,7 @@ fn write_wheel(directory: &Path, name: &str, requirements: &[&str], slow: bool) 
         &BTreeMap::new(),
         None,
         "py3-none-any",
+        &[],
         &files
             .iter()
             .map(|(path, contents)| (path.as_str(), contents.as_str()))
