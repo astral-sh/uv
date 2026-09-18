@@ -313,6 +313,9 @@ pub enum PreviewFeature {
     /// Stores [project virtual environments](./projects/layout.md#centralized-project-environments)
     /// in the uv cache.
     CentralizedProjectEnvs,
+    /// Suppresses the preview warning when discovering a virtual environment through a
+    /// [PEP 832](https://peps.python.org/pep-0832/) `.venv` redirect file.
+    VenvRedirectFiles,
     /// Stores a `uv.lock` alongside each installed tool and reuses it for reproducible installations,
     /// upgrades, and audits.
     ToolInstallLocks,

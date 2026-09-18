@@ -2601,6 +2601,57 @@ fn init_existing_environment() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn init_existing_redirect_environment() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.9", "3.12"]);
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+    context
+        .venv()
+        .current_dir(&child)
+        .arg("external")
+        .arg("--python")
+        .arg("3.12")
+        .arg("-q")
+        .assert()
+        .success();
+    child.child(".venv").write_str("external\n")?;
+
+    uv_snapshot!(context.filters(), context.init()
+        .arg(child.as_os_str()).arg("--author-from").arg("none"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Using `.venv` redirect files is experimental and may change without warning. Pass `--preview-features venv-redirect-files` to disable this warning.
+    Initialized project `foo` at `[TEMP_DIR]/foo`
+    ");
+
+    let pyproject_toml = fs_err::read_to_string(child.join("pyproject.toml"))?;
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(pyproject_toml, @r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
+        "#);
+    });
+    assert_eq!(
+        fs_err::read_to_string(child.child(".venv").path())?,
+        "external\n"
+    );
+    Ok(())
+}
+
 /// Run `uv init`, it should ignore the Python version from a parent `.venv`
 #[test]
 fn init_existing_environment_parent() -> Result<()> {
