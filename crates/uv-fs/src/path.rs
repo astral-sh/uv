@@ -198,6 +198,14 @@ pub fn normalize_url_path(path: &str) -> Cow<'_, str> {
     }
 }
 
+/// Return `true` if `path` is an absolute Windows drive path, regardless of the host platform.
+pub fn is_windows_absolute_path(path: &str) -> bool {
+    let [drive, b':', separator, ..] = path.as_bytes() else {
+        return false;
+    };
+    drive.is_ascii_alphabetic() && matches!(separator, b'/' | b'\\')
+}
+
 /// Normalize a path, removing things like `.` and `..`.
 ///
 /// Source: <https://github.com/rust-lang/cargo/blob/b48c41aedbd69ee3990d62a0e2006edbb506a480/crates/cargo-util/src/paths.rs#L76C1-L109C2>

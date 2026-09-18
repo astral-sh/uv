@@ -37,7 +37,7 @@
 use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str::FromStr;
 
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -48,16 +48,17 @@ use url::Url;
 #[cfg(feature = "http")]
 use uv_client::{BaseClient, ClientBuildError};
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::{NoBinary, NoBuild, PackageNameSpecifier};
+use uv_configuration::{
+    NoBinary, NoBuild, PackageNameSpecifier, RequirementsInput, RequirementsInputError,
+};
 use uv_distribution_types::{
     Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
-use uv_fs::{Simplified, normalize_path};
+use uv_fs::normalize_path;
 use uv_pep508::{Pep508Error, RequirementOrigin, VerbatimUrl, expand_env_vars};
 use uv_pypi_types::VerbatimParsedUrl;
 #[cfg(feature = "http")]
 use uv_redacted::DisplaySafeUrl;
-use uv_redacted::DisplaySafeUrlError;
 
 pub use crate::requirement::{MakeEditableError, RequirementsTxtRequirement};
 use crate::shquote::unquote;
@@ -65,8 +66,8 @@ use crate::shquote::unquote;
 mod requirement;
 mod shquote;
 
-/// A cache of file contents, keyed by path, to avoid re-reading files from disk.
-pub type SourceCache = FxHashMap<PathBuf, String>;
+/// A cache of file contents, keyed by input, to avoid re-reading local or remote files.
+pub type SourceCache = FxHashMap<RequirementsInput, String>;
 
 /// We emit one of those for each `requirements.txt` entry.
 enum RequirementsTxtStatement {
@@ -169,12 +170,9 @@ pub struct RequirementsTxt {
 
 impl RequirementsTxt {
     /// See module level documentation.
-    #[instrument(
-        skip_all,
-        fields(requirements_txt = requirements_txt.as_ref().as_os_str().to_str())
-    )]
+    #[instrument(skip_all)]
     pub async fn parse(
-        requirements_txt: impl AsRef<Path>,
+        requirements_txt: impl Into<RequirementsInput>,
         working_dir: impl AsRef<Path>,
     ) -> Result<Self, RequirementsTxtFileError> {
         Self::parse_with_cache(
@@ -187,22 +185,20 @@ impl RequirementsTxt {
     }
 
     /// Parse a `requirements.txt` file, using the given cache to avoid re-reading files from disk.
-    #[instrument(
-        skip_all,
-        fields(requirements_txt = requirements_txt.as_ref().as_os_str().to_str())
-    )]
+    #[instrument(skip_all)]
     pub async fn parse_with_cache(
-        requirements_txt: impl AsRef<Path>,
+        requirements_txt: impl Into<RequirementsInput>,
         working_dir: impl AsRef<Path>,
         client_builder: &BaseClientBuilder<'_>,
         cache: &mut SourceCache,
     ) -> Result<Self, RequirementsTxtFileError> {
+        let requirements_txt = requirements_txt.into();
         let mut visited = VisitedFiles::Requirements {
             requirements: &mut FxHashSet::default(),
             constraints: &mut FxHashSet::default(),
         };
         Self::parse_impl(
-            requirements_txt,
+            &requirements_txt,
             working_dir,
             client_builder,
             &mut visited,
@@ -211,18 +207,17 @@ impl RequirementsTxt {
         .await
     }
 
-    /// Parse requirements from a string, using the given path for error messages and resolving
-    /// relative paths.
+    /// Parse requirements from a string, using the given input for error messages and resolving
+    /// relative inputs.
     pub async fn parse_str(
         content: &str,
-        requirements_txt: impl AsRef<Path>,
+        requirements_txt: impl Into<RequirementsInput>,
         working_dir: impl AsRef<Path>,
         client_builder: &BaseClientBuilder<'_>,
         source_contents: &mut SourceCache,
     ) -> Result<Self, RequirementsTxtFileError> {
-        let requirements_txt = requirements_txt.as_ref();
+        let requirements_txt = requirements_txt.into();
         let working_dir = working_dir.as_ref();
-        let requirements_dir = requirements_txt.parent().unwrap_or(working_dir);
 
         let mut visited = VisitedFiles::Requirements {
             requirements: &mut FxHashSet::default(),
@@ -232,105 +227,100 @@ impl RequirementsTxt {
         Self::parse_inner(
             content,
             working_dir,
-            requirements_dir,
             client_builder,
-            requirements_txt,
+            &requirements_txt,
             &mut visited,
             source_contents,
         )
         .await
         .map_err(|err| RequirementsTxtFileError {
-            file: requirements_txt.into(),
+            file: Box::new(requirements_txt),
             error: err,
         })
     }
 
     /// See module level documentation
-    #[instrument(
-        skip_all,
-        fields(requirements_txt = requirements_txt.as_ref().as_os_str().to_str())
-    )]
+    #[instrument(skip_all, fields(requirements_txt = %requirements_txt.user_display()))]
     async fn parse_impl(
-        requirements_txt: impl AsRef<Path>,
+        requirements_txt: &RequirementsInput,
         working_dir: impl AsRef<Path>,
         client_builder: &BaseClientBuilder<'_>,
         visited: &mut VisitedFiles<'_>,
         cache: &mut SourceCache,
     ) -> Result<Self, RequirementsTxtFileError> {
-        let requirements_txt = requirements_txt.as_ref();
         let working_dir = working_dir.as_ref();
 
         let content = if let Some(content) = cache.get(requirements_txt) {
             // Use cached content if available.
             content.clone()
-        } else if requirements_txt.starts_with("http://") | requirements_txt.starts_with("https://")
-        {
-            #[cfg(not(feature = "http"))]
-            {
-                return Err(RequirementsTxtFileError {
-                    file: requirements_txt.into(),
-                    error: RequirementsTxtParserError::Io(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "Remote file not supported without `http` feature",
-                    )),
-                });
-            }
-
-            #[cfg(feature = "http")]
-            {
-                let url = requirements_txt.display().to_string();
-                let url = DisplaySafeUrl::parse(&url).map_err(|err| RequirementsTxtFileError {
-                    file: requirements_txt.into(),
-                    error: RequirementsTxtParserError::InvalidUrl(
-                        requirements_txt.display().to_string(),
-                        err,
-                    ),
-                })?;
-
-                // Avoid constructing a client if network is disabled already
-                if client_builder.is_offline() {
-                    return Err(RequirementsTxtFileError {
-                        file: requirements_txt.into(),
-                        error: RequirementsTxtParserError::Io(io::Error::new(
-                            io::ErrorKind::InvalidInput,
-                            format!(
-                                "Network connectivity is disabled, but a remote requirements file was requested: {url}"
-                            ),
-                        )),
-                    });
+        } else {
+            let content = match requirements_txt {
+                RequirementsInput::Stdin => {
+                    uv_fs::read_stdin_to_string_transcode().map_err(|err| {
+                        RequirementsTxtFileError {
+                            file: Box::new(requirements_txt.clone()),
+                            error: RequirementsTxtParserError::Io(err),
+                        }
+                    })?
                 }
-                let client = client_builder
-                    .build()
-                    .map_err(|err| RequirementsTxtFileError {
-                        file: requirements_txt.into(),
-                        error: RequirementsTxtParserError::ClientBuild(url.clone(), Box::new(err)),
-                    })?;
-                let content = read_url_to_string(&requirements_txt, client)
+                RequirementsInput::Local(path) => uv_fs::read_to_string_transcode(path)
                     .await
                     .map_err(|err| RequirementsTxtFileError {
-                        file: requirements_txt.into(),
-                        error: err,
-                    })?;
-                cache.insert(requirements_txt.to_path_buf(), content.clone());
-                content
-            }
-        } else {
-            // Ex) `file:///home/ferris/project/requirements.txt`
-            let content = uv_fs::read_to_string_transcode(&requirements_txt)
-                .await
-                .map_err(|err| RequirementsTxtFileError {
-                    file: requirements_txt.into(),
-                    error: RequirementsTxtParserError::Io(err),
-                })?;
-            cache.insert(requirements_txt.to_path_buf(), content.clone());
+                        file: Box::new(requirements_txt.clone()),
+                        error: RequirementsTxtParserError::Io(err),
+                    })?,
+                RequirementsInput::Remote(url) => {
+                    #[cfg(not(feature = "http"))]
+                    {
+                        return Err(RequirementsTxtFileError {
+                            file: Box::new(requirements_txt.clone()),
+                            error: RequirementsTxtParserError::Io(io::Error::new(
+                                io::ErrorKind::InvalidInput,
+                                "Remote file not supported without `http` feature",
+                            )),
+                        });
+                    }
+
+                    #[cfg(feature = "http")]
+                    {
+                        // Avoid constructing a client if network is disabled already.
+                        if client_builder.is_offline() {
+                            return Err(RequirementsTxtFileError {
+                                file: Box::new(requirements_txt.clone()),
+                                error: RequirementsTxtParserError::Io(io::Error::new(
+                                    io::ErrorKind::InvalidInput,
+                                    format!(
+                                        "Network connectivity is disabled, but a remote requirements file was requested: {url}"
+                                    ),
+                                )),
+                            });
+                        }
+                        let client =
+                            client_builder
+                                .build()
+                                .map_err(|err| RequirementsTxtFileError {
+                                    file: Box::new(requirements_txt.clone()),
+                                    error: RequirementsTxtParserError::ClientBuild(
+                                        url.clone(),
+                                        Box::new(err),
+                                    ),
+                                })?;
+                        read_url_to_string(url, client).await.map_err(|err| {
+                            RequirementsTxtFileError {
+                                file: Box::new(requirements_txt.clone()),
+                                error: err,
+                            }
+                        })?
+                    }
+                }
+            };
+            cache.insert(requirements_txt.clone(), content.clone());
             content
         };
 
-        let requirements_dir = requirements_txt.parent().unwrap_or(working_dir);
         let data = Self::parse_inner(
             &content,
             working_dir,
-            requirements_dir,
             client_builder,
             requirements_txt,
             visited,
@@ -338,7 +328,7 @@ impl RequirementsTxt {
         )
         .await
         .map_err(|err| RequirementsTxtFileError {
-            file: requirements_txt.into(),
+            file: Box::new(requirements_txt.clone()),
             error: err,
         })?;
 
@@ -354,22 +344,15 @@ impl RequirementsTxt {
     async fn parse_inner(
         content: &str,
         working_dir: &Path,
-        requirements_dir: &Path,
         client_builder: &BaseClientBuilder<'_>,
-        requirements_txt: &Path,
+        requirements_txt: &RequirementsInput,
         visited: &mut VisitedFiles<'_>,
         cache: &mut SourceCache,
     ) -> Result<Self, RequirementsTxtParserError> {
         let mut s = Scanner::new(content);
 
         let mut data = Self::default();
-        while let Some(statement) = parse_entry(
-            &mut s,
-            content,
-            working_dir,
-            requirements_dir,
-            requirements_txt,
-        )? {
+        while let Some(statement) = parse_entry(&mut s, content, working_dir, requirements_txt)? {
             match statement {
                 RequirementsTxtStatement::Requirements {
                     filename,
@@ -377,28 +360,13 @@ impl RequirementsTxt {
                     end,
                 } => {
                     let filename = expand_env_vars(&filename);
-                    let sub_file =
-                        if filename.starts_with("http://") || filename.starts_with("https://") {
-                            PathBuf::from(filename.as_ref())
-                        } else if filename.starts_with("file://") {
-                            requirements_txt.join(
-                                Url::parse(filename.as_ref())
-                                    .map_err(|err| RequirementsTxtParserError::Url {
-                                        source: DisplaySafeUrlError::Url(err).into(),
-                                        url: filename.to_string(),
-                                        start,
-                                        end,
-                                    })?
-                                    .to_file_path()
-                                    .map_err(|()| RequirementsTxtParserError::FileUrl {
-                                        url: filename.to_string(),
-                                        start,
-                                        end,
-                                    })?,
-                            )
-                        } else {
-                            requirements_dir.join(filename.as_ref())
-                        };
+                    let sub_file = requirements_txt
+                        .resolve(filename.as_ref(), working_dir)
+                        .map_err(|source| RequirementsTxtParserError::RequirementsInput {
+                            source: Box::new(source),
+                            start,
+                            end,
+                        })?;
                     match visited {
                         VisitedFiles::Requirements { requirements, .. } => {
                             if !requirements.insert(visited_file(&sub_file)) {
@@ -452,28 +420,13 @@ impl RequirementsTxt {
                     end,
                 } => {
                     let filename = expand_env_vars(&filename);
-                    let sub_file =
-                        if filename.starts_with("http://") || filename.starts_with("https://") {
-                            PathBuf::from(filename.as_ref())
-                        } else if filename.starts_with("file://") {
-                            requirements_txt.join(
-                                Url::parse(filename.as_ref())
-                                    .map_err(|err| RequirementsTxtParserError::Url {
-                                        source: DisplaySafeUrlError::Url(err).into(),
-                                        url: filename.to_string(),
-                                        start,
-                                        end,
-                                    })?
-                                    .to_file_path()
-                                    .map_err(|()| RequirementsTxtParserError::FileUrl {
-                                        url: filename.to_string(),
-                                        start,
-                                        end,
-                                    })?,
-                            )
-                        } else {
-                            requirements_dir.join(filename.as_ref())
-                        };
+                    let sub_file = requirements_txt
+                        .resolve(filename.as_ref(), working_dir)
+                        .map_err(|source| RequirementsTxtParserError::RequirementsInput {
+                            source: Box::new(source),
+                            start,
+                            end,
+                        })?;
 
                     // Switch to constraints mode, if we aren't in it already.
                     let mut visited = match visited {
@@ -560,8 +513,8 @@ impl RequirementsTxt {
                 RequirementsTxtStatement::OnlyBinary(only_binary) => {
                     data.only_binary.extend(only_binary);
                 }
-                RequirementsTxtStatement::UnsupportedOption(flag) => {
-                    if requirements_txt == Path::new("-") {
+                RequirementsTxtStatement::UnsupportedOption(flag) => match requirements_txt {
+                    RequirementsInput::Stdin => {
                         if flag.cli() {
                             uv_warnings::warn_user!(
                                 "Ignoring unsupported option from stdin: `{flag}` (hint: pass `{flag}` on the command line instead)",
@@ -573,7 +526,8 @@ impl RequirementsTxt {
                                 flag = flag.green()
                             );
                         }
-                    } else {
+                    }
+                    RequirementsInput::Local(_) | RequirementsInput::Remote(_) => {
                         if flag.cli() {
                             uv_warnings::warn_user!(
                                 "Ignoring unsupported option in `{path}`: `{flag}` (hint: pass `{flag}` on the command line instead)",
@@ -588,7 +542,7 @@ impl RequirementsTxt {
                             );
                         }
                     }
-                }
+                },
             }
         }
         Ok(data)
@@ -687,8 +641,7 @@ fn parse_entry(
     s: &mut Scanner,
     content: &str,
     working_dir: &Path,
-    requirements_dir: &Path,
-    requirements_txt: &Path,
+    requirements_txt: &RequirementsInput,
 ) -> Result<Option<RequirementsTxtStatement>, RequirementsTxtParserError> {
     // Eat all preceding whitespace, this may run us to the end of file
     eat_wrappable_whitespace(s);
@@ -738,10 +691,9 @@ fn parse_entry(
             });
         }
 
-        let source = if requirements_txt == Path::new("-") {
-            None
-        } else {
-            Some(requirements_txt)
+        let source = match requirements_txt {
+            RequirementsInput::Local(path) => Some(path.as_path()),
+            RequirementsInput::Stdin | RequirementsInput::Remote(_) => None,
         };
 
         let (mut requirement, hashes) =
@@ -833,27 +785,55 @@ fn parse_entry(
             .map(Cow::Owned)
             .unwrap_or(Cow::Borrowed(given));
         let expanded = expand_env_vars(given.as_ref());
-        let url = if let Some(path) = std::path::absolute(requirements_dir.join(expanded.as_ref()))
-            .ok()
+        let input = if let Some(path) = requirements_txt
+            .resolve_local_path(Path::new(expanded.as_ref()), working_dir)
+            .and_then(|path| std::path::absolute(path).ok())
             .filter(|path| path.exists())
         {
-            VerbatimUrl::from_absolute_path(path).map_err(|err| {
-                RequirementsTxtParserError::VerbatimUrl {
-                    source: err,
-                    url: given.to_string(),
-                    start,
-                    end: s.cursor(),
-                }
-            })?
+            Ok(RequirementsInput::Local(path))
         } else {
-            VerbatimUrl::parse_url(expanded.as_ref()).map_err(|err| {
-                RequirementsTxtParserError::Url {
-                    source: err,
-                    url: given.to_string(),
+            requirements_txt.resolve(expanded.as_ref(), working_dir)
+        };
+        let url = match input {
+            Ok(RequirementsInput::Stdin) => {
+                VerbatimUrl::parse_url(expanded.as_ref()).map_err(|err| {
+                    RequirementsTxtParserError::Url {
+                        source: err,
+                        url: given.to_string(),
+                        start,
+                        end: s.cursor(),
+                    }
+                })?
+            }
+            Ok(RequirementsInput::Local(path)) => {
+                if let Some(path) = std::path::absolute(path).ok().filter(|path| path.exists()) {
+                    VerbatimUrl::from_absolute_path(path).map_err(|err| {
+                        RequirementsTxtParserError::VerbatimUrl {
+                            source: err,
+                            url: given.to_string(),
+                            start,
+                            end: s.cursor(),
+                        }
+                    })?
+                } else {
+                    VerbatimUrl::parse_url(expanded.as_ref()).map_err(|err| {
+                        RequirementsTxtParserError::Url {
+                            source: err,
+                            url: given.to_string(),
+                            start,
+                            end: s.cursor(),
+                        }
+                    })?
+                }
+            }
+            Ok(RequirementsInput::Remote(url)) => VerbatimUrl::from_url(url),
+            Err(source) => {
+                return Err(RequirementsTxtParserError::RequirementsInput {
+                    source: Box::new(source),
                     start,
                     end: s.cursor(),
-                }
-            })?
+                });
+            }
         };
         RequirementsTxtStatement::FindLinks(url.with_given(given))
     } else if s.eat_if("--no-binary") {
@@ -889,10 +869,9 @@ fn parse_entry(
         })?;
         RequirementsTxtStatement::OnlyBinary(NoBuild::from_pip_arg(specifier))
     } else if s.at(char::is_ascii_alphanumeric) || s.at(|char| matches!(char, '.' | '/' | '$')) {
-        let source = if requirements_txt == Path::new("-") {
-            None
-        } else {
-            Some(requirements_txt)
+        let source = match requirements_txt {
+            RequirementsInput::Local(path) => Some(path.as_path()),
+            RequirementsInput::Stdin | RequirementsInput::Remote(_) => None,
         };
 
         let (requirement, hashes) =
@@ -1110,21 +1089,11 @@ fn parse_value<'a, T>(
 /// Fetch the contents of a URL and return them as a string.
 #[cfg(feature = "http")]
 async fn read_url_to_string(
-    path: impl AsRef<Path>,
+    url: &DisplaySafeUrl,
     client: BaseClient,
 ) -> Result<String, RequirementsTxtParserError> {
-    // pip would URL-encode the non-UTF-8 bytes of the string; we just don't support them.
-    let path_utf8 =
-        path.as_ref()
-            .to_str()
-            .ok_or_else(|| RequirementsTxtParserError::NonUnicodeUrl {
-                url: path.as_ref().to_owned(),
-            })?;
-
-    let url = DisplaySafeUrl::from_str(path_utf8)
-        .map_err(|err| RequirementsTxtParserError::InvalidUrl(path_utf8.to_string(), err))?;
     let response = client
-        .for_host(&url)
+        .for_host(url)
         .get(Url::from(url.clone()))
         .send()
         .await
@@ -1141,7 +1110,7 @@ async fn read_url_to_string(
 /// Error parsing requirements.txt, wrapper with filename
 #[derive(Debug)]
 pub struct RequirementsTxtFileError {
-    file: Box<Path>,
+    file: Box<RequirementsInput>,
     error: RequirementsTxtParserError,
 }
 
@@ -1157,6 +1126,11 @@ pub enum RequirementsTxtParserError {
     },
     FileUrl {
         url: String,
+        start: usize,
+        end: usize,
+    },
+    RequirementsInput {
+        source: Box<RequirementsInputError>,
         start: usize,
         end: usize,
     },
@@ -1217,15 +1191,10 @@ pub enum RequirementsTxtParserError {
         start: usize,
         end: usize,
     },
-    NonUnicodeUrl {
-        url: PathBuf,
-    },
     #[cfg(feature = "http")]
     Reqwest(DisplaySafeUrl, reqwest_middleware::Error),
     #[cfg(feature = "http")]
     ClientBuild(DisplaySafeUrl, Box<ClientBuildError>),
-    #[cfg(feature = "http")]
-    InvalidUrl(String, DisplaySafeUrlError),
 }
 
 impl Display for RequirementsTxtParserError {
@@ -1237,6 +1206,12 @@ impl Display for RequirementsTxtParserError {
             }
             Self::FileUrl { url, start, .. } => {
                 write!(f, "Invalid file URL at position {start}: `{url}`")
+            }
+            Self::RequirementsInput { source, start, .. } => {
+                write!(
+                    f,
+                    "Invalid requirements input at position {start}: {source}"
+                )
             }
             Self::VerbatimUrl { url, start, .. } => {
                 write!(f, "Invalid URL at position {start}: `{url}`")
@@ -1289,13 +1264,6 @@ impl Display for RequirementsTxtParserError {
             Self::Subfile { start, .. } => {
                 write!(f, "Error parsing included file at position {start}")
             }
-            Self::NonUnicodeUrl { url } => {
-                write!(
-                    f,
-                    "Remote requirements URL contains non-unicode characters: {}",
-                    url.display(),
-                )
-            }
             #[cfg(feature = "http")]
             Self::Reqwest(url, _err) => {
                 write!(f, "Error while accessing remote requirements file: `{url}`")
@@ -1303,18 +1271,6 @@ impl Display for RequirementsTxtParserError {
             #[cfg(feature = "http")]
             Self::ClientBuild(url, _err) => {
                 write!(f, "Error while accessing remote requirements file: `{url}`")
-            }
-            #[cfg(feature = "http")]
-            Self::InvalidUrl(url, err) => {
-                match err {
-                    DisplaySafeUrlError::Url(err) => write!(f, "Not a valid URL, {err}: `{url}`"),
-                    DisplaySafeUrlError::AmbiguousAuthority(_) => {
-                        // Intentionally avoid leaking the URL here, since we suspect that the user
-                        // has given us an ambiguous URL that contains sensitive information.
-                        // The error's own Display will provide a redacted version of the URL.
-                        write!(f, "Invalid URL: {err}")
-                    }
-                }
             }
         }
     }
@@ -1326,6 +1282,7 @@ impl std::error::Error for RequirementsTxtParserError {
             Self::Io(err) => err.source(),
             Self::Url { source, .. } => Some(source),
             Self::FileUrl { .. } => None,
+            Self::RequirementsInput { source, .. } => Some(source.as_ref()),
             Self::VerbatimUrl { source, .. } => Some(source),
             Self::UrlConversion(_) => None,
             Self::UnsupportedUrl(_) => None,
@@ -1339,54 +1296,44 @@ impl std::error::Error for RequirementsTxtParserError {
             Self::ParsedUrl { source, .. } => Some(source),
             Self::Subfile { source, .. } => Some(source.as_ref()),
             Self::Parser { .. } => None,
-            Self::NonUnicodeUrl { .. } => None,
             #[cfg(feature = "http")]
             Self::Reqwest(_, err) => err.source(),
             #[cfg(feature = "http")]
             Self::ClientBuild(_, err) => Some(err.as_ref()),
-            #[cfg(feature = "http")]
-            Self::InvalidUrl(_, err) => err.source(),
         }
     }
 }
 
 impl Display for RequirementsTxtFileError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let file = self.file.user_display();
         match &self.error {
             RequirementsTxtParserError::Io(err) => err.fmt(f),
             RequirementsTxtParserError::Url { url, start, .. } => {
-                write!(
-                    f,
-                    "Invalid URL in `{}` at position {start}: `{url}`",
-                    self.file.user_display(),
-                )
+                write!(f, "Invalid URL in `{file}` at position {start}: `{url}`")
             }
             RequirementsTxtParserError::FileUrl { url, start, .. } => {
                 write!(
                     f,
-                    "Invalid file URL in `{}` at position {start}: `{url}`",
-                    self.file.user_display(),
+                    "Invalid file URL in `{file}` at position {start}: `{url}`",
+                )
+            }
+            RequirementsTxtParserError::RequirementsInput { source, start, .. } => {
+                write!(
+                    f,
+                    "Invalid requirements input in `{file}` at position {start}: {source}",
                 )
             }
             RequirementsTxtParserError::VerbatimUrl { url, start, .. } => {
-                write!(
-                    f,
-                    "Invalid URL in `{}` at position {start}: `{url}`",
-                    self.file.user_display(),
-                )
+                write!(f, "Invalid URL in `{file}` at position {start}: `{url}`")
             }
             RequirementsTxtParserError::UrlConversion(given) => {
-                write!(
-                    f,
-                    "Unable to convert URL to path `{}`: {given}",
-                    self.file.user_display()
-                )
+                write!(f, "Unable to convert URL to path `{file}`: {given}")
             }
             RequirementsTxtParserError::UnsupportedUrl(url) => {
                 write!(
                     f,
-                    "Unsupported URL (expected a `file://` scheme) in `{}`: `{url}`",
-                    self.file.user_display(),
+                    "Unsupported URL (expected a `file://` scheme) in `{file}`: `{url}`",
                 )
             }
             RequirementsTxtParserError::NonEditable {
@@ -1394,36 +1341,31 @@ impl Display for RequirementsTxtFileError {
             } => {
                 write!(
                     f,
-                    "Unsupported editable requirement in `{}` at line {line}: `{requirement}`",
-                    self.file.user_display(),
+                    "Unsupported editable requirement in `{file}` at line {line}: `{requirement}`",
                 )
             }
             RequirementsTxtParserError::MissingRequirementPrefix(given) => {
                 write!(
                     f,
-                    "Requirement `{given}` in `{}` looks like a requirements file but was passed as a package name. Did you mean `-r {given}`?",
-                    self.file.user_display(),
+                    "Requirement `{given}` in `{file}` looks like a requirements file but was passed as a package name. Did you mean `-r {given}`?",
                 )
             }
             RequirementsTxtParserError::NoBinary { specifier, .. } => {
                 write!(
                     f,
-                    "Invalid specifier for `--no-binary` in `{}`: {specifier}",
-                    self.file.user_display(),
+                    "Invalid specifier for `--no-binary` in `{file}`: {specifier}",
                 )
             }
             RequirementsTxtParserError::OnlyBinary { specifier, .. } => {
                 write!(
                     f,
-                    "Invalid specifier for `--only-binary` in `{}`: {specifier}",
-                    self.file.user_display(),
+                    "Invalid specifier for `--only-binary` in `{file}`: {specifier}",
                 )
             }
             RequirementsTxtParserError::UnnamedConstraint { .. } => {
                 write!(
                     f,
-                    "Unnamed requirements are not allowed as constraints in `{}`",
-                    self.file.user_display(),
+                    "Unnamed requirements are not allowed as constraints in `{file}`",
                 )
             }
             RequirementsTxtParserError::Parser {
@@ -1431,45 +1373,24 @@ impl Display for RequirementsTxtFileError {
                 line,
                 column,
             } => {
-                write!(
-                    f,
-                    "{message} at {}:{line}:{column}",
-                    self.file.user_display(),
-                )
+                write!(f, "{message} at {file}:{line}:{column}")
             }
             RequirementsTxtParserError::UnsupportedRequirement { start, .. } => {
-                write!(
-                    f,
-                    "Unsupported requirement in {} at position {start}",
-                    self.file.user_display(),
-                )
+                write!(f, "Unsupported requirement in {file} at position {start}")
             }
             RequirementsTxtParserError::Pep508 { start, .. } => {
                 write!(
                     f,
-                    "Couldn't parse requirement in `{}` at position {start}",
-                    self.file.user_display(),
+                    "Couldn't parse requirement in `{file}` at position {start}",
                 )
             }
             RequirementsTxtParserError::ParsedUrl { start, .. } => {
-                write!(
-                    f,
-                    "Couldn't parse URL in `{}` at position {start}",
-                    self.file.user_display(),
-                )
+                write!(f, "Couldn't parse URL in `{file}` at position {start}")
             }
             RequirementsTxtParserError::Subfile { start, .. } => {
                 write!(
                     f,
-                    "Error parsing included file in `{}` at position {start}",
-                    self.file.user_display(),
-                )
-            }
-            RequirementsTxtParserError::NonUnicodeUrl { url } => {
-                write!(
-                    f,
-                    "Remote requirements URL contains non-unicode characters: {}",
-                    url.display(),
+                    "Error parsing included file in `{file}` at position {start}",
                 )
             }
             #[cfg(feature = "http")]
@@ -1480,16 +1401,6 @@ impl Display for RequirementsTxtFileError {
             RequirementsTxtParserError::ClientBuild(url, _err) => {
                 write!(f, "Error while accessing remote requirements file: `{url}`")
             }
-            #[cfg(feature = "http")]
-            RequirementsTxtParserError::InvalidUrl(url, err) => match err {
-                DisplaySafeUrlError::Url(err) => write!(f, "Not a valid URL, {err}: `{url}`"),
-                DisplaySafeUrlError::AmbiguousAuthority(_) => {
-                    // Intentionally avoid leaking the URL here, since we suspect that the user
-                    // has given us an ambiguous URL that contains sensitive information.
-                    // The error's own Display will provide a redacted version of the URL.
-                    write!(f, "Invalid URL: {err}")
-                }
-            },
         }
     }
 }
@@ -1524,22 +1435,24 @@ enum VisitedFiles<'a> {
     /// The requirements are included as regular requirements, and can recursively include both
     /// requirements and constraints.
     Requirements {
-        requirements: &'a mut FxHashSet<PathBuf>,
-        constraints: &'a mut FxHashSet<PathBuf>,
+        requirements: &'a mut FxHashSet<RequirementsInput>,
+        constraints: &'a mut FxHashSet<RequirementsInput>,
     },
     /// The requirements are included as constraints, all recursive inclusions are considered
     /// constraints.
     Constraints {
-        constraints: &'a mut FxHashSet<PathBuf>,
+        constraints: &'a mut FxHashSet<RequirementsInput>,
     },
 }
 
-/// Return a stable identity for a requirements file without changing the path used to read it.
-fn visited_file(path: &Path) -> PathBuf {
-    if path.starts_with("http://") || path.starts_with("https://") {
-        path.to_path_buf()
-    } else {
-        normalize_path(path).into_owned()
+/// Return a stable identity for a requirements input without changing the input used to read it.
+fn visited_file(input: &RequirementsInput) -> RequirementsInput {
+    match input {
+        RequirementsInput::Stdin => RequirementsInput::Stdin,
+        RequirementsInput::Local(path) => {
+            RequirementsInput::Local(normalize_path(path).into_owned())
+        }
+        RequirementsInput::Remote(url) => RequirementsInput::Remote(url.clone()),
     }
 }
 
@@ -1683,7 +1596,7 @@ mod test {
         let requirements_txt = temp_dir.path().join(path);
         fs::write(&requirements_txt, contents).unwrap();
 
-        let actual = RequirementsTxt::parse(&requirements_txt, &working_dir)
+        let actual = RequirementsTxt::parse(requirements_txt.as_path(), &working_dir)
             .await
             .unwrap();
 
@@ -3036,7 +2949,7 @@ mod test {
             -c constraints-only-recursive.txt
         "})?;
 
-        let parsed = RequirementsTxt::parse(&requirements, temp_dir.path()).await?;
+        let parsed = RequirementsTxt::parse(requirements.path(), temp_dir.path()).await?;
 
         let requirements: BTreeSet<String> = parsed
             .requirements

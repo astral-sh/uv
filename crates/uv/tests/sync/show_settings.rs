@@ -83,7 +83,9 @@ fn pip_compile_baseline() {
     PipCompileSettings {
         format: None,
         src_file: [
-            "requirements.in",
+            Local(
+                "requirements.in",
+            ),
         ],
         constraints: [],
         overrides: [],
@@ -457,7 +459,9 @@ fn pip_install_baseline() {
     PipInstallSettings {
         package: [],
         requirements: [
-            "requirements.in",
+            Local(
+                "requirements.in",
+            ),
         ],
         editables: [],
         editable: None,

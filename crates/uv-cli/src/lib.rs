@@ -14,6 +14,7 @@ use clap::{ValueEnum, ValueHint};
 use uv_audit::VulnerabilityServiceFormat;
 use uv_auth::Service;
 use uv_cache::CacheArgs;
+use uv_configuration::RequirementsInput;
 use uv_configuration::{
     AnnotationStyle, ExcludeNewerPackageEntry, ExportFormat, ForkStrategy, IndexStrategy,
     KeyringProviderType, PackageNameSpecifier, PipCompileFormat, PrereleaseMode,
@@ -714,7 +715,6 @@ pub struct VersionArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -1302,6 +1302,21 @@ impl<T> Maybe<T> {
     }
 }
 
+impl<T> FromStr for Maybe<T>
+where
+    T: FromStr,
+{
+    type Err = T::Err;
+
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        if input.is_empty() {
+            Ok(Self::None)
+        } else {
+            input.parse().map(Self::Some)
+        }
+    }
+}
+
 /// Parse an `--index-url` argument into an [`PipIndex`], mapping the empty string to `None`.
 fn parse_index_url(input: &str) -> Result<Maybe<PipIndex>, String> {
     if input.is_empty() {
@@ -1516,25 +1531,6 @@ fn parse_file_path(input: &str) -> Result<PathBuf, String> {
     }
 }
 
-/// Parse a string into a [`PathBuf`], mapping the empty string to `None`.
-fn parse_maybe_file_path(input: &str) -> Result<Maybe<PathBuf>, String> {
-    if input.is_empty() {
-        Ok(Maybe::None)
-    } else {
-        parse_file_path(input).map(Maybe::Some)
-    }
-}
-
-// Parse a string, mapping the empty string to `None`.
-#[expect(clippy::unnecessary_wraps)]
-fn parse_maybe_string(input: &str) -> Result<Maybe<String>, String> {
-    if input.is_empty() {
-        Ok(Maybe::None)
-    } else {
-        Ok(Maybe::Some(input.to_string()))
-    }
-}
-
 #[derive(Args)]
 #[command(group = clap::ArgGroup::new("sources").required(true).multiple(true))]
 pub struct PipCompileArgs {
@@ -1550,8 +1546,8 @@ pub struct PipCompileArgs {
     ///
     /// The order of the requirements files and the requirements in them is used to determine
     /// priority during resolution.
-    #[arg(group = "sources", value_parser = parse_file_path, value_hint = ValueHint::FilePath)]
-    pub src_file: Vec<PathBuf>,
+    #[arg(group = "sources", value_hint = ValueHint::FilePath)]
+    pub src_file: Vec<RequirementsInput>,
 
     /// Constrain versions using the given requirements files.
     ///
@@ -1566,10 +1562,9 @@ pub struct PipCompileArgs {
         alias = "constraint",
         env = EnvVars::UV_CONSTRAINT,
         value_delimiter = ' ',
-        value_parser = parse_maybe_file_path,
         value_hint = ValueHint::FilePath,
     )]
-    pub constraints: Vec<Maybe<PathBuf>>,
+    pub constraints: Vec<Maybe<RequirementsInput>>,
 
     /// Override versions using the given requirements files.
     ///
@@ -1585,10 +1580,9 @@ pub struct PipCompileArgs {
         alias = "override",
         env = EnvVars::UV_OVERRIDE,
         value_delimiter = ' ',
-        value_parser = parse_maybe_file_path,
         value_hint = ValueHint::FilePath,
     )]
-    pub overrides: Vec<Maybe<PathBuf>>,
+    pub overrides: Vec<Maybe<RequirementsInput>>,
 
     /// Exclude packages from resolution using the given requirements files.
     ///
@@ -1602,10 +1596,9 @@ pub struct PipCompileArgs {
         alias = "exclude",
         env = EnvVars::UV_EXCLUDE,
         value_delimiter = ' ',
-        value_parser = parse_maybe_file_path,
         value_hint = ValueHint::FilePath,
     )]
-    pub excludes: Vec<Maybe<PathBuf>>,
+    pub excludes: Vec<Maybe<RequirementsInput>>,
 
     /// Constrain build dependencies using the given requirements files when building source
     /// distributions.
@@ -1619,10 +1612,9 @@ pub struct PipCompileArgs {
         alias = "build-constraint",
         env = EnvVars::UV_BUILD_CONSTRAINT,
         value_delimiter = ' ',
-        value_parser = parse_maybe_file_path,
         value_hint = ValueHint::FilePath,
     )]
-    pub build_constraints: Vec<Maybe<PathBuf>>,
+    pub build_constraints: Vec<Maybe<RequirementsInput>>,
 
     /// Include optional dependencies from the specified extra name; may be provided more than once.
     ///
@@ -1742,7 +1734,6 @@ pub struct PipCompileArgs {
         short,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -1944,8 +1935,8 @@ pub struct PipSyncArgs {
     /// extract the requirements for the relevant project.
     ///
     /// If `-` is provided, then requirements will be read from stdin.
-    #[arg(required(true), value_parser = parse_file_path, value_hint = ValueHint::FilePath)]
-    pub src_file: Vec<PathBuf>,
+    #[arg(required(true), value_hint = ValueHint::FilePath)]
+    pub src_file: Vec<RequirementsInput>,
 
     /// Constrain versions using the given requirements files.
     ///
@@ -1960,10 +1951,9 @@ pub struct PipSyncArgs {
         alias = "constraint",
         env = EnvVars::UV_CONSTRAINT,
         value_delimiter = ' ',
-        value_parser = parse_maybe_file_path,
         value_hint = ValueHint::FilePath,
     )]
-    pub constraints: Vec<Maybe<PathBuf>>,
+    pub constraints: Vec<Maybe<RequirementsInput>>,
 
     /// Constrain build dependencies using the given requirements files when building source
     /// distributions.
@@ -1977,10 +1967,9 @@ pub struct PipSyncArgs {
         alias = "build-constraint",
         env = EnvVars::UV_BUILD_CONSTRAINT,
         value_delimiter = ' ',
-        value_parser = parse_maybe_file_path,
         value_hint = ValueHint::FilePath,
     )]
-    pub build_constraints: Vec<Maybe<PathBuf>>,
+    pub build_constraints: Vec<Maybe<RequirementsInput>>,
 
     /// Include optional dependencies from the specified extra name; may be provided more than once.
     ///
@@ -2028,7 +2017,6 @@ pub struct PipSyncArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -2233,10 +2221,9 @@ pub struct PipInstallArgs {
         short,
         alias = "requirement",
         group = "sources",
-        value_parser = parse_file_path,
         value_hint = ValueHint::FilePath,
     )]
-    pub requirements: Vec<PathBuf>,
+    pub requirements: Vec<RequirementsInput>,
 
     /// Install the editable package based on the provided local file path.
     #[arg(long, short, group = "sources")]
@@ -2263,10 +2250,9 @@ pub struct PipInstallArgs {
         alias = "constraint",
         env = EnvVars::UV_CONSTRAINT,
         value_delimiter = ' ',
-        value_parser = parse_maybe_file_path,
         value_hint = ValueHint::FilePath,
     )]
-    pub constraints: Vec<Maybe<PathBuf>>,
+    pub constraints: Vec<Maybe<RequirementsInput>>,
 
     /// Override versions using the given requirements files.
     ///
@@ -2282,10 +2268,9 @@ pub struct PipInstallArgs {
         alias = "override",
         env = EnvVars::UV_OVERRIDE,
         value_delimiter = ' ',
-        value_parser = parse_maybe_file_path,
         value_hint = ValueHint::FilePath,
     )]
-    pub overrides: Vec<Maybe<PathBuf>>,
+    pub overrides: Vec<Maybe<RequirementsInput>>,
 
     /// Exclude packages from resolution using the given requirements files.
     ///
@@ -2299,10 +2284,9 @@ pub struct PipInstallArgs {
         alias = "exclude",
         env = EnvVars::UV_EXCLUDE,
         value_delimiter = ' ',
-        value_parser = parse_maybe_file_path,
         value_hint = ValueHint::FilePath,
     )]
-    pub excludes: Vec<Maybe<PathBuf>>,
+    pub excludes: Vec<Maybe<RequirementsInput>>,
 
     /// Constrain build dependencies using the given requirements files when building source
     /// distributions.
@@ -2316,10 +2300,9 @@ pub struct PipInstallArgs {
         alias = "build-constraint",
         env = EnvVars::UV_BUILD_CONSTRAINT,
         value_delimiter = ' ',
-        value_parser = parse_maybe_file_path,
         value_hint = ValueHint::FilePath,
     )]
-    pub build_constraints: Vec<Maybe<PathBuf>>,
+    pub build_constraints: Vec<Maybe<RequirementsInput>>,
 
     /// Include optional dependencies from the specified extra name; may be provided more than once.
     ///
@@ -2375,7 +2358,6 @@ pub struct PipInstallArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -2573,8 +2555,8 @@ pub struct PipUninstallArgs {
     ///
     /// The following formats are supported: `requirements.txt`, `.py` files with inline metadata,
     /// `pylock.toml`, `pyproject.toml`, `setup.py`, and `setup.cfg`.
-    #[arg(long, short, alias = "requirement", group = "sources", value_parser = parse_file_path, value_hint = ValueHint::FilePath)]
-    pub requirements: Vec<PathBuf>,
+    #[arg(long, short, alias = "requirement", group = "sources", value_hint = ValueHint::FilePath)]
+    pub requirements: Vec<RequirementsInput>,
 
     /// The Python interpreter from which packages should be uninstalled.
     ///
@@ -2589,7 +2571,6 @@ pub struct PipUninstallArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -2685,7 +2666,6 @@ pub struct PipFreezeArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -2773,7 +2753,6 @@ pub struct PipListArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -2820,7 +2799,6 @@ pub struct PipCheckArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -2899,7 +2877,6 @@ pub struct PipShowArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -2964,7 +2941,6 @@ pub struct PipTreeArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -3098,10 +3074,9 @@ pub struct BuildArgs {
         alias = "build-constraint",
         env = EnvVars::UV_BUILD_CONSTRAINT,
         value_delimiter = ' ',
-        value_parser = parse_maybe_file_path,
         value_hint = ValueHint::FilePath,
     )]
-    pub build_constraints: Vec<Maybe<PathBuf>>,
+    pub build_constraints: Vec<Maybe<RequirementsInput>>,
 
     #[command(flatten)]
     pub hash_checking: HashCheckingArgs,
@@ -3119,7 +3094,6 @@ pub struct BuildArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -3148,7 +3122,6 @@ pub struct VenvArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -3505,7 +3478,6 @@ pub struct InitArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -3619,8 +3591,8 @@ pub struct RunArgs {
     /// The same environment semantics as `--with` apply.
     ///
     /// Using `pyproject.toml`, `setup.py`, or `setup.cfg` files is not allowed.
-    #[arg(long, value_delimiter = ',', value_parser = parse_maybe_file_path, value_hint = ValueHint::FilePath)]
-    pub with_requirements: Vec<Maybe<PathBuf>>,
+    #[arg(long, value_delimiter = ',', value_hint = ValueHint::FilePath)]
+    pub with_requirements: Vec<Maybe<RequirementsInput>>,
 
     /// Run the command in an isolated virtual environment [env: UV_ISOLATED=]
     ///
@@ -3745,7 +3717,6 @@ pub struct RunArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -4041,7 +4012,6 @@ pub struct SyncArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -4160,7 +4130,6 @@ pub struct LockArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -4199,10 +4168,9 @@ pub struct AddArgs {
         short,
         alias = "requirement",
         group = "sources",
-        value_parser = parse_file_path,
         value_hint = ValueHint::FilePath,
     )]
-    pub requirements: Vec<PathBuf>,
+    pub requirements: Vec<RequirementsInput>,
 
     /// Constrain versions using the given requirements files.
     ///
@@ -4217,10 +4185,9 @@ pub struct AddArgs {
         alias = "constraint",
         env = EnvVars::UV_CONSTRAINT,
         value_delimiter = ' ',
-        value_parser = parse_maybe_file_path,
         value_hint = ValueHint::FilePath,
     )]
-    pub constraints: Vec<Maybe<PathBuf>>,
+    pub constraints: Vec<Maybe<RequirementsInput>>,
 
     /// Apply this marker to all added packages.
     #[arg(long, short, value_parser = MarkerTree::from_str, value_hint = ValueHint::Other)]
@@ -4402,7 +4369,6 @@ pub struct AddArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -4639,7 +4605,6 @@ pub struct RemoveArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -4734,7 +4699,6 @@ pub struct TreeArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -5013,7 +4977,6 @@ pub struct ExportArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -5222,7 +5185,6 @@ pub struct CheckArgs {
         long,
         short,
         env = EnvVars::UV_PYTHON,
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -5576,10 +5538,9 @@ pub struct ToolRunArgs {
     #[arg(
         long,
         value_delimiter = ',',
-        value_parser = parse_maybe_file_path,
         value_hint = ValueHint::FilePath,
     )]
-    pub with_requirements: Vec<Maybe<PathBuf>>,
+    pub with_requirements: Vec<Maybe<RequirementsInput>>,
 
     /// Constrain versions using the given requirements files.
     ///
@@ -5594,10 +5555,9 @@ pub struct ToolRunArgs {
         alias = "constraint",
         env = EnvVars::UV_CONSTRAINT,
         value_delimiter = ' ',
-        value_parser = parse_maybe_file_path,
         value_hint = ValueHint::FilePath,
     )]
-    pub constraints: Vec<Maybe<PathBuf>>,
+    pub constraints: Vec<Maybe<RequirementsInput>>,
 
     /// Constrain build dependencies using the given requirements files when building source
     /// distributions.
@@ -5611,10 +5571,9 @@ pub struct ToolRunArgs {
         alias = "build-constraint",
         env = EnvVars::UV_BUILD_CONSTRAINT,
         value_delimiter = ' ',
-        value_parser = parse_maybe_file_path,
         value_hint = ValueHint::FilePath,
     )]
-    pub build_constraints: Vec<Maybe<PathBuf>>,
+    pub build_constraints: Vec<Maybe<RequirementsInput>>,
 
     /// Override versions using the given requirements files.
     ///
@@ -5630,10 +5589,9 @@ pub struct ToolRunArgs {
         alias = "override",
         env = EnvVars::UV_OVERRIDE,
         value_delimiter = ' ',
-        value_parser = parse_maybe_file_path,
         value_hint = ValueHint::FilePath,
     )]
-    pub overrides: Vec<Maybe<PathBuf>>,
+    pub overrides: Vec<Maybe<RequirementsInput>>,
 
     /// Run the tool in an isolated virtual environment, ignoring any already-installed tools [env:
     /// UV_ISOLATED=]
@@ -5673,7 +5631,6 @@ pub struct ToolRunArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -5757,8 +5714,8 @@ pub struct ToolInstallArgs {
     ///
     /// The following formats are supported: `requirements.txt`, `.py` files with inline metadata,
     /// and `pylock.toml`.
-    #[arg(long, value_delimiter = ',', value_parser = parse_maybe_file_path, value_hint = ValueHint::FilePath)]
-    pub with_requirements: Vec<Maybe<PathBuf>>,
+    #[arg(long, value_delimiter = ',', value_hint = ValueHint::FilePath)]
+    pub with_requirements: Vec<Maybe<RequirementsInput>>,
 
     /// Install the target package in editable mode, such that changes in the package's source
     /// directory are reflected without reinstallation.
@@ -5786,10 +5743,9 @@ pub struct ToolInstallArgs {
         alias = "constraint",
         env = EnvVars::UV_CONSTRAINT,
         value_delimiter = ' ',
-        value_parser = parse_maybe_file_path,
         value_hint = ValueHint::FilePath,
     )]
-    pub constraints: Vec<Maybe<PathBuf>>,
+    pub constraints: Vec<Maybe<RequirementsInput>>,
 
     /// Override versions using the given requirements files.
     ///
@@ -5805,10 +5761,9 @@ pub struct ToolInstallArgs {
         alias = "override",
         env = EnvVars::UV_OVERRIDE,
         value_delimiter = ' ',
-        value_parser = parse_maybe_file_path,
         value_hint = ValueHint::FilePath,
     )]
-    pub overrides: Vec<Maybe<PathBuf>>,
+    pub overrides: Vec<Maybe<RequirementsInput>>,
 
     /// Exclude packages from resolution using the given requirements files.
     ///
@@ -5822,10 +5777,9 @@ pub struct ToolInstallArgs {
         alias = "exclude",
         env = EnvVars::UV_EXCLUDE,
         value_delimiter = ' ',
-        value_parser = parse_maybe_file_path,
         value_hint = ValueHint::FilePath,
     )]
-    pub excludes: Vec<Maybe<PathBuf>>,
+    pub excludes: Vec<Maybe<RequirementsInput>>,
 
     /// Constrain build dependencies using the given requirements files when building source
     /// distributions.
@@ -5839,10 +5793,9 @@ pub struct ToolInstallArgs {
         alias = "build-constraint",
         env = EnvVars::UV_BUILD_CONSTRAINT,
         value_delimiter = ' ',
-        value_parser = parse_maybe_file_path,
         value_hint = ValueHint::FilePath,
     )]
-    pub build_constraints: Vec<Maybe<PathBuf>>,
+    pub build_constraints: Vec<Maybe<RequirementsInput>>,
 
     #[command(flatten)]
     pub installer: ResolverInstallerArgs,
@@ -5873,7 +5826,6 @@ pub struct ToolInstallArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -6023,7 +5975,6 @@ pub struct ToolUpgradeArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
@@ -7932,7 +7883,6 @@ pub struct MetadataArgs {
         env = EnvVars::UV_PYTHON,
         verbatim_doc_comment,
         help_heading = "Python options",
-        value_parser = parse_maybe_string,
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
