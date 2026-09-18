@@ -3,6 +3,35 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.12.17
+
+Released on 2026-09-18.
+
+### Enhancements
+
+- Add minimum libc versions for universal resolution ([#21651](https://github.com/astral-sh/uv/pull/21651))
+- Avoid writing lockfiles when reading workspace metadata ([#21821](https://github.com/astral-sh/uv/pull/21821))
+- Reject invalid Git archive paths in lockfiles ([#21780](https://github.com/astral-sh/uv/pull/21780))
+- Validate pylock wheel identities ([#20746](https://github.com/astral-sh/uv/pull/20746))
+
+### Performance
+
+- Avoid allocations for duplicate OnceMap registrations ([#21810](https://github.com/astral-sh/uv/pull/21810))
+- Borrow build exclude patterns to avoid quadratic deduplication ([#21650](https://github.com/astral-sh/uv/pull/21650))
+
+### Bug fixes
+
+- Widen required-environment forks to wheel compatibility boundaries ([#21825](https://github.com/astral-sh/uv/pull/21825))
+
+### Documentation
+
+- Improve the 0.12.14 and 0.12.15 changelog entries ([#21817](https://github.com/astral-sh/uv/pull/21817))
+
+### Other changes
+
+- Publish documentation with STS credentials ([#21595](https://github.com/astral-sh/uv/pull/21595))
+- Retry failed Depot image publication ([#21813](https://github.com/astral-sh/uv/pull/21813))
+
 ## 0.12.16
 
 Released on 2026-09-17.
