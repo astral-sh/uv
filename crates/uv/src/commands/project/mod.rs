@@ -1227,7 +1227,12 @@ fn is_centralized_environment_link(path: &Path, cache: &Cache) -> bool {
 
 /// Read an environment path from a file.
 fn read_environment_path_file(path: &Path) -> io::Result<PathBuf> {
-    let target = PathBuf::from(fs_err::read_to_string(path)?);
+    let contents = fs_err::read_to_string(path)?;
+    let line = contents
+        .strip_suffix("\r\n")
+        .or_else(|| contents.strip_suffix('\n'))
+        .unwrap_or(&contents);
+    let target = PathBuf::from(line);
     Ok(if target.is_absolute() {
         target
     } else {
@@ -1359,7 +1364,15 @@ pub(crate) fn update_project_environment_link(
         return false;
     };
 
-    if let Err(err) = uv_fs::write_atomic_sync(&link, target.as_bytes()) {
+    if target.contains(['\r', '\n']) {
+        report_error(format_args!(
+            "Failed to write the environment path to `{}`: the path contains a newline",
+            link.simplified_display()
+        ));
+        return false;
+    }
+
+    if let Err(err) = uv_fs::write_atomic_sync(&link, format!("{target}\n")) {
         report_error(format_args!("Failed to write the environment path: {err}"));
         return false;
     }
