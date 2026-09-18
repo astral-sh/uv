@@ -1588,6 +1588,24 @@ fn requirements_txt_frozen_invalid_git_path() -> Result<()> {
       cause: Git archive path `foo` for `example==1.0.0 @ git+https://example.com/pkg.git?path=foo#0000000000000000000000000000000000000000` must end in a supported file extension: `.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`
     ");
 
+    // Without a commit fragment, the Git source is rejected before checking the archive path.
+    context.temp_dir.child("uv.lock").write_str(
+        &context
+            .read("uv.lock")
+            .replace("#0000000000000000000000000000000000000000", ""),
+    )?;
+
+    uv_snapshot!(context.filters(), context.export().arg("--frozen").arg("--offline"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to parse `uv.lock`
+      cause: TOML parse error at line 5, column 1
+               |
+             5 | [[package]]
+               | ^^^^^^^^^^^
+             Failed to parse Git URL
+    ");
+
     Ok(())
 }
 
