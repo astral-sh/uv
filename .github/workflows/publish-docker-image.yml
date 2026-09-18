@@ -75,8 +75,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          sparse-checkout: scripts/depot-push-with-retry.sh
-          sparse-checkout-cone-mode: false
+          sparse-checkout: scripts/docker
 
       - uses: depot/setup-action@15c09a5f77a0840ad4bce955686522a257853461 # v1.7.1
 
@@ -141,7 +140,7 @@ jobs:
             # Copy the complete index instead of loading and re-pushing it through
             # the local Docker image store, which can drop platforms or change
             # the manifest format (astral-sh/uv#14165).
-            ./scripts/depot-push-with-retry.sh --project "$DEPOT_PROJECT_ID" --tag "${image_tags[0]}" "$build_id"
+            ./scripts/docker/depot-push-with-retry.sh --project "$DEPOT_PROJECT_ID" --tag "${image_tags[0]}" "$build_id"
             copied_digest=$(docker buildx imagetools inspect \
               "${image_tags[0]}" --format '{{.Manifest.Digest}}')
             if [ "$copied_digest" != "$digest" ]; then
