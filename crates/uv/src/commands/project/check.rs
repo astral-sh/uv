@@ -755,6 +755,8 @@ pub(crate) async fn check(
         project
             .as_ref()
             .map(|project| project.workspace().install_path().as_path()),
+        lock_check,
+        frozen,
         &check_targets,
         &excluded_targets,
         explicit_targets,

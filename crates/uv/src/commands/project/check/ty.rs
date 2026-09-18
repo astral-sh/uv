@@ -13,12 +13,14 @@ use uv_client::BaseClientBuilder;
 use uv_fs::Simplified;
 use uv_pep440::Version;
 use uv_shell::shlex_posix;
+use uv_static::EnvVars;
 
 use crate::child::run_to_completion;
 use crate::commands::ExitStatus;
 use crate::commands::reporters::BinaryDownloadReporter;
 use crate::commands::workspace::list::{ScriptDiscoveryError, find_scripts};
 use crate::printer::Printer;
+use crate::settings::{FrozenSource, LockCheck};
 
 /// Run a type check powered by ty.
 #[expect(clippy::fn_params_excessive_bools)]
@@ -28,6 +30,8 @@ pub(super) async fn run(
     fix: bool,
     target_dir: &Path,
     workspace_root: Option<&Path>,
+    lock_check: LockCheck,
+    frozen: Option<FrozenSource>,
     check_targets: &[PathBuf],
     excluded_targets: &[PathBuf],
     explicit_targets: bool,
@@ -232,6 +236,20 @@ pub(super) async fn run(
             "scripts"
         },
     );
+
+    if workspace_root.is_some() {
+        // Forward enabled settings and remove disabled ones so CLI overrides of inherited
+        // settings also apply when ty invokes `uv workspace metadata`.
+        if frozen.is_some() {
+            command.env(EnvVars::UV_FROZEN, "1");
+        } else {
+            command.env_remove(EnvVars::UV_FROZEN);
+        }
+        match lock_check {
+            LockCheck::Enabled(_) => command.env(EnvVars::UV_LOCKED, "1"),
+            LockCheck::Disabled => command.env_remove(EnvVars::UV_LOCKED),
+        };
+    }
 
     if let Some(venv_path) = venv_path {
         command.env("VIRTUAL_ENV", venv_path);

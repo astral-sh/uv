@@ -7883,18 +7883,6 @@ pub struct MetadataArgs {
     #[arg(long, overrides_with = "frozen", hide = true)]
     pub no_frozen: bool,
 
-    /// Perform a dry run, without writing the lockfile.
-    ///
-    /// In dry-run mode, uv will resolve the project's dependencies and report on the resulting
-    /// changes, but will not write the lockfile to disk.
-    #[arg(
-        long,
-        conflicts_with = "frozen",
-        conflicts_with = "locked",
-        conflicts_with = "sync"
-    )]
-    pub dry_run: bool,
-
     #[command(flatten)]
     pub resolver: ResolverArgs,
 
@@ -7908,6 +7896,9 @@ pub struct MetadataArgs {
     ///
     /// This adds a mapping from importable module names to references to the package nodes
     /// that provide them. By default, the environment is synced in inexact mode.
+    ///
+    /// This also allows creating or updating the lockfile, unless `--locked` or `--frozen` is
+    /// provided. For scripts, the lockfile is only updated if it already exists.
     #[arg(long)]
     pub sync: bool,
 

@@ -2276,7 +2276,6 @@ pub(crate) struct MetadataSettings {
     script: Option<PathBuf>,
     pub(crate) lock_check: LockCheck,
     pub(crate) frozen: Option<FrozenSource>,
-    pub(crate) dry_run: DryRun,
     pub(crate) sync: Option<Modifications>,
     pub(crate) active: ActiveEnvironment,
     pub(crate) python: Option<String>,
@@ -2299,7 +2298,6 @@ impl MetadataSettings {
             no_locked,
             frozen,
             no_frozen,
-            dry_run,
             resolver,
             build,
             refresh,
@@ -2326,7 +2324,6 @@ impl MetadataSettings {
             script,
             lock_check: locked,
             frozen,
-            dry_run: DryRun::from_args(dry_run),
             sync: sync.then_some(if exact {
                 Modifications::Exact
             } else {
