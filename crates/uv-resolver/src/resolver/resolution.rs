@@ -1,9 +1,12 @@
 use std::fmt::Write;
+use std::sync::Arc;
 
 use rustc_hash::FxHashMap;
 use tracing::{Level, trace};
 
-use uv_distribution_types::IndexUrl;
+use uv_distribution::Metadata;
+use uv_distribution_types::{Dist, DistributionId, Identifier, IndexUrl, ResolvedDist};
+use uv_git::GitResolver;
 use uv_normalize::PackageName;
 use uv_pep440::{MIN_VERSION, Version};
 use uv_pep508::MarkerTree;
@@ -11,8 +14,9 @@ use uv_pypi_types::VerbatimParsedUrl;
 use uv_resolver_types::PackageNodeKind;
 
 use crate::pins::FilePins;
+use crate::redirect::url_to_precise;
 use crate::universal_marker::ConflictMarker;
-use crate::{ResolverEnvironment, UniversalMarker};
+use crate::{InMemoryIndex, MetadataResponse, ResolveError, ResolverEnvironment, UniversalMarker};
 
 /// The resolution from a single fork including the virtual packages and the edges between them.
 #[derive(Debug)]
@@ -27,7 +31,136 @@ pub(crate) struct Resolution<'index> {
     pub(crate) env: ResolverEnvironment,
 }
 
+/// A completed fork whose selected artifacts and metadata have been recovered.
+#[derive(Debug)]
+pub(crate) struct ResolvedFork {
+    pub(crate) nodes: Vec<(ResolutionPackage, SelectedDistribution)>,
+    pub(crate) edges: Vec<ResolutionDependencyEdge>,
+    pub(crate) env: ResolverEnvironment,
+}
+
+/// A selected package version, retaining both its installation artifact and metadata provenance.
+#[derive(Debug)]
+pub(crate) struct SelectedDistribution {
+    version: Version,
+    source: SelectedSource,
+}
+
+#[derive(Debug)]
+enum SelectedSource {
+    Url {
+        dist: ResolvedDist,
+        metadata_id: DistributionId,
+        metadata: Metadata,
+    },
+    Registry {
+        dist: ResolvedDist,
+        metadata_id: DistributionId,
+        /// Direct-only resolution need not fetch registry metadata.
+        metadata: Option<Metadata>,
+    },
+}
+
+impl SelectedDistribution {
+    fn new(
+        package: &ResolutionPackage,
+        version: Version,
+        pins: &FilePins<'_>,
+        index: &InMemoryIndex,
+        git: &GitResolver,
+    ) -> Result<Self, ResolveError> {
+        let source = if let Some(url) = &package.url {
+            let metadata_id = Dist::from_url(package.name.clone(), url.clone())?.distribution_id();
+            let response = index.distributions().get(&metadata_id).ok_or_else(|| {
+                ResolveError::UnregisteredTask(format!("{} @ {}", package.name, url.verbatim))
+            })?;
+            let MetadataResponse::Found(archive) = &*response else {
+                return Err(ResolveError::PackageUnavailable(package.name.clone()));
+            };
+            SelectedSource::Url {
+                dist: ResolvedDist::Installable {
+                    dist: Arc::new(Dist::from_url(
+                        package.name.clone(),
+                        url_to_precise(url.clone(), git),
+                    )?),
+                    version: Some(version.clone()),
+                },
+                metadata_id,
+                metadata: archive.metadata.clone(),
+            }
+        } else {
+            let (dist, metadata_id) =
+                pins.dist_and_id(&package.name, &version).ok_or_else(|| {
+                    ResolveError::UnregisteredTask(format!("{}=={version}", package.name))
+                })?;
+            let metadata = index.distributions().get(metadata_id).and_then(|response| {
+                if let MetadataResponse::Found(archive) = &*response {
+                    Some(archive.metadata.clone())
+                } else {
+                    None
+                }
+            });
+            SelectedSource::Registry {
+                dist: dist.clone(),
+                metadata_id: metadata_id.clone(),
+                metadata,
+            }
+        };
+        Ok(Self { version, source })
+    }
+
+    pub(crate) fn version(&self) -> &Version {
+        &self.version
+    }
+
+    /// Move the selected artifact and metadata into the output graph.
+    pub(crate) fn into_parts(self) -> (Version, ResolvedDist, Option<Metadata>) {
+        match self.source {
+            SelectedSource::Url { dist, metadata, .. } => (self.version, dist, Some(metadata)),
+            SelectedSource::Registry { dist, metadata, .. } => (self.version, dist, metadata),
+        }
+    }
+
+    /// The metadata cache uses the requested URL, even when the installation URL is made precise.
+    fn metadata_id(&self) -> &DistributionId {
+        match &self.source {
+            SelectedSource::Url { metadata_id, .. }
+            | SelectedSource::Registry { metadata_id, .. } => metadata_id,
+        }
+    }
+
+    /// Registry hashes belong to the installation artifact; URL hashes use the requested URL.
+    pub(crate) fn hashes_id(&self) -> DistributionId {
+        match &self.source {
+            SelectedSource::Url { .. } => self.metadata_id().clone(),
+            SelectedSource::Registry { dist, .. } => dist.distribution_id(),
+        }
+    }
+}
+
 impl Resolution<'_> {
+    /// Recover selected artifacts and metadata once before constructing the merged output graph.
+    pub(crate) fn finalize(
+        self,
+        index: &InMemoryIndex,
+        git: &GitResolver,
+    ) -> Result<ResolvedFork, ResolveError> {
+        let nodes = self
+            .nodes
+            .into_iter()
+            .map(|(package, version)| {
+                let selected =
+                    SelectedDistribution::new(&package, version, &self.pins, index, git)?;
+                Ok((package, selected))
+            })
+            .collect::<Result<_, ResolveError>>()?;
+        Ok(ResolvedFork {
+            nodes,
+            edges: self.edges,
+            env: self.env,
+        })
+    }
+
     /// When trace level logging is enabled, we dump the final
     /// set of resolutions, including markers, to help with
     /// debugging. Namely, this tells use precisely the state
