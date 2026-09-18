@@ -14,7 +14,8 @@ use uv_configuration::{
 };
 use uv_distribution::LoweredRequirement;
 use uv_distribution_types::{
-    Index, IndexLocations, NameRequirementSpecification, Requirement, RequiresPython,
+    Index, IndexLocations, MinimumLibcVersion, NameRequirementSpecification, Requirement,
+    RequiresPython,
 };
 use uv_lock::Lock;
 use uv_normalize::{GroupName, PackageName};
@@ -256,6 +257,14 @@ impl<'lock> LockTarget<'lock> {
                 // TODO(charlie): Add support for environments in scripts.
                 None
             }
+        }
+    }
+
+    /// Returns the supported libc implementations and their minimum versions.
+    pub(crate) fn minimum_libc_version(self) -> Option<MinimumLibcVersion> {
+        match self {
+            Self::Workspace(workspace) => workspace.minimum_libc_version(),
+            Self::Script(_) => None,
         }
     }
 

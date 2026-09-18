@@ -21,7 +21,9 @@ use thiserror::Error;
 use tracing::instrument;
 use uv_build_backend::BuildBackendSettings;
 use uv_configuration::{ExcludeDependency, GitLfsSetting, Override};
-use uv_distribution_types::{Index, IndexName, NameRequirementSpecification, RequirementSource};
+use uv_distribution_types::{
+    Index, IndexName, MinimumLibcVersion, NameRequirementSpecification, RequirementSource,
+};
 use uv_fs::{PortablePathBuf, try_relative_to_if};
 use uv_git_types::GitReference;
 use uv_macros::OptionsMetadata;
@@ -705,6 +707,37 @@ pub struct ToolUv {
         "#
     )]
     pub(crate) required_environments: Option<SupportedEnvironments>,
+
+    /// The minimum libc versions to support when resolving for Linux.
+    ///
+    /// During universal resolution, wheels must support the configured libc versions to satisfy
+    /// `required-environments`. For example, `{ glibc = "2.31" }` accepts `manylinux_2_17` wheels
+    /// as coverage, but not `manylinux_2_34` wheels. Both are retained in the lockfile so installation
+    /// can select the best wheel for the current machine. An omitted libc is not required.
+    ///
+    /// Use `required-environments` to specify the Linux architectures to support. Each configured
+    /// libc version needs compatible wheels for those environments. Generic Linux wheels do not
+    /// constrain libc and can satisfy either implementation. Packages with a usable source
+    /// distribution can still be selected.
+    ///
+    /// This setting is respected by `uv lock` and `uv pip compile --universal`.
+    ///
+    /// This option is in preview and may change in any future release. Use
+    /// `--preview-features minimum-libc-version` or configure
+    /// `preview-features = ["minimum-libc-version"]` to disable the warning.
+    #[option(
+        default = "None",
+        value_type = "dict[str, str]",
+        example = r#"
+            preview-features = ["minimum-libc-version"]
+            required-environments = [
+                "sys_platform == 'linux' and platform_machine == 'x86_64'",
+                "sys_platform == 'linux' and platform_machine == 'aarch64'",
+            ]
+            minimum-libc-version = { glibc = "2.31" }
+        "#
+    )]
+    pub(crate) minimum_libc_version: Option<MinimumLibcVersion>,
 
     /// Declare collections of extras or dependency groups that are conflicting
     /// (i.e., mutually exclusive).

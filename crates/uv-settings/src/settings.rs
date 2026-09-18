@@ -13,8 +13,8 @@ use uv_configuration::{
 };
 use uv_distribution_types::{
     ConfigSettings, ExcludeNewerOverride, ExcludeNewerSpan, ExcludeNewerValue, ExtraBuildVariables,
-    Index, IndexLocations, IndexUrl, IndexUrlError, Origin, PackageConfigSettings, PipExtraIndex,
-    PipFindLinks, PipIndex, StaticMetadata,
+    Index, IndexLocations, IndexUrl, IndexUrlError, MinimumLibcVersion, Origin,
+    PackageConfigSettings, PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
 };
 use uv_install_wheel::LinkMode;
 use uv_macros::{CombineOptions, OptionsMetadata};
@@ -164,6 +164,9 @@ pub struct Options {
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub required_environments: Option<SupportedEnvironments>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub minimum_libc_version: Option<MinimumLibcVersion>,
 
     // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
@@ -2638,6 +2641,7 @@ struct OptionsWire {
     build_constraint_dependencies: Option<Vec<BuildConstraintDependency>>,
     environments: Option<SupportedEnvironments>,
     required_environments: Option<SupportedEnvironments>,
+    minimum_libc_version: Option<MinimumLibcVersion>,
 
     // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
@@ -2721,6 +2725,7 @@ impl TryFrom<OptionsWire> for Options {
             build_constraint_dependencies,
             environments,
             required_environments,
+            minimum_libc_version,
             conflicts,
             publish_url,
             trusted_publishing,
@@ -2803,6 +2808,7 @@ impl TryFrom<OptionsWire> for Options {
             build_constraint_dependencies,
             environments,
             required_environments,
+            minimum_libc_version,
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror,
                 pypy_install_mirror,

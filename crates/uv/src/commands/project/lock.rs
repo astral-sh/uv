@@ -707,6 +707,14 @@ async fn do_lock(
         None
     };
 
+    let minimum_libc_version = target.minimum_libc_version();
+    if minimum_libc_version.is_some() && !preview.is_enabled(PreviewFeature::MinimumLibcVersion) {
+        warn_user_once!(
+            "Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeature::MinimumLibcVersion
+        );
+    }
+
     // Determine the supported Python range. If no range is defined, and warn and default to the
     // current minor version.
     let requires_python = target.requires_python()?;
@@ -808,6 +816,7 @@ async fn do_lock(
         .index_strategy(*index_strategy)
         .build_options(build_options.clone())
         .artifact_environments(artifact_environments.clone())
+        .minimum_libc_version(minimum_libc_version)
         .build();
     // Checking an existing lockfile may build metadata and install build dependencies. Verify any
     // artifacts recorded in that lockfile, including for an ordinary unlocked command.
@@ -1310,6 +1319,16 @@ impl ValidatedLock {
             debug!(
                 "Resolving despite existing lockfile due to change in supported environments: `{:?}` vs. `{:?}`",
                 expected, actual
+            );
+            return Ok(Self::Versions(lock));
+        }
+
+        // Different libc requirements can change which versions cover the required platforms.
+        if lock.minimum_libc_version() != options.minimum_libc_version {
+            debug!(
+                "Resolving despite existing lockfile due to change in minimum libc version: {:?} vs. {:?}",
+                lock.minimum_libc_version(),
+                options.minimum_libc_version,
             );
             return Ok(Self::Versions(lock));
         }

@@ -41,6 +41,7 @@ Ok(
                 ),
             },
             fork_strategy: RequiresPython,
+            minimum_libc_version: None,
             exclude_newer: ExcludeNewer {
                 global: None,
                 package: ExcludeNewerPackage(

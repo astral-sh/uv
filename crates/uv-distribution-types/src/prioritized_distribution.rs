@@ -13,8 +13,8 @@ use uv_platform_tags::{
 use uv_pypi_types::{HashDigest, Yanked};
 
 use crate::{
-    File, InstalledDist, KnownPlatform, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
-    ResolvedDistRef,
+    File, InstalledDist, KnownPlatform, MinimumLibcVersion, RegistryBuiltDist, RegistryBuiltWheel,
+    RegistrySourceDist, ResolvedDistRef,
 };
 
 /// A collection of distributions that have been filtered by relevance.
@@ -33,8 +33,10 @@ struct PrioritizedDistInner {
     wheels: Vec<(RegistryBuiltWheel, WheelCompatibility)>,
     /// The hashes for each distribution.
     hashes: Vec<HashDigest>,
-    /// The set of supported platforms for the distribution, described in terms of their markers.
-    markers: MarkerTree,
+    /// Coverage for the glibc and musl baselines, unioned over compatible wheels separately.
+    /// Unconfigured baselines use ordinary platform coverage. Intersect only after unioning, so
+    /// separate glibc and musl wheels can jointly satisfy both baselines.
+    markers: [MarkerTree; 2],
 }
 
 impl Default for PrioritizedDistInner {
@@ -44,7 +46,7 @@ impl Default for PrioritizedDistInner {
             best_wheel_index: None,
             wheels: Vec::new(),
             hashes: Vec::new(),
-            markers: MarkerTree::FALSE,
+            markers: [MarkerTree::FALSE; 2],
         }
     }
 }
@@ -103,10 +105,13 @@ impl CompatibleDist<'_> {
         }
     }
 
-    /// Return the set of supported platform the distribution, in terms of their markers.
+    /// Return the set of supported platforms for the distribution, in terms of their markers.
     pub fn implied_markers(&self) -> MarkerTree {
         match self.prioritized() {
-            Some(prioritized) => prioritized.0.markers,
+            Some(prioritized) => {
+                let [glibc, musl] = prioritized.0.markers;
+                glibc.and(musl)
+            }
             None => MarkerTree::TRUE,
         }
     }
@@ -355,11 +360,17 @@ impl PrioritizedDist {
         dist: RegistryBuiltWheel,
         hashes: impl IntoIterator<Item = HashDigest>,
         compatibility: WheelCompatibility,
+        minimum_libc_version: Option<MinimumLibcVersion>,
     ) {
-        // Track the implied markers.
-        if compatibility.is_compatible() {
-            if !self.0.markers.is_true() {
-                self.0.markers = self.0.markers.or(implied_markers(&dist.filename));
+        if compatibility.is_compatible() && !self.0.markers.iter().all(|markers| markers.is_true())
+        {
+            for (coverage, markers) in self
+                .0
+                .markers
+                .iter_mut()
+                .zip(implied_libc_markers(&dist.filename, minimum_libc_version))
+            {
+                *coverage = coverage.or(markers);
             }
         }
         // Track the hashes.
@@ -384,9 +395,9 @@ impl PrioritizedDist {
         hashes: impl IntoIterator<Item = HashDigest>,
         compatibility: SourceDistCompatibility,
     ) {
-        // Track the implied markers.
+        // A usable source distribution provides coverage for all environments.
         if compatibility.is_compatible() {
-            self.0.markers = MarkerTree::TRUE;
+            self.0.markers = [MarkerTree::TRUE; 2];
         }
         // Track the hashes.
         if !compatibility.is_excluded() {
@@ -797,18 +808,47 @@ impl IncompatibleWheel {
     }
 }
 
-/// Given a wheel filename, determine the set of supported markers.
-pub fn implied_markers(filename: &WheelFilename) -> MarkerTree {
-    implied_platform_markers(filename).and(implied_python_markers(filename))
+/// Given a wheel filename, determine the markers covered by every configured libc baseline.
+///
+/// A wheel with multiple platform tags can remain eligible without covering every tagged platform.
+pub fn implied_markers(
+    filename: &WheelFilename,
+    minimum_libc_version: Option<MinimumLibcVersion>,
+) -> MarkerTree {
+    let [glibc, musl] = implied_libc_markers(filename, minimum_libc_version);
+    glibc.and(musl)
 }
 
-/// Given a wheel filename, determine the set of supported platforms, in terms of their markers.
-///
-/// This is roughly the inverse of platform tag generation: given a tag, we want to infer the
-/// supported platforms (rather than generating the supported tags from a given platform).
-fn implied_platform_markers(filename: &WheelFilename) -> MarkerTree {
+/// Infer coverage for each libc independently so separate wheels can satisfy each baseline.
+fn implied_libc_markers(
+    filename: &WheelFilename,
+    minimum_libc_version: Option<MinimumLibcVersion>,
+) -> [MarkerTree; 2] {
+    let python = implied_python_markers(filename);
+    let Some(minimum_libc_version) = minimum_libc_version else {
+        return [implied_platform_markers(filename.platform_tags()).and(python); 2];
+    };
+    let mut markers = [MarkerTree::FALSE; 2];
+    for tag in filename.platform_tags() {
+        let platform = implied_platform_markers([tag]).and(python);
+        for (markers, supported) in markers
+            .iter_mut()
+            .zip(minimum_libc_version.platform_coverage(tag))
+        {
+            if supported {
+                *markers = markers.or(platform);
+            }
+        }
+    }
+    markers
+}
+
+/// Infer the environments described by a set of platform tags.
+fn implied_platform_markers<'a>(
+    platform_tags: impl IntoIterator<Item = &'a PlatformTag>,
+) -> MarkerTree {
     let mut marker = MarkerTree::FALSE;
-    for platform_tag in filename.platform_tags() {
+    for platform_tag in platform_tags {
         match platform_tag {
             PlatformTag::Any => {
                 return MarkerTree::TRUE;
@@ -1067,7 +1107,7 @@ mod tests {
     fn assert_platform_markers(filename: &str, expected: &str) {
         let filename = WheelFilename::from_str(filename).unwrap();
         assert_eq!(
-            implied_platform_markers(&filename),
+            implied_platform_markers(filename.platform_tags()),
             expected.parse::<MarkerTree>().unwrap()
         );
     }
@@ -1085,7 +1125,7 @@ mod tests {
     fn assert_implied_markers(filename: &str, expected: &str) {
         let filename = WheelFilename::from_str(filename).unwrap();
         assert_eq!(
-            implied_markers(&filename),
+            implied_markers(&filename, None),
             expected.parse::<MarkerTree>().unwrap()
         );
     }
@@ -1093,7 +1133,10 @@ mod tests {
     #[test]
     fn test_implied_platform_markers() {
         let filename = WheelFilename::from_str("example-1.0-py3-none-any.whl").unwrap();
-        assert_eq!(implied_platform_markers(&filename), MarkerTree::TRUE);
+        assert_eq!(
+            implied_platform_markers(filename.platform_tags()),
+            MarkerTree::TRUE
+        );
 
         assert_platform_markers(
             "example-1.0-cp310-cp310-win32.whl",
@@ -1229,7 +1272,7 @@ mod tests {
             let filename =
                 WheelFilename::from_str(&format!("example-1.0-py3-none-{tag}.whl")).unwrap();
             assert_eq!(
-                implied_platform_markers(&filename),
+                implied_platform_markers(filename.platform_tags()),
                 MarkerTree::from_str(expected).unwrap()
             );
         }
