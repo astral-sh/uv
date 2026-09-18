@@ -33,10 +33,14 @@ impl RequirementsInput {
     ///
     /// Returns `None` when this input is remote.
     pub fn resolve_local_path(&self, path: &Path, working_dir: &Path) -> Option<PathBuf> {
+        // Match pip's path resolution for nested inputs and path-valued options in
+        // requirements files.
         match self {
-            Self::Stdin if path.is_absolute() => Some(path.to_path_buf()),
+            // An absolute path is resolved verbatim, if the top-level input was stdin or a local path.
+            Self::Stdin | Self::Local(_) if path.is_absolute() => Some(path.to_path_buf()),
+            // A relative path is resolved relative to uv's working directory, if the input was stdin.
             Self::Stdin => Some(working_dir.join(path)),
-            Self::Local(_) if path.is_absolute() => Some(path.to_path_buf()),
+            // A relative path is resolved relative to the input's parent directory, if the input was a local path.
             Self::Local(parent) => {
                 let parent = parent
                     .parent()
@@ -44,6 +48,7 @@ impl RequirementsInput {
                     .unwrap_or(working_dir);
                 Some(parent.join(path))
             }
+            // Remote inputs do not provide a base for resolving local paths.
             Self::Remote(_) => None,
         }
     }
