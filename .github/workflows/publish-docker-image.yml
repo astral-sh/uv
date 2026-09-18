@@ -72,6 +72,12 @@ jobs:
           echo "GHCR destination: $UV_GHCR_IMAGE"
           echo "Docker Hub destination: ${UV_DOCKERHUB_IMAGE:-none}"
 
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/depot-push-with-retry.sh
+          sparse-checkout-cone-mode: false
+
       - uses: depot/setup-action@15c09a5f77a0840ad4bce955686522a257853461 # v1.7.1
 
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
@@ -135,23 +141,7 @@ jobs:
             # Copy the complete index instead of loading and re-pushing it through
             # the local Docker image store, which can drop platforms or change
             # the manifest format (astral-sh/uv#14165).
-            # A registry can throttle a manifest push after accepting its blobs.
-            # Retry the same saved build with backoff and jitter.
-            retry_delay=5
-            for attempt in {1..5}; do
-              if depot push --project "$DEPOT_PROJECT_ID" --tag "${image_tags[0]}" "$build_id"; then
-                break
-              else
-                push_status=$?
-              fi
-              if [ "$attempt" -eq 5 ]; then
-                exit "$push_status"
-              fi
-              sleep_seconds=$((retry_delay + RANDOM % 5))
-              echo "::warning::Depot push failed (attempt $attempt/5); retrying in ${sleep_seconds}s"
-              sleep "$sleep_seconds"
-              retry_delay=$((retry_delay * 2))
-            done
+            ./scripts/depot-push-with-retry.sh --project "$DEPOT_PROJECT_ID" --tag "${image_tags[0]}" "$build_id"
             copied_digest=$(docker buildx imagetools inspect \
               "${image_tags[0]}" --format '{{.Manifest.Digest}}')
             if [ "$copied_digest" != "$digest" ]; then
