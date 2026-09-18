@@ -1585,7 +1585,7 @@ fn requirements_txt_frozen_invalid_git_path() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse `uv.lock`
-      cause: Failed to parse file extension for `example==1.0.0 @ git+https://example.com/pkg.git?path=foo#0000000000000000000000000000000000000000`; expected one of: `.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`
+      cause: Git archive path `foo` for `example==1.0.0 @ git+https://example.com/pkg.git?path=foo#0000000000000000000000000000000000000000` must end in a supported file extension: `.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`
     ");
 
     Ok(())
