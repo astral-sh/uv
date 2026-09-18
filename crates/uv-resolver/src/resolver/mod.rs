@@ -1670,30 +1670,34 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         pins: &mut FilePins<'index>,
         requests: &'index MetadataRequests,
     ) -> Result<(), ResolveError> {
-        let request = (matches!(&**package, PubGrubPackageInner::Package { .. })
-            && self.dependency_mode.is_transitive())
-        .then_some(|| {
-            requests.request_metadata(
-                MetadataRequest::Resolved(dist.for_resolution()),
-                |request| {
-                    if name != request.name() {
-                        return Err(ResolveError::MismatchedPackageName {
-                            request: "distribution",
-                            expected: name.clone(),
-                            actual: request.name().clone(),
-                        });
-                    }
-                    // Verify that the package is allowed under the hash-checking policy.
-                    if !self
-                        .hasher
-                        .allows_package(candidate.name(), candidate.version())
-                    {
-                        return Err(ResolveError::UnhashedPackage(candidate.name().clone()));
-                    }
-                    Ok(())
-                },
-            )
-        });
+        let request = if matches!(&**package, PubGrubPackageInner::Package { .. })
+            && self.dependency_mode.is_transitive()
+        {
+            Some(|| {
+                requests.request_metadata(
+                    MetadataRequest::Resolved(dist.for_resolution()),
+                    |request| {
+                        if name != request.name() {
+                            return Err(ResolveError::MismatchedPackageName {
+                                request: "distribution",
+                                expected: name.clone(),
+                                actual: request.name().clone(),
+                            });
+                        }
+                        // Verify that the package is allowed under the hash-checking policy.
+                        if !self
+                            .hasher
+                            .allows_package(candidate.name(), candidate.version())
+                        {
+                            return Err(ResolveError::UnhashedPackage(candidate.name().clone()));
+                        }
+                        Ok(())
+                    },
+                )
+            })
+        } else {
+            None
+        };
         pins.insert(candidate, dist, request)
     }
 
