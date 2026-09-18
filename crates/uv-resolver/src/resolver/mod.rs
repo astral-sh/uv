@@ -1491,8 +1491,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 if !env.included_by_marker(dist.implied_markers().and(marker))
                     && env.included_by_marker(find_environments(id, pubgrub).and(marker))
                 {
-                    // Then we need to fork.
-                    let Some((left, right)) = fork_version_by_marker(env, marker) else {
+                    // Separate the required environment from the candidate's wheel coverage,
+                    // allowing environments in neither set to fall on either side. For example,
+                    // Darwin == 24 becomes Darwin < 25 when the wheels require Darwin >= 25.
+                    // This avoids introducing forks for unrelated wheel tags.
+                    let split = marker.restrict(marker.or(dist.implied_markers()));
+                    let Some((left, right)) = fork_version_by_marker(env, split) else {
                         return Ok(Some(ResolverVersion::Unavailable(
                             candidate.version().clone(),
                             UnavailableVersion::IncompatibleDist(IncompatibleDist::Wheel(

@@ -38121,9 +38121,9 @@ fn lock_intel_mac() -> Result<()> {
         revision = 3
         requires-python = ">=3.11"
         resolution-markers = [
-            "(python_full_version >= '3.12' and platform_machine != 'x86_64') or (python_full_version >= '3.12' and sys_platform != 'darwin')",
-            "(python_full_version < '3.12' and platform_machine != 'x86_64') or (python_full_version < '3.12' and sys_platform != 'darwin')",
-            "platform_machine == 'x86_64' and sys_platform == 'darwin'",
+            "(python_full_version >= '3.12' and platform_machine != 'x86_64') or (python_full_version >= '3.12' and sys_platform == 'linux') or (python_full_version >= '3.12' and sys_platform == 'win32')",
+            "(python_full_version < '3.12' and platform_machine != 'x86_64') or (python_full_version < '3.12' and sys_platform == 'linux') or (python_full_version < '3.12' and sys_platform == 'win32')",
+            "platform_machine == 'x86_64' and sys_platform != 'linux' and sys_platform != 'win32'",
         ]
         required-markers = [
             "platform_machine == 'x86_64' and sys_platform == 'darwin'",
@@ -38343,8 +38343,8 @@ fn lock_intel_mac() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "torch", version = "2.2.2", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
-            { name = "torch", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+            { name = "torch", version = "2.2.2", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'x86_64' and sys_platform != 'linux' and sys_platform != 'win32'" },
+            { name = "torch", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'x86_64' or sys_platform == 'linux' or sys_platform == 'win32'" },
         ]
 
         [package.metadata]
@@ -38376,7 +38376,7 @@ fn lock_intel_mac() -> Result<()> {
         version = "2.2.2"
         source = { registry = "https://pypi.org/simple" }
         resolution-markers = [
-            "platform_machine == 'x86_64' and sys_platform == 'darwin'",
+            "platform_machine == 'x86_64' and sys_platform != 'linux' and sys_platform != 'win32'",
         ]
         dependencies = [
             { name = "filelock" },
@@ -38396,8 +38396,8 @@ fn lock_intel_mac() -> Result<()> {
         version = "2.5.1"
         source = { registry = "https://pypi.org/simple" }
         resolution-markers = [
-            "(python_full_version >= '3.12' and platform_machine != 'x86_64') or (python_full_version >= '3.12' and sys_platform != 'darwin')",
-            "(python_full_version < '3.12' and platform_machine != 'x86_64') or (python_full_version < '3.12' and sys_platform != 'darwin')",
+            "(python_full_version >= '3.12' and platform_machine != 'x86_64') or (python_full_version >= '3.12' and sys_platform == 'linux') or (python_full_version >= '3.12' and sys_platform == 'win32')",
+            "(python_full_version < '3.12' and platform_machine != 'x86_64') or (python_full_version < '3.12' and sys_platform == 'linux') or (python_full_version < '3.12' and sys_platform == 'win32')",
         ]
         dependencies = [
             { name = "filelock" },
@@ -42457,8 +42457,8 @@ fn lock_required_environment_python_fork() -> Result<()> {
         revision = 3
         requires-python = ">=3.12, <3.14"
         resolution-markers = [
-            "(python_full_version >= '3.13' and platform_machine != 'x86_64') or (python_full_version >= '3.13' and sys_platform != 'linux')",
-            "python_full_version >= '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux'",
+            "python_full_version >= '3.13' and sys_platform == 'win32'",
+            "python_full_version >= '3.13' and sys_platform != 'win32'",
             "python_full_version < '3.13'",
         ]
         supported-markers = [
@@ -42477,7 +42477,7 @@ fn lock_required_environment_python_fork() -> Result<()> {
         version = "1.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
         resolution-markers = [
-            "python_full_version >= '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux'",
+            "python_full_version >= '3.13' and sys_platform != 'win32'",
         ]
         wheels = [
             { url = "http://[LOCALHOST]/files/a-1.0.0-cp312-abi3-manylinux_2_17_x86_64.whl", hash = "sha256:[SHA256:a-1.0.0-cp312-abi3-manylinux_2_17_x86_64.whl]", upload-time = "2024-03-24T00:00:00Z" },
@@ -42488,7 +42488,7 @@ fn lock_required_environment_python_fork() -> Result<()> {
         version = "2.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
         resolution-markers = [
-            "(python_full_version >= '3.13' and platform_machine != 'x86_64') or (python_full_version >= '3.13' and sys_platform != 'linux')",
+            "python_full_version >= '3.13' and sys_platform == 'win32'",
             "python_full_version < '3.13'",
         ]
         wheels = [
@@ -42501,8 +42501,8 @@ fn lock_required_environment_python_fork() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "a", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "python_full_version >= '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux'" },
-            { name = "a", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "python_full_version < '3.13' or platform_machine != 'x86_64' or sys_platform != 'linux'" },
+            { name = "a", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "python_full_version >= '3.13' and sys_platform != 'win32'" },
+            { name = "a", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "python_full_version < '3.13' or sys_platform == 'win32'" },
         ]
 
         [package.metadata]
@@ -42514,6 +42514,7 @@ fn lock_required_environment_python_fork() -> Result<()> {
 }
 
 /// A required Darwin release must have a compatible wheel, without removing newer wheels.
+/// The newer version must not be selected between the baseline and its minimum Darwin release.
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_required_environment_macos_release() -> Result<()> {
@@ -42567,8 +42568,8 @@ fn lock_required_environment_macos_release() -> Result<()> {
         revision = 3
         requires-python = ">=3.12"
         resolution-markers = [
-            "(platform_machine == 'arm64' and platform_release < '24' and sys_platform == 'darwin') or (platform_machine == 'arm64' and platform_release > '24' and sys_platform == 'darwin')",
-            "platform_machine == 'arm64' and platform_release == '24' and sys_platform == 'darwin'",
+            "platform_machine == 'arm64' and platform_release >= '25' and sys_platform == 'darwin'",
+            "platform_machine == 'arm64' and platform_release < '25' and sys_platform == 'darwin'",
         ]
         supported-markers = [
             "platform_machine == 'arm64' and sys_platform == 'darwin'",
@@ -42585,7 +42586,7 @@ fn lock_required_environment_macos_release() -> Result<()> {
         version = "1.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
         resolution-markers = [
-            "platform_machine == 'arm64' and platform_release == '24' and sys_platform == 'darwin'",
+            "platform_machine == 'arm64' and platform_release < '25' and sys_platform == 'darwin'",
         ]
         wheels = [
             { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-macosx_14_0_arm64.whl", hash = "sha256:[SHA256:a-1.0.0-py3-none-macosx_14_0_arm64.whl]", upload-time = "2024-03-24T00:00:00Z" },
@@ -42597,7 +42598,7 @@ fn lock_required_environment_macos_release() -> Result<()> {
         version = "2.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
         resolution-markers = [
-            "(platform_machine == 'arm64' and platform_release < '24' and sys_platform == 'darwin') or (platform_machine == 'arm64' and platform_release > '24' and sys_platform == 'darwin')",
+            "platform_machine == 'arm64' and platform_release >= '25' and sys_platform == 'darwin'",
         ]
         wheels = [
             { url = "http://[LOCALHOST]/files/a-2.0.0-py3-none-macosx_26_0_arm64.whl", hash = "sha256:[SHA256:a-2.0.0-py3-none-macosx_26_0_arm64.whl]", upload-time = "2024-03-24T00:00:00Z" },
@@ -42608,8 +42609,8 @@ fn lock_required_environment_macos_release() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "a", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "platform_release == '24'" },
-            { name = "a", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "platform_release < '24' or platform_release > '24'" },
+            { name = "a", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "platform_release < '25'" },
+            { name = "a", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "platform_release >= '25'" },
         ]
 
         [package.metadata]
@@ -42645,7 +42646,7 @@ fn lock_required_environment_macos_release() -> Result<()> {
     uv_snapshot!(filters, context.lock().arg("--index-url").arg(server.index_url()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies for split (markers: python_full_version >= '3.12' and platform_machine == 'arm64' and platform_release == '24' and sys_platform == 'darwin')
+    error: No solution found when resolving dependencies for split (markers: python_full_version >= '3.12' and platform_machine == 'arm64' and platform_release < '25' and sys_platform == 'darwin')
       cause: Because only a==2.0.0 is available and a==2.0.0 has no `platform_machine == 'arm64' and sys_platform == 'darwin'`-compatible wheels, we can conclude that all versions of a cannot be used.
              And because your project depends on a, we can conclude that your project's requirements are unsatisfiable.
     ");
@@ -42783,7 +42784,7 @@ fn lock_required_environment_cycle_reports_resolution_error() -> Result<()> {
         @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies for split (markers: platform_machine == 'arm64')
+    error: No solution found when resolving dependencies for split (markers: platform_machine != 'ppc64')
       cause: Because a==1.0.0 has no `platform_machine == 'arm64'`-compatible wheels and only a==1.0.0 is available, we can conclude that all versions of a cannot be used.
              And because pkg-a depends on a and your workspace requires pkg-a, we can conclude that your workspace's requirements are unsatisfiable.
     "
