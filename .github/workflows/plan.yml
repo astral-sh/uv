@@ -76,8 +76,6 @@ env:
 jobs:
   plan:
     runs-on: depot-ubuntu-24.04
-    env:
-      IS_UV_PR: ${{ github.event_name == 'pull_request' && github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.full_name == github.repository && github.base_ref == 'main' }}
     outputs:
       test-code: ${{ steps.plan.outputs.test_code }}
       review-security: ${{ steps.plan.outputs.review_security }}
@@ -105,7 +103,6 @@ jobs:
           persist-credentials: false
 
       - name: "Install uv"
-        if: env.IS_UV_PR == 'true'
         uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
           # renovate: datasource=github-release-attachments depName=astral-sh/uv
@@ -117,6 +114,7 @@ jobs:
         shell: bash
         env:
           GH_REF: ${{ github.ref }}
+          IS_UV_PR: ${{ github.event_name == 'pull_request' && github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.full_name == github.repository && github.base_ref == 'main' }}
           HAS_SKIP_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:skip') }}
           HAS_INTEGRATION_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:integration') }}
           HAS_SYSTEM_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:system') }}
