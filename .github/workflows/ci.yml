@@ -21,6 +21,7 @@ jobs:
     uses: $/.github/workflows/plan.yml
 
   check-fmt:
+    needs: plan
     uses: $/.github/workflows/check-fmt.yml
 
   review:
@@ -303,6 +304,7 @@ jobs:
     name: "all required jobs passed"
     if: always()
     needs:
+      - plan
       - check-fmt
       - check-lint
       - check-docs
