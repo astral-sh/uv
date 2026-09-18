@@ -5680,7 +5680,7 @@ fn run_groups_include_requires_python() -> Result<()> {
     Ok(())
 }
 
-/// Test that a signal n makes the process exit with code 128+n.
+/// Test that a signal n makes the process exit with code 128+n and reports the signal.
 #[cfg(unix)]
 #[test]
 fn exit_status_signal() -> Result<()> {
@@ -5689,10 +5689,27 @@ fn exit_status_signal() -> Result<()> {
     let script = context.temp_dir.child("segfault.py");
     script.write_str(indoc! {r"
         import os
-        os.kill(os.getpid(), 11)
+        import signal
+        os.kill(os.getpid(), signal.SIGSEGV)
     "})?;
-    let status = context.run().arg(script.path()).status()?;
-    assert_eq!(status.code().expect("a status code"), 139);
+    let output = context.run().arg(script.path()).output()?;
+    assert_eq!(output.status.code().expect("a status code"), 139);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("Command terminated by signal SIGSEGV"),
+        "missing signal diagnostic in stderr: {stderr}"
+    );
+
+    // A normal exit with the shell-mapped status must not be reported as a signal.
+    let script = context.temp_dir.child("exit-139.py");
+    script.write_str("import sys\nsys.exit(139)\n")?;
+    let output = context.run().arg(script.path()).output()?;
+    assert_eq!(output.status.code().expect("a status code"), 139);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stderr.contains("Command terminated by signal"),
+        "normal exit incorrectly reported as a signal: {stderr}"
+    );
     Ok(())
 }
 

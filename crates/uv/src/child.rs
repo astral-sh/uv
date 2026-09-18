@@ -1,14 +1,24 @@
+#[cfg(unix)]
+use std::fmt::Write;
+
 use tokio::process::Child;
 use tracing::debug;
 
 use crate::commands::ExitStatus;
+use crate::printer::Printer;
 
 /// Wait for the child process to complete, handling signals and error codes.
 ///
 /// Note that this registers handles to ignore some signals in the parent process. This is safe as
 /// long as the command is the last thing that runs in this process; otherwise, we'd need to restore
 /// the default signal handlers after the command completes.
-pub(crate) async fn run_to_completion(mut handle: Child) -> anyhow::Result<ExitStatus> {
+pub(crate) async fn run_to_completion(
+    mut handle: Child,
+    printer: Printer,
+) -> anyhow::Result<ExitStatus> {
+    #[cfg(not(unix))]
+    let _ = printer;
+
     // On Unix, the terminal driver will send SIGINT to the active process group when a user presses
     // `Ctrl-C`. In general, this means that uv should ignore SIGINT, allowing the child process to
     // cleanly exit instead. If uv forwarded the SIGINT immediately, the child process would receive
@@ -294,14 +304,33 @@ pub(crate) async fn run_to_completion(mut handle: Child) -> anyhow::Result<ExitS
         {
             use std::os::unix::process::ExitStatusExt;
             debug!("Command exited with signal: {:?}", status.signal());
-            // Following https://tldp.org/LDP/abs/html/exitcodes.html, a fatal signal n gets the
-            // exit code 128+n
-            if let Some(mapped_code) = status
-                .signal()
-                .and_then(|signal| u8::try_from(signal).ok())
-                .and_then(|signal| 128u8.checked_add(signal))
-            {
-                return Ok(ExitStatus::External(mapped_code));
+            // A shell reports when a process was terminated by a signal, while `uv` must map the
+            // wait status to an ordinary exit code. Preserve that diagnostic so a signal exit can
+            // still be distinguished from a process that exits normally with the same code.
+            if let Some(signal) = status.signal() {
+                let mut stderr = printer.stderr_important();
+                let core_dumped = if status.core_dumped() {
+                    " (core dumped)"
+                } else {
+                    ""
+                };
+                if let Ok(signal_name) = nix::sys::signal::Signal::try_from(signal) {
+                    writeln!(
+                        stderr,
+                        "Command terminated by signal {signal_name}{core_dumped}"
+                    )?;
+                } else {
+                    writeln!(stderr, "Command terminated by signal {signal}{core_dumped}")?;
+                }
+
+                // Following https://tldp.org/LDP/abs/html/exitcodes.html, a fatal signal n gets the
+                // exit code 128+n.
+                if let Some(mapped_code) = u8::try_from(signal)
+                    .ok()
+                    .and_then(|signal| 128u8.checked_add(signal))
+                {
+                    return Ok(ExitStatus::External(mapped_code));
+                }
             }
         }
         Ok(ExitStatus::Failure)
