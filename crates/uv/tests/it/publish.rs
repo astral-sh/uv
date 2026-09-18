@@ -7,8 +7,6 @@ use sha2::{Digest, Sha256};
 use std::env::current_dir;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use uv_static::EnvVars;
 use uv_test::{uv_snapshot, venv_bin_path};
 use wiremock::matchers::{basic_auth, body_json, method, path};
@@ -1520,30 +1518,31 @@ async fn publish_json_concurrent_existing() {
     let sha256 = hex::encode(Sha256::digest(
         fs_err::read(dummy_wheel()).expect("Failed to read wheel"),
     ));
-    let check_count = Arc::new(AtomicUsize::new(0));
-    let check_count_clone = Arc::clone(&check_count);
     let file_url = format!("{}/ok-1.0.0-py3-none-any.whl", server.uri());
 
     Mock::given(method("GET"))
         .and(path("/simple/ok/"))
-        .respond_with(move |_request: &Request| {
-            if check_count_clone.fetch_add(1, Ordering::SeqCst) == 0 {
-                ResponseTemplate::new(404).set_body_raw("Not found", "text/plain")
-            } else {
-                ResponseTemplate::new(200).set_body_raw(
-                    json!({
-                        "files": [{
-                            "filename": "ok-1.0.0-py3-none-any.whl",
-                            "hashes": { "sha256": sha256 },
-                            "url": file_url,
-                        }]
-                    })
-                    .to_string(),
-                    "application/vnd.pypi.simple.v1+json",
-                )
-            }
-        })
-        .expect(2)
+        .respond_with(ResponseTemplate::new(404).set_body_raw("Not found", "text/plain"))
+        .up_to_n_times(1)
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/simple/ok/"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw(
+                json!({
+                    "files": [{
+                        "filename": "ok-1.0.0-py3-none-any.whl",
+                        "hashes": { "sha256": sha256 },
+                        "url": file_url,
+                    }]
+                })
+                .to_string(),
+                "application/vnd.pypi.simple.v1+json",
+            ),
+        )
+        .expect(1)
         .mount(&server)
         .await;
     Mock::given(method("POST"))
@@ -1581,7 +1580,6 @@ async fn publish_json_concurrent_existing() {
       "dry_run": false
     }
     "#);
-    assert_eq!(check_count.load(Ordering::SeqCst), 2);
 }
 
 #[tokio::test]
