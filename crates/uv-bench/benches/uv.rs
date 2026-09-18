@@ -5,12 +5,16 @@ extern crate uv_performance_memory_allocator;
 use std::env;
 use std::fmt::Write;
 use std::hint::black_box;
+use std::io::Cursor;
 use std::path::Path;
 use std::str::FromStr;
 
 use async_zip::base::write::ZipFileWriter;
 use async_zip::{Compression, ZipEntryBuilder};
-use criterion::{BatchSize, Criterion, criterion_group, criterion_main, measurement::WallTime};
+use criterion::{
+    BatchSize, BenchmarkId, Criterion, Throughput, criterion_group, criterion_main,
+    measurement::WallTime,
+};
 use flate2::write::GzEncoder;
 use futures::executor::block_on;
 use futures::io::AllowStdIo;
@@ -22,9 +26,10 @@ use uv_client::{BaseClientBuilder, Connectivity, RegistryClientBuilder};
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::Requirement;
 use uv_extract::dirhash::UnhashedFile;
+use uv_extract::hash::{HashReader, Hasher};
 use uv_install_wheel::{InstallState, Layout, LinkMode};
 use uv_preview::{MaybePreviewFeature, Preview, PreviewFeature};
-use uv_pypi_types::Scheme;
+use uv_pypi_types::{HashAlgorithm, Scheme};
 use uv_python::PythonEnvironment;
 use uv_resolver::Manifest;
 
@@ -32,7 +37,7 @@ const MANY_FILES_WHEEL_FILENAME: &str = "manyfiles-0.0.0-py3-none-any.whl";
 const MANY_FILES_WHEEL_FILE_COUNT: usize = 10_000;
 const MANY_FILES_SDIST_TOP_LEVEL: &str = "manyfiles-0.0.0";
 const MANY_FILES_SDIST_FILE_COUNT: usize = 10_000;
-const SHA256_BENCHMARK_SIZE: usize = 1024 * 1024;
+const HASH_BENCHMARK_SIZE: usize = 1024 * 1024;
 
 fn is_codspeed_simulation() -> bool {
     // CodSpeed reports Simulation as `instrumentation` in current versions.
@@ -43,11 +48,71 @@ fn is_codspeed_simulation() -> bool {
 }
 
 fn hash_sha256(c: &mut Criterion<WallTime>) {
-    let bytes = vec![0_u8; SHA256_BENCHMARK_SIZE];
+    let bytes = vec![0_u8; HASH_BENCHMARK_SIZE];
 
     c.bench_function("hash_sha256", |b| {
         b.iter(|| black_box(Sha256::digest(black_box(&bytes))));
     });
+}
+
+fn hash_reader(criterion: &mut Criterion<WallTime>) {
+    let bytes = vec![0_u8; HASH_BENCHMARK_SIZE];
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .build()
+        .expect("Failed to create Tokio runtime");
+    let mut group = criterion.benchmark_group("hash_reader");
+    group.throughput(Throughput::Bytes(HASH_BENCHMARK_SIZE as u64));
+
+    for (case, algorithms) in [
+        ("none", &[][..]),
+        ("md5", &[HashAlgorithm::Md5][..]),
+        ("sha256", &[HashAlgorithm::Sha256][..]),
+        ("sha384", &[HashAlgorithm::Sha384][..]),
+        ("sha512", &[HashAlgorithm::Sha512][..]),
+        ("blake2b", &[HashAlgorithm::Blake2b256][..]),
+        (
+            "all",
+            &[
+                HashAlgorithm::Md5,
+                HashAlgorithm::Sha256,
+                HashAlgorithm::Sha384,
+                HashAlgorithm::Sha512,
+                HashAlgorithm::Blake2b256,
+            ][..],
+        ),
+    ] {
+        group.bench_with_input(
+            BenchmarkId::new("finish", case),
+            algorithms,
+            |benchmark, algorithms| {
+                benchmark.iter_batched(
+                    || {
+                        algorithms
+                            .iter()
+                            .copied()
+                            .map(Hasher::from)
+                            .collect::<Vec<_>>()
+                    },
+                    |mut hashers| {
+                        let bytes_read = {
+                            let mut reader = HashReader::new(
+                                Cursor::new(black_box(bytes.as_slice())),
+                                &mut hashers,
+                            );
+                            runtime
+                                .block_on(reader.finish())
+                                .expect("Failed to read benchmark input");
+                            reader.bytes_read()
+                        };
+                        black_box((bytes_read, hashers));
+                    },
+                    BatchSize::SmallInput,
+                );
+            },
+        );
+    }
+
+    group.finish();
 }
 
 fn create_many_files_wheel() -> tempfile::NamedTempFile {
@@ -357,6 +422,7 @@ criterion_group! {
     config = criterion_with_preview();
     targets =
         hash_sha256,
+        hash_reader,
         unpack_sdist_many_files,
         unzip_wheel_many_files,
         prepare_wheel_many_files,
