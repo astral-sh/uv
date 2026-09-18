@@ -886,6 +886,24 @@ pub fn is_virtualenv_base(path: impl AsRef<Path>) -> bool {
     path.as_ref().join("pyvenv.cfg").is_file()
 }
 
+/// Parse the path in a `.venv` redirect file, relative to the file's directory.
+///
+/// The file format is defined by PEP 832. The caller must check that the resolved path contains a
+/// virtual environment; the target may be missing when inspecting an existing reference.
+pub fn parse_venv_redirect(path: &Path, contents: &str) -> PathBuf {
+    let line = contents
+        .strip_suffix("\r\n")
+        .or_else(|| contents.strip_suffix('\n'))
+        .unwrap_or(contents);
+
+    let target = PathBuf::from(line);
+    if target.is_absolute() {
+        target
+    } else {
+        path.parent().unwrap_or(Path::new("")).join(target)
+    }
+}
+
 /// Whether the error is due to a lock being held.
 fn is_known_already_locked_error(err: &std::fs::TryLockError) -> bool {
     match err {
@@ -1028,6 +1046,29 @@ mod tests {
     use std::assert_matches;
 
     use super::*;
+
+    #[test]
+    fn parse_venv_redirect_file() {
+        let path = Path::new("project/.venv");
+        assert_eq!(
+            parse_venv_redirect(path, "other environment\n"),
+            Path::new("project/other environment")
+        );
+        assert_eq!(
+            parse_venv_redirect(path, "environments/default\r\n"),
+            Path::new("project/environments/default")
+        );
+        #[cfg(unix)]
+        assert_eq!(
+            parse_venv_redirect(path, "/environments/default\n"),
+            Path::new("/environments/default")
+        );
+        #[cfg(windows)]
+        assert_eq!(
+            parse_venv_redirect(path, "C:/environments/default\n"),
+            Path::new("C:/environments/default")
+        );
+    }
 
     #[test]
     fn remove_symlink_removes_directory_link_without_removing_target() -> io::Result<()> {

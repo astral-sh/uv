@@ -238,6 +238,9 @@ pub(crate) enum ProjectError {
     #[error("Project virtual environment directory `{0}` cannot be used because {1}")]
     InvalidProjectEnvironmentDir(PathBuf, String),
 
+    #[error("Invalid `.venv` redirect file `{0}`")]
+    InvalidProjectEnvironmentRedirect(PathBuf, #[source] io::Error),
+
     #[error("Failed to parse `uv.lock`")]
     UvLockParse(#[source] toml::de::Error),
 
@@ -1227,12 +1230,44 @@ fn is_centralized_environment_link(path: &Path, cache: &Cache) -> bool {
 
 /// Read an environment path from a file.
 fn read_environment_path_file(path: &Path) -> io::Result<PathBuf> {
-    let target = PathBuf::from(fs_err::read_to_string(path)?);
-    Ok(if target.is_absolute() {
-        target
-    } else {
-        path.parent().unwrap_or(Path::new("")).join(target)
-    })
+    let contents = fs_err::read_to_string(path)?;
+    Ok(uv_fs::parse_venv_redirect(path, &contents))
+}
+
+/// Resolve a default project environment redirect, if present. A missing cache environment can
+/// result from uv pruning an earlier centralized environment; initialization replaces its reference.
+fn project_environment_redirect(
+    path: &Path,
+    cache: &Cache,
+) -> Result<Option<PathBuf>, ProjectError> {
+    if !path.is_file() {
+        return Ok(None);
+    }
+
+    let target = read_environment_path_file(path)
+        .map_err(|err| ProjectError::InvalidProjectEnvironmentRedirect(path.to_path_buf(), err))?;
+    if !uv_fs::is_virtualenv_base(&target) {
+        if is_centralized_environment_path(&target, cache) {
+            return Ok(None);
+        }
+        return Err(ProjectError::InvalidProjectEnvironmentRedirect(
+            path.to_path_buf(),
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "`{}` does not contain a virtual environment",
+                    target.display()
+                ),
+            ),
+        ));
+    }
+
+    if !uv_preview::is_enabled(PreviewFeature::VenvRedirectFiles) {
+        warn_user_once!(
+            "Using `.venv` redirect files is experimental and may change without warning. Pass `--preview-features venv-redirect-files` to disable this warning."
+        );
+    }
+    Ok(Some(target))
 }
 
 /// Return whether `path` refers to an environment in the current cache's environment bucket.
@@ -1359,7 +1394,15 @@ pub(crate) fn update_project_environment_link(
         return false;
     };
 
-    if let Err(err) = uv_fs::write_atomic_sync(&link, target.as_bytes()) {
+    if target.contains(['\r', '\n']) {
+        report_error(format_args!(
+            "Failed to write the environment path to `{}`: the path contains a newline",
+            link.simplified_display()
+        ));
+        return false;
+    }
+
+    if let Err(err) = uv_fs::write_atomic_sync(&link, format!("{target}\n")) {
         report_error(format_args!("Failed to write the environment path: {err}"));
         return false;
     }
@@ -1392,9 +1435,21 @@ impl ProjectInterpreter {
         let root = selection
             .explicit_path()
             .map_or_else(|| workspace.install_path().join(".venv"), Path::to_path_buf);
-        let root = read_environment_path_file(&root).unwrap_or(root);
+        let redirect = if selection.is_default() {
+            project_environment_redirect(&root, cache)?
+        } else {
+            None
+        };
+        let stale_cache_reference = redirect.is_none()
+            && selection.is_default()
+            && root.is_file()
+            && is_centralized_environment_reference(&root, cache);
         let centralized = centralized_environments_enabled(&selection, cache)
             || is_centralized_environment_reference(&root, cache);
+        let root = redirect.unwrap_or(root);
+        if stale_cache_reference {
+            return Ok(None);
+        }
         let root = if centralized {
             fs_err::canonicalize(&root).unwrap_or(root)
         } else {
@@ -1468,13 +1523,17 @@ impl ProjectInterpreter {
             let project_environment_path = environment_selection
                 .explicit_path()
                 .map_or_else(|| workspace.install_path().join(".venv"), Path::to_path_buf);
-            // TODO(tk): Revisit after PEP 832.
-            // A centralized path file is not a local environment; let initialization replace it.
-            if !(environment_selection.is_default()
-                && read_environment_path_file(&project_environment_path)
-                    .is_ok_and(|target| is_centralized_environment_path(&target, cache)))
+            let redirect = if environment_selection.is_default() {
+                project_environment_redirect(&project_environment_path, cache)?
+            } else {
+                None
+            };
+            // A pruned cache reference cannot be used as an environment; initialization removes it.
+            if !(redirect.is_none()
+                && environment_selection.is_default()
+                && is_centralized_environment_reference(&project_environment_path, cache))
                 && let Some(environment) = discover_project_environment(
-                    &project_environment_path,
+                    redirect.as_deref().unwrap_or(&project_environment_path),
                     python_request.as_ref(),
                     python_preference,
                     requires_python.as_ref(),
@@ -1903,9 +1962,18 @@ impl ProjectEnvironment {
                 let root = if centralized {
                     centralized_environment_root(workspace, &interpreter, upgradeable, cache)
                 } else {
-                    environment_selection
+                    let project_environment_path = environment_selection
                         .explicit_path()
-                        .map_or_else(|| workspace.install_path().join(".venv"), Path::to_path_buf)
+                        .map_or_else(|| workspace.install_path().join(".venv"), Path::to_path_buf);
+                    if environment_selection.is_default()
+                        && !is_centralized_environment_reference(&project_environment_path, cache)
+                        && let Some(target) =
+                            project_environment_redirect(&project_environment_path, cache)?
+                    {
+                        target
+                    } else {
+                        project_environment_path
+                    }
                 };
                 let centralized_environment_reference =
                     !centralized && is_centralized_environment_reference(&root, cache);

@@ -635,6 +635,113 @@ fn sync_recovers_from_centralized_environment_path_file() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn sync_replaces_cached_venv_redirect_without_removing_target() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
+    write_project(&context, ">=3.11", &[])?;
+    let redirect = context.temp_dir.child(".venv");
+
+    context
+        .sync()
+        .arg("--preview-features")
+        .arg("centralized-project-envs")
+        .arg("--python")
+        .arg("3.12")
+        .assert()
+        .success();
+    let cached_environment = fs_err::read_link(redirect.path())?;
+    uv_fs::remove_virtualenv(redirect.path())?;
+    redirect.write_str(&cached_environment.to_string_lossy())?;
+
+    // Selecting an incompatible interpreter leaves the cache entry in place and replaces only
+    // uv's pointer to it with a local environment.
+    uv_snapshot!(context.filters(), context.sync().arg("--python").arg("3.11"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Using `.venv` redirect files is experimental and may change without warning. Pass `--preview-features venv-redirect-files` to disable this warning.
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Removed link to project environment at: .venv
+    Creating virtual environment at: .venv
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+    assert!(uv_fs::is_virtualenv_base(redirect.path()));
+    assert!(uv_fs::is_virtualenv_base(&cached_environment));
+    Ok(())
+}
+
+#[test]
+fn sync_venv_redirect_file() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
+    write_project(&context, ">=3.11", &[])?;
+    context
+        .venv()
+        .arg("external")
+        .arg("--python")
+        .arg("3.12")
+        .arg("-q")
+        .assert()
+        .success();
+    let redirect = context.temp_dir.child(".venv");
+    redirect.write_str("external\n")?;
+
+    // uv uses the external environment and keeps the other tool's redirect file.
+    uv_snapshot!(context.filters(), context.sync(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Using `.venv` redirect files is experimental and may change without warning. Pass `--preview-features venv-redirect-files` to disable this warning.
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+    assert_eq!(fs_err::read_to_string(redirect.path())?, "external\n");
+    assert!(uv_fs::is_virtualenv_base(
+        context.temp_dir.child("external").path()
+    ));
+
+    // Activation of the selected environment does not produce a mismatch warning.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--preview-features").arg("venv-redirect-files")
+        .env(EnvVars::VIRTUAL_ENV, context.temp_dir.child("external").path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+
+    // Changing interpreter replaces the environment at the target without replacing the pointer.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--preview-features").arg("venv-redirect-files")
+        .arg("--python").arg("3.11"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Removed virtual environment at: external
+    Creating virtual environment at: external
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+    assert_eq!(fs_err::read_to_string(redirect.path())?, "external\n");
+    Ok(())
+}
+
+#[test]
+fn sync_invalid_venv_redirect_file() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    write_project(&context, ">=3.12", &[])?;
+    let redirect = context.temp_dir.child(".venv");
+
+    redirect.write_str("missing\n")?;
+    uv_snapshot!(context.filters(), context.sync().arg("--preview-features")
+        .arg("venv-redirect-files"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Invalid `.venv` redirect file `[VENV]/`
+      cause: `[TEMP_DIR]/missing` does not contain a virtual environment
+    ");
+    assert_eq!(fs_err::read_to_string(redirect.path())?, "missing\n");
+    Ok(())
+}
+
 #[cfg(windows)]
 #[test]
 fn sync_centralized_env_replaces_existing_empty_directory() -> Result<()> {
