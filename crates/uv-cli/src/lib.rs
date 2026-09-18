@@ -69,6 +69,15 @@ pub enum SyncFormat {
 }
 
 #[derive(Debug, Default, Clone, Copy, clap::ValueEnum)]
+pub enum PublishOutputFormat {
+    /// Display the result in a human-readable format.
+    #[default]
+    Text,
+    /// Display the result in JSON format.
+    Json,
+}
+
+#[derive(Debug, Default, Clone, Copy, clap::ValueEnum)]
 pub enum AuditOutputFormat {
     /// Display the result in a human-readable format.
     #[default]
@@ -7766,6 +7775,10 @@ pub struct PublishArgs {
 
     #[arg(long, hide = true)]
     pub skip_existing: bool,
+
+    /// Select the output format.
+    #[arg(long, value_enum, default_value_t = PublishOutputFormat::default())]
+    pub output_format: PublishOutputFormat,
 
     /// Perform a dry run without uploading files.
     ///

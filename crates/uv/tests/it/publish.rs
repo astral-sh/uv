@@ -7,6 +7,8 @@ use sha2::{Digest, Sha256};
 use std::env::current_dir;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use uv_static::EnvVars;
 use uv_test::{uv_snapshot, venv_bin_path};
 use wiremock::matchers::{basic_auth, body_json, method, path};
@@ -279,6 +281,152 @@ async fn publish_wheels_before_sdist_in_filename_order() {
     Uploading basic_package-0.1.0.tar.gz ([SIZE]B)
     "
     );
+}
+
+#[tokio::test]
+async fn publish_json() {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .and(basic_auth("dummy", "secret"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(3)
+        .mount(&server)
+        .await;
+
+    let publish_url = format!(
+        "http://dummy:secret@{}/upload",
+        server
+            .uri()
+            .strip_prefix("http://")
+            .expect("The mock server uses HTTP")
+    );
+    uv_snapshot!(context.filters(), context.publish()
+        // Pass the source distribution first and the wheels in reverse filename order.
+        .arg(basic_package_sdist())
+        .arg(basic_package_wheel())
+        .arg(basic_app_wheel())
+        .arg("--publish-url")
+        .arg(publish_url)
+        .arg("--output-format=json")
+        .arg("--preview-features")
+        .arg("json-output"), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "publish_url": "http://[LOCALHOST]/upload",
+      "files": [
+        {
+          "filename": "basic_app-0.1.0-py3-none-any.whl",
+          "status": "uploaded"
+        },
+        {
+          "filename": "basic_package-0.1.0-py3-none-any.whl",
+          "status": "uploaded"
+        },
+        {
+          "filename": "basic_package-0.1.0.tar.gz",
+          "status": "uploaded"
+        }
+      ],
+      "dry_run": false
+    }
+    "#);
+}
+
+#[tokio::test]
+async fn publish_json_preview_and_quiet() {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(3)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--username")
+        .arg("dummy")
+        .arg("--password")
+        .arg("dummy")
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg("--output-format")
+        .arg("json")
+        .arg(dummy_wheel()), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "publish_url": "http://[LOCALHOST]/upload",
+      "files": [
+        {
+          "filename": "ok-1.0.0-py3-none-any.whl",
+          "status": "uploaded"
+        }
+      ],
+      "dry_run": false
+    }
+
+    ----- stderr -----
+    warning: The `--output-format json` option is experimental and the schema may change without warning. Pass `--preview-features json-output` to disable this warning.
+    "#);
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--quiet")
+        .arg("--username")
+        .arg("dummy")
+        .arg("--password")
+        .arg("dummy")
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg("--output-format")
+        .arg("json")
+        .arg("--preview-features")
+        .arg("json-output")
+        .arg(dummy_wheel()), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "publish_url": "http://[LOCALHOST]/upload",
+      "files": [
+        {
+          "filename": "ok-1.0.0-py3-none-any.whl",
+          "status": "uploaded"
+        }
+      ],
+      "dry_run": false
+    }
+    "#);
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--quiet")
+        .arg("--quiet")
+        .arg("--username")
+        .arg("dummy")
+        .arg("--password")
+        .arg("dummy")
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg("--output-format")
+        .arg("json")
+        .arg("--preview-features")
+        .arg("json-output")
+        .arg(dummy_wheel()), @"
+    exit_code: 0 (success)
+    ");
 }
 
 /// Check that we (don't) use the keyring and warn for missing keyring behaviors correctly.
@@ -1250,6 +1398,241 @@ async fn dry_run_does_not_upload() {
     Checking ok-1.0.0-py3-none-any.whl ([SIZE]B)
     "
     );
+}
+
+#[tokio::test]
+async fn publish_json_dry_run() {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--dry-run")
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg("--token")
+        .arg("dummy")
+        .arg("--output-format")
+        .arg("json")
+        .arg("--preview-features")
+        .arg("json-output")
+        .arg(dummy_wheel()), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "publish_url": "http://[LOCALHOST]/upload",
+      "files": [
+        {
+          "filename": "ok-1.0.0-py3-none-any.whl",
+          "status": "validated"
+        }
+      ],
+      "dry_run": true
+    }
+    "#);
+}
+
+#[tokio::test]
+async fn publish_json_preexisting_and_skipped() {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let non_normalized = context.temp_dir.child("ok-1.01.0-py3-none-any.whl");
+    non_normalized.touch().expect("Failed to create wheel");
+    let sha256 = hex::encode(Sha256::digest(
+        fs_err::read(dummy_wheel()).expect("Failed to read wheel"),
+    ));
+
+    Mock::given(method("GET"))
+        .and(path("/simple/ok/"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw(
+                json!({
+                    "files": [{
+                        "filename": "ok-1.0.0-py3-none-any.whl",
+                        "hashes": { "sha256": sha256 },
+                        "url": format!("{}/ok-1.0.0-py3-none-any.whl", server.uri()),
+                    }]
+                })
+                .to_string(),
+                "application/vnd.pypi.simple.v1+json",
+            ),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--token")
+        .arg("dummy")
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg("--check-url")
+        .arg(format!("{}/simple/", server.uri()))
+        .arg("--output-format")
+        .arg("json")
+        .arg("--preview-features")
+        .arg("json-output")
+        .arg(dummy_wheel())
+        .arg(non_normalized.path()), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "publish_url": "http://[LOCALHOST]/upload",
+      "files": [
+        {
+          "filename": "ok-1.0.0-py3-none-any.whl",
+          "status": "already_exists"
+        },
+        {
+          "filename": "ok-1.01.0-py3-none-any.whl",
+          "status": "skipped"
+        }
+      ],
+      "dry_run": false
+    }
+
+    ----- stderr -----
+    warning: `ok-1.01.0-py3-none-any.whl` has a non-normalized filename (expected `ok-1.1.0-py3-none-any.whl`), skipping
+    "#);
+}
+
+#[tokio::test]
+async fn publish_json_concurrent_existing() {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let sha256 = hex::encode(Sha256::digest(
+        fs_err::read(dummy_wheel()).expect("Failed to read wheel"),
+    ));
+    let check_count = Arc::new(AtomicUsize::new(0));
+    let check_count_clone = Arc::clone(&check_count);
+    let file_url = format!("{}/ok-1.0.0-py3-none-any.whl", server.uri());
+
+    Mock::given(method("GET"))
+        .and(path("/simple/ok/"))
+        .respond_with(move |_request: &Request| {
+            if check_count_clone.fetch_add(1, Ordering::SeqCst) == 0 {
+                ResponseTemplate::new(404).set_body_raw("Not found", "text/plain")
+            } else {
+                ResponseTemplate::new(200).set_body_raw(
+                    json!({
+                        "files": [{
+                            "filename": "ok-1.0.0-py3-none-any.whl",
+                            "hashes": { "sha256": sha256 },
+                            "url": file_url,
+                        }]
+                    })
+                    .to_string(),
+                    "application/vnd.pypi.simple.v1+json",
+                )
+            }
+        })
+        .expect(2)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .respond_with(ResponseTemplate::new(400).set_body_string("Upload raced"))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--token")
+        .arg("dummy")
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg("--check-url")
+        .arg(format!("{}/simple/", server.uri()))
+        .arg("--output-format")
+        .arg("json")
+        .arg("--preview-features")
+        .arg("json-output")
+        .arg(dummy_wheel()), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "publish_url": "http://[LOCALHOST]/upload",
+      "files": [
+        {
+          "filename": "ok-1.0.0-py3-none-any.whl",
+          "status": "already_exists"
+        }
+      ],
+      "dry_run": false
+    }
+    "#);
+    assert_eq!(check_count.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
+async fn publish_json_failures() {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .respond_with(ResponseTemplate::new(400).set_body_string("Upload failed"))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--token")
+        .arg("dummy")
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg("--output-format")
+        .arg("json")
+        .arg("--preview-features")
+        .arg("json-output")
+        .arg(dummy_wheel()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to http://[LOCALHOST]/upload
+      cause: Server returned status code 400 Bad Request. Server says: Upload failed
+    ");
+
+    let wheel = context.temp_dir.child("invalid-1.0.0-py3-none-any.whl");
+    wheel.touch().expect("Failed to create wheel");
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--dry-run")
+        .arg("--token")
+        .arg("dummy")
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg("--output-format")
+        .arg("json")
+        .arg("--preview-features")
+        .arg("json-output")
+        .arg(wheel.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to publish: `invalid-1.0.0-py3-none-any.whl`
+      cause: Failed to read metadata
+      cause: Failed to read from zip file
+      cause: unable to locate the end of central directory record
+    Found issues with 1 file
+    ");
 }
 
 /// Test that `--dry-run` checks all files and reports all errors instead of
