@@ -9,27 +9,25 @@ Released on 2026-09-18.
 
 ### Enhancements
 
-- Add minimum libc versions for universal resolution ([#21651](https://github.com/astral-sh/uv/pull/21651))
-- Avoid writing lockfiles when reading workspace metadata ([#21821](https://github.com/astral-sh/uv/pull/21821))
-- Reject invalid Git archive paths in lockfiles ([#21780](https://github.com/astral-sh/uv/pull/21780))
-- Validate pylock wheel identities ([#20746](https://github.com/astral-sh/uv/pull/20746))
+- Reject lockfiles containing Git sources with invalid archive paths instead of panicking during frozen exports ([#21780](https://github.com/astral-sh/uv/pull/21780))
+
+### Preview features
+
+- Require universal resolutions to support configured minimum glibc and musl versions with `minimum-libc-version` ([#21651](https://github.com/astral-sh/uv/pull/21651))
+- Reject `pylock.toml` files whose wheel filenames do not match the declared package name or version ([#20746](https://github.com/astral-sh/uv/pull/20746))
+- Avoid creating or updating `uv.lock` when reading workspace metadata unless `--sync` is requested ([#21821](https://github.com/astral-sh/uv/pull/21821))
 
 ### Performance
 
-- Avoid allocations for duplicate OnceMap registrations ([#21810](https://github.com/astral-sh/uv/pull/21810))
+- Reduce allocations for duplicate resolver requests ([#21810](https://github.com/astral-sh/uv/pull/21810))
 
 ### Bug fixes
 
-- Widen required-environment forks to wheel compatibility boundaries ([#21825](https://github.com/astral-sh/uv/pull/21825))
+- Prevent `required-environments` from selecting versions with incompatible wheels between platform compatibility boundaries ([#21825](https://github.com/astral-sh/uv/pull/21825))
 
 ### Documentation
 
-- Improve the 0.12.14 and 0.12.15 changelog entries ([#21817](https://github.com/astral-sh/uv/pull/21817))
-
-### Other changes
-
-- Publish documentation with STS credentials ([#21595](https://github.com/astral-sh/uv/pull/21595))
-- Retry failed Depot image publication ([#21813](https://github.com/astral-sh/uv/pull/21813))
+- Clarify changes in the 0.12.14 and 0.12.15 release notes ([#21817](https://github.com/astral-sh/uv/pull/21817))
 
 ## 0.12.16
 
