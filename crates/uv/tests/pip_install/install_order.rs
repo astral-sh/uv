@@ -1,68 +1,61 @@
-use std::collections::BTreeMap;
 use std::fmt::Write;
-use std::path::Path;
 use std::process::Command;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use fs_err as fs;
-use indoc::indoc;
-use sha2::{Digest, Sha256};
+use indoc::{formatdoc, indoc};
 
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_pep508::Requirement;
 use uv_static::EnvVars;
-use uv_test::packse::{generate_wheel, generate_wheel_with_files};
+use uv_test::packse::PackseServer;
+use uv_test::packse::scenario::Scenario;
 use uv_test::{TestContext, uv_snapshot, venv_bin_path};
 
-/// Write a wheel that shares a module and console script with the other fixture wheels.
-fn write_wheel(directory: &Path, name: &str, requirements: &[&str], slow: bool) -> Result<()> {
-    let name: PackageName = name.parse()?;
+const OVERLAY_PACKAGE: &str = indoc! {r#"
+    [packages.order-overlay.versions."1.0.0"]
+    requires = ["order-base==1.0.0"]
+    sdist = false
+    entry_points = ["order-command"]
+    wheel_files = { "order_shared.py" = "OWNER = 'order-overlay'\n" }
+"#};
+
+/// Serve packages that share a module and console script with a larger dependency.
+fn install_order_index(packages: &str) -> Result<PackseServer> {
+    let mut scenario = toml::from_str::<Scenario>(&formatdoc! {r#"
+        name = "install-order"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.order-base.versions."1.0.0"]
+        sdist = false
+        entry_points = ["order-command"]
+        wheel_files = {{ "order_shared.py" = "OWNER = 'order-base'\n" }}
+
+        {packages}
+    "#})?;
+    let name: PackageName = "order-base".parse()?;
     let version: Version = "1.0.0".parse()?;
-    let normalized = name.as_dist_info_name();
-    let requirements: Vec<Requirement> = requirements
-        .iter()
-        .map(|requirement| requirement.parse())
-        .collect::<Result<Vec<_>, _>>()?;
-    let mut files = vec![
-        ("order_shared.py".to_string(), format!("OWNER = '{name}'\n")),
-        (
-            format!("{normalized}/cli.py"),
-            format!("def main():\n    print('{name}')\n"),
-        ),
-        (
-            format!("{normalized}-{version}.dist-info/entry_points.txt"),
-            format!("[console_scripts]\norder-command = {normalized}.cli:main\n"),
-        ),
-    ];
-    if slow {
-        // Console scripts are generated after linking the wheel's files. A larger dependency
-        // makes the entry-point race visible when installs are only sorted before running in parallel.
-        for index in 0..1024 {
-            files.push((
-                format!("{normalized}/padding/file_{index:04}.txt"),
-                "padding\n".to_string(),
-            ));
-        }
+    let base = scenario
+        .packages
+        .get_mut(&name)
+        .and_then(|package| package.versions.get_mut(&version))
+        .context("scenario should contain order-base==1.0.0")?;
+
+    // Console scripts are generated after linking the wheel's files. A larger dependency makes
+    // the entry-point race visible when installs are only sorted before running in parallel.
+    for index in 0..1024 {
+        base.wheel_files.insert(
+            format!("order_base/padding/file_{index:04}.txt"),
+            "padding\n".to_string(),
+        );
     }
-    let (filename, wheel) = generate_wheel_with_files(
-        &name,
-        &version,
-        &requirements,
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[],
-        &files
-            .iter()
-            .map(|(path, contents)| (path.as_str(), contents.as_str()))
-            .collect::<Vec<_>>(),
-    );
-    fs::create_dir_all(directory)?;
-    fs::write(directory.join(filename), wheel)?;
-    Ok(())
+    Ok(PackseServer::from_scenario(&scenario))
 }
 
 fn assert_winner(context: &TestContext, expected: &str) -> Result<()> {
@@ -79,7 +72,7 @@ fn assert_winner(context: &TestContext, expected: &str) -> Result<()> {
     assert!(output.status.success(), "{output:?}");
     assert_eq!(
         String::from_utf8(output.stdout)?.replace("\r\n", "\n"),
-        format!("{expected}\n")
+        format!("Hello from {expected}!\n")
     );
     Ok(())
 }
@@ -87,12 +80,11 @@ fn assert_winner(context: &TestContext, expected: &str) -> Result<()> {
 #[test]
 fn install_dependencies_before_dependents() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let wheels = context.temp_dir.join("wheels");
-    write_wheel(&wheels, "order-base", &[], true)?;
-    write_wheel(&wheels, "order-overlay", &["order-base==1.0.0"], false)?;
+    let server = install_order_index(OVERLAY_PACKAGE)?;
 
     uv_snapshot!(context.filters(), context.pip_install()
-        .args(["--no-index", "--find-links", "wheels", "--link-mode", "copy", "order-overlay"])
+        .args(["--link-mode", "copy", "order-overlay"])
+        .arg("--index-url").arg(server.index_url())
         .env(EnvVars::UV_CONCURRENT_INSTALLS, "1"), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -107,15 +99,9 @@ fn install_dependencies_before_dependents() -> Result<()> {
     // Exercise cached wheels and the parallel installer using the same environment.
     context
         .pip_install()
-        .args([
-            "--no-index",
-            "--find-links",
-            "wheels",
-            "--link-mode",
-            "copy",
-            "--reinstall",
-            "order-overlay",
-        ])
+        .args(["--link-mode", "copy", "--reinstall", "order-overlay"])
+        .arg("--index-url")
+        .arg(server.index_url())
         .env(EnvVars::UV_CONCURRENT_INSTALLS, "4")
         .assert()
         .success();
@@ -126,18 +112,23 @@ fn install_dependencies_before_dependents() -> Result<()> {
 #[test]
 fn install_dependency_cycles_in_name_order() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let wheels = context.temp_dir.join("wheels");
-    write_wheel(&wheels, "order-base", &[], true)?;
-    write_wheel(&wheels, "cycle-alpha", &["cycle-zebra==1.0.0"], false)?;
-    write_wheel(
-        &wheels,
-        "cycle-zebra",
-        &["cycle-alpha==1.0.0", "order-base==1.0.0"],
-        false,
-    )?;
+    let server = install_order_index(indoc! {r#"
+        [packages.cycle-alpha.versions."1.0.0"]
+        requires = ["cycle-zebra==1.0.0"]
+        sdist = false
+        entry_points = ["order-command"]
+        wheel_files = { "order_shared.py" = "OWNER = 'cycle-alpha'\n" }
+
+        [packages.cycle-zebra.versions."1.0.0"]
+        requires = ["cycle-alpha==1.0.0", "order-base==1.0.0"]
+        sdist = false
+        entry_points = ["order-command"]
+        wheel_files = { "order_shared.py" = "OWNER = 'cycle-zebra'\n" }
+    "#})?;
 
     uv_snapshot!(context.filters(), context.pip_install()
-        .args(["--no-index", "--find-links", "wheels", "--link-mode", "copy", "cycle-alpha"])
+        .args(["--link-mode", "copy", "cycle-alpha"])
+        .arg("--index-url").arg(server.index_url())
         .env(EnvVars::UV_CONCURRENT_INSTALLS, "4"), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -155,10 +146,17 @@ fn install_dependency_cycles_in_name_order() -> Result<()> {
 #[test]
 fn sync_keeps_dependencies_through_filtered_packages() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let wheels = context.temp_dir.join("wheels");
-    write_wheel(&wheels, "order-base", &[], true)?;
-    write_wheel(&wheels, "order-bridge", &["order-base==1.0.0"], false)?;
-    write_wheel(&wheels, "order-overlay", &["order-bridge==1.0.0"], false)?;
+    let server = install_order_index(indoc! {r#"
+        [packages.order-bridge.versions."1.0.0"]
+        requires = ["order-base==1.0.0"]
+        sdist = false
+
+        [packages.order-overlay.versions."1.0.0"]
+        requires = ["order-bridge==1.0.0"]
+        sdist = false
+        entry_points = ["order-command"]
+        wheel_files = { "order_shared.py" = "OWNER = 'order-overlay'\n" }
+    "#})?;
     context
         .temp_dir
         .child("pyproject.toml")
@@ -171,7 +169,8 @@ fn sync_keeps_dependencies_through_filtered_packages() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.sync()
-        .args(["--no-index", "--find-links", "wheels", "--link-mode", "copy", "--no-install-package", "order-bridge"])
+        .args(["--link-mode", "copy", "--no-install-package", "order-bridge"])
+        .arg("--index-url").arg(server.index_url())
         .env(EnvVars::UV_CONCURRENT_INSTALLS, "4"), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -186,21 +185,21 @@ fn sync_keeps_dependencies_through_filtered_packages() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn install_build_environment_dependencies_in_order() -> Result<()> {
+#[tokio::test]
+async fn install_build_environment_dependencies_in_order() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let wheels = context.temp_dir.join("wheels");
-    write_wheel(&wheels, "order-base", &[], true)?;
-    write_wheel(&wheels, "order-overlay", &["order-base==1.0.0"], false)?;
-    let (filename, wheel) = generate_wheel(
-        &"built-project".parse()?,
-        &"1.0.0".parse()?,
-        &[],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[],
-    );
+    let server = install_order_index(&formatdoc! {r#"
+        {OVERLAY_PACKAGE}
+
+        [packages.built-project.versions."1.0.0"]
+        sdist = false
+    "#})?;
+    let filename = "built_project-1.0.0-py3-none-any.whl";
+    let wheel = reqwest::get(server.file_url(filename))
+        .await?
+        .error_for_status()?
+        .bytes()
+        .await?;
     let built_wheel = context.temp_dir.join(filename);
     fs::write(&built_wheel, wheel)?;
     context
@@ -223,7 +222,7 @@ fn install_build_environment_dependencies_in_order() -> Result<()> {
         import order_shared
 
         assert order_shared.OWNER == "order-overlay", order_shared.OWNER
-        assert subprocess.check_output(["order-command"], text=True).strip() == "order-overlay"
+        assert subprocess.check_output(["order-command"], text=True).strip() == "Hello from order-overlay!"
 
         def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
             wheel = Path(os.environ["BUILT_PROJECT_WHEEL"])
@@ -232,7 +231,8 @@ fn install_build_environment_dependencies_in_order() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.pip_install()
-        .args(["--no-index", "--find-links", "wheels", "--link-mode", "copy", "./project"])
+        .args(["--link-mode", "copy", "./project"])
+        .arg("--index-url").arg(server.index_url())
         .env("BUILT_PROJECT_WHEEL", built_wheel)
         .env(EnvVars::UV_CONCURRENT_INSTALLS, "4"), @"
     exit_code: 0 (success)
@@ -249,16 +249,15 @@ fn install_build_environment_dependencies_in_order() -> Result<()> {
 #[test]
 fn flat_resolutions_install_all_selected_wheels() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let wheels = context.temp_dir.join("wheels");
-    write_wheel(&wheels, "order-base", &[], false)?;
-    write_wheel(&wheels, "order-overlay", &["order-base==1.0.0"], false)?;
+    let server = install_order_index(OVERLAY_PACKAGE)?;
     context
         .temp_dir
         .child("requirements.txt")
         .write_str("order-base==1.0.0\norder-overlay==1.0.0\n")?;
 
     uv_snapshot!(context.filters(), context.pip_sync()
-        .args(["--no-index", "--find-links", "wheels", "requirements.txt"])
+        .arg("requirements.txt")
+        .arg("--index-url").arg(server.index_url())
         .env(EnvVars::UV_CONCURRENT_INSTALLS, "4"), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -275,11 +274,15 @@ fn flat_resolutions_install_all_selected_wheels() -> Result<()> {
     let mut pylock = String::from("lock-version = \"1.0\"\ncreated-by = \"uv-test\"\n");
     for name in ["order-base", "order-overlay"] {
         let filename = format!("{}-1.0.0-py3-none-any.whl", name.replace('-', "_"));
-        let hash = hex::encode(Sha256::digest(fs::read(wheels.join(&filename))?));
+        let hash = server
+            .files()
+            .find_map(|(name, hash)| (name == filename).then_some(hash))
+            .context("scenario wheel should be indexed")?;
+        let url = server.file_url(&filename);
         writeln!(
             pylock,
             "\n[[packages]]\nname = \"{name}\"\nversion = \"1.0.0\"\n\
-             archive = {{ path = \"wheels/{filename}\", hashes = {{ sha256 = \"{hash}\" }} }}"
+             archive = {{ url = \"{url}\", hashes = {{ sha256 = \"{hash}\" }} }}"
         )?;
     }
     context.temp_dir.child("pylock.toml").write_str(&pylock)?;
