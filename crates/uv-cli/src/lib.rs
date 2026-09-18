@@ -7841,6 +7841,9 @@ pub struct WorkspaceNamespace {
 pub enum WorkspaceCommand {
     /// View metadata about the current workspace.
     ///
+    /// By default, uv validates the lockfile and resolves dependencies as needed without writing
+    /// changes to it. The lockfile is only created or updated when `--sync` is provided.
+    ///
     /// The output of this command is not yet stable.
     Metadata(Box<MetadataArgs>),
     /// Display the path of a workspace member.
@@ -7887,6 +7890,8 @@ pub struct MetadataArgs {
     ///
     /// In dry-run mode, uv will resolve the project's dependencies and report on the resulting
     /// changes, but will not write the lockfile to disk.
+    ///
+    /// This is the default behavior.
     #[arg(
         long,
         conflicts_with = "frozen",
@@ -7908,6 +7913,9 @@ pub struct MetadataArgs {
     ///
     /// This adds a mapping from importable module names to references to the package nodes
     /// that provide them. By default, the environment is synced in inexact mode.
+    ///
+    /// This also allows creating or updating the lockfile, unless `--locked` or `--frozen` is
+    /// provided. For scripts, the lockfile is only updated if it already exists.
     #[arg(long)]
     pub sync: bool,
 

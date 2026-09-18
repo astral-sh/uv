@@ -1660,12 +1660,13 @@ fn check_no_sync_frozen_uses_existing_lock_without_update() -> Result<()> {
         .success();
     let stale_lock = context.read("uv.lock");
 
+    // Metadata queries must use the frozen lock even if the current requirements cannot resolve.
     pyproject_toml.write_str(indoc! {r#"
         [project]
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["a==2.0.0"]
+        dependencies = ["a==999.0.0"]
     "#})?;
     context.temp_dir.child("main.py").write_str(indoc! {r"
         x: int = 1
@@ -1673,18 +1674,15 @@ fn check_no_sync_frozen_uses_existing_lock_without_update() -> Result<()> {
 
     uv_snapshot!(
         context.filters(),
-        context
-            .check()
+        workspace_check(&context)
             .arg("--no-sync")
             .arg("--frozen")
-            .arg("--index")
-            .arg(server.index_url())
-            .arg("--ty-version")
-            .arg("0.0.17"),
+            .env(EnvVars::UV_INDEX, server.index_url()),
         @"
-    exit_code: 0 (success)
+    exit_code: 1 (failure)
     ----- stdout -----
-    All checks passed!
+    pyproject.toml: warning[uv-metadata] Failed to load uv dependency metadata: uv metadata has no module ownership or editable source paths
+    Found 1 diagnostic
 
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
@@ -1749,18 +1747,15 @@ fn check_no_sync_isolated_does_not_write_lock_or_sync() -> Result<()> {
 
     uv_snapshot!(
         context.filters(),
-        context
-            .check()
+        workspace_check(&context)
             .arg("--no-sync")
             .arg("--isolated")
-            .arg("--index")
-            .arg(server.index_url())
-            .arg("--ty-version")
-            .arg("0.0.17"),
+            .env(EnvVars::UV_INDEX, server.index_url()),
         @"
-    exit_code: 0 (success)
+    exit_code: 1 (failure)
     ----- stdout -----
-    All checks passed!
+    pyproject.toml: warning[uv-metadata] Failed to load uv dependency metadata: uv metadata has no module ownership or editable source paths
+    Found 1 diagnostic
 
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
@@ -3359,11 +3354,9 @@ fn check_isolated() -> Result<()> {
 
     uv_snapshot!(
         context.filters(),
-        context
-            .check()
+        workspace_check(&context)
             .arg("--isolated")
-            .arg("--index")
-            .arg(server.index_url()),
+            .env(EnvVars::UV_INDEX, server.index_url()),
         @"
     exit_code: 0 (success)
     ----- stdout -----
@@ -3399,11 +3392,13 @@ fn check_isolated() -> Result<()> {
         import b
     "})?;
 
-    context
-        .check()
+    workspace_check(&context)
         .arg("--isolated")
-        .arg("--index")
-        .arg(server.index_url())
+        .arg("--no-frozen")
+        .arg("--no-locked")
+        .env(EnvVars::UV_FROZEN, "1")
+        .env(EnvVars::UV_LOCKED, "1")
+        .env(EnvVars::UV_INDEX, server.index_url())
         .assert()
         .success();
     assert_eq!(existing_lock, context.read("uv.lock"));
