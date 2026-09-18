@@ -758,6 +758,10 @@ def main() -> int:
     parser.add_argument("--uv")
     args = parser.parse_args()
 
+    # Keep the outer `uv run` quiet, then enable diagnostics for child uv commands.
+    if rust_log := os.environ.pop("UV_TEST_PUBLISH_RUST_LOG", None):
+        os.environ["RUST_LOG"] = rust_log
+
     if args.uv:
         # We change the working directory for the subprocess calls, so we have to
         # absolutize the path.
