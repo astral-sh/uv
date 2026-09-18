@@ -2025,6 +2025,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 files,
                 username,
                 password,
+                output_format,
                 dry_run,
                 no_attestations,
                 publish_url,
@@ -2047,10 +2048,12 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 check_url,
                 index,
                 index_locations,
+                output_format,
                 dry_run,
                 no_attestations,
                 &cache,
                 printer,
+                globals.preview,
             )
             .await
         }
