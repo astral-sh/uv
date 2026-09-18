@@ -7164,6 +7164,17 @@ impl PackageWire {
             .into());
         }
 
+        // A Git `path` points to a wheel or source archive within the repository.
+        if let Source::Git(_, git) = &self.id.source
+            && let Some(path) = &git.path
+        {
+            DistExtension::from_path(path).map_err(|err| LockErrorKind::InvalidGitPath {
+                id: self.id.clone(),
+                path: path.clone(),
+                err,
+            })?;
+        }
+
         let unwire_deps = |deps: Vec<DependencyWire>| -> Result<Vec<Dependency>, LockError> {
             deps.into_iter()
                 .map(|dep| {
@@ -9711,6 +9722,16 @@ enum LockErrorKind {
     MissingExtension {
         /// The filename that was expected to have an extension.
         id: PackageId,
+        /// The list of valid extensions that were expected.
+        err: ExtensionError,
+    },
+    /// A Git archive path does not have a supported distribution extension.
+    #[error("Git archive path `{path}` for `{id}` must end in a supported file extension: {err}", path = path.display().cyan(), id = id.cyan())]
+    InvalidGitPath {
+        /// The ID of the package containing the Git archive path.
+        id: PackageId,
+        /// The path to the archive within the Git repository.
+        path: PathBuf,
         /// The list of valid extensions that were expected.
         err: ExtensionError,
     },
