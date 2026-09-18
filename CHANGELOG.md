@@ -3,6 +3,34 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.12.17
+
+Released on 2026-09-18.
+
+### Enhancements
+
+- Reject unsupported Git archive paths in lockfiles with a clear error instead of panicking during frozen exports ([#21780](https://github.com/astral-sh/uv/pull/21780))
+
+### Preview features
+
+- Set minimum glibc and musl versions that universal resolutions must support with `minimum-libc-version` ([#21651](https://github.com/astral-sh/uv/pull/21651))
+- Reject `pylock.toml` files whose wheel filenames do not match their declared package names or versions ([#20746](https://github.com/astral-sh/uv/pull/20746))
+- Keep `uv workspace metadata` read-only unless `--sync` is provided ([#21821](https://github.com/astral-sh/uv/pull/21821))
+- Apply `uv check` lock modes when retrieving workspace metadata ([#21821](https://github.com/astral-sh/uv/pull/21821))
+
+### Performance
+
+- Speed up builds with many exclusion patterns by avoiding quadratic deduplication ([#21650](https://github.com/astral-sh/uv/pull/21650))
+- Reduce resolver allocations when deduplicating package and distribution requests ([#21810](https://github.com/astral-sh/uv/pull/21810))
+
+### Bug fixes
+
+- Prevent `required-environments` from selecting package versions whose wheels require a newer macOS version than the configured Darwin baseline ([#21825](https://github.com/astral-sh/uv/pull/21825))
+
+### Documentation
+
+- Clarify the 0.12.14 and 0.12.15 release notes ([#21817](https://github.com/astral-sh/uv/pull/21817))
+
 ## 0.12.16
 
 Released on 2026-09-17.
