@@ -830,7 +830,8 @@ def main():
     if args.targets == ["local"]:
         targets = list(local_targets)
     elif args.targets == ["all"]:
-        targets = list(all_targets)
+        # GitLab registry publishing is disabled in CI until its expired token is replaced.
+        targets = [target for target in all_targets if target != "gitlab"]
     else:
         targets = args.targets
 
