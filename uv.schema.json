@@ -1836,6 +1836,7 @@
             "gcs-endpoint",
             "adjust-ulimit",
             "special-conda-env-names",
+            "portable-envs",
             "relocatable-envs-default",
             "publish-require-normalized",
             "audit-command",
