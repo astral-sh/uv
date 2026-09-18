@@ -508,7 +508,7 @@ fn minimum_libc_backtracks_and_invalidates_lock() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
-    Resolved 3 packages in [TIME]
+    Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
 
     hint: To update the lockfile, run `uv lock`.
@@ -518,24 +518,22 @@ fn minimum_libc_backtracks_and_invalidates_lock() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
-    Resolved 3 packages in [TIME]
-    Updated demo v2.0.0 -> v1.0.0, v2.0.0
+    Resolved 2 packages in [TIME]
+    Updated demo v2.0.0 -> v1.0.0
     ");
     uv_snapshot!(context.filters(), context.export().args(["--frozen", "--no-hashes", "--no-header", "--no-annotate"]), @"
     exit_code: 0 (success)
     ----- stdout -----
-    demo==1.0.0 ; platform_machine == 'x86_64' and sys_platform == 'linux'
-    demo==2.0.0 ; platform_machine != 'x86_64' or sys_platform != 'linux'
+    demo==1.0.0
     ");
     uv_snapshot!(context.filters(), context.pip_compile().args(["pyproject.toml", "--universal", "--offline", "--no-header", "--no-annotate"]), @"
     exit_code: 0 (success)
     ----- stdout -----
-    demo==1.0.0 ; platform_machine == 'x86_64' and sys_platform == 'linux'
-    demo==2.0.0 ; platform_machine != 'x86_64' or sys_platform != 'linux'
+    demo==1.0.0
 
     ----- stderr -----
     warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
-    Resolved 2 packages in [TIME]
+    Resolved 1 package in [TIME]
     ");
     let lock = context.read("uv.lock");
     insta::with_settings!({filters => context.filters()}, {
@@ -543,10 +541,6 @@ fn minimum_libc_backtracks_and_invalidates_lock() -> Result<()> {
         version = 1
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "platform_machine != 'x86_64' or sys_platform != 'linux'",
-            "platform_machine == 'x86_64' and sys_platform == 'linux'",
-        ]
         required-markers = [
             "platform_machine == 'x86_64' and sys_platform == 'linux'",
         ]
@@ -559,22 +553,8 @@ fn minimum_libc_backtracks_and_invalidates_lock() -> Result<()> {
         name = "demo"
         version = "1.0.0"
         source = { registry = "links" }
-        resolution-markers = [
-            "platform_machine == 'x86_64' and sys_platform == 'linux'",
-        ]
         wheels = [
             { path = "demo-1.0.0-cp312-cp312-manylinux_2_17_x86_64.whl" },
-        ]
-
-        [[package]]
-        name = "demo"
-        version = "2.0.0"
-        source = { registry = "links" }
-        resolution-markers = [
-            "platform_machine != 'x86_64' or sys_platform != 'linux'",
-        ]
-        wheels = [
-            { path = "demo-2.0.0-cp312-cp312-manylinux_2_34_x86_64.whl" },
         ]
 
         [[package]]
@@ -582,8 +562,7 @@ fn minimum_libc_backtracks_and_invalidates_lock() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "demo", version = "1.0.0", source = { registry = "links" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
-            { name = "demo", version = "2.0.0", source = { registry = "links" }, marker = "platform_machine != 'x86_64' or sys_platform != 'linux'" },
+            { name = "demo" },
         ]
 
         [package.metadata]
@@ -594,7 +573,7 @@ fn minimum_libc_backtracks_and_invalidates_lock() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
-    Resolved 3 packages in [TIME]
+    Resolved 2 packages in [TIME]
     ");
 
     // Changing the floor invalidates the lock even when the selected wheel remains compatible.
@@ -616,7 +595,7 @@ fn minimum_libc_backtracks_and_invalidates_lock() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
-    Resolved 3 packages in [TIME]
+    Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
 
     hint: To update the lockfile, run `uv lock`.
@@ -692,7 +671,7 @@ fn minimum_libc_no_compatible_version() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
-    error: No solution found when resolving dependencies for split (markers: platform_machine == 'x86_64' and sys_platform == 'linux')
+    error: No solution found when resolving dependencies
       cause: Because demo==2.0.0 has no `platform_machine == 'x86_64' and sys_platform == 'linux'`-compatible wheels and only demo==2.0.0 is available, we can conclude that all versions of demo cannot be used.
              And because your project depends on demo, we can conclude that your project's requirements are unsatisfiable.
     ");
@@ -809,7 +788,7 @@ fn minimum_libc_allows_sdist_fallback() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
-    error: No solution found when resolving dependencies for split (markers: platform_machine == 'x86_64' and sys_platform == 'linux')
+    error: No solution found when resolving dependencies
       cause: Because demo==2.0.0 has no `platform_machine == 'x86_64' and sys_platform == 'linux'`-compatible wheels and only demo==2.0.0 is available, we can conclude that all versions of demo cannot be used.
              And because your project depends on demo, we can conclude that your project's requirements are unsatisfiable.
     ");
@@ -958,8 +937,8 @@ fn minimum_libc_architectures_and_markers() -> Result<()> {
     uv_snapshot!(context.filters(), context.export().args(["--frozen", "--no-hashes", "--no-header", "--no-annotate"]), @"
     exit_code: 0 (success)
     ----- stdout -----
-    demo==1.0.0 ; platform_machine == 'aarch64' and sys_platform == 'linux'
-    demo==2.0.0 ; (platform_machine != 'aarch64' and sys_platform == 'linux') or sys_platform == 'darwin'
+    demo==1.0.0 ; platform_machine != 'x86_64' and sys_platform == 'linux'
+    demo==2.0.0 ; (platform_machine == 'x86_64' and sys_platform == 'linux') or sys_platform == 'darwin'
     windows-only==1.0.0 ; sys_platform == 'win32'
     ");
     let lock = context.read("uv.lock");
@@ -969,8 +948,8 @@ fn minimum_libc_architectures_and_markers() -> Result<()> {
         revision = 3
         requires-python = ">=3.12"
         resolution-markers = [
-            "platform_machine != 'aarch64' and sys_platform == 'linux'",
-            "platform_machine == 'aarch64' and sys_platform == 'linux'",
+            "platform_machine == 'x86_64' and sys_platform == 'linux'",
+            "platform_machine != 'x86_64' and sys_platform == 'linux'",
             "sys_platform == 'darwin'",
             "sys_platform != 'darwin' and sys_platform != 'linux'",
         ]
@@ -988,11 +967,13 @@ fn minimum_libc_architectures_and_markers() -> Result<()> {
         version = "1.0.0"
         source = { registry = "links" }
         resolution-markers = [
-            "platform_machine == 'aarch64' and sys_platform == 'linux'",
+            "platform_machine != 'x86_64' and sys_platform == 'linux'",
         ]
         wheels = [
             { path = "demo-1.0.0-cp312-cp312-manylinux_2_31_aarch64.whl" },
+            { path = "demo-1.0.0-cp312-cp312-manylinux2014_x86_64.whl" },
             { path = "demo-1.0.0-cp312-cp312-musllinux_1_2_aarch64.whl" },
+            { path = "demo-1.0.0-cp312-cp312-musllinux_1_2_x86_64.whl" },
         ]
 
         [[package]]
@@ -1000,12 +981,10 @@ fn minimum_libc_architectures_and_markers() -> Result<()> {
         version = "2.0.0"
         source = { registry = "links" }
         resolution-markers = [
-            "platform_machine != 'aarch64' and sys_platform == 'linux'",
+            "platform_machine == 'x86_64' and sys_platform == 'linux'",
             "sys_platform == 'darwin'",
         ]
         wheels = [
-            { path = "demo-2.0.0-cp312-cp312-manylinux_2_34_aarch64.whl" },
-            { path = "demo-2.0.0-cp312-cp312-musllinux_1_2_aarch64.whl" },
             { path = "demo-2.0.0-cp312-cp312-macosx_11_0_arm64.whl" },
             { path = "demo-2.0.0-cp312-cp312-manylinux_2_17_x86_64.manylinux_2_34_aarch64.whl" },
         ]
@@ -1015,8 +994,8 @@ fn minimum_libc_architectures_and_markers() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "demo", version = "1.0.0", source = { registry = "links" }, marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
-            { name = "demo", version = "2.0.0", source = { registry = "links" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or sys_platform == 'darwin'" },
+            { name = "demo", version = "1.0.0", source = { registry = "links" }, marker = "platform_machine != 'x86_64' and sys_platform == 'linux'" },
+            { name = "demo", version = "2.0.0", source = { registry = "links" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or sys_platform == 'darwin'" },
             { name = "windows-only", marker = "sys_platform == 'win32'" },
         ]
 
