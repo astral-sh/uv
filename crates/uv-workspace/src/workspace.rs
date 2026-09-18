@@ -9,6 +9,7 @@ use std::fmt::Display;
 use std::hash::BuildHasherDefault;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use uv_distribution_types::RequirementScope;
 
 use glob::{GlobError, MatchOptions, Pattern, PatternError, glob};
 use itertools::Itertools;
@@ -586,6 +587,7 @@ impl Workspace {
                         url,
                     }
                 },
+                scope: RequirementScope::Global,
                 origin: None,
             })
         })
@@ -721,6 +723,7 @@ impl Workspace {
                         url,
                     }
                 },
+                scope: RequirementScope::Global,
                 origin: None,
             })
         })

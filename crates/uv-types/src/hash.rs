@@ -710,7 +710,7 @@ mod tests {
     use uv_distribution_filename::DistExtension;
     use uv_distribution_types::{
         ArchiveHashPolicy, HashCollection, HashValidation, MetadataHashPolicy, Requirement,
-        RequirementSource, UnresolvedRequirement, VersionId,
+        RequirementScope, RequirementSource, UnresolvedRequirement, VersionId,
     };
     use uv_normalize::PackageName;
     use uv_pep440::Version;
@@ -733,6 +733,7 @@ mod tests {
                 ext: DistExtension::Wheel,
                 url: url.parse().unwrap(),
             },
+            scope: RequirementScope::Global,
             origin: None,
         }
     }

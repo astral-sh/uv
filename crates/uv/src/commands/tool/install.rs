@@ -1,5 +1,6 @@
 use std::fmt::Write;
 use std::str::FromStr;
+use uv_distribution_types::RequirementScope;
 
 use anyhow::{Result, bail};
 use owo_colors::OwoColorize;
@@ -240,6 +241,7 @@ pub(crate) async fn install(
                     index: None,
                     conflict: None,
                 },
+                scope: RequirementScope::Global,
                 origin: None,
             }
         }
@@ -262,6 +264,7 @@ pub(crate) async fn install(
                     index: None,
                     conflict: None,
                 },
+                scope: RequirementScope::Global,
                 origin: None,
             }
         }
@@ -328,6 +331,7 @@ pub(crate) async fn install(
                     index: None,
                     conflict: None,
                 },
+                scope: RequirementScope::Global,
                 origin: None,
             })
         } else {

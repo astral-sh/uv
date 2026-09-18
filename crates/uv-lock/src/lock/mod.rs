@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use std::slice;
 use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
+use uv_distribution_types::RequirementScope;
 
 use itertools::Itertools;
 use jiff::Timestamp;
@@ -9108,6 +9109,7 @@ fn normalize_requirement(
                     subdirectory,
                     url: VerbatimUrl::from_url(url),
                 },
+                scope: RequirementScope::Global,
                 origin: None,
             })
         }
@@ -9154,6 +9156,7 @@ fn normalize_requirement(
                     ext,
                     url: VerbatimUrl::from_url(url),
                 },
+                scope: RequirementScope::Global,
                 origin: None,
             })
         }
@@ -9177,6 +9180,7 @@ fn normalize_requirement(
                     ext,
                     url,
                 },
+                scope: RequirementScope::Global,
                 origin: None,
             })
         }
@@ -9202,6 +9206,7 @@ fn normalize_requirement(
                     r#virtual: Some(r#virtual.unwrap_or(false)),
                     url,
                 },
+                scope: RequirementScope::Global,
                 origin: None,
             })
         }
@@ -9228,6 +9233,7 @@ fn normalize_requirement(
                     index,
                     conflict,
                 },
+                scope: RequirementScope::Global,
                 origin: None,
             })
         }
@@ -9261,6 +9267,7 @@ fn normalize_requirement(
                     ext,
                     url: VerbatimUrl::from_url(url),
                 },
+                scope: RequirementScope::Global,
                 origin: None,
             })
         }

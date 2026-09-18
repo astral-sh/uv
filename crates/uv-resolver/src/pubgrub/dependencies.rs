@@ -3,10 +3,9 @@ use std::iter;
 
 use either::Either;
 
-use uv_distribution_types::{IndexMetadata, Requirement, RequirementSource};
+use uv_distribution_types::{IndexMetadata, Requirement, RequirementScope, RequirementSource};
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
-use uv_pep508::RequirementOrigin;
 use uv_pypi_types::{ConflictItemRef, Conflicts, VerbatimParsedUrl};
 use uv_resolver_types::PackageNodeKind;
 
@@ -37,10 +36,7 @@ impl DependencySource {
     fn from_requirement(requirement: &Requirement) -> Self {
         match &requirement.source {
             RequirementSource::Registry { index, .. }
-                if matches!(
-                    requirement.origin.as_ref(),
-                    Some(RequirementOrigin::Group(_, Some(_), _))
-                ) =>
+                if matches!(requirement.scope, RequirementScope::Group { .. }) =>
             {
                 index
                     .clone()
