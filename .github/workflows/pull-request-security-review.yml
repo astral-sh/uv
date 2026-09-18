@@ -1,5 +1,37 @@
 on:
   workflow_call:
+    inputs:
+      threat-models:
+        description: "Threat model directory in the caller repository"
+        type: string
+        default: agents/references
+      setup-command:
+        description: "Bash commands to run at the caller workflow revision before checking out the PR"
+        type: string
+        default: ""
+      runner:
+        description: "Linux x86-64 runner for the security review"
+        type: string
+        default: ubuntu-latest
+      helper-runner:
+        description: "Linux x86-64 runner for preparing and publishing findings"
+        type: string
+        default: ubuntu-latest
+      uv-version:
+        description: "uv version used for repository setup and review scripts"
+        type: string
+        required: true
+      uv-checksum:
+        description: "SHA-256 of the Linux x86-64 uv release archive"
+        type: string
+        required: true
+    outputs:
+      result:
+        description: "The security review result"
+        value: ${{ jobs.review.outputs.result }}
+      comments:
+        description: "The prepared GitHub review comments"
+        value: ${{ jobs.prepare.outputs.result }}
 
 permissions: {}
 
@@ -9,7 +41,7 @@ env:
 jobs:
   review:
     name: "security review"
-    runs-on: depot-ubuntu-24.04-16
+    runs-on: ${{ inputs.runner }}
     environment: automations
     timeout-minutes: 30
     permissions:
@@ -19,23 +51,39 @@ jobs:
     outputs:
       result: ${{ steps.review.outputs.final-message }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Checkout review implementation
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          sparse-checkout: agents/security-pr-review
+          persist-credentials: false
+
+      - name: Save review implementation
+        run: cp -R agents/security-pr-review "$RUNNER_TEMP/pull-request-review-source"
+
+      - name: Checkout caller repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: "Prepare review configuration"
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: ${{ inputs.uv-version }}
+          checksum: ${{ inputs.uv-checksum }}
+
+      - name: Set up caller repository
+        if: inputs.setup-command != ''
+        env:
+          SETUP_COMMAND: ${{ inputs.setup-command }}
+        run: bash -euo pipefail -c "$SETUP_COMMAND"
+
+      - name: Prepare review configuration
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          REVIEW_CONFIG: ${{ runner.temp }}/pull-request-review
-        run: |
-          # Keep the review configuration at the workflow revision, even for older PR branches.
-          printf 'REVIEW_CONFIG=%s\n' "$REVIEW_CONFIG" >> "$GITHUB_ENV"
-          mkdir -p "$REVIEW_CONFIG"
-          cp -R agents/. "$REVIEW_CONFIG/"
-          mkdir -p "$REVIEW_CONFIG/toolchain"
-          cp pyproject.toml uv.lock "$REVIEW_CONFIG/toolchain/"
-          git checkout --detach "$HEAD_SHA"
+          THREAT_MODELS: ${{ inputs.threat-models }}
+        run: bash "$RUNNER_TEMP/pull-request-review-source/scripts/setup.sh"
 
       - name: "Checkout Codex Security plugin"
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -48,76 +96,16 @@ jobs:
             plugins/codex-security
           persist-credentials: false
 
-      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
-        with:
-          # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.12.13"
-          checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
-
       - name: "Install Codex Security plugin"
         run: '"$REVIEW_CONFIG/scripts/install-codex-security.sh" "$REVIEW_CONFIG/codex"'
 
       - name: "Collect pull request context"
-        run: |
-          set -euo pipefail
-
-          if [ "$(git rev-parse HEAD)" != "$HEAD_SHA" ]; then
-            echo "The checkout does not match the pull request head." >&2
-            exit 1
-          fi
-
-          gh pr view "$PULL_REQUEST_NUMBER" \
-            --repo "$GITHUB_REPOSITORY" \
-            --json number,title,body,author,baseRefName,baseRefOid,headRefName,headRefOid,isDraft,labels,files,additions,deletions,changedFiles \
-            > .pull-request-review-event.json
-
-          if ! jq --exit-status --arg head "$HEAD_SHA" \
-            '.headRefOid == $head' .pull-request-review-event.json > /dev/null; then
-            echo "The pull request head changed during review setup." >&2
-            exit 1
-          fi
-
-          merge_base="$(git merge-base "$BASE_SHA" "$HEAD_SHA")"
-          jq --null-input --arg base "$merge_base" --arg base_tip "$BASE_SHA" \
-            --arg head "$HEAD_SHA" \
-            '{base: $base, base_tip: $base_tip, head: $head}' \
-            > .pull-request-review-revisions.json
-
-          git diff --no-ext-diff --no-textconv --no-renames \
-            "$merge_base..$HEAD_SHA" > .pull-request-review.diff
-          git diff --no-ext-diff --no-textconv --no-renames --name-only -z \
-            "$merge_base..$HEAD_SHA" > "$RUNNER_TEMP/pull-request-review-paths.z"
-
-          : > .pull-request-review-paths.txt
-          while IFS= read -r -d '' path; do
-            if [[ "$path" == *$'\n'* || "$path" == *$'\r'* ]]; then
-              echo "A changed path cannot be represented in the scan inventory." >&2
-              exit 1
-            fi
-            printf '%s\n' "$path" >> .pull-request-review-paths.txt
-          done < "$RUNNER_TEMP/pull-request-review-paths.z"
-
-          gh api --paginate --slurp \
-            "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER/comments?per_page=100" \
-            | jq '[.[][] | {author: .user.login, body, path, line, original_line, side, start_line, original_start_line, start_side, commit_id, original_commit_id, in_reply_to_id, created_at, html_url}]' \
-            > .pull-request-review-comments.json
-
-          {
-            printf 'Pull request security review for #%s: %s\n\n' \
-              "$(jq -r '.number' .pull-request-review-event.json)" \
-              "$(jq -r '.title | gsub("[\r\n]+"; " ")' .pull-request-review-event.json)"
-            cat "$REVIEW_CONFIG/prompts/pull-request-security-review.md"
-          } > "$RUNNER_TEMP/pull-request-security-review-prompt.md"
+        run: bash "$REVIEW_CONFIG/scripts/collect-context.sh"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-
-      - name: "Install cargo nextest"
-        run: |
-          uv sync --project "$REVIEW_CONFIG/toolchain" --only-dev
-          echo "$REVIEW_CONFIG/toolchain/.venv/bin" >> "$GITHUB_PATH"
 
       # codex-action configures these only on GitHub-hosted runners.
       - name: "Enable Linux user namespaces for bubblewrap"
@@ -148,7 +136,7 @@ jobs:
           safety-strategy: drop-sudo
           allow-bot-users: "astral-automations-bot[bot],renovate[bot]"
           prompt-file: "${{ runner.temp }}/pull-request-security-review-prompt.md"
-          output-schema-file: "${{ env.REVIEW_CONFIG }}/schemas/pull-request-security-review.json"
+          output-schema-file: "${{ env.REVIEW_CONFIG }}/schema.json"
           output-file: "${{ runner.temp }}/pull-request-review-result.json"
 
       - name: "Check review coverage"
@@ -156,27 +144,7 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          set -euo pipefail
-
-          if [ "$(git rev-parse HEAD)" != "$HEAD_SHA" ]; then
-            echo "The review changed the checked-out revision." >&2
-            exit 1
-          fi
-
-          review="$RUNNER_TEMP/pull-request-review-result.json"
-          merge_base="$(git merge-base "$BASE_SHA" "$HEAD_SHA")"
-          git diff --no-ext-diff --no-textconv --no-renames --name-only -z \
-            "$merge_base..$HEAD_SHA" | LC_ALL=C sort -z \
-            > "$RUNNER_TEMP/expected-review-paths.z"
-          jq --join-output '.reviewed_paths[] | . + "\u0000"' "$review" \
-            | LC_ALL=C sort -z > "$RUNNER_TEMP/reviewed-paths.z"
-
-          if ! cmp --silent "$RUNNER_TEMP/expected-review-paths.z" \
-            "$RUNNER_TEMP/reviewed-paths.z"; then
-            echo "Infrastructure error: the security review did not account for every changed path" >&2
-            exit 1
-          fi
+        run: bash "$REVIEW_CONFIG/scripts/check-coverage.sh"
 
       - name: "Upload Codex thread"
         if: always()
@@ -189,33 +157,29 @@ jobs:
   prepare:
     needs: review
     if: needs.review.outputs.result != ''
-    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.helper-runner }}
     timeout-minutes: 5
     permissions:
       contents: read
     outputs:
       result: ${{ steps.comments.outputs.result }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Checkout review implementation
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          sparse-checkout: agents/security-pr-review
           persist-credentials: false
 
       - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
-          # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.12.13"
-          checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
+          version: ${{ inputs.uv-version }}
+          checksum: ${{ inputs.uv-checksum }}
 
       - name: "Prepare review findings"
         id: comments
-        run: |
-          delimiter="review-$(openssl rand -hex 16)"
-          {
-            printf 'result<<%s\n' "$delimiter"
-            printf '%s\n' "$REVIEW_RESULT" \
-              | ./agents/scripts/agent-review-to-github-comments.py --commit-id "$HEAD_SHA"
-            printf '%s\n' "$delimiter"
-          } >> "$GITHUB_OUTPUT"
+        run: bash agents/security-pr-review/scripts/prepare.sh
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           REVIEW_RESULT: ${{ needs.review.outputs.result }}
@@ -223,24 +187,26 @@ jobs:
   report:
     needs: prepare
     if: needs.prepare.outputs.result != '' && fromJSON(needs.prepare.outputs.result).comments[0] != null
-    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.helper-runner }}
     environment: automations
     timeout-minutes: 5
     permissions:
       id-token: write # for the credential broker
     steps:
-      - name: "Get uv token"
+      - name: "Get repository token"
         id: token
         uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
         with:
           exchange-url: ${{ secrets.STS_API_URL }}/exchange
           audience: ${{ secrets.STS_API_URL }}
-          repository: astral-sh/uv
+          repository: ${{ github.repository }}
           permissions: |
             pull_requests: write
 
       - name: "Publish review findings"
         run: |
+          set -euo pipefail
+
           printf '%s\n' "$REVIEW_RESULT" > "$RUNNER_TEMP/review.json"
 
           if jq --exit-status '.comments | length == 0' "$RUNNER_TEMP/review.json" > /dev/null; then
