@@ -59,15 +59,13 @@ pub struct Requirement {
     pub marker: MarkerTree,
     #[serde(flatten)]
     pub source: RequirementSource,
-    /// The resolver scope attached when selecting dependency groups. This is contextual input,
-    /// not part of the package's serialized dependency declarations.
     #[serde(skip)]
     pub scope: RequirementScope,
     #[serde(skip)]
     pub origin: Option<RequirementOrigin>,
 }
 
-/// The semantic scope of a requirement, independent of its diagnostic origin.
+/// Whether a requirement is global or belongs to a package's dependency group.
 #[derive(Debug, Clone, Default, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum RequirementScope {
     #[default]
