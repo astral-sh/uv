@@ -15492,7 +15492,7 @@ fn universal_required_environment() -> Result<()> {
         .env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies for split (markers: platform_machine == 'arm64')
+    error: No solution found when resolving dependencies for split (markers: platform_machine != 'ppc64')
       cause: Because a==1.0.0 has no `platform_machine == 'arm64'`-compatible wheels and only a==1.0.0 is available, we can conclude that all versions of a cannot be used.
              And because project depends on a, we can conclude that your requirements are unsatisfiable.
     ");
