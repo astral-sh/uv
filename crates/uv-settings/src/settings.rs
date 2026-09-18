@@ -1590,8 +1590,8 @@ pub struct PipOptions {
     /// with an error. uv may still build editable requirements, and their build backends may run
     /// arbitrary Python code.
     ///
-    /// Multiple packages may be provided. Disable binaries for all packages with `:all:`.
-    /// Clear previously specified packages with `:none:`.
+    /// Multiple packages may be provided. Disable source distributions for all packages with
+    /// `:all:`. Clear previously specified packages with `:none:`.
     #[option(
         default = "[]",
         value_type = "list[str]",
