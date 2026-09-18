@@ -248,8 +248,7 @@ fn add_version<'a>(
 ) -> Result<(), ResolveError> {
     let ResolutionPackage {
         name,
-        extra,
-        dev: group,
+        kind,
         url,
         index,
     } = &package;
@@ -279,7 +278,7 @@ fn add_version<'a>(
 
     if let Some(metadata) = metadata.as_ref() {
         // Validate the extra.
-        if let Some(extra) = extra {
+        if let Some(extra) = kind.extra() {
             if !metadata.provides_extra.contains(extra) {
                 diagnostics.push(ResolutionDiagnostic::MissingExtra {
                     dist: dist.clone(),
@@ -289,7 +288,7 @@ fn add_version<'a>(
         }
 
         // Validate the development dependency group.
-        if let Some(dev) = group {
+        if let Some(dev) = kind.group() {
             if !metadata.dependency_groups.contains_key(dev) {
                 diagnostics.push(ResolutionDiagnostic::MissingGroup {
                     dist: dist.clone(),
@@ -304,8 +303,7 @@ fn add_version<'a>(
         dist,
         name: name.clone(),
         version: version.clone(),
-        extra: extra.clone(),
-        group: group.clone(),
+        kind: kind.clone(),
         hashes,
         metadata,
         marker: UniversalMarker::TRUE,
@@ -522,17 +520,22 @@ fn report_missing_lower_bounds(
     constraints: &Constraints,
     overrides: &Overrides,
 ) {
+    let mut missing_lower_bounds = Vec::new();
     for node_index in graph.node_indices() {
         let ResolutionGraphNode::Dist(dist) = graph.node_weight(node_index).unwrap() else {
             // Ignore the root package.
             continue;
         };
         if !has_lower_bound(node_index, dist.name(), graph, constraints, overrides) {
-            diagnostics.push(ResolutionDiagnostic::MissingLowerBound {
-                package_name: dist.name().clone(),
-            });
+            missing_lower_bounds.push(dist.name());
         }
     }
+    missing_lower_bounds.sort_unstable();
+    diagnostics.extend(missing_lower_bounds.into_iter().map(|package_name| {
+        ResolutionDiagnostic::MissingLowerBound {
+            package_name: package_name.clone(),
+        }
+    }));
 }
 
 /// Whether the given package has a lower version bound by another package.
