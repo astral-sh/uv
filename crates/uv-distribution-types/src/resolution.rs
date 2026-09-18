@@ -1,3 +1,6 @@
+use petgraph::algo::tarjan_scc;
+use rustc_hash::FxHashMap;
+
 use uv_distribution_filename::DistExtension;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pypi_types::{HashDigest, HashDigests};
@@ -15,6 +18,18 @@ use crate::{
 pub struct Resolution {
     graph: petgraph::graph::DiGraph<Node, Edge>,
     diagnostics: Vec<ResolutionDiagnostic>,
+}
+
+/// A strongly connected component of a resolution's dependency graph.
+#[derive(Debug)]
+pub struct ResolutionComponent<'a> {
+    /// The distributions to install, sorted by package name.
+    ///
+    /// This can be empty when the component contains only filtered distributions or the root.
+    pub distributions: Vec<&'a ResolvedDist>,
+    /// Indices of the components this component depends on, in the result of
+    /// [`Resolution::dependency_components`]. Each index precedes this component.
+    pub dependencies: Vec<usize>,
 }
 
 impl Resolution {
@@ -62,6 +77,56 @@ impl Resolution {
                 Node::Dist { dist, install, .. } if *install => Some(dist),
                 _ => None,
             })
+    }
+
+    /// Group distributions into strongly connected components, with dependencies first.
+    ///
+    /// Components can be processed concurrently once their dependencies have completed.
+    /// Distributions within a component are returned in a stable order by package name.
+    /// Filtered distributions remain in the graph so that dependency paths through them are retained.
+    /// Only dependencies recorded in this resolution are included; some resolutions, such as those
+    /// constructed from a `pylock.toml`, contain no edges between distributions.
+    pub fn dependency_components(&self) -> Vec<ResolutionComponent<'_>> {
+        // Resolution edges point from a distribution to its dependencies. Tarjan's reverse
+        // topological order therefore puts dependencies before their dependents.
+        let components = tarjan_scc(&self.graph);
+        let component_by_node = components
+            .iter()
+            .enumerate()
+            .flat_map(|(component_index, component)| {
+                component.iter().map(move |node| (*node, component_index))
+            })
+            .collect::<FxHashMap<_, _>>();
+
+        components
+            .iter()
+            .enumerate()
+            .map(|(component_index, component)| {
+                let mut distributions = component
+                    .iter()
+                    .filter_map(|node| match &self.graph[*node] {
+                        Node::Dist { dist, install, .. } => install.then_some(dist),
+                        Node::Root => None,
+                    })
+                    .collect::<Vec<_>>();
+                distributions.sort_unstable_by(|left, right| left.name().cmp(right.name()));
+
+                let mut dependencies = component
+                    .iter()
+                    .flat_map(|node| self.graph.neighbors(*node))
+                    .map(|node| component_by_node[&node])
+                    .filter(|dependency| *dependency != component_index)
+                    .collect::<Vec<_>>();
+                dependencies.sort_unstable();
+                dependencies.dedup();
+                debug_assert!(dependencies.iter().all(|index| *index < component_index));
+
+                ResolutionComponent {
+                    distributions,
+                    dependencies,
+                }
+            })
+            .collect()
     }
 
     /// Return the number of distributions in this resolution.
@@ -284,5 +349,117 @@ impl From<&ResolvedDist> for RequirementSource {
                 conflict: None,
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+    use std::str::FromStr;
+    use std::sync::Arc;
+
+    use petgraph::graph::DiGraph;
+
+    use uv_normalize::PackageName;
+    use uv_pep440::Version;
+    use uv_pypi_types::HashDigests;
+
+    use crate::{InstalledDistKind, InstalledRegistryDist, Name, ResolvedDist};
+
+    use super::{Edge, Node, Resolution};
+
+    fn distribution(name: &str, install: bool) -> Node {
+        Node::Dist {
+            dist: ResolvedDist::Installed {
+                dist: Arc::new(
+                    InstalledDistKind::Registry(InstalledRegistryDist {
+                        name: PackageName::from_str(name).expect("valid package name"),
+                        version: Version::from_str("1.0").expect("valid version"),
+                        path: PathBuf::new().into_boxed_path(),
+                        cache_info: None,
+                        build_info: None,
+                    })
+                    .into(),
+                ),
+            },
+            hashes: HashDigests::empty(),
+            install,
+        }
+    }
+
+    fn components(resolution: &Resolution) -> Vec<(Vec<&str>, Vec<usize>)> {
+        resolution
+            .dependency_components()
+            .into_iter()
+            .map(|component| {
+                (
+                    component
+                        .distributions
+                        .into_iter()
+                        .map(|dist| dist.name().as_str())
+                        .collect(),
+                    component.dependencies,
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn dependency_components_retain_filtered_paths() {
+        let mut graph = DiGraph::new();
+        let root = graph.add_node(Node::Root);
+        let app = graph.add_node(distribution("app", true));
+        let filtered = graph.add_node(distribution("filtered", false));
+        let base = graph.add_node(distribution("base", true));
+        graph.add_edge(root, app, Edge::Prod);
+        graph.add_edge(app, filtered, Edge::Prod);
+        graph.add_edge(filtered, base, Edge::Prod);
+
+        assert_eq!(
+            components(&Resolution::new(graph)),
+            [
+                (vec!["base"], vec![]),
+                (vec![], vec![0]),
+                (vec!["app"], vec![1]),
+                (vec![], vec![2]),
+            ]
+        );
+    }
+
+    #[test]
+    fn dependency_components_sort_cycles_and_deduplicate_edges() {
+        let mut graph = DiGraph::new();
+        let zebra = graph.add_node(distribution("zebra", true));
+        let alpha = graph.add_node(distribution("alpha", true));
+        let base = graph.add_node(distribution("base", true));
+        graph.add_edge(zebra, alpha, Edge::Prod);
+        graph.add_edge(alpha, zebra, Edge::Prod);
+        graph.add_edge(zebra, base, Edge::Prod);
+        graph.add_edge(alpha, base, Edge::Prod);
+        graph.add_edge(alpha, base, Edge::Prod);
+
+        assert_eq!(
+            components(&Resolution::new(graph)),
+            [(vec!["base"], vec![]), (vec!["alpha", "zebra"], vec![0]),]
+        );
+    }
+
+    #[test]
+    fn dependency_components_leave_unrelated_distributions_independent() {
+        let mut graph = DiGraph::new();
+        let root = graph.add_node(Node::Root);
+        let alpha = graph.add_node(distribution("alpha", true));
+        let beta = graph.add_node(distribution("beta", true));
+        graph.add_edge(root, alpha, Edge::Prod);
+        graph.add_edge(root, beta, Edge::Prod);
+
+        let resolution = Resolution::new(graph);
+        let components = resolution.dependency_components();
+        assert_eq!(components.len(), 3);
+        assert!(components[..2].iter().all(|component| {
+            component.distributions.len() == 1 && component.dependencies.is_empty()
+        }));
+        assert!(components[2].distributions.is_empty());
+        assert_eq!(components[2].dependencies, [0, 1]);
     }
 }

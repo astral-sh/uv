@@ -17214,6 +17214,7 @@ fn project_build_hashes_locked_script_run_with_no_sync() -> Result<()> {
         &BTreeMap::new(),
         None,
         "py3-none-any",
+        &[],
         &[("build_dependency/changed.py", "changed = True\n")],
     );
     package

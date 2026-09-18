@@ -10,6 +10,7 @@ pub use uninstall::{UninstallError, uninstall};
 mod compile;
 mod preparer;
 
+mod install_order;
 mod installer;
 mod plan;
 mod satisfies;

@@ -4221,6 +4221,7 @@ fn install_copy_long_paths() -> Result<()> {
                 &BTreeMap::default(),
                 None,
                 "py3-none-any",
+                &[],
                 &[(&file, "data")],
             );
             fs::write(context.temp_dir.join(&filename), wheel)?;
