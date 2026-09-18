@@ -20,15 +20,15 @@ pub struct Resolution {
     diagnostics: Vec<ResolutionDiagnostic>,
 }
 
-/// A group of distributions that depend on each other, directly or transitively.
+/// A strongly connected component of a resolution's dependency graph.
 #[derive(Debug)]
-pub struct DependencyGroup<'a> {
+pub struct ResolutionComponent<'a> {
     /// The distributions to install, sorted by package name.
     ///
-    /// This can be empty when the group contains only filtered distributions or the root.
+    /// This can be empty when the component contains only filtered distributions or the root.
     pub distributions: Vec<&'a ResolvedDist>,
-    /// Indices of the groups this group depends on, in the result of
-    /// [`Resolution::dependency_groups`]. Each index precedes this group.
+    /// Indices of the components this component depends on, in the result of
+    /// [`Resolution::dependency_components`]. Each index precedes this component.
     pub dependencies: Vec<usize>,
 }
 
@@ -81,12 +81,12 @@ impl Resolution {
 
     /// Group distributions into strongly connected components, with dependencies first.
     ///
-    /// Groups can be processed concurrently once their dependencies have completed. Distributions
-    /// within a group form a dependency cycle and are returned in a stable order by package name.
+    /// Components can be processed concurrently once their dependencies have completed.
+    /// Distributions within a component are returned in a stable order by package name.
     /// Filtered distributions remain in the graph so that dependency paths through them are retained.
     /// Only dependencies recorded in this resolution are included; some resolutions, such as those
     /// constructed from a `pylock.toml`, contain no edges between distributions.
-    pub fn dependency_groups(&self) -> Vec<DependencyGroup<'_>> {
+    pub fn dependency_components(&self) -> Vec<ResolutionComponent<'_>> {
         // Resolution edges point from a distribution to its dependencies. Tarjan's reverse
         // topological order therefore puts dependencies before their dependents.
         let components = tarjan_scc(&self.graph);
@@ -105,8 +105,8 @@ impl Resolution {
                 let mut distributions = component
                     .iter()
                     .filter_map(|node| match &self.graph[*node] {
-                        Node::Dist { dist, install, .. } if *install => Some(dist),
-                        _ => None,
+                        Node::Dist { dist, install, .. } => install.then_some(dist),
+                        Node::Root => None,
                     })
                     .collect::<Vec<_>>();
                 distributions.sort_unstable_by(|left, right| left.name().cmp(right.name()));
@@ -121,7 +121,7 @@ impl Resolution {
                 dependencies.dedup();
                 debug_assert!(dependencies.iter().all(|index| *index < component_index));
 
-                DependencyGroup {
+                ResolutionComponent {
                     distributions,
                     dependencies,
                 }
@@ -387,25 +387,25 @@ mod tests {
         }
     }
 
-    fn groups(resolution: &Resolution) -> Vec<(Vec<&str>, Vec<usize>)> {
+    fn components(resolution: &Resolution) -> Vec<(Vec<&str>, Vec<usize>)> {
         resolution
-            .dependency_groups()
+            .dependency_components()
             .into_iter()
-            .map(|group| {
+            .map(|component| {
                 (
-                    group
+                    component
                         .distributions
                         .into_iter()
                         .map(|dist| dist.name().as_str())
                         .collect(),
-                    group.dependencies,
+                    component.dependencies,
                 )
             })
             .collect()
     }
 
     #[test]
-    fn dependency_groups_retain_filtered_paths() {
+    fn dependency_components_retain_filtered_paths() {
         let mut graph = DiGraph::new();
         let root = graph.add_node(Node::Root);
         let app = graph.add_node(distribution("app", true));
@@ -416,7 +416,7 @@ mod tests {
         graph.add_edge(filtered, base, Edge::Prod);
 
         assert_eq!(
-            groups(&Resolution::new(graph)),
+            components(&Resolution::new(graph)),
             [
                 (vec!["base"], vec![]),
                 (vec![], vec![0]),
@@ -427,7 +427,7 @@ mod tests {
     }
 
     #[test]
-    fn dependency_groups_sort_cycles_and_deduplicate_edges() {
+    fn dependency_components_sort_cycles_and_deduplicate_edges() {
         let mut graph = DiGraph::new();
         let zebra = graph.add_node(distribution("zebra", true));
         let alpha = graph.add_node(distribution("alpha", true));
@@ -439,13 +439,13 @@ mod tests {
         graph.add_edge(alpha, base, Edge::Prod);
 
         assert_eq!(
-            groups(&Resolution::new(graph)),
+            components(&Resolution::new(graph)),
             [(vec!["base"], vec![]), (vec!["alpha", "zebra"], vec![0]),]
         );
     }
 
     #[test]
-    fn dependency_groups_leave_unrelated_distributions_independent() {
+    fn dependency_components_leave_unrelated_distributions_independent() {
         let mut graph = DiGraph::new();
         let root = graph.add_node(Node::Root);
         let alpha = graph.add_node(distribution("alpha", true));
@@ -454,14 +454,12 @@ mod tests {
         graph.add_edge(root, beta, Edge::Prod);
 
         let resolution = Resolution::new(graph);
-        let groups = resolution.dependency_groups();
-        assert_eq!(groups.len(), 3);
-        assert!(
-            groups[..2]
-                .iter()
-                .all(|group| { group.distributions.len() == 1 && group.dependencies.is_empty() })
-        );
-        assert!(groups[2].distributions.is_empty());
-        assert_eq!(groups[2].dependencies, [0, 1]);
+        let components = resolution.dependency_components();
+        assert_eq!(components.len(), 3);
+        assert!(components[..2].iter().all(|component| {
+            component.distributions.len() == 1 && component.dependencies.is_empty()
+        }));
+        assert!(components[2].distributions.is_empty());
+        assert_eq!(components[2].dependencies, [0, 1]);
     }
 }

@@ -41,18 +41,18 @@ impl InstallOrder {
         }
 
         let mut groups: Vec<InstallGroup> = Vec::new();
-        for group in resolution.dependency_groups() {
+        for component in resolution.dependency_components() {
             let group_index = groups.len();
-            for dependency in &group.dependencies {
+            for dependency in &component.dependencies {
                 groups[*dependency].dependents.push(group_index);
             }
             groups.push(InstallGroup {
-                wheels: group
+                wheels: component
                     .distributions
                     .into_iter()
                     .filter_map(|dist| wheel_by_name.remove(dist.name()))
                     .collect(),
-                dependencies: group.dependencies.len(),
+                dependencies: component.dependencies.len(),
                 dependents: vec![],
             });
         }
@@ -139,6 +139,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::convert::Infallible;
     use std::sync::Mutex;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::mpsc;
@@ -210,7 +211,7 @@ mod tests {
                     .lock()
                     .expect("installed lock should not be poisoned")
                     .push(wheel);
-                Ok::<(), std::convert::Infallible>(())
+                Ok::<(), Infallible>(())
             })
             .expect("installation should succeed");
 
