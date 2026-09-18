@@ -39,28 +39,23 @@ Released on 2026-09-17.
 
 Released on 2026-09-15.
 
-This release fixes a regression in 0.12.14 that lead to rejecting valid installation commands such as using
-`uv pip install --system` in `python:*` docker images or when using `uv pip install --target .`. ([#21699](https://github.com/astral-sh/uv/pull/21699))
-
 ### Performance
 
 - Speed up cold-cache resolution and HTTP cache revalidation by batching cache writes ([#21675](https://github.com/astral-sh/uv/pull/21675))
 
 ### Bug fixes
 
-- Revert "Reject symlinked wheel installation destinations" ([#21699](https://github.com/astral-sh/uv/pull/21699))
+- Fix regressions in `0.12.14` when installing to symlinked destinations or using `uv pip install --target .` ([#21699](https://github.com/astral-sh/uv/pull/21699))
 
 ## 0.12.14
 
 Released on 2026-09-15.
 
-Package-operation errors now use uv's standard diagnostics, with consistent hints and compact, labeled cause chains. ([#17110](https://github.com/astral-sh/uv/pull/17110), [#21599](https://github.com/astral-sh/uv/pull/21599), [#21603](https://github.com/astral-sh/uv/pull/21603))
-
-Package-operation exit codes now reflect the underlying cause: expected failures return 1, while recognized operational and internal failures return 2. ([#17110](https://github.com/astral-sh/uv/pull/17110))
-
 ### Enhancements
 
 - Resume interrupted downloads with HTTP Range requests when supported ([#21570](https://github.com/astral-sh/uv/pull/21570))
+- Use a consistent format for error rendering ([#17110](https://github.com/astral-sh/uv/pull/17110))
+- Render error and warning causes with compact `cause:` labels ([#21599](https://github.com/astral-sh/uv/pull/21599), [#21603](https://github.com/astral-sh/uv/pull/21603))
 - Show underlying causes and hints in user warnings ([#21565](https://github.com/astral-sh/uv/pull/21565))
 - Show resolver hints for failed `uv tool upgrade` operations ([#21566](https://github.com/astral-sh/uv/pull/21566))
 
@@ -82,6 +77,7 @@ Package-operation exit codes now reflect the underlying cause: expected failures
 - Redact credentials and signatures from missing-path-segment URL errors ([#21616](https://github.com/astral-sh/uv/pull/21616))
 - Avoid exceeding the configured retry budget when cached HTTP responses fail revalidation ([#21640](https://github.com/astral-sh/uv/pull/21640))
 - Prefer `bin/python` over `bin/python3` when discovering interpreters in Unix environments ([#21559](https://github.com/astral-sh/uv/pull/21559))
+- Classify package-operation exit codes by their underlying cause: return `1` for expected failures and `2` for recognized operational and internal failures ([#17110](https://github.com/astral-sh/uv/pull/17110))
 - Suppress managed-Python fallback warnings under `--quiet` ([#21565](https://github.com/astral-sh/uv/pull/21565))
 - Keep failed `uv tool upgrade` errors visible with `-q` while suppressing them with `-qq` ([#21566](https://github.com/astral-sh/uv/pull/21566))
 
