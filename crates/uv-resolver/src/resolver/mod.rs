@@ -1401,6 +1401,19 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             )));
         }
 
+        // The version map filters wheel tags against the project-wide Python range. A fork may
+        // narrow that range, so ensure at least one usable distribution still matches it.
+        if env.marker_environment().is_none()
+            && !dist.matches_python_requirement(python_requirement.target())
+        {
+            return Ok(Some(ResolverVersion::Unavailable(
+                candidate.version().clone(),
+                UnavailableVersion::IncompatibleDist(IncompatibleDist::Wheel(
+                    IncompatibleWheel::Tag(IncompatibleTag::AbiPythonVersion),
+                )),
+            )));
+        }
+
         // Check whether this version covers all supported platforms; and, if not, generate a fork.
         if let Some(forked) = self.fork_version_registry(
             &candidate,

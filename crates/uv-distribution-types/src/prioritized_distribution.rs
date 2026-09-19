@@ -14,7 +14,7 @@ use uv_pypi_types::{HashDigest, Yanked};
 
 use crate::{
     File, InstalledDist, KnownPlatform, MinimumLibcVersion, RegistryBuiltDist, RegistryBuiltWheel,
-    RegistrySourceDist, ResolvedDistRef,
+    RegistrySourceDist, RequiresPython, ResolvedDistRef,
 };
 
 /// A collection of distributions that have been filtered by relevance.
@@ -85,6 +85,24 @@ pub enum CompatibleDist<'a> {
 }
 
 impl CompatibleDist<'_> {
+    /// Return whether a usable source distribution or a wheel matching [`RequiresPython`] exists.
+    ///
+    /// Wheel compatibility must be checked against the current Python range when a resolver fork
+    /// narrows the range used to construct the [`PrioritizedDist`].
+    pub fn matches_python_requirement(&self, requires_python: &RequiresPython) -> bool {
+        let Some(prioritized) = self.prioritized() else {
+            return true;
+        };
+        prioritized
+            .0
+            .source
+            .as_ref()
+            .is_some_and(|(_, compatibility)| compatibility.is_compatible())
+            || prioritized.0.wheels.iter().any(|(wheel, compatibility)| {
+                compatibility.is_compatible() && requires_python.matches_wheel_tag(&wheel.filename)
+            })
+    }
+
     /// Return the `requires-python` specifier for the distribution, if any.
     pub fn requires_python(&self) -> Option<&VersionSpecifiers> {
         match self {
