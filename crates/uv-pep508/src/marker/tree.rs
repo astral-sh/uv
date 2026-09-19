@@ -127,13 +127,15 @@ impl Display for MarkerValueString {
 
 /// Those markers with exclusively `in` and `not in` operators.
 ///
-/// Contains PEP 751 lockfile markers.
+/// Contains PEP 751 lockfile markers and the PEP 780 ABI feature marker.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum MarkerValueList {
     /// `extras`. This one is special because it's a list, and user-provided
     Extras,
     /// `dependency_groups`. This one is special because it's a list, and user-provided
     DependencyGroups,
+    /// `sys_abi_features`, the ABI features of the target Python interpreter.
+    SysAbiFeatures,
 }
 
 impl Display for MarkerValueList {
@@ -141,6 +143,7 @@ impl Display for MarkerValueList {
         match self {
             Self::Extras => f.write_str("extras"),
             Self::DependencyGroups => f.write_str("dependency_groups"),
+            Self::SysAbiFeatures => f.write_str("sys_abi_features"),
         }
     }
 }
@@ -199,6 +202,7 @@ impl FromStr for MarkerValue {
             "sys.platform" => Self::MarkerEnvString(MarkerValueString::SysPlatformDeprecated),
             "extras" => Self::MarkerEnvList(MarkerValueList::Extras),
             "dependency_groups" => Self::MarkerEnvList(MarkerValueList::DependencyGroups),
+            "sys_abi_features" => Self::MarkerEnvList(MarkerValueList::SysAbiFeatures),
             "extra" => Self::Extra,
             _ => return Err(format!("Invalid key: {s}")),
         };
@@ -969,7 +973,7 @@ impl MarkerTree {
                     low: low.negate(self.0),
                 })
             }
-            Variable::List(key) => {
+            Variable::SysAbiFeature(key) | Variable::List(key) => {
                 let Edges::Boolean { low, high } = node.children else {
                     unreachable!()
                 };
@@ -1121,6 +1125,9 @@ impl MarkerTree {
                     CanonicalMarkerListPair::Extras(extra) => extras.extras().contains(extra),
                     CanonicalMarkerListPair::DependencyGroup(dependency_group) => {
                         extras.dependency_groups().contains(dependency_group)
+                    }
+                    CanonicalMarkerListPair::SysAbiFeature(feature) => {
+                        env.sys_abi_features().contains(feature.as_str())
                     }
                     // Invalid marker expression
                     CanonicalMarkerListPair::Arbitrary { .. } => return false,

@@ -6,9 +6,13 @@ use tracing::debug;
 
 use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
-use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
+use uv_pep508::{
+    CanonicalMarkerListPair, ContainerOperator, MarkerExpression, MarkerOperator, MarkerTree,
+    MarkerValueString,
+};
 use uv_platform_tags::{
-    AbiTag, BinaryFormat, IncompatibleTag, LanguageTag, PlatformTag, TagPriority, Tags,
+    AbiTag, BinaryFormat, CPythonAbiVariants, IncompatibleTag, LanguageTag, PlatformTag,
+    TagPriority, Tags,
 };
 use uv_pypi_types::{HashDigest, Yanked};
 
@@ -377,6 +381,7 @@ impl PrioritizedDist {
         hashes: impl IntoIterator<Item = HashDigest>,
         compatibility: WheelCompatibility,
         minimum_libc_version: Option<MinimumLibcVersion>,
+        sys_abi_features: bool,
     ) {
         if compatibility.is_compatible()
             && (!self.0.python_markers.is_true()
@@ -384,10 +389,16 @@ impl PrioritizedDist {
         {
             let python = implied_python_markers(&dist.filename);
             self.0.python_markers = self.0.python_markers.or(python);
+            let coverage = if sys_abi_features {
+                implied_abi_markers(&dist.filename)
+            } else {
+                python
+            };
             for (coverage, markers) in self.0.markers.iter_mut().zip(implied_libc_markers(
                 &dist.filename,
-                python,
+                coverage,
                 minimum_libc_version,
+                sys_abi_features,
             )) {
                 *coverage = coverage.or(markers);
             }
@@ -834,9 +845,15 @@ impl IncompatibleWheel {
 pub fn implied_markers(
     filename: &WheelFilename,
     minimum_libc_version: Option<MinimumLibcVersion>,
+    sys_abi_features: bool,
 ) -> MarkerTree {
-    let python = implied_python_markers(filename);
-    let [glibc, musl] = implied_libc_markers(filename, python, minimum_libc_version);
+    let python = if sys_abi_features {
+        implied_abi_markers(filename)
+    } else {
+        implied_python_markers(filename)
+    };
+    let [glibc, musl] =
+        implied_libc_markers(filename, python, minimum_libc_version, sys_abi_features);
     glibc.and(musl)
 }
 
@@ -845,13 +862,15 @@ fn implied_libc_markers(
     filename: &WheelFilename,
     python: MarkerTree,
     minimum_libc_version: Option<MinimumLibcVersion>,
+    sys_abi_features: bool,
 ) -> [MarkerTree; 2] {
     let Some(minimum_libc_version) = minimum_libc_version else {
-        return [implied_platform_markers(filename.platform_tags()).and(python); 2];
+        return [implied_platform_markers(filename.platform_tags(), sys_abi_features).and(python);
+            2];
     };
     let mut markers = [MarkerTree::FALSE; 2];
     for tag in filename.platform_tags() {
-        let platform = implied_platform_markers([tag]).and(python);
+        let platform = implied_platform_markers([tag], sys_abi_features).and(python);
         for (markers, supported) in markers
             .iter_mut()
             .zip(minimum_libc_version.platform_coverage(tag))
@@ -867,7 +886,15 @@ fn implied_libc_markers(
 /// Infer the environments described by a set of platform tags.
 fn implied_platform_markers<'a>(
     platform_tags: impl IntoIterator<Item = &'a PlatformTag>,
+    sys_abi_features: bool,
 ) -> MarkerTree {
+    let bitness = |bits| {
+        if sys_abi_features {
+            abi_feature_marker(if bits == 32 { "32-bit" } else { "64-bit" })
+        } else {
+            MarkerTree::TRUE
+        }
+    };
     let mut marker = MarkerTree::FALSE;
     for platform_tag in platform_tags {
         match platform_tag {
@@ -887,6 +914,7 @@ fn implied_platform_markers<'a>(
                     operator: MarkerOperator::Equal,
                     value: arcstr::literal!("x86"),
                 }));
+                tag_marker = tag_marker.and(bitness(32));
                 marker = marker.or(tag_marker);
             }
             PlatformTag::WinAmd64 => {
@@ -900,6 +928,7 @@ fn implied_platform_markers<'a>(
                     operator: MarkerOperator::Equal,
                     value: arcstr::literal!("AMD64"),
                 }));
+                tag_marker = tag_marker.and(bitness(64));
                 marker = marker.or(tag_marker);
             }
             PlatformTag::WinArm64 => {
@@ -913,6 +942,7 @@ fn implied_platform_markers<'a>(
                     operator: MarkerOperator::Equal,
                     value: arcstr::literal!("ARM64"),
                 }));
+                tag_marker = tag_marker.and(bitness(64));
                 marker = marker.or(tag_marker);
             }
 
@@ -951,7 +981,19 @@ fn implied_platform_markers<'a>(
                         operator: MarkerOperator::GreaterEqual,
                         value: ArcStr::from(release.to_string()),
                     });
-                    arch_marker = arch_marker.or(architecture.and(release));
+                    let bits = match arch {
+                        BinaryFormat::I386 | BinaryFormat::Ppc => bitness(32),
+                        BinaryFormat::X86_64 | BinaryFormat::Arm64 | BinaryFormat::Ppc64 => {
+                            bitness(64)
+                        }
+                        BinaryFormat::Fat
+                        | BinaryFormat::Fat32
+                        | BinaryFormat::Fat64
+                        | BinaryFormat::Intel
+                        | BinaryFormat::Universal
+                        | BinaryFormat::Universal2 => MarkerTree::TRUE,
+                    };
+                    arch_marker = arch_marker.or(architecture.and(release).and(bits));
                 }
                 tag_marker = tag_marker.and(arch_marker);
 
@@ -975,6 +1017,7 @@ fn implied_platform_markers<'a>(
                     operator: MarkerOperator::Equal,
                     value: ArcStr::from(arch.name()),
                 }));
+                tag_marker = tag_marker.and(bitness(arch.pointer_width()));
                 marker = marker.or(tag_marker);
             }
 
@@ -1005,18 +1048,78 @@ fn macos_darwin_release(major: u16, minor: u16) -> Option<Version> {
     Some(Version::new(release))
 }
 
+/// Require one of the interpreter features defined by PEP 780.
+fn abi_feature_marker(feature: &str) -> MarkerTree {
+    MarkerTree::expression(MarkerExpression::List {
+        pair: CanonicalMarkerListPair::SysAbiFeature(feature.to_owned()),
+        operator: ContainerOperator::In,
+    })
+}
+
+/// Infer Python and ABI coverage together, so a stable ABI does not widen unrelated ABI tags.
+fn implied_abi_markers(filename: &WheelFilename) -> MarkerTree {
+    let mut markers = MarkerTree::FALSE;
+    for abi in filename.abi_tags() {
+        let mut python = implied_python_tag_markers(filename, abi.is_stable_abi());
+        match abi {
+            AbiTag::None | AbiTag::PyPy { .. } | AbiTag::GraalPy { .. } | AbiTag::Pyston { .. } => {
+            }
+            AbiTag::Abi3 => python = python.and(abi_feature_marker("gil-enabled")),
+            AbiTag::Abi3T => {
+                python =
+                    python
+                        .and(abi_feature_marker("free-threading"))
+                        .and(MarkerTree::expression(MarkerExpression::Version {
+                            key: uv_pep508::MarkerValueVersion::PythonVersion,
+                            specifier: VersionSpecifier::greater_than_equal_version(Version::new(
+                                [3, 15],
+                            )),
+                        }));
+            }
+            AbiTag::CPython {
+                python_version: (major, minor),
+                variant,
+            } => {
+                python = python
+                    .and(abi_feature_marker(
+                        if variant.contains(CPythonAbiVariants::Freethreading) {
+                            "free-threading"
+                        } else {
+                            "gil-enabled"
+                        },
+                    ))
+                    .and(MarkerTree::expression(MarkerExpression::Version {
+                        key: uv_pep508::MarkerValueVersion::PythonVersion,
+                        specifier: VersionSpecifier::equals_star_version(Version::new([
+                            u64::from(*major),
+                            u64::from(*minor),
+                        ])),
+                    }));
+                if variant.contains(CPythonAbiVariants::Debug) {
+                    python = python.and(abi_feature_marker("debug"));
+                }
+            }
+        }
+        markers = markers.or(python);
+    }
+    markers
+}
+
 /// Given a wheel filename, determine the set of supported Python versions, in terms of their markers.
 ///
 /// This is roughly the inverse of Python tag generation: given a tag, we want to infer the
 /// supported Python version (rather than generating the supported tags from a given Python version).
 fn implied_python_markers(filename: &WheelFilename) -> MarkerTree {
-    let mut marker = MarkerTree::FALSE;
-
     // If any ABI tag is a stable ABI (`abi3` or `abi3t`), the python tag represents a minimum
     // version rather than an exact version. For example, `cp39-abi3` means "compatible with
     // CPython 3.9+".
     let is_abi3 = filename.abi_tags().iter().any(|tag| tag.is_stable_abi());
+    implied_python_tag_markers(filename, is_abi3)
+}
 
+/// Infer Python coverage for one ABI, preserving the language/ABI tag product.
+fn implied_python_tag_markers(filename: &WheelFilename, is_abi3: bool) -> MarkerTree {
+    let mut marker = MarkerTree::FALSE;
     for python_tag in filename.python_tags() {
         // First, construct the version marker based on the tag
         let mut tree = match python_tag {
@@ -1139,11 +1242,63 @@ mod tests {
 
     use super::*;
 
+    #[test]
+    fn test_implied_abi_markers() -> Result<(), Box<dyn std::error::Error>> {
+        let _preview =
+            uv_preview::test::with_features(&[uv_preview::PreviewFeature::SysAbiFeatures]);
+        let regular: MarkerTree = "platform_python_implementation == 'CPython' and 'free-threading' not in sys_abi_features".parse()?;
+        let free_threaded: MarkerTree = "'free-threading' in sys_abi_features".parse()?;
+        for (tag, supports_regular, supports_free_threaded) in [
+            ("cp313-cp313", true, false),
+            ("cp313-cp313t", false, true),
+            ("cp313-cp313.cp313t", true, true),
+            ("cp39-abi3", true, false),
+            ("cp315-abi3t", false, true),
+            ("py3-none", true, true),
+        ] {
+            let filename: WheelFilename =
+                format!("example-1.0-{tag}-manylinux_2_17_x86_64.whl").parse()?;
+            let coverage = implied_markers(&filename, None, true);
+            assert_eq!(!coverage.is_disjoint(regular), supports_regular, "{tag}");
+            assert_eq!(
+                !coverage.is_disjoint(free_threaded),
+                supports_free_threaded,
+                "{tag}"
+            );
+        }
+        for (tag, bits) in [
+            ("win32", "32-bit"),
+            ("win_amd64", "64-bit"),
+            ("win_arm64", "64-bit"),
+            ("manylinux_2_17_i686", "32-bit"),
+            ("manylinux_2_17_x86_64", "64-bit"),
+            ("macosx_11_0_universal2", "64-bit"),
+        ] {
+            let filename: WheelFilename = format!("example-1.0-py3-none-{tag}.whl").parse()?;
+            let coverage = implied_markers(&filename, None, true);
+            let bitness: MarkerTree = format!("'{bits}' in sys_abi_features").parse()?;
+            assert!(coverage.is_disjoint(bitness.negate()), "{tag}");
+            assert!(!coverage.is_disjoint(bitness), "{tag}");
+        }
+        // A stable ABI in a compressed tag cannot widen an exact ABI's Python range.
+        let filename: WheelFilename =
+            "example-1.0-cp313-cp313.abi3t-manylinux_2_17_x86_64.whl".parse()?;
+        let coverage = implied_markers(&filename, None, true);
+        assert!(coverage.is_disjoint("python_version == '3.14'".parse()?));
+        assert!(!coverage.is_disjoint(
+            "python_version == '3.15' and 'free-threading' in sys_abi_features".parse()?
+        ));
+        assert!(coverage.is_disjoint(
+            "python_version == '3.15' and 'gil-enabled' in sys_abi_features".parse()?
+        ));
+        Ok(())
+    }
+
     #[track_caller]
     fn assert_platform_markers(filename: &str, expected: &str) {
         let filename = WheelFilename::from_str(filename).unwrap();
         assert_eq!(
-            implied_platform_markers(filename.platform_tags()),
+            implied_platform_markers(filename.platform_tags(), false),
             expected.parse::<MarkerTree>().unwrap()
         );
     }
@@ -1161,7 +1316,7 @@ mod tests {
     fn assert_implied_markers(filename: &str, expected: &str) {
         let filename = WheelFilename::from_str(filename).unwrap();
         assert_eq!(
-            implied_markers(&filename, None),
+            implied_markers(&filename, None, false),
             expected.parse::<MarkerTree>().unwrap()
         );
     }
@@ -1170,7 +1325,7 @@ mod tests {
     fn test_implied_platform_markers() {
         let filename = WheelFilename::from_str("example-1.0-py3-none-any.whl").unwrap();
         assert_eq!(
-            implied_platform_markers(filename.platform_tags()),
+            implied_platform_markers(filename.platform_tags(), false),
             MarkerTree::TRUE
         );
 
@@ -1308,7 +1463,7 @@ mod tests {
             let filename =
                 WheelFilename::from_str(&format!("example-1.0-py3-none-{tag}.whl")).unwrap();
             assert_eq!(
-                implied_platform_markers(filename.platform_tags()),
+                implied_platform_markers(filename.platform_tags(), false),
                 MarkerTree::from_str(expected).unwrap()
             );
         }

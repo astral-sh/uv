@@ -19,6 +19,7 @@ uv-cache-key = { workspace = true }
 uv-fs = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
+uv-preview = { workspace = true }
 uv-redacted = { workspace = true }
 
 arcstr = { workspace = true}
@@ -39,6 +40,7 @@ url = { workspace = true, features = ["serde"] }
 version-ranges = { workspace = true }
 
 [dev-dependencies]
+uv-preview = { workspace = true, features = ["testing"] }
 insta = { workspace = true }
 serde_json = { workspace = true }
 tracing-test = { workspace = true }

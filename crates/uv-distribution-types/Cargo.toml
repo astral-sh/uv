@@ -54,6 +54,7 @@ url = { workspace = true }
 version-ranges = { workspace = true }
 
 [dev-dependencies]
+uv-preview = { workspace = true, features = ["testing"] }
 toml = { workspace = true }
 
 [features]

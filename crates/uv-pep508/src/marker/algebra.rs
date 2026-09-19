@@ -344,7 +344,12 @@ impl InternerGuard<'_> {
                 return string;
             }
             MarkerExpression::List { pair, operator } => (
-                Variable::List(pair),
+                match pair {
+                    CanonicalMarkerListPair::SysAbiFeature(_) => Variable::SysAbiFeature(pair),
+                    CanonicalMarkerListPair::Extras(_)
+                    | CanonicalMarkerListPair::DependencyGroup(_)
+                    | CanonicalMarkerListPair::Arbitrary { .. } => Variable::List(pair),
+                },
                 Edges::from_bool(operator == ContainerOperator::In),
             ),
             // A variable representing the existence or absence of a particular extra.
@@ -1159,6 +1164,35 @@ impl InternerGuard<'_> {
             }
         }
 
+        // PEP 780 makes threading features exclusive and specific to CPython. Bitness
+        // features are exclusive too, but neither need be present if bitness is unknown.
+        let mut feature = |name: &str| {
+            self.expression(MarkerExpression::List {
+                pair: CanonicalMarkerListPair::SysAbiFeature(name.to_owned()),
+                operator: ContainerOperator::In,
+            })
+        };
+        let free_threading = feature("free-threading");
+        let gil_enabled = feature("gil-enabled");
+        let debug = feature("debug");
+        let bits32 = feature("32-bit");
+        let bits64 = feature("64-bit");
+        let cpython = self.expression(MarkerExpression::String {
+            key: MarkerValueString::PlatformPythonImplementation,
+            operator: MarkerOperator::Equal,
+            value: arcstr::literal!("CPython"),
+        });
+        pairs.extend([
+            (free_threading, gil_enabled),
+            (bits32, bits64),
+            (free_threading, cpython.not()),
+            (gil_enabled, cpython.not()),
+            (debug, cpython.not()),
+        ]);
+        let neither_threading =
+            conjunction(self, &mut cache, free_threading.not(), gil_enabled.not());
+        pairs.push((cpython, neither_threading));
+
         for (a, b) in pairs {
             let a_and_b = conjunction(self, &mut cache, a, b);
             tree = disjunction(self, &mut cache, tree, a_and_b);
@@ -1181,6 +1215,8 @@ impl InternerGuard<'_> {
 /// impact.
 #[derive(PartialOrd, Ord, PartialEq, Eq, Hash, Clone, Debug)]
 pub(crate) enum Variable {
+    /// ABI features precede other markers so known incompatibilities can be detected.
+    SysAbiFeature(CanonicalMarkerListPair),
     /// A string marker, such as `os_name`.
     String(CanonicalMarkerValueString),
     /// A string-valued marker interpreted as a version within a platform-specific scope.
@@ -1222,10 +1258,16 @@ impl Variable {
     /// For example, `sys_platform == 'win32'` and `platform_system == 'Darwin'` are known to
     /// never be true at the same time.
     fn is_conflicting_variable(&self) -> bool {
-        let Self::String(marker) = self else {
-            return false;
-        };
-        marker.is_conflicting()
+        match self {
+            Self::SysAbiFeature(_) => true,
+            Self::String(marker) => marker.is_conflicting(),
+            Self::VersionString(_)
+            | Self::Version(_)
+            | Self::In { .. }
+            | Self::Contains { .. }
+            | Self::Extra(_)
+            | Self::List(_) => false,
+        }
     }
 }
 
