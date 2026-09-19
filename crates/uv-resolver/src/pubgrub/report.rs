@@ -341,6 +341,15 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                 }
             }
             External::FromDependencyOf(package, package_set, dependency, dependency_set) => {
+                if package == dependency && dependency_set.is_empty() {
+                    let range = self.compatible_range(package, package_set);
+                    return if range.plural() {
+                        format!("{range} have incompatible dependencies on themselves")
+                    } else {
+                        format!("{range} has an incompatible dependency on itself")
+                    };
+                }
+
                 if package.name_no_root() == dependency.name_no_root() {
                     if let Some(member) = self.format_workspace_member(package) {
                         return format!(

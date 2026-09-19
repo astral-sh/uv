@@ -19096,6 +19096,37 @@ fn compile_broken_active_venv() -> Result<()> {
     Ok(())
 }
 
+/// Report an incompatible self-dependency without displaying an empty version range.
+#[test]
+fn pubgrub_incompatible_self_dependency() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "incompatible-self-dependency"
+
+        [root]
+        requires = ["a"]
+
+        [expected]
+        satisfiable = false
+
+        [packages.a.versions."1.0.0"]
+        requires = ["a>=2.0.0"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    context.temp_dir.child("requirements.in").write_str("a")?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--index-url").arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because all versions of a have incompatible dependencies on themselves and you require a, we can conclude that your requirements are unsatisfiable.
+    ");
+
+    Ok(())
+}
+
 /// <https://github.com/astral-sh/uv/issues/13344>
 #[test]
 fn pubgrub_panic_double_self_dependency() -> Result<()> {
