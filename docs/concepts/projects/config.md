@@ -195,6 +195,11 @@ To target this environment, you'd export `UV_PROJECT_ENVIRONMENT=/usr/local`.
     environment. The `--active` flag can be used to opt-in to respecting `VIRTUAL_ENV`. The
     `--no-active` flag can be used to silence the warning.
 
+    The `--active` flag respects an active Conda environment, via the `CONDA_PREFIX` environment
+    variable. If both are set, `VIRTUAL_ENV` takes precedence. Base Conda environments are treated
+    as system installations and are ignored. Unlike `VIRTUAL_ENV`, no warning is displayed when
+    `CONDA_PREFIX` does not match the project's environment.
+
 ## Build isolation
 
 By default, uv builds all packages in isolated virtual environments alongside their declared build
