@@ -8546,6 +8546,46 @@ fn lock_requires_python_fork_wheels() -> Result<()> {
     Ok(())
 }
 
+/// Future Python forks do not require wheels to have been published for those versions yet.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_requires_python_fork_wheels_future() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "requires-python-fork-wheels-future"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.a.versions."1.0.0"]
+        sdist = false
+        wheel_tags = ["cp312-cp312-any"]
+
+        [packages.b.versions."1.0.0"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12,<4"
+        dependencies = ["a", "b ; python_version >= '3.13'"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// A fork can use a source distribution, a wheel other than the preferred wheel, or a stable ABI.
 #[cfg(feature = "test-universal")]
 #[test]
