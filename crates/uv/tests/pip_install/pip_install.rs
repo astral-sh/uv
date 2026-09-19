@@ -6816,6 +6816,62 @@ fn dry_run_install() -> std::result::Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
+fn check_install() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.pip_install().arg("iniconfig==2.0.0").arg("--check"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Would download 1 package
+    Would install 1 package
+     + iniconfig==2.0.0
+    ");
+
+    // Checking must leave the environment unchanged.
+    uv_snapshot!(context.pip_install().arg("iniconfig==2.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    uv_snapshot!(context.pip_install().arg("iniconfig==2.0.0").arg("--check").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checked 1 package in [TIME]
+    Would make no changes
+    ");
+
+    // Exact installs bypass the fast path and check the resolved plan.
+    uv_snapshot!(context.pip_install().arg("iniconfig==2.0.0").arg("--check").arg("--exact"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Checked 1 package in [TIME]
+    Would make no changes
+    ");
+
+    uv_snapshot!(context.pip_install().arg("iniconfig==1.1.1").arg("--check"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Would download 1 package
+    Would uninstall 1 package
+    Would install 1 package
+     - iniconfig==2.0.0
+     + iniconfig==1.1.1
+    ");
+
+    context
+        .assert_command("import importlib.metadata; print(importlib.metadata.version('iniconfig'))")
+        .success()
+        .stdout("2.0.0\n");
+}
+
+#[test]
 fn dry_run_install_url_dependency() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let context = uv_test::test_context!("3.12");
     let requirements_txt = context.temp_dir.child("requirements.txt");

@@ -2525,6 +2525,12 @@ pub struct PipInstallArgs {
     #[arg(long)]
     pub dry_run: bool,
 
+    /// Check whether the environment satisfies the requirements without modifying it.
+    ///
+    /// Resolve and report any necessary changes, exiting with code 1 if changes are needed.
+    #[arg(long, conflicts_with = "dry_run")]
+    pub check: bool,
+
     /// The backend to use when fetching packages in the PyTorch ecosystem (e.g., `cpu`, `cu126`, or `auto`)
     ///
     /// When set, uv will ignore the configured index URLs for packages in the PyTorch ecosystem,

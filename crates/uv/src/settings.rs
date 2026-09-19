@@ -3864,6 +3864,7 @@ impl PipInstallSettings {
             dry_run,
             torch_backend,
             compat_args: _,
+            check,
         } = args;
 
         let constraints_from_workspace = if let Some(configuration) = &filesystem {
@@ -3931,7 +3932,11 @@ impl PipInstallSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
-            dry_run: DryRun::from_args(dry_run),
+            dry_run: if check {
+                DryRun::Check
+            } else {
+                DryRun::from_args(dry_run)
+            },
             constraints_from_workspace,
             overrides_from_workspace,
             excludes_from_workspace,
