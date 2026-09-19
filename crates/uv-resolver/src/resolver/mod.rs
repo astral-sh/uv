@@ -12,7 +12,7 @@ use std::{mem, thread};
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
 use papaya::{HashMap, ResizeMode};
-use pubgrub::{ConflictId, Id, Ranges, State};
+use pubgrub::{ConflictId, Id, Ranges, State, Term};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::{self, Receiver};
 use tokio::sync::oneshot;
@@ -525,8 +525,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         .pubgrub
                         .partial_solution
                         .term_intersection_for_package(next_id)
-                        .expect("a package was chosen but we don't have a term")
-                        .unwrap_positive();
+                        .and_then(|term| match term {
+                            Term::Positive(range) => Some(range),
+                            Term::Negative(_) => None,
+                        })
+                        .expect("a package was chosen but we don't have a positive term");
 
                     // Within a fixed resolver environment, an implicit registry candidate is
                     // stable for a given range and pre-release policy. Avoid repeating candidate
