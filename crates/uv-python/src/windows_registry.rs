@@ -163,7 +163,7 @@ fn write_registry_entry(
     company.set_string("SupportUrl", "https://github.com/astral-sh/uv")?;
 
     // Ex) CPython3.13.1
-    let tag = company.create(registry_python_tag(installation.key()))?;
+    let tag = company.create(installation.key().registry_tag())?;
     let display_name = format!(
         "{} {} ({}-bit)",
         installation.key().implementation().pretty(),
@@ -199,21 +199,6 @@ fn write_registry_entry(
     Ok(())
 }
 
-fn registry_python_tag(key: &PythonInstallationKey) -> String {
-    // Include the variant's executable suffix (e.g., "t" for freethreaded) in the
-    // registry tag so that variant (freethreaded, debug, etc.) installations of the same version
-    // get distinct registry entries. This suffix can be empty.
-    //
-    // See: https://github.com/astral-sh/uv/issues/18795
-    let variant_suffix = key.variant().executable_suffix();
-    format!(
-        "{}{}{}",
-        key.implementation().pretty(),
-        key.version(),
-        variant_suffix,
-    )
-}
-
 /// Remove requested Python entries from the Windows Registry (PEP 514).
 pub fn remove_registry_entry<'a>(
     installations: impl IntoIterator<Item = &'a ManagedPythonInstallation>,
@@ -236,7 +221,7 @@ pub fn remove_registry_entry<'a>(
     }
 
     for installation in installations {
-        let python_tag = registry_python_tag(installation.key());
+        let python_tag = installation.key().registry_tag();
         let python_entry = format!("{astral_key}\\{python_tag}");
         debug!("Removing registry key HKCU:\\{}", python_entry);
         if let Err(err) = CURRENT_USER.remove_tree(&python_entry) {
@@ -263,7 +248,7 @@ pub fn remove_registry_entry<'a>(
 pub fn remove_orphan_registry_entries(installations: &[ManagedPythonInstallation]) {
     let keep: HashSet<_> = installations
         .iter()
-        .map(|installation| registry_python_tag(installation.key()))
+        .map(|installation| installation.key().registry_tag())
         .collect();
     let astral_key = format!("Software\\Python\\{COMPANY_KEY}");
     let key = match CURRENT_USER.open(&astral_key) {

@@ -423,8 +423,15 @@ impl Interpreter {
 
     /// Return the patch version component of this Python version.
     pub(crate) fn python_patch(&self) -> u8 {
-        let minor = self.markers.python_full_version().version.release()[2];
-        u8::try_from(minor).expect("invalid patch version")
+        self.markers
+            .python_full_version()
+            .version
+            .release()
+            .get(2)
+            .copied()
+            .map_or(0, |patch| {
+                u8::try_from(patch).expect("invalid patch version")
+            })
     }
 
     /// Returns the Python version as a simple tuple, e.g., `(3, 12)`.

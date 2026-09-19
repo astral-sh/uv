@@ -7,9 +7,9 @@ use uv_static::EnvVars;
 #[cfg(all(test, unix))]
 use crate::discovery::find_python_installations;
 pub use crate::discovery::{
-    EnvironmentPreference, Error as DiscoveryError, PythonDownloads, PythonNotFound,
-    PythonPreference, PythonRequest, PythonSource, PythonVariant, VersionRequest,
-    find_all_python_installations,
+    EnvironmentPreference, Error as DiscoveryError, LenientPythonBuildVariant, PythonBuildVariant,
+    PythonDownloads, PythonNotFound, PythonPreference, PythonRequest, PythonSource, PythonVariant,
+    VersionRequest, find_all_python_installations,
 };
 pub use crate::environment::{InvalidEnvironmentKind, PythonEnvironment};
 pub use crate::implementation::{ImplementationName, LenientImplementationName};
@@ -742,7 +742,7 @@ mod tests {
             interpreter,
             PythonInstallation {
                 source: PythonSource::SearchPathFirst,
-                interpreter: _
+                ..
             },
             "We should find the valid executable; got {interpreter:?}"
         );
@@ -782,7 +782,7 @@ mod tests {
             interpreter,
             PythonInstallation {
                 source: PythonSource::SearchPathFirst,
-                interpreter: _
+                ..
             },
             "We should find the local Python without reading download metadata; got {interpreter:?}"
         );
@@ -846,7 +846,7 @@ mod tests {
             python,
             PythonInstallation {
                 source: PythonSource::SearchPath,
-                interpreter: _
+                ..
             },
             "We should skip the bad executables in favor of the good one; got {python:?}"
         );
@@ -1170,7 +1170,7 @@ mod tests {
             python,
             PythonInstallation {
                 source: PythonSource::SearchPath,
-                interpreter: _
+                ..
             },
             "We should skip the Python 2 installation and find the Python 3 interpreter; got {python:?}"
         );
@@ -1293,7 +1293,7 @@ mod tests {
             python,
             PythonInstallation {
                 source: PythonSource::SearchPath,
-                interpreter: _
+                ..
             },
             "We should find a python; got {python:?}"
         );
@@ -1324,7 +1324,7 @@ mod tests {
             python,
             PythonInstallation {
                 source: PythonSource::SearchPath,
-                interpreter: _
+                ..
             },
             "We should find a python; got {python:?}"
         );
@@ -1424,7 +1424,7 @@ mod tests {
             python,
             PythonInstallation {
                 source: PythonSource::SearchPath,
-                interpreter: _
+                ..
             },
             "We should find a python; got {python:?}"
         );
@@ -1455,7 +1455,7 @@ mod tests {
             python,
             PythonInstallation {
                 source: PythonSource::SearchPath,
-                interpreter: _
+                ..
             },
             "We should find a python; got {python:?}"
         );
@@ -1488,7 +1488,7 @@ mod tests {
             python,
             PythonInstallation {
                 source: PythonSource::SearchPathFirst,
-                interpreter: _
+                ..
             },
             "We should skip the active environment in favor of the requested version; got {python:?}"
         );
@@ -1516,7 +1516,7 @@ mod tests {
             python,
             PythonInstallation {
                 source: PythonSource::ActiveEnvironment,
-                interpreter: _
+                ..
             },
             "We should prefer the active environment after relaxing; got {python:?}"
         );
@@ -3227,7 +3227,7 @@ mod tests {
             python,
             PythonInstallation {
                 source: PythonSource::SearchPathFirst,
-                interpreter: _
+                ..
             },
             "We should find a python; got {python:?}"
         );
@@ -3277,7 +3277,7 @@ mod tests {
             python,
             PythonInstallation {
                 source: PythonSource::SearchPathFirst,
-                interpreter: _
+                ..
             },
             "We should find a python; got {python:?}"
         );
