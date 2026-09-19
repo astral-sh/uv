@@ -18,7 +18,7 @@ use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::Concurrency;
 use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
-use uv_fs::Simplified;
+use uv_fs::{Simplified, normalize_path};
 use uv_platform::{Arch, Libc};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::downloads::{
@@ -84,6 +84,25 @@ impl<'a> InstallRequest<'a> {
 
         Ok(Self {
             request,
+            download_request,
+            download,
+        })
+    }
+
+    /// Create a reinstall request that preserves the exact installation identity.
+    fn from_installation(
+        installation: &ManagedPythonInstallation,
+        download_list: &'a ManagedPythonDownloadList,
+    ) -> Result<Self, downloads::Error> {
+        let request = PythonDownloadRequest::from(installation);
+        let download_request = request.clone().fill()?;
+        let download = download_list
+            .iter_matching(&download_request)
+            .find(|download| download.key() == installation.key())
+            .ok_or_else(|| downloads::Error::NoDownloadFound(download_request.clone()))?;
+
+        Ok(Self {
+            request: PythonRequest::Key(request),
             download_request,
             download,
         })
@@ -405,24 +424,43 @@ async fn perform_install(
                     "Found Python version file at: {}",
                     file.path().user_display()
                 );
+                is_from_python_version_file = true;
             })
-            .map(PythonVersionFile::into_versions)
-            .inspect(|_| is_from_python_version_file = true)
+            .map(|file| {
+                file.into_versions()
+                    .into_iter()
+                    .map(|request| InstallRequest::new(request, &download_list))
+                    .collect::<Result<Vec<_>>>()
+            })
             .unwrap_or_else(|| {
                 // If no version file is found and no requests were made
                 // TODO(zanieb): We should consider differentiating between a global Python version
                 // file here, allowing a request from there to enable `is_default_install`.
                 is_default_install = true;
-                vec![if reinstall {
+                if reinstall {
                     // On bare `--reinstall`, reinstall all Python versions
-                    PythonRequest::Any
+                    let mut requests = Vec::with_capacity(existing_installations.len());
+                    for installation in &existing_installations {
+                        match InstallRequest::from_installation(installation, &download_list) {
+                            Ok(request) => requests.push(request),
+                            Err(err @ downloads::Error::NoDownloadFound(_)) => {
+                                // An installed build may no longer be in the download catalog.
+                                warn_user!(
+                                    "Failed to create reinstall request for existing installation `{}`: {err}",
+                                    installation.key().green()
+                                );
+                            }
+                            Err(err) => return Err(err.into()),
+                        }
+                    }
+                    Ok(requests)
                 } else {
-                    PythonRequest::Default
-                }]
-            })
-            .into_iter()
-            .map(|request| InstallRequest::new(request, &download_list))
-            .collect::<Result<Vec<_>>>()?
+                    Ok(vec![InstallRequest::new(
+                        PythonRequest::Default,
+                        &download_list,
+                    )?])
+                }
+            })?
         }
     } else {
         targets
@@ -487,9 +525,24 @@ async fn perform_install(
             Vec::with_capacity(existing_installations.len() + requests.len());
 
         for request in &requests {
+            if is_default_install {
+                // Bare reinstall requests already identify exact installed builds.
+                changelog.existing.insert(request.download.key().clone());
+                unsatisfied.push(Cow::Borrowed(request));
+                continue;
+            }
+
             let mut matching_installations = existing_installations
                 .iter()
-                .filter(|installation| request.matches_installation(installation))
+                .filter(|installation| {
+                    if let PythonRequest::Key(download_request) = &request.request
+                        && download_request.is_exact_installation_key()
+                    {
+                        download_request.satisfied_by_exact_key(installation.key())
+                    } else {
+                        request.matches_installation(installation)
+                    }
+                })
                 .peekable();
 
             if matching_installations.peek().is_none() {
@@ -510,7 +563,7 @@ async fn perform_install(
                 }
 
                 // Construct an install request matching the existing installation.
-                match InstallRequest::new(PythonRequest::Key(installation.into()), &download_list) {
+                match InstallRequest::from_installation(installation, &download_list) {
                     Ok(request) => {
                         debug!("Will reinstall `{}`", installation.key());
                         unsatisfied.push(Cow::Owned(request));
@@ -693,7 +746,34 @@ async fn perform_install(
         if let Err(e) = installation.ensure_dylib_patched() {
             e.warn_user(installation);
         }
+    }
 
+    let minor_versions =
+        PythonInstallationMinorVersionKey::highest_installations_by_minor_version_key(
+            installations
+                .iter()
+                .copied()
+                .chain(existing_installations.iter()),
+        );
+
+    // Create missing minor-version links so new executable aliases have resolvable targets.
+    // Defer updating existing links until alias replacement has identified their current owners.
+    let mut minor_version_updates = Vec::new();
+    for installation in minor_versions.values() {
+        let Some(minor_version_link) = PythonMinorVersionLink::from_installation(installation)
+        else {
+            continue;
+        };
+        match fs_err::symlink_metadata(&minor_version_link.symlink_directory) {
+            Ok(_) => minor_version_updates.push(installation),
+            Err(err) if err.kind() == ErrorKind::NotFound => {
+                installation.ensure_minor_version_link()?;
+            }
+            Err(err) => return Err(err.into()),
+        }
+    }
+
+    for installation in &installations {
         let upgradeable = (default || is_default_install)
             || requested_minor_versions.contains(&installation.key().version().python_version());
 
@@ -735,15 +815,7 @@ async fn perform_install(
         }
     }
 
-    let minor_versions =
-        PythonInstallationMinorVersionKey::highest_installations_by_minor_version_key(
-            installations
-                .iter()
-                .copied()
-                .chain(existing_installations.iter()),
-        );
-
-    for installation in minor_versions.values() {
+    for installation in minor_version_updates {
         installation.ensure_minor_version_link()?;
     }
 
@@ -1054,14 +1126,16 @@ fn create_bin_links(
                     target.simplified_display()
                 );
 
-                //  Figure out what installation it references, if any
-                let existing = find_matching_bin_link(
+                // Keep the stored target to distinguish fixed-patch links from minor-version links.
+                let existing_target = read_bin_link(&target);
+                let existing = existing_target.as_deref().and_then(|path| {
+                    let executable = dunce::canonicalize(path).ok()?;
                     installations
                         .iter()
                         .copied()
-                        .chain(existing_installations.iter()),
-                    &target,
-                );
+                        .chain(existing_installations.iter())
+                        .find(|installation| installation.executable(false) == executable)
+                });
 
                 match existing {
                     None => {
@@ -1108,9 +1182,15 @@ fn create_bin_links(
                         }
                     }
                     Some(existing) if existing == installation => {
-                        // The existing link points to the same installation, so we're done unless
-                        // they requested we reinstall
-                        if !(reinstall || force) {
+                        // Fixed-patch installs must point directly to the installation. Upgrades
+                        // can retain aliases that already resolve to the requested executable.
+                        let needs_patch_link = !upgrade
+                            && !upgradeable
+                            && existing_target.as_deref().is_some_and(|path| {
+                                normalize_path(path.simplified())
+                                    != normalize_path(executable.simplified())
+                            });
+                        if !(reinstall || force || needs_patch_link) {
                             debug!(
                                 "Executable at `{}` is already for `{}`",
                                 target.simplified_display(),
@@ -1351,31 +1431,19 @@ fn warn_if_not_on_path(bin: &Path) {
     }
 }
 
-/// Find the [`ManagedPythonInstallation`] corresponding to an executable link installed at the
-/// given path, if any.
-///
-/// Will resolve symlinks on Unix. On Windows, will resolve the target link for a trampoline.
-fn find_matching_bin_link<'a>(
-    mut installations: impl Iterator<Item = &'a ManagedPythonInstallation>,
-    path: &Path,
-) -> Option<&'a ManagedPythonInstallation> {
+/// Read an executable alias's target without resolving minor-version directory links.
+fn read_bin_link(path: &Path) -> Option<PathBuf> {
     if cfg!(unix) {
-        if !path.is_symlink() {
-            return None;
-        }
-        let target = fs_err::canonicalize(path).ok()?;
-
-        installations.find(|installation| installation.executable(false) == target)
+        let target = fs_err::read_link(path).ok()?;
+        Some(path.parent()?.join(target))
     } else if cfg!(windows) {
         let launcher = Launcher::try_from_path(path).ok()??;
-        if !matches!(launcher.kind, LauncherKind::Python) {
-            return None;
+        match launcher.kind {
+            LauncherKind::Python => Some(launcher.python_path),
+            LauncherKind::Script => None,
         }
-        let target = dunce::canonicalize(launcher.python_path).ok()?;
-
-        installations.find(|installation| installation.executable(false) == target)
     } else {
-        unreachable!("Only Unix and Windows are supported")
+        None
     }
 }
 
