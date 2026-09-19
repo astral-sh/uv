@@ -656,6 +656,20 @@ async fn python_list_remote_python_downloads_json_url() -> Result<()> {
         .await;
 
     let versioned_json = format!(r#"{{"version": 1, "downloads": {remote_json}}}"#);
+    let build_variants_json = versioned_json
+        .replace("+custom", "+custom+pgo+lto")
+        .replace(
+            r#""build_variant": "custom""#,
+            r#""build_variant": "custom+pgo+lto""#,
+        );
+    Mock::given(method("GET"))
+        .and(path("/build-variants"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw(build_variants_json, "application/json"),
+        )
+        .mount(&server)
+        .await;
+
     Mock::given(method("GET"))
         .and(path("/versioned-invalid-default"))
         .respond_with(ResponseTemplate::new(200).set_body_raw(
@@ -698,6 +712,84 @@ async fn python_list_remote_python_downloads_json_url() -> Result<()> {
     cpython-3.14.0-macos-aarch64-none                    https://custom.com/cpython-3.14.0-darwin-aarch64-none.tar.gz
     cpython-3.13.2+freethreaded-linux-powerpc64le-gnu    https://custom.com/ccpython-3.13.2+freethreaded-linux-powerpc64le-gnu.tar.gz
     cpython-3.12.9+custom-linux-x86_64-gnu               https://custom.com/cpython-3.12.9+custom-linux-x86_64-gnu.tar.gz
+    ");
+
+    // Test selecting a provider-defined build variant explicitly
+    uv_snapshot!(context
+        .python_list()
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS)
+        .arg("3.12+custom")
+        .arg("--all-versions")
+        .arg("--all-platforms")
+        .arg("--all-arches")
+        .arg("--show-urls")
+        .arg("--python-downloads-json-url").arg(server.uri()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    cpython-3.12.9+custom-linux-x86_64-gnu    https://custom.com/cpython-3.12.9+custom-linux-x86_64-gnu.tar.gz
+    ");
+
+    // Composite build tags can be reordered.
+    uv_snapshot!(context
+        .python_list()
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS)
+        .arg("3.12+lto+pgo+custom")
+        .arg("--only-downloads")
+        .arg("--all-platforms")
+        .arg("--all-arches")
+        .arg("--show-urls")
+        .arg("--python-downloads-json-url").arg(format!("{}/build-variants", server.uri())), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    cpython-3.12.9+custom+pgo+lto-linux-x86_64-gnu    https://custom.com/cpython-3.12.9+custom+pgo+lto-linux-x86_64-gnu.tar.gz
+    ");
+
+    // A request must include every build tag on the artifact.
+    uv_snapshot!(context
+        .python_list()
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS)
+        .arg("3.12+custom")
+        .arg("--only-downloads")
+        .arg("--all-platforms")
+        .arg("--all-arches")
+        .arg("--python-downloads-json-url").arg(format!("{}/build-variants", server.uri())), @"
+    exit_code: 0 (success)
+    ");
+
+    // Optimization tags alone must not expose a non-default provider build.
+    uv_snapshot!(context
+        .python_list()
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS)
+        .arg("3.12+pgo+lto")
+        .arg("--only-downloads")
+        .arg("--all-platforms")
+        .arg("--all-arches")
+        .arg("--python-downloads-json-url").arg(format!("{}/build-variants", server.uri())), @"
+    exit_code: 0 (success)
+    ");
+
+    // Every requested tag must be present.
+    uv_snapshot!(context
+        .python_list()
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS)
+        .arg("3.12+custom+noopt")
+        .arg("--only-downloads")
+        .arg("--all-platforms")
+        .arg("--all-arches")
+        .arg("--python-downloads-json-url").arg(format!("{}/build-variants", server.uri())), @"
+    exit_code: 0 (success)
+    ");
+
+    // Partial tag names must not match.
+    uv_snapshot!(context
+        .python_list()
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS)
+        .arg("3.12+cust")
+        .arg("--only-downloads")
+        .arg("--all-platforms")
+        .arg("--all-arches")
+        .arg("--python-downloads-json-url").arg(format!("{}/build-variants", server.uri())), @"
+    exit_code: 0 (success)
     ");
 
     // test invalid URL path

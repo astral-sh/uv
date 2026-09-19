@@ -395,6 +395,84 @@ fn python_pin_no_python() {
     ");
 }
 
+/// Build variants can be pinned without first resolving an interpreter.
+#[cfg(unix)]
+#[test]
+fn python_pin_build_variant() {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.13+custom"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Pinned `.python-version` to `3.13+custom`
+
+    ----- stderr -----
+    warning: No interpreter found for Python 3.13+custom in managed installations or search path
+    ");
+
+    let python_version = context.read(PYTHON_VERSION_FILENAME);
+    assert_snapshot!(python_version, @"3.13+custom");
+
+    // Preserve the build variant when pinning a version range.
+    uv_snapshot!(context.filters(), context.python_pin().arg(">=3.12+custom"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Updated `.python-version` from `3.13+custom` -> `>=3.12+custom`
+
+    ----- stderr -----
+    warning: No interpreter found for Python >=3.12+custom in managed installations or search path
+    ");
+
+    let python_version = context.read(PYTHON_VERSION_FILENAME);
+    assert_snapshot!(python_version, @">=3.12+custom");
+
+    // Reading the pin preserves the request, too.
+    uv_snapshot!(context.filters(), context.python_pin(), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    >=3.12+custom
+    ");
+
+    // Preserve composed runtime and build variants on a bounded range.
+    uv_snapshot!(context.filters(), context.python_pin().arg(">=3.13,<3.14+freethreaded+custom+pgo+lto"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Updated `.python-version` from `>=3.12+custom` -> `>=3.13, <3.14+freethreaded+custom+pgo+lto`
+
+    ----- stderr -----
+    warning: No interpreter found for Python >=3.13, <3.14+freethreaded+custom+pgo+lto in managed installations or search path
+    ");
+
+    let python_version = context.read(PYTHON_VERSION_FILENAME);
+    assert_snapshot!(python_version, @">=3.13, <3.14+freethreaded+custom+pgo+lto");
+
+    uv_snapshot!(context.filters(), context.python_pin(), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    >=3.13, <3.14+freethreaded+custom+pgo+lto
+    ");
+
+    // Sorting the constraints can place a wildcard immediately before the build variant.
+    uv_snapshot!(context.filters(), context.python_pin().arg("==3.13.*,>=3.12+custom"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Updated `.python-version` from `>=3.13, <3.14+freethreaded+custom+pgo+lto` -> `>=3.12, ==3.13.*+custom`
+
+    ----- stderr -----
+    warning: No interpreter found for Python >=3.12, ==3.13.*+custom in managed installations or search path
+    ");
+
+    let python_version = context.read(PYTHON_VERSION_FILENAME);
+    assert_snapshot!(python_version, @">=3.12, ==3.13.*+custom");
+
+    // Discovery must interpret the saved pin as a version request, not an executable name.
+    uv_snapshot!(context.filters(), context.python_find().arg("--managed-python"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: No interpreter found for Python >=3.12, ==3.13.*+custom in virtual environments or managed installations
+    ");
+}
+
 #[test]
 fn python_pin_compatible_with_requires_python() -> Result<()> {
     let context =
