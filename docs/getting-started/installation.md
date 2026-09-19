@@ -147,6 +147,49 @@ $ cargo install --locked uv
 
     This method builds uv from source, which requires a compatible Rust toolchain.
 
+### Nix
+
+uv is available via
+[nix packages](https://search.nixos.org/packages?channel=25.11&show=uv&query=uv).
+
+You add `uv` to your system packages in `/etc/nixos/configuration.nix`.
+
+```nix
+environment.systemPackages = with pkgs; [
+  uv
+];
+```
+
+Then rebuild:
+
+```console
+$ sudo nixos-rebuild switch
+```
+
+#### Common Error
+
+On NixOS, you may see this error:
+
+```console
+error: Querying Python at `/home/<user>/.local/share/uv/python/cpython-3.13.5-linux-x86_64-gnu/bin/python3.13` failed with exit status exit status: 127
+
+[stderr]
+Could not start dynamically linked executable: /home/<user>/.local/share/uv/python/cpython-3.13.5-linux-x86_64-gnu/bin/python3.13
+NixOS cannot run dynamically linked executables intended for generic
+linux environments out of the box. For more information, see:
+https://nix.dev/permalink/stub-ld
+```
+
+This happens because
+["NixOS cannot run dynamically linked executables intended for generic Linux environments out of the box."](https://nix.dev/guides/faq#how-to-run-non-nix-executables)
+
+[To fix this](https://wiki.nixos.org/wiki/Python_quickstart_using_uv#Fix_with_nix-ld), you need to
+enable [nix-ld](https://wiki.nixos.org/wiki/Nix-ld) In your `/etc/nixos/configuration.nix`:
+
+```nix
+programs.nix-ld.enable = true;
+```
+
 ## Upgrading uv
 
 When uv is installed via the standalone installer, it can update itself on-demand:
