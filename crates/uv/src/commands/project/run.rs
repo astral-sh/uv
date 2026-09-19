@@ -1342,6 +1342,7 @@ fn can_skip_ephemeral(
             ResolverSettings {
                 config_setting,
                 config_settings_package,
+                dependency_metadata,
                 extra_build_dependencies,
                 extra_build_variables,
                 ..
@@ -1372,6 +1373,7 @@ fn can_skip_ephemeral(
         &spec.overrides,
         &spec.override_dependencies,
         &spec.excludes,
+        dependency_metadata,
         DependencyMode::Transitive,
         InstallationStrategy::Permissive,
         &markers,

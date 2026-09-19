@@ -11217,6 +11217,78 @@ fn static_metadata_pyproject_toml() -> Result<()> {
     "
     );
 
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--offline")
+        .arg("anyio==3.7.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checked 1 package in [TIME]
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn static_metadata_installed_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("iniconfig==2.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "
+    );
+
+    context.temp_dir.child("uv.toml").write_str(indoc! {r#"
+        [[dependency-metadata]]
+        name = "iniconfig"
+        version = "2.0.0"
+        requires-dist = ["typing-extensions==4.10.0 ; extra == 'typing'"]
+        provides-extras = ["typing"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("iniconfig[typing]==2.0.0")
+        .arg("--no-deps"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checked 1 package in [TIME]
+    "
+    );
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("iniconfig==2.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checked 1 package in [TIME]
+    "
+    );
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("iniconfig[typing]==2.0.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + typing-extensions==4.10.0
+    "
+    );
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("iniconfig[typing]==2.0.0")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checked 1 package in [TIME]
+    "
+    );
+
     Ok(())
 }
 

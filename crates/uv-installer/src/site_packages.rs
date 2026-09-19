@@ -334,6 +334,7 @@ impl SitePackages {
         overrides: &[UnresolvedRequirementSpecification],
         override_dependencies: &[Override<Requirement>],
         exclude_dependencies: &[ExcludeDependency],
+        dependency_metadata: &DependencyMetadata,
         dependency_mode: DependencyMode,
         installation: InstallationStrategy,
         markers: &ResolverMarkerEnvironment,
@@ -442,6 +443,7 @@ impl SitePackages {
             constraints.iter().map(|constraint| &constraint.requirement),
             &overrides,
             &excludes,
+            dependency_metadata,
             dependency_mode,
             installation,
             markers,
@@ -460,6 +462,7 @@ impl SitePackages {
         constraints: impl Iterator<Item = &'a Requirement>,
         overrides: &'a Overrides,
         excludes: &'a Excludes,
+        dependency_metadata: &DependencyMetadata,
         dependency_mode: DependencyMode,
         installation: InstallationStrategy,
         markers: &ResolverMarkerEnvironment,
@@ -562,9 +565,15 @@ impl SitePackages {
                     }
 
                     // Recurse into the dependencies.
-                    let metadata = distribution
-                        .read_metadata()
-                        .with_context(|| format!("Failed to read metadata for: {distribution}"))?;
+                    let metadata = if let Some(metadata) =
+                        dependency_metadata.get(name, Some(distribution.version()))
+                    {
+                        Cow::Owned(metadata)
+                    } else {
+                        Cow::Borrowed(distribution.read_metadata().with_context(|| {
+                            format!("Failed to read metadata for: {distribution}")
+                        })?)
+                    };
 
                     // Add the dependencies to the queue.
                     let dependencies = metadata

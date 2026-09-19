@@ -2967,6 +2967,7 @@ pub(crate) async fn update_environment(
             &overrides,
             &override_dependencies,
             &excludes,
+            dependency_metadata,
             DependencyMode::Transitive,
             InstallationStrategy::Permissive,
             &marker_env,
