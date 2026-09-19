@@ -33,6 +33,8 @@ struct PrioritizedDistInner {
     wheels: Vec<(RegistryBuiltWheel, WheelCompatibility)>,
     /// The hashes for each distribution.
     hashes: Vec<HashDigest>,
+    /// Python coverage, unioned over compatible wheels independently of their platforms.
+    python_markers: MarkerTree,
     /// Coverage for the glibc and musl baselines, unioned over compatible wheels separately.
     /// Unconfigured baselines use ordinary platform coverage. Intersect only after unioning, so
     /// separate glibc and musl wheels can jointly satisfy both baselines.
@@ -46,6 +48,7 @@ impl Default for PrioritizedDistInner {
             best_wheel_index: None,
             wheels: Vec::new(),
             hashes: Vec::new(),
+            python_markers: MarkerTree::FALSE,
             markers: [MarkerTree::FALSE; 2],
         }
     }
@@ -90,17 +93,12 @@ impl CompatibleDist<'_> {
     /// Wheel compatibility must be checked against the current Python range when a resolver fork
     /// narrows the range used to construct the [`PrioritizedDist`].
     pub fn matches_python_requirement(&self, requires_python: &RequiresPython) -> bool {
-        let Some(prioritized) = self.prioritized() else {
-            return true;
-        };
-        prioritized
-            .0
-            .source
-            .as_ref()
-            .is_some_and(|(_, compatibility)| compatibility.is_compatible())
-            || prioritized.0.wheels.iter().any(|(wheel, compatibility)| {
-                compatibility.is_compatible() && requires_python.matches_wheel_tag(&wheel.filename)
-            })
+        self.prioritized().is_none_or(|prioritized| {
+            !prioritized
+                .0
+                .python_markers
+                .is_disjoint(requires_python.to_marker_tree())
+        })
     }
 
     /// Return the `requires-python` specifier for the distribution, if any.
@@ -380,14 +378,17 @@ impl PrioritizedDist {
         compatibility: WheelCompatibility,
         minimum_libc_version: Option<MinimumLibcVersion>,
     ) {
-        if compatibility.is_compatible() && !self.0.markers.iter().all(|markers| markers.is_true())
+        if compatibility.is_compatible()
+            && (!self.0.python_markers.is_true()
+                || !self.0.markers.iter().all(|markers| markers.is_true()))
         {
-            for (coverage, markers) in self
-                .0
-                .markers
-                .iter_mut()
-                .zip(implied_libc_markers(&dist.filename, minimum_libc_version))
-            {
+            let python = implied_python_markers(&dist.filename);
+            self.0.python_markers = self.0.python_markers.or(python);
+            for (coverage, markers) in self.0.markers.iter_mut().zip(implied_libc_markers(
+                &dist.filename,
+                python,
+                minimum_libc_version,
+            )) {
                 *coverage = coverage.or(markers);
             }
         }
@@ -415,6 +416,7 @@ impl PrioritizedDist {
     ) {
         // A usable source distribution provides coverage for all environments.
         if compatibility.is_compatible() {
+            self.0.python_markers = MarkerTree::TRUE;
             self.0.markers = [MarkerTree::TRUE; 2];
         }
         // Track the hashes.
@@ -833,16 +835,17 @@ pub fn implied_markers(
     filename: &WheelFilename,
     minimum_libc_version: Option<MinimumLibcVersion>,
 ) -> MarkerTree {
-    let [glibc, musl] = implied_libc_markers(filename, minimum_libc_version);
+    let python = implied_python_markers(filename);
+    let [glibc, musl] = implied_libc_markers(filename, python, minimum_libc_version);
     glibc.and(musl)
 }
 
 /// Infer coverage for each libc independently so separate wheels can satisfy each baseline.
 fn implied_libc_markers(
     filename: &WheelFilename,
+    python: MarkerTree,
     minimum_libc_version: Option<MinimumLibcVersion>,
 ) -> [MarkerTree; 2] {
-    let python = implied_python_markers(filename);
     let Some(minimum_libc_version) = minimum_libc_version else {
         return [implied_platform_markers(filename.platform_tags()).and(python); 2];
     };
@@ -1041,8 +1044,23 @@ fn implied_python_markers(filename: &WheelFilename) -> MarkerTree {
             LanguageTag::Python {
                 major,
                 minor: Some(minor),
+            } => {
+                // Generic Python tags support later minor versions within the same major version.
+                MarkerTree::expression(MarkerExpression::Version {
+                    key: uv_pep508::MarkerValueVersion::PythonVersion,
+                    specifier: VersionSpecifier::greater_than_equal_version(Version::new([
+                        u64::from(*major),
+                        u64::from(*minor),
+                    ])),
+                })
+                .and(MarkerTree::expression(MarkerExpression::Version {
+                    key: uv_pep508::MarkerValueVersion::PythonVersion,
+                    specifier: VersionSpecifier::equals_star_version(Version::new([u64::from(
+                        *major,
+                    )])),
+                }))
             }
-            | LanguageTag::CPython {
+            LanguageTag::CPython {
                 python_version: (major, minor),
             }
             | LanguageTag::PyPy {
@@ -1225,7 +1243,7 @@ mod tests {
         );
         assert_python_markers(
             "example-1.0-py310-none-any.whl",
-            "python_full_version >= '3.10' and python_full_version < '3.11'",
+            "python_full_version >= '3.10' and python_full_version < '4'",
         );
         assert_python_markers(
             "example-1.0-py3-none-any.whl",
@@ -1233,7 +1251,7 @@ mod tests {
         );
         assert_python_markers(
             "example-1.0-py311.py312-none-any.whl",
-            "python_full_version >= '3.11' and python_full_version < '3.13'",
+            "python_full_version >= '3.11' and python_full_version < '4'",
         );
 
         // abi3 wheels: the python tag represents a minimum version, not an exact version.

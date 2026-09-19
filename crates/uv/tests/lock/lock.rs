@@ -8586,7 +8586,7 @@ fn lock_requires_python_fork_wheels_future() -> Result<()> {
     Ok(())
 }
 
-/// A fork can use a source distribution, a wheel other than the preferred wheel, or a stable ABI.
+/// Python coverage includes usable sources and every compatible wheel, independent of platform.
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_requires_python_fork_wheels_compatible() -> Result<()> {
@@ -8608,6 +8608,14 @@ fn lock_requires_python_fork_wheels_compatible() -> Result<()> {
         [packages.c.versions."1.0.0"]
         sdist = false
         wheel_tags = ["cp311-abi3-any"]
+
+        [packages.d.versions."1.0.0"]
+        sdist = false
+        wheel_tags = ["py310-none-any"]
+
+        [packages.e.versions."1.0.0"]
+        sdist = false
+        wheel_tags = ["cp312-cp312-freebsd_13_x86_64", "cp313-cp313-freebsd_13_x86_64"]
     "#})?;
     let server = PackseServer::from_scenario(&scenario);
     let context = uv_test::test_context!("3.12");
@@ -8619,13 +8627,55 @@ fn lock_requires_python_fork_wheels_compatible() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["a", "b ; python_version >= '3.13'", "c"]
+        dependencies = ["a", "b ; python_version >= '3.13'", "c", "d", "e"]
     "#})?;
 
     uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 4 packages in [TIME]
+    Resolved 6 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// A stable ABI wheel still requires the Python version in its language tag or newer.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_requires_python_wheels_stable_abi() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "requires-python-wheels-stable-abi"
+
+        [root]
+
+        [expected]
+        satisfiable = false
+
+        [packages.a.versions."1.0.0"]
+        sdist = false
+        wheel_tags = ["cp313-abi3-any"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = "==3.12.*"
+        dependencies = ["a"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because a==1.0.0 has no wheels with a matching Python version tag (e.g., `cp312`) and only a==1.0.0 is available, we can conclude that all versions of a cannot be used.
+             And because your project depends on a, we can conclude that your project's requirements are unsatisfiable.
+
+    hint: Wheels are available for `a` (v1.0.0) with the following Python ABI tag: `abi3`
     ");
 
     Ok(())
@@ -42979,6 +43029,66 @@ fn lock_required_environment_macos_release_python_fork() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Generic Python wheel tags cover later minor versions on required platforms.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_required_environment_generic_python_wheel() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "required-environment-generic-python-wheel"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.a.versions."1.0.0"]
+        sdist = false
+        wheel_tags = ["py310-none-any"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12");
+    let pyproject = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12,<4"
+        dependencies = ["a"]
+
+        [tool.uv]
+        required-environments = ["sys_platform == 'linux' and python_version >= '3.12'"]
+    "#};
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject)?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // The same coverage applies to direct wheel URLs.
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject.replace(
+            "dependencies = [\"a\"]",
+            &format!(
+                "dependencies = [\"a @ {}\"]",
+                server.file_url("a-1.0.0-py310-none-any.whl")
+            ),
+        ))?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
     ");
 
     Ok(())
