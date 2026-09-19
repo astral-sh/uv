@@ -540,3 +540,7 @@ codegen-units = 1
 # The profile that 'cargo dist' will build with.
 [profile.dist]
 inherits = "release"
+
+[patch.crates-io]
+# Use jemalloc 5.4.0 until it is bundled in a published sys crate.
+tikv-jemalloc-sys = { git = "https://github.com/konsti-openai/jemallocator", rev = "a83f00d249d10be90ba033fa676b3a74260795a3" }
