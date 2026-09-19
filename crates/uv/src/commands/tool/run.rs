@@ -1103,6 +1103,7 @@ async fn get_or_create_environment(
                             ResolverSettings {
                                 config_setting,
                                 config_settings_package,
+                                dependency_metadata,
                                 extra_build_dependencies,
                                 extra_build_variables,
                                 ..
@@ -1129,6 +1130,7 @@ async fn get_or_create_environment(
                             constraints.iter().chain(latest.iter()),
                             &uv_configuration::Overrides::from_requirements(overrides.clone()),
                             &exclusions,
+                            dependency_metadata,
                             DependencyMode::Transitive,
                             InstallationStrategy::Permissive,
                             &markers,

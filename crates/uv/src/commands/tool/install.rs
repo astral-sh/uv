@@ -588,6 +588,7 @@ pub(crate) async fn install(
                         ResolverSettings {
                             config_setting,
                             config_settings_package,
+                            dependency_metadata,
                             extra_build_dependencies,
                             extra_build_variables,
                             ..
@@ -625,6 +626,7 @@ pub(crate) async fn install(
                         receipt_constraints.iter().chain(latest.iter()),
                         &Overrides::from_requirements(receipt_overrides.clone()),
                         &Excludes::from_entries(receipt_excludes.iter().cloned()),
+                        dependency_metadata,
                         DependencyMode::Transitive,
                         InstallationStrategy::Permissive,
                         &markers,
