@@ -3740,6 +3740,7 @@ impl PipSyncSettings {
             dry_run,
             torch_backend,
             compat_args: _,
+            check,
         } = *args;
 
         Ok(Self {
@@ -3752,7 +3753,11 @@ impl PipSyncSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
-            dry_run: DryRun::from_args(dry_run),
+            dry_run: if check {
+                DryRun::Check
+            } else {
+                DryRun::from_args(dry_run)
+            },
             refresh: Refresh::try_from(refresh)?,
             settings: PipSettings::combine(
                 PipOptions {

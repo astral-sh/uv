@@ -6866,9 +6866,11 @@ fn check_install() {
     ");
 
     context
-        .assert_command("import importlib.metadata; print(importlib.metadata.version('iniconfig'))")
+        .assert_command(
+            "import importlib.metadata; print(importlib.metadata.version('iniconfig'), end='')",
+        )
         .success()
-        .stdout("2.0.0\n");
+        .stdout("2.0.0");
 }
 
 #[test]
