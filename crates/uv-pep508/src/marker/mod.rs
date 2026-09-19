@@ -9,6 +9,7 @@
 //! outcomes. This implementation tries to carefully validate everything and emit warnings whenever
 //! bogus comparisons with unintended semantics are made.
 
+mod abi_feature;
 #[cfg(test)]
 mod abi_tests;
 mod algebra;
@@ -18,6 +19,7 @@ pub(crate) mod parse;
 mod simplify;
 mod tree;
 
+pub use abi_feature::AbiFeature;
 pub use environment::{MarkerEnvironment, MarkerEnvironmentBuilder};
 pub use lowering::{
     CanonicalMarkerListPair, CanonicalMarkerValueExtra, CanonicalMarkerValueString,

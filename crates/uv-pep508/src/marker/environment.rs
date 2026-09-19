@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use uv_pep440::{Version, VersionParseError};
 
-use crate::{CanonicalMarkerValueString, CanonicalMarkerValueVersion, StringVersion};
+use crate::{AbiFeature, CanonicalMarkerValueString, CanonicalMarkerValueVersion, StringVersion};
 
 /// The marker values for a python interpreter, normally the current one
 ///
@@ -29,7 +29,7 @@ struct MarkerEnvironmentInner {
     python_version: StringVersion,
     sys_platform: String,
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
-    sys_abi_features: BTreeSet<String>,
+    sys_abi_features: BTreeSet<AbiFeature>,
 }
 
 impl MarkerEnvironment {
@@ -183,7 +183,7 @@ impl MarkerEnvironment {
     }
 
     /// Returns the interpreter's ABI features as defined by PEP 780.
-    pub fn sys_abi_features(&self) -> &BTreeSet<String> {
+    pub fn sys_abi_features(&self) -> &BTreeSet<AbiFeature> {
         &self.inner.sys_abi_features
     }
 }
@@ -192,7 +192,7 @@ impl MarkerEnvironment {
 impl MarkerEnvironment {
     /// Set the interpreter's PEP 780 ABI features.
     #[must_use]
-    pub fn with_sys_abi_features(mut self, features: impl IntoIterator<Item = String>) -> Self {
+    pub fn with_sys_abi_features(mut self, features: impl IntoIterator<Item = AbiFeature>) -> Self {
         Arc::make_mut(&mut self.inner).sys_abi_features = features.into_iter().collect();
         self
     }

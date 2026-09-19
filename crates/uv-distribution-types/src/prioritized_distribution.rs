@@ -7,8 +7,8 @@ use tracing::debug;
 use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{
-    CanonicalMarkerListPair, ContainerOperator, MarkerExpression, MarkerOperator, MarkerTree,
-    MarkerValueString,
+    AbiFeature, CanonicalMarkerListPair, ContainerOperator, MarkerExpression, MarkerOperator,
+    MarkerTree, MarkerValueString,
 };
 use uv_platform_tags::{
     AbiTag, BinaryFormat, CPythonAbiVariants, IncompatibleTag, LanguageTag, PlatformTag,
@@ -890,7 +890,11 @@ fn implied_platform_markers<'a>(
 ) -> MarkerTree {
     let bitness = |bits| {
         if sys_abi_features {
-            abi_feature_marker(if bits == 32 { "32-bit" } else { "64-bit" })
+            abi_feature_marker(if bits == 32 {
+                AbiFeature::Bits32
+            } else {
+                AbiFeature::Bits64
+            })
         } else {
             MarkerTree::TRUE
         }
@@ -1049,9 +1053,9 @@ fn macos_darwin_release(major: u16, minor: u16) -> Option<Version> {
 }
 
 /// Require one of the interpreter features defined by PEP 780.
-fn abi_feature_marker(feature: &str) -> MarkerTree {
+fn abi_feature_marker(feature: AbiFeature) -> MarkerTree {
     MarkerTree::expression(MarkerExpression::List {
-        pair: CanonicalMarkerListPair::SysAbiFeature(feature.to_owned()),
+        pair: CanonicalMarkerListPair::SysAbiFeature(feature.as_str().to_owned()),
         operator: ContainerOperator::In,
     })
 }
@@ -1064,17 +1068,16 @@ fn implied_abi_markers(filename: &WheelFilename) -> MarkerTree {
         match abi {
             AbiTag::None | AbiTag::PyPy { .. } | AbiTag::GraalPy { .. } | AbiTag::Pyston { .. } => {
             }
-            AbiTag::Abi3 => python = python.and(abi_feature_marker("gil-enabled")),
+            AbiTag::Abi3 => python = python.and(abi_feature_marker(AbiFeature::GilEnabled)),
             AbiTag::Abi3T => {
-                python =
-                    python
-                        .and(abi_feature_marker("free-threading"))
-                        .and(MarkerTree::expression(MarkerExpression::Version {
-                            key: uv_pep508::MarkerValueVersion::PythonVersion,
-                            specifier: VersionSpecifier::greater_than_equal_version(Version::new(
-                                [3, 15],
-                            )),
-                        }));
+                python = python
+                    .and(abi_feature_marker(AbiFeature::FreeThreading))
+                    .and(MarkerTree::expression(MarkerExpression::Version {
+                        key: uv_pep508::MarkerValueVersion::PythonVersion,
+                        specifier: VersionSpecifier::greater_than_equal_version(Version::new([
+                            3, 15,
+                        ])),
+                    }));
             }
             AbiTag::CPython {
                 python_version: (major, minor),
@@ -1083,9 +1086,9 @@ fn implied_abi_markers(filename: &WheelFilename) -> MarkerTree {
                 python = python
                     .and(abi_feature_marker(
                         if variant.contains(CPythonAbiVariants::Freethreading) {
-                            "free-threading"
+                            AbiFeature::FreeThreading
                         } else {
-                            "gil-enabled"
+                            AbiFeature::GilEnabled
                         },
                     ))
                     .and(MarkerTree::expression(MarkerExpression::Version {
@@ -1096,7 +1099,7 @@ fn implied_abi_markers(filename: &WheelFilename) -> MarkerTree {
                         ])),
                     }));
                 if variant.contains(CPythonAbiVariants::Debug) {
-                    python = python.and(abi_feature_marker("debug"));
+                    python = python.and(abi_feature_marker(AbiFeature::Debug));
                 }
             }
         }
