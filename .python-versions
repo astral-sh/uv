@@ -8,12 +8,12 @@
 # first need to complete a uv release capable of installing that version, get it picked up by
 # astral-sh/setup-uv, and update its hash in .github/workflows.
 
-3.14.0
-3.13.2
-3.12.9
-3.11.11
-3.10.16
-3.9.21
+3.14.7
+3.13.15
+3.12.14
+3.11.16
+3.10.21
+3.9.25
 3.8.20
 # The following is needed for `==3.13` request tests
 3.13.0

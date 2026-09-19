@@ -619,7 +619,7 @@ fn incompatible_python_compatible_override() -> Result<()> {
 /// ```text
 /// python-patch-override-no-patch
 /// ├── environment
-/// │   └── python3.9.21
+/// │   └── python3.9.25
 /// ├── root
 /// │   └── requires a==1.0.0
 /// │       └── satisfied by a-1.0.0
@@ -630,7 +630,7 @@ fn incompatible_python_compatible_override() -> Result<()> {
 #[cfg(feature = "test-python-patch")]
 #[test]
 fn python_patch_override_no_patch() -> Result<()> {
-    let context = uv_test::test_context!("3.9.21");
+    let context = uv_test::test_context!("3.9.25");
     let python_versions = &[];
     let server = PackseServer::new("requires_python/python-patch-override-no-patch.toml");
 
@@ -661,7 +661,7 @@ fn python_patch_override_no_patch() -> Result<()> {
 /// ```text
 /// python-patch-override-patch-compatible
 /// ├── environment
-/// │   └── python3.9.21
+/// │   └── python3.9.25
 /// ├── root
 /// │   └── requires a==1.0.0
 /// │       └── satisfied by a-1.0.0
@@ -671,7 +671,7 @@ fn python_patch_override_no_patch() -> Result<()> {
 #[cfg(feature = "test-python-patch")]
 #[test]
 fn python_patch_override_patch_compatible() -> Result<()> {
-    let context = uv_test::test_context!("3.9.21");
+    let context = uv_test::test_context!("3.9.25");
     let python_versions = &[];
     let server = PackseServer::new("requires_python/python-patch-override-patch-compatible.toml");
 
@@ -689,7 +689,7 @@ fn python_patch_override_patch_compatible() -> Result<()> {
         # via -r requirements.in
 
     ----- stderr -----
-    warning: The requested Python version 3.9.0 is not available; 3.9.21 will be used to build dependencies instead.
+    warning: The requested Python version 3.9.0 is not available; 3.9.25 will be used to build dependencies instead.
     Resolved 1 package in [TIME]
     "
     );
