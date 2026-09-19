@@ -176,14 +176,18 @@ class PythonDownload:
     url: str
     build: str
     sha256: str | None = None
+    # Preserve upstream spelling for the existing artifact priority calculation.
     build_options: list[str] = field(default_factory=list)
     variant: Variant | None = None
+    build_variant: str | None = None
+    default: bool = True
 
     def key(self) -> str:
-        if self.variant:
-            return f"{self.implementation}-{self.version}+{self.variant}-{self.triple.platform}-{self.triple.arch}-{self.triple.libc}"
-        else:
-            return f"{self.implementation}-{self.version}-{self.triple.platform}-{self.triple.arch}-{self.triple.libc}"
+        tags = [str(self.variant)] if self.variant else []
+        if build_variant := self.build_variant:
+            tags.append(build_variant)
+        variant = f"+{'+'.join(tags)}" if tags else ""
+        return f"{self.implementation}-{self.version}{variant}-{self.triple.platform}-{self.triple.arch}-{self.triple.libc}"
 
 
 class Finder:
@@ -214,6 +218,15 @@ class CPythonFinder(Finder):
     # Terminal flavor keywords used as the last component of an NDJSON variant string.
     # All preceding "+" components are treated as build options.
     KNOWN_FLAVORS = frozenset({"full", "install_only", "install_only_stripped"})
+
+    # Older Windows descriptors combine linking and runtime/optimization options.
+    # These are upstream names, not valid uv build tags.
+    LEGACY_BUILD_OPTIONS: ClassVar[dict[str, tuple[str, ...]]] = {
+        "shared-pgo": ("shared", "pgo"),
+        "shared-noopt": ("shared", "noopt"),
+        "shared-freethreaded": ("shared", "freethreaded"),
+        "static-noopt": ("static", "noopt"),
+    }
 
     def __init__(self, client: httpx.AsyncClient):
         self.client = client
@@ -253,16 +266,22 @@ class CPythonFinder(Finder):
                 logger.debug("Found %s (%s)", download.key(), download.filename)
                 downloads_by_version.setdefault(download.version, []).append(download)
 
-        # Collapse CPython variants to a single flavor per triple and variant
+        # Collapse CPython variants to a single flavor per triple, runtime variant, and build
+        # variant. Retain other build variants for explicit selection.
         downloads = []
         for version_downloads in downloads_by_version.values():
             selected: dict[
-                tuple[PlatformTripleKey, Variant | None],
+                tuple[PlatformTripleKey, Variant | None, str | None],
                 tuple[PythonDownload, tuple[int, int]],
             ] = {}
             for download in version_downloads:
                 priority = self._get_priority(download)
-                existing = selected.get((download.triple.key(), download.variant))
+                selection_key = (
+                    download.triple.key(),
+                    download.variant,
+                    download.build_variant,
+                )
+                existing = selected.get(selection_key)
                 if existing:
                     existing_download, existing_priority = existing
                     # Skip if we have a flavor with higher priority already (indicated by a smaller value)
@@ -275,13 +294,23 @@ class CPythonFinder(Finder):
                             existing_download.flavor,
                         )
                         continue
-                selected[(download.triple.key(), download.variant)] = (
-                    download,
-                    priority,
-                )
+                selected[selection_key] = (download, priority)
 
-            # Drop the priorities
-            downloads.extend([download for download, _ in selected.values()])
+            preferred: dict[
+                tuple[PlatformTripleKey, Variant | None],
+                tuple[PythonDownload, tuple[int, int]],
+            ] = {}
+            for download, priority in selected.values():
+                preference_key = (download.triple.key(), download.variant)
+                existing = preferred.get(preference_key)
+                if existing is None or priority < existing[1]:
+                    preferred[preference_key] = (download, priority)
+
+            for download, _ in selected.values():
+                download.default = (
+                    preferred[(download.triple.key(), download.variant)][0] is download
+                )
+                downloads.append(download)
 
         return downloads
 
@@ -308,9 +337,16 @@ class CPythonFinder(Finder):
 
         flavor, variant_build_options = self._parse_variant(variant_str)
         build_options = platform_build_options + variant_build_options
+        # Normalize identity without changing how legacy artifacts are ranked.
+        # For example, recognizing PGO inside `shared-pgo` must not raise its priority.
+        normalized_build_options = [
+            component
+            for option in build_options
+            for component in self.LEGACY_BUILD_OPTIONS.get(option, (option,))
+        ]
 
         # Skip static builds (not supported)
-        if "static" in build_options:
+        if "static" in normalized_build_options:
             logger.debug("Skipping %s: static unsupported", filename)
             return None
 
@@ -318,7 +354,12 @@ class CPythonFinder(Finder):
         if triple is None:
             return None
 
-        variant = Variant.from_build_options(build_options)
+        variant = Variant.from_build_options(normalized_build_options)
+        build_tags = [
+            option
+            for option in normalized_build_options
+            if option not in {"shared", "debug", "freethreaded"}
+        ]
 
         return PythonDownload(
             release=release,
@@ -331,6 +372,7 @@ class CPythonFinder(Finder):
             build=str(release),
             build_options=build_options,
             variant=variant,
+            build_variant="+".join(build_tags) if build_tags else None,
             sha256=sha256,
         )
 
@@ -779,6 +821,24 @@ def render(downloads: list[PythonDownload]) -> None:
             )
             continue
 
+        # `uv-python` omits an entire download record when its `build_variant` fails
+        # validation. Reject invalid generated tags before writing the catalog, matching
+        # `LenientPythonBuildVariant::from_str` in `src/discovery.rs`.
+        if download.build_variant is not None:
+            tags = download.build_variant.lower().split("+")
+            if (
+                not download.build_variant.isascii()
+                or len(tags) != len(set(tags))
+                or any(
+                    re.fullmatch(r"[a-z0-9_.]+", tag) is None
+                    or tag in {"t", "d", "td", "freethreaded", "debug", "gil"}
+                    for tag in tags
+                )
+            ):
+                raise ValueError(
+                    f"Invalid build variant {download.build_variant!r} for {download.url}"
+                )
+
         logger.info(
             "Selected %s%s", key, f" ({download.flavor})" if download.flavor else ""
         )
@@ -794,6 +854,8 @@ def render(downloads: list[PythonDownload]) -> None:
             "url": download.url,
             "sha256": download.sha256,
             "variant": download.variant if download.variant else None,
+            "build_variant": download.build_variant,
+            "default": download.default,
             "build": download.build,
         }
 
