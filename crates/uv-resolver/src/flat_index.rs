@@ -143,6 +143,7 @@ impl FlatDistributions {
                     vec![],
                     compatibility,
                     minimum_libc_version,
+                    uv_preview::is_enabled(uv_preview::PreviewFeature::SysAbiFeatures),
                 );
             }
             DistFilename::SourceDistFilename(filename) => {

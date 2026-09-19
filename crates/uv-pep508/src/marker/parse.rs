@@ -104,6 +104,16 @@ fn parse_marker_value<T: Pep508Url>(
                 !char.is_whitespace() && !matches!(char, '>' | '=' | '<' | '!' | '~' | ')')
             });
             let key = cursor.slice(start, len);
+            if key == "sys_abi_features" {
+                uv_preview::require(uv_preview::PreviewFeature::SysAbiFeatures).map_err(
+                    |error| Pep508Error {
+                        message: Pep508ErrorSource::String(error.to_string()),
+                        start,
+                        len,
+                        input: cursor.to_string(),
+                    },
+                )?;
+            }
             MarkerValue::from_str(key)
                 .map_err(|_| Pep508Error {
                     message: Pep508ErrorSource::String(format!(
@@ -313,6 +323,9 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
                             }
                         })?;
                     let pair = match key {
+                        MarkerValueList::SysAbiFeatures => {
+                            CanonicalMarkerListPair::SysAbiFeature(l_string.to_string())
+                        }
                         // `'...' in extras`
                         MarkerValueList::Extras => match ExtraName::from_str(&l_string) {
                             Ok(name) => CanonicalMarkerListPair::Extras(name),

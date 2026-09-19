@@ -78,9 +78,24 @@ impl Interpreter {
             info.sys_executable.display()
         );
 
+        let mut abi_features = vec![match info.pointer_size {
+            PointerSize::_32 => "32-bit".to_owned(),
+            PointerSize::_64 => "64-bit".to_owned(),
+        }];
+        if info.markers.implementation_name() == "cpython" {
+            abi_features.push(if info.gil_disabled {
+                "free-threading".to_owned()
+            } else {
+                "gil-enabled".to_owned()
+            });
+            if info.debug_enabled {
+                abi_features.push("debug".to_owned());
+            }
+        }
+
         Ok(Self {
             platform: info.platform,
-            markers: Box::new(info.markers),
+            markers: Box::new(info.markers.with_sys_abi_features(abi_features)),
             scheme: info.scheme,
             virtualenv: info.virtualenv,
             manylinux_compatible: info.manylinux_compatible,
@@ -1432,6 +1447,58 @@ mod tests {
             "debug_enabled": false
         }
     "##}
+    }
+
+    #[tokio::test]
+    async fn test_sys_abi_features() -> Result<()> {
+        for (implementation, gil_disabled, debug, bits, expected) in [
+            ("cpython", false, false, "64", vec!["64-bit", "gil-enabled"]),
+            (
+                "cpython",
+                true,
+                true,
+                "32",
+                vec!["32-bit", "debug", "free-threading"],
+            ),
+            ("pypy", false, true, "64", vec!["64-bit"]),
+        ] {
+            let mock_dir = tempdir()?;
+            let executable = mock_dir.path().join("python");
+            let mut response = serde_json::from_str::<Value>(mocked_interpreter_response())?;
+            response["sys_executable"] = serde_json::to_value(&executable)?;
+            response["markers"]["implementation_name"] = implementation.into();
+            response["gil_disabled"] = gil_disabled.into();
+            response["debug_enabled"] = debug.into();
+            response["pointer_size"] = bits.into();
+            let response_path = mock_dir.path().join("response.json");
+            fs::write(&response_path, serde_json::to_vec(&response)?)?;
+            fs::write(
+                &executable,
+                formatdoc! {r#"
+                #!/bin/sh
+                cat "{}"
+            "#, response_path.display()},
+            )?;
+            fs::set_permissions(
+                &executable,
+                std::os::unix::fs::PermissionsExt::from_mode(0o770),
+            )?;
+            let cache = Cache::temp()?.init().await?;
+            // Check both a fresh query and cached interpreter information.
+            for _ in 0..2 {
+                let interpreter = Interpreter::query(&executable, &cache)?;
+                assert_eq!(
+                    interpreter
+                        .markers()
+                        .sys_abi_features()
+                        .iter()
+                        .map(String::as_str)
+                        .collect::<Vec<_>>(),
+                    expected
+                );
+            }
+        }
+        Ok(())
     }
 
     #[tokio::test]
