@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::{FileTouch, PathChild};
 use assert_fs::{fixture::FileWriteStr, prelude::PathCreateDir};
@@ -6,6 +6,7 @@ use indoc::indoc;
 
 use uv_platform::{Arch, Os};
 use uv_static::EnvVars;
+use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
 
 use uv_test::{uv_snapshot, venv_bin_path};
 
@@ -841,8 +842,8 @@ fn python_find_venv_invalid() {
     ");
 }
 
-#[test]
-fn python_find_managed() {
+#[tokio::test]
+async fn python_find_managed() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_python_sources()
         .with_versions_as_managed(&["3.12"]);
@@ -872,12 +873,27 @@ fn python_find_managed() {
     [PYTHON-3.12]
     ");
 
-    // Request an interpreter that cannot be satisfied
-    uv_snapshot!(context.filters(), context.python_find().arg("--no-managed-python").arg("3.11"), @"
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(503))
+        .mount(&server)
+        .await;
+
+    // A missing system interpreter does not require the managed download catalog.
+    uv_snapshot!(context.filters(), context.python_find().arg("--no-managed-python").arg("3.11")
+        .arg("--python-downloads-json-url").arg(server.uri())
+        .env(EnvVars::UV_HTTP_RETRIES, "0"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: No interpreter found for Python 3.11 in [PYTHON SOURCES]
     ");
+    assert!(
+        server
+            .received_requests()
+            .await
+            .context("Missing request log")?
+            .is_empty()
+    );
 
     // We find the unmanaged interpreter with system Python preferred
     uv_snapshot!(context.filters(), context.python_find().arg("--python-preference").arg("system"), @"
@@ -892,6 +908,8 @@ fn python_find_managed() {
     ----- stdout -----
     [PYTHON-3.11]
     ");
+
+    Ok(())
 }
 
 /// See: <https://github.com/astral-sh/uv/issues/11825>

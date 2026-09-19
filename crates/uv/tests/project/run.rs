@@ -1853,9 +1853,12 @@ fn run_with_overlay_interpreter() -> Result<()> {
     Resolved 4 packages in [TIME]
     ");
 
-    // Switch to a relocatable virtual environment.
+    // Switch to a relocatable virtual environment using the same base interpreter so the
+    // cached overlay dependencies remain reusable.
     context
         .venv()
+        .arg("--python")
+        .arg(context.interpreter())
         .arg("--allow-existing")
         .arg("--relocatable")
         .assert()
