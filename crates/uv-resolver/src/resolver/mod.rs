@@ -24,8 +24,8 @@ use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, Identifier, IncompatibleDist,
     IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations, IndexMetadata,
-    IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement, ResolvedDist,
-    ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
+    IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement,
+    RequiresPython, ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
 };
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
@@ -1398,6 +1398,22 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             return Ok(Some(ResolverVersion::Unavailable(
                 candidate.version().clone(),
                 UnavailableVersion::IncompatibleDist(incompatibility),
+            )));
+        }
+
+        // A fork can introduce a stricter Python upper bound, excluding every compatible wheel.
+        // Only recheck that upper bound: missing wheels for newer Python versions do not establish
+        // an upper bound on the release's Python support.
+        if env.marker_environment().is_none()
+            && let Some(upper_bound) = python_requirement.target().range().upper().specifier()
+            && !dist
+                .matches_python_requirement(&RequiresPython::from_specifiers(upper_bound.into()))
+        {
+            return Ok(Some(ResolverVersion::Unavailable(
+                candidate.version().clone(),
+                UnavailableVersion::IncompatibleDist(IncompatibleDist::Wheel(
+                    IncompatibleWheel::Tag(IncompatibleTag::AbiPythonVersion),
+                )),
             )));
         }
 

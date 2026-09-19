@@ -8419,6 +8419,218 @@ fn lock_requires_python_fork() -> Result<()> {
     Ok(())
 }
 
+/// Wheel tags must overlap the Python fork, even when `Requires-Python` is broader.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_requires_python_fork_wheels() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "requires-python-fork-wheels"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.a.versions."1.0.0"]
+        sdist = false
+        wheel_tags = ["cp312-cp312-any", "cp313-cp313-any"]
+
+        [packages.a.versions."2.0.0"]
+        sdist = false
+        wheel_tags = ["cp313-cp313-any"]
+
+        [packages.a.versions."3.0.0"]
+        requires_python = ">=3.13"
+        sdist = false
+        wheel_tags = ["cp313-cp313-any"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12").with_filters(
+        server
+            .files()
+            .map(|(filename, hash)| (hash.to_owned(), format!("[SHA256:{filename}]"))),
+    );
+    let pyproject = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a"]
+    "#};
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject)?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "python_full_version >= '3.13'",
+            "python_full_version < '3.13'",
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "python_full_version < '3.13'",
+        ]
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-cp312-cp312-any.whl", hash = "sha256:[SHA256:a-1.0.0-cp312-cp312-any.whl]", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/a-1.0.0-cp313-cp313-any.whl", hash = "sha256:[SHA256:a-1.0.0-cp313-cp313-any.whl]", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "a"
+        version = "3.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "python_full_version >= '3.13'",
+        ]
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-3.0.0-cp313-cp313-any.whl", hash = "sha256:[SHA256:a-3.0.0-cp313-cp313-any.whl]", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "python_full_version < '3.13'" },
+            { name = "a", version = "3.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "python_full_version >= '3.13'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "a" }]
+        "#);
+    });
+
+    // Without the older release, the Python 3.12 fork has no usable distribution.
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject.replace("dependencies = [\"a\"]", "dependencies = [\"a>=2\"]"))?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies for split (markers: python_full_version == '3.12.*')
+      cause: Because a==2.0.0 has no wheels with a matching Python version tag (e.g., `cp312`) and only the following versions of a are available:
+                 a<=2.0.0
+                 a>=3.0.0
+             we can conclude that a>=2.0.0,<3.0.0 cannot be used. (1)
+
+             Because the requested Python version (>=3.12) does not satisfy Python>=3.13 and a==3.0.0 depends on Python>=3.13, we can conclude that a==3.0.0 cannot be used.
+             And because only a<=3.0.0 is available, we can conclude that a>=3.0.0 cannot be used.
+             And because we know from (1) that a>=2.0.0,<3.0.0 cannot be used, we can conclude that a>=2.0.0 cannot be used.
+             And because your project depends on a>=2, we can conclude that your project's requirements are unsatisfiable.
+
+    hint: Wheels are available for `a` (v2.0.0) with the following Python ABI tag: `cp313`
+
+    hint: The `requires-python` value (>=3.12) includes Python versions that are not supported by your dependencies (e.g., a==3.0.0 only supports >=3.13). Consider using a more restrictive `requires-python` value (like >=3.13).
+    ");
+
+    Ok(())
+}
+
+/// Future Python forks do not require wheels to have been published for those versions yet.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_requires_python_fork_wheels_future() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "requires-python-fork-wheels-future"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.a.versions."1.0.0"]
+        sdist = false
+        wheel_tags = ["cp312-cp312-any"]
+
+        [packages.b.versions."1.0.0"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12,<4"
+        dependencies = ["a", "b ; python_version >= '3.13'"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// A fork can use a source distribution, a wheel other than the preferred wheel, or a stable ABI.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_requires_python_fork_wheels_compatible() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "requires-python-fork-wheels-compatible"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.a.versions."1.0.0"]
+        wheel_tags = ["cp313-cp313-any"]
+
+        [packages.b.versions."1.0.0"]
+        sdist = false
+        wheel_tags = ["cp312-cp312-any", "cp313-cp313-any"]
+
+        [packages.c.versions."1.0.0"]
+        sdist = false
+        wheel_tags = ["cp311-abi3-any"]
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a", "b ; python_version >= '3.13'", "c"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Lock a requirement from PyPI, respecting the `Requires-Python` metadata
 #[cfg(feature = "test-universal")]
 #[test]
