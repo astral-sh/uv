@@ -1870,7 +1870,12 @@ impl TargetTriple {
     /// The returned [`MarkerEnvironment`] will preserve the base environment's Python version
     /// markers, but override its platform markers.
     pub fn markers(self, base: MarkerEnvironment) -> MarkerEnvironment {
-        base.with_os_name(self.os_name())
+        let mut features = base.sys_abi_features().clone();
+        features.remove("32-bit");
+        features.remove("64-bit");
+        features.insert(format!("{}-bit", self.platform().arch().pointer_width()));
+        base.with_sys_abi_features(features)
+            .with_os_name(self.os_name())
             .with_platform_machine(self.platform_machine())
             .with_platform_system(self.platform_system())
             .with_sys_platform(self.sys_platform())

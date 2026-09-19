@@ -12,3 +12,6 @@ mod lock;
 
 #[cfg(all(feature = "test-python", feature = "test-universal"))]
 mod minimum_libc;
+
+#[cfg(all(feature = "test-python", feature = "test-universal"))]
+mod sys_abi_features;

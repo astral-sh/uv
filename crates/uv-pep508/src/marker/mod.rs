@@ -9,6 +9,8 @@
 //! outcomes. This implementation tries to carefully validate everything and emit warnings whenever
 //! bogus comparisons with unintended semantics are made.
 
+#[cfg(test)]
+mod abi_tests;
 mod algebra;
 mod environment;
 mod lowering;
@@ -18,14 +20,15 @@ mod tree;
 
 pub use environment::{MarkerEnvironment, MarkerEnvironmentBuilder};
 pub use lowering::{
-    CanonicalMarkerValueExtra, CanonicalMarkerValueString, CanonicalMarkerValueVersion,
+    CanonicalMarkerListPair, CanonicalMarkerValueExtra, CanonicalMarkerValueString,
+    CanonicalMarkerValueVersion,
 };
 pub(crate) use tree::MarkerValue;
 pub use tree::{
-    ContainsMarkerTree, ExtraMarkerTree, ExtraOperator, InMarkerTree, MarkerExpression,
-    MarkerOperator, MarkerTree, MarkerTreeContents, MarkerTreeKind, MarkerValueExtra,
-    MarkerValueList, MarkerValueString, MarkerValueVersion, MarkerWarningKind, StringMarkerTree,
-    StringVersion, VersionMarkerTree,
+    ContainerOperator, ContainsMarkerTree, ExtraMarkerTree, ExtraOperator, InMarkerTree,
+    MarkerExpression, MarkerOperator, MarkerTree, MarkerTreeContents, MarkerTreeKind,
+    MarkerValueExtra, MarkerValueList, MarkerValueString, MarkerValueVersion, MarkerWarningKind,
+    StringMarkerTree, StringVersion, VersionMarkerTree,
 };
 
 /// `serde` helpers for [`MarkerTree`].

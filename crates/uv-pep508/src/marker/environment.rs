@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use uv_pep440::{Version, VersionParseError};
@@ -27,6 +28,8 @@ struct MarkerEnvironmentInner {
     python_full_version: StringVersion,
     python_version: StringVersion,
     sys_platform: String,
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    sys_abi_features: BTreeSet<String>,
 }
 
 impl MarkerEnvironment {
@@ -178,10 +181,22 @@ impl MarkerEnvironment {
     pub fn sys_platform(&self) -> &str {
         &self.inner.sys_platform
     }
+
+    /// Returns the interpreter's ABI features as defined by PEP 780.
+    pub fn sys_abi_features(&self) -> &BTreeSet<String> {
+        &self.inner.sys_abi_features
+    }
 }
 
 /// APIs for setting specific parts of a marker environment.
 impl MarkerEnvironment {
+    /// Set the interpreter's PEP 780 ABI features.
+    #[must_use]
+    pub fn with_sys_abi_features(mut self, features: impl IntoIterator<Item = String>) -> Self {
+        Arc::make_mut(&mut self.inner).sys_abi_features = features.into_iter().collect();
+        self
+    }
+
     /// Set the Python implementation version for this environment.
     ///
     /// See also [`MarkerEnvironment::implementation_version`].
@@ -314,6 +329,7 @@ impl<'a> TryFrom<MarkerEnvironmentBuilder<'a>> for MarkerEnvironment {
                 python_full_version: builder.python_full_version.parse()?,
                 python_version: builder.python_version.parse()?,
                 sys_platform: builder.sys_platform.to_string(),
+                sys_abi_features: BTreeSet::new(),
             }),
         })
     }
