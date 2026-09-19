@@ -135,6 +135,7 @@ impl BatchPrefetcher {
         else {
             return;
         };
+        trace!(target: "uv_resolver::resolver::visit", "Tried package version: {name}=={version}");
         self.tried_versions
             .entry(name.clone())
             .or_default()
