@@ -14,8 +14,19 @@ use uv_warnings::warn_user_once;
 
 /// Indicates if the preview state has been finalized yet or not.
 enum PreviewState {
-    Provisional(Preview),
+    Provisional {
+        preview: Preview,
+        required: BitFlags<PreviewFeature>,
+    },
     Final(Preview),
+}
+
+fn check_required(preview: Preview, feature: PreviewFeature) -> Result<(), PreviewError> {
+    if preview.is_enabled(feature) {
+        Ok(())
+    } else {
+        Err(PreviewError::FeatureRequired(feature))
+    }
 }
 
 /// Indicates how the preview was initialised, to distinguish between normal
@@ -41,27 +52,36 @@ pub enum PreviewError {
     #[error("The preview configuration has not been initialized yet")]
     NotInitialized,
 
+    /// A parsed input requires a preview feature that was not enabled.
+    #[error("The `{0}` feature is experimental and requires `--preview-features {0}`")]
+    FeatureRequired(PreviewFeature),
+
     /// Returned when [`set`] or [`finalize`] are called on a test state.
     #[cfg(feature = "testing")]
     #[error("The preview configuration is in test mode and {}::{} cannot be used", module_path!(), .0)]
     InTest(&'static str),
 }
 
-/// Initialize the global preview configuration.
+/// Set the global preview configuration before finalization.
 ///
-/// This should be called once at startup with the resolved preview settings.
+/// Requirements recorded by [`require`] are retained when the configuration changes.
 pub fn set(preview: Preview) -> Result<(), PreviewError> {
     let mode = PREVIEW.get_or_init(|| {
-        PreviewMode::Normal(Mutex::new(PreviewState::Provisional(Preview::default())))
+        PreviewMode::Normal(Mutex::new(PreviewState::Provisional {
+            preview: Preview::default(),
+            required: BitFlags::empty(),
+        }))
     });
     match mode {
         PreviewMode::Normal(mutex) => {
             // Calling `set` in a test context is already disallowed, so a panic if
             // the mutex is poisoned is fine.
             let mut state = mutex.lock().unwrap();
-            match &*state {
-                PreviewState::Provisional(_) => {
-                    *state = PreviewState::Provisional(preview);
+            match &mut *state {
+                PreviewState::Provisional {
+                    preview: current, ..
+                } => {
+                    *current = preview;
                     Ok(())
                 }
                 PreviewState::Final(_) => Err(PreviewError::AlreadyFinalized),
@@ -72,6 +92,7 @@ pub fn set(preview: Preview) -> Result<(), PreviewError> {
     }
 }
 
+/// Finalize the preview configuration, checking all requirements recorded during parsing.
 pub fn finalize() -> Result<(), PreviewError> {
     match PREVIEW.get().ok_or(PreviewError::NotInitialized)? {
         PreviewMode::Normal(mutex) => {
@@ -79,7 +100,10 @@ pub fn finalize() -> Result<(), PreviewError> {
             // the mutex is poisoned is fine.
             let mut state = mutex.lock().unwrap();
             match &*state {
-                PreviewState::Provisional(preview) => {
+                PreviewState::Provisional { preview, required } => {
+                    for feature in *required {
+                        check_required(*preview, feature)?;
+                    }
                     *state = PreviewState::Final(*preview);
                     Ok(())
                 }
@@ -100,7 +124,7 @@ pub fn finalize() -> Result<(), PreviewError> {
 fn get() -> Preview {
     match PREVIEW.get() {
         Some(PreviewMode::Normal(mutex)) => match *mutex.lock().unwrap() {
-            PreviewState::Provisional(preview) => preview,
+            PreviewState::Provisional { preview, .. } => preview,
             PreviewState::Final(preview) => preview,
         },
         #[cfg(feature = "testing")]
@@ -132,6 +156,33 @@ fn get() -> Preview {
 /// Check if a specific preview feature is enabled globally.
 pub fn is_enabled(flag: PreviewFeature) -> bool {
     get().is_enabled(flag)
+}
+
+/// Require a preview feature for an input parsed before or after configuration discovery.
+///
+/// Before [`finalize`], record the requirement so a feature enabled in the same configuration
+/// file can satisfy it. After finalization, reject disabled features immediately.
+pub fn require(feature: PreviewFeature) -> Result<(), PreviewError> {
+    let mode = PREVIEW.get_or_init(|| {
+        PreviewMode::Normal(Mutex::new(PreviewState::Provisional {
+            preview: Preview::default(),
+            required: BitFlags::empty(),
+        }))
+    });
+    match mode {
+        PreviewMode::Normal(mutex) => {
+            let mut state = mutex.lock().expect("Preview state lock is not poisoned");
+            match &mut *state {
+                PreviewState::Provisional { required, .. } => {
+                    required.insert(feature);
+                    Ok(())
+                }
+                PreviewState::Final(preview) => check_required(*preview, feature),
+            }
+        }
+        #[cfg(feature = "testing")]
+        PreviewMode::Test(_) => check_required(get(), feature),
+    }
 }
 
 /// Functions for unit tests, do not use from normal code!
@@ -522,6 +573,27 @@ impl FromStr for Preview {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_required_features() -> Result<(), PreviewError> {
+        {
+            let _guard = test::with_features(&[PreviewFeature::Pylock]);
+            require(PreviewFeature::Pylock)?;
+            assert!(matches!(
+                require(PreviewFeature::JsonOutput),
+                Err(PreviewError::FeatureRequired(PreviewFeature::JsonOutput))
+            ));
+        }
+        {
+            let _guard = test::with_features(&[PreviewFeature::JsonOutput]);
+            require(PreviewFeature::JsonOutput)?;
+            assert!(matches!(
+                require(PreviewFeature::Pylock),
+                Err(PreviewError::FeatureRequired(PreviewFeature::Pylock))
+            ));
+        }
+        Ok(())
+    }
 
     #[test]
     fn test_preview_feature_from_str() {
