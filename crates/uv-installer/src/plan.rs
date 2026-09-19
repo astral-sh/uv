@@ -280,7 +280,8 @@ impl<'a> Planner<'a> {
             config_settings_package,
             extra_build_requires,
             extra_build_variables,
-        );
+        )
+        .with_build_lock_fingerprint(self.resolution.build_lock_fingerprint());
         let built_index = BuiltWheelIndex::new(
             cache,
             tags,
@@ -289,7 +290,8 @@ impl<'a> Planner<'a> {
             config_settings_package,
             extra_build_requires,
             extra_build_variables,
-        );
+        )
+        .with_build_lock_fingerprint(self.resolution.build_lock_fingerprint());
 
         let mut cached = vec![];
         let mut remote = vec![];
@@ -327,6 +329,16 @@ impl<'a> Planner<'a> {
                     [] => {}
                     [installed] => {
                         let source = RequirementSource::from(dist);
+                        let build_lock = match dist {
+                            ResolvedDist::Installable { dist, .. }
+                                if matches!(dist.as_ref(), Dist::Source(_)) =>
+                            {
+                                self.resolution.build_lock_fingerprint()
+                            }
+                            ResolvedDist::Installable { .. } | ResolvedDist::Installed { .. } => {
+                                None
+                            }
+                        };
                         match RequirementSatisfaction::check(
                             dist.name(),
                             installed,
@@ -338,6 +350,7 @@ impl<'a> Planner<'a> {
                             config_settings_package,
                             extra_build_requires,
                             extra_build_variables,
+                            build_lock,
                         ) {
                             RequirementSatisfaction::Mismatch => {
                                 debug!(

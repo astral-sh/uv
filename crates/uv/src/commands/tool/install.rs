@@ -472,6 +472,7 @@ pub(crate) async fn install(
     let installed_tools = InstalledTools::from_settings()?.init()?;
     let _lock = installed_tools.lock().await?;
     let tool_dir = installed_tools.tool_dir(package_name);
+    let existing_lock = ToolLock::read(&tool_dir)?;
 
     // Find the existing receipt, if it exists. If the receipt is present but malformed, we'll
     // remove the environment and continue with the install.
@@ -530,7 +531,7 @@ pub(crate) async fn install(
             environment.environment().interpreter()
         });
     let mut existing_tool_lock = if tool_locks {
-        if let Some(lock) = ToolLock::read(&tool_dir) {
+        if let Some(lock) = existing_lock {
             match Box::pin(lock.validate(
                 &requirements,
                 &receipt_constraints,

@@ -2154,6 +2154,7 @@ impl SyncSettings {
 /// The resolved settings to use for a `lock` invocation.
 #[derive(Debug, Clone)]
 pub(crate) struct LockSettings {
+    pub(crate) build_dependencies: Option<bool>,
     pub(crate) lock_check: LockCheck,
     pub(crate) frozen: Option<FrozenSource>,
     pub(crate) dry_run: DryRun,
@@ -2172,6 +2173,8 @@ impl LockSettings {
         environment: EnvironmentOptions,
     ) -> anyhow::Result<Self> {
         let LockArgs {
+            build_dependencies,
+            no_build_dependencies,
             check,
             locked,
             no_locked,
@@ -2216,6 +2219,11 @@ impl LockSettings {
         let (locked, frozen) = resolve_lock_flags(locked, frozen)?;
 
         Ok(Self {
+            build_dependencies: flag(
+                build_dependencies,
+                no_build_dependencies,
+                "build-dependencies",
+            )?,
             lock_check: locked,
             frozen,
             dry_run: DryRun::from_args(dry_run),

@@ -46,11 +46,22 @@ pub fn uninstall_wheel(
 
     // Uninstall the files, keeping track of any directories that are left empty.
     let mut visited = BTreeSet::new();
+    let mut top_level_modules = HashSet::new();
     for entry in &record {
         let path = site_packages.join(&entry.path);
 
         if !is_path_in_scheme(&entry.path, site_packages, &distribution, layout) {
             continue;
+        }
+
+        let normalized = normalize_path(&path);
+        if normalized.parent() == Some(site_packages)
+            && normalized
+                .extension()
+                .is_some_and(|extension| extension == "py")
+            && let Some(stem) = normalized.file_stem()
+        {
+            top_level_modules.insert(stem.to_os_string());
         }
 
         // On Windows, deleting the current executable is a special case.
@@ -95,6 +106,54 @@ pub fn uninstall_wheel(
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
                 Err(_) => return Err(err.into()),
             },
+        }
+    }
+
+    // The shared top-level `__pycache__` cannot be removed wholesale. Remove only bytecode
+    // belonging to source modules in this distribution's RECORD, across interpreter tags and
+    // optimization levels. Otherwise a same-second reinstall can import stale bytecode.
+    let pycache = site_packages.join("__pycache__");
+    let has_pycache = if top_level_modules.is_empty() {
+        false
+    } else {
+        match fs_err::symlink_metadata(&pycache) {
+            Ok(metadata) => metadata.file_type().is_dir(),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => false,
+            Err(err) => return Err(err.into()),
+        }
+    };
+    if has_pycache {
+        for entry in fs_err::read_dir(&pycache)? {
+            let entry = entry?;
+            let filename = entry.file_name();
+            let filename = Path::new(&filename);
+            if filename
+                .extension()
+                .is_none_or(|extension| extension != "pyc")
+            {
+                continue;
+            }
+            let Some(stem) = filename.file_stem().map(Path::new) else {
+                continue;
+            };
+            let stem = if stem
+                .extension()
+                .is_some_and(|extension| extension.as_encoded_bytes().starts_with(b"opt-"))
+            {
+                stem.file_stem().map(Path::new)
+            } else {
+                Some(stem)
+            };
+            if stem
+                .and_then(Path::file_stem)
+                .is_some_and(|stem| top_level_modules.contains(stem))
+            {
+                match fs_err::remove_file(entry.path()) {
+                    Ok(()) => file_count += 1,
+                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(err) => return Err(err.into()),
+                }
+            }
         }
     }
 
@@ -480,6 +539,55 @@ mod tests {
         assert!(!is_valid("C:target"));
         assert!(!is_valid("C:."));
         assert!(!is_valid("C:.."));
+    }
+
+    #[test]
+    fn test_uninstall_top_level_bytecode() {
+        let venv = assert_fs::TempDir::new().unwrap();
+        let site_packages = venv.child("lib/python3.12/site-packages");
+        let dist_info = site_packages.child("demo-1.0.0.dist-info");
+        dist_info
+            .child("RECORD")
+            .write_str("demo.py,,0\ndemo.part.py,,0\ndemo-1.0.0.dist-info/RECORD,,\n")
+            .unwrap();
+        site_packages.child("demo.py").touch().unwrap();
+        site_packages.child("demo.part.py").touch().unwrap();
+        let removed = [
+            "demo.cpython-312.pyc",
+            "demo.cpython-313.opt-1.pyc",
+            "demo.part.cpython-312.pyc",
+        ];
+        let retained = [
+            "other.cpython-312.pyc",
+            "demo.other.cpython-312.pyc",
+            "demo.cpython-312.txt",
+        ];
+        for filename in removed.iter().chain(&retained) {
+            site_packages
+                .child("__pycache__")
+                .child(filename)
+                .touch()
+                .unwrap();
+        }
+        let layout = Layout {
+            sys_executable: venv.path().join("bin/python"),
+            python_version: (3, 12),
+            os_name: "posix".to_owned(),
+            scheme: Scheme {
+                purelib: site_packages.to_path_buf(),
+                platlib: site_packages.to_path_buf(),
+                scripts: venv.path().join("bin"),
+                data: venv.path().to_path_buf(),
+                include: venv.path().join("include/python3.12"),
+            },
+        };
+        uninstall_wheel(dist_info.path(), "demo 1.0.0", &layout).unwrap();
+        for filename in removed {
+            assert!(!site_packages.child("__pycache__").child(filename).exists());
+        }
+        for filename in retained {
+            assert!(site_packages.child("__pycache__").child(filename).exists());
+        }
     }
 
     /// Uninstall must not remove files outside the install scheme.

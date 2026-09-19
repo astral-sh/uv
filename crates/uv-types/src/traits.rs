@@ -10,16 +10,16 @@ use uv_cache::Cache;
 use uv_configuration::{BuildKind, BuildOptions, BuildOutput, NoSources};
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
-    CachedDist, ConfigSettings, DependencyMetadata, DistributionId, ExtraBuildRequires,
-    ExtraBuildVariables, IndexCapabilities, IndexLocations, InstalledDist, IsBuildBackendError,
-    PackageConfigSettings, Requirement, SourceDist,
+    BuildLockFingerprint, CachedDist, ConfigSettings, DependencyMetadata, DistributionId,
+    ExtraBuildRequires, ExtraBuildVariables, IndexCapabilities, IndexLocations, InstalledDist,
+    IsBuildBackendError, PackageConfigSettings, Requirement, SourceDist,
 };
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_workspace::WorkspaceCache;
 
-use crate::{BuildArena, BuildIsolation, ResolvedRequirements};
+use crate::{BuildArena, BuildIsolation, BuildRequirementKind, ResolvedRequirements};
 
 /// Controls how source tree requirements influence workspace-member editability during lowering.
 #[derive(Debug, Clone, Copy, Default, Eq, PartialEq)]
@@ -144,6 +144,23 @@ pub trait BuildContext {
 
     /// Get the extra build variables.
     fn extra_build_variables(&self) -> &ExtraBuildVariables;
+
+    /// The required build contract used for source-wheel caches and installed provenance.
+    fn build_lock_fingerprint(&self) -> Option<&BuildLockFingerprint> {
+        None
+    }
+
+    /// Observe requirements at their source, before they are combined for resolution.
+    ///
+    /// The backend observation is emitted even when the hook returns an empty list or only
+    /// repeats declared requirements. Implementations may reject changes to a locked contract.
+    fn observe_build_requirements<'a>(
+        &'a self,
+        _kind: BuildRequirementKind,
+        _requirements: &'a [Requirement],
+    ) -> impl Future<Output = Result<(), AnyErrorBuild>> + 'a {
+        std::future::ready(Ok(()))
+    }
 
     /// Resolve the given requirements into a ready-to-install set of package versions.
     fn resolve<'a>(

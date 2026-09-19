@@ -29,12 +29,14 @@ uv-errors = { workspace = true }
 uv-git = { workspace = true }
 uv-install-wheel = { workspace = true }
 uv-installer = { workspace = true }
+uv-lock = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }
 uv-requirements = { workspace = true }
 uv-resolver = { workspace = true }
+uv-resolver-types = { workspace = true }
 uv-types = { workspace = true }
 uv-version = { workspace = true }
 uv-workspace = { workspace = true }

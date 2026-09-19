@@ -100,6 +100,12 @@ impl Manifest {
     }
 
     #[must_use]
+    pub fn with_preferences(mut self, preferences: Preferences) -> Self {
+        self.preferences = preferences;
+        self
+    }
+
+    #[must_use]
     pub fn with_lookaheads(mut self, mut lookaheads: Vec<RequestedRequirements>) -> Self {
         // Package metadata defaults to forced-relative paths. Restore the user's path preference for
         // the current project and workspace members before merging requirement URLs.

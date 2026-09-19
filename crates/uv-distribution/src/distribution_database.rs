@@ -25,9 +25,9 @@ use uv_client::{
 };
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
-    ArchiveHashPolicy, BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, HashCollection,
-    HashValidation, Hashed, IndexUrl, InstalledDist, MetadataHashPolicy, Name, SourceDist,
-    SourceUrl, parse_url_hashes,
+    ArchiveHashPolicy, BuildInfo, BuildLockFingerprint, BuildableSource, BuiltDist, Dist, DistRef,
+    HashCollection, HashValidation, Hashed, IndexUrl, InstalledDist, MetadataHashPolicy, Name,
+    SourceDist, SourceUrl, parse_url_hashes,
 };
 use uv_extract::dirhash::{DirectoryDigest, HashedFile};
 use uv_extract::hash::Hasher;
@@ -108,6 +108,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         }
     }
 
+    pub fn build_lock_fingerprint(&self) -> Option<&BuildLockFingerprint> {
+        self.build_context.build_lock_fingerprint()
+    }
+
     /// Handle a specific `reqwest` error, and convert it to [`io::Error`].
     fn handle_response_errors(&self, err: reqwest::Error) -> io::Error {
         if err.is_timeout() {
@@ -164,6 +168,24 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             ));
         }
         Ok(computed_hashes)
+    }
+
+    /// Resolve build requirements only when the source's runtime metadata is static.
+    ///
+    /// This allows an independent build graph to be captured after runtime resolution without
+    /// assuming that two different build environments produce identical runtime metadata.
+    #[instrument(skip_all, fields(%source))]
+    pub async fn resolve_static_build_requirements(
+        &self,
+        source: &SourceDist,
+        hashes: ArchiveHashPolicy<'_>,
+    ) -> Result<HashDigests, Error> {
+        let metadata = SourceDistributionBuilder::new(self.build_context)
+            .with_static_build_requirements()
+            .download_and_build_metadata(&BuildableSource::Dist(source), hashes, &self.client)
+            .boxed_local()
+            .await?;
+        Ok(metadata.hashes)
     }
 
     /// Either fetch the wheel or fetch and build the source distribution

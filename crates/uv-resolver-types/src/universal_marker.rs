@@ -438,6 +438,9 @@ impl UniversalMarker {
     /// conflict expressions. For example, given `sys_platform == 'linux' or extra == 'foo'`, the
     /// conflict marker is always true on Linux but still depends on `foo` elsewhere.
     pub fn conflict_for_environment(self, env: &MarkerEnvironment) -> ConflictMarker {
+        if self.marker.is_true() {
+            return ConflictMarker::TRUE;
+        }
         let mut remaining = MarkerTree::FALSE;
 
         'conjunctions: for conjunction in self.marker.to_dnf() {
@@ -1002,6 +1005,23 @@ mod tests {
             sys_platform: "darwin",
         })
         .expect("valid marker environment")
+    }
+
+    #[test]
+    fn constant_conflicts_for_environment() {
+        let environment = marker_environment();
+        assert!(
+            UniversalMarker::TRUE
+                .conflict_for_environment(&environment)
+                .is_true()
+        );
+        assert!(
+            UniversalMarker::new(
+                MarkerTree::TRUE,
+                UniversalMarker::FALSE.conflict_for_environment(&environment),
+            )
+            .is_false()
+        );
     }
 
     /// Shortcut for creating a conflict marker from an extra name.

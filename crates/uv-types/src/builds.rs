@@ -7,6 +7,15 @@ use uv_configuration::{BuildKind, NoSources};
 use uv_normalize::PackageName;
 use uv_python::PythonEnvironment;
 
+/// Where a PEP 517 frontend observed a set of build requirements.
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum BuildRequirementKind {
+    /// The effective `build-system.requires`, including the legacy default backend.
+    Declared,
+    /// Requirements returned by `get_requires_for_build_<kind>`.
+    Backend,
+}
+
 /// Whether to enforce build isolation when building source distributions.
 #[derive(Debug, Default, Copy, Clone)]
 pub enum BuildIsolation<'a> {

@@ -3,7 +3,8 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pypi_types::{HashDigest, HashDigests};
 
 use crate::{
-    BuiltDist, Diagnostic, Dist, IndexMetadata, Name, RequirementSource, ResolvedDist, SourceDist,
+    BuildLockFingerprint, BuiltDist, Diagnostic, Dist, IndexMetadata, Name, RequirementSource,
+    ResolvedDist, SourceDist,
 };
 
 /// A set of packages pinned at specific versions.
@@ -15,6 +16,7 @@ use crate::{
 pub struct Resolution {
     graph: petgraph::graph::DiGraph<Node, Edge>,
     diagnostics: Vec<ResolutionDiagnostic>,
+    build_lock: Option<BuildLockFingerprint>,
 }
 
 impl Resolution {
@@ -23,7 +25,22 @@ impl Resolution {
         Self {
             graph,
             diagnostics: Vec::new(),
+            build_lock: None,
         }
+    }
+
+    /// Require source builds in this selection to use the identified build contract.
+    #[must_use]
+    pub fn with_build_lock_fingerprint(
+        mut self,
+        fingerprint: Option<BuildLockFingerprint>,
+    ) -> Self {
+        self.build_lock = fingerprint;
+        self
+    }
+
+    pub fn build_lock_fingerprint(&self) -> Option<&BuildLockFingerprint> {
+        self.build_lock.as_ref()
     }
 
     /// Return the underlying graph of the resolution.

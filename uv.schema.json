@@ -1843,6 +1843,7 @@
             "add-bounds",
             "package-conflicts",
             "extra-build-dependencies",
+            "build-dependency-locking",
             "detect-module-conflicts",
             "format-command",
             "native-auth",
