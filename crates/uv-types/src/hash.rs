@@ -255,13 +255,13 @@ impl HashStrategy {
         mut self,
         requirements: impl Iterator<Item = &'a Requirement>,
     ) -> Result<Self, HashStrategyError> {
-        match &mut self.verification {
-            HashVerification::None => {}
-            HashVerification::IfPresent(existing) | HashVerification::Required(existing) => {
-                if let Some(hashes) = Self::augment_hashes(existing, requirements)? {
-                    *existing = Arc::new(hashes);
-                }
-            }
+        let (existing, mode) = match &mut self.verification {
+            HashVerification::None => return Ok(self),
+            HashVerification::IfPresent(existing) => (existing, HashCheckingMode::Verify),
+            HashVerification::Required(existing) => (existing, HashCheckingMode::Require),
+        };
+        if let Some(hashes) = Self::augment_hashes(existing, requirements, mode)? {
+            *existing = Arc::new(hashes);
         }
         Ok(self)
     }
@@ -487,17 +487,31 @@ impl HashStrategy {
     fn augment_hashes<'a>(
         existing: &FxHashMap<VersionId, Vec<HashDigest>>,
         requirements: impl Iterator<Item = &'a Requirement>,
+        mode: HashCheckingMode,
     ) -> Result<Option<FxHashMap<VersionId, Vec<HashDigest>>>, HashStrategyError> {
         let mut hashes = None;
 
         for requirement in requirements {
-            let Some((id, digests)) = Self::requirement_hashes(requirement)? else {
+            let Some((id, mut digests)) = Self::requirement_hashes(requirement)? else {
                 continue;
             };
             let current = hashes.as_ref().unwrap_or(existing);
             let current_digests = current.get(&id);
             let mut merged = current_digests.cloned().unwrap_or_default();
+            if mode.is_require() {
+                digests.retain(|digest| digest.algorithm() != HashAlgorithm::Md5);
+                merged.retain(|digest| digest.algorithm() != HashAlgorithm::Md5);
+            }
             merge_digests(&mut merged, &digests, requirement)?;
+
+            if mode.is_require() && merged.is_empty() {
+                // Augmentation can include inactive requirements. Leave missing hashes for the
+                // resolver to reject when the dependency is actually needed.
+                if current_digests.is_some() {
+                    hashes.get_or_insert_with(|| existing.clone()).remove(&id);
+                }
+                continue;
+            }
 
             if current_digests.map(Vec::as_slice) == Some(merged.as_slice()) {
                 continue;
@@ -779,6 +793,61 @@ mod tests {
                 ArchiveHashPolicy::All(expected.as_slice())
             );
         }
+    }
+
+    #[test]
+    fn augment_requirements_filters_insecure_hashes() -> Result<(), Box<dyn std::error::Error>> {
+        let url: DisplaySafeUrl = "https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl".parse()?;
+        let weak = requirement(&format!("{url}#md5=420d85e19168705cdf0223621b18831a"));
+        let strong = requirement(&format!(
+            "{url}#sha256=cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f"
+        ));
+        let md5 = HashDigest::from_str("md5:420d85e19168705cdf0223621b18831a")?;
+        let sha256 = HashDigest::from_str(
+            "sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+        )?;
+
+        let hasher =
+            HashStrategy::require(Arc::default()).augment_with_requirements([&weak].into_iter())?;
+        assert!(!hasher.allows_url(&url));
+        assert_eq!(
+            hasher.archive_policy_for_url(&url),
+            ArchiveHashPolicy::All(&[])
+        );
+
+        let hasher = HashStrategy::require(Arc::new(FxHashMap::from_iter([(
+            VersionId::from_url(&url),
+            vec![md5.clone()],
+        )])))
+        .augment_with_requirements([&weak].into_iter())?;
+        assert!(!hasher.allows_url(&url));
+
+        let hasher =
+            HashStrategy::verify(Arc::default()).augment_with_requirements([&weak].into_iter())?;
+        assert_eq!(
+            hasher.archive_policy_for_url(&url),
+            ArchiveHashPolicy::All(slice::from_ref(&md5))
+        );
+
+        let hasher = HashStrategy::from_requirements(
+            std::iter::empty(),
+            [(&strong, &[][..])].into_iter(),
+            None,
+            HashCheckingMode::Require,
+        )?
+        .augment_with_requirements([&weak].into_iter())?;
+        assert_eq!(
+            hasher.archive_policy_for_url(&url),
+            ArchiveHashPolicy::All(slice::from_ref(&sha256))
+        );
+
+        let hasher = HashStrategy::require(Arc::default())
+            .augment_with_requirements([&strong, &weak].into_iter())?;
+        assert_eq!(
+            hasher.archive_policy_for_url(&url),
+            ArchiveHashPolicy::All(slice::from_ref(&sha256))
+        );
+        Ok(())
     }
 
     #[test]

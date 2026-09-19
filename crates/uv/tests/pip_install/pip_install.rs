@@ -8623,7 +8623,45 @@ fn require_hashes_build_dependencies() -> Result<()> {
         .arg("--no-binary").arg("a")
         .arg("-r")
         .arg("requirements.txt")
-        .arg("--require-hashes"), @"
+        .arg("--require-hashes")
+        .arg("--require-build-hashes"), @r"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
+    Resolved 1 package in [TIME]
+    error: Failed to download and build `a==1.0.0`
+      cause: Failed to resolve requirements from `build-system.requires`
+      cause: No solution found when resolving: `hatchling`
+      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `hatchling`
+    "
+    );
+
+    uv_snapshot!(context.pip_install()
+        .arg("--index-url").arg(server.index_url())
+        .arg("--no-binary").arg("a")
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--require-hashes")
+        .arg("--require-build-hashes")
+        .arg("--preview-features").arg("build-dependency-hashes"), @r"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to download and build `a==1.0.0`
+      cause: Failed to resolve requirements from `build-system.requires`
+      cause: No solution found when resolving: `hatchling`
+      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `hatchling`
+    "
+    );
+
+    uv_snapshot!(context.pip_install()
+        .arg("--index-url").arg(server.index_url())
+        .arg("--no-binary").arg("a")
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--require-hashes")
+        .arg("--require-build-hashes")
+        .arg("--no-require-build-hashes"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -10453,6 +10491,85 @@ fn compatible_build_constraint() -> Result<()> {
      + requests==1.2.0
     "
     );
+
+    Ok(())
+}
+
+/// Include a `build_constraints.txt` file with hashes for the build dependencies.
+#[test]
+fn require_build_hashes_from_build_constraint() -> Result<()> {
+    let context = uv_test::test_context!("3.9");
+
+    let constraints_txt = context.temp_dir.child("build_constraints.txt");
+    constraints_txt.write_str(indoc::indoc! {r"
+        setuptools==69.0.2 \
+            --hash=sha256:1e8fdff6797d3865f37397be788a4e3cba233608e9b509382a2777d25ebde7f2
+        wheel==0.42.0 \
+            --hash=sha256:177f9c9b0d45c47873b619f5b650346d632cdc35fb5e4d25058e09c9e581433d
+    "})?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("requests==1.2")
+        .arg("--build-constraint")
+        .arg("build_constraints.txt")
+        .arg("--require-build-hashes")
+        .arg("--preview-features")
+        .arg("build-dependency-hashes"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + requests==1.2.0
+    "
+    );
+
+    Ok(())
+}
+
+/// Required build hashes reject an MD5-only URL before running the build backend.
+#[test]
+fn require_build_hashes_rejects_md5_url() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = FindLinksServer::new(&context.workspace_root.join("test/links"));
+    let context = context.with_filter((server.url().to_string(), "http://[LOCALHOST]"));
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "hash-test"
+        version = "1.0.0"
+
+        [build-system]
+        requires = ["ok @ {}/ok-1.0.0-py3-none-any.whl#md5=88d6d524262f256596aa7f663c88038b"]
+        build-backend = "backend"
+        backend-path = ["."]
+    "#, server.url()})?;
+    context.temp_dir.child("backend.py").write_str(indoc! {r#"
+        from pathlib import Path
+        Path(__file__).with_name("backend-executed").touch()
+        raise RuntimeError("build backend executed")
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(".")
+        .arg("--no-index")
+        .arg("--require-build-hashes")
+        .arg("--preview-features").arg("build-dependency-hashes"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    WARN Range requests not supported for ok-1.0.0-py3-none-any.whl; streaming wheel
+    error: Failed to build `hash-test @ file://[TEMP_DIR]/`
+      cause: Failed to resolve requirements from `build-system.requires`
+      cause: No solution found when resolving: `ok @ http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl#md5=88d6d524262f256596aa7f663c88038b`
+      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `ok`
+    ");
+    context
+        .temp_dir
+        .child("backend-executed")
+        .assert(predicate::path::missing());
 
     Ok(())
 }
