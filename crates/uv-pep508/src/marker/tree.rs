@@ -1126,9 +1126,10 @@ impl MarkerTree {
                     CanonicalMarkerListPair::DependencyGroup(dependency_group) => {
                         extras.dependency_groups().contains(dependency_group)
                     }
-                    CanonicalMarkerListPair::SysAbiFeature(feature) => {
-                        env.sys_abi_features().contains(feature.as_str())
-                    }
+                    CanonicalMarkerListPair::SysAbiFeature(feature) => env
+                        .sys_abi_features()
+                        .iter()
+                        .any(|candidate| candidate.as_str() == feature),
                     // Invalid marker expression
                     CanonicalMarkerListPair::Arbitrary { .. } => return false,
                 };

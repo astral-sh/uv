@@ -64,7 +64,8 @@ use crate::marker::lowering::{
 };
 use crate::marker::tree::ContainerOperator;
 use crate::{
-    ExtraOperator, MarkerExpression, MarkerOperator, MarkerValueString, MarkerValueVersion,
+    AbiFeature, ExtraOperator, MarkerExpression, MarkerOperator, MarkerValueString,
+    MarkerValueVersion,
 };
 
 /// The global node interner.
@@ -1166,17 +1167,17 @@ impl InternerGuard<'_> {
 
         // PEP 780 makes threading features exclusive and specific to CPython. Bitness
         // features are exclusive too, but neither need be present if bitness is unknown.
-        let mut feature = |name: &str| {
+        let mut feature = |feature: AbiFeature| {
             self.expression(MarkerExpression::List {
-                pair: CanonicalMarkerListPair::SysAbiFeature(name.to_owned()),
+                pair: CanonicalMarkerListPair::SysAbiFeature(feature.as_str().to_owned()),
                 operator: ContainerOperator::In,
             })
         };
-        let free_threading = feature("free-threading");
-        let gil_enabled = feature("gil-enabled");
-        let debug = feature("debug");
-        let bits32 = feature("32-bit");
-        let bits64 = feature("64-bit");
+        let free_threading = feature(AbiFeature::FreeThreading);
+        let gil_enabled = feature(AbiFeature::GilEnabled);
+        let debug = feature(AbiFeature::Debug);
+        let bits32 = feature(AbiFeature::Bits32);
+        let bits64 = feature(AbiFeature::Bits64);
         let cpython = self.expression(MarkerExpression::String {
             key: MarkerValueString::PlatformPythonImplementation,
             operator: MarkerOperator::Equal,

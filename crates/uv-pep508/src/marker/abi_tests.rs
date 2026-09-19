@@ -2,7 +2,24 @@ use std::error::Error;
 
 use uv_preview::{PreviewFeature, test::with_features};
 
-use super::{MarkerEnvironment, MarkerEnvironmentBuilder, MarkerTree};
+use super::{AbiFeature, MarkerEnvironment, MarkerEnvironmentBuilder, MarkerTree};
+
+#[test]
+fn abi_feature_serialization() -> Result<(), Box<dyn Error>> {
+    for (feature, name) in [
+        (AbiFeature::Bits32, "32-bit"),
+        (AbiFeature::Bits64, "64-bit"),
+        (AbiFeature::Debug, "debug"),
+        (AbiFeature::FreeThreading, "free-threading"),
+        (AbiFeature::GilEnabled, "gil-enabled"),
+    ] {
+        assert_eq!(feature.as_str(), name);
+        let value = serde_json::json!(name);
+        assert_eq!(serde_json::to_value(feature)?, value);
+        assert_eq!(serde_json::from_value::<AbiFeature>(value)?, feature);
+    }
+    Ok(())
+}
 
 #[test]
 fn sys_abi_features_evaluation() -> Result<(), Box<dyn Error>> {
@@ -20,7 +37,7 @@ fn sys_abi_features_evaluation() -> Result<(), Box<dyn Error>> {
         python_version: "3.13",
         sys_platform: "linux",
     })?
-    .with_sys_abi_features(["free-threading", "64-bit"].map(str::to_owned));
+    .with_sys_abi_features([AbiFeature::FreeThreading, AbiFeature::Bits64]);
     for (feature, expected) in [
         ("free-threading", true),
         ("gil-enabled", false),

@@ -34,7 +34,7 @@ use uv_normalize::{ExtraName, PackageName};
 use crate::cursor::Cursor;
 pub(crate) use crate::marker::MarkerValue;
 pub use crate::marker::{
-    CanonicalMarkerListPair, CanonicalMarkerValueExtra, CanonicalMarkerValueString,
+    AbiFeature, CanonicalMarkerListPair, CanonicalMarkerValueExtra, CanonicalMarkerValueString,
     CanonicalMarkerValueVersion, ContainerOperator, ContainsMarkerTree, ExtraMarkerTree,
     ExtraOperator, InMarkerTree, MarkerEnvironment, MarkerEnvironmentBuilder, MarkerExpression,
     MarkerOperator, MarkerTree, MarkerTreeContents, MarkerTreeKind, MarkerValueExtra,

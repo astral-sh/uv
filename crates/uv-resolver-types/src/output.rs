@@ -311,7 +311,11 @@ impl ResolverOutput {
         for marker_param in seen_marker_values {
             let expr = match marker_param {
                 MarkerParam::SysAbiFeature(feature) => {
-                    let operator = if marker_env.sys_abi_features().contains(&feature) {
+                    let operator = if marker_env
+                        .sys_abi_features()
+                        .iter()
+                        .any(|candidate| candidate.as_str() == feature)
+                    {
                         ContainerOperator::In
                     } else {
                         ContainerOperator::NotIn
