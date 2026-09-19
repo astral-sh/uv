@@ -23,7 +23,7 @@ use uv_fs::{
 };
 use uv_install_wheel::Layout;
 use uv_pep440::Version;
-use uv_pep508::{MarkerEnvironment, StringVersion};
+use uv_pep508::{AbiFeature, MarkerEnvironment, StringVersion};
 use uv_platform::{Arch, Libc, Os};
 use uv_platform_tags::{Platform, Tags, TagsError, TagsOptions};
 use uv_pypi_types::{ResolverMarkerEnvironment, Scheme};
@@ -78,9 +78,24 @@ impl Interpreter {
             info.sys_executable.display()
         );
 
+        let mut abi_features = vec![match info.pointer_size {
+            PointerSize::_32 => AbiFeature::Bits32,
+            PointerSize::_64 => AbiFeature::Bits64,
+        }];
+        if info.markers.implementation_name() == "cpython" {
+            abi_features.push(if info.gil_disabled {
+                AbiFeature::FreeThreading
+            } else {
+                AbiFeature::GilEnabled
+            });
+            if info.debug_enabled {
+                abi_features.push(AbiFeature::Debug);
+            }
+        }
+
         Ok(Self {
             platform: info.platform,
-            markers: Box::new(info.markers),
+            markers: Box::new(info.markers.with_sys_abi_features(abi_features)),
             scheme: info.scheme,
             virtualenv: info.virtualenv,
             manylinux_compatible: info.manylinux_compatible,

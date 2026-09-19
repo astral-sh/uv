@@ -1225,7 +1225,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             // If the wheel does not cover a required environment, it is incompatible.
             if env.marker_environment().is_none() && !self.options.artifact_environments.is_empty()
             {
-                let wheel_marker = implied_markers(filename, self.options.minimum_libc_version);
+                let wheel_marker = implied_markers(
+                    filename,
+                    self.options.minimum_libc_version,
+                    uv_preview::is_enabled(uv_preview::PreviewFeature::SysAbiFeatures),
+                );
                 // If the caller marked an environment as requiring artifact coverage, ensure it
                 // has coverage.
                 for environment_marker in self.options.artifact_environments.iter().copied() {
