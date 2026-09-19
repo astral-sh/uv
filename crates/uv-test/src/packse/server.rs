@@ -7,10 +7,10 @@
 //! Cached build dependencies are exposed through the same `/simple/*` and
 //! `/files/*` routes as scenario packages.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::str::FromStr;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use serde_json::json;
 use wiremock::{
@@ -76,6 +76,32 @@ pub struct PackseServer {
     index: Arc<ServerIndex>,
 }
 
+struct FileRequestGate {
+    blocked: String,
+    wait_for: HashSet<String>,
+    retried: bool,
+}
+
+impl FileRequestGate {
+    fn permits(&mut self, request: &Request) -> bool {
+        if request.method.as_str() != "GET" {
+            return true;
+        }
+        let Some(filename) = request.url.path().strip_prefix("/files/") else {
+            return true;
+        };
+        if filename != self.blocked {
+            self.wait_for.remove(filename);
+            return true;
+        }
+        if !self.retried {
+            self.retried = true;
+            return false;
+        }
+        self.wait_for.is_empty()
+    }
+}
+
 impl PackseServer {
     /// Load a scenario from a TOML path (relative to the vendored scenarios directory)
     /// and start a mock server for it.
@@ -95,19 +121,46 @@ impl PackseServer {
 
     /// Start a mock server for the given scenario.
     pub fn from_scenario(scenario: &Scenario) -> Self {
-        Self::start(scenario, true)
+        Self::start(scenario, true, None)
     }
 
     /// Start a mock server that omits hashes from the Simple API, mimicking indexes that don't
     /// provide hashes, such as HTML-only indexes.
     pub fn from_scenario_without_hashes(scenario: &Scenario) -> Self {
-        Self::start(scenario, false)
+        Self::start(scenario, false, None)
     }
 
-    fn start(scenario: &Scenario, hashes: bool) -> Self {
+    /// Make the first request for a file retry, then serve it only after the other files have
+    /// received `GET` requests. This lets tests order concurrent metadata requests.
+    pub fn from_scenario_with_file_request_gate(
+        scenario: &Scenario,
+        blocked: &str,
+        wait_for: &[&str],
+    ) -> Self {
+        let gate = FileRequestGate {
+            blocked: blocked.to_string(),
+            wait_for: wait_for
+                .iter()
+                .map(|filename| (*filename).to_string())
+                .collect(),
+            retried: false,
+        };
+        Self::start(scenario, true, Some(gate))
+    }
+
+    fn start(scenario: &Scenario, hashes: bool, gate: Option<FileRequestGate>) -> Self {
         let index = Arc::new(build_server_index(scenario));
         let server_index = Arc::clone(&index);
+        let gate = gate.map(Mutex::new);
         let server = HttpServer::start(move |request, server_uri| {
+            if let Some(gate) = &gate
+                && !gate
+                    .lock()
+                    .expect("file request gate should not be poisoned")
+                    .permits(request)
+            {
+                return ResponseTemplate::new(503);
+            }
             handle_request(request, server_uri, &server_index, hashes)
         });
 

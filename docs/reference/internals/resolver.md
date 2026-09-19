@@ -334,3 +334,11 @@ manually backtrack to a state before deciding A, in the next iteration now decid
 See [#8157](https://github.com/astral-sh/uv/issues/8157) and
 [#9843](https://github.com/astral-sh/uv/pull/9843) for a more detailed description with real world
 examples.
+
+If a repeated conflict comes from a requirement that backtracking cannot change, uv also checks
+already-fetched metadata for upcoming releases. For example, if the project pins `A==1` and several
+releases of B each require `A>=2`, we can exclude those B releases without selecting each one. The
+same applies through a short dependency chain, but only if the known conflicts cover every version
+the intermediate dependency allows. We check each release's own metadata and return to normal
+selection when it is missing or does not prove the same conflict; adjacent releases may declare
+different dependencies.

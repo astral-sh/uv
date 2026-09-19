@@ -109,6 +109,13 @@ mod urls;
 /// The number of conflicts a package may accumulate before we re-prioritize and backtrack.
 const CONFLICT_THRESHOLD: usize = 5;
 
+/// The maximum number of cached candidate releases checked after a repeated conflict.
+const CONFLICT_LOOKAHEAD_RELEASES: usize = 20;
+/// The maximum number of dependency edges followed to prove a conflict cannot change.
+const CONFLICT_LOOKAHEAD_DEPTH: usize = 2;
+/// The maximum number of learned incompatibilities followed at each dependency step.
+const CONFLICT_LOOKAHEAD_INCOMPATIBILITIES: usize = 128;
+
 pub struct Resolver<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider> {
     state: ResolverState<InstalledPackages>,
     provider: Provider,
@@ -713,13 +720,28 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             })?;
 
                         // Add the dependencies to the state.
-                        state.add_package_version_dependencies(
+                        let repeated_conflict = state
+                            .conflict_tracker
+                            .affected
+                            .get(&next_id)
+                            .is_some_and(|count| *count >= CONFLICT_THRESHOLD);
+                        let conflict = state.add_package_version_dependencies(
                             next_id,
                             &version,
                             dependencies,
                             &self.index,
                             &self.installed_packages,
                         );
+                        if let Some(conflict) = conflict.filter(|_| repeated_conflict) {
+                            self.prune_cached_impossible_releases(
+                                &mut state,
+                                next_id,
+                                &version,
+                                conflict,
+                                &preferences,
+                                requests,
+                            );
+                        }
                     }
                     ForkedDependencies::Forked {
                         mut forks,
@@ -938,7 +960,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     })?;
 
                 // Add the dependencies to the state.
-                forked_state.add_package_version_dependencies(
+                let _ = forked_state.add_package_version_dependencies(
                     package,
                     version,
                     fork.dependencies,
@@ -1664,6 +1686,327 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             },
         ];
         Ok(Some(ResolverVersion::Forked(forks)))
+    }
+
+    /// Rule out additional cached registry releases when a fixed requirement contradicts them.
+    ///
+    /// Each release must declare the incompatible dependency itself. If the proof fails, or its
+    /// metadata is not already available, leave that release to the normal candidate selection.
+    fn prune_cached_impossible_releases<'index>(
+        &self,
+        state: &mut ForkState<'index>,
+        package_id: Id<PubGrubPackage>,
+        version: &Version,
+        conflict: IncompId<PubGrubPackage, Range<Version>, UnavailableReason>,
+        preferences: &Preferences,
+        requests: &'index MetadataRequests,
+    ) {
+        let package = state.pubgrub.package_store[package_id].clone();
+        let PubGrubPackageInner::Package {
+            name,
+            kind: PackageNodeKind::Base,
+            marker: MarkerTree::TRUE,
+        } = &*package
+        else {
+            return;
+        };
+        // A later dependency may reveal a different source whose releases have different metadata.
+        if self.urls.any_url(name) || self.indexes.contains_key(name) {
+            return;
+        }
+        let PackageSource::Registry(None) =
+            PackageSource::from_fork(&package, &state.fork_urls, &state.fork_indexes)
+        else {
+            return;
+        };
+
+        let incompatibility = &state.pubgrub.incompatibility_store[conflict];
+        let Kind::FromDependencyOf(parent, blocker) = incompatibility.kind else {
+            return;
+        };
+        if parent != package_id
+            || state
+                .conflict_tracker
+                .affected
+                .get(&parent)
+                .is_none_or(|count| *count <= CONFLICT_THRESHOLD)
+            || state
+                .conflict_tracker
+                .culprit
+                .get(&blocker)
+                .is_none_or(|count| *count <= CONFLICT_THRESHOLD)
+        {
+            return;
+        }
+        let Some((_, Some(required))) = incompatibility.dependency_version_sets() else {
+            return;
+        };
+        if !self.has_unchanging_conflict(state, blocker, required) {
+            return;
+        }
+        let required = required.clone();
+        let blocker_package = state.pubgrub.package_store[blocker].clone();
+        let Some(Term::Positive(range)) = state
+            .pubgrub
+            .partial_solution
+            .term_intersection_for_package(package_id)
+        else {
+            return;
+        };
+        let mut range = range.difference(&Range::singleton(version.clone()));
+        let Some(response) = self.index.implicit().get(name) else {
+            return;
+        };
+        let VersionsResponse::Found(version_maps) = &*response else {
+            return;
+        };
+
+        let mut rejected = Range::empty();
+        let mut speculative_pins = FilePins::default();
+        for _ in 0..CONFLICT_LOOKAHEAD_RELEASES {
+            let Some(candidate) = self.selector.select(
+                name,
+                &range,
+                version_maps,
+                preferences,
+                &self.installed_packages,
+                &self.exclusions,
+                None,
+                &state.env,
+                self.tags.as_ref(),
+            ) else {
+                break;
+            };
+            let CandidateDist::Compatible(dist @ CompatibleDist::CompatibleWheel { .. }) =
+                candidate.dist()
+            else {
+                break;
+            };
+            if Self::check_requires_python(dist, &state.python_requirement).is_some()
+                || (state.env.fork_markers().is_some() && !dist.implied_markers().is_true())
+            {
+                break;
+            }
+            let distribution_id = dist.for_resolution().distribution_id();
+            let Some(metadata) = self.index.distributions().get(&distribution_id) else {
+                break;
+            };
+            let MetadataResponse::Found(_) = &*metadata else {
+                break;
+            };
+            if self
+                .visit_candidate(
+                    &candidate,
+                    dist,
+                    &package,
+                    name,
+                    &mut speculative_pins,
+                    requests,
+                )
+                .is_err()
+            {
+                break;
+            }
+            let candidate_version = candidate.version();
+            let Ok(ForkedDependencies::Unforked(candidate_dependencies)) = self
+                .get_dependencies_forking(
+                    package_id,
+                    &package,
+                    candidate_version,
+                    &speculative_pins,
+                    &state.env,
+                    &state.python_requirement,
+                    &state.pubgrub,
+                )
+            else {
+                break;
+            };
+            if !candidate_dependencies.iter().any(|dependency| {
+                dependency.package == blocker_package
+                    && dependency.version.difference(&required).is_empty()
+            }) || candidate_dependencies.iter().any(|dependency| {
+                dependency.source != DependencySource::Unspecified
+                    || dependency.package.name().is_some_and(|name| {
+                        self.urls.any_url(name) || self.indexes.contains_key(name)
+                    })
+            }) {
+                break;
+            }
+            // These packages would be discovered before their parent is rejected. Reserve their
+            // normal order, but do not request package metadata or add their irrelevant edges.
+            for dependency in &candidate_dependencies {
+                state
+                    .priorities
+                    .insert(&dependency.package, &dependency.version, &state.fork_urls);
+                if let Some(base_package) = dependency.package.base_package() {
+                    state
+                        .priorities
+                        .insert(&base_package, &dependency.version, &state.fork_urls);
+                }
+            }
+            let singleton = Range::singleton(candidate_version.clone());
+            rejected = rejected.union(&singleton);
+            range = range.difference(&singleton);
+            debug!("Pruned immutable conflict edge for cached {name}=={candidate_version}");
+        }
+
+        if !rejected.is_empty() {
+            state
+                .pubgrub
+                .add_incompatibility(Incompatibility::from_dependency(
+                    package_id,
+                    rejected,
+                    (blocker, required),
+                ));
+        }
+    }
+
+    /// Return whether the entire dependency range is ruled out by requirements that cannot change.
+    fn has_unchanging_conflict(
+        &self,
+        state: &ForkState<'_>,
+        blocker: Id<PubGrubPackage>,
+        required: &Range<Version>,
+    ) -> bool {
+        self.has_unchanging_conflict_at_depth(state, blocker, required, CONFLICT_LOOKAHEAD_DEPTH)
+    }
+
+    /// Follow learned dependency ranges only when they cover every blocker version required.
+    fn has_unchanging_conflict_at_depth(
+        &self,
+        state: &ForkState<'_>,
+        blocker: Id<PubGrubPackage>,
+        required: &Range<Version>,
+        remaining_depth: usize,
+    ) -> bool {
+        if required.is_empty() || self.has_direct_unchanging_conflict(state, blocker, required) {
+            return true;
+        }
+        if remaining_depth == 0 {
+            return false;
+        }
+        let Some(incompatibilities) = state.pubgrub.incompatibilities.get(&blocker) else {
+            return false;
+        };
+        let mut known_impossible = Range::empty();
+        for id in incompatibilities
+            .iter()
+            .rev()
+            .take(CONFLICT_LOOKAHEAD_INCOMPATIBILITIES)
+        {
+            let incompatibility = &state.pubgrub.incompatibility_store[*id];
+            let Kind::FromDependencyOf(parent, child) = incompatibility.kind else {
+                continue;
+            };
+            if parent != blocker || child == blocker {
+                continue;
+            }
+            let Some((parent_versions, Some(child_versions))) =
+                incompatibility.dependency_version_sets()
+            else {
+                continue;
+            };
+            if parent_versions.intersection(required).is_empty()
+                || !self.has_unchanging_conflict_at_depth(
+                    state,
+                    child,
+                    child_versions,
+                    remaining_depth - 1,
+                )
+            {
+                continue;
+            }
+            known_impossible = known_impossible.union(parent_versions);
+            if required.difference(&known_impossible).is_empty() {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Check decision-level-one requirements and requirements from directly rooted workspace URLs.
+    fn has_direct_unchanging_conflict(
+        &self,
+        state: &ForkState<'_>,
+        blocker: Id<PubGrubPackage>,
+        required: &Range<Version>,
+    ) -> bool {
+        if let Some(Term::Positive(unchanging)) = state
+            .pubgrub
+            .partial_solution
+            .unchanging_term_for_package(blocker)
+            && unchanging.intersection(required).is_empty()
+        {
+            return true;
+        }
+        let Some(incompatibilities) = state.pubgrub.incompatibilities.get(&blocker) else {
+            return false;
+        };
+        for id in incompatibilities {
+            let incompatibility = &state.pubgrub.incompatibility_store[*id];
+            let Kind::FromDependencyOf(parent, child) = incompatibility.kind else {
+                continue;
+            };
+            if child != blocker {
+                continue;
+            }
+            let package = &state.pubgrub.package_store[parent];
+            let PubGrubPackageInner::Package {
+                name,
+                kind: PackageNodeKind::Base,
+                marker: MarkerTree::TRUE,
+            } = &**package
+            else {
+                continue;
+            };
+            if self.project.as_ref() != Some(name) && !self.workspace_members.contains(name) {
+                continue;
+            }
+            let PackageSource::Url(_) =
+                PackageSource::from_fork(package, &state.fork_urls, &state.fork_indexes)
+            else {
+                continue;
+            };
+            let Some((_, parent_version)) = state
+                .pubgrub
+                .partial_solution
+                .extract_solution()
+                .find(|(package, _)| *package == parent)
+            else {
+                continue;
+            };
+            let Some((parent_versions, Some(child_versions))) =
+                incompatibility.dependency_version_sets()
+            else {
+                continue;
+            };
+            if !parent_versions.contains(&parent_version)
+                || !child_versions.intersection(required).is_empty()
+            {
+                continue;
+            }
+            let Some(incompatibilities) = state.pubgrub.incompatibilities.get(&parent) else {
+                continue;
+            };
+            if incompatibilities.iter().any(|id| {
+                let incompatibility = &state.pubgrub.incompatibility_store[*id];
+                let Kind::FromDependencyOf(root, project) = incompatibility.kind else {
+                    return false;
+                };
+                if root != state.pubgrub.root_package || project != parent {
+                    return false;
+                }
+                let Some((root_versions, Some(project_versions))) =
+                    incompatibility.dependency_version_sets()
+                else {
+                    return false;
+                };
+                root_versions.contains(&MIN_VERSION) && project_versions.contains(&parent_version)
+            }) {
+                return true;
+            }
+        }
+        false
     }
 
     /// Visit a selected candidate.
@@ -2820,7 +3163,7 @@ impl<'index> ForkState<'index> {
         dependencies: Vec<PubGrubDependency>,
         index: &InMemoryIndex,
         installed_packages: &InstalledPackages,
-    ) {
+    ) -> Option<IncompId<PubGrubPackage, Range<Version>, UnavailableReason>> {
         for dependency in &dependencies {
             let PubGrubDependency {
                 package,
@@ -2865,6 +3208,7 @@ impl<'index> ForkState<'index> {
         if let Some(incompatibility) = conflict {
             self.record_conflict(for_package, Some(for_version), incompatibility);
         }
+        conflict
     }
 
     /// Widens a version of the current package to the gap around it in the known versions.

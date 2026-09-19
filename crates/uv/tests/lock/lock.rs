@@ -37,6 +37,218 @@ use uv_test::{diff_snapshot, uv_snapshot};
 #[cfg(feature = "test-universal")]
 use uv_test::{download_to_disk, venv_bin_path};
 
+/// Cached releases can be rejected through a fixed transitive conflict, but not when their
+/// dependency range includes an alternative or the conflict can change during backtracking.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_prunes_cached_releases_with_fixed_transitive_conflicts() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "fixed-transitive-conflicts"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.blocker.versions]
+        "1.0.0" = {}
+        "2.0.0" = {}
+
+        [packages.boundary.versions]
+        "1.0.0" = {}
+
+        [packages.driver.versions]
+        "1.0.0" = { requires = ["series", "late"] }
+
+        [packages.forker.versions]
+        "1.0.0" = {}
+        "2.0.0" = {}
+
+        [packages.late.versions]
+        "1.0.0" = { requires = ["series>=2.0.7"] }
+
+        [packages.middle.versions]
+        "1.0.0" = { requires = ["blocker==1.0.0"] }
+        "2.0.0" = { requires = ["blocker==2.0.0"] }
+
+        [packages.series.versions]
+        "1.0.0" = { requires = ["middle==1.0.0"] }
+        "2.0.6" = { requires = ["middle>=1.0.0", "boundary"] }
+        "2.0.7" = { requires = ["middle==2.0.0", "unused==1.0.0"] }
+        "2.0.8" = { requires = ["middle==2.0.0", "unused==2.0.0"] }
+        "2.0.9" = { requires = ["middle==2.0.0", "unused==1.0.0"] }
+        "2.0.10" = { requires = ["middle==2.0.0", "unused==2.0.0"] }
+        "2.0.11" = { requires = ["middle==2.0.0", "unused==1.0.0"] }
+        "2.0.12" = { requires = ["middle==2.0.0", "unused==2.0.0"] }
+        "2.0.13" = { requires = ["middle==2.0.0", "unused==1.0.0"] }
+        "2.0.14" = { requires = ["middle==2.0.0", "unused==2.0.0"] }
+        "2.0.15" = { requires = ["middle==2.0.0", "unused==1.0.0"] }
+        "2.0.16" = { requires = ["middle==2.0.0", "unused==2.0.0"] }
+        "2.0.17" = { requires = ["middle==2.0.0", "unused==1.0.0"] }
+        "2.0.18" = { requires = ["middle==2.0.0", "unused==2.0.0"] }
+        "2.0.19" = { requires = ["middle==2.0.0", "unused==1.0.0"] }
+        "2.0.20" = { requires = ["middle==2.0.0", "unused==2.0.0"] }
+
+        [packages.unused.versions]
+        "1.0.0" = {}
+        "2.0.0" = {}
+    "#})?;
+    // Hold up the selected release until the prefetch for adjacent releases has completed.
+    let server = PackseServer::from_scenario_with_file_request_gate(
+        &scenario,
+        "series-2.0.15-py3-none-any.whl",
+        &[
+            "series-2.0.13-py3-none-any.whl",
+            "series-2.0.12-py3-none-any.whl",
+            "series-2.0.11-py3-none-any.whl",
+        ],
+    );
+
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = [
+                "blocker==1.0.0",
+                "series",
+                "forker==1.0.0; python_version < '3.13'",
+                "forker==2.0.0; python_version >= '3.13'",
+            ]
+        "#})?;
+    let output = context
+        .lock()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .env(EnvVars::RUST_LOG, "uv_resolver::resolver=debug")
+        .env(EnvVars::UV_HTTP_RETRIES, "5")
+        .env_remove(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY)
+        .assert()
+        .success();
+    let stderr = String::from_utf8_lossy(&output.get_output().stderr);
+    let pruned = stderr
+        .lines()
+        .filter_map(|line| line.split_once("Pruned immutable conflict edge for cached series=="))
+        .map(|(_, version)| version)
+        .collect::<Vec<_>>();
+    assert_snapshot!(
+        format!(
+            "Pruned an incompatible release: {}\nPruned the compatible release: {}",
+            !pruned.is_empty(),
+            pruned.contains(&"2.0.6"),
+        ),
+        @"
+    Pruned an incompatible release: true
+    Pruned the compatible release: false
+    "
+    );
+
+    let lock = context.read("uv.lock");
+    let packages = lock
+        .lines()
+        .filter(|line| line.starts_with("name = ") || line.starts_with("version = \""))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert_snapshot!(packages, @r#"
+    name = "blocker"
+    version = "1.0.0"
+    name = "boundary"
+    version = "1.0.0"
+    name = "forker"
+    version = "1.0.0"
+    name = "forker"
+    version = "2.0.0"
+    name = "middle"
+    version = "1.0.0"
+    name = "project"
+    version = "0.1.0"
+    name = "series"
+    version = "2.0.6"
+    "#);
+
+    // Prefer blocker 1.0.0 initially, but allow the resolver to select 2.0.0 after the conflict.
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = [
+                "blocker",
+                "driver",
+                "forker==1.0.0; python_version < '3.13'",
+                "forker==2.0.0; python_version >= '3.13'",
+            ]
+        "#})?;
+    let output = context
+        .lock()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--resolution")
+        .arg("lowest-direct")
+        .env(EnvVars::RUST_LOG, "uv_resolver::resolver=debug")
+        .env(EnvVars::UV_HTTP_RETRIES, "5")
+        .assert()
+        .success();
+    let stderr = String::from_utf8_lossy(&output.get_output().stderr);
+    let blocker_versions = stderr
+        .lines()
+        .filter_map(|line| line.split_once("Selecting: blocker=="))
+        .filter_map(|(_, message)| message.split_once(' '))
+        .map(|(version, _)| version)
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert_snapshot!(blocker_versions, @"
+    1.0.0
+    2.0.0
+    1.0.0
+    2.0.0
+    ");
+    let pruned = stderr
+        .lines()
+        .filter_map(|line| line.split_once("Pruned immutable conflict edge for cached series=="))
+        .map(|(_, version)| version)
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert_snapshot!(pruned, @"");
+
+    let lock = context.read("uv.lock");
+    let packages = lock
+        .lines()
+        .filter(|line| line.starts_with("name = ") || line.starts_with("version = \""))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert_snapshot!(packages, @r#"
+    name = "blocker"
+    version = "2.0.0"
+    name = "driver"
+    version = "1.0.0"
+    name = "forker"
+    version = "1.0.0"
+    name = "forker"
+    version = "2.0.0"
+    name = "late"
+    version = "1.0.0"
+    name = "middle"
+    version = "2.0.0"
+    name = "project"
+    version = "0.1.0"
+    name = "series"
+    version = "2.0.20"
+    name = "unused"
+    version = "2.0.0"
+    "#);
+
+    Ok(())
+}
+
 /// Lock validation warnings should explain why a local dependency's metadata could not be read.
 #[cfg(feature = "test-universal")]
 #[test]
