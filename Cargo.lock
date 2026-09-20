@@ -5886,6 +5886,7 @@ dependencies = [
  "uv-trampoline-builder",
  "uv-types",
  "uv-unix",
+ "uv-variants",
  "uv-version",
  "uv-virtualenv",
  "uv-warnings",

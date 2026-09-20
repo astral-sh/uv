@@ -1,7 +1,6 @@
 use std::fmt;
 use std::path::PathBuf;
 use std::sync::Arc;
-use uv_preview::PreviewFeature;
 
 use anyhow::{Result, bail};
 use owo_colors::OwoColorize;
@@ -16,16 +15,19 @@ use uv_distribution::{
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     BuiltDist, CachedDirectUrlDist, CachedDist, ConfigSettings, Dist, Error, ExtraBuildRequires,
-    ExtraBuildVariables, Hashed, IndexLocations, InstalledDist, Name, PackageConfigSettings,
-    RequirementSource, Resolution, ResolvedDist, SourceDist,
+    ExtraBuildVariables, Hashed, IndexLocations, InstalledDist, InstalledDistError, Name,
+    PackageConfigSettings, RemoteSource, RequirementSource, Resolution, ResolvedDist, SourceDist,
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
+use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, Tags};
+use uv_preview::PreviewFeature;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::PythonEnvironment;
 use uv_redacted::DisplaySafeUrl;
 use uv_types::HashStrategy;
+use uv_variants::variant_with_label::VariantWithLabel;
 
 use crate::satisfies::RequirementSatisfaction;
 use crate::{InstallationStrategy, SitePackages};
@@ -353,8 +355,18 @@ impl<'a> Planner<'a> {
                                 );
                             }
                             RequirementSatisfaction::Satisfied => {
-                                debug!("Requirement already installed: {installed}");
-                                continue;
+                                if installed_variant_matches(
+                                    self.resolution,
+                                    dist,
+                                    installed,
+                                    venv.interpreter().markers(),
+                                )? {
+                                    debug!("Requirement already installed: {installed}");
+                                    continue;
+                                }
+                                debug!(
+                                    "Installed variant or supported properties changed: {installed}"
+                                );
                             }
                             RequirementSatisfaction::OutOfDate => {
                                 debug!("Requirement installed, but not fresh: {installed}");
@@ -754,7 +766,11 @@ impl<'a> Planner<'a> {
                 }
             }
 
-            debug!("Identified uncached distribution: {dist}");
+            if let Ok(filename) = dist.filename() {
+                debug!("Identified uncached distribution: {dist} ({filename})");
+            } else {
+                debug!("Identified uncached distribution: {dist}");
+            }
             remote.push(dist.clone());
         }
 
@@ -781,6 +797,38 @@ impl<'a> Planner<'a> {
             extraneous,
         })
     }
+}
+
+/// Registry version equality does not imply that the selected variant is already installed.
+fn installed_variant_matches(
+    resolution: &Resolution,
+    dist: &ResolvedDist,
+    installed: &InstalledDist,
+    markers: &MarkerEnvironment,
+) -> Result<bool> {
+    let ResolvedDist::Installable { .. } = dist else {
+        return Ok(true);
+    };
+    let Some(filename) = dist
+        .wheel_filename()
+        .filter(|filename| filename.variant().is_some())
+    else {
+        return Ok(
+            installed.recorded_variant_context_matches(&VariantWithLabel::default(), markers)?
+        );
+    };
+    if let Some(selected) = resolution.variant_context(filename) {
+        return Ok(installed.recorded_variant_context_matches(selected, markers)?);
+    }
+    let selected = match installed.read_variant_context(markers) {
+        Ok(selected) => selected,
+        Err(InstalledDistError::VariantIncompatible(_)) => return Ok(false),
+        Err(err) => return Err(err.into()),
+    };
+    if selected.label.as_ref() != filename.variant() {
+        return Ok(false);
+    }
+    Ok(installed.recorded_variant_context_matches(&selected, markers)?)
 }
 
 /// Returns `true` if the given distribution is a seed package.

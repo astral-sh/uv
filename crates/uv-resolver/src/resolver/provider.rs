@@ -1,5 +1,6 @@
 use std::future::Future;
 use std::sync::Arc;
+use uv_pep508::MarkerEnvironment;
 pub use uv_resolver_types::MetadataResponse;
 pub(crate) use uv_resolver_types::MetadataUnavailable;
 
@@ -58,6 +59,7 @@ pub trait ResolverProvider {
     fn get_installed_metadata<'io>(
         &'io self,
         dist: &'io InstalledDist,
+        marker_env: Option<&'io MarkerEnvironment>,
     ) -> impl Future<Output = WheelMetadataResult> + 'io;
 
     /// Set the [`Reporter`] to use for this installer.
@@ -303,8 +305,19 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
     async fn get_installed_metadata<'io>(
         &'io self,
         dist: &'io InstalledDist,
+        marker_env: Option<&'io MarkerEnvironment>,
     ) -> WheelMetadataResult {
-        match self.fetcher.get_installed_metadata(dist).await {
+        let result = async {
+            let mut metadata = self.fetcher.get_installed_metadata(dist).await?;
+            if let Some(marker_env) = marker_env {
+                metadata.variant = Some(dist.read_variant_context(marker_env).map_err(|err| {
+                    uv_distribution::Error::ReadInstalled(Box::new(dist.clone()), err)
+                })?);
+            }
+            Ok::<_, uv_distribution::Error>(metadata)
+        }
+        .await;
+        match result {
             Ok(metadata) => Ok(MetadataResponse::Found(metadata)),
             Err(err) => Ok(MetadataResponse::Error(
                 Box::new(RequestedDist::Installed(dist.clone())),
