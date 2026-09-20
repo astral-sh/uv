@@ -40,6 +40,7 @@ pub use crate::marker::{
     MarkerTreeKind, MarkerValueExtra, MarkerValueList, MarkerValueString, MarkerValueVersion,
     MarkerWarningKind, StringMarkerTree, StringVersion, VersionMarkerTree,
 };
+pub use crate::marker::{VariantFeature, VariantNamespace, VariantValue};
 pub use crate::origin::RequirementOrigin;
 #[cfg(feature = "non-pep508-extensions")]
 pub use crate::unnamed::{UnnamedRequirement, UnnamedRequirementUrl};

@@ -15,6 +15,9 @@ mod lowering;
 pub(crate) mod parse;
 mod simplify;
 mod tree;
+mod variants;
+
+pub use variants::{VariantFeature, VariantNamespace, VariantParseError, VariantValue};
 
 pub use environment::{MarkerEnvironment, MarkerEnvironmentBuilder};
 pub use lowering::{
