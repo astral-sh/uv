@@ -6919,6 +6919,7 @@ dependencies = [
 name = "uv-lock"
 version = "0.0.97"
 dependencies = [
+ "bitflags 2.13.1",
  "either",
  "fs-err",
  "futures",

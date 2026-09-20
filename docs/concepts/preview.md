@@ -70,19 +70,6 @@ The following preview features are available:
 
 --8<-- "docs/reference/.preview-features.md"
 
-### Lockfile dependency shorthand
-
-The `lock-dependency-shorthand` feature writes dependencies as strings when the package name
-uniquely identifies the dependency and no extras or markers are needed. For example,
-`{ name = "requests" }` becomes `"requests"`. Dependencies that need additional fields retain the
-table form.
-
-Use `uv lock --refresh --preview-features lock-dependency-shorthand` to rewrite an existing lock.
-This feature does not change the lockfile's `version` or `revision`. Older uv versions cannot parse
-the shorthand, so all consumers of an opted-in lockfile must support it. Readers that support the
-shorthand can use it without enabling the preview feature. To restore the table form, disable this
-feature and run `uv lock --refresh --preview-features lockfile-format-check`.
-
 ## Disabling preview features
 
 The `--no-preview` option can be used to disable preview features.

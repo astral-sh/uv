@@ -1050,6 +1050,8 @@ mod tests {
     use uv_platform_tags::{Arch, Os, Platform, TagsOptions};
     use uv_warnings::anstream;
 
+    use crate::LockFeatures;
+
     use super::*;
 
     static TAGS: LazyLock<Tags> = LazyLock::new(|| {
@@ -1403,7 +1405,9 @@ provides-extras = ["cli"]
     #[test]
     fn unrelated_packages_do_not_change_dependency_identity() {
         let original = lock();
-        let original_toml = original.to_toml(false).expect("valid lock TOML");
+        let original_toml = original
+                .to_toml(LockFeatures::empty())
+                .expect("valid lock TOML");
         let input = formatdoc! {r#"
             {original_toml}
 
