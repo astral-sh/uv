@@ -723,7 +723,7 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
             }]
         }
         (Os::NetBsd { release }, arch) => {
-            let release_tag = release.replace(['.', '-'], "_");
+            let release_tag = release.replace(['.', '-'], "_").to_lowercase();
             let arch_tag = arch.machine();
             let release_arch = format!("{release_tag}_{arch_tag}");
             vec![PlatformTag::NetBsd {
@@ -1557,6 +1557,29 @@ mod tests {
             "macosx_10_4_fat32",
             "macosx_10_4_universal2",
             "macosx_10_4_universal",
+        ]
+        "#
+        );
+    }
+
+    /// NetBSD releases are normalized to lowercase tags, matching the FreeBSD
+    /// behavior. `uname -r` reports e.g. `11.0_STABLE` on NetBSD, while wheels
+    /// are tagged with lowercase platform tags like `netbsd_11_0_stable_amd64`.
+    #[test]
+    fn test_platform_tags_netbsd() {
+        let tags = compatible_tags(&Platform::new(
+            Os::NetBsd {
+                release: "11.0_STABLE".to_string(),
+            },
+            Arch::X86_64,
+        ))
+        .unwrap();
+        let tags = tags.iter().map(ToString::to_string).collect::<Vec<_>>();
+        assert_debug_snapshot!(
+            tags,
+            @r#"
+        [
+            "netbsd_11_0_stable_amd64",
         ]
         "#
         );
