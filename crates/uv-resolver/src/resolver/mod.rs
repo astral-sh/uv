@@ -22,15 +22,17 @@ use tracing::{Level, debug, info, instrument, trace, warn};
 use uv_configuration::{Constraints, DependencyModifiers};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
-    BuiltDist, DerivationChain, Dist, DistErrorKind, Identifier, IndexCapabilities, IndexLocations,
-    IndexMetadata, IndexUrl, InstalledDist, Name, RemoteSource, Requirement, RequiresPython,
-    ResolutionRecorder, ResolvedDist, SourceDist, VersionOrUrlRef,
+    BuiltDist, DerivationChain, Dist, DistErrorKind, GlobalVersionId, Identifier,
+    IndexCapabilities, IndexLocations, IndexMetadata, IndexUrl, InstalledDist, Name,
+    RegistryVariantsJson, RemoteSource, Requirement, RequiresPython, ResolutionRecorder,
+    ResolvedDist, SourceDist, VersionId, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
 use uv_pep440::{MIN_VERSION, Version, VersionSpecifiers, release_specifiers_to_ranges};
 use uv_pep508::{
     MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
+    MarkerVariantsUniversal,
 };
 use uv_platform_tags::{IncompatibleTag, Tags};
 use uv_pypi_types::{ConflictItem, ConflictItemRef, ConflictKindRef, Conflicts, VerbatimParsedUrl};
@@ -49,8 +51,8 @@ use crate::manifest::Manifest;
 use crate::pins::FilePins;
 use crate::preferences::{PreferenceSource, Preferences};
 use crate::prioritized_distribution::{
-    CompatibleDist, IncompatibleDist, IncompatibleSource, IncompatibleWheel, PythonRequirementKind,
-    implied_markers,
+    CompatibleDist, IncompatibleDist, IncompatibleSource, IncompatibleWheel, PrioritizedDist,
+    PythonRequirementKind, implied_markers,
 };
 use crate::pubgrub::{
     DependencySource, PubGrubDependency, PubGrubPackage, PubGrubPackageInner, PubGrubPriorities,
@@ -76,7 +78,7 @@ use crate::resolver::indexes::Indexes;
 use crate::resolver::package_source::PackageSource;
 pub use crate::resolver::provider::{
     DefaultResolverProvider, MetadataResponse, PackageVersionsResult, ResolverProvider,
-    VersionsResponse, WheelMetadataResult,
+    VariantProviderResult, VersionsResponse, WheelMetadataResult,
 };
 pub use crate::resolver::reporter::Reporter;
 pub(crate) use crate::resolver::requests::RegisteredMetadata;
@@ -93,6 +95,8 @@ pub(crate) use resolution::{
     SelectedDistribution,
 };
 use uv_configuration::ForkStrategy;
+use uv_variants::resolved_variants::ResolvedVariants;
+use uv_variants::variant_with_label::VariantWithLabel;
 
 mod availability;
 mod batch_prefetch;
@@ -669,6 +673,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &version,
                     &state.pins,
                     &state.env,
+                    &self.index,
                     &state.python_requirement,
                     &state.pubgrub,
                 )?;
@@ -1349,6 +1354,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             return Ok(None);
         };
 
+        // TODO(konsti): Can we make this an option so we don't pay any allocations?
+        let mut variant_prioritized_dist_binding = PrioritizedDist::default();
+        let candidate = Self::variant_candidate(
+            candidate,
+            env,
+            requests,
+            &mut variant_prioritized_dist_binding,
+        )?;
+
         let dist = match candidate.dist() {
             CandidateDist::Compatible(dist) => dist,
             CandidateDist::Incompatible {
@@ -1464,6 +1478,55 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         let version = candidate.version().clone();
         Ok(Some(ResolverVersion::Unforked(version)))
+    }
+
+    fn variant_candidate<'prioritized>(
+        candidate: Candidate<'prioritized>,
+        env: &ResolverEnvironment,
+        requests: &MetadataRequests,
+        variant_prioritized_dist_binding: &'prioritized mut PrioritizedDist,
+    ) -> Result<Candidate<'prioritized>, ResolveError> {
+        let candidate = if env.marker_environment().is_some() {
+            // When solving for a specific environment, check if there is a matching variant wheel
+            // for the current environment.
+            // TODO(konsti): When solving for an environment that is not the current host, don't
+            // consider variants unless a static variant is given.
+            let Some(prioritized_dist) = candidate.prioritized() else {
+                return Ok(candidate);
+            };
+
+            // No `variants.json`, no variants.
+            // TODO(konsti): Be more lenient, e.g. parse the wheel itself?
+            let Some(variants_json) = prioritized_dist.variants_json() else {
+                return Ok(candidate);
+            };
+
+            // If the distribution is not indexed, we can't resolve variants.
+            let Some(index) = prioritized_dist.index() else {
+                return Ok(candidate);
+            };
+
+            // Query the host for the applicable features and properties.
+            let version_id = GlobalVersionId::new(
+                VersionId::NameVersion(candidate.name().clone(), candidate.version().clone()),
+                index.clone(),
+            );
+            let resolved_variants = requests
+                .request_variants(&version_id, variants_json)?
+                .wait_blocking();
+
+            let Some(variant_prioritized_dist) =
+                prioritized_dist.prioritize_best_variant_wheel(&resolved_variants)
+            else {
+                return Ok(candidate);
+            };
+
+            *variant_prioritized_dist_binding = variant_prioritized_dist;
+            candidate.prioritize_best_variant_wheel(variant_prioritized_dist_binding)
+        } else {
+            candidate
+        };
+        Ok(candidate)
     }
 
     /// Determine whether a candidate covers all supported platforms; and, if not, generate a fork.
@@ -1585,6 +1648,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         ) else {
             return Ok(None);
         };
+
         let CandidateDist::Compatible(base_dist) = base_candidate.dist() else {
             return Ok(None);
         };
@@ -1771,21 +1835,32 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         version: &Version,
         pins: &FilePins,
         env: &ResolverEnvironment,
+        in_memory_index: &InMemoryIndex,
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
     ) -> Result<ForkedDependencies, ResolveError> {
-        let dependencies =
-            self.get_dependencies(id, package, version, pins, env, python_requirement, pubgrub)?;
+        let dependencies = self.get_dependencies(
+            id,
+            package,
+            version,
+            pins,
+            env,
+            in_memory_index,
+            python_requirement,
+            pubgrub,
+        )?;
         if env.marker_environment().is_some() {
             Ok(ForkedDependencies::from_dependencies_platform_specific(
                 dependencies,
             ))
         } else {
+            let variant_base = package.name().map(|name| format!("{name}=={version}"));
             Ok(ForkedDependencies::from_dependencies_universal(
                 dependencies,
                 env,
                 python_requirement,
                 &self.conflicts,
+                variant_base.as_deref(),
             ))
         }
     }
@@ -1799,6 +1874,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         version: &Version,
         pins: &FilePins,
         env: &ResolverEnvironment,
+        in_memory_index: &InMemoryIndex,
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
     ) -> Result<Dependencies, ResolveError> {
@@ -1806,7 +1882,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             RequirementExpander::new(&self.constraints, &self.modifiers, env, python_requirement);
         let dependencies = match &**package {
             PubGrubPackageInner::Root(_) => {
-                let requirements = expander.expand(&self.requirements, RequirementContext::Root);
+                let requirements = expander.expand(
+                    &self.requirements,
+                    RequirementContext::Root,
+                    &MarkerVariantsUniversal,
+                    None,
+                );
 
                 PubGrubDependency::from_requirements(
                     &self.conflicts,
@@ -1876,6 +1957,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     }
                 };
 
+                // Installed distributions and direct wheels provide their variant context in
+                // their metadata. Registry wheels use the properties selected for their version.
+                let variant = if env.marker_environment().is_some()
+                    && let MetadataResponse::Found(archive) = &*response
+                    && let Some(variant) = &archive.variant
+                {
+                    variant.clone()
+                } else {
+                    Self::variant_properties(name, version, pins, env, in_memory_index)
+                };
+
                 // If there was no requires-python on the index page, we may have an incompatible
                 // distribution or need to fork.
                 if let Some(requires_python) = &metadata.requires_python {
@@ -1924,7 +2016,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         RequirementContext::Package { name, version },
                     ),
                 };
-                let requirements = expander.expand(requirements, context);
+                let requirements = expander.expand(requirements, context, &variant, None);
 
                 PubGrubDependency::from_requirements(
                     &self.conflicts,
@@ -2023,6 +2115,51 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         })
     }
 
+    fn variant_properties(
+        name: &PackageName,
+        version: &Version,
+        pins: &FilePins,
+        env: &ResolverEnvironment,
+        in_memory_index: &InMemoryIndex,
+    ) -> VariantWithLabel {
+        // TODO(konsti): Perf/Caching with version selection: This is in the hot path!
+
+        if env.marker_environment().is_none() {
+            return VariantWithLabel::default();
+        }
+
+        // Grab the pinned distribution for the given name and version.
+        let Some(dist) = pins.get(name, version) else {
+            return VariantWithLabel::default();
+        };
+
+        let Some(filename) = dist.wheel_filename() else {
+            return VariantWithLabel::default();
+        };
+
+        let Some(variant_label) = filename.variant() else {
+            return VariantWithLabel::default();
+        };
+
+        let Some(index) = dist.index() else {
+            warn!("Wheel variant has no index: {filename}");
+            return VariantWithLabel::default();
+        };
+
+        let version_id = GlobalVersionId::new(
+            VersionId::NameVersion(name.clone(), version.clone()),
+            index.clone(),
+        );
+
+        let Some(resolved_variants) = in_memory_index.variant_priorities().get(&version_id) else {
+            return VariantWithLabel::default();
+        };
+
+        resolved_variants
+            .compatible_variant(variant_label)
+            .unwrap_or_default()
+    }
+
     /// Fetch the metadata for a stream of packages and versions.
     async fn fetch<Provider: ResolverProvider>(
         self: Arc<Self>,
@@ -2072,6 +2209,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     self.index
                         .distributions()
                         .done(dist.distribution_id(), Arc::new(metadata));
+                }
+                Some(Response::Variants {
+                    version_id,
+                    resolved_variants,
+                }) => {
+                    trace!("Received variant metadata for: {version_id}");
+                    self.index
+                        .variant_priorities()
+                        .done(version_id, Arc::new(resolved_variants));
                 }
                 None => {}
             }
@@ -2152,7 +2298,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
 
                 let metadata = provider
-                    .get_or_build_wheel_metadata(&dist)
+                    .get_or_build_wheel_metadata(&dist, self.env.marker_environment())
                     .boxed_local()
                     .await?;
 
@@ -2245,6 +2391,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 };
 
                 // If there is not a compatible distribution, short-circuit.
+                // TODO(konsti): Consider prefetching variants instead.
                 let Some(dist) = candidate.compatible() else {
                     return Ok(None);
                 };
@@ -2330,7 +2477,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     let response = match dist {
                         ResolvedDist::Installable { dist, .. } => {
                             let metadata = provider
-                                .get_or_build_wheel_metadata(&dist)
+                                .get_or_build_wheel_metadata(&dist, self.env.marker_environment())
                                 .boxed_local()
                                 .await?;
 
@@ -2357,7 +2504,30 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     Ok(None)
                 }
             }
+            Request::Variants(version_id, variants_json) => self
+                .fetch_and_query_variants(variants_json, provider)
+                .await
+                .map(|resolved_variants| {
+                    Some(Response::Variants {
+                        version_id,
+                        resolved_variants,
+                    })
+                }),
         }
+    }
+
+    async fn fetch_and_query_variants<Provider: ResolverProvider>(
+        &self,
+        variants_json: RegistryVariantsJson,
+        provider: &Provider,
+    ) -> Result<ResolvedVariants, ResolveError> {
+        let Some(marker_env) = self.env.marker_environment() else {
+            unreachable!("Variants should only be queried in non-universal resolution")
+        };
+        provider
+            .fetch_and_query_variants(&variants_json, marker_env)
+            .await
+            .map_err(|err| ResolveError::VariantFrontend(Box::new(err)))
     }
 
     fn convert_no_solution_err(
@@ -3293,7 +3463,6 @@ fn widen_to_gap(version: &Version, known_versions: Option<&[Version]>) -> Range<
 
 /// Fetch the metadata for an item
 #[derive(Debug)]
-#[expect(clippy::large_enum_variant)]
 pub(crate) enum Request {
     /// A request to fetch the metadata for a package.
     Package(PackageName, Option<IndexMetadata>),
@@ -3303,6 +3472,8 @@ pub(crate) enum Request {
     Installed(InstalledDist),
     /// A request to pre-fetch the metadata for a package and the best-guess distribution.
     Prefetch(PackageName, Range<Version>, PythonRequirement),
+    /// Resolve the variants for a package
+    Variants(GlobalVersionId, RegistryVariantsJson),
 }
 
 impl<'a> From<ResolvedDistRef<'a>> for Request {
@@ -3357,12 +3528,14 @@ impl Display for Request {
             Self::Prefetch(package_name, range, _) => {
                 write!(f, "Prefetch {package_name} {range}")
             }
+            Self::Variants(version_id, _) => {
+                write!(f, "Variants {version_id}")
+            }
         }
     }
 }
 
 #[derive(Debug)]
-#[expect(clippy::large_enum_variant)]
 enum Response {
     /// The returned metadata for a package hosted on a registry.
     Package(PackageName, Option<IndexUrl>, VersionsResponse),
@@ -3375,6 +3548,11 @@ enum Response {
     Installed {
         dist: InstalledDist,
         metadata: MetadataResponse,
+    },
+    /// The returned variant compatibility.
+    Variants {
+        version_id: GlobalVersionId,
+        resolved_variants: ResolvedVariants,
     },
 }
 
@@ -3442,6 +3620,7 @@ impl ForkedDependencies {
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
         conflicts: &Conflicts,
+        variant_base: Option<&str>,
     ) -> Self {
         let deps = match dependencies {
             Dependencies::Available(deps) => deps,
@@ -3460,8 +3639,13 @@ impl ForkedDependencies {
                 .clone();
             name_to_deps.entry(name).or_default().push(dep);
         }
-        let (mut forks, diverging_packages) =
-            Self::fork(name_to_deps, env, python_requirement, conflicts);
+        let (mut forks, diverging_packages) = Self::fork(
+            name_to_deps,
+            env,
+            python_requirement,
+            conflicts,
+            variant_base,
+        );
         if forks.is_empty() {
             Self::Unforked(vec![])
         } else if forks.len() == 1 {
@@ -3496,6 +3680,7 @@ impl ForkedDependencies {
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
         conflicts: &Conflicts,
+        variant_base: Option<&str>,
     ) -> (Vec<Fork>, BTreeSet<PackageName>) {
         let python_marker = python_requirement.to_marker_tree();
 
@@ -3525,7 +3710,11 @@ impl ForkedDependencies {
                     .is_none_or(|bound| !python_requirement.raises(&bound))
                 {
                     let dep = deps.pop().unwrap();
-                    let marker = dep.package.marker();
+                    let marker = if let Some(variant_base) = variant_base {
+                        dep.package.marker().with_variant_base(variant_base)
+                    } else {
+                        dep.package.marker()
+                    };
                     for fork in &mut forks {
                         if fork.env.included_by_marker(marker) {
                             fork.add_dependency(dep.clone());
@@ -3557,7 +3746,7 @@ impl ForkedDependencies {
                 }
             }
             for dep in deps {
-                let mut forker = match ForkingPossibility::new(env, &dep) {
+                let mut forker = match ForkingPossibility::new(env, &dep, variant_base) {
                     ForkingPossibility::Possible(forker) => forker,
                     ForkingPossibility::DependencyAlwaysExcluded => {
                         // If the markers can never be satisfied by the parent
@@ -3586,12 +3775,12 @@ impl ForkedDependencies {
 
                     for fork_env in envs {
                         let mut new_fork = fork.clone();
-                        new_fork.set_env(fork_env);
+                        new_fork.set_env(fork_env, variant_base);
                         // We only add the dependency to this fork if it
                         // satisfies the fork's markers. Some forks are
                         // specifically created to exclude this dependency,
                         // so this isn't always true!
-                        if forker.included(&new_fork.env) {
+                        if forker.included(&new_fork.env, variant_base) {
                             new_fork.add_dependency(dep.clone());
                         }
                         // Filter out any forks we created that are disjoint with our
@@ -3781,10 +3970,14 @@ impl Fork {
     ///
     /// Any dependency in this fork that does not satisfy the given environment
     /// is removed.
-    fn set_env(&mut self, env: ResolverEnvironment) {
+    fn set_env(&mut self, env: ResolverEnvironment, variant_base: Option<&str>) {
         self.env = env;
         self.dependencies.retain(|dep| {
-            let marker = dep.package.marker();
+            let marker = if let Some(variant_base) = variant_base {
+                dep.package.marker().with_variant_base(variant_base)
+            } else {
+                dep.package.marker()
+            };
             if self.env.included_by_marker(marker) {
                 return true;
             }
@@ -3983,7 +4176,32 @@ fn find_environments(id: Id<PubGrubPackage>, state: &State<UvDependencyProvider>
                 continue;
             }
 
-            let mut next_environment = state.package_store[*child].marker();
+            // Proxy edges repeat the marker already applied on the incoming dependency.
+            // Only the real parent package owns a dependency's variant markers.
+            let parent_package = &state.package_store[*parent];
+            let mut next_environment = if parent_package.is_proxy() {
+                MarkerTree::TRUE
+            } else {
+                let marker = state.package_store[*child].marker();
+                if marker.has_variant_expression()
+                    && let Some(name) = parent_package.name_no_root()
+                {
+                    let version = match state
+                        .partial_solution
+                        .term_intersection_for_package(*parent)
+                    {
+                        Some(Term::Positive(versions)) => versions.as_singleton(),
+                        Some(Term::Negative(_)) | None => None,
+                    };
+                    // An undecided ancestor still needs a distinct scope, even when its
+                    // exact version is not known yet.
+                    let base = version
+                        .map_or_else(|| name.to_string(), |version| format!("{name}=={version}"));
+                    marker.with_variant_base(&base)
+                } else {
+                    marker
+                }
+            };
             next_environment = next_environment.and(current_environment);
 
             let entry = environments.entry(*child).or_insert(MarkerTree::FALSE);

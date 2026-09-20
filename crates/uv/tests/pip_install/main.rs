@@ -11,4 +11,8 @@ mod json;
 mod pip_install;
 
 #[cfg(feature = "test-python")]
+mod variants;
+#[cfg(feature = "test-python")]
+mod variants_installed;
+#[cfg(feature = "test-python")]
 mod wheel_variants;

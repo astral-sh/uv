@@ -2,7 +2,6 @@ use std::collections::BTreeMap;
 use std::collections::Bound;
 use std::ops::RangeBounds;
 use std::sync::OnceLock;
-use uv_preview::PreviewFeature;
 
 use jiff::Timestamp;
 use pubgrub::Ranges;
@@ -18,8 +17,10 @@ use uv_distribution_types::{
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};
+use uv_preview::PreviewFeature;
 use uv_pypi_types::{HashDigest, ResolutionMetadata, Yanked};
 use uv_types::HashStrategy;
+use uv_variants::VariantPriority;
 use uv_warnings::warn_user_once;
 
 use crate::flat_index::FlatDistributions;
@@ -831,8 +832,8 @@ impl VersionMapLazy {
             }
         }
 
-        // Determine a compatibility for the wheel based on tags.
-        let priority = if let Some(tags) = &self.tags {
+        // Determine a priority for the wheel based on tags.
+        let tag_priority = if let Some(tags) = &self.tags {
             match filename.compatibility(tags) {
                 TagCompatibility::Incompatible(tag) => {
                     return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(tag));
@@ -848,6 +849,13 @@ impl VersionMapLazy {
                 ));
             }
             None
+        };
+
+        // Variant compatibility is determined later, when target properties are known.
+        let variant_priority = if filename.variant().is_none() {
+            VariantPriority::NonVariant
+        } else {
+            VariantPriority::Unknown
         };
 
         // Check if hashes line up. If hashes aren't required, they're considered matching.
@@ -868,7 +876,12 @@ impl VersionMapLazy {
         // Break ties with the build tag.
         let build_tag = filename.build_tag().cloned();
 
-        WheelCompatibility::Compatible(hash, priority, build_tag)
+        WheelCompatibility::Compatible {
+            hash,
+            tag_priority,
+            variant_priority,
+            build_tag,
+        }
     }
 }
 
