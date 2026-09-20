@@ -18,6 +18,7 @@ use uv_normalize::PackageName;
 use uv_python_interpreter::{Interpreter, PythonEnvironment};
 use uv_static::TarBackend;
 use uv_variants::VariantProviderOutput;
+use uv_variants::cache::VariantProviderCache;
 use uv_workspace::WorkspaceCache;
 
 use crate::{BuildArena, BuildIsolation, HashStrategy, ResolvedRequirements};
@@ -91,6 +92,7 @@ impl SourceTreeEditablePolicy {
 /// them.
 pub trait BuildContext {
     type SourceDistBuilder: SourceBuildTrait;
+    type VariantsBuilder: VariantsTrait;
 
     /// The tar implementation used for source archives.
     fn tar_backend(&self) -> TarBackend;
@@ -105,6 +107,9 @@ pub trait BuildContext {
 
     /// Return a reference to the Git resolver.
     fn git(&self) -> &GitResolver;
+
+    /// Return a reference to the variant cache.
+    fn variants(&self) -> &VariantProviderCache;
 
     /// Return a reference to the build arena.
     fn build_arena(&self) -> &BuildArena<Self::SourceDistBuilder>;
@@ -210,6 +215,14 @@ pub trait BuildContext {
         build_kind: BuildKind,
         version_id: Option<&'a str>,
     ) -> impl Future<Output = Result<Option<DistFilename>, impl IsBuildBackendError>> + 'a;
+
+    /// Set up the variants for the given provider.
+    fn setup_variants<'a>(
+        &'a self,
+        backend_name: String,
+        provider: &'a uv_variants::variants_json::Provider,
+        build_output: BuildOutput,
+    ) -> impl Future<Output = Result<Self::VariantsBuilder, anyhow::Error>> + 'a;
 }
 
 /// A wrapper for `uv_build_frontend::SourceBuild` to avoid cyclical crate dependencies.

@@ -6568,6 +6568,8 @@ dependencies = [
  "uv-resolver",
  "uv-static",
  "uv-types",
+ "uv-variant-frontend",
+ "uv-variants",
  "uv-version",
  "uv-workspace",
 ]
@@ -6585,6 +6587,7 @@ dependencies = [
  "http-content-range",
  "indoc",
  "insta",
+ "itertools 0.14.0",
  "owo-colors",
  "rayon",
  "reqwest",
@@ -6616,6 +6619,7 @@ dependencies = [
  "uv-install-wheel",
  "uv-metadata",
  "uv-normalize",
+ "uv-once-map",
  "uv-pep440",
  "uv-pep508",
  "uv-platform-tags",
@@ -6626,6 +6630,7 @@ dependencies = [
  "uv-static",
  "uv-threads",
  "uv-types",
+ "uv-variants",
  "uv-workspace",
  "walkdir",
 ]
@@ -7930,6 +7935,7 @@ dependencies = [
  "uv-static",
  "uv-torch",
  "uv-types",
+ "uv-variants",
  "uv-warnings",
 ]
 

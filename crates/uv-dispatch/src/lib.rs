@@ -45,6 +45,9 @@ use uv_types::{
     AnyErrorBuild, BuildArena, BuildContext, BuildIsolation, BuildStack, EmptyInstalledPackages,
     HashStrategy, HashVerification, InFlight, ResolvedRequirements, SourceTreeEditablePolicy,
 };
+use uv_variant_frontend::VariantBuild;
+use uv_variants::cache::VariantProviderCache;
+use uv_variants::variants_json::Provider;
 use uv_workspace::WorkspaceCache;
 
 #[derive(Debug, Error)]
@@ -292,6 +295,7 @@ impl<'a> BuildDispatch<'a> {
 #[allow(refining_impl_trait)]
 impl BuildContext for BuildDispatch<'_> {
     type SourceDistBuilder = SourceBuild;
+    type VariantsBuilder = VariantBuild;
 
     fn tar_backend(&self) -> TarBackend {
         self.tar_backend
@@ -307,6 +311,10 @@ impl BuildContext for BuildDispatch<'_> {
 
     fn git(&self) -> &GitResolver {
         &self.shared_state.git
+    }
+
+    fn variants(&self) -> &VariantProviderCache {
+        self.shared_state.index.variant_providers()
     }
 
     fn build_arena(&self) -> &BuildArena<SourceBuild> {
@@ -733,6 +741,26 @@ impl BuildContext for BuildDispatch<'_> {
         .await??;
 
         Ok(Some(filename))
+    }
+
+    async fn setup_variants<'data>(
+        &'data self,
+        backend_name: String,
+        backend: &'data Provider,
+        build_output: BuildOutput,
+    ) -> anyhow::Result<VariantBuild> {
+        let builder = VariantBuild::setup(
+            backend_name,
+            backend,
+            self.interpreter,
+            self,
+            self.build_extra_env_vars.clone(),
+            build_output,
+            self.concurrency.builds_semaphore.clone(),
+        )
+        .boxed_local()
+        .await?;
+        Ok(builder)
     }
 }
 

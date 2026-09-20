@@ -11,6 +11,7 @@ pub use metadata::{
 };
 pub use reporter::Reporter;
 pub use source::{StaticMetadataDatabase, prune};
+pub use variants::PackageVariantCache;
 
 mod archive;
 mod diagnostics;
@@ -24,3 +25,4 @@ mod index;
 mod metadata;
 mod reporter;
 mod source;
+mod variants;
