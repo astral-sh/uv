@@ -1003,6 +1003,7 @@ pub(crate) async fn do_sync<'a>(
             bytecode_compilation,
             &hasher,
             &tags,
+            marker_env.markers(),
             &client,
             state.in_flight(),
             concurrency,

@@ -6788,6 +6788,7 @@ dependencies = [
  "rayon",
  "rustc-hash",
  "same-file",
+ "serde_json",
  "tempfile",
  "thiserror",
  "tokio",
@@ -6815,6 +6816,7 @@ dependencies = [
  "uv-static",
  "uv-threads",
  "uv-types",
+ "uv-variants",
  "uv-warnings",
  "walkdir",
 ]
