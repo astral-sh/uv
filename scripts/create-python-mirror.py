@@ -33,11 +33,13 @@ from tqdm import tqdm
 
 SELF_DIR = Path(__file__).parent
 REPO_ROOT = SELF_DIR.parent
-VERSIONS_FILE = REPO_ROOT / "crates" / "uv-python" / "download-metadata.json"
+DOWNLOAD_METADATA_FILENAME = "download-metadata.json"
+VERSIONS_FILE = REPO_ROOT / "crates" / "uv-python" / DOWNLOAD_METADATA_FILENAME
 PREFIXES = [
     "https://github.com/astral-sh/python-build-standalone/releases/download/",
     "https://downloads.python.org/pypy/",
 ]
+NONE_SPECIFIED = "NONE_SPECIFIED"
 
 
 logging.basicConfig(
@@ -66,7 +68,7 @@ def sha256_checksum(file_path: Path) -> str:
     return hasher.hexdigest()
 
 
-def collect_metadata_from_git_history() -> list[dict]:
+def collect_metadata_from_git_history() -> list[tuple[str, dict]]:
     """Collect all metadata entries from the history of the VERSIONS_FILE."""
     metadata = []
     try:
@@ -78,7 +80,7 @@ def collect_metadata_from_git_history() -> list[dict]:
                 blob = commit.tree / str(VERSIONS_FILE.relative_to(REPO_ROOT))
                 content = blob.data_stream.read().decode()
                 data = json.loads(content)
-                metadata.extend(data.values())
+                metadata.extend(data.items())
             except KeyError:
                 logger.warning(
                     f"File {VERSIONS_FILE} not found in commit {commit.hexsha}. Skipping."
@@ -106,34 +108,45 @@ def check_arch(entry, arch):
 def match_version(entry, pattern):
     """Checks whether pattern matches against the entries version."""
     vers = f"{entry['major']}.{entry['minor']}.{entry['patch']}"
-    if entry["prerelease"] != "":
+    if "prerelease" in entry and entry["prerelease"] != "":
         vers += f"-{entry['prerelease']}"
     return pattern.match(vers) is not None
 
 
 def filter_metadata(
-    metadata: list[dict],
+    metadata: list[tuple[str, dict]],
     name: str | None,
     arch: str | None,
     os: str | None,
     version: re.Pattern | None,
-) -> list[dict]:
+    exclude: re.Pattern | None,
+    only_latest_per_major_minor: bool = False,
+) -> list[tuple[str, dict]]:
     """Filter the metadata based on name, architecture, and OS, ensuring unique URLs."""
     filtered = [
         entry
         for entry in metadata
-        if (not name or entry["name"] == name)
-        and (not arch or check_arch(entry["arch"], arch))
-        and (not os or entry["os"] == os)
-        and (not version or match_version(entry, version))
+        if (not name or entry[1]["name"] == name)
+        and (not arch or check_arch(entry[1]["arch"], arch))
+        and (not os or entry[1]["os"] == os)
+        and (not version or match_version(entry[1], version))
+        and (not exclude or not exclude.search(entry[1]["url"]))
     ]
     # Use a set to ensure unique URLs
     unique_urls = set()
     unique_filtered = []
     for entry in filtered:
-        if entry["url"] not in unique_urls:
-            unique_urls.add(entry["url"])
+        if entry[1]["url"] not in unique_urls:
+            unique_urls.add(entry[1]["url"])
             unique_filtered.append(entry)
+    if only_latest_per_major_minor:
+        latest_dict: dict[tuple[int, int], tuple[str, dict]] = {}
+        for entry in unique_filtered:
+            patch = entry[1]["patch"]
+            key = (entry[1]["major"], entry[1]["minor"])
+            if key not in latest_dict or patch > latest_dict[key][1]["patch"]:
+                latest_dict[key] = entry
+        unique_filtered = list(latest_dict.values())
     return unique_filtered
 
 
@@ -197,7 +210,10 @@ async def download_file(
 
 
 async def download_files(
-    urls: set[tuple[str, str | None]], target: Path, max_concurrent: int
+    urls: set[tuple[str, str | None]],
+    target: Path,
+    max_concurrent: int,
+    dry_run: bool = False,
 ):
     """Download files with a limit on concurrent downloads using httpx."""
     async with httpx.AsyncClient(follow_redirects=True) as client:
@@ -209,13 +225,17 @@ async def download_files(
         async def sem_download(url, sha256):
             nonlocal success_count
             async with sem:
+                dest = target / sanitize_url(url)
+                if dry_run:
+                    print(f"Would download {url} to {dest}")
+                    return
                 success = await download_file(
-                    client,
-                    url,
-                    target / sanitize_url(url),
-                    sha256,
-                    progress_bar,
-                    errors,
+                    client=client,
+                    url=url,
+                    dest=dest,
+                    expected_sha256=sha256,
+                    progress_bar=progress_bar,
+                    errors=errors,
                 )
                 if success:
                     success_count += 1
@@ -227,6 +247,29 @@ async def download_files(
         return success_count, errors
 
 
+def update_mirror_url(mirror_url: str, filtered_metadata: list[tuple[str, dict]]):
+    """Updates the given filtered_metadata to point at the given mirror_url"""
+    if not mirror_url.endswith("/"):
+        mirror_url += "/"
+    for entry in filtered_metadata:
+        for prefix in PREFIXES:
+            entry[1]["url"] = entry[1]["url"].replace(prefix, mirror_url)
+
+
+def write_metadata(
+    save_metadata: str, target: str, filtered_metadata: list[tuple[str, dict]]
+):
+    """Save the filtered_metadata to the given save_metadata path or to target if NONE_SPECIFIED"""
+
+    metadata_output = Path(target) / DOWNLOAD_METADATA_FILENAME
+    if save_metadata != NONE_SPECIFIED:
+        metadata_output = Path(save_metadata)
+    Path(metadata_output).parent.mkdir(parents=True, exist_ok=True)
+    with open(metadata_output, "w") as f:
+        json.dump(dict(filtered_metadata), f, indent=2)
+        print(f"Saved metadata to {metadata_output}")
+
+
 def parse_arguments():
     """Parse command-line arguments using argparse."""
     parser = argparse.ArgumentParser(description="Download and mirror Python builds.")
@@ -235,6 +278,15 @@ def parse_arguments():
     parser.add_argument("--os", help="Filter by operating system (e.g., 'darwin').")
     parser.add_argument(
         "--version", help="Filter version by regex (e.g., '3.13.\\d+$')."
+    )
+    parser.add_argument(
+        "--exclude",
+        help="Exclude files by regex found in URL (e.g. `freethreaded|debug`).",
+    )
+    parser.add_argument(
+        "--only-latest-per-major-minor",
+        action="store_true",
+        help="Only include the latest patch version for each major.minor combination.",
     )
     parser.add_argument(
         "--max-concurrent",
@@ -252,6 +304,20 @@ def parse_arguments():
         default=SELF_DIR / "mirror",
         help="Directory to store the downloaded files.",
     )
+    parser.add_argument(
+        "--save-metadata",
+        nargs="?",
+        const=NONE_SPECIFIED,
+        help="File to save metadata. Defaults to 'target' if no value provided.",
+    )
+    parser.add_argument(
+        "--mirror-url", help="Saved metadata has URLs updated to this root path."
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Perform a dry run without downloading files.",
+    )
     return parser.parse_args()
 
 
@@ -263,13 +329,20 @@ def main():
         metadata = collect_metadata_from_git_history()
     else:
         with open(VERSIONS_FILE) as f:
-            metadata = list(json.load(f).values())
+            metadata: list[tuple[str, dict]] = list(json.load(f).items())
 
     version = re.compile(args.version) if args.version else None
+    exclude = re.compile(args.exclude) if args.exclude else None
     filtered_metadata = filter_metadata(
-        metadata, args.name, args.arch, args.os, version
+        metadata,
+        name=args.name,
+        arch=args.arch,
+        os=args.os,
+        version=version,
+        exclude=exclude,
+        only_latest_per_major_minor=args.only_latest_per_major_minor,
     )
-    urls = {(entry["url"], entry["sha256"]) for entry in filtered_metadata}
+    urls = {(entry[1]["url"], entry[1]["sha256"]) for entry in filtered_metadata}
 
     if not urls:
         logger.error("No URLs found.")
@@ -279,15 +352,24 @@ def main():
     logger.info(f"Downloading {len(urls)} files to {target}...")
     try:
         success_count, errors = asyncio.run(
-            download_files(urls, target, args.max_concurrent)
+            download_files(urls, target, args.max_concurrent, dry_run=args.dry_run)
         )
         print(f"Successfully downloaded: {success_count} files.")
         if errors:
             print("Failed downloads:")
             for url, error in errors:
                 print(f"- {url}: {error}")
+
+        example_mirror = f"file://{target.absolute()}"
+        if args.mirror_url:
+            update_mirror_url(args.mirror_url, filtered_metadata)
+            example_mirror = args.mirror_url
+
+        if args.save_metadata is not None:
+            write_metadata(args.save_metadata, args.target, filtered_metadata)
+
         print(
-            f"Example usage: `UV_PYTHON_INSTALL_MIRROR='file://{target.absolute()}' uv python install 3.13`"
+            f"Example usage: `UV_PYTHON_INSTALL_MIRROR='{example_mirror}' uv python install 3.13`"
         )
     except (httpx.HTTPError, OSError, ValueError) as e:
         logger.error(f"Error during download: {e}")
