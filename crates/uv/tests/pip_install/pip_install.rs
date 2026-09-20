@@ -17453,3 +17453,29 @@ fn compile_bytecode_excludes_stdlib() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn install_uv_lockfile_error() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let uv_lock = context.temp_dir.child("uv.lock");
+    uv_lock.write_str(indoc! {r#"
+        version = 1
+        revision = 1
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "anyio"
+        version = "4.3.0"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg("uv.lock"), @r"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: The file `uv.lock` appears to be a uv lockfile, but uv lockfiles cannot be used as requirements files
+    ");
+
+    Ok(())
+}
