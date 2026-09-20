@@ -1,6 +1,7 @@
 use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::fmt::Write;
+use uv_pep508::MarkerVariantsUniversal;
 
 use anyhow::Result;
 use futures::StreamExt;
@@ -257,7 +258,10 @@ impl<'env> DisplayDependencyGraph<'env> {
                 if prune.contains(&requirement.name) {
                     continue;
                 }
-                if !requirement.marker.evaluate(markers, &[]) {
+                if !requirement
+                    .marker
+                    .evaluate(markers, &MarkerVariantsUniversal, &[])
+                {
                     continue;
                 }
 

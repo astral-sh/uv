@@ -6,6 +6,7 @@ use either::Either;
 use uv_configuration::{Constraints, DependencyModifierScope, DependencyModifiers};
 use uv_distribution_types::{Requirement, ResolutionRecorder};
 use uv_normalize::PackageName;
+use uv_pep508::MarkerVariantsUniversal;
 use uv_types::RequestedRequirements;
 
 use crate::preferences::Preferences;
@@ -153,7 +154,11 @@ impl Manifest {
                 .scoped_overrides()
                 .map(Cow::Borrowed)
                 .filter(move |requirement| {
-                    requirement.evaluate_markers(env.marker_environment(), &[])
+                    requirement.evaluate_markers(
+                        env.marker_environment(),
+                        &MarkerVariantsUniversal,
+                        &[],
+                    )
                 }),
         )
     }
@@ -179,15 +184,22 @@ impl Manifest {
                                 lookahead.requirements(),
                             )
                             .filter(move |requirement| {
-                                requirement
-                                    .evaluate_markers(env.marker_environment(), lookahead.extras())
+                                requirement.evaluate_markers(
+                                    env.marker_environment(),
+                                    &MarkerVariantsUniversal,
+                                    lookahead.extras(),
+                                )
                             })
                     })
                     .chain(
                         self.modifiers
                             .apply(DependencyModifierScope::Global, &self.requirements)
                             .filter(move |requirement| {
-                                requirement.evaluate_markers(env.marker_environment(), &[])
+                                requirement.evaluate_markers(
+                                    env.marker_environment(),
+                                    &MarkerVariantsUniversal,
+                                    &[],
+                                )
                             }),
                     )
                     .chain(
@@ -195,7 +207,11 @@ impl Manifest {
                             .requirements()
                             .filter(|requirement| !self.modifiers.is_excluded(&requirement.name))
                             .filter(move |requirement| {
-                                requirement.evaluate_markers(env.marker_environment(), &[])
+                                requirement.evaluate_markers(
+                                    env.marker_environment(),
+                                    &MarkerVariantsUniversal,
+                                    &[],
+                                )
                             })
                             .map(Cow::Borrowed),
                     ),
@@ -207,7 +223,11 @@ impl Manifest {
                     .chain(self.constraints.requirements().map(Cow::Borrowed))
                     .filter(|requirement| !self.modifiers.is_excluded(&requirement.name))
                     .filter(move |requirement| {
-                        requirement.evaluate_markers(env.marker_environment(), &[])
+                        requirement.evaluate_markers(
+                            env.marker_environment(),
+                            &MarkerVariantsUniversal,
+                            &[],
+                        )
                     }),
             ),
         }
@@ -220,7 +240,13 @@ impl Manifest {
     ) -> impl Iterator<Item = Cow<'a, Requirement>> + 'a {
         self.modifiers
             .global_overrides()
-            .filter(move |requirement| requirement.evaluate_markers(env.marker_environment(), &[]))
+            .filter(move |requirement| {
+                requirement.evaluate_markers(
+                    env.marker_environment(),
+                    &MarkerVariantsUniversal,
+                    &[],
+                )
+            })
             .map(Cow::Borrowed)
     }
 
@@ -256,15 +282,22 @@ impl Manifest {
                                 lookahead.requirements(),
                             )
                             .filter(move |requirement| {
-                                requirement
-                                    .evaluate_markers(env.marker_environment(), lookahead.extras())
+                                requirement.evaluate_markers(
+                                    env.marker_environment(),
+                                    &MarkerVariantsUniversal,
+                                    lookahead.extras(),
+                                )
                             })
                     })
                     .chain(
                         self.modifiers
                             .apply(DependencyModifierScope::Global, &self.requirements)
                             .filter(move |requirement| {
-                                requirement.evaluate_markers(env.marker_environment(), &[])
+                                requirement.evaluate_markers(
+                                    env.marker_environment(),
+                                    &MarkerVariantsUniversal,
+                                    &[],
+                                )
                             }),
                     ),
             ),
@@ -274,7 +307,11 @@ impl Manifest {
                 self.modifiers
                     .apply(DependencyModifierScope::Global, self.requirements.iter())
                     .filter(move |requirement| {
-                        requirement.evaluate_markers(env.marker_environment(), &[])
+                        requirement.evaluate_markers(
+                            env.marker_environment(),
+                            &MarkerVariantsUniversal,
+                            &[],
+                        )
                     }),
             ),
         }

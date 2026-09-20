@@ -1,8 +1,9 @@
+use arcstr::ArcStr;
 use std::fmt::{Display, Formatter};
-
 use uv_normalize::{ExtraName, GroupName};
 
 use crate::marker::tree::MarkerValueList;
+use crate::marker::{VariantFeature, VariantNamespace, VariantValue};
 use crate::{MarkerValueExtra, MarkerValueString, MarkerValueVersion};
 
 /// Those environment markers with a PEP 440 version as value such as `python_version`
@@ -40,7 +41,7 @@ impl From<CanonicalMarkerValueVersion> for MarkerValueVersion {
 ///
 /// Critically, any variants that could be involved in a known-incompatible marker pair should
 /// be at the top of the ordering, i.e., given the maximum priority.
-#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum CanonicalMarkerValueString {
     /// `os_name`
     OsName,
@@ -59,16 +60,51 @@ pub enum CanonicalMarkerValueString {
     PlatformVersion,
     /// `implementation_name`
     ImplementationName,
+    /// `variant_label`
+    VariantLabel,
+    /// A variant label scoped to the package whose dependencies contain it.
+    VariantLabelBase(ArcStr),
 }
 
 impl CanonicalMarkerValueString {
+    /// Whether this string marker refers to a selected wheel label.
+    pub fn is_variant_label(&self) -> bool {
+        match self {
+            Self::VariantLabel | Self::VariantLabelBase(_) => true,
+            Self::OsName
+            | Self::SysPlatform
+            | Self::PlatformSystem
+            | Self::PlatformMachine
+            | Self::PlatformPythonImplementation
+            | Self::PlatformRelease
+            | Self::PlatformVersion
+            | Self::ImplementationName => false,
+        }
+    }
+
+    /// The package whose selected label this marker refers to, if it is scoped.
+    pub fn variant_base(&self) -> Option<&str> {
+        match self {
+            Self::VariantLabelBase(base) => Some(base),
+            Self::VariantLabel
+            | Self::OsName
+            | Self::SysPlatform
+            | Self::PlatformSystem
+            | Self::PlatformMachine
+            | Self::PlatformPythonImplementation
+            | Self::PlatformRelease
+            | Self::PlatformVersion
+            | Self::ImplementationName => None,
+        }
+    }
+
     /// Returns `true` if the marker is known to be involved in _at least_ one conflicting
     /// marker pair.
     ///
     /// For example, `sys_platform == 'win32'` and `platform_system == 'Darwin'` are known to
     /// never be true at the same time.
-    pub(crate) fn is_conflicting(self) -> bool {
-        self <= Self::PlatformSystem
+    pub(crate) fn is_conflicting(&self) -> bool {
+        *self <= Self::PlatformSystem
     }
 }
 
@@ -91,6 +127,8 @@ impl From<MarkerValueString> for CanonicalMarkerValueString {
             MarkerValueString::PlatformVersionDeprecated => Self::PlatformVersion,
             MarkerValueString::SysPlatform => Self::SysPlatform,
             MarkerValueString::SysPlatformDeprecated => Self::SysPlatform,
+            MarkerValueString::VariantLabel => Self::VariantLabel,
+            MarkerValueString::VariantLabelBase(base) => Self::VariantLabelBase(base),
         }
     }
 }
@@ -108,6 +146,8 @@ impl From<CanonicalMarkerValueString> for MarkerValueString {
             CanonicalMarkerValueString::PlatformSystem => Self::PlatformSystem,
             CanonicalMarkerValueString::PlatformVersion => Self::PlatformVersion,
             CanonicalMarkerValueString::SysPlatform => Self::SysPlatform,
+            CanonicalMarkerValueString::VariantLabel => Self::VariantLabel,
+            CanonicalMarkerValueString::VariantLabelBase(base) => Self::VariantLabelBase(base),
         }
     }
 }
@@ -124,6 +164,8 @@ impl Display for CanonicalMarkerValueString {
             Self::PlatformSystem => f.write_str("platform_system"),
             Self::PlatformVersion => f.write_str("platform_version"),
             Self::SysPlatform => f.write_str("sys_platform"),
+            Self::VariantLabel => f.write_str("variant_label"),
+            Self::VariantLabelBase(base) => write!(f, "variant_label[\"{base}\"]"),
         }
     }
 }
@@ -162,13 +204,34 @@ impl Display for CanonicalMarkerValueExtra {
 
 /// A key-value pair for `<value> in <key>` or `<value> not in <key>`, where the key is a list.
 ///
-/// Used for PEP 751 markers.
+/// Used for PEP 751 and variant markers.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum CanonicalMarkerListPair {
     /// A valid [`ExtraName`].
     Extras(ExtraName),
     /// A valid [`GroupName`].
     DependencyGroup(GroupName),
+    /// A valid `variant_namespaces`.
+    VariantNamespaces {
+        /// If set, the variant marker is evaluated as a variant of the base package.
+        base: Option<String>,
+        namespace: VariantNamespace,
+    },
+    /// A valid `variant_features`.
+    VariantFeatures {
+        /// If set, the variant marker is evaluated as a variant of the base package.
+        base: Option<String>,
+        namespace: VariantNamespace,
+        feature: VariantFeature,
+    },
+    /// A valid `variant_properties`.
+    VariantProperties {
+        /// If set, the variant marker is evaluated as a variant of the base package.
+        base: Option<String>,
+        namespace: VariantNamespace,
+        feature: VariantFeature,
+        value: VariantValue,
+    },
     /// For leniency, preserve invalid values.
     Arbitrary { key: MarkerValueList, value: String },
 }
@@ -179,6 +242,9 @@ impl CanonicalMarkerListPair {
         match self {
             Self::Extras(_) => MarkerValueList::Extras,
             Self::DependencyGroup(_) => MarkerValueList::DependencyGroups,
+            Self::VariantNamespaces { .. } => MarkerValueList::VariantNamespaces,
+            Self::VariantFeatures { .. } => MarkerValueList::VariantFeatures,
+            Self::VariantProperties { .. } => MarkerValueList::VariantProperties,
             Self::Arbitrary { key, .. } => *key,
         }
     }
@@ -188,6 +254,39 @@ impl CanonicalMarkerListPair {
         match self {
             Self::Extras(extra) => extra.to_string(),
             Self::DependencyGroup(group) => group.to_string(),
+            Self::VariantNamespaces {
+                base: prefix,
+                namespace,
+            } => {
+                if let Some(prefix) = prefix {
+                    format!("{prefix} | {namespace}")
+                } else {
+                    namespace.to_string()
+                }
+            }
+            Self::VariantFeatures {
+                base: prefix,
+                namespace,
+                feature,
+            } => {
+                if let Some(prefix) = prefix {
+                    format!("{prefix} | {namespace} :: {feature}")
+                } else {
+                    format!("{namespace} :: {feature}")
+                }
+            }
+            Self::VariantProperties {
+                base: prefix,
+                namespace,
+                feature,
+                value,
+            } => {
+                if let Some(prefix) = prefix {
+                    format!("{prefix} | {namespace} :: {feature} :: {value}")
+                } else {
+                    format!("{namespace} :: {feature} :: {value}")
+                }
+            }
             Self::Arbitrary { value, .. } => value.clone(),
         }
     }

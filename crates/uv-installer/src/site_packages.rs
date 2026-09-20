@@ -20,7 +20,7 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
-use uv_pep508::VersionOrUrl;
+use uv_pep508::{MarkerVariantsUniversal, VersionOrUrl};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{ResolverMarkerEnvironment, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonEnvironment};
@@ -285,7 +285,7 @@ impl SitePackages {
 
                 // Verify that the dependencies are installed.
                 for dependency in &metadata.requires_dist {
-                    if !dependency.evaluate_markers(markers, &[]) {
+                    if !dependency.evaluate_markers(markers, &MarkerVariantsUniversal, &[]) {
                         continue;
                     }
 
@@ -502,7 +502,7 @@ impl SitePackages {
         for requirement in requirements.flat_map(|requirement| {
             modifiers.apply(DependencyModifierScope::Global, once(requirement))
         }) {
-            if requirement.evaluate_markers(Some(markers), &[]) {
+            if requirement.evaluate_markers(Some(markers), &MarkerVariantsUniversal, &[]) {
                 let requirement = requirement.into_owned();
                 if seen.insert(requirement.clone()) {
                     stack.push(requirement);
@@ -540,7 +540,8 @@ impl SitePackages {
 
                     // Validate that the installed version satisfies the constraints.
                     for constraint in constraints.get(name).into_iter().flatten() {
-                        if constraint.evaluate_markers(Some(markers), &[]) {
+                        if constraint.evaluate_markers(Some(markers), &MarkerVariantsUniversal, &[])
+                        {
                             match RequirementSatisfaction::check(
                                 name,
                                 distribution,
@@ -589,7 +590,11 @@ impl SitePackages {
                         DependencyModifierScope::Package(name, distribution.version()),
                         &dependencies,
                     ) {
-                        if dependency.evaluate_markers(Some(markers), &requirement.extras) {
+                        if dependency.evaluate_markers(
+                            Some(markers),
+                            &MarkerVariantsUniversal,
+                            &requirement.extras,
+                        ) {
                             let dependency = dependency.into_owned();
                             if seen.insert(dependency.clone()) {
                                 stack.push(dependency);

@@ -315,11 +315,11 @@ impl InternerGuard<'_> {
                         CanonicalMarkerValueString::SysPlatform,
                         arcstr::literal!("android"),
                     ),
-                    _ => (key.into(), value),
+                    (key, _) => (key.into(), value),
                 };
                 let string = self.create_node(
-                    Variable::String(key),
-                    Edges::from_string(key, operator, value.clone()),
+                    Variable::String(key.clone()),
+                    Edges::from_string(key.clone(), operator, value.clone()),
                 );
                 // Darwin kernel releases are dotted versions. Other platforms can include
                 // arbitrary text in `platform_release`, so retain string comparisons there.
