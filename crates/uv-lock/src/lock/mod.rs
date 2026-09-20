@@ -6985,7 +6985,7 @@ impl Package {
     }
 
     fn find_best_wheel(&self, tag_policy: TagPolicy<'_>) -> Option<usize> {
-        type WheelPriority<'lock> = (TagPriority, Option<&'lock BuildTag>);
+        type WheelPriority<'lock> = (bool, TagPriority, Option<&'lock BuildTag>);
 
         let mut best: Option<(WheelPriority, usize)> = None;
         for (i, wheel) in self.wheels.iter().enumerate() {
@@ -6995,7 +6995,8 @@ impl Package {
                 continue;
             };
             let build_tag = wheel.filename.build_tag();
-            let wheel_priority = (tag_priority, build_tag);
+            // Non-variant wheels before variant wheels.
+            let wheel_priority = (wheel.filename.variant().is_none(), tag_priority, build_tag);
             match best {
                 None => {
                     best = Some((wheel_priority, i));
@@ -10349,6 +10350,12 @@ enum LockErrorKind {
     NonLocalWorkspaceMember {
         /// The ID of the workspace member with an invalid source.
         id: PackageId,
+    },
+    #[error("Failed to fetch and query variants for `{package_id}`")]
+    VariantError {
+        package_id: PackageId,
+        #[source]
+        err: uv_distribution::Error,
     },
 }
 
