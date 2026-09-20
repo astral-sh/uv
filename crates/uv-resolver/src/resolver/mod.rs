@@ -1498,7 +1498,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             *variant_prioritized_dist_binding = variant_prioritized_dist;
             candidate.prioritize_best_variant_wheel(variant_prioritized_dist_binding)
         } else {
-            candidate
+            // In universal mode, a variant wheel with an otherwise compatible tag is acceptable.
+            candidate.allow_variant_wheels()
         };
         Ok(candidate)
     }
@@ -2020,7 +2021,21 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         RequirementContext::Package { name, version },
                     )
                 };
-                let requirements = expander.expand(requirements, context, &variant, None);
+                // A direct wheel has the same label on every target, while supported property
+                // values can still differ between targets during universal resolution.
+                let fixed_variant_label = if env.marker_environment().is_none()
+                    && let Some(Dist::Built(dist)) = &direct_dist
+                {
+                    Some(
+                        dist.wheel_filename()
+                            .variant()
+                            .map_or("", |label| label.as_str()),
+                    )
+                } else {
+                    None
+                };
+                let requirements =
+                    expander.expand(requirements, context, &variant, fixed_variant_label);
 
                 PubGrubDependency::from_requirements(
                     &self.conflicts,

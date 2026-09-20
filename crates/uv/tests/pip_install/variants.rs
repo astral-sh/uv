@@ -320,6 +320,63 @@ fn pep825_metadata_only_version() -> Result<()> {
     Ok(())
 }
 
+/// Variant metadata cannot provide platform coverage when it precedes the wheels in a flat index.
+#[test]
+fn pep825_metadata_platform_coverage() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    write_metadata(&context, json!({"null": {}}))?;
+    let metadata = context.read("example-1.0.0-variants.json");
+    // Equivalent release versions with different trailing zeros put the sidecar before the wheel
+    // in the HTML parser's filename ordering.
+    let (_, wheel) = generate_wheel_with_files(
+        &"example".parse()?,
+        &"1.0.0.0".parse()?,
+        &[],
+        &BTreeMap::new(),
+        None,
+        "py3-none-manylinux_2_17_x86_64",
+        &[("example-1.0.0.0.dist-info/variant.json", &metadata)],
+    );
+    context
+        .temp_dir
+        .child("example-1.0.0.0-py3-none-manylinux_2_17_x86_64-null.whl")
+        .write_binary(&wheel)?;
+    context.temp_dir.child("index.html").write_str(indoc! {r#"
+        <a href="example-1.0.0-variants.json">example-1.0.0-variants.json</a>
+        <a href="example-1.0.0.0-py3-none-manylinux_2_17_x86_64-null.whl">example-1.0.0.0-py3-none-manylinux_2_17_x86_64-null.whl</a>
+    "#})?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["example"]
+
+        [tool.uv]
+        required-environments = ["sys_platform == 'win32'"]
+
+        [[tool.uv.index]]
+        name = "local"
+        url = "./index.html"
+        format = "flat"
+        default = true
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features").arg("wheel-variants"), @r###"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies for split (markers: sys_platform == 'win32')
+      cause: Because example==1.0.0 has no Windows-compatible wheels and only example==1.0.0 is available, we can conclude that all versions of example cannot be used.
+             And because your project depends on example, we can conclude that your project's requirements are unsatisfiable.
+
+    hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
+    "###);
+    Ok(())
+}
+
 #[test]
 fn pep825_selection_and_markers() -> Result<()> {
     let context = uv_test::test_context!("3.12");

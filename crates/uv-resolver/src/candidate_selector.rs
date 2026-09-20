@@ -980,6 +980,26 @@ impl<'a> Candidate<'a> {
         }
     }
 
+    /// By default, variant wheels are considered incompatible. During universal resolutions,
+    /// variant wheels should be allowed, similar to any other wheel that is only tag-incompatible
+    /// to the current platform.
+    pub(crate) fn allow_variant_wheels(self) -> Self {
+        // Optimization: Only if the current candidate is incompatible for being a variant, it can
+        // change if we allow variants.
+        let CandidateDist::Incompatible {
+            incompatible_dist: IncompatibleDist::Wheel(IncompatibleWheel::Variant),
+            prioritized_dist,
+        } = self.dist
+        else {
+            return self;
+        };
+
+        Self {
+            dist: CandidateDist::from_prioritized_dist(prioritized_dist, true),
+            ..self
+        }
+    }
+
     // TODO(konsti): Stop breaking isolation?
     pub(crate) fn prioritize_best_variant_wheel(
         self,

@@ -273,7 +273,19 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         // Concrete non-variant wheels use empty variant markers. Universal lookahead retains
         // all variant conditions for the resolver to consider.
         let variant = marker_env.map(|_| archive.variant.clone().unwrap_or_default());
-        let fixed_variant_label = None;
+        let fixed_variant_label = if marker_env.is_none()
+            && let Dist::Built(built) = &dist
+        {
+            Some(
+                built
+                    .wheel_filename()
+                    .variant()
+                    .map_or("", |label| label.as_str())
+                    .to_string(),
+            )
+        } else {
+            None
+        };
         self.index
             .distributions()
             .done(id, Arc::new(MetadataResponse::Found(archive)));
