@@ -668,6 +668,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     next_package,
                     &version,
                     &state.pins,
+                    &state.fork_urls,
                     &state.env,
                     &self.index,
                     &state.python_requirement,
@@ -1520,7 +1521,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             *variant_prioritized_dist_binding = variant_prioritized_dist;
             candidate.prioritize_best_variant_wheel(variant_prioritized_dist_binding)
         } else {
-            candidate
+            // In universal mode, a variant wheel with an otherwise compatible tag is acceptable.
+            candidate.allow_variant_wheels()
         };
         Ok(candidate)
     }
@@ -1830,6 +1832,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         package: &PubGrubPackage,
         version: &Version,
         pins: &FilePins,
+        fork_urls: &ForkUrls,
         env: &ResolverEnvironment,
         in_memory_index: &InMemoryIndex,
         python_requirement: &PythonRequirement,
@@ -1840,6 +1843,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             package,
             version,
             pins,
+            fork_urls,
             env,
             in_memory_index,
             python_requirement,
@@ -1869,6 +1873,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         package: &PubGrubPackage,
         version: &Version,
         pins: &FilePins,
+        fork_urls: &ForkUrls,
         env: &ResolverEnvironment,
         in_memory_index: &InMemoryIndex,
         python_requirement: &PythonRequirement,
@@ -2012,7 +2017,25 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         RequirementContext::Package { name, version },
                     ),
                 };
-                let requirements = expander.expand(requirements, context, &variant, None);
+                // A direct wheel has the same label on every target, while supported property
+                // values can still differ between targets during universal resolution.
+                let direct_dist = fork_urls
+                    .get(name)
+                    .map(|url| Dist::from_url(name.clone(), url.clone()))
+                    .transpose()?;
+                let fixed_variant_label = if env.marker_environment().is_none()
+                    && let Some(Dist::Built(dist)) = &direct_dist
+                {
+                    Some(
+                        dist.wheel_filename()
+                            .variant()
+                            .map_or("", |label| label.as_str()),
+                    )
+                } else {
+                    None
+                };
+                let requirements =
+                    expander.expand(requirements, context, &variant, fixed_variant_label);
 
                 PubGrubDependency::from_requirements(
                     &self.conflicts,
