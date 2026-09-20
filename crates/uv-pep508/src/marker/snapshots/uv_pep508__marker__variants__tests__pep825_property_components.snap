@@ -1,0 +1,21 @@
+---
+source: crates/uv-pep508/src/marker/variants.rs
+expression: errors
+---
+[
+    Err(
+        "Variant namespace must not be empty",
+    ),
+    Err(
+        "Variant feature must not be empty",
+    ),
+    Err(
+        "Variant value must not be empty",
+    ),
+    Err(
+        "Invalid character `>` in variant value, only [a-z0-9_.] are allowed: >=12.8",
+    ),
+    Err(
+        "Invalid character `,` in variant value, only [a-z0-9_.] are allowed: 12,13",
+    ),
+]
