@@ -2,7 +2,9 @@ use indexmap::IndexMap;
 
 use uv_pep508::{VariantFeature, VariantNamespace, VariantValue};
 
+pub mod cache;
 pub mod resolved_variants;
+pub mod variant_lock;
 pub mod variant_with_label;
 pub mod variants_json;
 
