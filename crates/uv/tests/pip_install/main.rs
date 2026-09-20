@@ -17,3 +17,5 @@ mod variants_lock;
 mod variants_markers;
 #[cfg(feature = "test-python")]
 mod variants_packse;
+#[cfg(feature = "test-python")]
+mod variants_pylock;
