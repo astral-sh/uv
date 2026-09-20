@@ -1,26 +1,38 @@
+use std::collections::BTreeSet;
 use std::io;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, PoisonError};
 
-use tracing::debug;
-use uv_scripts::Pep723Script;
-use uv_workspace::VirtualProject;
+use anyhow::{Context, Result};
+use tracing::{debug, warn};
+use uv_fs::Simplified;
 
-use crate::commands::project::lock_target::LockTarget;
-
-/// Restore a project edit on errors or Ctrl-C unless it succeeds.
+/// Restore project or script files on errors and Ctrl-C, unless the edit is committed.
+///
+/// Only changed files are restored. Callers must exclude files they cannot modify, such as
+/// lockfiles when editing with `--frozen`.
 pub(super) struct ProjectEdit {
-    snapshot: Option<ProjectSnapshot>,
+    files: Arc<Mutex<Vec<FileSnapshot>>>,
 }
 
 impl ProjectEdit {
-    /// Start guarding an edit once its files have been modified.
-    pub(super) fn new(snapshot: ProjectSnapshot, modified: bool) -> Self {
-        let snapshot = modified.then_some(snapshot);
-        let _ = ctrlc::set_handler({
-            let snapshot = snapshot.clone();
+    /// Snapshot the files an operation can modify and install its Ctrl-C handler.
+    pub(super) fn new(paths: impl IntoIterator<Item = PathBuf>) -> Result<Self> {
+        let files = paths
+            .into_iter()
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .map(|path| {
+                let contents = read_file(&path)?;
+                Ok(FileSnapshot { path, contents })
+            })
+            .collect::<io::Result<Vec<_>>>()?;
+        let files = Arc::new(Mutex::new(files));
+
+        ctrlc::set_handler({
+            let files = Arc::clone(&files);
             move || {
-                if let Some(snapshot) = &snapshot {
-                    let _ = snapshot.revert();
-                }
+                revert(&mut files.lock().unwrap_or_else(PoisonError::into_inner));
 
                 #[expect(clippy::cast_possible_wrap)]
                 std::process::exit(if cfg!(windows) {
@@ -29,80 +41,68 @@ impl ProjectEdit {
                     130
                 });
             }
-        });
-        Self { snapshot }
+        })
+        .context("Failed to install the project edit Ctrl-C handler")?;
+
+        Ok(Self { files })
     }
 
     /// Keep the edited files when the operation succeeds.
-    pub(super) fn commit(mut self) {
-        self.snapshot = None;
+    pub(super) fn commit(self) {
+        self.files
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clear();
     }
 }
 
 impl Drop for ProjectEdit {
     fn drop(&mut self) {
-        if let Some(snapshot) = &self.snapshot {
-            let _ = snapshot.revert();
+        revert(&mut self.files.lock().unwrap_or_else(PoisonError::into_inner));
+    }
+}
+
+struct FileSnapshot {
+    path: PathBuf,
+    contents: Option<Vec<u8>>,
+}
+
+impl FileSnapshot {
+    /// Restore the original contents, or remove a file created by the operation.
+    fn revert(&self) -> io::Result<()> {
+        // An unchanged file may be read-only, even when another file in the edit is writable.
+        if let Ok(contents) = read_file(&self.path)
+            && contents == self.contents
+        {
+            return Ok(());
+        }
+
+        debug!("Reverting changes to {}", self.path.user_display());
+        if let Some(contents) = &self.contents {
+            fs_err::write(&self.path, contents)
+        } else {
+            match fs_err::remove_file(&self.path) {
+                Ok(()) => Ok(()),
+                Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(()),
+                Err(err) => Err(err),
+            }
         }
     }
 }
 
-#[derive(Debug, Clone)]
-#[expect(clippy::large_enum_variant)]
-pub(super) enum ProjectSnapshot {
-    Script(Pep723Script, Option<Vec<u8>>),
-    Project(VirtualProject, Option<Vec<u8>>),
+/// Attempt every restoration even if an earlier file cannot be restored.
+fn revert(files: &mut Vec<FileSnapshot>) {
+    for file in files.drain(..) {
+        if let Err(err) = file.revert() {
+            warn!("Failed to restore {}: {err}", file.path.user_display());
+        }
+    }
 }
 
-impl ProjectSnapshot {
-    /// Write the snapshot back to disk (e.g., to a `pyproject.toml` and `uv.lock`).
-    fn revert(&self) -> Result<(), io::Error> {
-        match self {
-            Self::Script(script, lock) => {
-                // Write the PEP 723 script back to disk.
-                debug!("Reverting changes to PEP 723 script block");
-                script.write(&script.metadata.raw)?;
-
-                // Write the lockfile back to disk.
-                let target = LockTarget::from(script);
-                if let Some(lock) = lock {
-                    debug!("Reverting changes to `uv.lock`");
-                    fs_err::write(target.lock_path(), lock)?;
-                } else {
-                    debug!("Removing `uv.lock`");
-                    fs_err::remove_file(target.lock_path())?;
-                }
-                Ok(())
-            }
-            Self::Project(project, lock) => {
-                // Write the workspace `pyproject.toml` back to disk.
-                let workspace = project.workspace();
-                if workspace.install_path() != project.root() {
-                    debug!("Reverting changes to workspace `pyproject.toml`");
-                    fs_err::write(
-                        workspace.install_path().join("pyproject.toml"),
-                        workspace.pyproject_toml().as_ref(),
-                    )?;
-                }
-
-                // Write the `pyproject.toml` back to disk.
-                debug!("Reverting changes to `pyproject.toml`");
-                fs_err::write(
-                    project.root().join("pyproject.toml"),
-                    project.pyproject_toml().as_ref(),
-                )?;
-
-                // Write the lockfile back to disk.
-                let target = LockTarget::from(project.workspace());
-                if let Some(lock) = lock {
-                    debug!("Reverting changes to `uv.lock`");
-                    fs_err::write(target.lock_path(), lock)?;
-                } else {
-                    debug!("Removing `uv.lock`");
-                    fs_err::remove_file(target.lock_path())?;
-                }
-                Ok(())
-            }
-        }
+fn read_file(path: &Path) -> io::Result<Option<Vec<u8>>> {
+    match fs_err::read(path) {
+        Ok(contents) => Ok(Some(contents)),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(err) => Err(err),
     }
 }

@@ -54,7 +54,7 @@ use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryResolveLogger,
 };
 use crate::commands::pip::operations::Modifications;
-use crate::commands::project::edit::{ProjectEdit, ProjectSnapshot};
+use crate::commands::project::edit::ProjectEdit;
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
@@ -543,7 +543,20 @@ pub(crate) async fn add(
     }
 
     // Store the content prior to any modifications.
-    let snapshot = target.snapshot().await?;
+    let paths = match &target {
+        AddTarget::Script(script, _) => vec![script.path.clone()],
+        AddTarget::Project(project, _) => vec![
+            project.root().join("pyproject.toml"),
+            project.workspace().install_path().join("pyproject.toml"),
+        ],
+    };
+    let edit = ProjectEdit::new(
+        paths.into_iter().chain(
+            frozen
+                .is_none()
+                .then(|| LockTarget::from(&target).lock_path()),
+        ),
+    )?;
 
     // If the user provides a single, named index, pin all requirements to that index.
     let index = indexes
@@ -554,9 +567,6 @@ pub(crate) async fn add(
         .inspect(|index| {
             debug!("Pinning all requirements to index: `{index}`");
         });
-
-    // Track modification status, for reverts.
-    let mut modified = false;
 
     // Determine whether to use workspace mode.
     let use_workspace = match workspace {
@@ -587,6 +597,7 @@ pub(crate) async fn add(
     // If workspace mode is enabled, add any members to the `workspace` section of the
     // `pyproject.toml` file.
     if use_workspace {
+        let mut modified = false;
         let AddTarget::Project(project, python_target) = target else {
             unreachable!("`--workspace` and `--script` are conflicting options");
         };
@@ -738,11 +749,12 @@ pub(crate) async fn add(
     let content = toml.to_string();
 
     // Save the modified `pyproject.toml` or script.
-    modified |= target.write(&content)?;
+    target.write(&content)?;
 
     // If `--frozen`, exit early. There's no reason to lock and sync, since we don't need a `uv.lock`
     // to exist at all.
     if frozen.is_some() {
+        edit.commit();
         return Ok(ExitStatus::Success);
     }
 
@@ -757,8 +769,6 @@ pub(crate) async fn add(
 
     // Update the `pypackage.toml` in-memory.
     let target = target.update(&content, &WorkspaceCache::default())?;
-
-    let edit = ProjectEdit::new(snapshot, modified);
 
     // Use separate state for locking and syncing.
     let lock_state = state.fork();
@@ -1440,24 +1450,6 @@ impl AddTarget {
                     .ok_or(ProjectError::PyprojectTomlUpdate)?;
                 Ok(Self::Project(project, venv))
             }
-        }
-    }
-
-    /// Take a snapshot of the target.
-    async fn snapshot(&self) -> Result<ProjectSnapshot, io::Error> {
-        // Read the lockfile into memory.
-        let target = match self {
-            Self::Script(script, _) => LockTarget::from(script),
-            Self::Project(project, _) => LockTarget::Workspace(project.workspace()),
-        };
-        let lock = target.read_bytes().await?;
-
-        // Obtain a detached a copy of the old structure so we can revert to it without
-        // breaking the assumption that the workspace cache is only used by the modifying code
-        // when changing it.
-        match self {
-            Self::Script(script, _) => Ok(ProjectSnapshot::Script(script.clone(), lock)),
-            Self::Project(project, _) => Ok(ProjectSnapshot::Project(project.clone_detach(), lock)),
         }
     }
 }
