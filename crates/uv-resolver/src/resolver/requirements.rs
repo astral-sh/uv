@@ -3,7 +3,6 @@
 use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::{iter, slice};
-use uv_pep508::MarkerVariantsUniversal;
 
 use either::Either;
 use rustc_hash::FxHashSet;
@@ -13,7 +12,7 @@ use uv_configuration::{Constraints, Excludes, Overrides};
 use uv_distribution_types::Requirement;
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::Version;
-use uv_pep508::MarkerTree;
+use uv_pep508::{MarkerTree, MarkerVariantsEnvironment};
 use uv_pypi_types::ConflictItemRef;
 
 use crate::python_requirement::PythonRequirement;
@@ -99,8 +98,11 @@ impl<'a> RequirementExpander<'a> {
         &'data self,
         dependencies: &'data [Requirement],
         context: RequirementContext<'data>,
+        variants: &'data impl MarkerVariantsEnvironment,
+        fixed_variant_label: Option<&'data str>,
     ) -> impl Iterator<Item = Cow<'data, Requirement>> {
-        let requirements = self.requirements_for_context(dependencies, context);
+        let requirements =
+            self.requirements_for_context(dependencies, context, variants, fixed_variant_label);
         let (name, version) = match context {
             // Dependency groups can include the project itself, so they do not flatten recursive
             // dependencies.
@@ -141,6 +143,8 @@ impl<'a> RequirementExpander<'a> {
                     version,
                     extra: &extra,
                 },
+                variants,
+                fixed_variant_label,
             ) {
                 let requirement = match requirement {
                     Cow::Owned(mut requirement) => {
@@ -217,6 +221,8 @@ impl<'a> RequirementExpander<'a> {
         &'data self,
         dependencies: impl IntoIterator<Item = &'data Requirement> + 'parameters,
         context: RequirementContext<'parameters>,
+        variants: &'parameters impl MarkerVariantsEnvironment,
+        fixed_variant_label: Option<&'parameters str>,
     ) -> impl Iterator<Item = Cow<'data, Requirement>> + 'parameters
     where
         'data: 'parameters,
@@ -238,7 +244,7 @@ impl<'a> RequirementExpander<'a> {
                 // The requirements are then separately tracked in production and optional
                 // dependencies respectively.
 
-                let marker = match extra {
+                let mut marker = match extra {
                     Some(extra) => requirement
                         .marker
                         .simplify_extras(slice::from_ref(extra))
@@ -251,6 +257,9 @@ impl<'a> RequirementExpander<'a> {
                         ),
                     None => requirement.marker.simplify_not_extras_with(|_| true),
                 };
+                if let Some(label) = fixed_variant_label {
+                    marker = marker.simplify_variant_label(label);
+                }
 
                 if requirement.marker != marker {
                     requirement.to_mut().marker = marker;
@@ -258,10 +267,14 @@ impl<'a> RequirementExpander<'a> {
 
                 requirement
             })
-            .filter(move |requirement| self.is_requirement_applicable(requirement, extra))
+            .filter(move |requirement| self.is_requirement_applicable(requirement, extra, variants))
             .flat_map(move |requirement| {
-                iter::once(requirement.clone())
-                    .chain(self.constraints_for_requirement(requirement, extra))
+                iter::once(requirement.clone()).chain(self.constraints_for_requirement(
+                    requirement,
+                    extra,
+                    variants,
+                    fixed_variant_label,
+                ))
             })
     }
 
@@ -271,6 +284,7 @@ impl<'a> RequirementExpander<'a> {
         &self,
         requirement: &Requirement,
         extra: Option<&ExtraName>,
+        variants: &impl MarkerVariantsEnvironment,
     ) -> bool {
         let env = self.env;
         let python_marker = self.python_marker;
@@ -278,11 +292,7 @@ impl<'a> RequirementExpander<'a> {
         // If the requirement isn't relevant for the current platform, skip it.
         match extra {
             Some(source_extra) => {
-                if !requirement.evaluate_markers(
-                    env.marker_environment(),
-                    &MarkerVariantsUniversal,
-                    &[],
-                ) {
+                if !requirement.evaluate_markers(env.marker_environment(), variants, &[]) {
                     return false;
                 }
 
@@ -292,11 +302,7 @@ impl<'a> RequirementExpander<'a> {
                 }
             }
             None => {
-                if !requirement.evaluate_markers(
-                    env.marker_environment(),
-                    &MarkerVariantsUniversal,
-                    &[],
-                ) {
+                if !requirement.evaluate_markers(env.marker_environment(), variants, &[]) {
                     return false;
                 }
             }
@@ -328,6 +334,8 @@ impl<'a> RequirementExpander<'a> {
         &'data self,
         requirement: Cow<'data, Requirement>,
         extra: Option<&'parameters ExtraName>,
+        variants: &'parameters impl MarkerVariantsEnvironment,
+        fixed_variant_label: Option<&'parameters str>,
     ) -> impl Iterator<Item = Cow<'data, Requirement>> + 'parameters
     where
         'data: 'parameters,
@@ -342,7 +350,7 @@ impl<'a> RequirementExpander<'a> {
             .filter_map(move |constraint| {
                 // If the requirement would not be selected with any Python version
                 // supported by the root, skip it.
-                let constraint = if constraint.marker.is_true() {
+                let mut constraint = if constraint.marker.is_true() {
                     // Additionally, if the requirement is `requests ; sys_platform == 'darwin'`
                     // and the constraint is `requests ; python_version == '3.6'`, the
                     // constraint should only apply when _both_ markers are true.
@@ -409,6 +417,13 @@ impl<'a> RequirementExpander<'a> {
                     }
                 };
 
+                if let Some(label) = fixed_variant_label {
+                    let marker = constraint.marker.simplify_variant_label(label);
+                    if marker != constraint.marker {
+                        constraint.to_mut().marker = marker;
+                    }
+                }
+
                 // If we're in a fork in universal mode, ignore any dependency that isn't part of
                 // this fork (but will be part of another fork).
                 if !env.included_by_marker(constraint.marker) {
@@ -420,7 +435,7 @@ impl<'a> RequirementExpander<'a> {
                 match extra {
                     Some(source_extra) => {
                         if !constraint
-                            .evaluate_markers(env.marker_environment(), &MarkerVariantsUniversal, slice::from_ref(source_extra))
+                            .evaluate_markers(env.marker_environment(), variants, slice::from_ref(source_extra))
                         {
                             return None;
                         }
@@ -430,7 +445,7 @@ impl<'a> RequirementExpander<'a> {
                         }
                     }
                     None => {
-                        if !constraint.evaluate_markers(env.marker_environment(), &MarkerVariantsUniversal, &[]) {
+                        if !constraint.evaluate_markers(env.marker_environment(), variants, &[]) {
                             return None;
                         }
                     }

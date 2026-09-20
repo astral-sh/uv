@@ -1,6 +1,5 @@
 use std::future::Future;
 use std::sync::Arc;
-use uv_pep508::MarkerEnvironment;
 pub use uv_resolver_types::MetadataResponse;
 pub(crate) use uv_resolver_types::MetadataUnavailable;
 
@@ -9,12 +8,14 @@ use uv_configuration::BuildOptions;
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_distribution_types::{
     Dist, IndexCapabilities, IndexLocations, IndexMetadata, IndexMetadataRef, InstalledDist,
-    RequestedDist, RequiresPython,
+    RegistryVariantsJson, RequestedDist, RequiresPython, VariantsJsonFilename,
 };
 use uv_normalize::PackageName;
+use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Tags;
 use uv_static::EnvVars;
 use uv_types::{BuildContext, HashStrategy};
+use uv_variants::resolved_variants::ResolvedVariants;
 
 use crate::ExcludeNewer;
 use crate::flat_index::{FlatDistributions, FlatIndex};
@@ -23,6 +24,7 @@ use crate::yanks::AllowedYanks;
 
 pub type PackageVersionsResult = Result<VersionsResponse, uv_client::Error>;
 pub type WheelMetadataResult = Result<MetadataResponse, uv_distribution::Error>;
+pub type VariantProviderResult = Result<ResolvedVariants, uv_distribution::Error>;
 
 /// The response when requesting versions for a package
 #[derive(Debug)]
@@ -53,6 +55,7 @@ pub trait ResolverProvider {
     fn get_or_build_wheel_metadata<'io>(
         &'io self,
         dist: &'io Dist,
+        marker_env: Option<&'io MarkerEnvironment>,
     ) -> impl Future<Output = WheelMetadataResult> + 'io;
 
     /// Get the metadata for an installed distribution.
@@ -61,6 +64,13 @@ pub trait ResolverProvider {
         dist: &'io InstalledDist,
         marker_env: Option<&'io MarkerEnvironment>,
     ) -> impl Future<Output = WheelMetadataResult> + 'io;
+
+    /// Fetch the variants for a distribution given the marker environment.
+    fn fetch_and_query_variants<'io>(
+        &'io self,
+        variants_json: &'io RegistryVariantsJson,
+        marker_env: &'io uv_pep508::MarkerEnvironment,
+    ) -> impl Future<Output = VariantProviderResult> + 'io;
 
     /// Set the [`Reporter`] to use for this installer.
     #[must_use]
@@ -227,12 +237,40 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
     }
 
     /// Fetch the metadata for a distribution, building it if necessary.
-    async fn get_or_build_wheel_metadata<'io>(&'io self, dist: &'io Dist) -> WheelMetadataResult {
-        match self
-            .fetcher
-            .get_or_build_wheel_metadata(dist, self.hasher.metadata_policy(dist))
-            .await
-        {
+    async fn get_or_build_wheel_metadata<'io>(
+        &'io self,
+        dist: &'io Dist,
+        marker_env: Option<&'io MarkerEnvironment>,
+    ) -> WheelMetadataResult {
+        let result = async {
+            let mut metadata = self
+                .fetcher
+                .get_or_build_wheel_metadata(dist, self.hasher.metadata_policy(dist))
+                .await?;
+            if let Dist::Built(built) = dist
+                && built.index().is_none()
+                && let Some(label) = built.wheel_filename().variant()
+            {
+                let variants = self
+                    .fetcher
+                    .read_wheel_variant_metadata(built, self.hasher.archive_policy(dist))
+                    .await?;
+                if let Some(marker_env) = marker_env {
+                    let filename = VariantsJsonFilename {
+                        name: built.wheel_filename().name.clone(),
+                        version: built.wheel_filename().version.clone(),
+                    };
+                    metadata.variant = Some(
+                        self.fetcher
+                            .query_wheel_variants(variants, label, marker_env, &filename)
+                            .await?,
+                    );
+                }
+            }
+            Ok::<_, uv_distribution::Error>(metadata)
+        }
+        .await;
+        match result {
             Ok(metadata) => Ok(MetadataResponse::Found(metadata)),
             Err(err) => match err {
                 uv_distribution::Error::Client(client) => {
@@ -324,6 +362,17 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                 Arc::new(err),
             )),
         }
+    }
+
+    /// Fetch the variants for a distribution given the marker environment.
+    async fn fetch_and_query_variants<'io>(
+        &'io self,
+        variants_json: &'io RegistryVariantsJson,
+        marker_env: &'io uv_pep508::MarkerEnvironment,
+    ) -> VariantProviderResult {
+        self.fetcher
+            .fetch_and_query_variants(variants_json, marker_env)
+            .await
     }
 
     /// Set the [`Reporter`] to use for this installer.

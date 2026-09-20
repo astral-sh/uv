@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 use std::collections::btree_map::Entry;
-use uv_preview::PreviewFeature;
 
 use rustc_hash::FxHashMap;
 use tracing::instrument;
@@ -19,8 +18,10 @@ use uv_distribution_types::{
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::{TagCompatibility, Tags};
+use uv_preview::PreviewFeature;
 use uv_pypi_types::HashDigest;
 use uv_types::HashStrategy;
+use uv_variants::VariantPriority;
 
 /// Unfiltered entries from `--find-links`, indexed by [`PackageName`].
 #[derive(Debug, Clone, Default)]
@@ -230,7 +231,7 @@ impl FlatDistributions {
         }
 
         // Determine a compatibility for the wheel based on tags.
-        let priority = match tags {
+        let tag_priority = match tags {
             Some(tags) => match filename.compatibility(tags) {
                 TagCompatibility::Incompatible(tag) => {
                     return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(tag));
@@ -238,6 +239,13 @@ impl FlatDistributions {
                 TagCompatibility::Compatible(priority) => Some(priority),
             },
             None => None,
+        };
+
+        // TODO(konsti): Currently we ignore variants here on only determine them later
+        let variant_priority = if filename.variant().is_none() {
+            VariantPriority::NonVariant
+        } else {
+            VariantPriority::Unknown
         };
 
         // Check if hashes line up.
@@ -257,7 +265,12 @@ impl FlatDistributions {
         // Break ties with the build tag.
         let build_tag = filename.build_tag().cloned();
 
-        WheelCompatibility::Compatible(hash, priority, build_tag)
+        WheelCompatibility::Compatible {
+            hash,
+            variant_priority,
+            tag_priority,
+            build_tag,
+        }
     }
 }
 
