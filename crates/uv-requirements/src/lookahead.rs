@@ -1,4 +1,5 @@
 use std::{collections::VecDeque, sync::Arc};
+use uv_pep508::MarkerVariantsUniversal;
 
 use futures::StreamExt;
 use futures::stream::FuturesUnordered;
@@ -95,7 +96,13 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                 self.modifiers
                     .apply(DependencyModifierScope::Global, self.requirements),
             )
-            .filter(|requirement| requirement.evaluate_markers(env.marker_environment(), &[]))
+            .filter(|requirement| {
+                requirement.evaluate_markers(
+                    env.marker_environment(),
+                    &MarkerVariantsUniversal,
+                    &[],
+                )
+            })
             .map(|requirement| (*requirement).clone())
             .collect();
 
@@ -145,9 +152,11 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                         DependencyModifierScope::Package(lookahead.package(), lookahead.version()),
                         lookahead.requirements(),
                     )) {
-                        if requirement
-                            .evaluate_markers(env.marker_environment(), lookahead.extras())
-                        {
+                        if requirement.evaluate_markers(
+                            env.marker_environment(),
+                            &MarkerVariantsUniversal,
+                            lookahead.extras(),
+                        ) {
                             queue.push_back((*requirement).clone());
                         }
                     }

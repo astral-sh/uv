@@ -31,6 +31,7 @@ use uv_distribution_types::{
 };
 use uv_git::GitResolver;
 use uv_installer::{InstallationStrategy, Installer, Plan, Planner, Preparer, SitePackages};
+use uv_pep508::MarkerVariantsUniversal;
 use uv_preview::Preview;
 use uv_pypi_types::Conflicts;
 use uv_python_interpreter::{Interpreter, PythonEnvironment};
@@ -372,7 +373,11 @@ impl BuildContext for BuildDispatch<'_> {
         let tags = self.interpreter.tags()?;
 
         let active_requirements = requirements.iter().filter(|requirement| {
-            requirement.evaluate_markers(Some(self.interpreter.markers()), &[])
+            requirement.evaluate_markers(
+                Some(self.interpreter.markers()),
+                &MarkerVariantsUniversal,
+                &[],
+            )
         });
         let previous_hasher = hash_override;
         let hasher = match previous_hasher {

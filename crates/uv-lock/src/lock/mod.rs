@@ -50,7 +50,8 @@ use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::{
-    MarkerEnvironment, MarkerTree, Scheme, VerbatimUrl, VerbatimUrlError, split_scheme,
+    MarkerEnvironment, MarkerTree, MarkerVariantsUniversal, Scheme, VerbatimUrl, VerbatimUrlError,
+    split_scheme,
 };
 use uv_platform_tags::{
     AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
@@ -3322,7 +3323,11 @@ impl Lock {
         } else {
             let root_applies = self.manifest.requirements.iter().any(|requirement| {
                 &requirement.name == dependency_name
-                    && requirement.marker.evaluate(marker_environment, &[])
+                    && requirement.marker.evaluate(
+                        marker_environment,
+                        &MarkerVariantsUniversal,
+                        &[],
+                    )
             });
             let group_applies =
                 self.manifest
@@ -3331,7 +3336,11 @@ impl Lock {
                     .flatten()
                     .any(|requirement| {
                         &requirement.name == dependency_name
-                            && requirement.marker.evaluate(marker_environment, &[])
+                            && requirement.marker.evaluate(
+                                marker_environment,
+                                &MarkerVariantsUniversal,
+                                &[],
+                            )
                     });
 
             // Lock-manifest requirements and dependency groups only record requirements, not
@@ -3345,7 +3354,11 @@ impl Lock {
             let root = package.and_then(|package| {
                 let mut applicable = self.manifest.requirements.iter().filter(|requirement| {
                     &requirement.name == dependency_name
-                        && requirement.marker.evaluate(marker_environment, &[])
+                        && requirement.marker.evaluate(
+                            marker_environment,
+                            &MarkerVariantsUniversal,
+                            &[],
+                        )
                 });
                 let requirement = applicable.next()?;
                 let mut selection = SelectedDependency::from_requirement(package, requirement);
@@ -3359,7 +3372,11 @@ impl Lock {
                 for (group, requirements) in &self.manifest.dependency_groups {
                     let mut applicable = requirements.iter().filter(|requirement| {
                         &requirement.name == dependency_name
-                            && requirement.marker.evaluate(marker_environment, &[])
+                            && requirement.marker.evaluate(
+                                marker_environment,
+                                &MarkerVariantsUniversal,
+                                &[],
+                            )
                     });
                     let Some(requirement) = applicable.next() else {
                         continue;
@@ -3405,6 +3422,7 @@ impl Lock {
             // must not match there.
             if !dependency.complexified_marker.evaluate(
                 marker_environment,
+                &MarkerVariantsUniversal,
                 std::iter::empty::<&PackageName>(),
                 dependency
                     .extra
@@ -3454,6 +3472,7 @@ impl Lock {
         {
             if !dependency.complexified_marker.evaluate(
                 marker_environment,
+                &MarkerVariantsUniversal,
                 std::iter::once(project_name),
                 dependency
                     .extra
@@ -4630,7 +4649,7 @@ impl Lock {
                     if marker.is_false() {
                         continue;
                     }
-                    if !marker.evaluate(markers, &[]) {
+                    if !marker.evaluate(markers, &MarkerVariantsUniversal, &[]) {
                         continue;
                     }
 
