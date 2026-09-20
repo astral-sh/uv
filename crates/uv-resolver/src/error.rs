@@ -43,6 +43,9 @@ pub enum ResolveError {
     Dependencies(#[source] Box<Self>, PackageName, Version, DerivationChain),
 
     #[error(transparent)]
+    VariantFrontend(Box<uv_distribution::Error>),
+
+    #[error(transparent)]
     Client(#[from] uv_client::Error),
 
     #[error(transparent)]
@@ -146,6 +149,7 @@ impl ResolveError {
         match self {
             Self::Dependencies(error, ..) => error.is_user_failure(),
             Self::Distribution(error) => error.is_user_failure(),
+            Self::VariantFrontend(error) => error.is_user_failure(),
             Self::ConflictingUrls { .. }
             | Self::ConflictingIndexesForEnvironment { .. }
             | Self::ConflictingIndexes(..)

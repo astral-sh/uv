@@ -9,3 +9,7 @@ mod direct_url_hashes;
 mod json;
 #[cfg(all(feature = "test-python", feature = "test-pypi"))]
 mod pip_install;
+#[cfg(feature = "test-python")]
+mod variants;
+#[cfg(feature = "test-python")]
+mod variants_installed;

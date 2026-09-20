@@ -3,12 +3,13 @@ use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
 
 use uv_distribution_types::{
-    Dist, DistributionId, Identifier, IndexMetadata, IndexUrl, Name, ResolutionRecorder,
-    ResolvedDistRef,
+    Dist, DistributionId, GlobalVersionId, Identifier, IndexMetadata, IndexUrl, Name,
+    RegistryVariantsJson, ResolutionRecorder, ResolvedDistRef,
 };
 use uv_normalize::PackageName;
 use uv_once_map::Registration;
 use uv_pep440::Version;
+use uv_variants::resolved_variants::ResolvedVariants;
 
 use crate::pubgrub::Range;
 use crate::resolver::index::FxRegisteredEntry;
@@ -193,6 +194,23 @@ impl MetadataRequests {
             Registration::Existing(entry) => entry,
         };
         Ok(RegisteredMetadata(entry))
+    }
+
+    /// Request variant properties once for a package version from the selected index.
+    pub(crate) fn request_variants(
+        &self,
+        id: &GlobalVersionId,
+        variants_json: &RegistryVariantsJson,
+    ) -> Result<FxRegisteredEntry<'_, GlobalVersionId, Arc<ResolvedVariants>>, ResolveError> {
+        let entry = match self.index.variant_priorities().register_entry(id.clone()) {
+            Registration::New(entry) => {
+                self.sender
+                    .blocking_send(Request::Variants(id.clone(), variants_json.clone()))?;
+                entry
+            }
+            Registration::Existing(entry) => entry,
+        };
+        Ok(entry)
     }
 
     /// Schedule speculative candidate selection using an already-requested package version map.

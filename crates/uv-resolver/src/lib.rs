@@ -9,7 +9,7 @@ pub use resolution::{ConflictingDistributionError, DisplayResolutionGraph, Resol
 pub use resolver::{
     DefaultResolverProvider, InMemoryIndex, MetadataResponse, PackageVersionsResult,
     Reporter as ResolverReporter, Resolver, ResolverEnvironment, ResolverProvider,
-    VersionsResponse, WheelMetadataResult,
+    VariantProviderResult, VersionsResponse, WheelMetadataResult,
 };
 pub use universal_marker::UniversalMarker;
 pub use upgrade::UpgradePackages;

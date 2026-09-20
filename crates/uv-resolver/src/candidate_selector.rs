@@ -911,9 +911,9 @@ impl CandidateDist<'_> {
     }
 }
 
-impl<'a> From<&'a PrioritizedDist> for CandidateDist<'a> {
-    fn from(value: &'a PrioritizedDist) -> Self {
-        if let Some(dist) = value.get() {
+impl<'a> CandidateDist<'a> {
+    fn from_prioritized_dist(value: &'a PrioritizedDist, allow_all_variants: bool) -> Self {
+        if let Some(dist) = value.get(allow_all_variants) {
             CandidateDist::Compatible(dist)
         } else {
             // TODO(zanieb)
@@ -922,7 +922,7 @@ impl<'a> From<&'a PrioritizedDist> for CandidateDist<'a> {
             // why neither distribution kind can be used.
             let dist = if let Some(incompatibility) = value.incompatible_source() {
                 IncompatibleDist::Source(incompatibility.clone())
-            } else if let Some(incompatibility) = value.incompatible_wheel() {
+            } else if let Some(incompatibility) = value.incompatible_wheel(allow_all_variants) {
                 IncompatibleDist::Wheel(incompatibility.clone())
             } else {
                 IncompatibleDist::Unavailable
@@ -979,8 +979,18 @@ impl<'a> Candidate<'a> {
         Self {
             name,
             version,
-            dist: CandidateDist::from(dist),
+            dist: CandidateDist::from_prioritized_dist(dist, false),
             choice_kind,
+        }
+    }
+
+    pub(crate) fn prioritize_best_variant_wheel(
+        self,
+        prioritized_dist: &'a PrioritizedDist,
+    ) -> Self {
+        Self {
+            dist: CandidateDist::from_prioritized_dist(prioritized_dist, true),
+            ..self
         }
     }
 
