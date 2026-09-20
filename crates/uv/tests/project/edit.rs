@@ -15,6 +15,8 @@ use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use serde_json::json;
 use std::path::Path;
+#[cfg(unix)]
+use std::{fs::Permissions, os::unix::fs::PermissionsExt};
 use url::Url;
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
@@ -8469,6 +8471,92 @@ fn remove_include_default_groups() -> Result<()> {
 
     assert!(context.temp_dir.join("uv.lock").exists());
 
+    Ok(())
+}
+
+/// An unchanged, read-only workspace manifest must not prevent restoring the member.
+#[test]
+#[cfg(unix)]
+fn add_locked_readonly_workspace() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let workspace = context.temp_dir.child("pyproject.toml");
+    workspace.write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["member"]
+    "#})?;
+    context
+        .temp_dir
+        .child("member/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+    context.lock().assert().success();
+    let member = context.read("member/pyproject.toml");
+    let lock = context.read("uv.lock");
+    fs_err::set_permissions(&workspace, Permissions::from_mode(0o444))?;
+
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--package").arg("member").arg("--locked").arg("--no-sync"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    assert_eq!(context.read("member/pyproject.toml"), member);
+    assert_eq!(context.read("uv.lock"), lock);
+    Ok(())
+}
+
+/// Frozen edits must not read the lockfile.
+#[test]
+#[cfg(unix)]
+fn add_remove_frozen_unreadable_lockfile() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+    let lock = context.temp_dir.child("uv.lock");
+    lock.write_str("unreadable lockfile\n")?;
+    fs_err::set_permissions(&lock, Permissions::from_mode(0o000))?;
+
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--frozen"), @"
+    exit_code: 0 (success)
+    ");
+    assert_snapshot!(context.read("pyproject.toml"), @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "iniconfig",
+    ]
+    "#);
+    uv_snapshot!(context.filters(), context.remove().arg("iniconfig").arg("--frozen"), @"
+    exit_code: 0 (success)
+    ");
+    assert_snapshot!(context.read("pyproject.toml"), @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = []
+    "#);
+    fs_err::set_permissions(&lock, Permissions::from_mode(0o644))?;
+    assert_snapshot!(context.read("uv.lock"), @"
+    unreadable lockfile
+    ");
     Ok(())
 }
 

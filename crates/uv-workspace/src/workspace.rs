@@ -2294,22 +2294,6 @@ impl VirtualProject {
         })
     }
 
-    /// Clone while detaching from the original workspace `Arc`, freeing the original state for
-    /// modification.
-    ///
-    /// This is intended for rollbacks only.
-    #[must_use]
-    pub fn clone_detach(&self) -> Self {
-        match self {
-            Self::Project(project) => Self::Project(ProjectWorkspace {
-                project_root: project.project_root.clone(),
-                project_name: project.project_name.clone(),
-                workspace: Arc::new((*project.workspace).clone()),
-            }),
-            Self::NonProject(workspace) => Self::NonProject(Arc::new((**workspace).clone())),
-        }
-    }
-
     /// Return the root of the project.
     pub fn root(&self) -> &Path {
         match self {
