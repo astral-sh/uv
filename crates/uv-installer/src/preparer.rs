@@ -1,7 +1,7 @@
 use std::cmp::Reverse;
 use std::sync::Arc;
 
-use futures::{FutureExt, Stream, TryFutureExt, TryStreamExt, stream::FuturesUnordered};
+use futures::{FutureExt, Stream, StreamExt, TryFutureExt, TryStreamExt};
 use tracing::{debug, instrument};
 
 use uv_cache::Cache;
@@ -62,25 +62,27 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
     }
 
     /// Fetch, build, and unzip the distributions in parallel.
+    ///
+    /// Concurrency is bounded by [`prepare_concurrency`]: every in-flight build holds its
+    /// cache shard `.lock` file open for the entire build, so an unbounded fan-out exhausts
+    /// file descriptors on large workspaces (see <https://github.com/astral-sh/uv/issues/17512>).
     fn prepare_stream<'stream>(
         &'stream self,
         distributions: Vec<Arc<Dist>>,
         in_flight: &'stream InFlight,
         resolution: &'stream Resolution,
     ) -> impl Stream<Item = Result<CachedDist, Error>> + 'stream {
-        distributions
-            .into_iter()
-            .map(async |dist| {
-                let wheel = self
-                    .get_wheel((*dist).clone(), in_flight, resolution)
-                    .boxed_local()
-                    .await?;
-                if let Some(reporter) = self.reporter.as_ref() {
-                    reporter.on_progress(&wheel);
-                }
-                Ok::<CachedDist, Error>(wheel)
-            })
-            .collect::<FuturesUnordered<_>>()
+        futures::stream::iter(distributions.into_iter().map(async |dist| {
+            let wheel = self
+                .get_wheel((*dist).clone(), in_flight, resolution)
+                .boxed_local()
+                .await?;
+            if let Some(reporter) = self.reporter.as_ref() {
+                reporter.on_progress(&wheel);
+            }
+            Ok::<CachedDist, Error>(wheel)
+        }))
+        .buffer_unordered(prepare_concurrency())
     }
 
     /// Download, build, and unzip a set of distributions.
@@ -320,5 +322,62 @@ impl uv_distribution::Reporter for Facade {
 
     fn on_download_complete(&self, name: &PackageName, index: usize) {
         self.reporter.on_download_complete(name, index);
+    }
+}
+
+/// Maximum number of distributions to prepare concurrently.
+///
+/// Every in-flight build holds its cache shard `.lock` file open for the entire build, so an
+/// unbounded fan-out over a large workspace exhausts file descriptors (`Too many open files`,
+/// see <https://github.com/astral-sh/uv/issues/17512>). Must never return zero:
+/// `buffer_unordered(0)` would stall the stream forever.
+fn prepare_concurrency() -> usize {
+    std::thread::available_parallelism()
+        .map(usize::from)
+        .unwrap_or(1)
+        .max(1)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use futures::StreamExt;
+    use futures::TryStreamExt;
+
+    #[test]
+    fn concurrency_bound_is_nonzero() {
+        assert!(prepare_concurrency() >= 1);
+    }
+
+    /// The combinator used by `prepare_stream` never has more than `bound` futures in flight.
+    #[tokio::test]
+    async fn prepare_stream_is_bounded() {
+        let bound = 4;
+        let total = 50;
+        let in_flight = Arc::new(AtomicUsize::new(0));
+        let max_observed = Arc::new(AtomicUsize::new(0));
+
+        let results: Vec<usize> = futures::stream::iter(0..total)
+            .map(|i| {
+                let in_flight = in_flight.clone();
+                let max_observed = max_observed.clone();
+                async move {
+                    let current = in_flight.fetch_add(1, Ordering::SeqCst) + 1;
+                    max_observed.fetch_max(current, Ordering::SeqCst);
+                    tokio::task::yield_now().await;
+                    in_flight.fetch_sub(1, Ordering::SeqCst);
+                    Ok::<usize, super::Error>(i)
+                }
+            })
+            .buffer_unordered(bound)
+            .try_collect()
+            .await
+            .unwrap();
+
+        assert_eq!(results.len(), total);
+        assert!(max_observed.load(Ordering::SeqCst) <= bound);
+        assert!(max_observed.load(Ordering::SeqCst) > 1);
     }
 }
