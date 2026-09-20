@@ -1,3 +1,7 @@
+#[cfg(unix)]
+use std::fs::Permissions;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
 use anyhow::{Ok, Result};
@@ -2554,6 +2558,155 @@ fn version_get_frozen_workspace_without_python() -> Result<()> {
     ----- stderr -----
     error: Failed to initialize cache at `cache-file`
       cause: failed to create directory `[CACHE_DIR]`: [ERROR]
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn version_bump_locked_preserves_pyproject() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "myproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--bump").arg("minor")
+        .arg("--locked"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    // A failed version change should leave the project and lockfile consistent.
+    assert_snapshot!(context.read("pyproject.toml"), @r#"
+    [project]
+    name = "myproject"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    "#);
+    assert_snapshot!(context.read("uv.lock"), @r#"
+    version = 1
+    revision = 3
+    requires-python = ">=3.12"
+
+    [options]
+    exclude-newer = "2024-03-25T00:00:00Z"
+
+    [[package]]
+    name = "myproject"
+    version = "0.1.0"
+    source = { virtual = "." }
+    "#);
+
+    Ok(())
+}
+
+#[test]
+#[cfg(unix)]
+fn version_bump_locked_readonly_workspace() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let workspace = context.temp_dir.child("pyproject.toml");
+    workspace.write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["member"]
+    "#})?;
+    context
+        .temp_dir
+        .child("member/pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "myproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    let lock = context.read("uv.lock");
+
+    // Updating a member does not require writing to the workspace's metadata.
+    fs_err::set_permissions(&workspace, Permissions::from_mode(0o444))?;
+
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--package").arg("myproject")
+        .arg("--bump").arg("minor")
+        .arg("--locked")
+        .arg("--no-sync"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    assert_snapshot!(context.read("member/pyproject.toml"), @r#"
+    [project]
+    name = "myproject"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    "#);
+    assert_eq!(context.read("uv.lock"), lock);
+
+    Ok(())
+}
+
+#[test]
+#[cfg(unix)]
+fn version_bump_frozen_unreadable_lockfile() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "myproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+        "#})?;
+    let lock = context.temp_dir.child("uv.lock");
+    lock.write_str("unreadable lockfile\n")?;
+    fs_err::set_permissions(&lock, Permissions::from_mode(0o000))?;
+
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--bump").arg("minor")
+        .arg("--frozen"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    myproject 0.1.0 => 0.2.0
+    ");
+
+    assert_snapshot!(context.read("pyproject.toml"), @r#"
+    [project]
+    name = "myproject"
+    version = "0.2.0"
+    requires-python = ">=3.12"
+    "#);
+    fs_err::set_permissions(&lock, Permissions::from_mode(0o644))?;
+    assert_snapshot!(context.read("uv.lock"), @"
+    unreadable lockfile
     ");
 
     Ok(())

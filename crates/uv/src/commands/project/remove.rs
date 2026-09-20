@@ -27,6 +27,7 @@ use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::add::{AddTarget, PythonTarget};
+use crate::commands::project::edit::ProjectEdit;
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
@@ -188,12 +189,26 @@ pub(crate) async fn remove(
 
     let content = toml.to_string();
 
+    let (path, lock_target) = match &target {
+        RemoveTarget::Script(script) => (script.path.clone(), LockTarget::from(script)),
+        RemoveTarget::Project(project) => (
+            project.root().join("pyproject.toml"),
+            LockTarget::from(project.workspace()),
+        ),
+    };
+    let edit = ProjectEdit::new(
+        [path]
+            .into_iter()
+            .chain(frozen.is_none().then(|| lock_target.lock_path())),
+    )?;
+
     // Save the modified `pyproject.toml` or script.
     target.write(&content)?;
 
     // If `--frozen`, exit early. There's no reason to lock and sync, since we don't need a `uv.lock`
     // to exist at all.
     if frozen.is_some() {
+        edit.commit();
         return Ok(ExitStatus::Success);
     }
 
@@ -205,6 +220,7 @@ pub(crate) async fn remove(
                 "Updated `{}`",
                 script.path.user_display().cyan()
             )?;
+            edit.commit();
             return Ok(ExitStatus::Success);
         }
     }
@@ -338,11 +354,13 @@ pub(crate) async fn remove(
 
     let AddTarget::Project(project, environment) = target else {
         // If we're not adding to a project, exit early.
+        edit.commit();
         return Ok(ExitStatus::Success);
     };
 
     let PythonTarget::Environment(venv) = &*environment else {
         // If we're not syncing, exit early.
+        edit.commit();
         return Ok(ExitStatus::Success);
     };
 
@@ -389,6 +407,7 @@ pub(crate) async fn remove(
         Err(err) => return Err(UvError::from(err).into()),
     }
 
+    edit.commit();
     Ok(ExitStatus::Success)
 }
 
