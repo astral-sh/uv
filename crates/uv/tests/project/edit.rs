@@ -8474,6 +8474,37 @@ fn remove_include_default_groups() -> Result<()> {
     Ok(())
 }
 
+/// A failed removal must not leave the manifest inconsistent with its lockfile.
+#[test]
+fn remove_locked_reverts_project() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+    "#})?;
+    context.lock().assert().success();
+    let pyproject = context.read("pyproject.toml");
+    let lock = context.read("uv.lock");
+
+    uv_snapshot!(context.filters(), context.remove().arg("iniconfig").arg("--locked").arg("--no-sync"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    assert_eq!(context.read("pyproject.toml"), pyproject);
+    assert_eq!(context.read("uv.lock"), lock);
+    Ok(())
+}
+
 /// An unchanged, read-only workspace manifest must not prevent restoring the member.
 #[test]
 #[cfg(unix)]
@@ -8557,6 +8588,110 @@ fn add_remove_frozen_unreadable_lockfile() -> Result<()> {
     assert_snapshot!(context.read("uv.lock"), @"
     unreadable lockfile
     ");
+    Ok(())
+}
+
+/// Restore both files when syncing fails after resolution has written a lockfile.
+#[test]
+fn remove_version_build_failure_reverts_project() -> Result<()> {
+    for args in [
+        &["remove", "iniconfig"][..],
+        &["version", "--bump", "minor"][..],
+    ] {
+        for locked in [false, true] {
+            let context = uv_test::test_context!("3.12");
+            context
+                .temp_dir
+                .child("pyproject.toml")
+                .write_str(indoc! {r#"
+                [project]
+                name = "project"
+                version = "0.1.0"
+                requires-python = ">=3.12"
+                dependencies = ["iniconfig"]
+
+                [build-system]
+                requires = []
+                build-backend = "backend"
+                backend-path = ["."]
+            "#})?;
+            context.temp_dir.child("backend.py").write_str(indoc! {r#"
+                from pathlib import Path
+
+                def build_editable(*args, **kwargs):
+                    Path(__file__).with_name("built").touch()
+                    raise RuntimeError("build failed")
+            "#})?;
+            if locked {
+                context.lock().assert().success();
+            }
+            let pyproject = context.read("pyproject.toml");
+            let lock = locked.then(|| context.read("uv.lock"));
+
+            context.command().args(args).assert().code(1);
+            assert!(context.temp_dir.join("built").exists(), "{args:?}");
+            assert_eq!(context.read("pyproject.toml"), pyproject, "{args:?}");
+            assert_eq!(
+                fs_err::read_to_string(context.temp_dir.join("uv.lock")).ok(),
+                lock,
+                "{args:?}"
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Interrupt during a build, after the manifest and lockfile have both been written.
+#[test]
+#[cfg(unix)]
+fn edit_interrupt_reverts_project() -> Result<()> {
+    for args in [
+        &["add", "iniconfig", "--dev"][..],
+        &["remove", "iniconfig"][..],
+        &["version", "--bump", "minor"][..],
+    ] {
+        for locked in [false, true] {
+            let context = uv_test::test_context!("3.12");
+            context
+                .temp_dir
+                .child("pyproject.toml")
+                .write_str(indoc! {r#"
+                [project]
+                name = "project"
+                version = "0.1.0"
+                requires-python = ">=3.12"
+                dependencies = ["iniconfig"]
+
+                [build-system]
+                requires = []
+                build-backend = "backend"
+                backend-path = ["."]
+            "#})?;
+            context.temp_dir.child("backend.py").write_str(indoc! {r#"
+                import os
+                import signal
+                import time
+
+                def build_editable(*args, **kwargs):
+                    os.kill(os.getppid(), signal.SIGINT)
+                    time.sleep(1)
+                    raise RuntimeError("build interrupted")
+            "#})?;
+            if locked {
+                context.lock().assert().success();
+            }
+            let pyproject = context.read("pyproject.toml");
+            let lock = locked.then(|| context.read("uv.lock"));
+
+            context.command().args(args).assert().code(130);
+            assert_eq!(context.read("pyproject.toml"), pyproject, "{args:?}");
+            assert_eq!(
+                fs_err::read_to_string(context.temp_dir.join("uv.lock")).ok(),
+                lock,
+                "{args:?}"
+            );
+        }
+    }
     Ok(())
 }
 
