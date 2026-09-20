@@ -137,6 +137,9 @@ pub enum EnvironmentError {
     DefaultGroups(#[from] uv_workspace::DefaultGroupsError),
 
     #[error(transparent)]
+    Distribution(Box<uv_distribution::Error>),
+
+    #[error(transparent)]
     ExtraBuildRequires(#[from] uv_distribution_types::ExtraBuildRequiresError),
 
     #[error(transparent)]
@@ -240,6 +243,7 @@ impl From<EnvironmentError> for UvError {
             | EnvironmentError::Metadata(..)
             | EnvironmentError::Lowering(..)
             | EnvironmentError::Workspace(..)
+            | EnvironmentError::Distribution(..)
             | EnvironmentError::DefaultGroups(..)
             | EnvironmentError::ExtraBuildRequires(..)
             | EnvironmentError::Fmt(..)
@@ -261,6 +265,7 @@ impl uv_errors::Hinted for EnvironmentError {
             Self::Resolve(error) => error.hints(),
             Self::Install(error) => error.hints(),
             Self::Client(error) => error.hints(),
+            Self::Distribution(error) => error.hints(),
             Self::Conflict(..)
             | Self::MissingGroupProject(..)
             | Self::MissingGroupProjects(..)
@@ -309,5 +314,11 @@ impl From<ScriptRequirementsError> for EnvironmentError {
             ScriptRequirementsError::IndexUrl(error) => Self::IndexUrl(error),
             ScriptRequirementsError::Lowering(error) => Self::Lowering(error),
         }
+    }
+}
+
+impl From<uv_distribution::Error> for EnvironmentError {
+    fn from(error: uv_distribution::Error) -> Self {
+        Self::Distribution(Box::new(error))
     }
 }

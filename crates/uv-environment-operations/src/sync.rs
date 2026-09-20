@@ -8,15 +8,14 @@ use uv_configuration::{
     ExtrasSpecificationWithDefaults, HashCheckingMode, InstallOptions, Modifications, TargetTriple,
 };
 use uv_dispatch::{BuildDispatch, PlatformState};
-use uv_distribution::LoweredExtraBuildDependencies;
+use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{Dist, Resolution, ResolvedDist, SourceDist};
 use uv_install_operations::editable::apply_editable_mode;
 use uv_install_operations::loggers::InstallLogger;
 use uv_install_operations::{BytecodeCompilation, Changelog, InstallationPlan};
 use uv_installer::{InstallationStrategy, SitePackages};
 use uv_lock::Installable;
-use uv_pep508::MarkerVariantsUniversal;
-use uv_pep508::{MarkerTree, VersionOrUrl};
+use uv_pep508::{MarkerTree, MarkerVariantsUniversal, VersionOrUrl};
 use uv_preview::Preview;
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, ParsedUrl};
 use uv_python_interpreter::PythonEnvironment;
@@ -200,72 +199,74 @@ pub async fn sync_from_lock(
     let tags = resolution_tags(None, python_platform, venv.interpreter())
         .map_err(EnvironmentError::from)?;
 
-    // Read the lockfile.
-    let resolution = target.to_resolution(
-        &marker_env,
-        &tags,
-        extras,
-        groups,
-        build_options,
-        &install_options,
-    )?;
-
-    // Always skip virtual projects, which shouldn't be built or installed.
-    let resolution = apply_no_virtual_project(resolution);
-
-    // If necessary, convert editable to non-editable distributions.
-    let resolution = apply_editable_mode(resolution, editable);
-
-    // Constrain any build requirements marked as `match-runtime = true`.
-    let extra_build_requires = extra_build_requires.match_runtime(&resolution)?;
-
-    // Extract the hashes from the lockfile.
-    let hasher = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?;
-
     // Populate credentials from the target.
     store_credentials_from_target(target, &client_builder)?;
 
-    let bytecode_compilation = compile_bytecode.then_some(BytecodeCompilation::All);
-    let site_packages = SitePackages::from_environment(venv)?;
-    let installation_plan = InstallationPlan::build(
-        &resolution,
-        site_packages,
-        InstallationStrategy::Strict,
-        reinstall,
-        build_options,
-        &hasher,
-        index_locations,
-        config_setting,
-        config_settings_package,
-        &extra_build_requires,
-        extra_build_variables,
-        cache,
-        venv,
-        &tags,
-    )?;
+    if !target.has_variants() {
+        // Read the lockfile.
+        let resolution = target.to_resolution(
+            &marker_env,
+            &tags,
+            extras,
+            groups,
+            build_options,
+            &install_options,
+        )?;
 
-    // Avoid constructing an HTTP client and build dispatch when planning shows that there is no
-    // installation work to perform.
-    if installation_plan.is_noop(modifications, bytecode_compilation, dry_run) {
-        maybe_check_malware(
-            &target,
+        // Always skip virtual projects, which shouldn't be built or installed.
+        let resolution = apply_no_virtual_project(resolution);
+
+        // If necessary, convert editable to non-editable distributions.
+        let resolution = apply_editable_mode(resolution, editable.clone());
+
+        // Constrain any build requirements marked as `match-runtime = true`.
+        let extra_build_requires = extra_build_requires.clone().match_runtime(&resolution)?;
+
+        // Extract the hashes from the lockfile.
+        let hasher = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?;
+
+        let bytecode_compilation = compile_bytecode.then_some(BytecodeCompilation::All);
+        let site_packages = SitePackages::from_environment(venv)?;
+        let installation_plan = InstallationPlan::build(
             &resolution,
-            &malware_check_client_builder,
-            concurrency,
+            site_packages,
+            InstallationStrategy::Strict,
+            reinstall,
+            build_options,
+            &hasher,
+            index_locations,
+            config_setting,
+            config_settings_package,
+            &extra_build_requires,
+            extra_build_variables,
             cache,
-            preview,
-            &malware_context,
-        )
-        .await?;
+            venv,
+            &tags,
+        )?;
 
-        return Ok(installation_plan.finish_noop(
-            &resolution,
-            modifications,
-            bytecode_compilation,
-            logger.as_ref(),
-            dry_run,
-            printer,
-        )?);
+        // Avoid constructing an HTTP client and build dispatch when planning shows that there is no
+        // installation work to perform.
+        if installation_plan.is_noop(modifications, bytecode_compilation, dry_run) {
+            maybe_check_malware(
+                &target,
+                &resolution,
+                &malware_check_client_builder,
+                concurrency,
+                cache,
+                preview,
+                &malware_context,
+            )
+            .await?;
+
+            return Ok(installation_plan.finish_noop(
+                &resolution,
+                modifications,
+                bytecode_compilation,
+                logger.as_ref(),
+                dry_run,
+                printer,
+            )?);
+        }
     }
 
     // Initialize the registry client.
@@ -288,7 +289,7 @@ pub async fn sync_from_lock(
     // Read the build constraints from the lockfile.
     let build_constraints = target.build_constraints();
 
-    let build_hasher = HashStrategy::from_constraints(
+    let constraint_hasher = HashStrategy::from_constraints(
         &build_constraints,
         Some(&venv.interpreter().to_resolver_marker_environment()),
         build_hash_checking,
@@ -297,7 +298,7 @@ pub async fn sync_from_lock(
     let build_hasher = target
         .lock()
         .hash_strategy(target.install_path(), &FxHashSet::default())?
-        .with_constraint_hashes(&build_hasher)?;
+        .with_constraint_hashes(&constraint_hasher)?;
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = FlatIndex::load(&client, cache, index_locations).await?;
@@ -328,6 +329,108 @@ pub async fn sync_from_lock(
         concurrency.clone(),
         preview,
     );
+
+    // TODO(konsti): Pass this into operations::install
+    let distribution_database = DistributionDatabase::new(
+        &client,
+        &build_dispatch,
+        concurrency.downloads_semaphore.clone(),
+    );
+
+    // Read the lockfile.
+    let resolution = target
+        .to_resolution_with_variants(
+            &marker_env,
+            &tags,
+            extras,
+            groups,
+            build_options,
+            &install_options,
+            distribution_database,
+            state.index().variant_priorities(),
+        )
+        .await?;
+
+    // Always skip virtual projects, which shouldn't be built or installed.
+    let resolution = apply_no_virtual_project(resolution);
+
+    // If necessary, convert editable to non-editable distributions.
+    let resolution = apply_editable_mode(resolution, editable);
+
+    // Constrain any build requirements marked as `match-runtime = true`.
+    let extra_build_requires = extra_build_requires.match_runtime(&resolution)?;
+
+    // Extract the hashes from the lockfile.
+    let hasher = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?;
+
+    // Create a build dispatch.
+    let build_dispatch = BuildDispatch::new(
+        &client,
+        cache,
+        &build_constraints,
+        venv.interpreter(),
+        index_locations,
+        &flat_index,
+        dependency_metadata,
+        state.clone().into_inner(),
+        index_strategy,
+        config_setting,
+        config_settings_package,
+        build_isolation,
+        &extra_build_requires,
+        extra_build_variables,
+        link_mode,
+        build_options,
+        &build_hasher,
+        exclude_newer.clone(),
+        sources.clone(),
+        SourceTreeEditablePolicy::Project,
+        workspace_cache.clone(),
+        concurrency.clone(),
+        preview,
+    );
+
+    let bytecode_compilation = compile_bytecode.then_some(BytecodeCompilation::All);
+    let site_packages = SitePackages::from_environment(venv)?;
+    let installation_plan = InstallationPlan::build(
+        &resolution,
+        site_packages,
+        InstallationStrategy::Strict,
+        reinstall,
+        build_options,
+        &hasher,
+        index_locations,
+        config_setting,
+        config_settings_package,
+        &extra_build_requires,
+        extra_build_variables,
+        cache,
+        venv,
+        &tags,
+    )?;
+
+    // Finish without preparing distributions when the environment already satisfies the plan.
+    if installation_plan.is_noop(modifications, bytecode_compilation, dry_run) {
+        maybe_check_malware(
+            &target,
+            &resolution,
+            &malware_check_client_builder,
+            concurrency,
+            cache,
+            preview,
+            &malware_context,
+        )
+        .await?;
+
+        return Ok(installation_plan.finish_noop(
+            &resolution,
+            modifications,
+            bytecode_compilation,
+            logger.as_ref(),
+            dry_run,
+            printer,
+        )?);
+    }
 
     // Run a malware check against OSV before installing.
     maybe_check_malware(
