@@ -5891,6 +5891,7 @@ dependencies = [
  "uv-trampoline-builder",
  "uv-types",
  "uv-unix",
+ "uv-variants",
  "uv-version",
  "uv-virtualenv",
  "uv-warnings",
@@ -6690,6 +6691,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-redacted",
  "uv-small-str",
+ "uv-static",
  "uv-variants",
  "uv-warnings",
 ]
@@ -7317,6 +7319,7 @@ dependencies = [
  "uv-tool",
  "uv-torch",
  "uv-types",
+ "uv-variants",
  "uv-warnings",
  "uv-workspace",
 ]

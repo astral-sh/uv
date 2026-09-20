@@ -14,8 +14,8 @@ use uv_configuration::{
 use uv_distribution_filename::EggInfoFilename;
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, Diagnostic, ExtraBuildRequires, ExtraBuildVariables,
-    InstalledDist, InstalledDistKind, Name, NameRequirementSpecification, PackageConfigSettings,
-    Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification,
+    InstalledDist, InstalledDistError, InstalledDistKind, Name, NameRequirementSpecification,
+    PackageConfigSettings, Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
@@ -283,9 +283,11 @@ impl SitePackages {
                     }
                 }
 
+                let variants = distribution.read_variant_context(markers.markers())?;
+
                 // Verify that the dependencies are installed.
                 for dependency in &metadata.requires_dist {
-                    if !dependency.evaluate_markers(markers, &MarkerVariantsUniversal, &[]) {
+                    if !dependency.evaluate_markers(markers, &variants, &[]) {
                         continue;
                     }
 
@@ -561,6 +563,16 @@ impl SitePackages {
                         }
                     }
 
+                    // A changed target may require another wheel or a refreshed marker context,
+                    // even when the installed version and dependency set are unchanged.
+                    match distribution.can_reuse_variant_context(markers.markers()) {
+                        Ok(true) => {}
+                        Ok(false) | Err(InstalledDistError::VariantIncompatible(_)) => {
+                            return Ok(SatisfiesResult::Unsatisfied(requirement));
+                        }
+                        Err(err) => return Err(err.into()),
+                    }
+
                     // With `--no-deps`, only the requested requirements and their constraints
                     // need to be satisfied. Avoid reading metadata for dependencies that the
                     // resolver would not include either.
@@ -578,6 +590,7 @@ impl SitePackages {
                             format!("Failed to read metadata for: {distribution}")
                         })?)
                     };
+                    let variants = distribution.read_variant_context(markers.markers())?;
 
                     // Add the dependencies to the queue.
                     let dependencies = metadata
@@ -592,7 +605,7 @@ impl SitePackages {
                     ) {
                         if dependency.evaluate_markers(
                             Some(markers),
-                            &MarkerVariantsUniversal,
+                            &variants,
                             &requirement.extras,
                         ) {
                             let dependency = dependency.into_owned();
