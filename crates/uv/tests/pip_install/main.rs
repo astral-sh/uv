@@ -15,4 +15,8 @@ mod variants;
 #[cfg(feature = "test-python")]
 mod variants_installed;
 #[cfg(feature = "test-python")]
+mod variants_packse;
+#[cfg(feature = "test-python")]
+mod variants_provider;
+#[cfg(feature = "test-python")]
 mod wheel_variants;
