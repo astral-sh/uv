@@ -8,7 +8,8 @@ use tracing::{debug, trace};
 
 use uv_configuration::IndexStrategy;
 use uv_distribution_types::{
-    CompatibleDist, IncompatibleDist, IncompatibleSource, IndexUrl, ResolutionRecorder,
+    CompatibleDist, IncompatibleDist, IncompatibleSource, IndexUrl, InstalledDist,
+    InstalledDistError, ResolutionRecorder,
 };
 use uv_distribution_types::{DistributionMetadata, IncompatibleWheel, Name, PrioritizedDist};
 use uv_normalize::PackageName;
@@ -128,7 +129,7 @@ impl CandidateSelector {
         let installed = if reinstall {
             None
         } else {
-            Self::get_installed(package_name, range, installed_packages, tags)
+            Self::get_installed(package_name, range, installed_packages, env, tags)
         };
 
         // If we're not upgrading, we should prefer the already-installed distribution.
@@ -249,6 +250,7 @@ impl CandidateSelector {
             installed_packages,
             reinstall,
             prerelease_selection,
+            env,
             tags,
         )
     }
@@ -262,6 +264,7 @@ impl CandidateSelector {
         installed_packages: &'a InstalledPackages,
         reinstall: bool,
         prerelease_selection: PrereleaseSelection,
+        env: &ResolverEnvironment,
         tags: Option<&Tags>,
     ) -> Option<Candidate<'a>> {
         for (version, source) in preferences {
@@ -277,7 +280,7 @@ impl CandidateSelector {
                 match installed_dists.as_slice() {
                     [] => {}
                     [dist] => {
-                        if dist.version() == version {
+                        if dist.version() == version && Self::can_reuse_variant(dist, env) {
                             debug!(
                                 "Found installed version of {dist} that satisfies preference in {range}"
                             );
@@ -381,6 +384,7 @@ impl CandidateSelector {
         package_name: &'a PackageName,
         range: &Range<Version>,
         installed_packages: &'a InstalledPackages,
+        env: &ResolverEnvironment,
         tags: Option<&'a Tags>,
     ) -> Option<Candidate<'a>> {
         let installed_dists = installed_packages.get_packages(package_name);
@@ -390,7 +394,7 @@ impl CandidateSelector {
                 let version = dist.version();
 
                 // Respect the version range for this requirement.
-                if !range.contains(version) {
+                if !range.contains(version) || !Self::can_reuse_variant(dist, env) {
                     return None;
                 }
 
@@ -421,6 +425,18 @@ impl CandidateSelector {
             }
         }
         None
+    }
+
+    fn can_reuse_variant(dist: &InstalledDist, env: &ResolverEnvironment) -> bool {
+        let Some(markers) = env.marker_environment() else {
+            return true;
+        };
+        match dist.can_reuse_variant_context(markers) {
+            Ok(reusable) => reusable,
+            Err(InstalledDistError::VariantIncompatible(_)) => false,
+            // Preserve metadata errors so the metadata request can report their cause.
+            Err(_) => true,
+        }
     }
 
     /// Select a [`Candidate`] without checking for version preference such as an existing
