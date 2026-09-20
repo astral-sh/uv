@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use uv_preview::PreviewFeature;
 
 use rustc_hash::FxHashMap;
 use tracing::instrument;
@@ -88,6 +89,12 @@ impl FlatDistributions {
     ) -> Self {
         let mut distributions = Self::default();
         for entry in entries {
+            if let DistFilename::WheelFilename(filename) = entry.filename()
+                && filename.variant().is_some()
+                && !uv_preview::is_enabled(PreviewFeature::WheelVariants)
+            {
+                continue;
+            }
             let (filename, file, index) = entry.into_parts();
             distributions.add_file(file, filename, tags, hasher, build_options, index);
         }

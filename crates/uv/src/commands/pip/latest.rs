@@ -8,6 +8,7 @@ use uv_distribution_types::{
 };
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
+use uv_preview::PreviewFeature;
 use uv_resolver::{ExcludeNewer, Prerelease, PrereleaseMode};
 use uv_warnings::warn_user_once;
 
@@ -43,6 +44,13 @@ impl LatestClient<'_> {
         file: &File,
         exclude_newer: Option<&jiff::Timestamp>,
     ) -> bool {
+        if let DistFilename::WheelFilename(filename) = filename
+            && filename.variant().is_some()
+            && !uv_preview::is_enabled(PreviewFeature::WheelVariants)
+        {
+            return false;
+        }
+
         // Respect any exclude-newer cutoffs that were provided.
         if let Some(exclude_newer) = exclude_newer {
             match file.upload_time_utc_ms.as_ref() {

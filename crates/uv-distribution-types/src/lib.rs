@@ -737,6 +737,15 @@ impl BuiltDist {
             Self::GitPath(wheel) => &wheel.filename.version,
         }
     }
+
+    pub fn wheel_filename(&self) -> &WheelFilename {
+        match self {
+            Self::Registry(wheels) => &wheels.best_wheel().filename,
+            Self::DirectUrl(wheel) => &wheel.filename,
+            Self::Path(wheel) => &wheel.filename,
+            Self::GitPath(wheel) => &wheel.filename,
+        }
+    }
 }
 
 impl SourceDist {

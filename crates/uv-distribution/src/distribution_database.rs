@@ -221,6 +221,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         dist: &Dist,
         hashes: MetadataHashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
+        if let Dist::Built(built) = dist
+            && built.wheel_filename().variant().is_some()
+            && !uv_preview::is_enabled(PreviewFeature::WheelVariants)
+        {
+            return Err(Error::WheelVariantsPreview);
+        }
         match dist {
             Dist::Built(built) => self.get_wheel_metadata(built, hashes).await,
             Dist::Source(source) => {

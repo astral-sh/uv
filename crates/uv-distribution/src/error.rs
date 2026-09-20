@@ -34,6 +34,8 @@ impl fmt::Display for PythonVersion {
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[error("Wheel variants require `--preview-features wheel-variants`")]
+    WheelVariantsPreview,
     #[error("Building source distributions is disabled")]
     NoBuild,
     #[error("Building source distributions for `{0}` is disabled")]
@@ -292,7 +294,8 @@ impl Error {
     /// Return whether this is an expected user-facing failure.
     pub fn is_user_failure(&self) -> bool {
         match self {
-            Self::NoBuild
+            Self::WheelVariantsPreview
+            | Self::NoBuild
             | Self::NoBuildPackage(_)
             | Self::InvalidUrl(_)
             | Self::NonFileUrl(_)
