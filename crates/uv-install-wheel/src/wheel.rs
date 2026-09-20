@@ -877,6 +877,7 @@ pub(crate) fn write_installer_metadata<Cache: serde::Serialize, Build: serde::Se
     direct_url: Option<&DirectUrl>,
     cache_info: Option<&Cache>,
     build_info: Option<&Build>,
+    variant_info: Option<&serde_json::Value>,
     installer: Option<&str>,
     record: &mut Vec<RecordEntry>,
 ) -> Result<(), Error> {
@@ -905,6 +906,14 @@ pub(crate) fn write_installer_metadata<Cache: serde::Serialize, Build: serde::Se
             site_packages,
             &dist_info_dir.join("uv_build.json"),
             serde_json::to_string(build_info)?.as_bytes(),
+            record,
+        )?;
+    }
+    if let Some(variant_info) = variant_info {
+        write_file_recorded(
+            site_packages,
+            &dist_info_dir.join("uv_variant.json"),
+            serde_json::to_string(variant_info)?.as_bytes(),
             record,
         )?;
     }
@@ -1545,6 +1554,7 @@ mod test {
             site_packages,
             "foo-0.1.0",
             true,
+            None,
             None,
             None,
             None,
