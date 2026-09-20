@@ -1,3 +1,4 @@
+use crate::{IndexUrl, RegistryVariantsJson};
 use std::fmt::{Display, Formatter};
 
 use arcstr::ArcStr;
@@ -29,6 +30,8 @@ struct PrioritizedDistInner {
     best_wheel_index: Option<usize>,
     /// The set of all wheels associated with this distribution.
     wheels: Vec<(RegistryBuiltWheel, WheelCompatibility)>,
+    /// The `variants.json` file associated with the package version.
+    variants_json: Option<RegistryVariantsJson>,
     /// The hashes for each distribution.
     hashes: Vec<HashDigest>,
     /// The set of supported platforms for the distribution, described in terms of their markers.
@@ -41,6 +44,7 @@ impl Default for PrioritizedDistInner {
             source: None,
             best_wheel_index: None,
             wheels: Vec::new(),
+            variants_json: None,
             hashes: Vec::new(),
             markers: MarkerTree::FALSE,
         }
@@ -88,6 +92,16 @@ impl CompatibleDist<'_> {
             Self::SourceDist { sdist, .. } => sdist.file.requires_python.as_deref(),
             Self::CompatibleWheel { wheel, .. } => wheel.file.requires_python.as_deref(),
             Self::IncompatibleWheel { sdist, .. } => sdist.file.requires_python.as_deref(),
+        }
+    }
+
+    /// Return the index URL for the distribution, if any.
+    pub fn index(&self) -> Option<&IndexUrl> {
+        match self {
+            CompatibleDist::InstalledDist(_) => None,
+            CompatibleDist::SourceDist { sdist, .. } => Some(&sdist.index),
+            CompatibleDist::CompatibleWheel { wheel, .. } => Some(&wheel.index),
+            CompatibleDist::IncompatibleWheel { sdist, .. } => Some(&sdist.index),
         }
     }
 
@@ -347,6 +361,14 @@ pub enum HashComparison {
 }
 
 impl PrioritizedDist {
+    /// Create a new [`PrioritizedDist`] from the `variants.json`.
+    pub fn from_variant_json(variant_json: RegistryVariantsJson) -> Self {
+        Self(Box::new(PrioritizedDistInner {
+            variants_json: Some(variant_json),
+            ..PrioritizedDistInner::default()
+        }))
+    }
+
     /// Insert the given built distribution into the [`PrioritizedDist`].
     pub fn insert_built(
         &mut self,
@@ -398,6 +420,28 @@ impl PrioritizedDist {
         } else {
             self.0.source = Some((dist, compatibility));
         }
+    }
+
+    pub fn insert_variant_json(&mut self, variant_json: RegistryVariantsJson) {
+        debug_assert!(
+            self.0.variants_json.is_none(),
+            "The variants.json filename is unique"
+        );
+        self.0.variants_json = Some(variant_json);
+    }
+
+    /// Return the variants JSON for the distribution, if any.
+    pub fn variants_json(&self) -> Option<&RegistryVariantsJson> {
+        self.0.variants_json.as_ref()
+    }
+
+    /// Return the index URL for the distribution, if any.
+    pub fn index(&self) -> Option<&IndexUrl> {
+        self.0
+            .source
+            .as_ref()
+            .map(|(sdist, _)| &sdist.index)
+            .or_else(|| self.0.wheels.first().map(|(wheel, _)| &wheel.index))
     }
 
     /// Return the highest-priority distribution for the package version, if any.

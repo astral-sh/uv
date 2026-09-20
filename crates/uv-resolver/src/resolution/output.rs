@@ -363,6 +363,8 @@ fn parse_dist(
         (
             ResolvedDist::Installable {
                 dist: Arc::new(dist),
+                // Only registry distributions have a variants JSON file.
+                variants_json: None,
                 version: Some(version.clone()),
             },
             hashes,

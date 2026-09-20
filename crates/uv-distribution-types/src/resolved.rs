@@ -1,16 +1,16 @@
 use std::fmt::{Display, Formatter};
 use std::path::Path;
 use std::sync::Arc;
-use uv_distribution_filename::WheelFilename;
 
+use uv_distribution_filename::WheelFilename;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pypi_types::Yanked;
 
 use crate::{
     BuiltDist, Dist, DistributionId, DistributionMetadata, Identifier, IndexUrl, InstalledDist,
-    Name, PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, ResourceId, SourceDist,
-    VersionId, VersionOrUrlRef,
+    Name, PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, RegistryVariantsJson,
+    ResourceId, SourceDist, VersionId, VersionOrUrlRef,
 };
 
 /// A distribution that can be used for resolution and installation.
@@ -23,6 +23,7 @@ pub enum ResolvedDist {
     },
     Installable {
         dist: Arc<Dist>,
+        variants_json: Option<Arc<RegistryVariantsJson>>,
         version: Option<Version>,
     },
 }
@@ -89,7 +90,7 @@ impl ResolvedDist {
     /// Returns the version of the distribution, if available.
     pub fn version(&self) -> Option<&Version> {
         match self {
-            Self::Installable { version, dist } => dist.version().or(version.as_ref()),
+            Self::Installable { version, dist, .. } => dist.version().or(version.as_ref()),
             Self::Installed { dist } => Some(dist.version()),
         }
     }
@@ -131,6 +132,9 @@ impl ResolvedDistRef<'_> {
                 );
                 ResolvedDist::Installable {
                     dist: Arc::new(Dist::Source(SourceDist::Registry(source))),
+                    variants_json: prioritized
+                        .variants_json()
+                        .map(|variants_json| Arc::new(variants_json.clone())),
                     version: Some(sdist.version.clone()),
                 }
             }
@@ -147,6 +151,9 @@ impl ResolvedDistRef<'_> {
                 let built = prioritized.built_dist().expect("at least one wheel");
                 ResolvedDist::Installable {
                     dist: Arc::new(Dist::Built(BuiltDist::Registry(built))),
+                    variants_json: prioritized
+                        .variants_json()
+                        .map(|variants_json| Arc::new(variants_json.clone())),
                     version: Some(wheel.filename.version.clone()),
                 }
             }

@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::collections::btree_map::Entry;
 use uv_preview::PreviewFeature;
 
 use rustc_hash::FxHashMap;
@@ -11,9 +12,9 @@ use uv_client::{
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    File, HashComparison, IncompatibleSource, IncompatibleWheel, Index, IndexLocations, IndexUrl,
-    PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility,
-    WheelCompatibility,
+    File, HashComparison, IncompatibleSource, IncompatibleWheel, Index, IndexEntryFilename,
+    IndexLocations, IndexUrl, PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist,
+    RegistryVariantsJson, SourceDistCompatibility, WheelCompatibility,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -89,8 +90,7 @@ impl FlatDistributions {
     ) -> Self {
         let mut distributions = Self::default();
         for entry in entries {
-            if let DistFilename::WheelFilename(filename) = entry.filename()
-                && filename.variant().is_some()
+            if entry.filename().is_variant()
                 && !uv_preview::is_enabled(PreviewFeature::WheelVariants)
             {
                 continue;
@@ -110,7 +110,7 @@ impl FlatDistributions {
     fn add_file(
         &mut self,
         file: File,
-        filename: DistFilename,
+        filename: IndexEntryFilename,
         tags: Option<&Tags>,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
@@ -119,7 +119,7 @@ impl FlatDistributions {
         // No `requires-python` here: for source distributions, we don't have that information;
         // for wheels, we read it lazily only when selected.
         match filename {
-            DistFilename::WheelFilename(filename) => {
+            IndexEntryFilename::DistFilename(DistFilename::WheelFilename(filename)) => {
                 let version = filename.version.clone();
 
                 let compatibility = Self::wheel_compatibility(
@@ -140,7 +140,7 @@ impl FlatDistributions {
                     .or_default()
                     .insert_built(dist, vec![], compatibility);
             }
-            DistFilename::SourceDistFilename(filename) => {
+            IndexEntryFilename::DistFilename(DistFilename::SourceDistFilename(filename)) => {
                 let compatibility = Self::source_dist_compatibility(
                     &filename,
                     file.hashes.as_slice(),
@@ -161,6 +161,22 @@ impl FlatDistributions {
                     vec![],
                     compatibility,
                 );
+            }
+            IndexEntryFilename::VariantJson(variants_json) => {
+                let version = variants_json.version.clone();
+                let registry_variants_json = RegistryVariantsJson {
+                    filename: variants_json,
+                    file: Box::new(file),
+                    index,
+                };
+                match self.0.entry(version) {
+                    Entry::Occupied(mut entry) => {
+                        entry.get_mut().insert_variant_json(registry_variants_json);
+                    }
+                    Entry::Vacant(entry) => {
+                        entry.insert(PrioritizedDist::from_variant_json(registry_variants_json));
+                    }
+                }
             }
         }
     }
