@@ -18,8 +18,14 @@ use super::{
 };
 
 /// Serializes a lockfile directly while preserving the canonical `uv.lock` layout.
-pub(super) fn to_toml(lock: &Lock) -> Result<String, toml_edit::ser::Error> {
-    let mut writer = LockWriter::default();
+pub(super) fn to_toml(
+    lock: &Lock,
+    dependency_shorthand: bool,
+) -> Result<String, toml_edit::ser::Error> {
+    let mut writer = LockWriter {
+        output: String::new(),
+        dependency_shorthand,
+    };
     write_lock(&mut writer, lock).map_err(|error| match error {
         WriteError::Format => {
             toml_edit::ser::Error::Custom("failed to write lockfile to a string".to_string())
@@ -567,6 +573,19 @@ fn write_dependency_inline(
     simplified_environment: MarkerTree,
     dist_count_by_name: &FxHashMap<PackageName, u64>,
 ) -> Result<(), WriteError> {
+    let marker = dependency
+        .simplified_marker
+        .as_simplified_marker_tree()
+        .restrict(simplified_environment)
+        .try_to_string();
+    if writer.dependency_shorthand
+        && dist_count_by_name.get(&dependency.package_id.name) == Some(&1)
+        && dependency.extra.is_empty()
+        && marker.is_none()
+    {
+        return writer.value(dependency.package_id.name.as_ref());
+    }
+
     let mut first = true;
     writer.start_inline_table();
 
@@ -585,12 +604,7 @@ fn write_dependency_inline(
     }
 
     // Avoid restating the resolution's environment on every dependency edge.
-    if let Some(marker) = dependency
-        .simplified_marker
-        .as_simplified_marker_tree()
-        .restrict(simplified_environment)
-        .try_to_string()
-    {
+    if let Some(marker) = marker {
         writer.inline_value(&mut first, "marker", &marker)?;
     }
 
@@ -671,6 +685,7 @@ impl From<toml_edit::ser::Error> for WriteError {
 #[derive(Default)]
 struct LockWriter {
     output: String,
+    dependency_shorthand: bool,
 }
 
 impl LockWriter {

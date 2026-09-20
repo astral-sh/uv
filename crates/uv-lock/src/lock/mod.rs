@@ -3574,8 +3574,10 @@ impl Lock {
     }
 
     /// Returns the TOML representation of this lockfile.
-    pub fn to_toml(&self) -> Result<String, toml_edit::ser::Error> {
-        serialize::to_toml(self)
+    ///
+    /// If `dependency_shorthand` is enabled, name-only dependencies are written as strings.
+    pub fn to_toml(&self, dependency_shorthand: bool) -> Result<String, toml_edit::ser::Error> {
+        serialize::to_toml(self, dependency_shorthand)
     }
 
     /// Locate every locked version without scanning unrelated sorted packages.
@@ -8946,9 +8948,34 @@ impl Display for Dependency {
 }
 
 /// A single dependency of a package in a lockfile.
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+struct DependencyWire(DependencyWireTable);
+
+impl<'de> serde::Deserialize<'de> for DependencyWire {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        serde_untagged::UntaggedEnumVisitor::new()
+            .string(|name| {
+                Ok(Self(DependencyWireTable {
+                    package_id: PackageIdForDependency {
+                        name: PackageName::from_str(name).map_err(serde::de::Error::custom)?,
+                        version: None,
+                        source: None,
+                    },
+                    extra: BTreeSet::new(),
+                    marker: SimplifiedMarkerTree::default(),
+                }))
+            })
+            .map(|map| map.deserialize().map(Self))
+            .deserialize(deserializer)
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
-struct DependencyWire {
+struct DependencyWireTable {
     #[serde(flatten)]
     package_id: PackageIdForDependency,
     #[serde(default)]
@@ -8965,20 +8992,21 @@ impl DependencyWire {
         default: UniversalMarker,
         unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
     ) -> Result<Dependency, LockError> {
+        let Self(dependency) = self;
         let (simplified_marker, complexified_marker) =
-            if self.marker.as_simplified_marker_tree().is_true() {
+            if dependency.marker.as_simplified_marker_tree().is_true() {
                 (environment, default)
             } else {
-                let mut simplified_marker = self.marker;
+                let mut simplified_marker = dependency.marker;
                 simplified_marker.and(environment);
                 let complexified_marker =
                     UniversalMarker::from_combined(simplified_marker.into_marker(requires_python));
                 (simplified_marker, complexified_marker)
             };
         Ok(Dependency {
-            package_id: self.package_id.unwire(unambiguous_package_ids)?,
+            package_id: dependency.package_id.unwire(unambiguous_package_ids)?,
             index: PackageIndex(0),
-            extra: self.extra,
+            extra: dependency.extra,
             simplified_marker,
             complexified_marker,
         })

@@ -402,8 +402,12 @@ impl<'lock> LockTarget<'lock> {
     }
 
     /// Write the lockfile to disk.
-    pub(crate) async fn commit(self, lock: &Lock) -> Result<(), ProjectError> {
-        let encoded = lock.to_toml()?;
+    pub(crate) async fn commit(
+        self,
+        lock: &Lock,
+        dependency_shorthand: bool,
+    ) -> Result<(), ProjectError> {
+        let encoded = lock.to_toml(dependency_shorthand)?;
         fs_err::tokio::write(self.lock_path(), encoded).await?;
         Ok(())
     }

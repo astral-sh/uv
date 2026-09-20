@@ -1878,6 +1878,7 @@
             "index-hash-algorithm",
             "lockfile-format-check",
             "lock-without-metadata",
+            "lock-dependency-shorthand",
             "tar-codec",
             "index-by-name",
             "artifact-hash-filtering",

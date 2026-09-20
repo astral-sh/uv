@@ -91,6 +91,169 @@ fn lock_validation_warning_chain() -> Result<()> {
     Ok(())
 }
 
+/// Opt into shorthand when writing locks, and read it without enabling preview.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_dependency_shorthand() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["base"]
+
+        [project.optional-dependencies]
+        feature = ["extra"]
+
+        [dependency-groups]
+        dev = ["dev"]
+
+        [tool.uv.sources]
+        base = { path = "base" }
+        extra = { path = "extra" }
+        dev = { path = "dev" }
+    "#})?;
+    for name in ["base", "extra", "dev"] {
+        context.temp_dir.child(name).create_dir_all()?;
+        context
+            .temp_dir
+            .child(name)
+            .child("pyproject.toml")
+            .write_str(&formatdoc! {r#"
+            [project]
+            name = "{name}"
+            version = "1.0.0"
+        "#})?;
+    }
+
+    context.lock().arg("--offline").assert().success();
+    let standard = context.read("uv.lock");
+    uv_snapshot!(context.filters(), context.lock().args(["--no-index", "--refresh", "--dry-run", "--preview-features", "lock-dependency-shorthand"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Lockfile changes detected
+    ");
+    assert_eq!(standard, context.read("uv.lock"));
+    context
+        .lock()
+        .args([
+            "--no-index",
+            "--refresh",
+            "--preview-features",
+            "lock-dependency-shorthand",
+        ])
+        .assert()
+        .success();
+    let compact = context.read("uv.lock");
+    context
+        .lock()
+        .args([
+            "--no-index",
+            "--refresh",
+            "--check",
+            "--preview-features",
+            "lock-dependency-shorthand",
+        ])
+        .assert()
+        .success();
+    assert_snapshot!(diff_snapshot(&standard, &compact, 3), @r#"
+    --- old
+    +++ new
+    @@ -25,17 +25,17 @@
+     version = "0.1.0"
+     source = { virtual = "." }
+     dependencies = [
+    -    { name = "base" },
+    +    "base",
+     ]
+
+     [package.optional-dependencies]
+     feature = [
+    -    { name = "extra" },
+    +    "extra",
+     ]
+
+     [package.dev-dependencies]
+     dev = [
+    -    { name = "dev" },
+    +    "dev",
+     ]
+
+     [package.metadata]
+    "#);
+
+    // Reading shorthand does not require opting into writing it.
+    context
+        .lock()
+        .args([
+            "--offline",
+            "--check",
+            "--no-cache",
+            "--preview-features",
+            "lockfile-format-check",
+        ])
+        .assert()
+        .success();
+    uv_snapshot!(context.filters(), context.tree().args(["--frozen", "--all-groups"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    project v0.1.0
+    ├── base v1.0.0
+    ├── extra v1.0.0 (extra: feature)
+    └── dev v1.0.0 (group: dev)
+    ");
+    assert_eq!(compact, context.read("uv.lock"));
+
+    context
+        .lock()
+        .args([
+            "--no-index",
+            "--refresh",
+            "--preview-features",
+            "lockfile-format-check",
+        ])
+        .assert()
+        .success();
+    assert_eq!(standard, context.read("uv.lock"));
+
+    // The independent metadata-free preview can use the same shorthand.
+    context
+        .lock()
+        .args([
+            "--no-index",
+            "--refresh",
+            "--preview-features",
+            "lock-dependency-shorthand,lock-without-metadata",
+        ])
+        .assert()
+        .success();
+    context
+        .lock()
+        .args([
+            "--offline",
+            "--check",
+            "--no-cache",
+            "--preview-features",
+            "lock-without-metadata",
+        ])
+        .assert()
+        .success();
+    uv_snapshot!(context.filters(), context.tree().args(["--frozen", "--all-groups"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    project v0.1.0
+    ├── base v1.0.0
+    ├── extra v1.0.0 (extra: feature)
+    └── dev v1.0.0 (group: dev)
+    ");
+    Ok(())
+}
+
 /// Generate the preview lock without package metadata.
 #[cfg(feature = "test-universal")]
 fn lock_without_package_metadata(lock: &str) -> Result<toml_edit::DocumentMut> {

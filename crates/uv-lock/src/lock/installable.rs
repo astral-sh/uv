@@ -1392,7 +1392,7 @@ provides-extras = ["cli"]
         let original = lock();
         let input = format!(
             "{}\n{}",
-            original.to_toml().expect("valid lock TOML"),
+            original.to_toml(false).expect("valid lock TOML"),
             r#"
 [[package]]
 name = "aaa-unrelated"
