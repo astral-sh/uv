@@ -188,9 +188,10 @@ pub trait Installable<'lock> {
             },
         )?;
         let version = package.version().cloned();
+        let variants_json = package.to_registry_variants_json(self.install_path())?;
         let dist = ResolvedDist::Installable {
             dist: Arc::new(dist),
-            variants_json: None,
+            variants_json: variants_json.map(Arc::new),
             version,
         };
         Ok(Node::Dist {
@@ -217,7 +218,10 @@ pub trait Installable<'lock> {
         let version = package.version().cloned();
         let dist = ResolvedDist::Installable {
             dist: Arc::new(dist),
-            variants_json: None,
+            // Dependencies still belong to this wheel when its installation is omitted.
+            variants_json: package
+                .to_registry_variants_json(self.install_path())?
+                .map(Arc::new),
             version,
         };
         let hashes = package.hashes();
