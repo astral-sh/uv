@@ -7620,6 +7620,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "uv-variants"
+version = "0.0.88"
+dependencies = [
+ "indexmap",
+ "insta",
+ "rustc-hash",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tracing",
+ "uv-distribution-filename",
+ "uv-normalize",
+ "uv-once-map",
+ "uv-pep440",
+ "uv-pep508",
+ "uv-pypi-types",
+]
+
+[[package]]
 name = "uv-version"
 version = "0.12.21"
 
