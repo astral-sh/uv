@@ -7095,6 +7095,7 @@ dependencies = [
  "anyhow",
  "hashbrown 0.17.1",
  "indexmap",
+ "indoc",
  "insta",
  "itertools 0.14.0",
  "jiff",
@@ -7587,6 +7588,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-python",
  "uv-redacted",
+ "uv-variants",
  "uv-workspace",
 ]
 
@@ -7596,6 +7598,32 @@ version = "0.0.82"
 dependencies = [
  "nix 0.31.3",
  "thiserror",
+]
+
+[[package]]
+name = "uv-variant-frontend"
+version = "0.0.3"
+dependencies = [
+ "anstream",
+ "anyhow",
+ "fs-err",
+ "indoc",
+ "owo-colors",
+ "rustc-hash",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "uv-configuration",
+ "uv-distribution-types",
+ "uv-fs",
+ "uv-preview",
+ "uv-python",
+ "uv-static",
+ "uv-types",
+ "uv-variants",
+ "uv-virtualenv",
 ]
 
 [[package]]

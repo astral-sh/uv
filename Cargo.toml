@@ -89,6 +89,7 @@ uv-torch = { version = "0.0.82", path = "crates/uv-torch" }
 uv-trampoline-builder = { version = "0.0.82", path = "crates/uv-trampoline-builder" }
 uv-types = { version = "0.0.82", path = "crates/uv-types" }
 uv-unix = { version = "0.0.82", path = "crates/uv-unix" }
+uv-variant-frontend = { path = "crates/uv-variant-frontend" }
 uv-variants = { path = "crates/uv-variants" }
 uv-version = { version = "0.12.15", path = "crates/uv-version" }
 uv-virtualenv = { version = "0.0.82", path = "crates/uv-virtualenv" }

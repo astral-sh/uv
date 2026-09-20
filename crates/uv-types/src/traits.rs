@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use rustc_hash::FxHashSet;
-
 use uv_cache::Cache;
 use uv_configuration::{BuildKind, BuildOptions, BuildOutput, NoSources};
 use uv_distribution_filename::DistFilename;
@@ -17,6 +16,7 @@ use uv_distribution_types::{
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
 use uv_python::{Interpreter, PythonEnvironment};
+use uv_variants::VariantProviderOutput;
 use uv_workspace::WorkspaceCache;
 
 use crate::{BuildArena, BuildIsolation, ResolvedRequirements};
@@ -226,6 +226,10 @@ pub trait SourceBuildTrait {
         &'a self,
         wheel_dir: &'a Path,
     ) -> impl Future<Output = Result<String, AnyErrorBuild>> + 'a;
+}
+
+pub trait VariantsTrait {
+    fn query(&self) -> impl Future<Output = Result<VariantProviderOutput>>;
 }
 
 /// Provides access to installed distributions during resolution.
