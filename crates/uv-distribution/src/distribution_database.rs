@@ -221,13 +221,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         tags: &Tags,
         hashes: ArchiveHashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
-        // TODO(konsti): Support fetching wheel variants.
         if let Dist::Built(built) = dist
             && built.wheel_filename().variant().is_some()
+            && !uv_preview::is_enabled(PreviewFeature::WheelVariants)
         {
-            return Err(Error::UnsupportedWheelVariant(Box::new(
-                built.wheel_filename().clone(),
-            )));
+            return Err(Error::WheelVariantsPreview);
         }
         match dist {
             Dist::Built(built) => self.get_wheel(built, hashes).await,
@@ -267,13 +265,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         dist: &Dist,
         hashes: MetadataHashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
-        // TODO(konsti): Support reading metadata from wheel variants.
         if let Dist::Built(built) = dist
             && built.wheel_filename().variant().is_some()
+            && !uv_preview::is_enabled(PreviewFeature::WheelVariants)
         {
-            return Err(Error::UnsupportedWheelVariant(Box::new(
-                built.wheel_filename().clone(),
-            )));
+            return Err(Error::WheelVariantsPreview);
         }
         match dist {
             Dist::Built(built) => self.get_wheel_metadata(built, hashes).await,

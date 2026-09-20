@@ -1,6 +1,7 @@
 use std::fmt;
 use std::path::PathBuf;
 use std::sync::Arc;
+use uv_preview::PreviewFeature;
 
 use owo_colors::OwoColorize;
 use tracing::{debug, warn};
@@ -9,7 +10,8 @@ use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_cache_info::Timestamp;
 use uv_configuration::{BuildOptions, Reinstall};
 use uv_distribution::{
-    BuiltWheelIndex, HttpArchivePointer, PathArchivePointer, RegistryWheelIndex,
+    BuiltWheelIndex, Error as DistributionError, HttpArchivePointer, PathArchivePointer,
+    RegistryWheelIndex,
 };
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
@@ -45,7 +47,7 @@ pub enum PlanError {
     #[error(transparent)]
     DistributionTypes(#[from] Error),
     #[error(transparent)]
-    Distribution(#[from] uv_distribution::Error),
+    Distribution(#[from] DistributionError),
 }
 
 impl uv_errors::Hinted for PlanError {
@@ -341,14 +343,12 @@ impl<'a> Planner<'a> {
         //    So, e.g., if a package is marked as `--reinstall`, we _expect_ that it's not passed in
         //    as [`ResolvedDist::Installed`] here.
         for dist in self.resolution.distributions() {
-            // TODO(konsti): Support installing wheel variants.
-            if let Some(filename) = dist.wheel_filename()
-                && filename.variant().is_some()
+            if dist
+                .wheel_filename()
+                .is_some_and(|filename| filename.variant().is_some())
+                && !uv_preview::is_enabled(PreviewFeature::WheelVariants)
             {
-                return Err(uv_distribution::Error::UnsupportedWheelVariant(Box::new(
-                    filename.clone(),
-                ))
-                .into());
+                return Err(DistributionError::WheelVariantsPreview.into());
             }
             // Check if the package should be reinstalled.
             let reinstall = reinstall.contains_package(dist.name())

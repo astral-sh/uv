@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::collections::Bound;
 use std::ops::RangeBounds;
 use std::sync::OnceLock;
+use uv_preview::PreviewFeature;
 
 use jiff::Timestamp;
 use pubgrub::Ranges;
@@ -630,6 +631,12 @@ impl VersionMapLazy {
             .expect("archived version files always deserializes");
             let mut priority_dist = init.cloned().unwrap_or_default();
             for (filename, file) in files.all(&self.package_name) {
+                if let DistFilename::WheelFilename(filename) = &filename
+                    && filename.variant().is_some()
+                    && !uv_preview::is_enabled(PreviewFeature::WheelVariants)
+                {
+                    continue;
+                }
                 // Support resolving as if it were an earlier timestamp, at least as long files have
                 // upload time information.
                 let (excluded, upload_time) = if let Some(included_version_cutoff) =
@@ -814,14 +821,6 @@ impl VersionMapLazy {
             if yanked.is_yanked() && !self.allowed_yanks.contains(name, version) {
                 return WheelCompatibility::Incompatible(IncompatibleWheel::Yanked(yanked.clone()));
             }
-        }
-
-        // Variant wheels cannot be selected, including during universal resolution.
-        // TODO(konsti): Support wheel variants during resolution.
-        if filename.variant().is_some() {
-            return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(
-                IncompatibleTag::Variant,
-            ));
         }
 
         // Determine a compatibility for the wheel based on tags.
