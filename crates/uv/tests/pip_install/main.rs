@@ -23,4 +23,6 @@ mod variants_packse;
 #[cfg(feature = "test-python")]
 mod variants_provider;
 #[cfg(feature = "test-python")]
+mod variants_pylock;
+#[cfg(feature = "test-python")]
 mod wheel_variants;
