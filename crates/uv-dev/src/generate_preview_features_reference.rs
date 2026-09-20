@@ -269,6 +269,10 @@ mod tests {
         machine-readable output for use by other tools. The JSON schemas are experimental and may
         change without warning; enabling this feature silences the preview warning.
 
+        ### `lock-dependency-shorthand` {#lock-dependency-shorthand}
+
+        Writes name-only dependencies in `uv.lock` as strings. Older uv versions cannot read this syntax.
+
         ### `lock-without-metadata` {#lock-without-metadata}
 
         uv omits the `package.metadata` tables from `uv.lock`, except for remote URL and Git

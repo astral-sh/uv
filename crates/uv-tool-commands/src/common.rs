@@ -389,7 +389,7 @@ impl ToolLock {
     pub(super) fn write(directory: &Path, lock: Option<&Self>) -> anyhow::Result<()> {
         let path = directory.join("uv.lock");
         if let Some(lock) = lock {
-            uv_fs::write_atomic_sync(&path, lock.lock.to_toml()?)?;
+            uv_fs::write_atomic_sync(&path, lock.lock.to_toml(false)?)?;
         } else {
             match fs_err::remove_file(path) {
                 Ok(()) => (),
