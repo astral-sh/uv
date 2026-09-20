@@ -7091,6 +7091,7 @@ dependencies = [
  "uv-resolver-types",
  "uv-small-str",
  "uv-types",
+ "uv-variants",
  "uv-version",
  "uv-warnings",
  "uv-workspace",
