@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
+use std::collections::BTreeSet;
 use std::fmt::{self, Display, Formatter};
 use std::ops::{Bound, Deref};
 use std::str::FromStr;
@@ -1802,6 +1803,75 @@ impl MarkerTree {
             }
         }
         imp(self, &mut f);
+    }
+
+    /// Ensure variant markers are globally identifiable by adding a prefix to all un-prefixed
+    /// variant markers.
+    ///
+    /// When using variant markers outside their original package, for example in the resolver forks
+    /// or in the lockfile, we need to attach the package of origin they need to be evaluated from.
+    #[must_use]
+    pub fn with_variant_base(self, base: &str) -> Self {
+        if !self.has_variant_expression() {
+            return self;
+        }
+
+        Self(INTERNER.lock().edit_variable(self.0, &|var| match var {
+            Variable::String(CanonicalMarkerValueString::VariantLabel) => Some(Variable::String(
+                CanonicalMarkerValueString::VariantLabelBase(base.into()),
+            )),
+            Variable::In {
+                key: CanonicalMarkerValueString::VariantLabel,
+                value,
+            } => Some(Variable::In {
+                key: CanonicalMarkerValueString::VariantLabelBase(base.into()),
+                value: value.clone(),
+            }),
+            Variable::Contains {
+                key: CanonicalMarkerValueString::VariantLabel,
+                value,
+            } => Some(Variable::Contains {
+                key: CanonicalMarkerValueString::VariantLabelBase(base.into()),
+                value: value.clone(),
+            }),
+            Variable::List(CanonicalMarkerListPair::VariantNamespaces {
+                base: None,
+                namespace,
+            }) => Some(Variable::List(CanonicalMarkerListPair::VariantNamespaces {
+                base: Some(base.to_string()),
+                namespace: namespace.clone(),
+            })),
+            Variable::List(CanonicalMarkerListPair::VariantFeatures {
+                base: None,
+                namespace,
+                feature,
+            }) => Some(Variable::List(CanonicalMarkerListPair::VariantFeatures {
+                base: Some(base.to_string()),
+                namespace: namespace.clone(),
+                feature: feature.clone(),
+            })),
+            Variable::List(CanonicalMarkerListPair::VariantProperties {
+                base: None,
+                namespace,
+                feature,
+                value,
+            }) => Some(Variable::List(CanonicalMarkerListPair::VariantProperties {
+                base: Some(base.to_string()),
+                namespace: namespace.clone(),
+                feature: feature.clone(),
+                value: value.clone(),
+            })),
+            _ => None,
+        }))
+    }
+
+    /// The base packages for variant markers, if any.
+    ///
+    /// Variant markers without a base package are ignored.
+    pub fn collect_variant_bases(&self) -> BTreeSet<String> {
+        let mut bases = BTreeSet::new();
+        INTERNER.lock().collect_variant_bases(self.0, &mut bases);
+        bases
     }
 
     fn simplify_extras_with_impl(self, is_extra: &impl Fn(&ExtraName) -> bool) -> Self {
@@ -4331,6 +4401,58 @@ mod test {
         assert!(marker.evaluate(&env37, &cu126, &[]));
         assert!(marker.evaluate(&env37, &cu126_2, &[]));
         assert!(!marker.evaluate(&env37, &cu128, &[]));
+    }
+
+    #[test]
+    fn base_variant_marker() {
+        let env37 = env37();
+        let cu128 = VariantEnv::new(&[("nvidia", "ctk", "12.8")], String::new());
+
+        let marker = m(
+            "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: ctk :: 12.8' in variant_properties",
+        );
+        let marker_base = marker.with_variant_base("torch 2.8.0");
+
+        assert!(marker.evaluate(&env37, &cu128, &[]));
+        assert!(!marker_base.evaluate(&env37, &cu128, &[]));
+
+        let marker = m(
+            "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch 2.8.0 | nvidia :: ctk :: 12.8' in variant_properties",
+        );
+
+        assert!(!marker.evaluate(&env37, &cu128, &[]));
+
+        // A parent's selected label must not constrain another package's label.
+        let parent = m("variant_label == 'null'").with_variant_base("parent==1");
+        let child = m("variant_label == ''");
+        assert!(!parent.and(child).is_false());
+        assert_eq!(
+            parent.and(child).with_variant_base("child==1"),
+            parent.and(child.with_variant_base("child==1")),
+        );
+        assert_eq!(
+            parent.and(child).with_variant_base("successor==1"),
+            parent.and(child.with_variant_base("successor==1")),
+        );
+        for expression in [
+            "variant_label == 'null'",
+            "variant_label != 'null'",
+            "variant_label <= 'null'",
+            "variant_label in 'null fast'",
+            "'ul' in variant_label",
+        ] {
+            let scoped = m(expression).with_variant_base("parent==1");
+            assert!(scoped.has_variant_expression());
+            assert_eq!(
+                scoped,
+                m(&scoped.contents().expect("nonconstant marker").to_string())
+            );
+            assert_eq!(scoped, scoped.with_variant_base("child==1"));
+            assert_eq!(
+                scoped.collect_variant_bases(),
+                ["parent==1".to_string()].into()
+            );
+        }
     }
 
     #[test]
