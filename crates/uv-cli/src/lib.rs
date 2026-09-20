@@ -59,6 +59,15 @@ pub enum PythonListFormat {
     Json,
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum PythonDirFormat {
+    /// Display the directory as plain text.
+    #[default]
+    Text,
+    /// Display the directory as JSON.
+    Json,
+}
+
 #[derive(Debug, Default, Clone, Copy, clap::ValueEnum)]
 pub enum SyncFormat {
     /// Display the result in a human-readable format.
@@ -6256,6 +6265,10 @@ pub struct PythonDirArgs {
     /// - `$HOME/.local/bin`
     #[arg(long, verbatim_doc_comment)]
     pub bin: bool,
+
+    /// Select the output format.
+    #[arg(long, value_enum, default_value_t = PythonDirFormat::default())]
+    pub output_format: PythonDirFormat,
 }
 
 #[derive(Args)]

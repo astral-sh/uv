@@ -765,3 +765,99 @@ fn python_list_with_mirrors() {
     graalpy-3.10.0-[PLATFORM] https://github.com/oracle/graalpython/releases/download/[FILE-PATH]
     ");
 }
+
+#[test]
+fn python_list_json_preview_warning() {
+    let context = uv_test::test_context_with_versions!(&["3.12"])
+        .with_filtered_python_symlinks()
+        .with_filtered_python_keys()
+        .with_collapsed_whitespace();
+
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("--output-format").arg("json")
+        .arg("--only-installed")
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, ""), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    []
+
+    ----- stderr -----
+    warning: The `--output-format json` option is experimental and the schema may change without warning. Pass `--preview-features json-output` to disable this warning.
+    "#);
+}
+
+#[test]
+fn python_list_json_empty_installed() {
+    let context = uv_test::test_context_with_versions!(&["3.12"])
+        .with_filtered_python_symlinks()
+        .with_filtered_python_keys()
+        .with_collapsed_whitespace();
+
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("--output-format").arg("json")
+        .arg("--only-installed")
+        .arg("--preview-features").arg("json-output")
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, ""), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    []
+    "#);
+}
+
+#[test]
+fn python_list_json_no_match() {
+    let context = uv_test::test_context_with_versions!(&["3.12"])
+        .with_filtered_python_symlinks()
+        .with_filtered_python_keys()
+        .with_collapsed_whitespace();
+
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("3.99")
+        .arg("--output-format").arg("json")
+        .arg("--only-installed")
+        .arg("--preview-features").arg("json-output"), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    []
+    "#);
+}
+
+#[test]
+fn python_list_json_installed() {
+    let context = uv_test::test_context_with_versions!(&["3.12"])
+        .with_filtered_python_symlinks()
+        .with_filtered_python_keys()
+        .with_collapsed_whitespace()
+        .with_filter((r#""patch":\s*\d+"#, r#""patch": [PATCH]"#))
+        .with_filter((r#""(os|arch|libc)":\s*"[^"]*""#, r#""$1": "[$1]""#))
+        .with_filter((r#""path":\s*"[^"]*""#, r#""path": "[PYTHON-3.12]""#));
+
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("--output-format").arg("json")
+        .arg("--only-installed")
+        .arg("--preview-features").arg("json-output"), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [{"key":"cpython-3.12.[X]-[PLATFORM]","version":"3.12.[X]","version_parts":{"major":3,"minor":12,"patch": [PATCH]},"path": "[PYTHON-3.12]","symlink":null,"url":null,"os": "[os]","variant":"default","implementation":"cpython","arch": "[arch]","libc": "[libc]"}]
+    "#);
+}
+
+#[test]
+fn python_list_json_downloads() {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_collapsed_whitespace()
+        .with_filter((r#""(os|arch|libc)":\s*"[^"]*""#, r#""$1": "[$1]""#))
+        .with_filter((r#"(https://mirror\.example\.com/)[^"]*"#, "$1[FILE-PATH]"));
+
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("cpython@3.10.19")
+        .arg("--output-format").arg("json")
+        .arg("--preview-features").arg("json-output")
+        .env(EnvVars::UV_PYTHON_INSTALL_MIRROR, "https://mirror.example.com")
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [{"key":"cpython-3.10.19-[PLATFORM]","version":"3.10.19","version_parts":{"major":3,"minor":10,"patch":19},"path":null,"symlink":null,"url":"https://mirror.example.com/[FILE-PATH]","os": "[os]","variant":"default","implementation":"cpython","arch": "[arch]","libc": "[libc]"}]
+    "#);
+}

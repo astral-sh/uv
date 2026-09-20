@@ -1838,6 +1838,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 &client_builder.subcommand(vec!["python".to_owned(), "list".to_owned()]),
                 &cache,
                 printer,
+                globals.preview,
             )
             .await
         }
@@ -1994,7 +1995,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             let args = settings::PythonDirSettings::resolve(args, filesystem);
             show_settings!(args);
 
-            commands::python_dir(args.bin, printer)?;
+            commands::python_dir(args.bin, args.output_format, globals.preview, printer)?;
             Ok(ExitStatus::Success)
         }
         Commands::Python(PythonNamespace {

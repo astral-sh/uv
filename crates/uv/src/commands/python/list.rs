@@ -11,6 +11,7 @@ use rustc_hash::FxHashSet;
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_fs::Simplified;
+use uv_preview::{Preview, PreviewFeature};
 use uv_python::downloads::{
     Error as PythonDownloadError, ManagedPythonDownloadList, PythonDownloadRequest,
 };
@@ -18,6 +19,7 @@ use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonPreference, PythonRequest, PythonSource,
     find_all_python_installations,
 };
+use uv_warnings::warn_user;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -70,7 +72,17 @@ pub(crate) async fn list(
     client_builder: &BaseClientBuilder<'_>,
     cache: &Cache,
     printer: Printer,
+    preview: Preview,
 ) -> Result<ExitStatus> {
+    if matches!(output_format, PythonListFormat::Json)
+        && !preview.is_enabled(PreviewFeature::JsonOutput)
+    {
+        warn_user!(
+            "The `--output-format json` option is experimental and the schema may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeature::JsonOutput
+        );
+    }
+
     let request = request.as_deref().map(PythonRequest::parse);
     let base_download_request = if python_preference == PythonPreference::OnlySystem {
         None
