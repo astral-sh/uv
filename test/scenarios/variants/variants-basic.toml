@@ -1,0 +1,61 @@
+# Adapted from https://github.com/astral-sh/packse/pull/292 (f00a08fa16f60eb5b7c39409ce62cb9e2632ffed).
+name = "variants-basic"
+description = "A basic example using one build time and one runtime plugin"
+
+# These tests vary provider output and inspect installed variant metadata.
+# See crates/uv/tests/pip_install/variants_packse.rs.
+[testgen]
+disable = true
+
+[root]
+requires = ["cpu-first", "blas-first"]
+
+[expected]
+satisfiable = true
+
+[expected.packages]
+cpu-first = "1.0.0"
+blas-first = "1.0.0"
+
+[packages.cpu-first.versions."1.0.0".variants.default_priorities]
+namespace = ["cpu", "library"]
+
+[packages.cpu-first.versions."1.0.0".variants.properties]
+openblas_v2 = { library = { blas = ["open"] }, cpu = { level = ["v2"] } }
+closedblas_v3 = { library = { blas = ["closed"] }, cpu = { level = ["v3"] } }
+
+[packages.cpu-first.versions."1.0.0".variants.providers.cpu]
+requires = ["cpu_provider >= 0.1, <0.2"]
+plugin-api = "cpu_provider.plugin"
+
+[packages.cpu-first.versions."1.0.0".variants.providers.library]
+requires = ["library >=1, <2"]
+install-time = false
+
+# Only namespace is flipped
+[packages.blas-first.versions."1.0.0".variants.default_priorities]
+namespace = ["library", "cpu"]
+
+[packages.blas-first.versions."1.0.0".variants.properties]
+openblas_v2 = { library = { blas = ["open"] }, cpu = { level = ["v2"] } }
+closedblas_v3 = { library = { blas = ["closed"] }, cpu = { level = ["v3"] } }
+
+[packages.blas-first.versions."1.0.0".variants.providers.cpu]
+requires = ["cpu_provider >= 0.1, <0.2"]
+plugin-api = "cpu_provider.plugin"
+
+[packages.blas-first.versions."1.0.0".variants.providers.library]
+requires = ["library >=1, <2"]
+install-time = false
+
+[packages.cpu-first.versions."1.0.0".variants.static_properties.library]
+blas = ["open", "closed"]
+
+[packages.blas-first.versions."1.0.0".variants.static_properties.library]
+blas = ["open", "closed"]
+
+[packages.cpu-first.versions."1.0.0"]
+sdist = false
+
+[packages.blas-first.versions."1.0.0"]
+sdist = false

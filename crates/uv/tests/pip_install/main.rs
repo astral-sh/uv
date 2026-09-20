@@ -13,3 +13,7 @@ mod pip_install;
 mod variants;
 #[cfg(feature = "test-python")]
 mod variants_installed;
+#[cfg(feature = "test-python")]
+mod variants_packse;
+#[cfg(feature = "test-python")]
+mod variants_provider;
