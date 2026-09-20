@@ -1,6 +1,7 @@
 use std::fmt::{Display, Formatter};
 use std::path::Path;
 use std::sync::Arc;
+use uv_distribution_filename::WheelFilename;
 
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -98,6 +99,17 @@ impl ResolvedDist {
         match self {
             Self::Installable { dist, .. } => dist.source_tree(),
             Self::Installed { .. } => None,
+        }
+    }
+
+    /// Return the wheel filename for an installable distribution, if available.
+    pub fn wheel_filename(&self) -> Option<&WheelFilename> {
+        match self {
+            Self::Installed { .. } => None,
+            Self::Installable { dist, .. } => match &**dist {
+                Dist::Built(dist) => Some(dist.wheel_filename()),
+                Dist::Source(_) => None,
+            },
         }
     }
 }
