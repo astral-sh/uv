@@ -787,6 +787,7 @@ pub(crate) struct RunSettings {
     pub(crate) malware_settings: MalwareCheckSettings,
     #[cfg(unix)]
     pub(crate) run_rlimit_nofile: Option<u32>,
+    pub(crate) no_wait: bool,
 }
 
 impl RunSettings {
@@ -850,6 +851,7 @@ impl RunSettings {
             env_file,
             no_env_file,
             max_recursion_depth,
+            no_wait,
         } = args;
 
         let filesystem_install_mirrors = filesystem
@@ -956,6 +958,7 @@ impl RunSettings {
             malware_settings,
             #[cfg(unix)]
             run_rlimit_nofile: environment.run_rlimit_nofile,
+            no_wait,
         })
     }
 }
