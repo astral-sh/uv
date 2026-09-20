@@ -1563,18 +1563,31 @@ mod tests {
     }
 
     #[test]
-    fn test_platform_tags_netbsd_stable() {
-        let tags = compatible_tags(&Platform::new(
+    fn test_platform_tags_bsd() {
+        let tags = [
             Os::NetBsd {
                 release: "11.0_STABLE".to_string(),
             },
-            Arch::X86_64,
-        ))
-        .unwrap();
-        let tags = tags.iter().map(ToString::to_string).collect::<Vec<_>>();
+            Os::FreeBsd {
+                release: "15.0-RELEASE-p13".to_string(),
+            },
+            Os::OpenBsd {
+                release: "7.9".to_string(),
+            },
+            Os::Dragonfly {
+                release: "6.4-RELEASE".to_string(),
+            },
+        ]
+        .into_iter()
+        .flat_map(|os| compatible_tags(&Platform::new(os, Arch::X86_64)).unwrap())
+        .map(|tag| tag.to_string())
+        .collect::<Vec<_>>();
         assert_debug_snapshot!(tags, @r#"
         [
             "netbsd_11_0_stable_amd64",
+            "freebsd_15_0_release_p13_amd64",
+            "openbsd_7_9_amd64",
+            "dragonfly_6_4_release_x86_64",
         ]
         "#);
     }
