@@ -43,6 +43,7 @@ uv-version = { workspace = true }
 uv-warnings = { workspace = true }
 uv-workspace = { workspace = true }
 
+bitflags = { workspace = true }
 cyclonedx-bom = { workspace = true }
 either = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }

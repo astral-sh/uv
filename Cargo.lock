@@ -6813,6 +6813,7 @@ dependencies = [
 name = "uv-lock"
 version = "0.0.84"
 dependencies = [
+ "bitflags 2.13.1",
  "cyclonedx-bom",
  "either",
  "fs-err",

@@ -17,7 +17,7 @@ use uv_distribution_types::{
     Index, IndexLocations, MinimumLibcVersion, NameRequirementSpecification, Requirement,
     RequiresPython,
 };
-use uv_lock::Lock;
+use uv_lock::{Lock, LockFeatures};
 use uv_normalize::{GroupName, PackageName};
 use uv_pep508::RequirementOrigin;
 use uv_pypi_types::{Conflicts, SupportedEnvironments, VerbatimParsedUrl};
@@ -405,9 +405,9 @@ impl<'lock> LockTarget<'lock> {
     pub(crate) async fn commit(
         self,
         lock: &Lock,
-        dependency_shorthand: bool,
+        features: LockFeatures,
     ) -> Result<(), ProjectError> {
-        let encoded = lock.to_toml(dependency_shorthand)?;
+        let encoded = lock.to_toml(features)?;
         fs_err::tokio::write(self.lock_path(), encoded).await?;
         Ok(())
     }

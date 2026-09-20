@@ -31,7 +31,7 @@ use uv_fs::replace_symlink;
 use uv_fs::{CWD, Simplified};
 use uv_git::GitResolver;
 use uv_installer::SitePackages;
-use uv_lock::{Installable, Lock, ResolverManifest};
+use uv_lock::{Installable, Lock, LockFeatures, ResolverManifest};
 use uv_normalize::{DefaultExtras, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_preview::Preview;
@@ -384,7 +384,7 @@ impl ToolLock {
     pub(crate) fn write(directory: &Path, lock: Option<&Self>) -> anyhow::Result<()> {
         let path = directory.join("uv.lock");
         if let Some(lock) = lock {
-            uv_fs::write_atomic_sync(&path, lock.lock.to_toml(false)?)?;
+            uv_fs::write_atomic_sync(&path, lock.lock.to_toml(LockFeatures::empty())?)?;
         } else {
             match fs_err::remove_file(path) {
                 Ok(()) => (),

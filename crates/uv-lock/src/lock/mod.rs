@@ -69,6 +69,8 @@ use uv_types::{BuildContext, HashStrategy};
 use uv_warnings::warn_user_once;
 use uv_workspace::{Editability, WorkspaceMember};
 
+use crate::LockFeatures;
+
 pub use crate::lock::deserialize::Error as CanonicalLockError;
 pub use crate::lock::export::RequirementsTxtExport;
 pub use crate::lock::export::{
@@ -3573,11 +3575,9 @@ impl Lock {
         Ok(lock)
     }
 
-    /// Returns the TOML representation of this lockfile.
-    ///
-    /// If `dependency_shorthand` is enabled, name-only dependencies are written as strings.
-    pub fn to_toml(&self, dependency_shorthand: bool) -> Result<String, toml_edit::ser::Error> {
-        serialize::to_toml(self, dependency_shorthand)
+    /// Returns the TOML representation of this lockfile with the given [`LockFeatures`].
+    pub fn to_toml(&self, features: LockFeatures) -> Result<String, toml_edit::ser::Error> {
+        serialize::to_toml(self, features)
     }
 
     /// Locate every locked version without scanning unrelated sorted packages.

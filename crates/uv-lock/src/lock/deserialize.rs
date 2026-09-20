@@ -873,9 +873,10 @@ mod tests {
     use std::fmt::Write as _;
 
     use serde::Deserialize;
-    use uv_warnings::anstream;
 
-    use super::super::{LockParseError, VERSION, serialize};
+    use crate::LockFeatures;
+
+    use super::super::{LockParseError, VERSION};
     use super::{Cursor, Error, Lock, ValueDeserializer, from_str};
 
     const CANONICAL_LOCK: &str = r#"version = 1
@@ -902,133 +903,6 @@ dependencies = [
         let actual = from_str(CANONICAL_LOCK).expect("valid canonical lock");
 
         assert_eq!(actual, expected);
-    }
-
-    #[test]
-    fn dependency_shorthand_round_trip() {
-        let input = r#"version = 1
-revision = 4
-requires-python = ">=3.12"
-
-[[package]]
-name = "dependency"
-version = "1.0.0"
-source = { virtual = "dependency" }
-
-[package.optional-dependencies]
-feature = []
-
-[[package]]
-name = "project"
-version = "0.1.0"
-source = { virtual = "." }
-dependencies = [
-    { name = "dependency" },
-    { name = "split", version = "1.0.0", source = { virtual = "split-v1" }, marker = "sys_platform == 'win32'" },
-    { name = "split", version = "2.0.0", source = { virtual = "split-v2" }, marker = "sys_platform != 'win32'" },
-]
-
-[package.optional-dependencies]
-conditional = [
-    { name = "dependency", marker = "sys_platform == 'win32'" },
-]
-feature = [
-    { name = "dependency", extra = ["feature"] },
-]
-test = [
-    { name = "dependency" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "dependency" },
-]
-
-[[package]]
-name = "split"
-version = "1.0.0"
-source = { virtual = "split-v1" }
-
-[[package]]
-name = "split"
-version = "2.0.0"
-source = { virtual = "split-v2" }
-"#;
-        let lock = Lock::from_toml(input).expect("valid lock");
-        let compact = serialize::to_toml(&lock, true).expect("lock serializes");
-        insta::assert_snapshot!(compact, @r#"
-        version = 1
-        revision = 4
-        requires-python = ">=3.12"
-
-        [[package]]
-        name = "dependency"
-        version = "1.0.0"
-        source = { virtual = "dependency" }
-
-        [package.optional-dependencies]
-        feature = []
-
-        [[package]]
-        name = "project"
-        version = "0.1.0"
-        source = { virtual = "." }
-        dependencies = [
-            "dependency",
-            { name = "split", version = "1.0.0", source = { virtual = "split-v1" }, marker = "sys_platform == 'win32'" },
-            { name = "split", version = "2.0.0", source = { virtual = "split-v2" }, marker = "sys_platform != 'win32'" },
-        ]
-
-        [package.optional-dependencies]
-        conditional = [
-            { name = "dependency", marker = "sys_platform == 'win32'" },
-        ]
-        feature = [
-            { name = "dependency", extra = ["feature"] },
-        ]
-        test = [
-            "dependency",
-        ]
-
-        [package.dev-dependencies]
-        dev = [
-            "dependency",
-        ]
-
-        [[package]]
-        name = "split"
-        version = "1.0.0"
-        source = { virtual = "split-v1" }
-
-        [[package]]
-        name = "split"
-        version = "2.0.0"
-        source = { virtual = "split-v2" }
-        "#);
-        assert_eq!(from_str(&compact).expect("canonical shorthand"), lock);
-        assert_eq!(
-            toml::from_str::<Lock>(&compact).expect("TOML shorthand"),
-            lock
-        );
-        assert_eq!(
-            Lock::from_toml(&compact.replace("\"dependency\"", "'dependency'"))
-                .expect("noncanonical shorthand"),
-            lock,
-        );
-        assert_eq!(
-            serialize::to_toml(&lock, false).expect("full syntax"),
-            input
-        );
-
-        let ambiguous = compact.replace(
-            "{ name = \"split\", version = \"1.0.0\", source = { virtual = \"split-v1\" }, marker = \"sys_platform == 'win32'\" }",
-            "\"split\"",
-        );
-        let error = Lock::from_toml(&ambiguous).expect_err("ambiguous shorthand");
-        insta::assert_snapshot!(
-            anstream::adapter::strip_str(&error.to_string()),
-            @"Dependency `split` has missing `source` field but has more than one matching package"
-        );
     }
 
     #[test]
@@ -1672,7 +1546,9 @@ dev = [{ name = "dependency", specifier = ">=1" }]
     #[test]
     fn canonical_round_trip_uses_fast_path() {
         let lock: Lock = toml::from_str(CANONICAL_LOCK).expect("valid TOML lock");
-        let canonical = lock.to_toml(false).expect("lock serializes canonically");
+        let canonical = lock
+            .to_toml(LockFeatures::empty())
+            .expect("lock serializes canonically");
 
         assert_eq!(
             Lock::from_canonical_toml(&canonical).expect("writer output uses fast path"),

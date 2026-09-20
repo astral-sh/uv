@@ -11,6 +11,8 @@ use uv_normalize::PackageName;
 use uv_pep508::MarkerTree;
 use uv_pypi_types::ConflictKind;
 
+use crate::LockFeatures;
+
 use super::{
     Dependency, DirectSource, ExcludeNewerOverride, ExcludeNewerValue, ForkStrategy, Lock, Package,
     PackageId, PrereleaseMode, RegistrySource, ResolutionMode, ResolverManifest, ResolverOptions,
@@ -20,11 +22,11 @@ use super::{
 /// Serializes a lockfile directly while preserving the canonical `uv.lock` layout.
 pub(super) fn to_toml(
     lock: &Lock,
-    dependency_shorthand: bool,
+    features: LockFeatures,
 ) -> Result<String, toml_edit::ser::Error> {
     let mut writer = LockWriter {
         output: String::new(),
-        dependency_shorthand,
+        features,
     };
     write_lock(&mut writer, lock).map_err(|error| match error {
         WriteError::Format => {
@@ -578,7 +580,7 @@ fn write_dependency_inline(
         .as_simplified_marker_tree()
         .restrict(simplified_environment)
         .try_to_string();
-    if writer.dependency_shorthand
+    if writer.features.contains(LockFeatures::DEPENDENCY_SHORTHAND)
         && dist_count_by_name.get(&dependency.package_id.name) == Some(&1)
         && dependency.extra.is_empty()
         && marker.is_none()
@@ -685,7 +687,7 @@ impl From<toml_edit::ser::Error> for WriteError {
 #[derive(Default)]
 struct LockWriter {
     output: String,
-    dependency_shorthand: bool,
+    features: LockFeatures,
 }
 
 impl LockWriter {

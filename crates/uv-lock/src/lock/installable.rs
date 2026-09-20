@@ -1037,6 +1037,8 @@ mod tests {
     use uv_platform_tags::{Arch, Os, Platform, TagsOptions};
     use uv_warnings::anstream;
 
+    use crate::LockFeatures;
+
     use super::*;
 
     static TAGS: LazyLock<Tags> = LazyLock::new(|| {
@@ -1392,7 +1394,9 @@ provides-extras = ["cli"]
         let original = lock();
         let input = format!(
             "{}\n{}",
-            original.to_toml(false).expect("valid lock TOML"),
+            original
+                .to_toml(LockFeatures::empty())
+                .expect("valid lock TOML"),
             r#"
 [[package]]
 name = "aaa-unrelated"
