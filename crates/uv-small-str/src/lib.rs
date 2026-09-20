@@ -6,6 +6,8 @@ use std::str::Utf8Error;
 use arcstr::ArcStr;
 
 /// An optimized type for immutable identifiers. Represented as an [`ArcStr`] internally.
+///
+/// This type is one pointer wide.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SmallString(ArcStr);
 
@@ -173,5 +175,15 @@ impl schemars::JsonSchema for SmallString {
 
     fn json_schema(generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
         String::json_schema(generator)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn small_str_size() {
+        assert_eq!(size_of::<SmallString>(), size_of::<usize>());
     }
 }
