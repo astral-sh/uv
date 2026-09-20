@@ -530,3 +530,87 @@ fn pep825_invalid_metadata_fallback() -> Result<()> {
     "###);
     Ok(())
 }
+
+#[test]
+fn pep825_project_sync() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let properties = json!({"gpu": {"cuda": ["12.0", "13.0", "14.0"]}});
+    let dependencies = [
+        "supported; 'gpu :: cuda :: 12.0' in variant_properties",
+        "unsupported; 'gpu :: cuda :: 14.0' in variant_properties",
+    ];
+    write_wheel(
+        &context,
+        "example",
+        Some("fast"),
+        properties.clone(),
+        &dependencies,
+        None,
+    )?;
+    write_wheel(
+        &context,
+        "example",
+        Some("null"),
+        json!({}),
+        &dependencies,
+        None,
+    )?;
+    write_wheel(&context, "example", None, json!({}), &dependencies, None)?;
+    write_wheel(&context, "supported", None, json!({}), &[], None)?;
+    write_wheel(&context, "unsupported", None, json!({}), &[], None)?;
+    write_metadata(&context, json!({"fast": properties, "null": {}}))?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["example"]
+    "#})?;
+    uv_snapshot!(context.filters(), context.sync().arg("--preview-features").arg("wheel-variants")
+        .arg("--no-index").arg("--find-links").arg(context.temp_dir.path())
+        .env("UV_VARIANT_LOCK", context.temp_dir.child("target.toml").path()), @r###"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + example==1.0.0
+     + supported==1.0.0
+    "###);
+    // Reusing the lockfile still requires opting in, even when the wheels are already installed.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen")
+        .env("UV_VARIANT_LOCK", context.temp_dir.child("missing.toml").path()), @r###"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to parse `uv.lock`
+      cause: This lockfile uses wheel variants; pass `--preview-features wheel-variants` to use it
+    "###);
+    // A changed host can change the dependency set without changing the selected label.
+    context.temp_dir.child("target.toml").write_str(indoc! {r#"
+        [metadata]
+        version = "0.1"
+        created-by = "uv-test"
+        [[provider]]
+        namespace = "gpu"
+        resolved = []
+        [provider.properties]
+        cuda = ["14.0"]
+    "#})?;
+    uv_snapshot!(context.filters(), context.sync().arg("--preview-features").arg("wheel-variants").arg("--locked")
+        .arg("--no-index").arg("--find-links").arg(context.temp_dir.path())
+        .env("UV_VARIANT_LOCK", context.temp_dir.child("target.toml").path()), @r###"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     ~ example==1.0.0
+     - supported==1.0.0
+     + unsupported==1.0.0
+    "###);
+    Ok(())
+}
