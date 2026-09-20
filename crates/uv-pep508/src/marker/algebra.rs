@@ -315,10 +315,10 @@ impl InternerGuard<'_> {
                         CanonicalMarkerValueString::SysPlatform,
                         arcstr::literal!("android"),
                     ),
-                    _ => (key.into(), value),
+                    (key, _) => (key.into(), value),
                 };
                 (
-                    Variable::String(key),
+                    Variable::String(key.clone()),
                     Edges::from_string(key, operator, value),
                 )
             }

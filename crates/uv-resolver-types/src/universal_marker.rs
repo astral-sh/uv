@@ -6,7 +6,10 @@ use itertools::Itertools;
 use rustc_hash::FxHashMap;
 
 use uv_normalize::{ExtraName, GroupName, InvalidNameError, PackageName};
-use uv_pep508::{ExtraOperator, MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree};
+use uv_pep508::{
+    ExtraOperator, MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree,
+    MarkerVariantsEnvironment, MarkerVariantsUniversal,
+};
 use uv_pypi_types::{ConflictItem, ConflictKind, Conflicts, Inference};
 
 #[derive(Debug, thiserror::Error)]
@@ -345,7 +348,7 @@ impl UniversalMarker {
     /// This should only be used when evaluating a marker that is known not to
     /// have any extras. For example, the PEP 508 markers on a fork.
     pub fn evaluate_no_extras(self, env: &MarkerEnvironment) -> bool {
-        self.marker.evaluate(env, &[])
+        self.marker.evaluate(env, &MarkerVariantsUniversal, &[])
     }
 
     /// Returns true if this universal marker is satisfied by the given marker
@@ -357,6 +360,7 @@ impl UniversalMarker {
     pub fn evaluate<P, E, G>(
         self,
         env: &MarkerEnvironment,
+        variants: &impl MarkerVariantsEnvironment,
         projects: impl Iterator<Item = P>,
         extras: impl Iterator<Item = (P, E)>,
         groups: impl Iterator<Item = (P, G)>,
@@ -367,16 +371,17 @@ impl UniversalMarker {
         G: Borrow<GroupName>,
     {
         let activated = ActivatedConflictItems::new(projects, extras, groups);
-        self.evaluate_activated(env, &activated)
+        self.evaluate_activated(env, variants, &activated)
     }
 
     /// Returns true if this universal marker is satisfied by an already encoded activated set.
     pub fn evaluate_activated(
         self,
         env: &MarkerEnvironment,
+        variants: &impl MarkerVariantsEnvironment,
         activated: &ActivatedConflictItems,
     ) -> bool {
-        self.marker.evaluate(env, &activated.0)
+        self.marker.evaluate(env, variants, &activated.0)
     }
 
     /// Returns true if the marker always evaluates to true if the given set of extras is activated.
@@ -448,7 +453,11 @@ impl UniversalMarker {
                         conflict = conflict.and(MarkerTree::expression(expression));
                     }
                     expression => {
-                        if !MarkerTree::expression(expression).evaluate(env, &[]) {
+                        if !MarkerTree::expression(expression).evaluate(
+                            env,
+                            &MarkerVariantsUniversal,
+                            &[],
+                        ) {
                             continue 'conjunctions;
                         }
                     }
@@ -1059,14 +1068,14 @@ mod tests {
             [(&package, &extra)].into_iter(),
             [(&package, &group)].into_iter(),
         );
-        assert!(marker.evaluate_activated(&env, &activated));
+        assert!(marker.evaluate_activated(&env, &MarkerVariantsUniversal, &activated));
 
         let without_group = ActivatedConflictItems::new(
             [&package].into_iter(),
             [(&package, &extra)].into_iter(),
             std::iter::empty::<(&PackageName, &GroupName)>(),
         );
-        assert!(!marker.evaluate_activated(&env, &without_group));
+        assert!(!marker.evaluate_activated(&env, &MarkerVariantsUniversal, &without_group));
     }
 
     /// This tests the conversion from declared conflicts into a conflict
@@ -1128,7 +1137,7 @@ mod tests {
                 .collect::<Vec<(PackageName, ExtraName)>>();
             let groups = Vec::<(PackageName, GroupName)>::new();
             assert!(
-                !UniversalMarker::new(MarkerTree::TRUE, cm).evaluate_only_extras(&extras, &groups),
+                !UniversalMarker::new(MarkerTree::TRUE, cm).evaluate_only_extras(&extras, &groups,),
                 "expected `{extra_names:?}` to evaluate to `false` in `{cm:?}`"
             );
         }
@@ -1151,7 +1160,7 @@ mod tests {
                 .collect::<Vec<(PackageName, ExtraName)>>();
             let groups = Vec::<(PackageName, GroupName)>::new();
             assert!(
-                UniversalMarker::new(MarkerTree::TRUE, cm).evaluate_only_extras(&extras, &groups),
+                UniversalMarker::new(MarkerTree::TRUE, cm).evaluate_only_extras(&extras, &groups,),
                 "expected `{extra_names:?}` to evaluate to `true` in `{cm:?}`"
             );
         }

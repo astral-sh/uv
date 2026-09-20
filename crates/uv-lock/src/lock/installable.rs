@@ -3,6 +3,7 @@ use std::collections::VecDeque;
 use std::collections::hash_map::Entry;
 use std::path::Path;
 use std::sync::Arc;
+use uv_pep508::MarkerVariantsUniversal;
 
 use either::Either;
 use itertools::Itertools;
@@ -400,6 +401,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 let additional_activated_extras = newly_activated_extras(dep, &activated_extras);
                 if !dep.complexified_marker.evaluate(
                     marker_env,
+                    &MarkerVariantsUniversal,
                     activated_projects.iter().copied(),
                     activated_extras
                         .iter()
@@ -487,7 +489,10 @@ trait InstallableExt<'lock>: Installable<'lock> {
             // Add any requirements that are exclusive to the workspace root (e.g., dependencies in
             // PEP 723 scripts).
             for dependency in self.lock().requirements() {
-                if !dependency.marker.evaluate(marker_env, &[]) {
+                if !dependency
+                    .marker
+                    .evaluate(marker_env, &MarkerVariantsUniversal, &[])
+                {
                     continue;
                 }
 
@@ -550,7 +555,10 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 })
                 .flatten()
             {
-                if !dependency.marker.evaluate(marker_env, &[]) {
+                if !dependency
+                    .marker
+                    .evaluate(marker_env, &MarkerVariantsUniversal, &[])
+                {
                     continue;
                 }
 
@@ -679,6 +687,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
                         newly_activated_extras(dep, &activated_extras);
                     if !dep_reachability.evaluate(
                         marker_env,
+                        &MarkerVariantsUniversal,
                         activated_projects.iter().copied(),
                         activated_extras
                             .iter()
@@ -757,10 +766,11 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 if validate_conflicts && dep.complexified_marker.has_conflict_marker() {
                     dependencies_for_conflict_validation.push((package, dep));
                 }
-                if !dep
-                    .complexified_marker
-                    .evaluate_activated(marker_env, &activated)
-                {
+                if !dep.complexified_marker.evaluate_activated(
+                    marker_env,
+                    &MarkerVariantsUniversal,
+                    &activated,
+                ) {
                     continue;
                 }
 

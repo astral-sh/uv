@@ -1,6 +1,7 @@
 use std::fmt::Write;
 use std::ops::Deref;
 use std::path::Path;
+use uv_pep508::MarkerVariantsUniversal;
 
 use anyhow::Result;
 use itertools::Itertools;
@@ -750,7 +751,7 @@ pub(crate) async fn do_sync<'a>(
     if !environments.is_empty() {
         if !environments
             .iter()
-            .any(|env| env.evaluate(&marker_env, &[]))
+            .any(|env| env.evaluate(&marker_env, &MarkerVariantsUniversal, &[]))
         {
             return Err(ProjectError::LockedPlatformIncompatibility(
                 // For error reporting, we use the "simplified"

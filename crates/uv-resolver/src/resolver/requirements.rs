@@ -3,6 +3,7 @@
 use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::{iter, slice};
+use uv_pep508::MarkerVariantsUniversal;
 
 use either::Either;
 use rustc_hash::FxHashSet;
@@ -277,7 +278,11 @@ impl<'a> RequirementExpander<'a> {
         // If the requirement isn't relevant for the current platform, skip it.
         match extra {
             Some(source_extra) => {
-                if !requirement.evaluate_markers(env.marker_environment(), &[]) {
+                if !requirement.evaluate_markers(
+                    env.marker_environment(),
+                    &MarkerVariantsUniversal,
+                    &[],
+                ) {
                     return false;
                 }
 
@@ -287,7 +292,11 @@ impl<'a> RequirementExpander<'a> {
                 }
             }
             None => {
-                if !requirement.evaluate_markers(env.marker_environment(), &[]) {
+                if !requirement.evaluate_markers(
+                    env.marker_environment(),
+                    &MarkerVariantsUniversal,
+                    &[],
+                ) {
                     return false;
                 }
             }
@@ -411,7 +420,7 @@ impl<'a> RequirementExpander<'a> {
                 match extra {
                     Some(source_extra) => {
                         if !constraint
-                            .evaluate_markers(env.marker_environment(), slice::from_ref(source_extra))
+                            .evaluate_markers(env.marker_environment(), &MarkerVariantsUniversal, slice::from_ref(source_extra))
                         {
                             return None;
                         }
@@ -421,7 +430,7 @@ impl<'a> RequirementExpander<'a> {
                         }
                     }
                     None => {
-                        if !constraint.evaluate_markers(env.marker_environment(), &[]) {
+                        if !constraint.evaluate_markers(env.marker_environment(), &MarkerVariantsUniversal, &[]) {
                             return None;
                         }
                     }

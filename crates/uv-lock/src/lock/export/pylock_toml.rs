@@ -4,6 +4,7 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf, absolute};
 use std::str::FromStr;
 use std::sync::Arc;
+use uv_pep508::MarkerVariantsUniversal;
 
 use futures::{StreamExt, TryStreamExt};
 use jiff::Timestamp;
@@ -1229,7 +1230,10 @@ impl<'lock> PylockToml {
 
         for package in self.packages {
             // Omit packages that aren't relevant to the current environment.
-            if !package.marker.evaluate_pep751(markers, extras, groups) {
+            if !package
+                .marker
+                .evaluate_pep751(markers, &MarkerVariantsUniversal, extras, groups)
+            {
                 continue;
             }
             if !active_packages.insert(package.name.clone()) {
