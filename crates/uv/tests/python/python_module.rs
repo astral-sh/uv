@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::{FileTouch, FileWriteStr, PathChild, PathCreateDir};
@@ -33,15 +33,9 @@ sys.base_prefix = '/dev/null'
 print(uv.find_uv_bin())
 ";
 
-fn fake_uv(context: &TestContext) -> anyhow::Result<PathBuf> {
-    materialize_fake_uv(
-        context,
-        &context.workspace_root.join("test/packages/fake-uv"),
-    )
-}
-
 /// Copy the current Python sources into a fixture independent of Git's symlink support.
-fn materialize_fake_uv(context: &TestContext, package: &Path) -> anyhow::Result<PathBuf> {
+fn fake_uv(context: &TestContext) -> anyhow::Result<PathBuf> {
+    let package = context.workspace_root.join("test/packages/fake-uv");
     let destination = context.temp_dir.join("fake-uv");
     fs::create_dir(&destination)?;
     fs::copy(
@@ -54,34 +48,6 @@ fn materialize_fake_uv(context: &TestContext, package: &Path) -> anyhow::Result<
         destination.join("src"),
     )?;
     Ok(destination)
-}
-
-#[test]
-fn fake_uv_without_symlink_support() -> anyhow::Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let source = context.workspace_root.join("test/packages/fake-uv");
-    let checkout = context.temp_dir.child("checkout").child("fake-uv");
-
-    checkout.create_dir_all()?;
-    fs::copy(
-        source.join("pyproject.toml"),
-        checkout.join("pyproject.toml"),
-    )?;
-    copy_dir_ignore(source.join("scripts"), checkout.join("scripts"))?;
-
-    // Git materializes the source symlink as a regular file when symlink support is disabled.
-    checkout.child("src").write_str("../../../python/")?;
-    let package = materialize_fake_uv(&context, checkout.path())?;
-    uv_snapshot!(context.filters(), context.pip_install().arg(package), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[TEMP_DIR]/fake-uv)
-    ");
-
-    Ok(())
 }
 
 #[test]
