@@ -42,6 +42,7 @@ uv-redacted = { workspace = true }
 uv-static = { workspace = true }
 uv-threads = { workspace = true }
 uv-torch = { workspace = true }
+uv-variants = { workspace = true }
 uv-version = { workspace = true }
 uv-warnings = { workspace = true }
 

@@ -6301,6 +6301,7 @@ dependencies = [
  "uv-static",
  "uv-threads",
  "uv-torch",
+ "uv-variants",
  "uv-version",
  "uv-warnings",
  "webpki-root-certs",
