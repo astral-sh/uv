@@ -830,7 +830,7 @@ fn python_list_json_installed() {
         .with_collapsed_whitespace()
         .with_filter((r#""patch":\s*\d+"#, r#""patch": [PATCH]"#))
         .with_filter((r#""(os|arch|libc)":\s*"[^"]*""#, r#""$1": "[$1]""#))
-        .with_filter((r#""symlink":\s*"[^"]*""#, r#""symlink": null"#))
+        .with_filter((r#""symlink":\s*"[^"]*""#, r#""symlink":null"#))
         .with_filter((r#""path":\s*"[^"]*""#, r#""path": "[PYTHON-3.12]""#));
 
     uv_snapshot!(context.filters(), context.python_list()
