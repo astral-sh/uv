@@ -2711,6 +2711,35 @@ mod process_status_tests {
 }
 
 #[cfg(test)]
+mod environment_tests {
+    use std::ffi::OsStr;
+    use std::path::Path;
+
+    use uv_static::EnvVars;
+
+    use super::TestContext;
+
+    #[test]
+    fn clears_variant_settings() {
+        let command = TestContext::new_command_with(Path::new("uv"));
+        for name in [
+            EnvVars::UV_VARIANT_LOCK,
+            EnvVars::UV_VARIANT_LOCK_INCOMPLETE,
+            EnvVars::UV_NO_PROVIDER_ISOLATION,
+        ] {
+            assert_eq!(
+                command
+                    .get_envs()
+                    .find(|(key, _)| *key == OsStr::new(name))
+                    .map(|(_, value)| value),
+                Some(None),
+                "{name} should not be inherited from the test host"
+            );
+        }
+    }
+}
+
+#[cfg(test)]
 mod cache_directory_tests {
     use std::process::Command;
 
