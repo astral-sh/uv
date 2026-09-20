@@ -723,7 +723,7 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
             }]
         }
         (Os::NetBsd { release }, arch) => {
-            let release_tag = release.replace(['.', '-'], "_");
+            let release_tag = release.replace(['.', '-'], "_").to_lowercase();
             let arch_tag = arch.machine();
             let release_arch = format!("{release_tag}_{arch_tag}");
             vec![PlatformTag::NetBsd {
@@ -736,7 +736,7 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
             }]
         }
         (Os::OpenBsd { release }, arch) => {
-            let release_tag = release.replace(['.', '-'], "_");
+            let release_tag = release.replace(['.', '-'], "_").to_lowercase();
             let arch_tag = arch.machine();
             let release_arch = format!("{release_tag}_{arch_tag}");
             vec![PlatformTag::OpenBsd {
@@ -749,7 +749,7 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
             }]
         }
         (Os::Dragonfly { release }, arch) => {
-            let release = release.replace(['.', '-'], "_");
+            let release = release.replace(['.', '-'], "_").to_lowercase();
             let release_arch = format!("{release}_{arch}");
             vec![PlatformTag::Dragonfly {
                 release_arch: release_arch.parse::<ReleaseArch>().map_err(|error| {
@@ -761,7 +761,7 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
             }]
         }
         (Os::Haiku { release }, arch) => {
-            let release = release.replace(['.', '-'], "_");
+            let release = release.replace(['.', '-'], "_").to_lowercase();
             let release_arch = format!("{release}_{arch}");
             vec![PlatformTag::Haiku {
                 release_arch: release_arch.parse::<ReleaseArch>().map_err(|error| {
@@ -1560,6 +1560,23 @@ mod tests {
         ]
         "#
         );
+    }
+
+    #[test]
+    fn test_platform_tags_netbsd_stable() {
+        let tags = compatible_tags(&Platform::new(
+            Os::NetBsd {
+                release: "11.0_STABLE".to_string(),
+            },
+            Arch::X86_64,
+        ))
+        .unwrap();
+        let tags = tags.iter().map(ToString::to_string).collect::<Vec<_>>();
+        assert_debug_snapshot!(tags, @r#"
+        [
+            "netbsd_11_0_stable_amd64",
+        ]
+        "#);
     }
 
     #[test]
