@@ -144,6 +144,19 @@ impl TryFrom<VariantProperties> for Variant {
 }
 
 impl Variant {
+    pub(crate) fn retain_values(
+        &mut self,
+        mut supported: impl FnMut(&VariantNamespace, &VariantFeature, &VariantValue) -> bool,
+    ) {
+        self.0.retain(|namespace, features| {
+            features.retain(|feature, values| {
+                values.retain(|value| supported(namespace, feature, value));
+                !values.is_empty()
+            });
+            !features.is_empty()
+        });
+    }
+
     fn has_properties(&self) -> bool {
         self.0
             .values()
