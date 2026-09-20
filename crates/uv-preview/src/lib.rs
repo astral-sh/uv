@@ -340,6 +340,8 @@ pub enum PreviewFeature {
     MissingExcludeNewerPackageLock,
     /// Allows using `uv export --batch`.
     BatchExport,
+    /// Allows resolving and installing [wheel variants](https://peps.python.org/pep-0825/), including running variant providers.
+    WheelVariants,
 }
 
 impl Display for PreviewFeature {
