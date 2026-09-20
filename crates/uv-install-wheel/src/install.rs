@@ -58,6 +58,7 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
     direct_url: Option<&DirectUrl>,
     cache_info: Option<&Cache>,
     build_info: Option<&Build>,
+    variant_info: Option<&serde_json::Value>,
     installer: Option<&str>,
     installer_metadata: bool,
     link_mode: LinkMode,
@@ -155,6 +156,7 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
             direct_url,
             cache_info,
             build_info,
+            variant_info,
             installer,
             &mut record,
         )?;

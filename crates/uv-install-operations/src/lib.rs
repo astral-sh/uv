@@ -25,7 +25,7 @@ use uv_install_wheel::{LinkMode, installed_dist_info_path, read_record_into_iter
 use uv_installer::{InstallationStrategy, Plan, Planner, Preparer, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_pep508::VerbatimUrl;
+use uv_pep508::{MarkerEnvironment, VerbatimUrl};
 use uv_platform_tags::Tags;
 use uv_preview::Preview;
 use uv_pypi_types::ResolverMarkerEnvironment;
@@ -327,6 +327,7 @@ pub async fn install(
     compile: Option<BytecodeCompilation>,
     hasher: &HashStrategy,
     tags: &Tags,
+    markers: &MarkerEnvironment,
     client: &RegistryClient,
     in_flight: &InFlight,
     concurrency: &Concurrency,
@@ -364,6 +365,7 @@ pub async fn install(
         compile,
         hasher,
         tags,
+        markers,
         client,
         in_flight,
         concurrency,
@@ -390,6 +392,7 @@ impl InstallationPlan {
         compile: Option<BytecodeCompilation>,
         hasher: &HashStrategy,
         tags: &Tags,
+        markers: &MarkerEnvironment,
         client: &RegistryClient,
         in_flight: &InFlight,
         concurrency: &Concurrency,
@@ -467,6 +470,7 @@ impl InstallationPlan {
                 link_mode,
                 hasher,
                 tags,
+                markers,
                 client,
                 in_flight,
                 concurrency,
@@ -496,6 +500,7 @@ impl InstallationPlan {
                 link_mode,
                 hasher,
                 tags,
+                markers,
                 client,
                 in_flight,
                 concurrency,
@@ -677,6 +682,7 @@ async fn execute_plan(
     link_mode: LinkMode,
     hasher: &HashStrategy,
     tags: &Tags,
+    markers: &MarkerEnvironment,
     client: &RegistryClient,
     in_flight: &InFlight,
     concurrency: &Concurrency,
@@ -729,6 +735,26 @@ async fn execute_plan(
         wheels
     };
 
+    let mut installs = wheels.into_iter().chain(cached).collect::<Vec<_>>();
+    let installer = uv_installer::Installer::new(venv, preview)
+        .with_link_mode(link_mode)
+        .with_cache(cache)
+        .with_installer_metadata(installer_metadata)
+        .with_reporter(Arc::new(
+            InstallReporter::from(printer).with_length(installs.len() as u64),
+        ))
+        .with_variant_contexts(
+            &installs,
+            resolution,
+            &DistributionDatabase::new(
+                client,
+                build_dispatch,
+                concurrency.downloads_semaphore.clone(),
+            ),
+            markers,
+        )
+        .await?;
+
     // Remove any upgraded or extraneous installations.
     let uninstalls = extraneous.into_iter().chain(reinstalls).collect::<Vec<_>>();
     if !uninstalls.is_empty() {
@@ -771,20 +797,12 @@ async fn execute_plan(
     }
 
     // Install the resolved distributions.
-    let mut installs = wheels.into_iter().chain(cached).collect::<Vec<_>>();
     if !installs.is_empty() {
         let start = std::time::Instant::now();
-        installs = uv_installer::Installer::new(venv, preview)
-            .with_link_mode(link_mode)
-            .with_cache(cache)
-            .with_installer_metadata(installer_metadata)
-            .with_reporter(Arc::new(
-                InstallReporter::from(printer).with_length(installs.len() as u64),
-            ))
-            // This technically can block the runtime, but we are on the main thread and
-            // have no other running tasks at this point, so this lets us avoid spawning a blocking
-            // task.
-            .install_blocking(installs)?;
+        // This technically can block the runtime, but we are on the main thread and
+        // have no other running tasks at this point, so this lets us avoid spawning a blocking
+        // task.
+        installs = installer.install_blocking(installs)?;
 
         logger.on_install(installs.len(), start, printer, DryRun::Disabled)?;
     }

@@ -351,6 +351,7 @@ pub async fn sync_from_lock(
             bytecode_compilation,
             &hasher,
             &tags,
+            marker_env.markers(),
             &client,
             state.in_flight(),
             concurrency,
