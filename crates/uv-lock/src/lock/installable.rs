@@ -190,6 +190,7 @@ pub trait Installable<'lock> {
         let version = package.version().cloned();
         let dist = ResolvedDist::Installable {
             dist: Arc::new(dist),
+            variants_json: None,
             version,
         };
         Ok(Node::Dist {
@@ -216,6 +217,7 @@ pub trait Installable<'lock> {
         let version = package.version().cloned();
         let dist = ResolvedDist::Installable {
             dist: Arc::new(dist),
+            variants_json: None,
             version,
         };
         let hashes = package.hashes();

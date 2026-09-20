@@ -6,8 +6,8 @@ use tracing::debug;
 
 use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_distribution_types::{
-    File, InstalledDist, MinimumLibcVersion, Name, RegistryBuiltDist, RegistryBuiltWheel,
-    RegistrySourceDist, RequiresPython,
+    File, IndexUrl, InstalledDist, MinimumLibcVersion, Name, RegistryBuiltDist, RegistryBuiltWheel,
+    RegistrySourceDist, RegistryVariantsJson, RequiresPython,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
@@ -34,6 +34,8 @@ struct PrioritizedDistInner {
     best_wheel_index: Option<usize>,
     /// The set of all wheels associated with this distribution.
     wheels: Vec<(RegistryBuiltWheel, WheelCompatibility)>,
+    /// The `variants.json` file associated with the package version.
+    variants_json: Option<RegistryVariantsJson>,
     /// The hashes for each distribution.
     hashes: Vec<HashDigest>,
     /// Python coverage, unioned over compatible wheels independently of their platforms.
@@ -50,6 +52,7 @@ impl Default for PrioritizedDistInner {
             source: None,
             best_wheel_index: None,
             wheels: Vec::new(),
+            variants_json: None,
             hashes: Vec::new(),
             python_markers: MarkerTree::FALSE,
             markers: [MarkerTree::FALSE; 2],
@@ -394,6 +397,14 @@ pub enum HashComparison {
 }
 
 impl PrioritizedDist {
+    /// Create a new [`PrioritizedDist`] from the `variants.json`.
+    pub fn from_variant_json(variant_json: RegistryVariantsJson) -> Self {
+        Self(Box::new(PrioritizedDistInner {
+            variants_json: Some(variant_json),
+            ..PrioritizedDistInner::default()
+        }))
+    }
+
     /// Insert the given built distribution into the [`PrioritizedDist`].
     pub(crate) fn insert_built(
         &mut self,
@@ -464,6 +475,27 @@ impl PrioritizedDist {
         } else {
             self.0.source = Some((dist, compatibility));
         }
+    }
+
+    pub fn insert_variant_json(&mut self, variant_json: RegistryVariantsJson) {
+        // An index can list the same metadata file more than once.
+        if self.0.variants_json.is_none() {
+            self.0.variants_json = Some(variant_json);
+        }
+    }
+
+    /// Return the variants JSON for the distribution, if any.
+    pub fn variants_json(&self) -> Option<&RegistryVariantsJson> {
+        self.0.variants_json.as_ref()
+    }
+
+    /// Return the index URL for the distribution, if any.
+    pub fn index(&self) -> Option<&IndexUrl> {
+        self.0
+            .source
+            .as_ref()
+            .map(|(sdist, _)| &sdist.index)
+            .or_else(|| self.0.wheels.first().map(|(wheel, _)| &wheel.index))
     }
 
     /// Return the highest-priority distribution for the package version, if any.

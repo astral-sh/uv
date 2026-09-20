@@ -44,6 +44,9 @@ impl ResolvedDistRef<'_> {
                 );
                 ResolvedDist::Installable {
                     dist: Arc::new(Dist::Source(SourceDist::Registry(source))),
+                    variants_json: prioritized
+                        .variants_json()
+                        .map(|variants_json| Arc::new(variants_json.clone())),
                     version: Some(sdist.version.clone()),
                 }
             }
@@ -60,6 +63,9 @@ impl ResolvedDistRef<'_> {
                 let built = prioritized.built_dist().expect("at least one wheel");
                 ResolvedDist::Installable {
                     dist: Arc::new(Dist::Built(BuiltDist::Registry(built))),
+                    variants_json: prioritized
+                        .variants_json()
+                        .map(|variants_json| Arc::new(variants_json.clone())),
                     version: Some(wheel.filename.version.clone()),
                 }
             }

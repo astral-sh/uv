@@ -83,6 +83,7 @@ impl SelectedDistribution {
                         package.name.clone(),
                         url_to_precise(url.clone(), git),
                     )?),
+                    variants_json: None,
                     version: Some(version.clone()),
                 },
                 metadata_id,

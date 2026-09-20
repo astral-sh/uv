@@ -9,7 +9,7 @@ use uv_pypi_types::Yanked;
 
 use crate::{
     BuiltDist, Dist, DistributionId, DistributionMetadata, Identifier, IndexUrl, InstalledDist,
-    Name, ResourceId, SourceDist, VersionId, VersionOrUrlRef,
+    Name, RegistryVariantsJson, ResourceId, SourceDist, VersionId, VersionOrUrlRef,
 };
 
 /// A distribution that can be used for resolution and installation.
@@ -22,6 +22,7 @@ pub enum ResolvedDist {
     },
     Installable {
         dist: Arc<Dist>,
+        variants_json: Option<Arc<RegistryVariantsJson>>,
         version: Option<Version>,
     },
 }
@@ -78,7 +79,7 @@ impl ResolvedDist {
     /// Returns the version of the distribution, if available.
     pub fn version(&self) -> Option<&Version> {
         match self {
-            Self::Installable { version, dist } => dist.version().or(version.as_ref()),
+            Self::Installable { version, dist, .. } => dist.version().or(version.as_ref()),
             Self::Installed { dist } => Some(dist.version()),
         }
     }

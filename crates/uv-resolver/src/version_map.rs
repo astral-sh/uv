@@ -12,7 +12,8 @@ use uv_client::{FlatIndexEntry, OwnedArchive, SimpleDetailMetadata, VersionFiles
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    IndexUrl, MinimumLibcVersion, RegistryBuiltWheel, RegistrySourceDist, RequiresPython,
+    IndexEntryFilename, IndexUrl, MinimumLibcVersion, RegistryBuiltWheel, RegistrySourceDist,
+    RegistryVariantsJson, RequiresPython,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -630,11 +631,8 @@ impl VersionMapLazy {
             )
             .expect("archived version files always deserializes");
             let mut priority_dist = init.cloned().unwrap_or_default();
-            for (filename, file) in files.all(&self.package_name) {
-                if let DistFilename::WheelFilename(filename) = &filename
-                    && filename.variant().is_some()
-                    && !uv_preview::is_enabled(PreviewFeature::WheelVariants)
-                {
+            for (filename, file) in files.all_entries(&self.package_name) {
+                if filename.is_variant() && !uv_preview::is_enabled(PreviewFeature::WheelVariants) {
                     continue;
                 }
                 // Support resolving as if it were an earlier timestamp, at least as long files have
@@ -682,7 +680,7 @@ impl VersionMapLazy {
                 let yanked = file.yanked.as_deref();
                 let hashes = file.hashes.clone();
                 match filename {
-                    DistFilename::WheelFilename(filename) => {
+                    IndexEntryFilename::DistFilename(DistFilename::WheelFilename(filename)) => {
                         let compatibility = self.wheel_compatibility(
                             &filename,
                             &filename.name,
@@ -705,7 +703,9 @@ impl VersionMapLazy {
                             self.minimum_libc_version,
                         );
                     }
-                    DistFilename::SourceDistFilename(filename) => {
+                    IndexEntryFilename::DistFilename(DistFilename::SourceDistFilename(
+                        filename,
+                    )) => {
                         let compatibility = self.source_dist_compatibility(
                             &filename,
                             hashes.as_slice(),
@@ -723,6 +723,14 @@ impl VersionMapLazy {
                             size_is_authoritative: false,
                         };
                         priority_dist.insert_source(dist, hashes, compatibility);
+                    }
+                    IndexEntryFilename::VariantJson(filename) => {
+                        let variant_json = RegistryVariantsJson {
+                            filename,
+                            file: Box::new(file),
+                            index: self.index.clone(),
+                        };
+                        priority_dist.insert_variant_json(variant_json);
                     }
                 }
             }
