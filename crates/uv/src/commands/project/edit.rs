@@ -3,7 +3,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use tracing::{debug, warn};
 use uv_fs::Simplified;
 
@@ -29,7 +29,7 @@ impl ProjectEdit {
             .collect::<io::Result<Vec<_>>>()?;
         let files = Arc::new(Mutex::new(files));
 
-        ctrlc::set_handler({
+        let _ = ctrlc::set_handler({
             let files = Arc::clone(&files);
             move || {
                 revert(&mut files.lock().unwrap_or_else(PoisonError::into_inner));
@@ -41,8 +41,7 @@ impl ProjectEdit {
                     130
                 });
             }
-        })
-        .context("Failed to install the project edit Ctrl-C handler")?;
+        });
 
         Ok(Self { files })
     }
