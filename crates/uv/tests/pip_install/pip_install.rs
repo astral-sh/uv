@@ -3045,6 +3045,119 @@ fn install_git_unescaped_ref() {
     ");
 }
 
+/// Installing from a Git repository that tracks `.ok` as a symlink must not
+/// follow the symlink when uv writes the checkout-ready marker.
+///
+/// See <https://github.com/astral-sh/uv/issues/21857>.
+#[test]
+#[cfg(all(unix, feature = "test-git"))]
+fn install_git_checkout_marker_does_not_follow_symlink() -> Result<()> {
+    let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION);
+
+    // A victim file outside the repository; the repository tracks `.ok` as a
+    // symlink to it.
+    let victim = context.temp_dir.child("victim.txt");
+    victim.write_str("VICTIM-SENTINEL")?;
+
+    let repository = context.temp_dir.child("repository");
+    repository.child("pyproject.toml").write_str(indoc! {r#"
+        [build-system]
+        requires = []
+        build-backend = "backend"
+        backend-path = ["."]
+
+        [project]
+        name = "example"
+        version = "0.1.0"
+    "#})?;
+    repository.child("backend.py").write_str(indoc! {r#"
+        import os
+        import zipfile
+
+        DIST_INFO = "example-0.1.0.dist-info"
+
+        def _metadata(directory):
+            os.makedirs(os.path.join(directory, DIST_INFO), exist_ok=True)
+            with open(os.path.join(directory, DIST_INFO, "METADATA"), "w") as file:
+                file.write("Metadata-Version: 2.1\nName: example\nVersion: 0.1.0\n")
+            with open(os.path.join(directory, DIST_INFO, "WHEEL"), "w") as file:
+                file.write("Wheel-Version: 1.0\nGenerator: backend\nRoot-Is-Purelib: true\nTag: py3-none-any\n")
+
+        def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
+            _metadata(metadata_directory)
+            return DIST_INFO
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            filename = "example-0.1.0-py3-none-any.whl"
+            with zipfile.ZipFile(os.path.join(wheel_directory, filename), "w") as archive:
+                archive.writestr("example/__init__.py", "__version__ = \"0.1.0\"\n")
+                archive.writestr(
+                    f"{DIST_INFO}/METADATA",
+                    "Metadata-Version: 2.1\nName: example\nVersion: 0.1.0\n",
+                )
+                archive.writestr(
+                    f"{DIST_INFO}/WHEEL",
+                    "Wheel-Version: 1.0\nGenerator: backend\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+                )
+                archive.writestr(f"{DIST_INFO}/RECORD", "")
+            return filename
+    "#})?;
+    symlink(victim.path(), repository.child(".ok").path())?;
+
+    Command::new("git")
+        .arg("init")
+        .arg(repository.path())
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .arg("add")
+        .arg(".")
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args([
+            "-c",
+            "user.name=ferris",
+            "-c",
+            "user.email=ferris@example.com",
+            "commit",
+            "-m",
+            "Initial commit",
+        ])
+        .env("GIT_AUTHOR_DATE", "2000-01-01T00:00:00Z")
+        .env("GIT_COMMITTER_DATE", "2000-01-01T00:00:00Z")
+        .assert()
+        .success();
+
+    let repository_url = Url::from_directory_path(repository.path())
+        .map_err(|()| anyhow!("failed to convert repository path to file URL"))?;
+    let repository_url = repository_url.as_str().trim_end_matches('/');
+
+    let mut filters = context.filters();
+    filters.push((r"@[0-9a-f]{40}", "@[COMMIT]"));
+    uv_snapshot!(filters, context
+        .pip_install()
+        .arg(format!("example @ git+{repository_url}")), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + example==0.1.0 (from git+file://[TEMP_DIR]/repository@[COMMIT])
+    ");
+
+    context.assert_installed("example", "0.1.0");
+
+    // The symlink target outside the checkout is untouched.
+    assert_eq!(fs::read_to_string(victim.path())?, "VICTIM-SENTINEL");
+
+    Ok(())
+}
+
 /// Install and update a package from a public GitHub repository
 #[test]
 #[cfg(feature = "test-git")]
