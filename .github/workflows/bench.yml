@@ -179,6 +179,7 @@ jobs:
         with:
           run: uv run --only-dev cargo codspeed run
           mode: simulation
+          exclude-allocations: true
           upload-url: ${{ steps.profiles.outputs.upload-url }}
 
       - name: "Finish profile capture"
