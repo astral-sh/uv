@@ -37,3 +37,6 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
 which = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

@@ -499,7 +499,10 @@ impl GitCheckout {
         match self.repo.rev_parse("HEAD") {
             Ok(id) if id == self.revision => {
                 // See comments in reset() for why we check this
-                self.repo.path.join(CHECKOUT_READY_LOCK).exists()
+                let ok_file = self.repo.path.join(CHECKOUT_READY_LOCK);
+                fs_err::symlink_metadata(&ok_file)
+                    .map(|meta| meta.is_file())
+                    .unwrap_or(false)
             }
             _ => false,
         }
@@ -538,7 +541,13 @@ impl GitCheckout {
         original_remote_url: &DisplaySafeUrl,
     ) -> Result<Option<bool>> {
         let ok_file = self.repo.path.join(CHECKOUT_READY_LOCK);
-        let _ = paths::remove_file(&ok_file);
+        if let Ok(meta) = fs_err::symlink_metadata(&ok_file) {
+            if meta.is_dir() {
+                let _ = fs_err::remove_dir_all(&ok_file);
+            } else {
+                let _ = fs_err::remove_file(&ok_file);
+            }
+        }
 
         // We want to skip smudge if lfs was disabled for the repository
         // as smudge filters can trigger on a reset even if lfs artifacts
@@ -611,6 +620,16 @@ impl GitCheckout {
         // When Git LFS is enabled, the objects must also be fetched and
         // validated successfully as part of the corresponding db.
         if with_lfs.is_none() || lfs_validation == Some(true) {
+            // Remove any existing .ok entry created by `git reset` (e.g., if the repository
+            // tracks .ok as a symlink, directory, or regular file) to avoid following
+            // repository-controlled symlinks.
+            if let Ok(meta) = fs_err::symlink_metadata(&ok_file) {
+                if meta.is_dir() {
+                    let _ = fs_err::remove_dir_all(&ok_file);
+                } else {
+                    let _ = fs_err::remove_file(&ok_file);
+                }
+            }
             paths::create(ok_file)?;
         }
 
@@ -1039,6 +1058,69 @@ mod tests {
                 )
             );
         }
+
+        Ok(())
+    }
+
+    #[test]
+    fn checkout_marker_does_not_follow_symlink() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let repo_path = temp.path().join("repo");
+        fs_err::create_dir_all(&repo_path)?;
+
+        let ok_file = repo_path.join(CHECKOUT_READY_LOCK);
+        let target_file = temp.path().join("target");
+        fs_err::write(&target_file, "unmodified content")?;
+
+        #[cfg(unix)]
+        fs_err::os::unix::fs::symlink(&target_file, &ok_file)?;
+        #[cfg(windows)]
+        {
+            if fs_err::os::windows::fs::symlink_file(&target_file, &ok_file).is_err() {
+                return Ok(());
+            }
+        }
+
+        if let Ok(meta) = fs_err::symlink_metadata(&ok_file) {
+            if meta.is_dir() {
+                let _ = fs_err::remove_dir_all(&ok_file);
+            } else {
+                let _ = fs_err::remove_file(&ok_file);
+            }
+        }
+        paths::create(&ok_file)?;
+
+        assert_eq!(fs_err::read_to_string(&target_file)?, "unmodified content");
+
+        let meta = fs_err::symlink_metadata(&ok_file)?;
+        assert!(meta.is_file());
+
+        Ok(())
+    }
+
+    #[test]
+    fn checkout_marker_symlink_not_fresh() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let repo_path = temp.path().join("repo");
+        fs_err::create_dir_all(&repo_path)?;
+
+        let ok_file = repo_path.join(CHECKOUT_READY_LOCK);
+        let target_file = temp.path().join("target");
+        fs_err::write(&target_file, "content")?;
+
+        #[cfg(unix)]
+        fs_err::os::unix::fs::symlink(&target_file, &ok_file)?;
+        #[cfg(windows)]
+        {
+            if fs_err::os::windows::fs::symlink_file(&target_file, &ok_file).is_err() {
+                return Ok(());
+            }
+        }
+
+        let is_regular_file = fs_err::symlink_metadata(&ok_file)
+            .map(|meta| meta.is_file())
+            .unwrap_or(false);
+        assert!(!is_regular_file);
 
         Ok(())
     }
