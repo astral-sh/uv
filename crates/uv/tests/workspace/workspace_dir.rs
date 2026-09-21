@@ -75,10 +75,9 @@ fn workspace_metadata_from_member() -> Result<()> {
 /// discovery.
 #[test]
 fn workspace_dir_rejects_project_inside_cache() -> Result<()> {
-    let mut context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_cache_dir("workspace/cache");
     let workspace = context.temp_dir.child("workspace");
-    let cache_dir = workspace.child("cache");
-    let cached_project = cache_dir.child("cached-project");
+    let cached_project = context.cache_dir.child("cached-project");
 
     fs_err::create_dir_all(&cached_project)?;
     workspace.child("pyproject.toml").write_str(
@@ -95,12 +94,10 @@ fn workspace_dir_rejects_project_inside_cache() -> Result<()> {
         "#,
     )?;
 
-    context.cache_dir = cache_dir;
-
     uv_snapshot!(context.filters(), context.workspace_dir().current_dir(&cached_project), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: The project directory `.` is inside the cache directory `[TEMP_DIR]/workspace/cache`
+    error: The project directory `.` is inside the cache directory `[CACHE_DIR]/`
     "
     );
 

@@ -2487,10 +2487,12 @@ fn version_virtual_workspace_root_rejects_before_members() -> Result<()> {
 /// Read the frozen version of a workspace member without discovering an interpreter.
 #[test]
 fn version_get_frozen_workspace_without_python() -> Result<()> {
-    let mut context = uv_test::test_context!("3.12").with_filter((
-        r"Caused by: failed to create directory `[^`]+`: .*",
-        "Caused by: failed to create directory `[CACHE_DIR]`: [ERROR]",
-    ));
+    let context = uv_test::test_context!("3.12")
+        .with_cache_dir("cache-file")
+        .with_filter((
+            r"Caused by: failed to create directory `[^`]+`: .*",
+            "Caused by: failed to create directory `[CACHE_DIR]`: [ERROR]",
+        ));
 
     context
         .temp_dir
@@ -2525,9 +2527,7 @@ fn version_get_frozen_workspace_without_python() -> Result<()> {
     "#})?;
 
     // A file can't be initialized as a cache directory.
-    let cache_file = context.temp_dir.child("cache-file");
-    cache_file.touch()?;
-    context.cache_dir = cache_file;
+    context.cache_dir.touch()?;
 
     uv_snapshot!(context.filters(), context.version()
         .arg("--package").arg("child")

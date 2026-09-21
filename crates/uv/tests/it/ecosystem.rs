@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-use assert_fs::fixture::ChildPath;
 use insta::assert_snapshot;
 use std::path::Path;
 use uv_resolver::Lock;
@@ -218,13 +217,11 @@ fn lock_ecosystem_package_without_build(python_version: &str, name: &str) -> Res
 }
 
 fn lock_ecosystem_package_with_args(python_version: &str, name: &str, args: &[&str]) -> Result<()> {
-    let mut context = uv_test::test_context!(python_version);
-    context.copy_ecosystem_project(name);
-
     // Cache source distribution builds to speed up the tests.
     let cache_dir =
         std::path::absolute(Path::new("../../target/ecosystem-test-caches").join(name))?;
-    context.cache_dir = ChildPath::new(cache_dir);
+    let context = uv_test::test_context!(python_version).with_cache_dir(cache_dir);
+    context.copy_ecosystem_project(name);
 
     let mut command = context.lock();
     command.env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER);
