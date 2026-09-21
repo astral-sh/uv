@@ -128,7 +128,11 @@ jobs:
           retention-days: 30
 
   benchmarks-simulated:
-    name: "simulated"
+    name: "simulated sample ${{ matrix.sample }}"
+    strategy:
+      fail-fast: false
+      matrix:
+        sample: [1, 2, 3, 4, 5]
     runs-on: depot-ubuntu-24.04-4
     # Only uv measures main; uv-dev reuses the resulting profiles.
     if: ${{ github.repository == 'astral-sh/uv' || (github.repository == 'astral-sh/uv-dev' && github.ref != 'refs/heads/main') }}
@@ -170,8 +174,7 @@ jobs:
 
       - name: "Retain benchmark profiles"
         id: profiles
-        # Only public main pushes produce reusable baseline profiles.
-        if: ${{ github.repository == 'astral-sh/uv' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        # Retain every independent sample for the variance experiment.
         run: ./target/debug/uv run --script scripts/codspeed-profiles.py start "$RUNNER_TEMP/codspeed-simulation" simulation >> "$GITHUB_OUTPUT"
 
       - name: "Run benchmarks"
@@ -189,7 +192,7 @@ jobs:
         if: ${{ steps.profiles.outcome == 'success' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: codspeed-profiles-simulation
+          name: codspeed-profiles-simulation-${{ matrix.sample }}
           path: |
             ${{ runner.temp }}/codspeed-simulation/metadata.json
             ${{ runner.temp }}/codspeed-simulation/profile.tar
