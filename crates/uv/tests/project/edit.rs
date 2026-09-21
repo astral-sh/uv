@@ -613,6 +613,36 @@ fn add_git_branch() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "test-git")]
+fn add_git_unnamed_partial_static_metadata_no_build() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        no-binary-package = ["dynamic-requires-python-tool"]
+        no-build = true
+    "#})?;
+
+    // The static project name should allow the package-specific exception to apply; see
+    // astral-sh/uv-dev#732.
+    uv_snapshot!(context.filters(), context.add()
+        .arg("git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=dynamic"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Building source distributions is disabled
+    ");
+
+    Ok(())
+}
+
+#[test]
 #[cfg(feature = "test-git-lfs")]
 fn add_git_lfs() -> Result<()> {
     let context = uv_test::test_context!("3.13").with_git_lfs_config();
