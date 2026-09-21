@@ -343,7 +343,7 @@ impl SitePackages {
         config_settings_package: &PackageConfigSettings,
         extra_build_requires: &ExtraBuildRequires,
         extra_build_variables: &ExtraBuildVariables,
-    ) -> Result<SatisfiesResult> {
+    ) -> Result<SatisfiesResult<UnresolvedRequirement>> {
         // First, map all unnamed requirements to named requirements.
         let requirements = {
             let mut named = Vec::with_capacity(requirements.len());
@@ -356,7 +356,7 @@ impl SitePackages {
                         match self.get_urls(requirement.url.verbatim.raw()).as_slice() {
                             [] => {
                                 return Ok(SatisfiesResult::Unsatisfied(
-                                    requirement.url.verbatim.raw().to_string(),
+                                    UnresolvedRequirement::Unnamed(requirement.clone()),
                                 ));
                             }
                             [distribution] => {
@@ -373,7 +373,7 @@ impl SitePackages {
                             }
                             _ => {
                                 return Ok(SatisfiesResult::Unsatisfied(
-                                    requirement.url.verbatim.raw().to_string(),
+                                    UnresolvedRequirement::Unnamed(requirement.clone()),
                                 ));
                             }
                         }
@@ -396,7 +396,7 @@ impl SitePackages {
                         match self.get_urls(requirement.url.verbatim.raw()).as_slice() {
                             [] => {
                                 return Ok(SatisfiesResult::Unsatisfied(
-                                    requirement.url.verbatim.raw().to_string(),
+                                    UnresolvedRequirement::Unnamed(requirement.clone()),
                                 ));
                             }
                             [distribution] => {
@@ -413,7 +413,7 @@ impl SitePackages {
                             }
                             _ => {
                                 return Ok(SatisfiesResult::Unsatisfied(
-                                    requirement.url.verbatim.raw().to_string(),
+                                    UnresolvedRequirement::Unnamed(requirement.clone()),
                                 ));
                             }
                         }
@@ -438,7 +438,7 @@ impl SitePackages {
         )?;
         let excludes = Excludes::from_entries(exclude_dependencies.iter().cloned());
 
-        self.satisfies_requirements(
+        match self.satisfies_requirements(
             requirements.iter().map(Cow::as_ref),
             constraints.iter().map(|constraint| &constraint.requirement),
             &overrides,
@@ -452,7 +452,16 @@ impl SitePackages {
             config_settings_package,
             extra_build_requires,
             extra_build_variables,
-        )
+        )? {
+            SatisfiesResult::Fresh {
+                recursive_requirements,
+            } => Ok(SatisfiesResult::Fresh {
+                recursive_requirements,
+            }),
+            SatisfiesResult::Unsatisfied(requirement) => Ok(SatisfiesResult::Unsatisfied(
+                UnresolvedRequirement::Named(requirement),
+            )),
+        }
     }
 
     /// Like [`SitePackages::satisfies_spec`], but with resolved names for all requirements.
@@ -471,7 +480,7 @@ impl SitePackages {
         config_settings_package: &PackageConfigSettings,
         extra_build_requires: &ExtraBuildRequires,
         extra_build_variables: &ExtraBuildVariables,
-    ) -> Result<SatisfiesResult> {
+    ) -> Result<SatisfiesResult<Requirement>> {
         // Collect the constraints by package name.
         let constraints: FxHashMap<&PackageName, Vec<&Requirement>> =
             constraints.fold(FxHashMap::default(), |mut constraints, constraint| {
@@ -504,7 +513,7 @@ impl SitePackages {
             match installed.as_slice() {
                 [] => {
                     // The package isn't installed.
-                    return Ok(SatisfiesResult::Unsatisfied(requirement.to_string()));
+                    return Ok(SatisfiesResult::Unsatisfied(requirement));
                 }
                 [distribution] => {
                     // Validate that the requirement is satisfied.
@@ -524,7 +533,7 @@ impl SitePackages {
                             RequirementSatisfaction::Mismatch
                             | RequirementSatisfaction::OutOfDate
                             | RequirementSatisfaction::CacheInvalid => {
-                                return Ok(SatisfiesResult::Unsatisfied(requirement.to_string()));
+                                return Ok(SatisfiesResult::Unsatisfied(requirement));
                             }
                             RequirementSatisfaction::Satisfied => {}
                         }
@@ -548,9 +557,7 @@ impl SitePackages {
                                 RequirementSatisfaction::Mismatch
                                 | RequirementSatisfaction::OutOfDate
                                 | RequirementSatisfaction::CacheInvalid => {
-                                    return Ok(SatisfiesResult::Unsatisfied(
-                                        requirement.to_string(),
-                                    ));
+                                    return Ok(SatisfiesResult::Unsatisfied(requirement));
                                 }
                                 RequirementSatisfaction::Satisfied => {}
                             }
@@ -598,7 +605,7 @@ impl SitePackages {
                 }
                 _ => {
                     // There are multiple installed distributions for the same package.
-                    return Ok(SatisfiesResult::Unsatisfied(requirement.to_string()));
+                    return Ok(SatisfiesResult::Unsatisfied(requirement));
                 }
             }
         }
@@ -632,7 +639,7 @@ pub enum InstallationStrategy {
 
 /// Whether all requirements are already satisfied for the requested [`DependencyMode`].
 #[derive(Debug)]
-pub enum SatisfiesResult {
+pub enum SatisfiesResult<T> {
     /// All requirements are satisfied, including transitive dependencies when requested.
     Fresh {
         /// The set of all requirements checked, including the transitive closure when requested.
@@ -640,7 +647,7 @@ pub enum SatisfiesResult {
     },
     /// We found an unsatisfied requirement. Since we exit early, we only know about the first
     /// unsatisfied requirement.
-    Unsatisfied(String),
+    Unsatisfied(T),
 }
 
 /// Infer the package name from an installed distribution path without reading its metadata.
