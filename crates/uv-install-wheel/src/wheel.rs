@@ -56,15 +56,12 @@ if __name__ == "__main__":
 pub(crate) fn read_scripts_from_section(
     scripts_section: &HashMap<String, Option<String>>,
     section_name: &str,
-    extras: Option<&[String]>,
 ) -> Result<Vec<Script>, Error> {
     let mut scripts = Vec::new();
     for (script_name, python_location) in scripts_section {
         match python_location {
             Some(value) => {
-                if let Some(script) = Script::from_value(script_name, value, extras)? {
-                    scripts.push(script);
-                }
+                scripts.push(Script::from_value(script_name, value)?);
             }
             None => {
                 return Err(Error::InvalidWheel(format!(
@@ -1170,11 +1167,10 @@ pub(crate) fn dist_info_metadata(
 ///
 /// Returns (`script_name`, module, function)
 ///
-/// Extras are supposed to be ignored, which happens if you pass None for extras.
+/// Extras declared by an entry point are accepted but ignored.
 pub(crate) fn parse_scripts(
     wheel: impl AsRef<Path>,
     dist_info_prefix: &str,
-    extras: Option<&[String]>,
     python_minor: u8,
 ) -> Result<(Vec<Script>, Vec<Script>), Error> {
     let entry_points_path = wheel
@@ -1184,7 +1180,7 @@ pub(crate) fn parse_scripts(
     let EntryPoints {
         console_scripts,
         gui_scripts,
-    } = EntryPoints::read(entry_points_path, extras, python_minor)?;
+    } = EntryPoints::read(entry_points_path, python_minor)?;
 
     Ok((console_scripts, gui_scripts))
 }
@@ -1317,7 +1313,7 @@ mod test {
             .child("example-1.0.0.dist-info/entry_points.txt")
             .write_binary(&[0xff])?;
 
-        let error = parse_scripts(&wheel, "example-1.0.0", None, 13)
+        let error = parse_scripts(&wheel, "example-1.0.0", 13)
             .err()
             .ok_or_else(|| anyhow::anyhow!("invalid UTF-8 should fail to parse"))?;
 
@@ -1357,42 +1353,20 @@ mod test {
     #[test]
     fn test_script_from_value() {
         assert_eq!(
-            Script::from_value("launcher", "foo.bar:main", None).unwrap(),
-            Some(Script {
+            Script::from_value("launcher", "foo.bar:main").unwrap(),
+            Script {
                 name: "launcher".to_string(),
                 module: "foo.bar".to_string(),
                 function: "main".to_string(),
-            })
+            }
         );
         assert_eq!(
-            Script::from_value(
-                "launcher",
-                "foo.bar:main",
-                Some(&["bar".to_string(), "baz".to_string()]),
-            )
-            .unwrap(),
-            Some(Script {
-                name: "launcher".to_string(),
-                module: "foo.bar".to_string(),
-                function: "main".to_string(),
-            })
-        );
-        assert_eq!(
-            Script::from_value("launcher", "foomod:main_bar [bar,baz]", Some(&[])).unwrap(),
-            None
-        );
-        assert_eq!(
-            Script::from_value(
-                "launcher",
-                "foomod:main_bar [bar,baz]",
-                Some(&["bar".to_string(), "baz".to_string()]),
-            )
-            .unwrap(),
-            Some(Script {
+            Script::from_value("launcher", "foomod:main_bar [bar,baz]").unwrap(),
+            Script {
                 name: "launcher".to_string(),
                 module: "foomod".to_string(),
                 function: "main_bar".to_string(),
-            })
+            }
         );
     }
 
