@@ -2726,6 +2726,7 @@ fn force_pep517() -> Result<()> {
 /// Check that we show a hint when there's a venv in the source distribution.
 ///
 /// <https://github.com/astral-sh/uv/issues/15096>
+/// <https://github.com/astral-sh/uv/issues/21128>
 // Windows uses trampolines instead of symlinks. You don't want those in your source distribution
 // either, but that's for the build backend to catch, we're only checking for the unix error hint
 // in uv here.
@@ -2777,8 +2778,14 @@ fn venv_included_in_sdist() -> Result<()> {
     hint: The source distribution includes a virtual environment. Virtual environments must be excluded from source distributions.
     ");
 
+    // Point the virtual environment at the test interpreter's `python/3.12/python3` shim to
+    // exercise a base interpreter outside `bin`, as in Gentoo's test layout.
+    let venv_python = context.venv.child("bin").child("python");
+    fs_err::remove_file(&venv_python)?;
+    venv_python.symlink_to_file(context.root.child("python").child("3.12").child("python3"))?;
+
     // The preview tar-codec backend reports a structured unsafe-link error and preserves the same
-    // user-facing hint.
+    // user-facing hint, regardless of the base interpreter's installation layout.
     uv_snapshot!(context.filters(), context
         .build()
         .arg("--preview-features")
