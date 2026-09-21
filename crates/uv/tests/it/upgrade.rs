@@ -1717,6 +1717,7 @@ fn upgrade_allows_registry_source() -> Result<()> {
 }
 
 #[tokio::test]
+#[cfg(feature = "test-pypi")]
 async fn upgrade_uses_extra_index_url_credentials_for_registry_source() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let proxy = crate::pypi_proxy::start().await;
