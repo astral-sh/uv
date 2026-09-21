@@ -4,7 +4,7 @@
 #     "httpx>=0.28.1,<0.29",
 #     "packaging>=24.1,<25",
 #     "pypi-attestations==0.0.28",
-#     "sigstore==4.1.0",
+#     "sigstore==4.4.0",
 # ]
 # [tool.uv]
 # exclude-newer = "P7D"
