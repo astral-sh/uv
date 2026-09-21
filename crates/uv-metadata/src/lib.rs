@@ -59,6 +59,23 @@ impl From<async_zip::error::ZipError> for Error {
     }
 }
 
+/// Like `pip`, validate that the `.dist-info` directory is prefixed with the canonical package
+/// name.
+fn validate_dist_info_name(dist_info_prefix: &str, filename: &WheelFilename) -> Result<(), Error> {
+    let normalized_prefix = DistInfoName::new(dist_info_prefix);
+    if !normalized_prefix
+        .as_ref()
+        .starts_with(filename.name.as_str())
+    {
+        return Err(Error::MissingDistInfoPackageName(
+            dist_info_prefix.to_string(),
+            filename.name.to_string(),
+        ));
+    }
+
+    Ok(())
+}
+
 /// Find the `.dist-info` directory in a zipped wheel.
 ///
 /// Returns the dist info dir prefix without the `.dist-info` extension.
@@ -96,18 +113,7 @@ pub fn find_archive_dist_info<'a, T: Copy>(
         }
     };
 
-    // Like `pip`, validate that the `.dist-info` directory is prefixed with the canonical
-    // package name.
-    let normalized_prefix = DistInfoName::new(dist_info_prefix);
-    if !normalized_prefix
-        .as_ref()
-        .starts_with(filename.name.as_str())
-    {
-        return Err(Error::MissingDistInfoPackageName(
-            dist_info_prefix.to_string(),
-            filename.name.to_string(),
-        ));
-    }
+    validate_dist_info_name(dist_info_prefix, filename)?;
 
     Ok((payload, dist_info_prefix))
 }
@@ -125,18 +131,7 @@ fn is_metadata_entry(path: &str, filename: &WheelFilename) -> Result<bool, Error
         return Ok(false);
     };
 
-    // Like `pip`, validate that the `.dist-info` directory is prefixed with the canonical
-    // package name.
-    let normalized_prefix = DistInfoName::new(dist_info_prefix);
-    if !normalized_prefix
-        .as_ref()
-        .starts_with(filename.name.as_str())
-    {
-        return Err(Error::MissingDistInfoPackageName(
-            dist_info_prefix.to_string(),
-            filename.name.to_string(),
-        ));
-    }
+    validate_dist_info_name(dist_info_prefix, filename)?;
 
     Ok(true)
 }
@@ -199,18 +194,7 @@ fn find_flat_dist_info(filename: &WheelFilename, path: impl AsRef<Path>) -> Resu
         return Err(Error::MissingDistInfo);
     };
 
-    // Like `pip`, validate that the `.dist-info` directory is prefixed with the canonical
-    // package name.
-    let normalized_prefix = DistInfoName::new(&dist_info_prefix);
-    if !normalized_prefix
-        .as_ref()
-        .starts_with(filename.name.as_str())
-    {
-        return Err(Error::MissingDistInfoPackageName(
-            dist_info_prefix,
-            filename.name.to_string(),
-        ));
-    }
+    validate_dist_info_name(&dist_info_prefix, filename)?;
 
     Ok(dist_info_prefix)
 }
