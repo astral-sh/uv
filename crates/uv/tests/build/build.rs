@@ -1067,7 +1067,7 @@ fn build_dependency_check_dynamic_requirements() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = []
+        requires = ["idna>=3.3"]
         build-backend = "backend"
         backend-path = ["."]
     "#})?;
@@ -1126,7 +1126,9 @@ fn build_dependency_check_dynamic_requirements() -> Result<()> {
     project
         .child("sdist-hook-called")
         .assert(predicate::path::missing());
-    uv_snapshot!(context.filters(), context.pip_install().arg("idna==3.6"), @"
+    // Build the dependency with settings that differ from the project's build settings.
+    uv_snapshot!(context.filters(), context.pip_install().arg("idna==3.6")
+        .arg("--no-binary=idna").arg("-Cdependency=installed"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]

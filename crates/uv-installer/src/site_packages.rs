@@ -25,7 +25,7 @@ use uv_redacted::DisplaySafeUrl;
 use uv_types::InstalledPackagesProvider;
 use uv_warnings::warn_user;
 
-use crate::satisfies::RequirementSatisfaction;
+use crate::satisfies::{BuildSettings, RequirementSatisfaction};
 
 /// An index over the packages installed in an environment.
 ///
@@ -448,10 +448,12 @@ impl SitePackages {
             installation,
             markers,
             tags,
-            config_settings,
-            config_settings_package,
-            extra_build_requires,
-            extra_build_variables,
+            Some(BuildSettings {
+                config_settings,
+                config_settings_package,
+                extra_build_requires,
+                extra_build_variables,
+            }),
         )? {
             SatisfiesResult::Fresh {
                 recursive_requirements,
@@ -465,6 +467,8 @@ impl SitePackages {
     }
 
     /// Like [`SitePackages::satisfies_spec`], but with resolved names for all requirements.
+    ///
+    /// If `build_settings` is `None`, accept installed distributions regardless of their build settings.
     pub fn satisfies_requirements<'a, 'b>(
         &self,
         requirements: impl Iterator<Item = &'a Requirement>,
@@ -476,10 +480,7 @@ impl SitePackages {
         installation: InstallationStrategy,
         markers: &ResolverMarkerEnvironment,
         tags: &Tags,
-        config_settings: &ConfigSettings,
-        config_settings_package: &PackageConfigSettings,
-        extra_build_requires: &ExtraBuildRequires,
-        extra_build_variables: &ExtraBuildVariables,
+        build_settings: Option<BuildSettings<'_>>,
     ) -> Result<SatisfiesResult<Requirement>> {
         // Collect the constraints by package name.
         let constraints: FxHashMap<&PackageName, Vec<&Requirement>> =
@@ -525,10 +526,7 @@ impl SitePackages {
                         None,
                         installation,
                         tags,
-                        config_settings,
-                        config_settings_package,
-                        extra_build_requires,
-                        extra_build_variables,
+                        build_settings,
                     ) {
                         RequirementSatisfaction::Mismatch
                         | RequirementSatisfaction::OutOfDate
@@ -548,10 +546,7 @@ impl SitePackages {
                                 None,
                                 installation,
                                 tags,
-                                config_settings,
-                                config_settings_package,
-                                extra_build_requires,
-                                extra_build_variables,
+                                build_settings,
                             ) {
                                 RequirementSatisfaction::Mismatch
                                 | RequirementSatisfaction::OutOfDate

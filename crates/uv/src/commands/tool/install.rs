@@ -18,7 +18,7 @@ use uv_distribution_types::{
     ExtraBuildRequires, IndexCapabilities, NameRequirementSpecification, Requirement,
     RequirementSource, UnresolvedRequirementSpecification,
 };
-use uv_installer::{InstallationStrategy, Planner, SatisfiesResult, SitePackages};
+use uv_installer::{BuildSettings, InstallationStrategy, Planner, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
@@ -631,10 +631,12 @@ pub(crate) async fn install(
                         InstallationStrategy::Permissive,
                         &markers,
                         &tags,
-                        config_setting,
-                        config_settings_package,
-                        &extra_build_requires,
-                        extra_build_variables,
+                        Some(BuildSettings {
+                            config_settings: config_setting,
+                            config_settings_package,
+                            extra_build_requires: &extra_build_requires,
+                            extra_build_variables,
+                        }),
                     ),
                     Ok(SatisfiesResult::Fresh { .. })
                 );

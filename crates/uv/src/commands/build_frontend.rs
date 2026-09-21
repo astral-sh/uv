@@ -1074,10 +1074,8 @@ impl BuildDependencyCheck<'_> {
                 InstallationStrategy::Permissive,
                 &markers,
                 tags,
-                self.build_dispatch.config_settings(),
-                self.build_dispatch.config_settings_package(),
-                self.build_dispatch.extra_build_requires(),
-                self.build_dispatch.extra_build_variables(),
+                // Build settings configure this project, not its preinstalled dependencies.
+                None,
             )
             .map_err(Error::RequirementsCheck)?
         {
