@@ -47,7 +47,7 @@ fn create_venv() {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     error: Failed to create virtual environment
-      cause: A virtual environment already exists at: .venv
+      Caused by: A virtual environment already exists at: .venv
 
     hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing virtual environment
     "
@@ -419,7 +419,7 @@ fn create_centralized_project_environment() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment `project-cp3.12.[X]-[HASH]`
     error: Failed to create virtual environment
-      cause: A virtual environment already exists at: [CACHE_DIR]/environments-v2/project-cp3.12.[X]-[HASH]
+      Caused by: A virtual environment already exists at: [CACHE_DIR]/environments-v2/project-cp3.12.[X]-[HASH]
 
     hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing virtual environment
     "#);
@@ -1390,7 +1390,7 @@ fn file_exists() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     error: Failed to create virtual environment
-      cause: File exists at `.venv`
+      Caused by: File exists at `.venv`
     "
     );
 
@@ -1414,7 +1414,7 @@ fn non_utf8_path() {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv-�
     error: Failed to create virtual environment
-      cause: Virtual environment path is not valid UTF-8: .venv-�
+      Caused by: Virtual environment path is not valid UTF-8: .venv-�
     "
     );
 
@@ -1462,7 +1462,7 @@ fn non_empty_dir_exists() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     error: Failed to create virtual environment
-      cause: A directory already exists at: .venv
+      Caused by: A directory already exists at: .venv
 
     hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing directory
     ");
@@ -1477,7 +1477,7 @@ fn non_empty_dir_exists() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     error: Failed to create virtual environment
-      cause: uv will not clear a directory that is not a virtual environment
+      Caused by: uv will not clear a directory that is not a virtual environment
 
     hint: Use the `--force` flag to remove the existing directory anyway
     "
@@ -1534,7 +1534,7 @@ fn non_empty_dir_exists_allow_existing() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     error: Failed to create virtual environment
-      cause: A directory already exists at: .venv
+      Caused by: A directory already exists at: .venv
 
     hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing directory
     "
@@ -1906,57 +1906,10 @@ fn path_with_trailing_space_gives_proper_error() {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to initialize cache at `[CACHE_DIR]/ `
-      cause: failed to open file `[CACHE_DIR]/ /CACHEDIR.TAG`: The system cannot find the path specified. (os error 3)
+      Caused by: failed to open file `[CACHE_DIR]/ /CACHEDIR.TAG`: The system cannot find the path specified. (os error 3)
     "###
     );
     // Note the extra trailing `/` in the snapshot is due to the filters, not the actual output.
-}
-
-/// Activate a virtual environment through a UNC path.
-///
-/// Requires `UV_INTERNAL__TEST_SMB_FS`.
-#[test]
-#[cfg(windows)]
-fn create_venv_powershell_unc() -> Result<()> {
-    let Some(smb_fs) = std::env::var_os(EnvVars::UV_INTERNAL__TEST_SMB_FS) else {
-        return Ok(());
-    };
-    let temp_dir = assert_fs::TempDir::new_in(smb_fs)?;
-    let venv_dir = temp_dir.child("test env");
-    let context =
-        uv_test::test_context_with_versions!(&["3.12"]).with_filtered_path(temp_dir.path(), "SMB");
-
-    context
-        .venv()
-        .arg(venv_dir.path())
-        .arg("--python")
-        .arg("3.12")
-        .assert()
-        .success();
-
-    uv_snapshot!(context.filters(), context.external_command("powershell.exe")
-        .arg("-NoProfile")
-        .arg("-NonInteractive")
-        .arg("-ExecutionPolicy")
-        .arg("Bypass")
-        .arg("-Command")
-        .arg(indoc! {r#"
-            $ErrorActionPreference = "Stop"
-            . $env:UV_TEST_ACTIVATE
-            $env:VIRTUAL_ENV
-            & $env:UV_TEST_BIN python find
-            exit $LASTEXITCODE
-        "#})
-        .env("UV_TEST_ACTIVATE", venv_dir.child("Scripts/activate.ps1").path())
-        .env("UV_TEST_BIN", uv_test::get_bin!())
-        .env(EnvVars::UV_CACHE_DIR, context.cache_dir.path()), @r"
-    exit_code: 0 (success)
-    ----- stdout -----
-    [SMB]/test env
-    [SMB]/test env/Scripts/python.exe
-    ");
-
-    Ok(())
 }
 
 /// Check that the activate script still works with the path contains an apostrophe.
@@ -2030,7 +1983,7 @@ fn venv_python_preference() {
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
     error: Failed to create virtual environment
-      cause: A virtual environment already exists at: .venv
+      Caused by: A virtual environment already exists at: .venv
 
     hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing virtual environment
     ");
@@ -2049,7 +2002,7 @@ fn venv_python_preference() {
     Using CPython 3.12.[X]
     Creating virtual environment at: .venv
     error: Failed to create virtual environment
-      cause: A virtual environment already exists at: .venv
+      Caused by: A virtual environment already exists at: .venv
 
     hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing virtual environment
     ");
@@ -2110,6 +2063,58 @@ fn create_venv_symlink_clear_preservation() -> Result<()> {
     );
 
     // Verify symlink is STILL preserved after --clear
+    assert!(symlink_path.path().is_symlink());
+
+    Ok(())
+}
+
+#[test]
+#[cfg(unix)]
+fn create_venv_symlink_recreate_preservation() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+
+    // Create a target directory
+    let target_dir = context.temp_dir.child("target");
+    target_dir.create_dir_all()?;
+
+    // Create a symlink pointing to the target directory
+    let symlink_path = context.temp_dir.child(".venv");
+    symlink(&target_dir, &symlink_path)?;
+
+    // Verify symlink exists
+    assert!(symlink_path.path().is_symlink());
+
+    // Create virtual environment at symlink location
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(symlink_path.as_os_str())
+        .arg("--python")
+        .arg("3.12"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "
+    );
+
+    // Verify symlink is preserved after first creation
+    assert!(symlink_path.path().is_symlink());
+
+    // Run uv venv again with --clear to test symlink preservation during recreation
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(symlink_path.as_os_str())
+        .arg("--clear")
+        .arg("--python")
+        .arg("3.12"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "
+    );
+
+    // Verify symlink is STILL preserved after recreation
     assert!(symlink_path.path().is_symlink());
 
     Ok(())
@@ -2239,7 +2244,7 @@ fn create_venv_current_working_directory() {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .
     error: Failed to create virtual environment
-      cause: failed to remove directory `[VENV]/`: The process cannot access the file because it is being used by another process. (os error 32)
+      Caused by: failed to remove directory `[VENV]/`: The process cannot access the file because it is being used by another process. (os error 32)
     "
     );
 }
@@ -2272,7 +2277,7 @@ fn no_clear_with_existing_directory() {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     error: Failed to create virtual environment
-      cause: A virtual environment already exists at: .venv
+      Caused by: A virtual environment already exists at: .venv
 
     hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing virtual environment
     "
@@ -2320,7 +2325,7 @@ fn no_clear_overrides_clear() {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     error: Failed to create virtual environment
-      cause: A directory already exists at: .venv
+      Caused by: A directory already exists at: .venv
 
     hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing directory
     "
@@ -2347,7 +2352,7 @@ fn no_clear_overrides_clear_env_var() {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     error: Failed to create virtual environment
-      cause: A directory already exists at: .venv
+      Caused by: A directory already exists at: .venv
 
     hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing directory
     "

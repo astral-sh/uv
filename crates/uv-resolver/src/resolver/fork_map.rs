@@ -2,7 +2,7 @@ use rustc_hash::FxHashMap;
 
 use uv_distribution_types::{Requirement, RequirementSource};
 use uv_normalize::PackageName;
-use uv_pep508::MarkerTree;
+use uv_pep508::{MarkerTree, RequirementOrigin};
 use uv_pypi_types::{ConflictItem, ConflictItemRef, ConflictKind};
 
 use crate::ResolverEnvironment;
@@ -58,7 +58,12 @@ impl ForkScope {
             | RequirementSource::Path { .. }
             | RequirementSource::Directory { .. } => None,
         };
-        conflict.or_else(|| requirement.scope.conflict_item())
+        conflict.or_else(|| match requirement.origin.as_ref() {
+            Some(RequirementOrigin::Group(_, Some(project_name), group)) => {
+                Some(ConflictItem::from((project_name.clone(), group.clone())))
+            }
+            _ => None,
+        })
     }
 
     /// Return the conflict item that further restricts this scope, if any.
@@ -127,14 +132,14 @@ mod tests {
     use std::path::PathBuf;
     use std::str::FromStr;
 
-    use uv_distribution_types::{RequirementScope, RequirementSource};
+    use uv_distribution_types::RequirementSource;
     use uv_normalize::{GroupName, PackageName};
     use uv_pep508::VerbatimUrl;
 
     use super::*;
 
     #[test]
-    fn add_scopes_non_registry_requirements_without_origin() {
+    fn add_scopes_non_registry_requirements_to_group_origin() {
         let project_name = PackageName::from_str("workspace-root").unwrap();
         let group = GroupName::from_str("dev").unwrap();
         let package_name = PackageName::from_str("demo").unwrap();
@@ -150,11 +155,11 @@ mod tests {
                 r#virtual: None,
                 url: VerbatimUrl::parse_url("file:///tmp/demo").unwrap(),
             },
-            scope: RequirementScope::Group {
-                package: project_name,
+            origin: Some(RequirementOrigin::Group(
+                PathBuf::from("pyproject.toml"),
+                Some(project_name),
                 group,
-            },
-            origin: None,
+            )),
         };
 
         let mut map = ForkMap::default();

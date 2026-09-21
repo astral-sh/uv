@@ -404,8 +404,6 @@ impl ProjectUrls {
 
 #[cfg(test)]
 mod tests {
-    use std::assert_matches;
-
     use super::*;
     use crate::MetadataError;
     use insta::assert_snapshot;
@@ -414,11 +412,11 @@ mod tests {
     fn test_parse_from_str() {
         let s = "Metadata-Version: 1.0";
         let meta: Result<Metadata23, MetadataError> = s.parse();
-        assert_matches!(meta, Err(MetadataError::FieldNotFound("Name")));
+        assert!(matches!(meta, Err(MetadataError::FieldNotFound("Name"))));
 
         let s = "Metadata-Version: 1.0\nName: asdf";
         let meta = Metadata23::parse(s.as_bytes());
-        assert_matches!(meta, Err(MetadataError::FieldNotFound("Version")));
+        assert!(matches!(meta, Err(MetadataError::FieldNotFound("Version"))));
 
         let s = "Metadata-Version: 1.0\nName: asdf\nVersion: 1.0";
         let meta = Metadata23::parse(s.as_bytes()).unwrap();

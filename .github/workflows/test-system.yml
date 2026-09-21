@@ -6,33 +6,21 @@ on:
         required: true
         type: string
 
-permissions:
-  contents: read
-
-env:
-  UV_LOCKED: 1
+permissions: {}
 
 jobs:
   system-test-debian:
     timeout-minutes: 10
-    name: "python on ${{ matrix.image-name }}"
-    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
-    container: ${{ matrix.image }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - image-name: debian:12
-            image: debian:12@sha256:6ebd97fa83deb272194a2cf015b3d26a4d538e9ad3a7a79d544c8af5b0a01443
-          - image-name: debian:13
-            image: debian:13@sha256:34cd9e9fd437c0a095ec39cb2e73422c9f30821b0d0848ed74fd0d43bae4d958
+    name: "python on debian"
+    runs-on: ubuntu-latest
+    container: debian:13@sha256:34cd9e9fd437c0a095ec39cb2e73422c9f30821b0d0848ed74fd0d43bae4d958
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: "Install Python"
-        run: apt-get update && apt-get install -y python3 python3-pip python3-venv python3-debian python3-dev build-essential
+        run: apt-get update && apt-get install -y python3 python3-pip python3-venv python3-debian
 
       - name: "Download binary"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -56,7 +44,7 @@ jobs:
   system-test-fedora:
     timeout-minutes: 10
     name: "python on fedora"
-    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     container: fedora:45@sha256:0c1f63ed8fb818fad16cf6ae091598c410a21d2e1a9adf183beb93189299bfba
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -83,13 +71,13 @@ jobs:
   system-test-ubuntu:
     timeout-minutes: 10
     name: "python3.12 via setup-python"
-    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.12"
 
@@ -107,42 +95,10 @@ jobs:
       - name: "Validate global Python install"
         run: python scripts/check_system_python.py --uv ./uv
 
-  system-test-python:
-    timeout-minutes: 10
-    name: "python on ${{ matrix.image-name }}"
-    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
-    container: ${{ matrix.image }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - image-name: python:3.14-bookworm
-            image: python:3.14-bookworm@sha256:ecac9e212daacda8a702eae372fceebc0ee36f5805abe087880367e8d061fa5b
-          - image-name: python:3.14-trixie
-            image: python:3.14-trixie@sha256:3df083612dec28cf1456da4f38064469561fc2e55da4ebf47e9f0110c62f80e2
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: "Download binary"
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: uv-linux-musl-${{ inputs.sha }}
-
-      - name: "Prepare binary"
-        run: chmod +x ./uv
-
-      - name: "Print Python path"
-        run: command -v python3
-
-      - name: "Validate global Python install"
-        run: python3 scripts/check_system_python.py --uv ./uv
-
   system-test-python-36:
     timeout-minutes: 10
     name: "python3.6 on debian buster"
-    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     container: python:3.6-buster
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -166,7 +122,7 @@ jobs:
   system-test-python-37:
     timeout-minutes: 10
     name: "python3.7 on debian buster"
-    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     container: python:3.7-buster
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -226,7 +182,7 @@ jobs:
   system-test-rocky-linux:
     timeout-minutes: 10
     name: "python on rocky linux ${{ matrix.rocky-version }}"
-    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     container: rockylinux/rockylinux:${{ matrix.rocky-version }}
     strategy:
       fail-fast: false
@@ -241,7 +197,7 @@ jobs:
         if: matrix.rocky-version == '8'
         run: |
           for i in {1..5}; do
-            dnf install python39 python39-pip python39-devel which -y && break || { echo "Attempt $i failed, retrying in 10 seconds..."; sleep 10; }
+            dnf install python39 python39-pip which -y && break || { echo "Attempt $i failed, retrying in 10 seconds..."; sleep 10; }
             if [ $i -eq 5 ]; then
               echo "Failed to install Python after 5 attempts"
               exit 1
@@ -252,7 +208,7 @@ jobs:
         if: matrix.rocky-version == '9'
         run: |
           for i in {1..5}; do
-            dnf install python3.9 python3.9-pip python3-devel which -y && break || { echo "Attempt $i failed, retrying in 10 seconds..."; sleep 10; }
+            dnf install python3.9 python3.9-pip which -y && break || { echo "Attempt $i failed, retrying in 10 seconds..."; sleep 10; }
             if [ $i -eq 5 ]; then
               echo "Failed to install Python after 5 attempts"
               exit 1
@@ -262,7 +218,7 @@ jobs:
       - name: "Install Python"
         if: matrix.rocky-version == '10'
         run: |
-          dnf install python3 python3-pip python3-devel which -y
+          dnf install python3 python3-pip which -y
 
       - name: "Download binary"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -275,7 +231,7 @@ jobs:
       - name: "Print Python path"
         run: echo $(which python3)
 
-      # Needed for building native extensions.
+      # Needed for building Pydantic
       - name: "Install build tools"
         run: dnf install -y gcc
 
@@ -285,13 +241,13 @@ jobs:
   system-test-graalpy:
     timeout-minutes: 10
     name: "graalpy on linux"
-    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "graalpy24.1"
 
@@ -312,13 +268,13 @@ jobs:
   system-test-pypy:
     timeout-minutes: 10
     name: "pypy on linux"
-    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "pypy3.9"
 
@@ -339,7 +295,7 @@ jobs:
   system-test-pyston:
     timeout-minutes: 10
     name: "pyston on linux"
-    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     container: pyston/pyston:2.3.5@sha256:3e8c851140fb52a183b1d7f478e2a534374275516426acfeda5c2b0a032fc6bb
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -363,7 +319,7 @@ jobs:
   system-test-chainguard-dev:
     timeout-minutes: 10
     name: "python on chainguard-dev"
-    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     container:
       image: cgr.dev/chainguard/python:latest-dev@sha256:c3898a57639a93cb4356fce37d6312f8e9ad44ced420f530148dbcbc5f6797ef
       options: --user root --entrypoint /bin/sh
@@ -387,12 +343,12 @@ jobs:
         run: python scripts/check_system_python.py --uv ./uv
 
   # The Chainguard distroless image has no shell, so we can't use `container:`
-  # directly. Instead, we run on Ubuntu and use `docker run` to execute
+  # directly. Instead, we run on ubuntu-latest and use `docker run` to execute
   # inside the image.
   system-test-chainguard:
     timeout-minutes: 10
     name: "python on chainguard"
-    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -417,7 +373,7 @@ jobs:
   system-test-alpine:
     timeout-minutes: 10
     name: "python on alpine"
-    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     container: alpine:latest@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -464,6 +420,32 @@ jobs:
       - name: "Validate global Python install"
         run: python3 scripts/check_system_python.py --uv ./uv --externally-managed
 
+  system-test-macos-aarch64-homebrew:
+    timeout-minutes: 10
+    name: "homebrew python on macos aarch64"
+    runs-on: macos-14 # github-macos-14-aarch64-3
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: "Install Python"
+        run: brew install python3
+
+      - name: "Download binary"
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: uv-macos-aarch64-${{ inputs.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Print Python path"
+        run: echo $(which python3)
+
+      - name: "Validate global Python install"
+        run: python3 scripts/check_system_python.py --uv ./uv --externally-managed
+
   system-test-macos-aarch64-emulated:
     timeout-minutes: 10
     name: "x86-64 python on macos aarch64"
@@ -473,7 +455,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: 3.13
           architecture: x64
@@ -503,7 +485,7 @@ jobs:
 
       # We test with GitHub's Python as a regression test for
       # https://github.com/astral-sh/uv/issues/2450
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
 
       - name: "Download binary"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -528,7 +510,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.10"
 
@@ -552,7 +534,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.10"
           architecture: "x86"
@@ -577,7 +559,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.13"
           allow-prereleases: true
@@ -602,7 +584,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.13"
           architecture: "x64"
@@ -625,7 +607,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.13"
           architecture: "arm64"
@@ -669,7 +651,7 @@ jobs:
   system-test-pyenv:
     timeout-minutes: 10
     name: "python3.9 via pyenv"
-    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -711,13 +693,13 @@ jobs:
   system-test-linux-313:
     timeout-minutes: 10
     name: "python3.13 via setup-python"
-    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: 3.13
           allow-prereleases: true
@@ -749,7 +731,7 @@ jobs:
           - {
               os: "linux",
               target: "linux-libc",
-              runner: "${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}",
+              runner: "ubuntu-latest",
               arch: "x86-64",
             }
           - {
@@ -772,7 +754,6 @@ jobs:
       - uses: conda-incubator/setup-miniconda@8ee1f361103df19b6f8c8655fd3967a8ecb162d5 # v4.0.1
         with:
           miniconda-version: "latest"
-          channels: defaults
           activate-environment: uv
           python-version: ${{ matrix.python-version }}
 
@@ -809,7 +790,7 @@ jobs:
   system-test-amazonlinux:
     timeout-minutes: 10
     name: "python on amazonlinux"
-    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     container: amazonlinux:2023@sha256:32f61af6a24e178e8142fb7b0079f4af3a5cda6816cd53d2c611a921ef029ca0
     steps:
       - name: "Install base requirements"
@@ -820,7 +801,7 @@ jobs:
         with:
           persist-credentials: false
       - name: "Install Python"
-        run: yum install python3 python3-pip python3-devel -y
+        run: yum install python3 python3-pip -y
 
       - name: "Download binary"
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1

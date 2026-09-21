@@ -6,7 +6,7 @@ use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
@@ -14,10 +14,10 @@ use tracing::{debug, warn};
 
 use uv_cache::Cache;
 use uv_cache_key::RepositoryUrl;
-use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    ActiveEnvironment, Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DevMode,
-    DryRun, EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, GitLfsSetting,
+    Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DevMode, DryRun,
+    EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, GitLfsSetting,
     InstallOptions, NoSources,
 };
 use uv_dispatch::BuildDispatch;
@@ -26,8 +26,7 @@ use uv_distribution_types::{
     Identifier, Index, IndexLocations, IndexName, IndexUrl, NameRequirementSpecification,
     Requirement, RequirementSource, UnresolvedRequirement,
 };
-use uv_errors::HintOrdering;
-use uv_fs::{LockedFile, LockedFileError, Simplified};
+use uv_fs::{CWD, LockedFile, LockedFileError, Simplified};
 use uv_git::store_credentials;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, ExtraName, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
@@ -54,44 +53,18 @@ use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryResolveLogger,
 };
 use crate::commands::pip::operations::Modifications;
-use crate::commands::project::edit::ProjectEdit;
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     LinkErrorReporting, PlatformState, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectError,
     ProjectInterpreter, ScriptInterpreter, UniversalState, WorkspacePython,
-    init_script_python_requirement,
+    default_dependency_groups, init_script_python_requirement,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
-use crate::commands::{ExitStatus, ScriptPath, UvError, project};
+use crate::commands::{ExitStatus, ScriptPath, diagnostics, project};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
-
-/// A failed dependency addition, with `uv add`-specific recovery context.
-#[derive(Debug, thiserror::Error)]
-#[error("Failed to add dependencies")]
-pub(crate) struct AddDependencyError {
-    #[source]
-    cause: anyhow::Error,
-    standard_library_package: Option<PackageName>,
-}
-
-impl uv_errors::Hinted for AddDependencyError {
-    fn hints(&self) -> uv_errors::Hints<'_> {
-        let mut hints = uv_errors::Hints::none();
-        if let Some(package) = &self.standard_library_package {
-            hints.push(format!(
-                "The module `{package}` is included in the Python standard library and usually should not be added as a dependency"
-            ));
-        }
-        hints.push(format!(
-            "If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing",
-            "--frozen".green()
-        ));
-        hints.with_ordering(HintOrdering::Last)
-    }
-}
 
 /// Add one or more packages to the project requirements.
 #[expect(clippy::fn_params_excessive_bools)]
@@ -99,7 +72,7 @@ pub(crate) async fn add(
     project_dir: &Path,
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,
-    active: ActiveEnvironment,
+    active: Option<bool>,
     no_sync: bool,
     no_install_project: bool,
     only_install_project: bool,
@@ -304,7 +277,8 @@ pub(crate) async fn add(
         }
 
         // Enable the default groups of the project
-        defaulted_groups = groups.with_defaults(project.default_groups()?);
+        defaulted_groups =
+            groups.with_defaults(default_dependency_groups(project.pyproject_toml())?);
 
         if frozen.is_some() || no_sync {
             // Discover the interpreter.
@@ -325,8 +299,7 @@ pub(crate) async fn add(
                 python_downloads,
                 &install_mirrors,
                 ProjectEnvironmentPolicy::Optional,
-                // Suppress warnings about the active environment when we won't modify it.
-                active.without_warning(),
+                active,
                 cache,
                 printer,
             )
@@ -414,6 +387,8 @@ pub(crate) async fn add(
         if !unnamed.is_empty() {
             // TODO(charlie): These are all default values. We should consider whether we want to
             // make them optional on the downstream APIs.
+            let build_constraints = Constraints::default();
+            let build_hasher = HashStrategy::default();
             let hasher = HashStrategy::default();
             let sources = NoSources::None;
 
@@ -425,20 +400,6 @@ pub(crate) async fn add(
                 .platform(target.interpreter().platform())
                 .build()?;
 
-            let build_constraints = LockTarget::from(&target)
-                .lower_build_constraints(
-                    &settings.resolver.index_locations,
-                    &settings.resolver.sources,
-                    cache,
-                    &WorkspaceCache::default(),
-                    client.credentials_cache(),
-                )
-                .await?;
-            let build_hasher = HashStrategy::from_constraints(
-                &build_constraints,
-                Some(&target.interpreter().to_resolver_marker_environment()),
-                uv_configuration::HashCheckingMode::Verify,
-            )?;
             // Determine whether to enable build isolation.
             let environment;
             let build_isolation = match &settings.resolver.build_isolation {
@@ -454,8 +415,20 @@ pub(crate) async fn add(
             };
 
             // Resolve the flat indexes from `--find-links`.
-            let flat_index =
-                FlatIndex::load(&client, cache, &settings.resolver.index_locations).await?;
+            let flat_index = {
+                let client =
+                    FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
+                let entries = client
+                    .fetch_all(
+                        settings
+                            .resolver
+                            .index_locations
+                            .flat_indexes()
+                            .map(Index::url),
+                    )
+                    .await?;
+                FlatIndex::from_entries(entries, None, &hasher, &settings.resolver.build_options)
+            };
 
             // Lower the extra build dependencies, if any.
             let extra_build_requires = if let AddTarget::Project(project, _) = &target {
@@ -543,20 +516,7 @@ pub(crate) async fn add(
     }
 
     // Store the content prior to any modifications.
-    let paths = match &target {
-        AddTarget::Script(script, _) => vec![script.path.clone()],
-        AddTarget::Project(project, _) => vec![
-            project.root().join("pyproject.toml"),
-            project.workspace().install_path().join("pyproject.toml"),
-        ],
-    };
-    let edit = ProjectEdit::new(
-        paths.into_iter().chain(
-            frozen
-                .is_none()
-                .then(|| LockTarget::from(&target).lock_path()),
-        ),
-    )?;
+    let snapshot = target.snapshot().await?;
 
     // If the user provides a single, named index, pin all requirements to that index.
     let index = indexes
@@ -567,6 +527,9 @@ pub(crate) async fn add(
         .inspect(|index| {
             debug!("Pinning all requirements to index: `{index}`");
         });
+
+    // Track modification status, for reverts.
+    let mut modified = false;
 
     // Determine whether to use workspace mode.
     let use_workspace = match workspace {
@@ -597,7 +560,6 @@ pub(crate) async fn add(
     // If workspace mode is enabled, add any members to the `workspace` section of the
     // `pyproject.toml` file.
     if use_workspace {
-        let mut modified = false;
         let AddTarget::Project(project, python_target) = target else {
             unreachable!("`--workspace` and `--script` are conflicting options");
         };
@@ -733,9 +695,7 @@ pub(crate) async fn add(
     // Add any indexes that were provided on the command-line, in priority order.
     if !raw {
         let root_dir = match &target {
-            AddTarget::Script(script, _) => {
-                script.path.parent().expect("script path has no parent")
-            }
+            AddTarget::Script(_, _) => CWD.as_path(),
             AddTarget::Project(project, _) => project.root(),
         };
         let locations = IndexLocations::new(indexes, Vec::new(), false);
@@ -749,12 +709,11 @@ pub(crate) async fn add(
     let content = toml.to_string();
 
     // Save the modified `pyproject.toml` or script.
-    target.write(&content)?;
+    modified |= target.write(&content)?;
 
     // If `--frozen`, exit early. There's no reason to lock and sync, since we don't need a `uv.lock`
     // to exist at all.
     if frozen.is_some() {
-        edit.commit();
         return Ok(ExitStatus::Success);
     }
 
@@ -769,6 +728,23 @@ pub(crate) async fn add(
 
     // Update the `pypackage.toml` in-memory.
     let target = target.update(&content, &WorkspaceCache::default())?;
+
+    // Set the Ctrl-C handler to revert changes on exit.
+    let _ = ctrlc::set_handler({
+        let snapshot = snapshot.clone();
+        move || {
+            if modified {
+                let _ = snapshot.revert();
+            }
+
+            #[expect(clippy::exit, clippy::cast_possible_wrap)]
+            std::process::exit(if cfg!(windows) {
+                0xC000_013A_u32 as i32
+            } else {
+                130
+            });
+        }
+    });
 
     // Use separate state for locking and syncing.
     let lock_state = state.fork();
@@ -807,33 +783,36 @@ pub(crate) async fn add(
     ))
     .await
     {
-        Ok(()) => {
-            edit.commit();
-            Ok(ExitStatus::Success)
-        }
-        Err(err) => match err {
-            ProjectError::Operation(err) => {
-                let standard_library_package = standard_library_package(&err, &edits, python_minor);
-                Err(UvError::from(err)
-                    .map_user(|cause| {
-                        AddDependencyError {
-                            cause,
-                            standard_library_package,
-                        }
-                        .into()
-                    })
-                    .into())
+        Ok(()) => Ok(ExitStatus::Success),
+        Err(err) => {
+            if modified {
+                let _ = snapshot.revert();
             }
-            err => Err(UvError::from(err).into()),
-        },
+            match err {
+                ProjectError::Operation(err) => {
+                    let standard_library_hint = standard_library_hint(&err, &edits, python_minor);
+                    let diagnostic = diagnostics::OperationDiagnostic::default();
+                    let diagnostic = if let Some(hint) = standard_library_hint {
+                        diagnostic.with_hint(hint)
+                    } else {
+                        diagnostic
+                    };
+                    diagnostic
+                        .with_hint(format!("If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing", "--frozen".green()))
+                        .report(err)
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                }
+                err => Err(err.into()),
+            }
+        }
     }
 }
 
-fn standard_library_package(
+fn standard_library_hint(
     operation_error: &crate::commands::pip::operations::Error,
     edits: &[DependencyEdit],
     python_minor: u8,
-) -> Option<PackageName> {
+) -> Option<String> {
     let crate::commands::pip::operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(
         no_solution_error,
     )) = operation_error
@@ -851,7 +830,10 @@ fn standard_library_package(
                 .packages()
                 .any(|package| package == &edit.requirement.name)
         {
-            Some(edit.requirement.name.clone())
+            Some(format!(
+                "The module `{}` is included in the Python standard library and usually should not be added as a dependency",
+                edit.requirement.name
+            ))
         } else {
             None
         }
@@ -1062,7 +1044,7 @@ async fn lock_and_sync(
     mut target: AddTarget,
     toml: &mut PyProjectTomlMut,
     edits: &[DependencyEdit],
-    mut lock_state: UniversalState,
+    lock_state: UniversalState,
     sync_state: PlatformState,
     lock_check: LockCheck,
     no_install_project: bool,
@@ -1207,12 +1189,7 @@ async fn lock_and_sync(
                 let url = DisplaySafeUrl::from_file_path(project.project_root())
                     .expect("project root is a valid URL");
                 let distribution_id = url.distribution_id();
-                let existing = lock_state
-                    .index_mut()
-                    .distributions_mut()
-                    .context("Cannot invalidate project metadata while the cache is in use")?
-                    .remove(&distribution_id);
-                // TODO: Allow an absent entry after reusing a metadata-free lock.
+                let existing = lock_state.index().distributions().remove(&distribution_id);
                 debug_assert!(existing.is_some(), "distribution should exist");
             }
 
@@ -1449,6 +1426,86 @@ impl AddTarget {
                     )?
                     .ok_or(ProjectError::PyprojectTomlUpdate)?;
                 Ok(Self::Project(project, venv))
+            }
+        }
+    }
+
+    /// Take a snapshot of the target.
+    async fn snapshot(&self) -> Result<AddTargetSnapshot, io::Error> {
+        // Read the lockfile into memory.
+        let target = match self {
+            Self::Script(script, _) => LockTarget::from(script),
+            Self::Project(project, _) => LockTarget::Workspace(project.workspace()),
+        };
+        let lock = target.read_bytes().await?;
+
+        // Obtain a detached a copy of the old structure so we can revert to it without
+        // breaking the assumption that the workspace cache is only used by the modifying code
+        // when changing it.
+        match self {
+            Self::Script(script, _) => Ok(AddTargetSnapshot::Script(script.clone(), lock)),
+            Self::Project(project, _) => {
+                Ok(AddTargetSnapshot::Project(project.clone_detach(), lock))
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+#[expect(clippy::large_enum_variant)]
+enum AddTargetSnapshot {
+    Script(Pep723Script, Option<Vec<u8>>),
+    Project(VirtualProject, Option<Vec<u8>>),
+}
+
+impl AddTargetSnapshot {
+    /// Write the snapshot back to disk (e.g., to a `pyproject.toml` and `uv.lock`).
+    fn revert(&self) -> Result<(), io::Error> {
+        match self {
+            Self::Script(script, lock) => {
+                // Write the PEP 723 script back to disk.
+                debug!("Reverting changes to PEP 723 script block");
+                script.write(&script.metadata.raw)?;
+
+                // Write the lockfile back to disk.
+                let target = LockTarget::from(script);
+                if let Some(lock) = lock {
+                    debug!("Reverting changes to `uv.lock`");
+                    fs_err::write(target.lock_path(), lock)?;
+                } else {
+                    debug!("Removing `uv.lock`");
+                    fs_err::remove_file(target.lock_path())?;
+                }
+                Ok(())
+            }
+            Self::Project(project, lock) => {
+                // Write the workspace `pyproject.toml` back to disk.
+                let workspace = project.workspace();
+                if workspace.install_path() != project.root() {
+                    debug!("Reverting changes to workspace `pyproject.toml`");
+                    fs_err::write(
+                        workspace.install_path().join("pyproject.toml"),
+                        workspace.pyproject_toml().as_ref(),
+                    )?;
+                }
+
+                // Write the `pyproject.toml` back to disk.
+                debug!("Reverting changes to `pyproject.toml`");
+                fs_err::write(
+                    project.root().join("pyproject.toml"),
+                    project.pyproject_toml().as_ref(),
+                )?;
+
+                // Write the lockfile back to disk.
+                let target = LockTarget::from(project.workspace());
+                if let Some(lock) = lock {
+                    debug!("Reverting changes to `uv.lock`");
+                    fs_err::write(target.lock_path(), lock)?;
+                } else {
+                    debug!("Removing `uv.lock`");
+                    fs_err::remove_file(target.lock_path())?;
+                }
+                Ok(())
             }
         }
     }

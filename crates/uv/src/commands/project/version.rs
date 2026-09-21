@@ -12,7 +12,7 @@ use uv_cli::version::ProjectVersionInfo;
 use uv_cli::{VersionBump, VersionBumpSpec, VersionFormat};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    ActiveEnvironment, Concurrency, DependencyGroups, DryRun, ExtrasSpecification, InstallOptions,
+    Concurrency, DependencyGroups, DryRun, ExtrasSpecification, InstallOptions,
 };
 use uv_fs::Simplified;
 use uv_normalize::DefaultExtras;
@@ -32,15 +32,14 @@ use uv_workspace::{
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::add::{AddTarget, PythonTarget};
-use crate::commands::project::edit::ProjectEdit;
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectError,
-    ProjectInterpreter, UniversalState, WorkspacePython,
+    ProjectInterpreter, UniversalState, WorkspacePython, default_dependency_groups,
 };
-use crate::commands::{ExitStatus, UvError, project};
+use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
@@ -81,7 +80,7 @@ pub(crate) async fn project_version(
     dry_run: bool,
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,
-    active: ActiveEnvironment,
+    active: Option<bool>,
     no_sync: bool,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
@@ -332,13 +331,6 @@ pub(crate) async fn project_version(
     let status = if dry_run {
         ExitStatus::Success
     } else if let Some(new_version) = &new_version {
-        let edit = ProjectEdit::new(
-            [pyproject_path.clone()].into_iter().chain(
-                frozen
-                    .is_none()
-                    .then(|| LockTarget::from(project.workspace()).lock_path()),
-            ),
-        )?;
         let project = update_project(
             project,
             new_version,
@@ -346,7 +338,7 @@ pub(crate) async fn project_version(
             &pyproject_path,
             workspace_cache,
         )?;
-        let status = Box::pin(lock_and_sync(
+        Box::pin(lock_and_sync(
             project,
             project_dir,
             lock_check,
@@ -367,9 +359,7 @@ pub(crate) async fn project_version(
             preview,
             &malware_settings,
         ))
-        .await?;
-        edit.commit();
-        status
+        .await?
     } else {
         debug!("No changes to version; skipping update");
         ExitStatus::Success
@@ -390,7 +380,7 @@ pub(crate) struct MissingProjectVersionError {
     err: WorkspaceError,
 }
 
-impl uv_errors::Hinted for MissingProjectVersionError {
+impl uv_errors::Hint for MissingProjectVersionError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         uv_errors::Hints::from(format!(
             "If you meant to view uv's version, use `{}` instead",
@@ -512,7 +502,12 @@ async fn print_frozen_version(
     .await
     {
         Ok(result) => result.into_lock(),
-        Err(err) => return Err(UvError::from(err).into()),
+        Err(ProjectError::Operation(err)) => {
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+        }
+        Err(err) => return Err(err.into()),
     };
 
     // Try to find the package of interest in the lock
@@ -544,7 +539,7 @@ async fn lock_and_sync(
     project_dir: &Path,
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,
-    active: ActiveEnvironment,
+    active: Option<bool>,
     no_sync: bool,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
@@ -566,7 +561,7 @@ async fn lock_and_sync(
     }
 
     // Determine the groups and extras that should be enabled.
-    let default_groups = project.default_groups()?;
+    let default_groups = default_dependency_groups(project.pyproject_toml())?;
     let default_extras = DefaultExtras::default();
     let groups = DependencyGroups::default().with_defaults(default_groups);
     let extras = ExtrasSpecification::default().with_defaults(default_extras);
@@ -654,7 +649,12 @@ async fn lock_and_sync(
     .await
     {
         Ok(result) => result.into_lock(),
-        Err(err) => return Err(UvError::from(err).into()),
+        Err(ProjectError::Operation(err)) => {
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+        }
+        Err(err) => return Err(err.into()),
     };
 
     let AddTarget::Project(project, environment) = target else {
@@ -709,7 +709,12 @@ async fn lock_and_sync(
     .await
     {
         Ok(_) => {}
-        Err(err) => return Err(UvError::from(err).into()),
+        Err(ProjectError::Operation(err)) => {
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+        }
+        Err(err) => return Err(err.into()),
     }
 
     Ok(ExitStatus::Success)

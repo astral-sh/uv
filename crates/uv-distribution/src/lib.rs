@@ -14,7 +14,6 @@ mod archive;
 mod distribution_database;
 mod download;
 mod error;
-mod extracted_wheel;
 mod hash;
 mod index;
 mod metadata;

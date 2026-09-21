@@ -1,7 +1,7 @@
 //! Generate minimal Python wheels and source distributions in memory.
 //!
-//! Packse scenario packages contain metadata, a stub `__init__.py`, and optional console scripts.
-//! We generate them directly without invoking a Python build backend.
+//! Packse scenario packages are trivial: they contain only metadata and a stub
+//! `__init__.py`. We generate them directly without invoking a Python build backend.
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -32,57 +32,13 @@ pub fn generate_wheel(
     extras: &BTreeMap<ExtraName, Vec<Requirement>>,
     requires_python: Option<&VersionSpecifiers>,
     tag: &str,
-    entry_points: &[String],
-) -> (String, Vec<u8>) {
-    let mut files = Vec::new();
-    if !entry_points.is_empty() {
-        let normalized = name.as_dist_info_name();
-        let mut entry_points_metadata = String::from("[console_scripts]\n");
-        for entry_point in entry_points {
-            entry_points_metadata.push_str(entry_point);
-            entry_points_metadata.push_str(" = ");
-            entry_points_metadata.push_str(&normalized);
-            entry_points_metadata.push_str(".cli:main\n");
-        }
-        files.push((
-            format!("{normalized}-{version}.dist-info/entry_points.txt"),
-            entry_points_metadata,
-        ));
-        files.push((format!("{normalized}/cli.py"), build_cli_module(name)));
-    }
-
-    generate_wheel_with_files(
-        name,
-        version,
-        requires,
-        extras,
-        requires_python,
-        tag,
-        &files
-            .iter()
-            .map(|(path, contents)| (path.as_str(), contents.as_str()))
-            .collect::<Vec<_>>(),
-    )
-}
-
-/// Generate a wheel (`.whl`) with additional files as an in-memory ZIP archive.
-///
-/// Returns `(filename, bytes)`.
-pub fn generate_wheel_with_files(
-    name: &PackageName,
-    version: &Version,
-    requires: &[Requirement],
-    extras: &BTreeMap<ExtraName, Vec<Requirement>>,
-    requires_python: Option<&VersionSpecifiers>,
-    tag: &str,
-    files: &[(&str, &str)],
 ) -> (String, Vec<u8>) {
     let normalized = name.as_dist_info_name();
     let dist_info = format!("{normalized}-{version}.dist-info");
 
     let mut zip = ZipFileWriter::new(Vec::new());
 
-    let mut entries = vec![
+    let entries = [
         (
             format!("{normalized}/__init__.py"),
             format!("__version__ = \"{version}\"\n"),
@@ -101,11 +57,6 @@ pub fn generate_wheel_with_files(
             ),
         ),
     ];
-    entries.extend(
-        files
-            .iter()
-            .map(|(path, contents)| ((*path).to_string(), (*contents).to_string())),
-    );
     for (path, contents) in &entries {
         let entry = ZipEntryBuilder::new(path.clone().into(), ZipCompression::Stored);
         block_on(zip.write_entry_whole(entry, contents.as_bytes()))
@@ -149,7 +100,6 @@ pub fn generate_sdist(
     requires: &[Requirement],
     extras: &BTreeMap<ExtraName, Vec<Requirement>>,
     requires_python: Option<&VersionSpecifiers>,
-    entry_points: &[String],
 ) -> (String, Vec<u8>) {
     let normalized = name.as_dist_info_name();
     let prefix = format!("{normalized}-{version}");
@@ -157,14 +107,7 @@ pub fn generate_sdist(
     let mut encoder = GzEncoder::new(Vec::new(), Compression::fast());
     let mut tar = TarEncoder::new(AllowStdIo::new(&mut encoder).compat_write()).builder();
 
-    let pyproject = build_pyproject_toml(
-        name,
-        version,
-        requires,
-        extras,
-        requires_python,
-        entry_points,
-    );
+    let pyproject = build_pyproject_toml(name, version, requires, extras, requires_python);
     add_tar_file(
         &mut tar,
         &format!("{prefix}/pyproject.toml"),
@@ -180,13 +123,6 @@ pub fn generate_sdist(
         &format!("{prefix}/src/{normalized}/__init__.py"),
         init_py.as_bytes(),
     );
-    if !entry_points.is_empty() {
-        add_tar_file(
-            &mut tar,
-            &format!("{prefix}/src/{normalized}/cli.py"),
-            build_cli_module(name).as_bytes(),
-        );
-    }
 
     block_on(tar.finish()).expect("failed to finish in-memory source archive");
     let bytes = encoder
@@ -194,11 +130,6 @@ pub fn generate_sdist(
         .expect("failed to finish in-memory gzip stream");
     let filename = format!("{normalized}-{version}.tar.gz");
     (filename, bytes)
-}
-
-/// Build the callable module used by generated console scripts.
-fn build_cli_module(name: &PackageName) -> String {
-    format!("def main():\n    print('Hello from {name}!')\n")
 }
 
 /// Build PEP 566 / PEP 643 metadata content.
@@ -247,7 +178,6 @@ fn build_pyproject_toml(
     requires: &[Requirement],
     extras: &BTreeMap<ExtraName, Vec<Requirement>>,
     requires_python: Option<&VersionSpecifiers>,
-    entry_points: &[String],
 ) -> String {
     let normalized = name.as_dist_info_name();
     let dependencies = if requires.is_empty() {
@@ -280,17 +210,6 @@ fn build_pyproject_toml(
         optional_dependencies
     };
 
-    let scripts = if entry_points.is_empty() {
-        String::new()
-    } else {
-        let scripts: BTreeMap<_, _> = entry_points
-            .iter()
-            .map(|entry_point| (entry_point, format!("{normalized}.cli:main")))
-            .collect();
-        let scripts = toml::to_string(&scripts).expect("console scripts should serialize to TOML");
-        format!("\n[project.scripts]\n{scripts}")
-    };
-
     formatdoc! {
         r#"
         [build-system]
@@ -306,7 +225,7 @@ fn build_pyproject_toml(
         [project]
         name = "{name}"
         version = "{version}"
-        {dependencies}{requires_python}{optional_dependencies}{scripts}
+        {dependencies}{requires_python}{optional_dependencies}
         "#
     }
 }
@@ -349,7 +268,6 @@ mod tests {
             &BTreeMap::new(),
             Some(&requires_python),
             "py3-none-any",
-            &[],
         );
         assert_eq!(filename, "my_package-1.0.0-py3-none-any.whl");
 
@@ -412,7 +330,6 @@ mod tests {
             &requires,
             &BTreeMap::new(),
             Some(&requires_python),
-            &[],
         );
         assert_eq!(filename, "my_package-1.0.0.tar.gz");
 

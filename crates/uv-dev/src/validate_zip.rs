@@ -26,13 +26,7 @@ pub(crate) async fn validate_zip(
     let client = RegistryClientBuilder::new(
         BaseClientBuilder::default()
             .read_timeout(environment.http_read_timeout)
-            .connect_timeout(environment.http_connect_timeout)
-            .metadata_range_request(
-                environment
-                    .require_metadata_range_requests
-                    .unwrap_or_default()
-                    .into(),
-            ),
+            .connect_timeout(environment.http_connect_timeout),
         cache,
     )
     .build()?;
@@ -53,7 +47,7 @@ pub(crate) async fn validate_zip(
 
     let target = tempfile::TempDir::new()?;
 
-    uv_extract::stream::unzip(reader.compat(), target).await?;
+    uv_extract::stream::unzip(reader.compat(), target.path()).await?;
 
     Ok(())
 }

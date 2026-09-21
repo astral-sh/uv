@@ -6,7 +6,6 @@ use std::collections::{BTreeMap, BTreeSet, Bound};
 use std::ffi::OsStr;
 use std::fmt::Display;
 use std::fmt::Write;
-use std::iter;
 use std::path::{Path, PathBuf};
 use std::str::{self, FromStr};
 use tracing::{debug, trace, warn};
@@ -17,14 +16,12 @@ use walkdir::WalkDir;
 use uv_fs::Simplified;
 use uv_globfilter::{GlobDirFilter, PortableGlobParser};
 use uv_normalize::{ExtraName, PackageName};
-use uv_pep440::{Operator, Version, VersionSpecifiers};
+use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::{
-    ExtraOperator, MarkerEnvironment, MarkerExpression, MarkerTree, MarkerValueExtra, Requirement,
-    VersionOrUrl,
+    ExtraOperator, MarkerExpression, MarkerTree, MarkerValueExtra, Requirement, VersionOrUrl,
 };
 use uv_pypi_types::{
-    BuildKind, Identifier, IdentifierParseError, Keywords, Metadata23, ProjectUrls,
-    VerbatimParsedUrl,
+    Identifier, IdentifierParseError, Keywords, Metadata23, ProjectUrls, VerbatimParsedUrl,
 };
 use uv_toml::deserialize_unique_map;
 
@@ -136,8 +133,6 @@ pub enum DirectBuildIncompatibility {
     UrlRequirement,
     #[error("`uv_build{0}` is not a known compatible range")]
     IncompatibleRange(VersionSpecifiers),
-    #[error("`uv_build=={0}` does not match the running uv version")]
-    VersionMismatch(Version),
 }
 
 #[derive(Debug, Clone)]
@@ -245,8 +240,6 @@ fn parse_import_entry(value: &str, field: &'static str) -> Result<ImportEntry, V
 
 /// Check if the build backend is matching the currently running uv version.
 ///
-/// Active exact pins in the backend requirement and constraints must match the running uv version.
-///
 /// Example table compatible with uv 0.4.21:
 ///
 /// ```toml
@@ -257,8 +250,6 @@ fn parse_import_entry(value: &str, field: &'static str) -> Result<ImportEntry, V
 pub fn check_direct_build(
     source_tree: &Path,
     uv_version: &str,
-    marker_env: &MarkerEnvironment,
-    constraints: impl IntoIterator<Item = Requirement<VerbatimParsedUrl>>,
 ) -> Result<(), DirectBuildIncompatibility> {
     #[derive(Deserialize)]
     #[serde(rename_all = "kebab-case")]
@@ -333,28 +324,6 @@ pub fn check_direct_build(
             ));
         }
         Some(VersionOrUrl::VersionSpecifier(_)) => {}
-    }
-
-    if !uv_requirement.evaluate_markers(marker_env, &[]) {
-        return Ok(());
-    }
-
-    let uv_version = Version::from_str(uv_version).expect("uv version is not PEP 440 compliant");
-    for requirement in iter::once((**uv_requirement).clone()).chain(
-        constraints
-            .into_iter()
-            .filter(|constraint| constraint.name == uv_requirement.name),
-    ) {
-        if requirement.evaluate_markers(marker_env, &[])
-            && let Some(VersionOrUrl::VersionSpecifier(specifiers)) = &requirement.version_or_url
-            && let Some(specifier) = specifiers.iter().find(|specifier| {
-                *specifier.operator() == Operator::Equal && !specifier.contains(&uv_version)
-            })
-        {
-            return Err(DirectBuildIncompatibility::VersionMismatch(
-                specifier.version().clone(),
-            ));
-        }
     }
 
     Ok(())
@@ -453,12 +422,8 @@ impl PyProjectToml {
     }
 
     /// See [`BuildSystem::check_build_system`].
-    pub(crate) fn check_build_system(
-        &self,
-        uv_version: &str,
-        build_kind: BuildKind,
-    ) -> Vec<String> {
-        self.build_system.check_build_system(uv_version, build_kind)
+    pub(crate) fn check_build_system(&self, uv_version: &str) -> Vec<String> {
+        self.build_system.check_build_system(uv_version)
     }
 
     /// Validate and convert a `pyproject.toml` to core metadata.
@@ -1211,7 +1176,7 @@ impl BuildSystem {
     /// requires = ["uv_build>=0.4.15,<0.5.0"]
     /// build-backend = "uv_build"
     /// ```
-    fn check_build_system(&self, uv_version: &str, build_kind: BuildKind) -> Vec<String> {
+    fn check_build_system(&self, uv_version: &str) -> Vec<String> {
         let mut warnings = Vec::new();
         if self.build_backend.as_deref() != Some("uv_build") {
             warnings.push(format!(
@@ -1222,6 +1187,9 @@ impl BuildSystem {
 
         let uv_version =
             Version::from_str(uv_version).expect("uv's own version is not PEP 440 compliant");
+        let next_minor = uv_version.release().get(1).copied().unwrap_or_default() + 1;
+        let next_breaking = Version::new([0, next_minor]);
+
         let [uv_requirement] = &self.requires.as_slice() else {
             warnings.push(format!(
                 "Expected `build-system.requires` to contain only `uv_build`, found `{}`",
@@ -1261,9 +1229,7 @@ impl BuildSystem {
             }
         };
 
-        if matches!(build_kind, BuildKind::Sdist) && !bounded {
-            let next_minor = uv_version.release().get(1).copied().unwrap_or_default() + 1;
-            let next_breaking = Version::new([0, next_minor]);
+        if !bounded {
             warnings.push(format!(
                 "`build_system.requires = [\"{}\"]` is missing an \
                 upper bound on the `uv_build` version such as `<{next_breaking}`. \
@@ -1286,7 +1252,6 @@ mod tests {
     use insta::assert_snapshot;
     use std::iter;
     use tempfile::TempDir;
-    use uv_pep508::MarkerEnvironmentBuilder;
 
     fn extend_project(payload: &str) -> String {
         formatdoc! {r#"
@@ -1761,9 +1726,7 @@ mod tests {
         let contents = extend_project("");
         let pyproject_toml: PyProjectToml = toml::from_str(&contents).unwrap();
         assert_snapshot!(
-            pyproject_toml
-                .check_build_system("0.4.15+test", BuildKind::Wheel)
-                .join("\n"),
+            pyproject_toml.check_build_system("0.4.15+test").join("\n"),
             @""
         );
     }
@@ -1781,21 +1744,7 @@ mod tests {
         "#};
         let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         assert_snapshot!(
-            pyproject_toml
-                .check_build_system("0.4.15+test", BuildKind::Wheel)
-                .join("\n"),
-            @""
-        );
-        assert_snapshot!(
-            pyproject_toml
-                .check_build_system("0.4.15+test", BuildKind::Editable)
-                .join("\n"),
-            @""
-        );
-        assert_snapshot!(
-            pyproject_toml
-                .check_build_system("0.4.15+test", BuildKind::Sdist)
-                .join("\n"),
+            pyproject_toml.check_build_system("0.4.15+test").join("\n"),
             @r#"`build_system.requires = ["uv_build"]` is missing an upper bound on the `uv_build` version such as `<0.5`. Without bounding the `uv_build` version, the source distribution will break when a future, breaking version of `uv_build` is released."#
         );
     }
@@ -1813,9 +1762,7 @@ mod tests {
         "#};
         let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         assert_snapshot!(
-            pyproject_toml
-                .check_build_system("0.4.15+test", BuildKind::Wheel)
-                .join("\n"),
+            pyproject_toml.check_build_system("0.4.15+test").join("\n"),
             @"Expected `build-system.requires` to contain only `uv_build`, found `uv-build>=0.4.15,<0.5.0`, `wheel`"
         );
     }
@@ -1833,9 +1780,7 @@ mod tests {
         "#};
         let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         assert_snapshot!(
-            pyproject_toml
-                .check_build_system("0.4.15+test", BuildKind::Wheel)
-                .join("\n"),
+            pyproject_toml.check_build_system("0.4.15+test").join("\n"),
             @"Expected `build-system.requires` to be `uv_build`, found `setuptools`"
         );
     }
@@ -1853,9 +1798,7 @@ mod tests {
         "#};
         let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         assert_snapshot!(
-            pyproject_toml
-                .check_build_system("0.4.15+test", BuildKind::Wheel)
-                .join("\n"),
+            pyproject_toml.check_build_system("0.4.15+test").join("\n"),
             @r#"`build_system.build-backend` was expected to be `"uv_build"`, not `"setuptools"`"#
         );
     }
@@ -2096,23 +2039,6 @@ mod tests {
         assert_snapshot!(script_error(&contents), @"Use `project.gui-scripts` instead of `project.entry-points.gui_scripts`");
     }
 
-    fn marker_environment() -> MarkerEnvironment {
-        MarkerEnvironment::try_from(MarkerEnvironmentBuilder {
-            implementation_name: "cpython",
-            implementation_version: "3.12.0",
-            os_name: "posix",
-            platform_machine: "x86_64",
-            platform_python_implementation: "CPython",
-            platform_release: "6.8.0",
-            platform_system: "Linux",
-            platform_version: "1",
-            python_full_version: "3.12.0",
-            python_version: "3.12",
-            sys_platform: "linux",
-        })
-        .expect("valid marker environment")
-    }
-
     #[test]
     fn check_direct_build_ok() {
         let temp_dir = TempDir::new().unwrap();
@@ -2129,7 +2055,7 @@ mod tests {
             "#},
         )
         .unwrap();
-        check_direct_build(temp_dir.path(), "0.10.0", &marker_environment(), []).unwrap();
+        check_direct_build(temp_dir.path(), "0.10.0").unwrap();
     }
 
     #[test]
@@ -2141,7 +2067,7 @@ mod tests {
         )
         .unwrap();
         assert_snapshot!(
-            check_direct_build(temp_dir.path(), "0.10.0", &marker_environment(), []).unwrap_err(),
+            check_direct_build(temp_dir.path(), "0.10.0").unwrap_err(),
             @r#"
             its `pyproject.toml` failed to parse: TOML parse error at line 1, column 9
               |
@@ -2169,7 +2095,7 @@ mod tests {
         )
         .unwrap();
         assert_snapshot!(
-            check_direct_build(temp_dir.path(), "0.10.0", &marker_environment(), []).unwrap_err(),
+            check_direct_build(temp_dir.path(), "0.10.0").unwrap_err(),
             @"`build_system.build-backend` is not `uv_build`, but `setuptools`"
         );
     }
@@ -2191,7 +2117,7 @@ mod tests {
         )
         .unwrap();
         assert_snapshot!(
-            check_direct_build(temp_dir.path(), "0.10.0", &marker_environment(), []).unwrap_err(),
+            check_direct_build(temp_dir.path(), "0.10.0").unwrap_err(),
             @"`build-system.requires` is not exactly `uv_build`, but `uv-build>=0.10.0,<0.11`, `wheel`"
         );
     }
@@ -2213,7 +2139,7 @@ mod tests {
         )
         .unwrap();
         assert_snapshot!(
-            check_direct_build(temp_dir.path(), "0.10.0", &marker_environment(), []).unwrap_err(),
+            check_direct_build(temp_dir.path(), "0.10.0").unwrap_err(),
             @"`build-system.requires` is not `uv_build`, but `setuptools`"
         );
     }
@@ -2235,7 +2161,7 @@ mod tests {
         )
         .unwrap();
         assert_snapshot!(
-            check_direct_build(temp_dir.path(), "0.10.0", &marker_environment(), []).unwrap_err(),
+            check_direct_build(temp_dir.path(), "0.10.0").unwrap_err(),
             @"`build_system.requires` uses a URL requirement"
         );
     }
@@ -2257,7 +2183,7 @@ mod tests {
         )
         .unwrap();
         assert_snapshot!(
-            check_direct_build(temp_dir.path(), "0.10.0", &marker_environment(), []).unwrap_err(),
+            check_direct_build(temp_dir.path(), "0.10.0").unwrap_err(),
             @"`uv_build>=0.5.0, <0.6` is not a known compatible range"
         );
     }

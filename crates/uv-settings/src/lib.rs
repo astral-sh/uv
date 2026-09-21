@@ -7,7 +7,7 @@ use tracing::info_span;
 use uv_client::{DEFAULT_CONNECT_TIMEOUT, DEFAULT_READ_TIMEOUT, DEFAULT_READ_TIMEOUT_UPLOAD};
 use uv_configuration::RequiredVersion;
 use uv_dirs::{system_config_file, user_config_dir};
-use uv_distribution_types::{IndexUrlError, Origin};
+use uv_distribution_types::Origin;
 use uv_flags::EnvironmentFlags;
 use uv_fs::Simplified;
 use uv_normalize::{GroupName, PackageName};
@@ -31,11 +31,6 @@ impl FilesystemOptions {
     /// Convert the [`FilesystemOptions`] into [`Options`].
     pub fn into_options(self) -> Options {
         self.0
-    }
-
-    /// Resolve the [`FilesystemOptions`] relative to the given root directory.
-    pub fn relative_to(self, root_dir: &Path) -> Result<Self, IndexUrlError> {
-        Ok(Self(self.0.relative_to(root_dir)?))
     }
 }
 
@@ -306,7 +301,6 @@ fn validate_uv_toml(path: &Path, options: &Options) -> Result<(), Error> {
         build_constraint_dependencies: _,
         environments,
         required_environments,
-        minimum_libc_version,
         conflicts,
         workspace,
         sources,
@@ -369,12 +363,6 @@ fn validate_uv_toml(path: &Path, options: &Options) -> Result<(), Error> {
         return Err(Error::PyprojectOnlyField(
             path.to_path_buf(),
             "required-environments",
-        ));
-    }
-    if minimum_libc_version.is_some() {
-        return Err(Error::PyprojectOnlyField(
-            path.to_path_buf(),
-            "minimum-libc-version",
         ));
     }
     Ok(())
@@ -463,7 +451,6 @@ fn warn_uv_toml_masked_fields(options: &Options) {
         build_constraint_dependencies,
         environments: _,
         required_environments: _,
-        minimum_libc_version: _,
         conflicts: _,
         workspace: _,
         sources: _,
@@ -737,7 +724,6 @@ pub struct EnvironmentOptions {
     pub ruff_path: Option<PathBuf>,
     pub ty_path: Option<PathBuf>,
     pub skip_wheel_filename_check: Option<bool>,
-    pub require_metadata_range_requests: Option<bool>,
     pub hide_build_output: Option<bool>,
     pub python_install_bin: Option<bool>,
     pub python_install_registry: Option<bool>,
@@ -812,25 +798,11 @@ impl EnvironmentOptions {
         )?)
         .map(Duration::from_secs);
 
-        // Ignore the deprecated `UV_NATIVE_TLS` variable when its replacement is set.
-        let system_certs = EnvFlag::new(EnvVars::UV_SYSTEM_CERTS)?;
-        let native_tls = if system_certs.value.is_some() {
-            EnvFlag {
-                value: None,
-                env_var: EnvVars::UV_NATIVE_TLS,
-            }
-        } else {
-            EnvFlag::new(EnvVars::UV_NATIVE_TLS)?
-        };
-
         Ok(Self {
             ruff_path: parse_path_environment_variable(EnvVars::RUFF),
             ty_path: parse_path_environment_variable(EnvVars::TY),
             skip_wheel_filename_check: parse_boolish_environment_variable(
                 EnvVars::UV_SKIP_WHEEL_FILENAME_CHECK,
-            )?,
-            require_metadata_range_requests: parse_boolish_environment_variable(
-                EnvVars::UV_REQUIRE_METADATA_RANGE_REQUESTS,
             )?,
             hide_build_output: parse_boolish_environment_variable(EnvVars::UV_HIDE_BUILD_OUTPUT)?,
             python_install_bin: parse_boolish_environment_variable(EnvVars::UV_PYTHON_INSTALL_BIN)?,
@@ -900,8 +872,8 @@ impl EnvironmentOptions {
             no_sync: EnvFlag::new(EnvVars::UV_NO_SYNC)?,
             managed_python: EnvFlag::new(EnvVars::UV_MANAGED_PYTHON)?,
             no_managed_python: EnvFlag::new(EnvVars::UV_NO_MANAGED_PYTHON)?,
-            native_tls,
-            system_certs,
+            native_tls: EnvFlag::new(EnvVars::UV_NATIVE_TLS)?,
+            system_certs: EnvFlag::new(EnvVars::UV_SYSTEM_CERTS)?,
             preview: EnvFlag::new(EnvVars::UV_PREVIEW)?,
             isolated: EnvFlag::new(EnvVars::UV_ISOLATED)?,
             no_progress: EnvFlag::new(EnvVars::UV_NO_PROGRESS)?,

@@ -41,7 +41,7 @@ use uv_warnings::warn_user;
 
 use crate::commands::python::{ChangeEvent, ChangeEventKind};
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{ExitStatus, UvError, conjunction, elapsed};
+use crate::commands::{ExitStatus, conjunction, elapsed};
 use crate::printer::Printer;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -166,26 +166,6 @@ impl std::fmt::Display for PythonUpgradeSource {
         match self {
             Self::Install => write!(f, "uv python install --upgrade"),
             Self::Upgrade => write!(f, "uv python upgrade"),
-        }
-    }
-}
-
-#[derive(Debug, thiserror::Error)]
-#[error("`{command}` only accepts minor versions, got: {request}")]
-pub(crate) struct InvalidUpgradeRequestError {
-    command: PythonUpgradeSource,
-    request: String,
-    from_version_file: bool,
-}
-
-impl uv_errors::Hinted for InvalidUpgradeRequestError {
-    fn hints(&self) -> Hints<'_> {
-        if self.from_version_file {
-            Hints::from(
-                "The version request came from a `.python-version` file; change the patch version in the file to upgrade instead",
-            )
-        } else {
-            Hints::none()
         }
     }
 }
@@ -466,12 +446,22 @@ async fn perform_install(
         if let Some(request) = requests.iter().find(|request| {
             request.request.includes_patch() || request.request.includes_prerelease()
         }) {
-            return Err(UvError::user(InvalidUpgradeRequestError {
-                command: source,
-                request: request.request.to_canonical_string().into_owned(),
-                from_version_file: is_from_python_version_file,
-            })
-            .into());
+            writeln!(
+                printer.stderr(),
+                "error: `{source}` only accepts minor versions, got: {}",
+                request.request.to_canonical_string()
+            )?;
+            if is_from_python_version_file {
+                // TODO(zanieb): Consider refactoring this to use an error type.
+                write!(
+                    printer.stderr(),
+                    "{}",
+                    uv_errors::Hints::from(
+                        "The version request came from a `.python-version` file; change the patch version in the file to upgrade instead",
+                    ),
+                )?;
+            }
+            return Ok(ExitStatus::Failure);
         }
     }
 
@@ -609,7 +599,6 @@ async fn perform_install(
 
     // Download and unpack the Python versions concurrently
     let reporter = PythonDownloadReporter::new(printer, Some(downloads.len() as u64));
-    let replacements = changelog.existing.clone();
 
     let mut tasks = futures::stream::iter(&downloads)
         .map(async |download| {
@@ -621,7 +610,7 @@ async fn perform_install(
                         &retry_policy,
                         installations_dir,
                         &scratch_dir,
-                        reinstall || replacements.contains(download.key()),
+                        reinstall,
                         python_install_mirror.as_deref(),
                         pypy_install_mirror.as_deref(),
                         Some(&reporter),
@@ -927,7 +916,7 @@ async fn perform_install(
                 InstallErrorKind::DownloadUnpack => {
                     write_error_chain_with_options(
                         err.context(format!("Failed to install {key}")).as_ref(),
-                        &Hints::none(),
+                        Hints::none(),
                         ErrorOptions::default().with_stream(printer.stderr()),
                     )?;
                 }
@@ -941,7 +930,7 @@ async fn perform_install(
                     write_error_chain_with_options(
                         err.context(format!("Failed to install executable for {key}"))
                             .as_ref(),
-                        &Hints::none(),
+                        Hints::none(),
                         ErrorOptions::default()
                             .with_level(level)
                             .with_color(color)
@@ -959,7 +948,7 @@ async fn perform_install(
                     write_error_chain_with_options(
                         err.context(format!("Failed to create registry entry for {key}"))
                             .as_ref(),
-                        &Hints::none(),
+                        Hints::none(),
                         ErrorOptions::default()
                             .with_level(level)
                             .with_color(color)
@@ -1070,8 +1059,7 @@ fn create_bin_links(
                         let valid_link = cfg!(windows)
                             || target
                                 .read_link()
-                                // Resolve relative targets from the executable's directory.
-                                .and_then(|_| target.try_exists())
+                                .and_then(|target| target.try_exists())
                                 .inspect_err(|err| {
                                     debug!("Failed to inspect executable with error: {err}");
                                 })

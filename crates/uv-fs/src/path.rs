@@ -198,14 +198,6 @@ pub fn normalize_url_path(path: &str) -> Cow<'_, str> {
     }
 }
 
-/// Return `true` if `path` is an absolute Windows drive path, regardless of the host platform.
-pub fn is_windows_absolute_path(path: &str) -> bool {
-    let [drive, b':', separator, ..] = path.as_bytes() else {
-        return false;
-    };
-    drive.is_ascii_alphabetic() && matches!(separator, b'/' | b'\\')
-}
-
 /// Normalize a path, removing things like `.` and `..`.
 ///
 /// Source: <https://github.com/rust-lang/cargo/blob/b48c41aedbd69ee3990d62a0e2006edbb506a480/crates/cargo-util/src/paths.rs#L76C1-L109C2>
@@ -668,8 +660,6 @@ impl AsRef<Path> for PortablePathBuf {
 
 #[cfg(test)]
 mod tests {
-    use std::assert_matches;
-
     use super::*;
 
     #[test]
@@ -819,9 +809,8 @@ mod tests {
         // Verify the fast path: already-normalized inputs are returned borrowed.
         for already_normalized in ["foo/bar", "/a/b/c", "foo", "/", ""] {
             let path = Path::new(already_normalized);
-            assert_matches!(
-                normalize_path(path),
-                Cow::Borrowed(_),
+            assert!(
+                matches!(normalize_path(path), Cow::Borrowed(_)),
                 "expected borrowed for {already_normalized:?}"
             );
         }

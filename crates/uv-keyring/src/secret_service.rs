@@ -616,8 +616,6 @@ fn wrap(err: Error) -> Box<dyn std::error::Error + Send + Sync> {
 #[cfg(feature = "native-auth")]
 #[cfg(test)]
 mod tests {
-    use std::assert_matches;
-
     use crate::secret_service::{EncryptionType, SecretService, SsCredential};
     use crate::{Entry, Error, tests::generate_random_string};
     use std::collections::HashMap;
@@ -629,9 +627,8 @@ mod tests {
     #[test]
     fn test_invalid_parameter() {
         let credential = SsCredential::new_with_target(Some(""), "service", "user");
-        assert_matches!(
-            credential,
-            Err(Error::Invalid(_, _)),
+        assert!(
+            matches!(credential, Err(Error::Invalid(_, _))),
             "Created entry with empty target"
         );
     }
@@ -694,7 +691,7 @@ mod tests {
             .delete_credential()
             .await
             .expect("Couldn't delete get-credential");
-        assert_matches!(entry.get_password().await, Err(Error::NoEntry));
+        assert!(matches!(entry.get_password().await, Err(Error::NoEntry)));
     }
 
     #[tokio::test]
@@ -704,9 +701,8 @@ mod tests {
             .expect("Can't create credential for attribute test");
         let create_label = credential.label.clone();
         let entry = Entry::new_with_credential(Box::new(credential));
-        assert_matches!(
-            entry.get_attributes().await,
-            Err(Error::NoEntry),
+        assert!(
+            matches!(entry.get_attributes().await, Err(Error::NoEntry)),
             "Read missing credential in attribute test",
         );
         let mut in_map: HashMap<&str, &str> = HashMap::new();
@@ -715,9 +711,8 @@ mod tests {
         in_map.insert("target", "ignored target value");
         in_map.insert("service", "ignored service value");
         in_map.insert("username", "ignored username value");
-        assert_matches!(
-            entry.update_attributes(&in_map).await,
-            Err(Error::NoEntry),
+        assert!(
+            matches!(entry.update_attributes(&in_map).await, Err(Error::NoEntry)),
             "Updated missing credential in attribute test",
         );
         // create the credential and test again
@@ -734,9 +729,8 @@ mod tests {
         assert!(!out_map.contains_key("target"));
         assert!(!out_map.contains_key("service"));
         assert!(!out_map.contains_key("username"));
-        assert_matches!(
-            entry.update_attributes(&in_map).await,
-            Ok(()),
+        assert!(
+            matches!(entry.update_attributes(&in_map).await, Ok(())),
             "Couldn't update attributes in attribute test",
         );
         let after_map = entry
@@ -750,18 +744,19 @@ mod tests {
         );
         assert_eq!(out_map["application"], "uv");
         in_map.insert("label", "");
-        assert_matches!(
-            entry.update_attributes(&in_map).await,
-            Err(Error::Invalid(_, _)),
+        assert!(
+            matches!(
+                entry.update_attributes(&in_map).await,
+                Err(Error::Invalid(_, _))
+            ),
             "Was able to set empty label in attribute test",
         );
         entry
             .delete_credential()
             .await
             .unwrap_or_else(|err| panic!("Can't delete credential for attribute test: {err:?}"));
-        assert_matches!(
-            entry.get_attributes().await,
-            Err(Error::NoEntry),
+        assert!(
+            matches!(entry.get_attributes().await, Err(Error::NoEntry)),
             "Read deleted credential in attribute test",
         );
     }
@@ -787,7 +782,7 @@ mod tests {
             .delete_credential()
             .await
             .expect("Couldn't delete password for new collection entry");
-        assert_matches!(entry.get_password().await, Err(Error::NoEntry));
+        assert!(matches!(entry.get_password().await, Err(Error::NoEntry)));
         delete_collection(&name).await;
     }
 
@@ -837,17 +832,17 @@ mod tests {
             .delete_credential()
             .await
             .expect("Couldn't delete password for collection 1");
-        assert_matches!(entry1.get_password().await, Err(Error::NoEntry));
+        assert!(matches!(entry1.get_password().await, Err(Error::NoEntry)));
         entry2
             .delete_credential()
             .await
             .expect("Couldn't delete password for collection 2");
-        assert_matches!(entry2.get_password().await, Err(Error::NoEntry));
+        assert!(matches!(entry2.get_password().await, Err(Error::NoEntry)));
         entry3
             .delete_credential()
             .await
             .expect("Couldn't delete password for default collection");
-        assert_matches!(entry3.get_password().await, Err(Error::NoEntry));
+        assert!(matches!(entry3.get_password().await, Err(Error::NoEntry)));
         delete_collection(&name1).await;
         delete_collection(&name2).await;
     }

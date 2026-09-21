@@ -123,10 +123,8 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
             }
             Dist::Source(ref dist) => {
                 if self.build_options.no_build_package(dist.name()) {
-                    if dist.is_editable() || dist.is_first_party() {
-                        debug!(
-                            "Allowing build for first-party or editable source distribution: {dist}"
-                        );
+                    if dist.is_editable() {
+                        debug!("Allowing build for editable source distribution: {dist}");
                     } else {
                         return Err(Error::NoBuild(dist.name().clone()));
                     }
@@ -171,7 +169,7 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                 Err(err) => Err(Error::Thread(err.to_owned())),
             }
         } else {
-            let policy = self.hashes.archive_policy(&dist);
+            let policy = self.hashes.get(&dist);
 
             let result = self
                 .database
@@ -226,15 +224,6 @@ pub enum Error {
 }
 
 impl Error {
-    /// Return whether this is an expected user-facing failure.
-    pub fn is_user_failure(&self) -> bool {
-        match self {
-            Self::NoBuild(_) | Self::NoBinary(_) | Self::CyclicBuildDependency(_) => true,
-            Self::Dist(_, _, _, error) => error.is_user_failure(),
-            Self::Thread(_) => false,
-        }
-    }
-
     /// Create an [`Error`] from a distribution error.
     fn from_dist(dist: Dist, err: uv_distribution::Error, resolution: &Resolution) -> Self {
         let chain =

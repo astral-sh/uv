@@ -4,13 +4,14 @@ use std::fmt::Write as _;
 use std::path::Path;
 
 use crate::commands::ExitStatus;
-use crate::commands::UvError;
+use crate::commands::diagnostics;
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::resolution_markers;
+use crate::commands::project::default_dependency_groups;
 use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    ProjectEnvironmentPolicy, ProjectInterpreter, ScriptInterpreter, UniversalState,
+    ProjectEnvironmentPolicy, ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
     WorkspacePython,
 };
 use crate::commands::reporters::AuditReporter;
@@ -28,16 +29,16 @@ use uv_cache::Cache;
 use uv_cli::AuditOutputFormat;
 use uv_client::{BaseClientBuilder, CachedClient, RegistryClientBuilder};
 use uv_configuration::{
-    ActiveEnvironment, Concurrency, DependencyGroups, DependencyGroupsWithDefaults,
-    ExtrasSpecification, ExtrasSpecificationWithDefaults, TargetTriple,
+    Concurrency, DependencyGroups, DependencyGroupsWithDefaults, ExtrasSpecification,
+    ExtrasSpecificationWithDefaults, TargetTriple,
 };
 use uv_distribution_types::{IndexCapabilities, IndexUrl};
 use uv_fs::{CWD, find_git_repository_root, relative_to};
-use uv_lock::Lock;
 use uv_normalize::{DefaultExtras, DefaultGroups};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{ConfigDiscovery, PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
+use uv_resolver::Lock;
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user;
@@ -104,7 +105,7 @@ pub(crate) async fn audit(
 
     // Determine the groups to include.
     let default_groups = match target {
-        LockTarget::Workspace(workspace) => workspace.default_groups()?,
+        LockTarget::Workspace(workspace) => default_dependency_groups(workspace.pyproject_toml())?,
         LockTarget::Script(_) => DefaultGroups::default(),
     };
     let groups = groups.with_defaults(default_groups);
@@ -133,7 +134,7 @@ pub(crate) async fn audit(
                 &install_mirrors,
                 false,
                 config_discovery,
-                ActiveEnvironment::Ignore,
+                Some(false),
                 &cache,
                 printer,
             )
@@ -157,7 +158,7 @@ pub(crate) async fn audit(
                     python_downloads,
                     &install_mirrors,
                     ProjectEnvironmentPolicy::Optional,
-                    ActiveEnvironment::Ignore,
+                    Some(false),
                     &cache,
                     printer,
                 )
@@ -201,7 +202,12 @@ pub(crate) async fn audit(
     .await
     {
         Ok(result) => result.into_lock(),
-        Err(err) => return Err(UvError::from(err).into()),
+        Err(ProjectError::Operation(err)) => {
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+        }
+        Err(err) => return Err(err.into()),
     };
 
     // Determine the markers to use for resolution.

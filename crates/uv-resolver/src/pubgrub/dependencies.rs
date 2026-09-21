@@ -3,11 +3,14 @@ use std::iter;
 
 use either::Either;
 
-use uv_distribution_types::{IndexMetadata, Requirement, RequirementScope, RequirementSource};
-use uv_normalize::{GroupName, PackageName};
+use uv_distribution_types::{IndexMetadata, Requirement, RequirementSource};
+use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
-use uv_pypi_types::{ConflictItemRef, Conflicts, VerbatimParsedUrl};
-use uv_resolver_types::PackageNodeKind;
+use uv_pep508::RequirementOrigin;
+use uv_pypi_types::{
+    ConflictItemRef, Conflicts, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitDirectoryUrl,
+    ParsedGitPathUrl, ParsedPathUrl, ParsedUrl, VerbatimParsedUrl,
+};
 
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, Range};
 use crate::resolver::UnsatisfiableRequirement;
@@ -36,7 +39,10 @@ impl DependencySource {
     fn from_requirement(requirement: &Requirement) -> Self {
         match &requirement.source {
             RequirementSource::Registry { index, .. }
-                if matches!(requirement.scope, RequirementScope::Group { .. }) =>
+                if matches!(
+                    requirement.origin.as_ref(),
+                    Some(RequirementOrigin::Group(_, Some(_), _))
+                ) =>
             {
                 index
                     .clone()
@@ -161,12 +167,12 @@ impl PubGrubDependency {
                 .iter()
                 .any(|extra| conflicts.contains(&requirement.name, extra))
             {
-                Either::Left(iter::once(PackageNodeKind::Base))
+                Either::Left(iter::once((None, None)))
             } else {
                 Either::Right(iter::empty())
             };
             Either::Left(Either::Left(base.chain(
-                Box::into_iter(requirement.extras.clone()).map(PackageNodeKind::Extra),
+                Box::into_iter(requirement.extras.clone()).map(|extra| (Some(extra), None)),
             )))
         } else if !requirement.groups.is_empty() {
             let base = if requirement
@@ -174,20 +180,21 @@ impl PubGrubDependency {
                 .iter()
                 .any(|group| conflicts.contains(&requirement.name, group))
             {
-                Either::Left(iter::once(PackageNodeKind::Base))
+                Either::Left(iter::once((None, None)))
             } else {
                 Either::Right(iter::empty())
             };
             Either::Left(Either::Right(base.chain(
-                Box::into_iter(requirement.groups.clone()).map(PackageNodeKind::Group),
+                Box::into_iter(requirement.groups.clone()).map(|group| (None, Some(group))),
             )))
         } else {
-            Either::Right(iter::once(PackageNodeKind::Base))
+            Either::Right(iter::once((None, None)))
         };
 
         // Add the package, plus any extra variants.
-        Ok(iter.map(move |kind| {
-            let pubgrub_requirement = PubGrubRequirement::from_requirement(&requirement, kind);
+        Ok(iter.map(move |(extra, group)| {
+            let pubgrub_requirement =
+                PubGrubRequirement::from_requirement(&requirement, extra, group);
             let PubGrubRequirement {
                 package,
                 version,
@@ -269,31 +276,108 @@ struct PubGrubRequirement {
 }
 
 impl PubGrubRequirement {
-    fn package_for_requirement(requirement: &Requirement, kind: PackageNodeKind) -> PubGrubPackage {
-        PubGrubPackage::from_package(requirement.name.clone(), kind, requirement.marker)
+    fn package_for_requirement(
+        requirement: &Requirement,
+        extra: Option<ExtraName>,
+        group: Option<GroupName>,
+    ) -> PubGrubPackage {
+        PubGrubPackage::from_package(requirement.name.clone(), extra, group, requirement.marker)
     }
 
     /// Convert a [`Requirement`] to a PubGrub-compatible package and range, while returning the URL
     /// on the [`Requirement`], if any.
-    fn from_requirement(requirement: &Requirement, kind: PackageNodeKind) -> Self {
-        if let RequirementSource::Registry { specifier, .. } = &requirement.source {
-            return Self::from_registry_requirement(specifier, kind, requirement);
-        }
+    fn from_requirement(
+        requirement: &Requirement,
+        extra: Option<ExtraName>,
+        group: Option<GroupName>,
+    ) -> Self {
+        let (verbatim_url, parsed_url) = match &requirement.source {
+            RequirementSource::Registry { specifier, .. } => {
+                return Self::from_registry_requirement(specifier, extra, group, requirement);
+            }
+            RequirementSource::Url {
+                subdirectory,
+                location,
+                ext,
+                url,
+            } => {
+                let parsed_url = ParsedUrl::Archive(ParsedArchiveUrl::from_source(
+                    location.clone(),
+                    subdirectory.clone(),
+                    *ext,
+                ));
+                (url, parsed_url)
+            }
+            RequirementSource::GitDirectory {
+                git,
+                url,
+                subdirectory,
+            } => {
+                let parsed_url = ParsedUrl::GitDirectory(ParsedGitDirectoryUrl::from_source(
+                    git.clone(),
+                    subdirectory.clone(),
+                ));
+                (url, parsed_url)
+            }
+            RequirementSource::GitPath {
+                git,
+                install_path,
+                ext,
+                url,
+            } => {
+                let parsed_url = ParsedUrl::GitPath(ParsedGitPathUrl::from_source(
+                    git.clone(),
+                    install_path.clone(),
+                    *ext,
+                ));
+                (url, parsed_url)
+            }
+            RequirementSource::Path {
+                ext,
+                url,
+                install_path,
+            } => {
+                let parsed_url = ParsedUrl::Path(ParsedPathUrl::from_source(
+                    install_path.clone(),
+                    *ext,
+                    url.to_url(),
+                ));
+                (url, parsed_url)
+            }
+            RequirementSource::Directory {
+                editable,
+                r#virtual,
+                url,
+                install_path,
+            } => {
+                let parsed_url = ParsedUrl::Directory(ParsedDirectoryUrl::from_source(
+                    install_path.clone(),
+                    *editable,
+                    *r#virtual,
+                    url.to_url(),
+                ));
+                (url, parsed_url)
+            }
+        };
 
         Self {
-            package: Self::package_for_requirement(requirement, kind),
+            package: Self::package_for_requirement(requirement, extra, group),
             version: Range::full(),
-            source: DependencySource::from_requirement(requirement),
+            source: DependencySource::Url(Box::new(VerbatimParsedUrl {
+                parsed_url,
+                verbatim: verbatim_url.clone(),
+            })),
         }
     }
 
     fn from_registry_requirement(
         specifier: &VersionSpecifiers,
-        kind: PackageNodeKind,
+        extra: Option<ExtraName>,
+        group: Option<GroupName>,
         requirement: &Requirement,
     ) -> Self {
         Self {
-            package: Self::package_for_requirement(requirement, kind),
+            package: Self::package_for_requirement(requirement, extra, group),
             source: DependencySource::from_requirement(requirement),
             version: Range::from(specifier.clone()),
         }

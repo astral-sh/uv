@@ -15,7 +15,7 @@ use uv_small_str::SmallString;
 
 use crate::cached_client::{CacheControl, CachedClientError};
 use crate::html::SimpleDetailHTML;
-use crate::{CachedClient, Connectivity, Error, ErrorKind, OwnedArchive, RetryState};
+use crate::{CachedClient, Connectivity, Error, ErrorKind, OwnedArchive};
 
 #[derive(Debug, thiserror::Error)]
 pub enum FlatIndexError {
@@ -30,17 +30,6 @@ pub enum FlatIndexError {
 
     #[error("Failed to read `--find-links` URL: {0}")]
     FindLinksUrl(DisplaySafeUrl, #[source] Error),
-}
-
-impl FlatIndexError {
-    /// Return whether this is an expected user-facing failure.
-    pub fn is_user_failure(&self) -> bool {
-        match self {
-            Self::NonFileUrl(_) => true,
-            Self::FindLinksFile(_, error) | Self::FindLinksUrl(_, error) => error.is_user_failure(),
-            Self::FindLinksDirectory(..) => false,
-        }
-    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -61,7 +50,7 @@ pub struct FlatIndexEntry {
 
 impl FlatIndexEntry {
     /// Return the distribution filename.
-    pub fn filename(&self) -> &DistFilename {
+    pub(crate) fn filename(&self) -> &DistFilename {
         &self.filename
     }
 
@@ -227,7 +216,7 @@ impl<'a> FlatIndexClient<'a> {
             .map_err(|err| {
                 ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
             })?;
-        let parse_simple_response = |response: Response, _: &mut RetryState| {
+        let parse_simple_response = |response: Response| {
             async {
                 // Use the response URL, rather than the request URL, as the base for relative URLs.
                 // This ensures that we handle redirects and other URL transformations correctly.
@@ -365,7 +354,7 @@ impl<'a> FlatIndexClient<'a> {
             let url = DisplaySafeUrl::from_file_path(entry.path()).unwrap();
 
             let file = File {
-                dist_info_metadata: None,
+                dist_info_metadata: false,
                 filename: filename.into(),
                 hashes: HashDigests::empty(),
                 requires_python: None,
@@ -373,6 +362,7 @@ impl<'a> FlatIndexClient<'a> {
                 upload_time_utc_ms: None,
                 url: FileLocation::AbsoluteUrl(UrlString::from(url)),
                 yanked: None,
+                zstd: None,
             };
 
             let Some(filename) = DistFilename::try_from_normalized_filename(filename) else {
@@ -405,30 +395,6 @@ mod tests {
     use fs_err::File;
     use std::io::Write;
     use tempfile::tempdir;
-
-    /// Round-trip a synthetic flat-index cache entry and preserve sidecar hashes.
-    #[test]
-    fn cached_files_round_trip() -> Result<(), Box<dyn std::error::Error>> {
-        let url = DisplaySafeUrl::parse("https://example.com/flat/")?;
-        let files = FlatIndexClient::parse_html(
-            r#"<a href="example-1.0.0-py3-none-any.whl" data-core-metadata="sha256=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef">example-1.0.0-py3-none-any.whl</a>"#,
-            &url,
-        )?;
-        assert_eq!(files.len(), 1);
-        let metadata_hashes = files[0].dist_info_metadata.clone();
-        assert!(
-            metadata_hashes
-                .as_ref()
-                .is_some_and(|hashes| !hashes.is_empty())
-        );
-        let archived = OwnedArchive::from_unarchived(&files)?;
-        let files = OwnedArchive::deserialize(&archived);
-        let entries =
-            FlatIndexClient::entries_from_files(files, &IndexUrl::parse(url.as_str(), None)?);
-        assert_eq!(entries.entries.len(), 1);
-        assert_eq!(entries.entries[0].file.dist_info_metadata, metadata_hashes);
-        Ok(())
-    }
 
     #[test]
     fn read_from_directory_sorts_distributions() {

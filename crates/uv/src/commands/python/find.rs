@@ -4,7 +4,7 @@ use std::path::Path;
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_configuration::{ActiveEnvironment, DependencyGroupsWithDefaults};
+use uv_configuration::DependencyGroupsWithDefaults;
 use uv_errors::ErrorWithHints;
 use uv_fs::Simplified;
 use uv_python::{
@@ -13,7 +13,7 @@ use uv_python::{
 };
 use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
-use uv_warnings::{warn_user, warn_user_once_with_chain};
+use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
 use crate::commands::{
@@ -65,7 +65,7 @@ pub(crate) async fn find(
                         | WorkspaceErrorKind::MissingPyprojectToml
                         | WorkspaceErrorKind::NonWorkspace(_)
                 ) {
-                    warn_user_once_with_chain!(&err);
+                    warn_user_once!("{err}");
                 }
                 None
             }
@@ -157,7 +157,7 @@ pub(crate) async fn find_script(
         &PythonInstallMirrors::default(),
         false,
         config_discovery,
-        ActiveEnvironment::Ignore,
+        Some(false),
         cache,
         printer,
     )
@@ -167,7 +167,7 @@ pub(crate) async fn find_script(
             writeln!(
                 printer.stderr(),
                 "{}",
-                ErrorWithHints::new(&error, uv_errors::Hinted::hints(&error))
+                ErrorWithHints::new(&error, uv_errors::Hint::hints(&error))
             )?;
             return Ok(ExitStatus::Failure);
         }

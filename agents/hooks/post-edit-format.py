@@ -1,9 +1,6 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = []
-# [tool.uv]
-# no-build = true
-# exclude-newer = "P7D"
 # ///
 
 """Post-edit hook to auto-format files after agent edits."""
@@ -32,7 +29,7 @@ def format_python(file_path: str, cwd: str) -> None:
     """Format Python files with ruff."""
     try:
         subprocess.run(
-            ["uv", "run", "--only-group=check", "ruff", "format", file_path],
+            ["uvx", "ruff", "format", file_path],
             cwd=cwd,
             capture_output=True,
             check=False,

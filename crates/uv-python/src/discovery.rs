@@ -4,7 +4,6 @@ use regex::Regex;
 use rustc_hash::{FxBuildHasher, FxHashSet};
 use same_file::is_same_file;
 use std::borrow::Cow;
-use std::cmp::Reverse;
 use std::env::consts::EXE_SUFFIX;
 use std::fmt::{self, Debug, Formatter};
 use std::{env, io, iter};
@@ -14,6 +13,7 @@ use tracing::{debug, instrument, trace};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_distribution_types::RequiresPython;
+use uv_errors::Hints;
 use uv_fs::Simplified;
 use uv_fs::which::is_executable;
 use uv_pep440::{
@@ -21,7 +21,7 @@ use uv_pep440::{
     release_specifiers_to_ranges,
 };
 use uv_static::EnvVars;
-use uv_warnings::{warn_user_once, warn_user_with_chain};
+use uv_warnings::{warn_user_once, write_warning_chain};
 use which::{which, which_all};
 
 use crate::downloads::{ManagedPythonDownloadList, PlatformRequest, PythonDownloadRequest};
@@ -247,23 +247,6 @@ pub enum PythonSource {
     ParentInterpreter,
 }
 
-/// A non-empty group of equally preferred Python executables.
-///
-/// Minor-version fallback candidates from one `PATH` directory share a group. Preferred executable
-/// names and interpreters from other sources form singleton groups.
-struct PythonExecutableGroup(Vec<(PythonSource, PathBuf)>);
-
-impl PythonExecutableGroup {
-    fn new(executables: Vec<(PythonSource, PathBuf)>) -> Option<Self> {
-        (!executables.is_empty()).then_some(Self(executables))
-    }
-
-    fn filter(mut self, mut predicate: impl FnMut(PythonSource, &Path) -> bool) -> Option<Self> {
-        self.0.retain(|(source, path)| predicate(*source, path));
-        (!self.0.is_empty()).then_some(self)
-    }
-}
-
 #[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]
@@ -309,7 +292,7 @@ pub enum Error {
     BuildVersion(#[from] crate::python_version::BuildVersionError),
 }
 
-impl uv_errors::Hinted for Error {
+impl uv_errors::Hint for Error {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::Query(err, _, _) => err.hints(),
@@ -384,7 +367,7 @@ fn python_executables_from_installed<'a>(
     implementation: Option<&'a ImplementationName>,
     platform: PlatformRequest,
     preference: PythonPreference,
-) -> Box<dyn Iterator<Item = Result<PythonExecutableGroup, Error>> + 'a> {
+) -> Box<dyn Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a> {
     let from_managed_installations = iter::once_with(move || {
         ManagedPythonInstallations::from_settings(None)
             .map_err(Error::from)
@@ -453,32 +436,24 @@ fn python_executables_from_installed<'a>(
                 )
             })
     })
-    .flatten_ok()
-    .map_ok(|executable| PythonExecutableGroup(vec![executable]));
+    .flatten_ok();
 
     let from_search_path = iter::once_with(move || {
-        let mut first = true;
-        python_executables_from_search_path(version, implementation).filter_map(move |paths| {
-            let executables = paths
-                .into_iter()
-                .map(|path| {
-                    let source = if first {
-                        first = false;
-                        PythonSource::SearchPathFirst
-                    } else {
-                        PythonSource::SearchPath
-                    };
-                    (source, path)
-                })
-                .collect();
-            PythonExecutableGroup::new(executables).map(Ok)
-        })
+        python_executables_from_search_path(version, implementation)
+            .enumerate()
+            .map(|(i, path)| {
+                if i == 0 {
+                    Ok((PythonSource::SearchPathFirst, path))
+                } else {
+                    Ok((PythonSource::SearchPath, path))
+                }
+            })
     })
     .flatten();
 
     #[cfg(windows)]
     let from_windows_registry: Box<
-        dyn Iterator<Item = Result<PythonExecutableGroup, Error>> + 'a,
+        dyn Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a,
     > = match uv_static::parse_boolish_environment_variable(EnvVars::UV_PYTHON_NO_REGISTRY) {
         Ok(Some(true)) => Box::new(iter::empty()),
         Ok(Some(false) | None) => Box::new(
@@ -511,15 +486,14 @@ fn python_executables_from_installed<'a>(
                     })
                     .map_err(Error::from)
             })
-            .flatten_ok()
-            .map_ok(|executable| PythonExecutableGroup(vec![executable])),
+            .flatten_ok(),
         ),
         Err(err) => Box::new(iter::once(Err(Error::from(err)))),
     };
 
     #[cfg(not(windows))]
     let from_windows_registry: Box<
-        dyn Iterator<Item = Result<PythonExecutableGroup, Error>> + 'a,
+        dyn Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a,
     > = Box::new(iter::empty());
 
     match preference {
@@ -562,17 +536,12 @@ fn python_executables<'a>(
     platform: PlatformRequest,
     environments: EnvironmentPreference,
     preference: PythonPreference,
-) -> Box<dyn Iterator<Item = Result<PythonExecutableGroup, Error>> + 'a> {
+) -> Box<dyn Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a> {
     // Always read from `UV_INTERNAL__PARENT_INTERPRETER` — it could be a system interpreter
     let from_parent_interpreter = iter::once_with(|| {
         env::var_os(EnvVars::UV_INTERNAL__PARENT_INTERPRETER)
             .into_iter()
-            .map(|path| {
-                Ok(PythonExecutableGroup(vec![(
-                    PythonSource::ParentInterpreter,
-                    PathBuf::from(path),
-                )]))
-            })
+            .map(|path| Ok((PythonSource::ParentInterpreter, PathBuf::from(path))))
     })
     .flatten();
 
@@ -581,17 +550,11 @@ fn python_executables<'a>(
         conda_environment_from_env(CondaEnvironmentKind::Base)
             .into_iter()
             .map(virtualenv_python_executable)
-            .map(|path| {
-                Ok(PythonExecutableGroup(vec![(
-                    PythonSource::BaseCondaPrefix,
-                    path,
-                )]))
-            })
+            .map(|path| Ok((PythonSource::BaseCondaPrefix, path)))
     })
     .flatten();
 
-    let from_virtual_environments = python_executables_from_virtual_environments()
-        .map_ok(|executable| PythonExecutableGroup(vec![executable]));
+    let from_virtual_environments = python_executables_from_virtual_environments();
     let from_installed =
         python_executables_from_installed(version, implementation, platform, preference);
 
@@ -625,28 +588,12 @@ fn python_executables<'a>(
 /// Executables are returned in the search path order, then by specificity of the name, e.g.
 /// `python3.9` is preferred over `python3` and `pypy3.9` is preferred over `python3.9`.
 ///
-/// For a `PATH` directory containing `python`, `python3`, `python3.14`, `python3.15`, and
-/// `python3.15t`, an exact `3.15` request produces the following groups:
-///
-/// ```text
-/// [python3.15], [python3], [python]
-/// ```
-///
-/// A `>=3.14,<3.16` request instead produces:
-///
-/// ```text
-/// [python3], [python], [python3.14, python3.15, python3.15t]
-/// ```
-///
-/// Grouping minor-version fallback candidates from the same directory allows their queried
-/// installation keys to determine their relative order without overriding search-path precedence.
-///
 /// If a `version` is not provided, we will only look for default executable names e.g.
 /// `python3` and `python` — `python3.9` and similar will not be included.
 fn python_executables_from_search_path<'a>(
     version: &'a VersionRequest,
     implementation: Option<&'a ImplementationName>,
-) -> impl Iterator<Item = Vec<PathBuf>> + 'a {
+) -> impl Iterator<Item = PathBuf> + 'a {
     // `UV_PYTHON_SEARCH_PATH` can be used to override `PATH` for Python executable discovery
     let search_path = env::var_os(EnvVars::UV_PYTHON_SEARCH_PATH)
         .unwrap_or(env::var_os(EnvVars::PATH).unwrap_or_default());
@@ -689,8 +636,6 @@ fn python_executables_from_search_path<'a>(
                 // If we cannot determine if the directory is unique, we'll assume it is
                 .unwrap_or(true)
                 .then(|| {
-                    let minor_version_directory = dir_clone.clone();
-
                     possible_names
                         .clone()
                         .into_iter()
@@ -699,24 +644,14 @@ fn python_executables_from_search_path<'a>(
                             which::which_in_global(&*name, Some(&dir))
                                 .into_iter()
                                 .flatten()
-                                .filter(|path| !is_windows_store_shim(path))
-                                .map(|path| vec![path])
                                 // We have to collect since `which` requires that the regex outlives its
                                 // parameters, and the dir is local while we return the iterator.
                                 .collect::<Vec<_>>()
                         })
-                        .chain(
-                            iter::once_with(move || {
-                                find_all_minor(implementation, version, &minor_version_directory)
-                                    .filter(|path| !is_windows_store_shim(path))
-                                    .collect::<Vec<_>>()
-                            })
-                            .filter(|paths| !paths.is_empty()),
-                        )
-                        .inspect(|paths| {
-                            for path in paths {
-                                trace!("Found possible Python executable: {}", path.display());
-                            }
+                        .chain(find_all_minor(implementation, version, &dir_clone))
+                        .filter(|path| !is_windows_store_shim(path))
+                        .inspect(|path| {
+                            trace!("Found possible Python executable: {}", path.display());
                         })
                         .chain(
                             // TODO(zanieb): Consider moving `python.bat` into `possible_names` to avoid a chain
@@ -725,7 +660,6 @@ fn python_executables_from_search_path<'a>(
                                     which::which_in_global("python.bat", Some(&dir_clone))
                                         .into_iter()
                                         .flatten()
-                                        .map(|path| vec![path])
                                         .collect::<Vec<_>>()
                                 })
                                 .into_iter()
@@ -809,9 +743,9 @@ fn find_all_minor(
 /// How to query discovered Python executables.
 #[derive(Debug, Clone, Copy)]
 enum QueryStrategy {
-    /// Lazily query one executable group at a time.
+    /// Query each executable as it is requested by the consumer.
     Sequential,
-    /// Query groups and their executables concurrently before yielding results.
+    /// Query all executables concurrently before yielding results.
     Parallel,
 }
 
@@ -839,13 +773,8 @@ fn python_installations<'a>(
             // unnecessary interpreter queries, which are generally expensive. We'll filter again
             // with `PythonInstallation::satisfies_preferences` after querying.
             python_executables(version, implementation, platform, environments, preference)
-                .filter_map(move |result| match result {
-                    Ok(group) => group
-                        .filter(|source, path| {
-                            source_satisfies_environment_preference(source, path, environments)
-                        })
-                        .map(Ok),
-                    Err(error) => Some(Err(error)),
+                .filter_ok(move |(source, path)| {
+                    source_satisfies_environment_preference(*source, path, environments)
                 }),
             cache,
             strategy,
@@ -881,66 +810,26 @@ fn python_installation_from_executable(
 
 /// Convert Python executables into installations using the given query strategy.
 fn python_installations_from_executables<'a>(
-    executables: impl Iterator<Item = Result<PythonExecutableGroup, Error>> + 'a,
+    executables: impl Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a,
     cache: &'a Cache,
     strategy: QueryStrategy,
 ) -> Box<dyn Iterator<Item = Result<PythonInstallation, Error>> + 'a> {
     match strategy {
-        QueryStrategy::Sequential => Box::new(executables.flat_map(move |group| {
-            python_installations_from_executable_group(group, cache, strategy)
+        QueryStrategy::Sequential => Box::new(executables.map(move |result| match result {
+            Ok((source, path)) => python_installation_from_executable(source, path, cache),
+            Err(err) => Err(err),
         })),
         QueryStrategy::Parallel => {
-            let items: Vec<Result<PythonExecutableGroup, Error>> = executables.collect();
-            let results: Vec<Vec<Result<PythonInstallation, Error>>> = items
+            let items: Vec<Result<(PythonSource, PathBuf), Error>> = executables.collect();
+            let results: Vec<Result<PythonInstallation, Error>> = items
                 .into_par_iter()
-                .map(|group| {
-                    python_installations_from_executable_group(group, cache, strategy)
-                        .collect::<Vec<_>>()
+                .map(|result| match result {
+                    Ok((source, path)) => python_installation_from_executable(source, path, cache),
+                    Err(err) => Err(err),
                 })
                 .collect();
-            Box::new(results.into_iter().flatten())
+            Box::new(results.into_iter())
         }
-    }
-}
-
-/// Query an executable group, ordering equally preferred installations by their installation keys.
-fn python_installations_from_executable_group(
-    group: Result<PythonExecutableGroup, Error>,
-    cache: &Cache,
-    strategy: QueryStrategy,
-) -> impl Iterator<Item = Result<PythonInstallation, Error>> + use<> {
-    match group {
-        Err(error) => Either::Left(iter::once(Err(error))),
-        Ok(PythonExecutableGroup(executables)) => {
-            let mut installations = match strategy {
-                QueryStrategy::Sequential => executables
-                    .into_iter()
-                    .map(|(source, path)| python_installation_from_executable(source, path, cache))
-                    .collect::<Vec<_>>(),
-                QueryStrategy::Parallel => executables
-                    .into_par_iter()
-                    .map(|(source, path)| python_installation_from_executable(source, path, cache))
-                    .collect::<Vec<_>>(),
-            };
-
-            sort_installations_by_key(&mut installations, PythonInstallation::key);
-
-            Either::Right(installations.into_iter())
-        }
-    }
-}
-
-/// Sort successful installations without moving them across critical query errors.
-fn sort_installations_by_key<T, K: Ord>(
-    installations: &mut [Result<T, Error>],
-    key: impl Fn(&T) -> K,
-) {
-    // Critical errors preserve discovery order; non-critical errors must not interrupt
-    // installation-key ordering and can follow successful queries.
-    for candidates in
-        installations.split_mut(|result| result.as_ref().is_err_and(Error::is_critical))
-    {
-        candidates.sort_by_key(|result| Reverse(result.as_ref().ok().map(&key)));
     }
 }
 
@@ -1140,12 +1029,7 @@ fn python_installations_with_name<'a>(
     cache: &'a Cache,
     strategy: QueryStrategy,
 ) -> Box<dyn Iterator<Item = Result<PythonInstallation, Error>> + 'a> {
-    python_installations_from_executables(
-        python_executables_with_name(name)
-            .map_ok(|executable| PythonExecutableGroup(vec![executable])),
-        cache,
-        strategy,
-    )
+    python_installations_from_executables(python_executables_with_name(name), cache, strategy)
 }
 
 /// Iterate over all Python installations that satisfy the given request.
@@ -1363,8 +1247,8 @@ fn find_python_installations_with_strategy<'a>(
 /// concurrently.
 ///
 /// Unlike [`find_python_installations`], this eagerly collects matching installations instead of
-/// returning a lazy iterator. Interpreter query failures produce warnings and are skipped. Other
-/// non-critical discovery errors are dropped, while critical errors are propagated in discovery order.
+/// returning a lazy iterator. Non-critical discovery errors are dropped, while critical errors are
+/// propagated in discovery order.
 pub fn find_all_python_installations(
     request: &PythonRequest,
     environments: EnvironmentPreference,
@@ -1383,9 +1267,6 @@ pub fn find_all_python_installations(
         match result {
             Ok(Ok(installation)) => installations.push(installation),
             Ok(Err(_)) => {}
-            Err(err @ Error::Query(..)) => {
-                warn_user_with_chain!(&err);
-            }
             Err(err) if err.is_critical() => return Err(err),
             Err(_) => {}
         }
@@ -1669,13 +1550,11 @@ pub(crate) async fn find_best_python_installation(
                     return Err(error);
                 }
 
-                warn_user_with_chain!(
-                    anyhow::Error::from(error)
-                        .context(format!(
-                            "A managed Python download is available for {request}, but an error occurred when attempting to download it."
-                        ))
-                        .as_ref()
-                );
+                let error = anyhow::Error::from(error).context(format!(
+                    "A managed Python download is available for {request}, but an error occurred when attempting to download it."
+                ));
+                write_warning_chain(error.as_ref(), Hints::none())
+                    .expect("writing to stderr should not fail");
                 previous_fetch_failed = true;
             }
         }
@@ -3841,8 +3720,7 @@ fn split_wheel_tag_release_version(version: Version) -> Version {
 
 #[cfg(test)]
 mod tests {
-    use std::assert_matches;
-    use std::{cell::Cell, io, path::PathBuf, str::FromStr};
+    use std::{cell::Cell, path::PathBuf, str::FromStr};
 
     use assert_fs::{TempDir, prelude::*};
     use target_lexicon::{Aarch64Architecture, Architecture};
@@ -3859,50 +3737,17 @@ mod tests {
     use uv_platform::{Arch, Libc, Os};
 
     use super::{
-        DiscoveryPreferences, EnvironmentPreference, Error, InterpreterError,
-        PythonExecutableGroup, PythonPreference, PythonSource, PythonVariant, QueryStrategy,
-        python_installations_from_executables, sort_installations_by_key,
+        DiscoveryPreferences, EnvironmentPreference, Error, PythonPreference, PythonSource,
+        PythonVariant, QueryStrategy, python_installations_from_executables,
     };
 
-    // Testing this at a higher level would necessitate relying on filesystem ordering.
     #[test]
-    fn installation_key_order_only_partitions_critical_errors() {
-        let query_error = |error| {
-            Error::Query(
-                Box::new(error),
-                PathBuf::from("python"),
-                PythonSource::SearchPath,
-            )
-        };
-
-        let mut installations = [
-            Ok(1_u8),
-            Err(query_error(InterpreterError::NotFound(PathBuf::from(
-                "missing",
-            )))),
-            Ok(2),
-            Err(query_error(InterpreterError::Io(io::Error::other(
-                "critical",
-            )))),
-            Ok(3),
-        ];
-
-        sort_installations_by_key(&mut installations, |key| *key);
-
-        assert_matches!(
-            &installations[..],
-            [Ok(2), Ok(1), Err(noncritical), Err(critical), Ok(3)]
-                if !noncritical.is_critical() && critical.is_critical()
-        );
-    }
-
-    #[test]
-    fn sequential_query_strategy_does_not_prefetch_executable_groups() -> anyhow::Result<()> {
+    fn sequential_query_strategy_does_not_prefetch_executables() -> anyhow::Result<()> {
         let cache = Cache::temp()?;
         let pulls = Cell::new(0);
         let executables = (0..2).map(|_| {
             pulls.set(pulls.get() + 1);
-            Err::<PythonExecutableGroup, _>(Error::SourceNotAllowed(
+            Err::<(PythonSource, PathBuf), _>(Error::SourceNotAllowed(
                 PythonRequest::Default,
                 PythonSource::SearchPath,
                 PythonPreference::OnlyManaged,
@@ -4386,9 +4231,11 @@ mod tests {
                 PythonVariant::Default
             )
         );
-        assert_matches!(
-            VersionRequest::from_str("3rc1"),
-            Err(Error::InvalidVersionRequest(_)),
+        assert!(
+            matches!(
+                VersionRequest::from_str("3rc1"),
+                Err(Error::InvalidVersionRequest(_))
+            ),
             "Pre-release version requests require a minor version"
         );
         assert_eq!(
@@ -4418,19 +4265,25 @@ mod tests {
                 PythonVariant::Default
             )
         );
-        assert_matches!(
-            VersionRequest::from_str("3.12-dev"),
-            Err(Error::InvalidVersionRequest(_)),
+        assert!(
+            matches!(
+                VersionRequest::from_str("3.12-dev"),
+                Err(Error::InvalidVersionRequest(_))
+            ),
             "Development version segments are not allowed"
         );
-        assert_matches!(
-            VersionRequest::from_str("3.12+local"),
-            Err(Error::InvalidVersionRequest(_)),
+        assert!(
+            matches!(
+                VersionRequest::from_str("3.12+local"),
+                Err(Error::InvalidVersionRequest(_))
+            ),
             "Local version segments are not allowed"
         );
-        assert_matches!(
-            VersionRequest::from_str("3.12.post0"),
-            Err(Error::InvalidVersionRequest(_)),
+        assert!(
+            matches!(
+                VersionRequest::from_str("3.12.post0"),
+                Err(Error::InvalidVersionRequest(_))
+            ),
             "Post version segments are not allowed"
         );
         assert!(
@@ -4473,14 +4326,14 @@ mod tests {
                 PythonVariant::Freethreaded
             )
         );
-        assert_matches!(
+        assert!(matches!(
             VersionRequest::from_str("3.13tt"),
             Err(Error::InvalidVersionRequest(_))
-        );
-        assert_matches!(
+        ));
+        assert!(matches!(
             VersionRequest::from_str("3.12²t"),
             Err(Error::InvalidVersionRequest(_))
-        );
+        ));
 
         // `==` specifiers are parsed as concrete version requests via `from_specifiers`
         assert_eq!(
@@ -4636,22 +4489,22 @@ mod tests {
 
     #[test]
     fn test_try_split_prefix_and_version() {
-        assert_matches!(
+        assert!(matches!(
             PythonRequest::try_split_prefix_and_version("prefix", "prefix"),
             Ok(None),
-        );
-        assert_matches!(
+        ));
+        assert!(matches!(
             PythonRequest::try_split_prefix_and_version("prefix", "prefix3"),
             Ok(Some(_)),
-        );
-        assert_matches!(
+        ));
+        assert!(matches!(
             PythonRequest::try_split_prefix_and_version("prefix", "prefix@3"),
             Ok(Some(_)),
-        );
-        assert_matches!(
+        ));
+        assert!(matches!(
             PythonRequest::try_split_prefix_and_version("prefix", "prefix3notaversion"),
             Ok(None),
-        );
+        ));
         // Version parsing errors are only raised if @ is present.
         assert!(
             PythonRequest::try_split_prefix_and_version("prefix", "prefix@3notaversion").is_err()

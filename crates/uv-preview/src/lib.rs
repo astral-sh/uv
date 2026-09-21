@@ -267,6 +267,8 @@ pub enum PreviewFeature {
     SbomExport,
     /// Allows using `uv auth helper` as a credential helper for external tools.
     AuthHelper,
+    /// Allows publishing directly to a package index.
+    DirectPublish,
     /// Uses the directory containing a local `uv run` target, rather than the current working
     /// directory, as the starting point for project and workspace discovery. This feature takes
     /// effect before configuration is loaded.
@@ -325,23 +327,10 @@ pub enum PreviewFeature {
     IndexHashAlgorithm,
     /// Rejects non-canonical lockfile formatting when using `--locked` or `--check`.
     LockfileFormatCheck,
-    /// Omit `package.metadata` from `uv.lock`, except for remote URL dependencies.
+    /// Omit `package.metadata` from `uv.lock`.
     LockWithoutMetadata,
     /// Uses the new `tar-codec` encoding/decoding backend, instead of `astral-tokio-tar`.
     TarCodec,
-    /// Allows selecting configured package indexes by name with `--index` and `--default-index`.
-    IndexByName,
-    /// Restricts generated requirement hashes to artifacts allowed by binary and build policies.
-    ArtifactHashFiltering,
-    /// Enables content-addressed wheel archives in the cache.
-    ContentAddressedCache,
-    /// Exclude `exclude-newer-package` entries from the lockfile when not included in the
-    /// project's resolved dependencies.
-    MissingExcludeNewerPackageLock,
-    /// Allows using `uv export --batch`.
-    BatchExport,
-    /// Allows setting minimum libc versions for universal resolutions.
-    MinimumLibcVersion,
 }
 
 impl Display for PreviewFeature {

@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use std::collections::BTreeMap;
@@ -7,12 +7,12 @@ use std::str::FromStr;
 use tracing::{debug, trace};
 
 use uv_cache::Cache;
-use uv_cache_key::CanonicalUrl;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, Constraints, DryRun, HashCheckingMode, TargetTriple};
 use uv_distribution::LoweredExtraBuildDependencies;
-use uv_distribution_types::{ExtraBuildRequires, Index, Name, Requirement, RequirementSource};
-use uv_fs::{CWD, Simplified};
+use uv_distribution_types::{ExtraBuildRequires, Name, Requirement, RequirementSource};
+use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
+use uv_fs::CWD;
 use uv_installer::{InstallationStrategy, Planner, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version};
@@ -67,12 +67,7 @@ pub(crate) async fn upgrade(
         if names.is_empty() {
             installed_tools
                 .tools()
-                .with_context(|| {
-                    format!(
-                        "Failed to inspect installed tools in `{}`",
-                        installed_tools.root().user_display()
-                    )
-                })?
+                .unwrap_or_default()
                 .into_iter()
                 .map(|(name, _)| (name, Vec::new()))
                 .collect()
@@ -178,9 +173,11 @@ pub(crate) async fn upgrade(
             .sorted_unstable_by(|(name_a, _), (name_b, _)| name_a.cmp(name_b))
         {
             trace!("Error trace: {err:?}");
-            crate::commands::diagnostics::write_error_chain(
-                &err.context(format!("Failed to upgrade {}", name.green())),
-                printer,
+            write_error_chain_with_options(
+                err.context(format!("Failed to upgrade {}", name.green()))
+                    .as_ref(),
+                Hints::none(),
+                ErrorOptions::default().with_stream(printer.stderr()),
             )?;
         }
         return Ok(ExitStatus::Failure);
@@ -321,32 +318,16 @@ async fn upgrade_tool(
         }
     };
 
-    // Restore credentials from user configuration when the receipt refers to the same index.
-    // Receipts intentionally omit credentials, including usernames needed for keyring lookups.
-    let mut receipt = ResolverInstallerOptions::from(existing_tool_receipt.options().clone());
-    if let (Some(stored), Some(configured)) = (
-        receipt.indexes.index_url.as_ref(),
-        filesystem.indexes.index_url.as_ref(),
-    ) {
-        let stored = Index::from(stored.clone());
-        let configured = Index::from(configured.clone());
-
-        if stored.raw_url().username().is_empty()
-            && stored.raw_url().password().is_none()
-            && (!configured.raw_url().username().is_empty()
-                || configured.raw_url().password().is_some())
-            && CanonicalUrl::new(stored.raw_url().clone())
-                == CanonicalUrl::new(configured.raw_url().clone())
-        {
-            receipt.indexes.index_url = Some(configured.into());
-        }
-    }
-
     // Resolve the appropriate settings, preferring: CLI > receipt > user.
-    let options = args.clone().combine(receipt.combine(filesystem.clone()));
+    let options = args.clone().combine(
+        ResolverInstallerOptions::from(existing_tool_receipt.options().clone())
+            .combine(filesystem.clone()),
+    );
     let settings = ResolverInstallerSettings::from(options.clone());
 
-    let build_constraints = existing_tool_receipt.build_constraints().to_vec();
+    let build_constraint_requirements = existing_tool_receipt.build_constraints().to_vec();
+    let build_constraints =
+        Constraints::from_requirements(build_constraint_requirements.iter().cloned());
     let manifest_constraints = existing_tool_receipt
         .constraints()
         .iter()
@@ -360,10 +341,9 @@ async fn upgrade_tool(
         &manifest_constraints,
         &manifest_overrides,
         &manifest_excludes,
-        &build_constraints,
+        &build_constraint_requirements,
         &settings.resolver.dependency_metadata,
     );
-    let build_constraints = Constraints::from_specifications(build_constraints);
 
     // Resolve the requirements.
     let spec = RequirementsSpecification::from_excludes(

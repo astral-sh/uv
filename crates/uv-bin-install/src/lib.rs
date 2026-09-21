@@ -842,7 +842,7 @@ async fn download_and_unpack(
 
     let id = reporter.on_download_start(binary.name(), version, size);
     let mut progress_reader = ProgressReader::new(reader, id, reporter);
-    let (temp_dir, _) = stream::archive(&mut progress_reader, format.into(), temp_dir)
+    stream::archive(&mut progress_reader, format.into(), temp_dir.path())
         .await
         .map_err(|e| Error::Extract { source: e })?;
     reporter.on_download_complete(id);
@@ -922,8 +922,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::assert_matches;
-
     use serde_json::json;
     use std::io::Write;
     use uv_client::{BaseClientBuilder, fetch_with_url_fallback, retryable_on_request_failure};
@@ -1318,7 +1316,7 @@ mod tests {
                 .await
                 .expect_err("no matching version should not fall back to canonical manifest");
 
-        assert_matches!(err, Error::NoMatchingVersion { .. });
+        assert!(matches!(err, Error::NoMatchingVersion { .. }));
         assert_eq!(mirror_server.received_requests().await.unwrap().len(), 1);
         assert_eq!(canonical_server.received_requests().await.unwrap().len(), 0);
     }

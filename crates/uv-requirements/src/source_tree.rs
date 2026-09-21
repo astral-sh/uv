@@ -10,8 +10,7 @@ use uv_configuration::ExtrasSpecification;
 use uv_distribution::{DistributionDatabase, FlatRequiresDist, Reporter, RequiresDist};
 use uv_distribution_types::Requirement;
 use uv_distribution_types::{
-    BuildableSource, DirectorySourceUrl, HashCollection, HashValidation, Identifier,
-    MetadataHashPolicy, SourceUrl,
+    BuildableSource, DirectorySourceUrl, HashGeneration, HashPolicy, Identifier, SourceUrl,
 };
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
@@ -19,7 +18,7 @@ use uv_pep508::RequirementOrigin;
 use uv_pypi_types::PyProjectToml;
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{InMemoryIndex, MetadataResponse};
-use uv_types::{BuildContext, HashStrategy, HashVerification};
+use uv_types::{BuildContext, HashStrategy};
 
 #[derive(Debug, Clone)]
 pub enum SourceTree {
@@ -206,22 +205,16 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
 
         // Determine the hash policy. Since we don't have a package name, we perform a
         // manual match.
-        let collection = match self.hasher.verification() {
-            HashVerification::Required(_) => {
+        let hashes = match self.hasher {
+            HashStrategy::None => HashPolicy::None,
+            HashStrategy::Generate(mode) => HashPolicy::Generate(*mode),
+            HashStrategy::Verify(_) => HashPolicy::Generate(HashGeneration::All),
+            HashStrategy::Require(_) => {
                 return Err(anyhow::anyhow!(
                     "Hash-checking is not supported for local directories: {}",
                     path.user_display()
                 ));
             }
-            HashVerification::IfPresent(_) => match self.hasher.collection() {
-                HashCollection::None => HashCollection::All,
-                collection @ (HashCollection::Url | HashCollection::All) => collection,
-            },
-            HashVerification::None => self.hasher.collection(),
-        };
-        let hashes = MetadataHashPolicy {
-            collection,
-            validation: HashValidation::None,
         };
 
         // Fetch the metadata for the distribution.
@@ -248,7 +241,6 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             }
         };
 
-        // This source tree was requested as an input, so preserve its authored path spelling.
-        Ok(RequiresDist::from(metadata.with_force_relative(false)))
+        Ok(RequiresDist::from(metadata))
     }
 }

@@ -325,9 +325,7 @@ fn list_outdated_index() -> Result<()> {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn list_editable() {
-    let context = uv_test::test_context!("3.12")
-        .with_filter((r"\-\-\-\-\-\-+.*", "[UNDERLINE]"))
-        .with_filter(("  +", " "));
+    let context = uv_test::test_context!("3.12");
 
     // Install the editable package.
     uv_snapshot!(context.filters(), context.pip_install()
@@ -345,7 +343,13 @@ fn list_editable() {
     "
     );
 
-    uv_snapshot!(context.filters(), context.pip_list(), @"
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain(vec![(r"\-\-\-\-\-\-+.*", "[UNDERLINE]"), ("  +", " ")])
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, context.pip_list(), @"
     exit_code: 0 (success)
     ----- stdout -----
     Package Version Editable project location
@@ -361,9 +365,7 @@ fn list_editable() {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn list_editable_only() {
-    let context = uv_test::test_context!("3.12")
-        .with_filter((r"\-\-\-\-\-\-+.*", "[UNDERLINE]"))
-        .with_filter(("  +", " "));
+    let context = uv_test::test_context!("3.12");
 
     // Install the editable package.
     uv_snapshot!(context.filters(), context.pip_install()
@@ -381,7 +383,13 @@ fn list_editable_only() {
     "
     );
 
-    uv_snapshot!(context.filters(), context.pip_list()
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain(vec![(r"\-\-\-\-\-\-+.*", "[UNDERLINE]"), ("  +", " ")])
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, context.pip_list()
         .arg("--editable"), @"
     exit_code: 0 (success)
     ----- stdout -----
@@ -391,7 +399,7 @@ fn list_editable_only() {
     "
     );
 
-    uv_snapshot!(context.filters(), context.pip_list()
+    uv_snapshot!(filters, context.pip_list()
         .arg("--exclude-editable"), @"
     exit_code: 0 (success)
     ----- stdout -----
@@ -403,7 +411,7 @@ fn list_editable_only() {
     "
     );
 
-    uv_snapshot!(context.filters(), context.pip_list()
+    uv_snapshot!(filters, context.pip_list()
         .arg("--editable")
         .arg("--exclude-editable"), @"
     exit_code: 2 (failure)
@@ -420,9 +428,7 @@ fn list_editable_only() {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn list_exclude() {
-    let context = uv_test::test_context!("3.12")
-        .with_filter((r"\-\-\-\-\-\-+.*", "[UNDERLINE]"))
-        .with_filter(("  +", " "));
+    let context = uv_test::test_context!("3.12");
 
     // Install the editable package.
     uv_snapshot!(context.filters(), context.pip_install()
@@ -440,7 +446,13 @@ fn list_exclude() {
     "
     );
 
-    uv_snapshot!(context.filters(), context.pip_list()
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain(vec![(r"\-\-\-\-\-\-+.*", "[UNDERLINE]"), ("  +", " ")])
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, context.pip_list()
     .arg("--exclude")
     .arg("numpy"), @"
     exit_code: 0 (success)
@@ -454,7 +466,7 @@ fn list_exclude() {
     "
     );
 
-    uv_snapshot!(context.filters(), context.pip_list()
+    uv_snapshot!(filters, context.pip_list()
     .arg("--exclude")
     .arg("poetry-editable"), @"
     exit_code: 0 (success)
@@ -467,7 +479,7 @@ fn list_exclude() {
     "
     );
 
-    uv_snapshot!(context.filters(), context.pip_list()
+    uv_snapshot!(filters, context.pip_list()
     .arg("--exclude")
     .arg("numpy")
     .arg("--exclude")
@@ -505,7 +517,13 @@ fn list_format_json() {
     "
     );
 
-    uv_snapshot!(context.filters(), context.pip_list()
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .chain(vec![(r"\-\-\-\-\-\-+.*", "[UNDERLINE]"), ("  +", " ")])
+        .collect();
+
+    uv_snapshot!(filters, context.pip_list()
     .arg("--format=json"), @r#"
     exit_code: 0 (success)
     ----- stdout -----
@@ -513,7 +531,7 @@ fn list_format_json() {
     "#
     );
 
-    uv_snapshot!(context.filters(), context.pip_list()
+    uv_snapshot!(filters, context.pip_list()
     .arg("--format=json")
     .arg("--editable"), @r#"
     exit_code: 0 (success)
@@ -522,7 +540,7 @@ fn list_format_json() {
     "#
     );
 
-    uv_snapshot!(context.filters(), context.pip_list()
+    uv_snapshot!(filters, context.pip_list()
     .arg("--format=json")
     .arg("--exclude-editable"), @r#"
     exit_code: 0 (success)
@@ -554,7 +572,13 @@ fn list_format_freeze() {
     "
     );
 
-    uv_snapshot!(context.filters(), context.pip_list()
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain(vec![(r"\-\-\-\-\-\-+.*", "[UNDERLINE]"), ("  +", " ")])
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, context.pip_list()
     .arg("--format=freeze"), @"
     exit_code: 0 (success)
     ----- stdout -----
@@ -565,7 +589,7 @@ fn list_format_freeze() {
     "
     );
 
-    uv_snapshot!(context.filters(), context.pip_list()
+    uv_snapshot!(filters, context.pip_list()
     .arg("--format=freeze")
     .arg("--editable"), @"
     exit_code: 0 (success)
@@ -574,7 +598,7 @@ fn list_format_freeze() {
     "
     );
 
-    uv_snapshot!(context.filters(), context.pip_list()
+    uv_snapshot!(filters, context.pip_list()
     .arg("--format=freeze")
     .arg("--exclude-editable"), @"
     exit_code: 0 (success)
@@ -588,9 +612,7 @@ fn list_format_freeze() {
 
 #[test]
 fn list_legacy_editable() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
-        .with_filter((r"\-\-\-\-\-\-+.*", "[UNDERLINE]"))
-        .with_filter(("  +", " "));
+    let context = uv_test::test_context!("3.12");
 
     let site_packages = ChildPath::new(context.site_packages());
 
@@ -618,7 +640,13 @@ Version: 0.22.0
         target.path().to_str().unwrap()
     ))?;
 
-    uv_snapshot!(context.filters(), context.pip_list()
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain(vec![(r"\-\-\-\-\-\-+.*", "[UNDERLINE]"), ("  +", " ")])
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, context.pip_list()
         .arg("--editable"), @"
     exit_code: 0 (success)
     ----- stdout -----
@@ -633,7 +661,7 @@ Version: 0.22.0
 
 #[test]
 fn list_legacy_editable_invalid_version() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filter(("  +", " "));
+    let context = uv_test::test_context!("3.12");
 
     let site_packages = ChildPath::new(context.site_packages());
 
@@ -652,12 +680,18 @@ Version: 0.1-bulbasaur
         .child("paramiko.egg-link")
         .write_str(target.path().to_str().unwrap())?;
 
-    uv_snapshot!(context.filters(), context.pip_list()
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain(vec![(r"\-\-\-\-\-\-+.*", "[UNDERLINE]"), ("  +", " ")])
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, context.pip_list()
         .arg("--editable"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to read metadata from: `[SITE_PACKAGES]/paramiko.egg-link`
-     cause: after parsing `0.1-b`, found `ulbasaur`, which is not part of a valid version
+     Caused by: after parsing `0.1-b`, found `ulbasaur`, which is not part of a valid version
     "
     );
 
@@ -686,7 +720,13 @@ fn list_ignores_quiet_flag_format_freeze() {
     "
     );
 
-    uv_snapshot!(context.filters(), context.pip_list()
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain(vec![(r"\-\-\-\-\-\-+.*", "[UNDERLINE]"), ("  +", " ")])
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, context.pip_list()
     .arg("--format=freeze")
     .arg("--quiet"), @"
     exit_code: 0 (success)
@@ -698,7 +738,7 @@ fn list_ignores_quiet_flag_format_freeze() {
     "
     );
 
-    uv_snapshot!(context.filters(), context.pip_list()
+    uv_snapshot!(filters, context.pip_list()
     .arg("--format=freeze")
     .arg("--editable")
     .arg("--quiet"), @"
@@ -708,7 +748,7 @@ fn list_ignores_quiet_flag_format_freeze() {
     "
     );
 
-    uv_snapshot!(context.filters(), context.pip_list()
+    uv_snapshot!(filters, context.pip_list()
     .arg("--format=freeze")
     .arg("--exclude-editable")
     .arg("--quiet"), @"

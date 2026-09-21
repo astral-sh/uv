@@ -12,7 +12,7 @@ use reqsign::aws::DefaultSigner as AwsDefaultSigner;
 use reqsign::azure::DefaultSigner as AzureDefaultSigner;
 use reqsign::google::DefaultSigner as GcsDefaultSigner;
 use reqwest::Request;
-use reqwest::header::{HeaderValue, InvalidHeaderValue};
+use reqwest::header::{HeaderName, HeaderValue};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
@@ -20,6 +20,8 @@ use url::Url;
 use uv_netrc::Netrc;
 use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
+
+const AZURE_STORAGE_VERSION: &str = "2023-11-03";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Credentials {
@@ -337,11 +339,11 @@ impl Credentials {
         None
     }
 
-    /// Create an HTTP authorization header for the credentials.
+    /// Create an HTTP Basic Authentication header for the credentials.
     ///
-    /// Returns an error if the bearer token contains invalid header characters.
-    pub fn to_header_value(&self) -> Result<HeaderValue, InvalidHeaderValue> {
-        let header_bytes = match self {
+    /// Panics if the username or password cannot be base64 encoded.
+    pub fn to_header_value(&self) -> HeaderValue {
+        match self {
             Self::Basic { .. } => {
                 // See: <https://github.com/seanmonstar/reqwest/blob/2c11ef000b151c2eebeed2c18a7b81042220c6b0/src/util.rs#L3>
                 let mut buf = b"Basic ".to_vec();
@@ -354,13 +356,18 @@ impl Credentials {
                             .expect("Write to base64 encoder should succeed");
                     }
                 }
-                buf
+                let mut header =
+                    HeaderValue::from_bytes(&buf).expect("base64 is always valid HeaderValue");
+                header.set_sensitive(true);
+                header
             }
-            Self::Bearer { token } => [b"Bearer ", token.as_slice()].concat(),
-        };
-        let mut header = HeaderValue::from_bytes(&header_bytes)?;
-        header.set_sensitive(true);
-        Ok(header)
+            Self::Bearer { token } => {
+                let mut header = HeaderValue::from_bytes(&[b"Bearer ", token.as_slice()].concat())
+                    .expect("Bearer token is always valid HeaderValue");
+                header.set_sensitive(true);
+                header
+            }
+        }
     }
 
     /// Apply the credentials to the given URL.
@@ -380,11 +387,12 @@ impl Credentials {
     /// Attach the credentials to the given request.
     ///
     /// Any existing credentials will be overridden.
-    fn authenticate(&self, mut request: Request) -> Result<Request, InvalidHeaderValue> {
+    #[must_use]
+    pub fn authenticate(&self, mut request: Request) -> Request {
         request
             .headers_mut()
-            .insert(reqwest::header::AUTHORIZATION, Self::to_header_value(self)?);
-        Ok(request)
+            .insert(reqwest::header::AUTHORIZATION, Self::to_header_value(self));
+        request
     }
 }
 
@@ -405,9 +413,6 @@ pub(crate) enum Authentication {
 
 #[derive(Debug, Error)]
 pub(crate) enum AuthenticationError {
-    #[error("Invalid authorization header")]
-    InvalidHeaderValue(#[from] InvalidHeaderValue),
-
     #[error("Failed to convert request URL to URI")]
     InvalidUri(#[from] http::uri::InvalidUri),
 
@@ -523,7 +528,7 @@ impl Authentication {
         mut request: Request,
     ) -> Result<Request, AuthenticationError> {
         match self {
-            Self::Credentials(credentials) => Ok(credentials.authenticate(request)?),
+            Self::Credentials(credentials) => Ok(credentials.authenticate(request)),
             Self::AwsSigner(signer) => {
                 // Build an `http::Request` from the `reqwest::Request`.
                 let uri = Uri::from_str(request.url().as_str())?;
@@ -600,6 +605,10 @@ impl Authentication {
                         source,
                     })?;
                 *http_req.headers_mut() = request.headers().clone();
+                http_req
+                    .headers_mut()
+                    .entry(HeaderName::from_static("x-ms-version"))
+                    .or_insert(HeaderValue::from_static(AZURE_STORAGE_VERSION));
 
                 // Sign the parts.
                 let (mut parts, ()) = http_req.into_parts();
@@ -626,9 +635,6 @@ impl Authentication {
 
 #[cfg(test)]
 mod tests {
-    use std::assert_matches;
-    use std::future::{self, Future};
-
     use insta::{assert_debug_snapshot, assert_snapshot};
     use reqsign::aws::Credential as AwsCredential;
     use reqsign::azure::Credential as AzureCredential;
@@ -642,11 +648,11 @@ mod tests {
     impl ProvideCredential for EmptyAwsCredentialProvider {
         type Credential = AwsCredential;
 
-        fn provide_credential(
+        async fn provide_credential(
             &self,
             _ctx: &Context,
-        ) -> impl Future<Output = reqsign::Result<Option<Self::Credential>>> {
-            future::ready(Ok(None))
+        ) -> reqsign::Result<Option<Self::Credential>> {
+            Ok(None)
         }
     }
 
@@ -656,18 +662,18 @@ mod tests {
     impl ProvideCredential for EmptyAzureCredentialProvider {
         type Credential = AzureCredential;
 
-        fn provide_credential(
+        async fn provide_credential(
             &self,
             _ctx: &Context,
-        ) -> impl Future<Output = reqsign::Result<Option<Self::Credential>>> {
-            future::ready(Ok(None))
+        ) -> reqsign::Result<Option<Self::Credential>> {
+            Ok(None)
         }
     }
 
     #[test]
     fn from_url_no_credentials() {
         let url = &Url::parse("https://example.com/simple/first/").unwrap();
-        assert_matches!(Credentials::from_url(url), Ok(None));
+        assert!(matches!(Credentials::from_url(url), Ok(None)));
     }
 
     #[test]
@@ -741,7 +747,7 @@ mod tests {
         let credentials = Credentials::from_url(&auth_url).unwrap().unwrap();
 
         let mut request = Request::new(reqwest::Method::GET, url);
-        request = credentials.authenticate(request).unwrap();
+        request = credentials.authenticate(request);
 
         let mut header = request
             .headers()
@@ -763,7 +769,7 @@ mod tests {
         let credentials = Credentials::from_url(&auth_url).unwrap().unwrap();
 
         let mut request = Request::new(reqwest::Method::GET, url);
-        request = credentials.authenticate(request).unwrap();
+        request = credentials.authenticate(request);
 
         let mut header = request
             .headers()
@@ -785,7 +791,7 @@ mod tests {
         let credentials = Credentials::from_url(&auth_url).unwrap().unwrap();
 
         let mut request = Request::new(reqwest::Method::GET, url);
-        request = credentials.authenticate(request).unwrap();
+        request = credentials.authenticate(request);
 
         let mut header = request
             .headers()
@@ -817,6 +823,15 @@ mod tests {
             .expect("Authorization header should be set");
         assert_eq!(authorization.to_str().unwrap(), "Bearer token");
         assert!(request.headers().contains_key("x-ms-date"));
+        assert_eq!(
+            request
+                .headers()
+                .get("x-ms-version")
+                .expect("x-ms-version header should be set")
+                .to_str()
+                .unwrap(),
+            AZURE_STORAGE_VERSION
+        );
     }
 
     #[tokio::test]

@@ -9,7 +9,6 @@ use flate2::write::GzEncoder;
 use fs_err::File;
 use futures_lite::future::block_on;
 use globset::{Glob, GlobSet};
-use itertools::Itertools;
 use rustc_hash::FxHashSet;
 use std::io;
 use std::io::{BufReader, Cursor, Read, Write};
@@ -26,7 +25,6 @@ use uv_distribution_filename::{SourceDistExtension, SourceDistFilename};
 use uv_fs::{Simplified, normalize_path};
 use uv_globfilter::{GlobDirFilter, PortableGlobParser};
 use uv_preview::PreviewFeature;
-use uv_pypi_types::BuildKind;
 use uv_warnings::warn_user_once;
 use walkdir::WalkDir;
 
@@ -184,19 +182,17 @@ fn source_dist_matcher(
             source: err,
         })?;
 
-    let defaults = if settings.default_excludes {
-        DEFAULT_EXCLUDES
-    } else {
-        &[]
-    };
-    let excludes = defaults
-        .iter()
-        .copied()
-        .chain(settings.source_exclude.iter().map(String::as_str));
-    debug!(
-        "Source dist excludes: {:?}",
-        excludes.clone().unique().collect::<Vec<_>>()
-    );
+    let mut excludes: Vec<String> = Vec::new();
+    if settings.default_excludes {
+        excludes.extend(DEFAULT_EXCLUDES.iter().map(ToString::to_string));
+    }
+    for exclude in settings.source_exclude {
+        // Avoid duplicate entries.
+        if !excludes.contains(&exclude) {
+            excludes.push(exclude);
+        }
+    }
+    debug!("Source dist excludes: {:?}", excludes);
     let exclude_matcher = build_exclude_matcher(excludes)?;
     if exclude_matcher.is_match("pyproject.toml") {
         return Err(Error::PyprojectTomlExcluded);
@@ -212,7 +208,7 @@ fn write_source_dist(
     show_warnings: bool,
 ) -> Result<SourceDistFilename, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
-    for warning in pyproject_toml.check_build_system(uv_version, BuildKind::Sdist) {
+    for warning in pyproject_toml.check_build_system(uv_version) {
         warn_user_once!("{warning}");
     }
     let settings = pyproject_toml

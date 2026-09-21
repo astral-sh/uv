@@ -8,31 +8,9 @@
     "uv-dev": {
       "name": "astral-sh/uv-dev",
       "id": 1302176231
-    },
-    "uv-security": {
-      "name": "astral-sh/uv-security",
-      "id": 1333576902
     }
   },
   "rules": [
-    {
-      "repository": "uv",
-      "on": {
-        "workflow_run": ["completed"]
-      },
-      "target_repository": "uv-dev",
-      "head_repositories": ["uv"],
-      "conditions": {
-        "/workflow_run/event": "push",
-        "/workflow_run/head_branch": "main",
-        "/workflow/path": ".github/workflows/ci.yml"
-      },
-      "workflow": "import-codspeed-profiles.yml",
-      "inputs": {
-        "source-run": "/workflow_run/id",
-        "source-sha": "/workflow_run/head_sha"
-      }
-    },
     {
       "repository": "uv",
       "on": {
@@ -80,17 +58,7 @@
     {
       "repository": "uv-dev",
       "on": {
-        "pull_request": ["ready_for_review"]
-      },
-      "workflow": "promote-pull-request.yml"
-    },
-    {
-      "repository": "uv-security",
-      "on": {
-        "pull_request": ["ready_for_review"]
-      },
-      "conditions": {
-        "/sender/type": "User"
+        "pull_request": ["ready_for_review", "synchronize"]
       },
       "workflow": "promote-pull-request.yml"
     },
@@ -103,11 +71,7 @@
         "/changes/base/ref/from": { "exists": true }
       },
       "allow_draft": true,
-      "workflow": "pull-request-conflicts.yml",
-      "inputs": {
-        "base_previous_ref": "/changes/base/ref/from",
-        "base_previous_sha": "/changes/base/sha/from"
-      }
+      "workflow": "pull-request-conflicts.yml"
     },
     {
       "repository": "uv",

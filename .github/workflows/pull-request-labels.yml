@@ -19,13 +19,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ inputs.pull_request }}
   cancel-in-progress: true
 
-env:
-  UV_LOCKED: 1
-
 jobs:
   labels:
     if: github.repository == 'astral-sh/uv' || github.repository == 'astral-sh/uv-dev'
-    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     environment: automations
     timeout-minutes: 15
     permissions:
@@ -59,8 +56,6 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --limit 1000 \
             --json name,description \
-            | jq --slurpfile allowed "$GITHUB_WORKSPACE/.github/allowed-pull-request-labels.json" \
-              '[.[] | select(.name as $label | $allowed[0] | index($label))]' \
             > .pull-request-labels.json
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -73,7 +68,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.147.0"
+          codex-version: "0.146.0"
           working-directory: "${{ github.workspace }}/pull-request"
           codex-home: "${{ github.workspace }}/agents/codex"
           permission-profile: "pull-request-labels"
@@ -85,7 +80,7 @@ jobs:
   report:
     needs: labels
     if: needs.labels.outputs.result != ''
-    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     permissions: {}
     steps:
       - name: "Write label recommendations"
@@ -93,50 +88,13 @@ jobs:
         env:
           LABEL_RESULT: ${{ needs.labels.outputs.result }}
 
-  validate:
+  apply:
     needs: labels
     if: >-
       github.repository == 'astral-sh/uv-dev' &&
-      needs.labels.outputs.result != ''
-    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
-    permissions: {}
-    outputs:
-      labels: ${{ steps.validate.outputs.labels }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: main
-          persist-credentials: false
-
-      - name: "Validate recommended labels"
-        id: validate
-        run: |
-          if ! labels=$(jq --exit-status --compact-output --slurp \
-            --slurpfile allowed .github/allowed-pull-request-labels.json '
-              select(length == 1)
-              | .[0]
-              | select(type == "object")
-              | .labels
-              | select(type == "array" and length <= 3)
-              | select(length == (unique | length))
-              | select(all(.[];
-                  type == "string"
-                  and (. as $label | $allowed[0] | index($label) != null)))
-            ' <<< "$LABEL_RESULT"); then
-            echo "Codex recommended an invalid or disallowed pull request label." >&2
-            exit 1
-          fi
-
-          echo "labels=$labels" >> "$GITHUB_OUTPUT"
-        env:
-          LABEL_RESULT: ${{ needs.labels.outputs.result }}
-
-  apply:
-    needs: validate
-    if: >-
-      needs.validate.outputs.labels != '' &&
-      fromJSON(needs.validate.outputs.labels)[0] != null
-    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
+      needs.labels.outputs.result != '' &&
+      fromJSON(needs.labels.outputs.result).labels[0] != null
+    runs-on: ubuntu-slim
     environment: automations
     timeout-minutes: 5
     permissions:
@@ -155,7 +113,8 @@ jobs:
       - name: "Apply recommended labels"
         run: |
           # POST adds labels without removing any labels already on the pull request.
-          jq --null-input --argjson labels "$LABELS" '{labels: $labels}' \
+          printf '%s\n' "$LABEL_RESULT" \
+            | jq '{labels}' \
             | gh api \
                 --method POST \
                 "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/labels" \
@@ -163,5 +122,5 @@ jobs:
                 --silent
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
-          LABELS: ${{ needs.validate.outputs.labels }}
+          LABEL_RESULT: ${{ needs.labels.outputs.result }}
           PULL_REQUEST_NUMBER: ${{ inputs.pull_request }}

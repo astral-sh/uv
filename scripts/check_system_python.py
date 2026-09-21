@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Install `pylint` and packages with native extensions into the system Python.
+"""Install `pylint` and `numpy` into the system Python.
 
 To run locally, create a venv with seed packages.
 """
@@ -12,28 +12,15 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 
-def install_package(
-    *,
-    uv: str,
-    package: str,
-    version: Optional[str] = None,
-    path: Optional[Path] = None,
-    import_check: Optional[str] = None,
-):
+def install_package(*, uv: str, package: str, version: Optional[str] = None):
     """Install a package into the system Python."""
 
-    if path is not None:
-        requirement = str(path)
-    elif version is not None:
-        requirement = f"{package}=={version}"
-    else:
-        requirement = package
+    requirement = f"{package}=={version}" if version is not None else package
 
     logger.info(f"Installing the package `{requirement}`.")
     subprocess.run(
@@ -44,7 +31,7 @@ def install_package(
 
     logger.info(f"Checking that `{package}` can be imported with `{sys.executable}`.")
     code = subprocess.run(
-        [sys.executable, "-c", import_check or f"import {package}"],
+        [sys.executable, "-c", f"import {package}"],
         cwd=temp_dir,
         check=False,
     )
@@ -54,23 +41,6 @@ def install_package(
     code = subprocess.run([uv, "pip", "show", package, "--system"], check=False)
     if code.returncode != 0:
         raise RuntimeError(f"Could not show {package}.")
-
-
-def install_native_extension(*, uv: str):
-    """Build, install, and run a small native extension with the system Python."""
-
-    fixture = Path(__file__).resolve().parents[1] / "test/packages/native_extension"
-    path = Path(temp_dir) / "native_extension"
-    shutil.copytree(fixture, path)
-    install_package(
-        uv=uv,
-        package="uv_test_native_extension",
-        path=path,
-        import_check=(
-            "import uv_test_native_extension as extension; "
-            "assert extension.answer() == 42"
-        ),
-    )
 
 
 if __name__ == "__main__":
@@ -110,12 +80,15 @@ if __name__ == "__main__":
     # Pin packages to the last versions that support older Python interpreters.
     if sys.version_info < (3, 7):
         pylint_version = "2.12.2"
+        numpy_version = "1.19.5"
         pydantic_core_version = None
     elif sys.version_info < (3, 8):
         pylint_version = "2.17.7"
+        numpy_version = "1.21.6"
         pydantic_core_version = "2.14.6"
     else:
         pylint_version = None
+        numpy_version = None
         pydantic_core_version = None
 
     pylint_requirement = (
@@ -300,9 +273,12 @@ if __name__ == "__main__":
                 "The package `pylint` is installed in the virtual environment (but shouldn't be)."
             )
 
-        # Build and import a native extension on interpreters with build tools in CI.
+        # Attempt to install NumPy.
+        # This ensures that we can successfully install a package with native libraries.
+        #
+        # NumPy doesn't distribute wheels for Python 3.13 or GraalPy (at time of writing).
         if sys.version_info < (3, 13) and sys.implementation.name != "graalpy":
-            install_native_extension(uv=uv)
+            install_package(uv=uv, package="numpy", version=numpy_version)
 
         # Attempt to install `pydantic_core`.
         # This ensures that we can successfully install and recognize a package that may

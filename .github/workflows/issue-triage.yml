@@ -13,13 +13,10 @@ on:
 
 permissions: {}
 
-env:
-  UV_LOCKED: 1
-
 jobs:
   initialize-context:
     if: github.repository == 'astral-sh/uv'
-    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     environment: automations
     timeout-minutes: 10
     permissions:
@@ -106,7 +103,7 @@ jobs:
   triage:
     needs: initialize-context
     if: github.repository == 'astral-sh/uv'
-    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     environment: automations
     timeout-minutes: 15
     permissions:
@@ -148,7 +145,7 @@ jobs:
           TMPDIR: ${{ runner.temp }}
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.147.0"
+          codex-version: "0.146.0"
           codex-home: "agents/codex"
           effort: high
           permission-profile: "issue-triage"
@@ -178,7 +175,7 @@ jobs:
   context:
     needs: triage
     if: needs.triage.outputs.result != ''
-    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     environment: automations
     timeout-minutes: 10
     concurrency:
@@ -260,32 +257,5 @@ jobs:
     with:
       issue: ${{ inputs.issue || github.event.issue.number }}
       issue-type: ${{ fromJSON(needs.triage.outputs.result).type }}
-      runner: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
-    secrets: inherit
-
-  fix-bug:
-    needs:
-      - triage
-      - reproduce-bug
-    if: >-
-      needs.triage.outputs.result != '' &&
-      fromJSON(needs.triage.outputs.result).type == 'bug' &&
-      needs.reproduce-bug.outputs.result != '' &&
-      fromJSON(needs.reproduce-bug.outputs.result).reproduction == 'reproducible' &&
-      needs.reproduce-bug.outputs.pull-request != ''
-    permissions:
-      actions: read
-      contents: read
-      id-token: write
-      issues: read
-    uses: $/.github/workflows/fix-bug.yml
-    with:
-      issue: ${{ inputs.issue || github.event.issue.number }}
-      issue-number: ${{ needs.reproduce-bug.outputs.issue-number }}
-      reproduction-result: ${{ needs.reproduce-bug.outputs.result }}
-      reproduction-thread-artifact-id: ${{ needs.reproduce-bug.outputs.thread-artifact-id }}
-      parent-pull-request: ${{ needs.reproduce-bug.outputs.pull-request }}
-      parent-head-ref: ${{ needs.reproduce-bug.outputs.head-ref }}
-      parent-head-sha: ${{ needs.reproduce-bug.outputs.head-sha }}
-      runner: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+      runner: ubuntu-latest
     secrets: inherit

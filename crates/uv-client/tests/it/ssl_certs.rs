@@ -1,4 +1,3 @@
-use std::assert_matches;
 use std::io::Write;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
@@ -15,7 +14,7 @@ use url::Url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Certificates, RegistryClientBuilder};
 use uv_distribution_types::IndexUrl;
-use uv_errors::{ErrorOptions, Hinted, write_error_chain_with_options};
+use uv_errors::{ErrorOptions, Hint, write_error_chain_with_options};
 use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 
@@ -261,7 +260,7 @@ impl TestClient {
             let mut rendered = String::new();
             write_error_chain_with_options(
                 &error,
-                &error.hints(),
+                error.hints(),
                 ErrorOptions::default().with_stream(&mut rendered),
             )
             .unwrap();
@@ -325,9 +324,8 @@ impl TestClient {
     /// valid client certificate was presented.
     async fn expect_mtls_connect_fails(&self, cert: &TestCertificate) {
         self.expect_mtls_connect_fails_with_server_tls_error(cert, |server_tls_err| {
-            assert_matches!(
-                server_tls_err,
-                rustls::Error::NoCertificatesPresented,
+            assert!(
+                matches!(server_tls_err, rustls::Error::NoCertificatesPresented),
                 "expected NoCertificatesPresented, got: {server_tls_err}"
             );
         })
@@ -861,11 +859,13 @@ async fn test_mtls_with_wrong_client_cert() -> Result<()> {
         .ssl_cert_file(&server_cert.trust_path)
         .ssl_client_cert(&other_cert.client_cert_path)
         .expect_mtls_connect_fails_with_server_tls_error(&server_cert, |server_tls_err| {
-            assert_matches!(
-                server_tls_err,
-                rustls::Error::InvalidCertificate(
-                    rustls::CertificateError::BadSignature
-                        | rustls::CertificateError::UnknownIssuer
+            assert!(
+                matches!(
+                    server_tls_err,
+                    rustls::Error::InvalidCertificate(
+                        rustls::CertificateError::BadSignature
+                            | rustls::CertificateError::UnknownIssuer
+                    )
                 ),
                 "expected InvalidCertificate(BadSignature | UnknownIssuer), got: {server_tls_err}"
             );

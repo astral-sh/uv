@@ -3,9 +3,7 @@ source: crates/uv-requirements-txt/src/lib.rs
 expression: actual
 ---
 RequirementsTxtFileError {
-    file: Local(
-        "<REQUIREMENTS_DIR>/semicolon.txt",
-    ),
+    file: "<REQUIREMENTS_DIR>/semicolon.txt",
     error: Pep508 {
         source: Pep508Error {
             message: UrlError(

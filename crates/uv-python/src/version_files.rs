@@ -193,12 +193,13 @@ impl PythonVersionFile {
                 );
                 let versions = content
                     .lines()
-                    .map(str::trim)
                     .filter(|line| {
                         // Skip comments and empty lines.
-                        !(line.is_empty() || line.starts_with('#'))
+                        let trimmed = line.trim();
+                        !(trimmed.is_empty() || trimmed.starts_with('#'))
                     })
-                    .map(PythonRequest::parse)
+                    .map(ToString::to_string)
+                    .map(|version| PythonRequest::parse(&version))
                     .filter(|request| {
                         if let PythonRequest::ExecutableName(name) = request {
                             warn_user_once!(

@@ -336,8 +336,6 @@ fn decode_error(err: Error) -> ErrorCode {
 #[cfg(not(miri))]
 #[cfg(test)]
 mod tests {
-    use std::assert_matches;
-
     use crate::{Entry, Error, tests::generate_random_string};
 
     use super::MacCredential;
@@ -353,15 +351,13 @@ mod tests {
     #[test]
     fn test_invalid_parameter() {
         let credential = MacCredential::new_with_target(None, "", "user");
-        assert_matches!(
-            credential,
-            Err(Error::Invalid(_, _)),
+        assert!(
+            matches!(credential, Err(Error::Invalid(_, _))),
             "Created credential with empty service"
         );
         let credential = MacCredential::new_with_target(None, "service", "");
-        assert_matches!(
-            credential,
-            Err(Error::Invalid(_, _)),
+        assert!(
+            matches!(credential, Err(Error::Invalid(_, _))),
             "Created entry with empty user"
         );
     }
@@ -417,7 +413,7 @@ mod tests {
             .delete_credential()
             .await
             .expect("Couldn't delete after get_credential");
-        assert_matches!(entry.get_password().await, Err(Error::NoEntry));
+        assert!(matches!(entry.get_password().await, Err(Error::NoEntry)));
     }
 
     #[tokio::test]
@@ -436,9 +432,8 @@ mod tests {
                 .downcast_ref()
                 .expect("credential not a MacCredential");
             if name == "unknown" {
-                assert_matches!(
-                    mac_cred.domain,
-                    super::MacKeychainDomain::User,
+                assert!(
+                    matches!(mac_cred.domain, super::MacKeychainDomain::User),
                     "wrong domain for unknown specifier"
                 );
             }

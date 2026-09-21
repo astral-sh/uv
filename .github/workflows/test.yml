@@ -10,8 +10,7 @@ on:
         type: string
         default: "false"
 
-permissions:
-  contents: read
+permissions: {}
 
 env:
   CARGO_INCREMENTAL: 0
@@ -20,7 +19,6 @@ env:
   PYTHON_VERSION: "3.12"
   RUSTC_BOOTSTRAP: 1
   RUSTUP_MAX_RETRIES: 10
-  UV_LOCKED: 1
 
 jobs:
   # We use the large GitHub actions runners
@@ -42,7 +40,7 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup toolchain install --profile minimal
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         id: rust-cache
         with:
           prefix-key: v1-rust-workspace
@@ -54,24 +52,16 @@ jobs:
         if: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
         run: touch "$RUNNER_TEMP/uv-cargo-cache-marker"
 
-      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
-          # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.12.13"
-          checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
+          version: "0.12.3"
 
       - name: "Install required Python versions"
         run: uv python install
 
       - name: "Install secret service"
         run: |
-          # Try the next configured mirror after the first failed download.
-          cat /etc/apt/apt-mirrors.txt
-          printf '%s\n' \
-            'Acquire::Retries "0";' \
-            'Acquire::http::Timeout "10";' \
-            'Acquire::https::Timeout "10";' \
-            | sudo tee /etc/apt/apt.conf.d/80-retries > /dev/null
+          echo 'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/80-retries > /dev/null
           sudo apt install -y --no-install-recommends gnome-keyring
 
       - name: "Start gnome-keyring"
@@ -103,6 +93,11 @@ jobs:
           sudo mount -o loop /tmp/minix.img /minix
           sudo chown "$(id -u):$(id -g)" /minix
 
+      - name: "Install cargo nextest"
+        uses: taiki-e/install-action@1beb33eee6d086258184383af9a538940be190ed # v2.85.6
+        with:
+          tool: cargo-nextest
+
       - name: "Cargo test"
         env:
           # Retry more than default to reduce flakes in CI
@@ -117,7 +112,7 @@ jobs:
           INSTA_UPDATE: new
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         run: |
-          uv run --only-dev cargo nextest run \
+          cargo nextest run \
             --cargo-profile fast-build-nightly \
             -Z panic-abort-tests \
             -Z checksum-freshness \
@@ -162,7 +157,7 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup toolchain install --profile minimal
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         id: rust-cache
         with:
           prefix-key: v1-rust-workspace
@@ -190,14 +185,17 @@ jobs:
           security list-keychains -d user -s "$RUNNER_TEMP/uv-ci.keychain-db"
           security default-keychain -d user -s "$RUNNER_TEMP/uv-ci.keychain-db"
 
-      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
-          # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.12.13"
-          checksum: "7e6ddb9316acc00f2296c82ff4d99977870ee34b2f0ddcae9444d714db9364ed"
+          version: "0.12.3"
 
       - name: "Install required Python versions"
         run: uv python install
+
+      - name: "Install cargo nextest"
+        uses: taiki-e/install-action@1beb33eee6d086258184383af9a538940be190ed # v2.85.6
+        with:
+          tool: cargo-nextest
 
       - name: "Cargo test"
         env:
@@ -214,7 +212,7 @@ jobs:
           INSTA_UPDATE: new
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         run: |
-          uv run --only-dev cargo nextest run \
+          cargo nextest run \
             --cargo-profile fast-build-nightly \
             -Z panic-abort-tests \
             -Z checksum-freshness \
@@ -267,11 +265,9 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
 
-      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
-          # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.12.13"
-          checksum: "a86c9dc7bad9b03f388583b7187c05fe9951c2e0d392217e8fd43d97787f6ec2"
+          version: "0.12.3"
 
       - name: "Install required Python versions"
         run: uv python install
@@ -280,7 +276,7 @@ jobs:
         working-directory: ${{ env.UV_WORKSPACE }}
         run: rustup toolchain install --profile minimal
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         id: rust-cache
         with:
           prefix-key: v1-rust-workspace
@@ -303,6 +299,11 @@ jobs:
           New-Item -Path "C:\uv-smb" -ItemType Directory -Force
           New-SmbShare -Name "uv-alt-fs" -Path "C:\uv-smb" -FullAccess "Everyone"
 
+      - name: "Install cargo nextest"
+        uses: taiki-e/install-action@1beb33eee6d086258184383af9a538940be190ed # v2.85.6
+        with:
+          tool: cargo-nextest
+
       - name: "Cargo test"
         working-directory: ${{ env.UV_WORKSPACE }}
         env:
@@ -321,7 +322,7 @@ jobs:
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         shell: bash
         run: |
-          uv run --only-dev cargo nextest run \
+          cargo nextest run \
             --cargo-profile fast-build-nightly \
             -Z panic-abort-tests \
             -Z checksum-freshness \

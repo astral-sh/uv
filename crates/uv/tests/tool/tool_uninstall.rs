@@ -7,26 +7,31 @@ use uv_test::uv_snapshot;
 
 #[test]
 fn tool_uninstall() {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     // Install `black`
     context
         .tool_install()
         .arg("black==24.2.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .assert()
         .success();
 
-    uv_snapshot!(context.filters(), context.tool_uninstall().arg("black"), @"
+    uv_snapshot!(context.filters(), context.tool_uninstall().arg("black")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Uninstalled 2 executables: black, blackd
     ");
 
     // After uninstalling the tool, it shouldn't be listed.
-    uv_snapshot!(context.filters(), context.tool_list(), @"
+    uv_snapshot!(context.filters(), context.tool_list()
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
     No tools installed
@@ -35,6 +40,8 @@ fn tool_uninstall() {
     // After uninstalling the tool, we should be able to reinstall it.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black==24.2.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -52,27 +59,39 @@ fn tool_uninstall() {
 
 #[test]
 fn tool_uninstall_multiple_names() {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
 
     // Install `black`
     context
         .tool_install()
         .arg("black==24.2.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .assert()
         .success();
 
-    context.tool_install().arg("ruff==0.3.4").assert().success();
+    context
+        .tool_install()
+        .arg("ruff==0.3.4")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .assert()
+        .success();
 
-    uv_snapshot!(context.filters(), context.tool_uninstall().arg("black").arg("ruff"), @"
+    uv_snapshot!(context.filters(), context.tool_uninstall().arg("black").arg("ruff")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Uninstalled 3 executables: black, blackd, ruff
     ");
 
     // After uninstalling the tool, it shouldn't be listed.
-    uv_snapshot!(context.filters(), context.tool_list(), @"
+    uv_snapshot!(context.filters(), context.tool_list()
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
     No tools installed
@@ -81,11 +100,13 @@ fn tool_uninstall_multiple_names() {
 
 #[test]
 fn tool_uninstall_not_installed() {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
 
-    uv_snapshot!(context.filters(), context.tool_uninstall().arg("black"), @"
+    uv_snapshot!(context.filters(), context.tool_uninstall().arg("black")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: `black` is not installed
@@ -94,21 +115,24 @@ fn tool_uninstall_not_installed() {
 
 #[test]
 fn tool_uninstall_missing_receipt() {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
 
     // Install `black`
     context
         .tool_install()
         .arg("black==24.2.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .assert()
         .success();
 
     fs_err::remove_file(tool_dir.join("black").join("uv-receipt.toml")).unwrap();
 
-    uv_snapshot!(context.filters(), context.tool_uninstall().arg("black"), @"
+    uv_snapshot!(context.filters(), context.tool_uninstall().arg("black")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Removed dangling environment for `black`
@@ -117,23 +141,32 @@ fn tool_uninstall_missing_receipt() {
 
 #[test]
 fn tool_uninstall_multiple_names_with_missing_receipt() {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
 
     // Install `black`
     context
         .tool_install()
         .arg("black==24.2.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .assert()
         .success();
 
-    context.tool_install().arg("ruff==0.3.4").assert().success();
+    context
+        .tool_install()
+        .arg("ruff==0.3.4")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .assert()
+        .success();
 
     fs_err::remove_file(tool_dir.join("black").join("uv-receipt.toml")).unwrap();
 
-    uv_snapshot!(context.filters(), context.tool_uninstall().arg("black").arg("ruff"), @"
+    uv_snapshot!(context.filters(), context.tool_uninstall().arg("black").arg("ruff")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Removed dangling environment for `black`
@@ -141,7 +174,9 @@ fn tool_uninstall_multiple_names_with_missing_receipt() {
     ");
 
     // After uninstalling both tools, neither should be listed.
-    uv_snapshot!(context.filters(), context.tool_list(), @"
+    uv_snapshot!(context.filters(), context.tool_list()
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
     No tools installed
@@ -150,21 +185,24 @@ fn tool_uninstall_multiple_names_with_missing_receipt() {
 
 #[test]
 fn tool_uninstall_all_missing_receipt() {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
 
     // Install `black`
     context
         .tool_install()
         .arg("black==24.2.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .assert()
         .success();
 
     fs_err::remove_file(tool_dir.join("black").join("uv-receipt.toml")).unwrap();
 
-    uv_snapshot!(context.filters(), context.tool_uninstall().arg("--all"), @"
+    uv_snapshot!(context.filters(), context.tool_uninstall().arg("--all")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Removed dangling environment for `black`

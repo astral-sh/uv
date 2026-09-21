@@ -31,25 +31,16 @@ impl Printer {
         }
     }
 
-    /// Return whether this printer suppresses progress output.
-    pub(crate) const fn suppresses_progress(self) -> bool {
-        match self {
-            Self::Silent => true,
-            Self::Quiet => true,
-            Self::Default => false,
-            // Confusingly, hide the progress bar when in verbose mode.
-            // Otherwise, it gets interleaved with debug messages.
-            Self::Verbose => true,
-            Self::NoProgress => true,
-        }
-    }
-
     /// Return the [`ProgressDrawTarget`] for this printer.
     pub(crate) fn target(self) -> ProgressDrawTarget {
-        if self.suppresses_progress() {
-            ProgressDrawTarget::hidden()
-        } else {
-            ProgressDrawTarget::stderr()
+        match self {
+            Self::Silent => ProgressDrawTarget::hidden(),
+            Self::Quiet => ProgressDrawTarget::hidden(),
+            Self::Default => ProgressDrawTarget::stderr(),
+            // Confusingly, hide the progress bar when in verbose mode.
+            // Otherwise, it gets interleaved with debug messages.
+            Self::Verbose => ProgressDrawTarget::hidden(),
+            Self::NoProgress => ProgressDrawTarget::hidden(),
         }
     }
 
@@ -77,6 +68,7 @@ impl Printer {
     }
 
     /// Return the [`Stderr`] for this printer.
+    #[allow(dead_code)] // Only used with the optional self-update feature.
     pub(crate) fn stderr_important(self) -> Stderr {
         match self {
             Self::Silent => Stderr::Disabled,

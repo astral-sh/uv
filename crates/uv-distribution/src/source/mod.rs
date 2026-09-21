@@ -26,16 +26,16 @@ use uv_cache::{Cache, CacheBucket, CacheEntry, CacheShard, Removal, WheelCache};
 use uv_cache_info::CacheInfo;
 use uv_client::{
     BaseClientBuilder, CacheControl, CachedClientError, Connectivity, DataWithCachePolicy,
-    RegistryClient, RetryState,
+    RegistryClient,
 };
 use uv_configuration::{BuildKind, BuildOutput, NoSources};
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::{
-    ArchiveHashPolicy, BuildInfo, BuildVariables, BuildableSource, ConfigSettings,
-    DirectorySourceUrl, ExtraBuildRequirement, GitDirectorySourceUrl, GitPathSourceUrl, Hashed,
-    IndexUrl, PathSourceUrl, RemoteSource, RequirementSource, RequiresPython, SourceDist,
-    SourceUrl,
+    BuildInfo, BuildVariables, BuildableSource, ConfigSettings, DirectorySourceUrl,
+    ExtraBuildRequirement, GitDirectorySourceUrl, GitPathSourceUrl, HashPolicy, Hashed, IndexUrl,
+    PathSourceUrl, RemoteSource, RequirementSource, RequiresPython, SourceDist, SourceUrl,
 };
+use uv_extract::hash::Hasher;
 use uv_fs::{Simplified, rename_with_retry, write_atomic};
 use uv_git::{Fetch, GIT_LFS, GitError, GitHttpSettings, GitResolver};
 use uv_git_types::{GitHubRepository, GitOid, GitUrl};
@@ -50,15 +50,14 @@ use uv_workspace::pyproject::ToolUvSources;
 
 use crate::distribution_database::ManagedClient;
 use crate::error::Error;
+use crate::hash::http_hash_algorithms;
 use crate::metadata::{ArchiveMetadata, GitWorkspaceMember, Metadata};
 use crate::source::built_wheel_metadata::{BuiltWheelFile, BuiltWheelMetadata};
 use crate::source::revision::Revision;
-use crate::source::validated_archive::{ArchiveValidation, ValidatedSourceArchive};
 use crate::{Reporter, RequiresDist};
 
 mod built_wheel_metadata;
 mod revision;
-mod validated_archive;
 
 /// Access distribution metadata without requiring a build interpreter.
 ///
@@ -262,7 +261,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source: &BuildableSource<'_>,
         tags: &Tags,
-        hashes: ArchiveHashPolicy<'_>,
+        hashes: HashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
         let built_wheel_metadata = match &source {
@@ -426,7 +425,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     pub(crate) async fn download_and_build_metadata(
         &self,
         source: &BuildableSource<'_>,
-        hashes: ArchiveHashPolicy<'_>,
+        hashes: HashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<ArchiveMetadata, Error> {
         let metadata = match &source {
@@ -632,7 +631,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         subdirectory: Option<&'data Path>,
         ext: SourceDistExtension,
         tags: &Tags,
-        hashes: ArchiveHashPolicy<'_>,
+        hashes: HashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
@@ -765,7 +764,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         cache_shard: &CacheShard,
         subdirectory: Option<&'data Path>,
         ext: SourceDistExtension,
-        hashes: ArchiveHashPolicy<'_>,
+        hashes: HashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<ArchiveMetadata, Error> {
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
@@ -949,7 +948,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         url: &DisplaySafeUrl,
         index: Option<&IndexUrl>,
         cache_shard: &CacheShard,
-        hashes: ArchiveHashPolicy<'_>,
+        hashes: HashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<Revision, Error> {
         let cache_entry = cache_shard.entry(HTTP_REVISION);
@@ -974,7 +973,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
-        let download = |response, _: &mut RetryState| {
+        let download = |response| {
             async {
                 // At this point, we're seeing a new or updated source distribution. Initialize a
                 // new revision, to collect the source and built artifacts.
@@ -983,8 +982,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 // Download the source distribution.
                 debug!("Downloading source distribution: {source}");
                 let entry = cache_shard.shard(revision.id()).entry(SOURCE);
+                let algorithms = http_hash_algorithms(hashes);
                 let (hashes, size) = self
-                    .download_archive(response, source, ext, entry.path(), hashes, &[])
+                    .download_archive(response, source, ext, entry.path(), &algorithms)
                     .await?;
 
                 Ok(revision
@@ -1058,7 +1058,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         resource: &PathSourceUrl<'_>,
         cache_shard: &CacheShard,
         tags: &Tags,
-        hashes: ArchiveHashPolicy<'_>,
+        hashes: HashPolicy<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
 
@@ -1166,7 +1166,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         resource: &PathSourceUrl<'_>,
         cache_shard: &CacheShard,
-        hashes: ArchiveHashPolicy<'_>,
+        hashes: HashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
 
@@ -1321,7 +1321,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         resource: &PathSourceUrl<'_>,
         cache_shard: &CacheShard,
-        hashes: ArchiveHashPolicy<'_>,
+        hashes: HashPolicy<'_>,
     ) -> Result<LocalRevisionPointer, Error> {
         // Verify that the archive exists.
         if !resource.path.is_file() {
@@ -1350,15 +1350,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Unzip the archive to a temporary directory.
         debug!("Unpacking source distribution: {source}");
         let entry = cache_shard.shard(revision.id()).entry(SOURCE);
+        let algorithms = hashes.algorithms();
         let hashes = self
-            .persist_archive(
-                source,
-                &resource.path,
-                resource.ext,
-                entry.path(),
-                hashes,
-                &[],
-            )
+            .persist_archive(&resource.path, resource.ext, entry.path(), &algorithms)
             .await?;
 
         // Include the hashes and cache info in the revision.
@@ -1381,7 +1375,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         resource: &DirectorySourceUrl<'_>,
         tags: &Tags,
-        hashes: ArchiveHashPolicy<'_>,
+        hashes: HashPolicy<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
         // Before running the build, check that the hashes match.
         if hashes.requires_validation() {
@@ -1487,7 +1481,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source: &BuildableSource<'_>,
         resource: &DirectorySourceUrl<'_>,
-        hashes: ArchiveHashPolicy<'_>,
+        hashes: HashPolicy<'_>,
         credentials_cache: &CredentialsCache,
     ) -> Result<ArchiveMetadata, Error> {
         // Before running the build, check that the hashes match.
@@ -1799,7 +1793,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         resource: &GitPathSourceUrl<'_>,
         fetch: &Fetch,
         cache_shard: &CacheShard,
-        hashes: ArchiveHashPolicy<'_>,
+        hashes: HashPolicy<'_>,
     ) -> Result<RevisionHashes, Error> {
         // Validate that LFS artifacts were fully initialized.
         if resource.git.lfs().enabled() && !fetch.lfs_ready() {
@@ -1835,15 +1829,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Otherwise, we need to unzip the archive, or at least compute the hashes.
         debug!("Unpacking source distribution: {source}");
         let entry = cache_shard.entry(SOURCE);
+        let algorithms = hashes.algorithms();
         let hashes = self
-            .persist_archive(
-                source,
-                &install_path,
-                resource.ext,
-                entry.path(),
-                hashes,
-                &[],
-            )
+            .persist_archive(&install_path, resource.ext, entry.path(), &algorithms)
             .await?;
 
         // Persist the revision.
@@ -1859,7 +1847,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         resource: &GitPathSourceUrl<'_>,
         tags: &Tags,
-        hashes: ArchiveHashPolicy<'_>,
+        hashes: HashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
         // Fetch the Git repository.
@@ -1969,7 +1957,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source: &BuildableSource<'_>,
         resource: &GitPathSourceUrl<'_>,
-        hashes: ArchiveHashPolicy<'_>,
+        hashes: HashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<ArchiveMetadata, Error> {
         // Fetch the Git repository.
@@ -2132,7 +2120,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         resource: &GitDirectorySourceUrl<'_>,
         tags: &Tags,
-        hashes: ArchiveHashPolicy<'_>,
+        hashes: HashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
         // Before running the build, check that the hashes match.
@@ -2240,7 +2228,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source: &BuildableSource<'_>,
         resource: &GitDirectorySourceUrl<'_>,
-        hashes: ArchiveHashPolicy<'_>,
+        hashes: HashPolicy<'_>,
         client: &ManagedClient<'_>,
         credentials_cache: &CredentialsCache,
     ) -> Result<ArchiveMetadata, Error> {
@@ -2716,20 +2704,29 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         resource: &PathSourceUrl<'_>,
         entry: &CacheEntry,
         revision: Revision,
-        hashes: ArchiveHashPolicy<'_>,
+        hashes: HashPolicy<'_>,
     ) -> Result<Revision, Error> {
         warn!("Re-extracting missing source distribution: {source}");
 
+        // Take the union of the requested and existing hash algorithms.
+        let algorithms = {
+            let mut algorithms = hashes.algorithms();
+            for digest in revision.hashes() {
+                algorithms.push(digest.algorithm());
+            }
+            algorithms.sort();
+            algorithms.dedup();
+            algorithms
+        };
+
         let hashes = self
-            .persist_archive(
-                source,
-                &resource.path,
-                resource.ext,
-                entry.path(),
-                hashes,
-                revision.hashes(),
-            )
+            .persist_archive(&resource.path, resource.ext, entry.path(), &algorithms)
             .await?;
+        for existing in revision.hashes() {
+            if !hashes.contains(existing) {
+                return Err(Error::CacheHeal(source.to_string(), existing.algorithm()));
+            }
+        }
         Ok(revision.with_hashes(HashDigests::from(hashes)))
     }
 
@@ -2742,7 +2739,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         index: Option<&IndexUrl>,
         entry: &CacheEntry,
         revision: Revision,
-        hashes: ArchiveHashPolicy<'_>,
+        hashes: HashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<Revision, Error> {
         warn!("Re-downloading missing source distribution: {source}");
@@ -2768,18 +2765,27 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
-        let download = |response, _: &mut RetryState| {
+        let download = |response| {
             async {
+                // Take the union of the requested and existing hash algorithms.
+                let algorithms = {
+                    let mut algorithms = http_hash_algorithms(hashes);
+                    for digest in revision.hashes() {
+                        algorithms.push(digest.algorithm());
+                    }
+                    algorithms.sort();
+                    algorithms.dedup();
+                    algorithms
+                };
+
                 let (hashes, size) = self
-                    .download_archive(
-                        response,
-                        source,
-                        ext,
-                        entry.path(),
-                        hashes,
-                        revision.hashes(),
-                    )
+                    .download_archive(response, source, ext, entry.path(), &algorithms)
                     .await?;
+                for existing in revision.hashes() {
+                    if !hashes.contains(existing) {
+                        return Err(Error::CacheHeal(source.to_string(), existing.algorithm()));
+                    }
+                }
                 Ok(revision
                     .clone()
                     .with_hashes(HashDigests::from(hashes))
@@ -2807,20 +2813,42 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .await
     }
 
-    /// Download, extract, validate, and persist a source distribution into the cache.
+    /// Download and unzip a source distribution into the cache from an HTTP response.
     async fn download_archive(
         &self,
         response: Response,
         source: &BuildableSource<'_>,
         ext: SourceDistExtension,
         target: &Path,
-        hash_policy: ArchiveHashPolicy<'_>,
-        existing_hashes: &[HashDigest],
+        algorithms: &[HashAlgorithm],
     ) -> Result<(Vec<HashDigest>, u64), Error> {
+        let temp_dir = tempfile::tempdir_in(
+            self.build_context
+                .cache()
+                .bucket(CacheBucket::SourceDistributions),
+        )
+        .map_err(Error::CacheWrite)?;
+
         let reader = response
             .bytes_stream()
             .map_err(std::io::Error::other)
             .into_async_read();
+
+        // Create a hasher for each hash algorithm.
+        let mut hashers = algorithms
+            .iter()
+            .copied()
+            .map(Hasher::from)
+            .collect::<Vec<_>>();
+        let mut hasher = uv_extract::hash::HashReader::new(reader.compat(), &mut hashers);
+
+        // Download and unzip the source distribution into a temporary directory.
+        let span = info_span!("download_source_dist", source_dist = %source);
+        uv_extract::stream::archive(&mut hasher, ext, temp_dir.path())
+            .await
+            .map_err(|err| Error::Extract(source.to_string(), err))?;
+        drop(span);
+
         let expected_size = match source {
             BuildableSource::Dist(SourceDist::Registry(dist)) if dist.size_is_authoritative => {
                 dist.size()
@@ -2829,52 +2857,117 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             _ => None,
         };
 
-        let archive = ValidatedSourceArchive::extract(
-            reader.compat(),
-            source,
-            ext,
-            self.build_context.cache(),
-            ArchiveValidation {
-                extra_algorithms: &[HashAlgorithm::Sha256],
-                hash_policy,
-                existing_hashes,
-                expected_size,
-            },
-        )
-        .instrument(info_span!("download_source_dist", source_dist = %source))
-        .await?;
-        let metadata = archive.persist(target).await?;
-        Ok((metadata.hashes, metadata.size))
+        // If necessary, exhaust the reader to compute the hash or validate the archive size.
+        if !algorithms.is_empty() || expected_size.is_some() {
+            hasher.finish().await.map_err(Error::HashExhaustion)?;
+        }
+        if let Some(expected) = expected_size
+            && hasher.bytes_read() != expected
+        {
+            return Err(Error::MismatchedSize {
+                distribution: source.to_string(),
+                expected,
+                actual: hasher.bytes_read(),
+            });
+        }
+
+        let size = hasher.bytes_read();
+        let hashes = hashers.into_iter().map(HashDigest::from).collect();
+
+        // Extract the top-level directory.
+        let extracted = match uv_extract::strip_component(temp_dir.path()) {
+            Ok(top_level) => top_level,
+            Err(uv_extract::Error::NonSingularArchive(_)) => temp_dir.keep(),
+            Err(err) => {
+                return Err(Error::Extract(
+                    temp_dir.path().to_string_lossy().into_owned(),
+                    err,
+                ));
+            }
+        };
+
+        // Persist it to the cache.
+        fs_err::tokio::create_dir_all(target.parent().expect("Cache entry to have parent"))
+            .await
+            .map_err(Error::CacheWrite)?;
+        if let Err(err) = rename_with_retry(extracted, target).await {
+            // If the directory already exists, accept it.
+            if err.kind() == std::io::ErrorKind::AlreadyExists {
+                warn!("Directory already exists: {}", target.display());
+            } else {
+                return Err(Error::CacheWrite(err));
+            }
+        }
+
+        Ok((hashes, size))
     }
 
-    /// Extract, validate, and persist a local source archive into the cache.
+    /// Extract a local archive, and store it at the given [`CacheEntry`].
     async fn persist_archive(
         &self,
-        source: &BuildableSource<'_>,
         path: &Path,
         ext: SourceDistExtension,
         target: &Path,
-        hash_policy: ArchiveHashPolicy<'_>,
-        existing_hashes: &[HashDigest],
+        algorithms: &[HashAlgorithm],
     ) -> Result<Vec<HashDigest>, Error> {
         debug!("Unpacking for build: {}", path.display());
-        let reader = fs_err::tokio::File::open(path)
+
+        let temp_dir = tempfile::tempdir_in(
+            self.build_context
+                .cache()
+                .bucket(CacheBucket::SourceDistributions),
+        )
+        .map_err(Error::CacheWrite)?;
+        let reader = fs_err::tokio::File::open(&path)
             .await
             .map_err(Error::CacheRead)?;
-        let archive = ValidatedSourceArchive::extract(
-            reader,
-            source,
-            ext,
-            self.build_context.cache(),
-            ArchiveValidation {
-                extra_algorithms: &[],
-                hash_policy,
-                existing_hashes,
-                expected_size: None,
-            },
-        )
-        .await?;
-        Ok(archive.persist(target).await?.hashes)
+
+        // Create a hasher for each hash algorithm.
+        let mut hashers = algorithms
+            .iter()
+            .copied()
+            .map(Hasher::from)
+            .collect::<Vec<_>>();
+        let mut hasher = uv_extract::hash::HashReader::new(reader, &mut hashers);
+
+        // Unzip the archive into a temporary directory.
+        uv_extract::stream::archive(&mut hasher, ext, &temp_dir.path())
+            .await
+            .map_err(|err| Error::Extract(temp_dir.path().to_string_lossy().into_owned(), err))?;
+
+        // If necessary, exhaust the reader to compute the hash.
+        if !algorithms.is_empty() {
+            hasher.finish().await.map_err(Error::HashExhaustion)?;
+        }
+
+        let hashes = hashers.into_iter().map(HashDigest::from).collect();
+
+        // Extract the top-level directory from the archive.
+        let extracted = match uv_extract::strip_component(temp_dir.path()) {
+            Ok(top_level) => top_level,
+            Err(uv_extract::Error::NonSingularArchive(_)) => temp_dir.path().to_path_buf(),
+            Err(err) => {
+                return Err(Error::Extract(
+                    temp_dir.path().to_string_lossy().into_owned(),
+                    err,
+                ));
+            }
+        };
+
+        // Persist it to the cache.
+        fs_err::tokio::create_dir_all(target.parent().expect("Cache entry to have parent"))
+            .await
+            .map_err(Error::CacheWrite)?;
+        if let Err(err) = rename_with_retry(extracted, target).await {
+            // If the directory already exists, accept it.
+            if err.kind() == std::io::ErrorKind::DirectoryNotEmpty {
+                warn!("Directory already exists: {}", target.display());
+            } else {
+                return Err(Error::CacheWrite(err));
+            }
+        }
+
+        Ok(hashes)
     }
 
     /// For Git directories, we check them out into the cache, so we need to avoid workspace
@@ -2914,8 +3007,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .build_options()
             .no_build_requirement(source.name())
         {
-            if source.is_editable() || source.is_first_party() {
-                debug!("Allowing build for first-party or editable source distribution: {source}");
+            if source.is_editable() {
+                debug!("Allowing build for editable source distribution: {source}");
             } else {
                 return Err(Error::NoBuild);
             }

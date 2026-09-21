@@ -355,11 +355,11 @@ fn format_fails_malformed_pyproject() -> Result<()> {
 
     warning: `uv format` is experimental and may change without warning. Pass `--preview-features format-command` to disable this warning.
     error: Failed to parse: `pyproject.toml`
-      cause: TOML parse error at line 1, column 11
-               |
-             1 | malformed pyproject.toml
-               |           ^
-             key with no value, expected `=`
+      Caused by: TOML parse error at line 1, column 11
+          |
+        1 | malformed pyproject.toml
+          |           ^
+        key with no value, expected `=`
     ");
 
     // Check that the file is not formatted
@@ -662,10 +662,7 @@ fn format_exclude_newer() -> Result<()> {
 
 #[test]
 fn format_no_matching_version() -> Result<()> {
-    let context = uv_test::test_context_with_versions!(&[]).with_filter((
-        r"\b[a-z0-9_]+-(?:apple|pc|unknown)-[a-z0-9_]+(?:-[a-z0-9_]+)?\b",
-        "[PLATFORM]",
-    ));
+    let context = uv_test::test_context_with_versions!(&[]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -682,12 +679,16 @@ fn format_no_matching_version() -> Result<()> {
     "})?;
 
     // Run format with impossible version constraints - should fail
+    let context = context.with_filter((
+        r"\b[a-z0-9_]+-(?:apple|pc|unknown)-[a-z0-9_]+(?:-[a-z0-9_]+)?\b",
+        "[PLATFORM]",
+    ));
     uv_snapshot!(context.filters(), context.format().arg("--version").arg(">=999.0.0"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     warning: `uv format` is experimental and may change without warning. Pass `--preview-features format-command` to disable this warning.
     error: Failed to find ruff version matching: >=999.0.0
-      cause: No version of ruff found matching `>=999.0.0` for platform `[PLATFORM]`
+      Caused by: No version of ruff found matching `>=999.0.0` for platform `[PLATFORM]`
     ");
 
     Ok(())

@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 #[cfg(any(feature = "test-git", feature = "test-git-lfs"))]
 use std::collections::BTreeSet;
 #[cfg(feature = "test-git")]
@@ -11,20 +10,16 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::ChildPath;
 use assert_fs::{
     assert::PathAssert,
-    fixture::{FileTouch, FileWriteBin, FileWriteStr, PathChild, PathCreateDir},
+    fixture::{FileTouch, FileWriteStr, PathChild, PathCreateDir},
 };
 use indoc::indoc;
-use insta::{allow_duplicates, assert_snapshot};
+use insta::assert_snapshot;
 use predicates::prelude::predicate;
-use sha2::{Digest, Sha256};
 #[cfg(windows)]
 use uv_fs::Simplified;
 use uv_fs::copy_dir_all;
 use uv_static::EnvVars;
 
-use uv_test::packse::{
-    PackseServer, generate_wheel, generate_wheel_with_files, scenario::Scenario,
-};
 use uv_test::uv_snapshot;
 
 #[cfg(feature = "test-git")]
@@ -57,14 +52,15 @@ fn tool_install_git_path(bin_dir: &ChildPath) -> OsString {
 fn tool_install() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     // Install `black`
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -137,6 +133,8 @@ fn tool_install() {
     // Install another tool
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("flask")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -204,9 +202,7 @@ fn tool_install() {
 
 #[test]
 fn tool_install_relative_exclude_newer_receipt_preserves_span() {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -217,6 +213,8 @@ fn tool_install_relative_exclude_newer_receipt_preserves_span() {
         .arg("3 weeks")
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, "2024-05-01T00:00:00Z")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .assert()
         .success();
@@ -242,9 +240,7 @@ fn tool_install_relative_exclude_newer_receipt_preserves_span() {
 /// Package-specific pre-release policies are persisted and reused when upgrading a tool.
 #[test]
 fn tool_install_prerelease_package_receipt_preserves_policy() {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -255,6 +251,8 @@ fn tool_install_prerelease_package_receipt_preserves_policy() {
         .arg("black=allow")
         .arg("--prerelease-package")
         .arg("click=disallow")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .assert()
         .success();
@@ -279,6 +277,8 @@ fn tool_install_prerelease_package_receipt_preserves_policy() {
     context
         .tool_upgrade()
         .arg("black")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .assert()
         .success();
@@ -305,8 +305,8 @@ fn tool_install_prerelease_package_receipt_preserves_policy() {
 fn tool_install_from_directory_ignores_global_pin_outside_requires_python_range() {
     let context = uv_test::test_context_with_versions!(&["3.13", "3.12", "3.11"])
         .with_filtered_counts()
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     let foo_dir = context.temp_dir.child("foo");
@@ -356,6 +356,8 @@ fn tool_install_from_directory_ignores_global_pin_outside_requires_python_range(
 
     uv_snapshot!(context.filters(), context.tool_install()
         .arg(foo_dir.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -378,8 +380,8 @@ fn tool_install_from_directory_ignores_global_pin_outside_requires_python_range(
 fn tool_install_from_directory_uses_global_pin_within_requires_python_range() {
     let context = uv_test::test_context_with_versions!(&["3.13", "3.12", "3.11"])
         .with_filtered_counts()
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     let foo_dir = context.temp_dir.child("foo");
@@ -429,6 +431,8 @@ fn tool_install_from_directory_uses_global_pin_within_requires_python_range() {
 
     uv_snapshot!(context.filters(), context.tool_install()
         .arg(foo_dir.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -451,8 +455,8 @@ fn tool_install_from_directory_uses_global_pin_within_requires_python_range() {
 fn tool_install_python_from_global_version_file() {
     let context = uv_test::test_context_with_versions!(&["3.11", "3.12", "3.13"])
         .with_filtered_counts()
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     // Pin to 3.12
@@ -466,6 +470,8 @@ fn tool_install_python_from_global_version_file() {
     // Install a tool
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("flask")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -502,6 +508,8 @@ fn tool_install_python_from_global_version_file() {
     // Installing flask again should be a no-op, even though the global pin changed
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("flask")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -520,6 +528,8 @@ fn tool_install_python_from_global_version_file() {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("flask")
         .arg("--upgrade")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -541,6 +551,8 @@ fn tool_install_python_from_global_version_file() {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("flask")
         .arg("--reinstall")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -573,6 +585,8 @@ fn tool_install_python_from_global_version_file() {
         .arg("flask")
         .arg("--python")
         .arg("3.11")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -602,6 +616,8 @@ fn tool_install_python_from_global_version_file() {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("flask")
         .arg("--reinstall")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -633,8 +649,8 @@ fn tool_install_python_from_global_version_file() {
 fn tool_install_force_respects_global_python_change() {
     let context = uv_test::test_context_with_versions!(&["3.11", "3.12", "3.13"])
         .with_filtered_counts()
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     context
@@ -646,6 +662,8 @@ fn tool_install_force_respects_global_python_change() {
 
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("flask")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -680,6 +698,8 @@ fn tool_install_force_respects_global_python_change() {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("flask")
         .arg("--force")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -710,8 +730,8 @@ fn tool_install_with_editable() -> Result<()> {
     let context = uv_test::test_context!("3.12")
         .with_exclude_newer("2025-01-18T00:00:00Z")
         .with_filtered_counts()
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
     let anyio_local = context.temp_dir.child("src").child("anyio_local");
     copy_dir_all(
@@ -725,6 +745,8 @@ fn tool_install_with_editable() -> Result<()> {
         .arg("--with")
         .arg("iniconfig")
         .arg("executable-application")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -863,9 +885,8 @@ fn tool_install_workspace_members_do_not_override_explicit_with_requirements() -
 
 #[test]
 fn tool_install_preserves_mixed_workspace_member_editability() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     let tool_root = context.temp_dir.child("tool-root");
@@ -943,6 +964,8 @@ fn tool_install_preserves_mixed_workspace_member_editability() -> Result<()> {
         .arg("--with-editable")
         .arg(other_workspace.path())
         .arg(tool_root.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .status()
         .expect("failed to run uv tool install with mixed workspace editability");
@@ -969,9 +992,8 @@ fn tool_install_preserves_mixed_workspace_member_editability() -> Result<()> {
 
 #[test]
 fn tool_install_preserves_mixed_workspace_member_non_editability() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     let tool_root = context.temp_dir.child("tool-root");
@@ -1050,6 +1072,8 @@ fn tool_install_preserves_mixed_workspace_member_non_editability() -> Result<()>
         .arg("--with")
         .arg(other_workspace.path())
         .arg(tool_root.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .status()
         .expect("failed to run uv tool install with mixed workspace editability");
@@ -1076,9 +1100,8 @@ fn tool_install_preserves_mixed_workspace_member_non_editability() -> Result<()>
 
 #[test]
 fn tool_install_reinstall_converts_workspace_members_to_non_editable() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     let root_pyproject = context.temp_dir.child("pyproject.toml");
@@ -1137,6 +1160,8 @@ fn tool_install_reinstall_converts_workspace_members_to_non_editable() -> Result
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("--editable")
         .arg(context.temp_dir.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1158,6 +1183,8 @@ fn tool_install_reinstall_converts_workspace_members_to_non_editable() -> Result
         .tool_install()
         .arg("--reinstall")
         .arg(context.temp_dir.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .status()
         .expect("failed to run uv tool install --reinstall");
@@ -1178,9 +1205,8 @@ fn tool_install_reinstall_converts_workspace_members_to_non_editable() -> Result
 
 #[test]
 fn tool_install_workspace_members_are_non_editable_by_default() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     let root_pyproject = context.temp_dir.child("pyproject.toml");
@@ -1238,6 +1264,8 @@ fn tool_install_workspace_members_are_non_editable_by_default() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.tool_install()
         .arg(context.temp_dir.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1270,9 +1298,8 @@ fn tool_install_workspace_members_are_non_editable_by_default() -> Result<()> {
 
 #[test]
 fn tool_install_workspace_members_honor_editable_flag() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     let root_pyproject = context.temp_dir.child("pyproject.toml");
@@ -1331,6 +1358,8 @@ fn tool_install_workspace_members_honor_editable_flag() -> Result<()> {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("--editable")
         .arg(context.temp_dir.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1363,9 +1392,8 @@ fn tool_install_workspace_members_honor_editable_flag() -> Result<()> {
 
 #[test]
 fn tool_install_workspace_members_honor_source_editable_flag() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     let root_pyproject = context.temp_dir.child("pyproject.toml");
@@ -1425,6 +1453,8 @@ fn tool_install_workspace_members_honor_source_editable_flag() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.tool_install()
         .arg(context.temp_dir.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1476,8 +1506,7 @@ fn tool_install_with_compatible_build_constraints() -> Result<()> {
     let context = uv_test::test_context!("3.9")
         .with_exclude_newer("2024-05-04T00:00:00Z")
         .with_filtered_counts()
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -1490,6 +1519,8 @@ fn tool_install_with_compatible_build_constraints() -> Result<()> {
         .arg("requests==1.2")
         .arg("--build-constraints")
         .arg("build_constraints.txt")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1542,8 +1573,7 @@ fn tool_install_with_incompatible_build_constraints() -> Result<()> {
     let context = uv_test::test_context!("3.9")
         .with_exclude_newer("2024-05-04T00:00:00Z")
         .with_filtered_counts()
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -1556,13 +1586,15 @@ fn tool_install_with_incompatible_build_constraints() -> Result<()> {
         .arg("requests==1.2")
         .arg("--build-constraints")
         .arg("build_constraints.txt")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: Failed to download and build `requests==1.2.0`
-      cause: Failed to resolve requirements from `setup.py` build
-      cause: No solution found when resolving: `setuptools>=40.8.0`
-      cause: Because you require setuptools>=40.8.0 and setuptools==2, we can conclude that your requirements are unsatisfiable.
+      × Failed to download and build `requests==1.2.0`
+      ├─▶ Failed to resolve requirements from `setup.py` build
+      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
+      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==2, we can conclude that your requirements are unsatisfiable.
     ");
 
     tool_dir
@@ -1578,12 +1610,15 @@ fn tool_install_suggest_other_packages_with_executable() {
     // FastAPI 0.111 is only available from this date onwards.
     let context = uv_test::test_context!("3.12")
         .with_exclude_newer("2024-05-04T00:00:00Z")
-        .with_filtered_exe_suffix()
-        .with_filter(("\\+ uvloop(.+)\n ", ""))
-        .with_tool_dirs();
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let context = context.with_filter(("\\+ uvloop(.+)\n ", ""));
 
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("fastapi==0.111.0"), @"
+        .arg("fastapi==0.111.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     exit_code: 2 (failure)
     ----- stdout -----
     No executables are provided by package `fastapi`; removing tool
@@ -1636,15 +1671,15 @@ fn tool_install_suggest_other_packages_with_executable() {
 /// Test installing a tool at a version
 #[test]
 fn tool_install_version() {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     // Install `black`
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black==24.2.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1718,9 +1753,7 @@ fn tool_install_version() {
 /// Test an editable installation of a tool.
 #[test]
 fn tool_install_editable() {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -1728,6 +1761,8 @@ fn tool_install_editable() {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("-e")
         .arg(context.workspace_root.join("test/packages/black_editable"))
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1793,6 +1828,8 @@ fn tool_install_editable() {
     // Request `black`. It should reinstall from the registry.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1822,6 +1859,8 @@ fn tool_install_editable() {
         .arg("black")
         .arg("--from")
         .arg("black==24.2.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1861,9 +1900,8 @@ fn tool_install_editable() {
 /// switching between editable and non-editable installs.
 #[test]
 fn tool_install_editable_rebuilds_explicit_local_directory() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
     let project = context.temp_dir.child("dynamic_tool");
 
@@ -1930,6 +1968,8 @@ fn tool_install_editable_rebuilds_explicit_local_directory() -> Result<()> {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("-e")
         .arg(project.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1955,6 +1995,8 @@ fn tool_install_editable_rebuilds_explicit_local_directory() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.tool_install()
         .arg(project.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1970,6 +2012,8 @@ fn tool_install_editable_rebuilds_explicit_local_directory() -> Result<()> {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("-e")
         .arg(project.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1988,9 +2032,9 @@ fn tool_install_editable_rebuilds_explicit_local_directory() -> Result<()> {
 /// tool's source is unchanged.
 #[test]
 fn tool_install_explicit_local_directory_respects_global_python_change() -> Result<()> {
-    let context = uv_test::test_context_with_versions!(&["3.12", "3.13"])
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+    let context =
+        uv_test::test_context_with_versions!(&["3.12", "3.13"]).with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
     let project = context.temp_dir.child("project");
 
@@ -2030,6 +2074,8 @@ fn tool_install_explicit_local_directory_respects_global_python_change() -> Resu
     context
         .tool_install()
         .arg(project.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .assert()
         .success();
@@ -2051,6 +2097,8 @@ fn tool_install_explicit_local_directory_respects_global_python_change() -> Resu
     context
         .tool_install()
         .arg(project.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .assert()
         .success();
@@ -2069,9 +2117,8 @@ fn tool_install_explicit_local_directory_respects_global_python_change() -> Resu
 /// requirement discovered through `--with-requirements` should retain its normal cache behavior.
 #[test]
 fn tool_install_rebuilds_explicit_local_with_requirement() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
     let project = context.temp_dir.child("project");
     let helper = context.temp_dir.child("helper");
@@ -2132,6 +2179,8 @@ fn tool_install_rebuilds_explicit_local_with_requirement() -> Result<()> {
         .arg("--with")
         .arg(helper.path())
         .arg(project.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .assert()
         .success();
@@ -2150,6 +2199,8 @@ fn tool_install_rebuilds_explicit_local_with_requirement() -> Result<()> {
         .arg("--with")
         .arg(helper.path())
         .arg(project.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .assert()
         .success();
@@ -2170,6 +2221,8 @@ fn tool_install_rebuilds_explicit_local_with_requirement() -> Result<()> {
         .arg("--with-requirements")
         .arg(requirements_txt.path())
         .arg(project.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .assert()
         .success();
@@ -2187,15 +2240,15 @@ fn tool_install_rebuilds_explicit_local_with_requirement() -> Result<()> {
 /// Ensure that we remove any existing entrypoints upon error.
 #[test]
 fn tool_install_remove_on_empty() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     // Request `black`. It should reinstall from the registry.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -2257,6 +2310,8 @@ fn tool_install_remove_on_empty() -> Result<()> {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("-e")
         .arg(black.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 2 (failure)
     ----- stdout -----
@@ -2280,6 +2335,8 @@ fn tool_install_remove_on_empty() -> Result<()> {
     // Re-request `black`. It should reinstall, without requiring `--force`.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -2317,9 +2374,7 @@ fn tool_install_remove_on_empty() -> Result<()> {
 /// Test an editable installation of a tool using `--from`.
 #[test]
 fn tool_install_editable_from() {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -2329,6 +2384,8 @@ fn tool_install_editable_from() {
         .arg("-e")
         .arg("--from")
         .arg(context.workspace_root.join("test/packages/black_editable"))
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -2395,9 +2452,8 @@ fn tool_install_editable_from() {
 /// Test installing a tool with `uv tool install --from`
 #[test]
 fn tool_install_from() {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     // Install `black` using `--from` to specify the version
@@ -2405,6 +2461,8 @@ fn tool_install_from() {
         .arg("black")
         .arg("--from")
         .arg("black==24.2.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -2425,6 +2483,8 @@ fn tool_install_from() {
         .arg("black")
         .arg("--from")
         .arg("flask==24.2.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 2 (failure)
     ----- stderr -----
@@ -2436,6 +2496,8 @@ fn tool_install_from() {
         .arg("black==24.2.0")
         .arg("--from")
         .arg("black==24.3.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 2 (failure)
     ----- stderr -----
@@ -2448,14 +2510,15 @@ fn tool_install_from() {
 fn tool_install_already_installed() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     // Install `black`
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -2520,6 +2583,8 @@ fn tool_install_already_installed() {
     // Install `black` again
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -2553,6 +2618,8 @@ fn tool_install_already_installed() {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
         .arg("--reinstall")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -2575,6 +2642,8 @@ fn tool_install_already_installed() {
         .arg("black")
         .arg("--reinstall-package")
         .arg("black")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -2592,6 +2661,8 @@ fn tool_install_already_installed() {
         .arg("black")
         .arg("--reinstall-package")
         .arg("click")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -2609,8 +2680,7 @@ fn tool_install_already_installed() {
 fn tool_install_force() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -2620,6 +2690,8 @@ fn tool_install_force() {
     // Attempt to install `black`
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 2 (failure)
     ----- stderr -----
@@ -2654,6 +2726,8 @@ fn tool_install_force() {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
         .arg("--reinstall")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 2 (failure)
     ----- stderr -----
@@ -2690,6 +2764,8 @@ fn tool_install_force() {
         .unwrap();
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 2 (failure)
     ----- stderr -----
@@ -2708,6 +2784,8 @@ fn tool_install_force() {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
         .arg("--force")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -2732,6 +2810,8 @@ fn tool_install_force() {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
         .arg("--force")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -2752,6 +2832,8 @@ fn tool_install_force() {
     // Re-install `black` without `--force`
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -2764,6 +2846,8 @@ fn tool_install_force() {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
         .arg("--reinstall")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -2806,7 +2890,7 @@ fn tool_install_force() {
     }, {
         // Should run black in the virtual environment
         assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r#"
-        #![TEMP_DIR]/tools/black/bin/python
+        #![TEMP_DIR]/tools/black/bin/python3
         # -*- coding: utf-8 -*-
         import sys
         from black import patched_main
@@ -2924,14 +3008,15 @@ fn tool_install_xdg_data_home() {
 /// Test `uv tool install` when the bin directory is set by `$XDG_BIN_HOME`
 #[test]
 fn tool_install_xdg_bin_home() {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     // Install `black`
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -2955,14 +3040,14 @@ fn tool_install_xdg_bin_home() {
 /// Test `uv tool install` when the bin directory is set by `$UV_TOOL_BIN_DIR`
 #[test]
 fn tool_install_tool_bin_dir() {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     // Install `black`
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::UV_TOOL_BIN_DIR, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
@@ -2987,14 +3072,14 @@ fn tool_install_tool_bin_dir() {
 /// Test installing a tool that lacks entrypoints
 #[test]
 fn tool_install_no_entrypoints() {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("iniconfig")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 2 (failure)
     ----- stdout -----
@@ -3020,9 +3105,7 @@ fn tool_install_no_entrypoints() {
 /// Test that a failed tool installation removes entrypoints installed from additional packages.
 #[test]
 fn tool_install_failure_removes_additional_entrypoints() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -3036,6 +3119,8 @@ fn tool_install_failure_removes_additional_entrypoints() -> Result<()> {
         .arg("--with-executables-from")
         .arg("black")
         .arg("iniconfig")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 2 (failure)
     ----- stdout -----
@@ -3071,15 +3156,15 @@ fn tool_install_failure_removes_additional_entrypoints() -> Result<()> {
 
 #[test]
 fn tool_install_no_binary_package_env_var() {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("pytest")
         .env(EnvVars::UV_NO_BINARY_PACKAGE, "iniconfig")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -3106,9 +3191,7 @@ fn tool_install_no_binary_package_env_var() {
 /// Test installing a package that can't be installed.
 #[test]
 fn tool_install_uninstallable() {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -3127,28 +3210,32 @@ fn tool_install_uninstallable() {
         .collect::<Vec<_>>();
     uv_snapshot!(filters, context.tool_install()
         .arg("pyenv")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to build `pyenv==0.0.1`
-      cause: The build backend returned an error
-      cause: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
+      × Failed to build `pyenv==0.0.1`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
-             [stdout]
-             running bdist_wheel
-             running build
-             installing to build/bdist.linux-x86_64/wheel
-             running install
+          [stdout]
+          running bdist_wheel
+          running build
+          installing to build/bdist.linux-x86_64/wheel
+          running install
 
-             [stderr]
-             # NOTE #
-             We are sorry, but this package is not installable with pip.
+          [stderr]
+          # NOTE #
+          We are sorry, but this package is not installable with pip.
 
-             Please read the installation instructions at:
+          Please read the installation instructions at:
 
-             https://github.com/pyenv/pyenv#installation
-             #
+          https://github.com/pyenv/pyenv#installation
+          #
+
+
 
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
@@ -3161,15 +3248,15 @@ fn tool_install_uninstallable() {
 /// Test installing a tool with a bare URL requirement.
 #[test]
 fn tool_install_unnamed_package() {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     // Install `black`
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -3244,9 +3331,7 @@ fn tool_install_unnamed_package() {
 #[test]
 #[cfg(feature = "test-git")]
 fn tool_install_git() {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
     let path = tool_install_git_path(&bin_dir);
@@ -3254,6 +3339,8 @@ fn tool_install_git() {
     // Unnamed Git Install
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("git+https://github.com/psf/black@24.2.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, path.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -3284,6 +3371,8 @@ fn tool_install_git() {
     // Named Git Install
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black @ git+https://github.com/psf/black@24.2.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, path.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -3315,8 +3404,8 @@ fn tool_install_git() {
 fn tool_install_git_infers_static_requires_python() {
     let context = uv_test::test_context_with_versions!(&["3.12", "3.11"])
         .with_filtered_counts()
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
     let path = tool_install_git_path(&bin_dir);
 
@@ -3329,6 +3418,8 @@ fn tool_install_git_infers_static_requires_python() {
 
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=static")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, path.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -3353,8 +3444,8 @@ fn tool_install_git_infers_static_requires_python() {
 fn tool_install_git_does_not_infer_dynamic_requires_python() {
     let context = uv_test::test_context_with_versions!(&["3.12", "3.11"])
         .with_filtered_counts()
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
     let path = tool_install_git_path(&bin_dir);
 
@@ -3367,12 +3458,14 @@ fn tool_install_git_does_not_infer_dynamic_requires_python() {
 
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=dynamic")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, path.as_os_str()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies
-      cause: Because the current Python version (3.11.[X]) does not satisfy Python>=3.12,<3.13 and dynamic-requires-python-tool==0.1.0 depends on Python>=3.12,<3.13, we can conclude that dynamic-requires-python-tool==0.1.0 cannot be used.
-             And because only dynamic-requires-python-tool==0.1.0 is available and you require dynamic-requires-python-tool, we can conclude that your requirements are unsatisfiable.
+      × No solution found when resolving dependencies:
+      ╰─▶ Because the current Python version (3.11.[X]) does not satisfy Python>=3.12,<3.13 and dynamic-requires-python-tool==0.1.0 depends on Python>=3.12,<3.13, we can conclude that dynamic-requires-python-tool==0.1.0 cannot be used.
+          And because only dynamic-requires-python-tool==0.1.0 is available and you require dynamic-requires-python-tool, we can conclude that your requirements are unsatisfiable.
     ");
 }
 
@@ -3382,8 +3475,7 @@ fn tool_install_git_does_not_infer_dynamic_requires_python() {
 fn tool_install_git_lfs() {
     let context = uv_test::test_context!("3.13")
         .with_filtered_exe_suffix()
-        .with_git_lfs_config()
-        .with_tool_dirs();
+        .with_git_lfs_config();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
     let mut paths = BTreeSet::new();
@@ -3421,6 +3513,8 @@ fn tool_install_git_lfs() {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("--lfs")
         .arg("test-lfs-repo @ git+https://github.com/astral-sh/test-lfs-repo@e282f5be233e3f1d44934164895a043fc534b8aa")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, path.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -3490,6 +3584,8 @@ fn tool_install_git_lfs() {
         .arg("--lfs")
         .arg("test-lfs-repo @ git+https://github.com/astral-sh/test-lfs-repo@e282f5be233e3f1d44934164895a043fc534b8aa")
         .env(EnvVars::UV_INTERNAL__TEST_LFS_DISABLED, "1")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, path.as_os_str()), @"
     exit_code: [ERROR_CODE] (failure)
     ----- stderr -----
@@ -3499,6 +3595,8 @@ fn tool_install_git_lfs() {
     // Attempt to install when LFS artifacts are missing but LFS was not requested.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("test-lfs-repo @ git+https://github.com/astral-sh/test-lfs-repo@e282f5be233e3f1d44934164895a043fc534b8aa")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, path.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -3550,9 +3648,8 @@ fn tool_install_git_lfs() {
 /// name conflict.
 #[test]
 fn tool_install_unnamed_conflict() {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     // Install `black`
@@ -3560,6 +3657,8 @@ fn tool_install_unnamed_conflict() {
         .arg("black")
         .arg("--from")
         .arg("https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 2 (failure)
     ----- stderr -----
@@ -3570,9 +3669,7 @@ fn tool_install_unnamed_conflict() {
 /// Test installing a tool with a bare URL requirement using `--from`.
 #[test]
 fn tool_install_unnamed_from() {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -3581,6 +3678,8 @@ fn tool_install_unnamed_from() {
         .arg("black")
         .arg("--from")
         .arg("https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -3654,9 +3753,7 @@ fn tool_install_unnamed_from() {
 /// Test installing a tool with a bare URL requirement using `--with`.
 #[test]
 fn tool_install_unnamed_with() {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -3665,6 +3762,8 @@ fn tool_install_unnamed_with() {
         .arg("black")
         .arg("--with")
         .arg("https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -3743,8 +3842,7 @@ fn tool_install_unnamed_with() {
 fn tool_install_with_dependencies_from_script() -> Result<()> {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -3765,6 +3863,8 @@ fn tool_install_with_dependencies_from_script() -> Result<()> {
         .arg("--with-requirements")
         .arg("script.py")
         .arg("black")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -3821,6 +3921,8 @@ fn tool_install_with_dependencies_from_script() -> Result<()> {
         .arg("black")
         .arg("--with-requirements")
         .arg("script.py")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -3860,8 +3962,7 @@ fn tool_install_with_dependencies_from_script() -> Result<()> {
 fn tool_install_requirements_txt() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -3873,6 +3974,8 @@ fn tool_install_requirements_txt() {
         .arg("black")
         .arg("--with-requirements")
         .arg("requirements.txt")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -3917,6 +4020,8 @@ fn tool_install_requirements_txt() {
         .arg("black")
         .arg("--with-requirements")
         .arg("requirements.txt")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -3953,9 +4058,7 @@ fn tool_install_requirements_txt() {
 /// Ignore and warn when (e.g.) the `--index-url` argument is a provided `requirements.txt`.
 #[test]
 fn tool_install_requirements_txt_arguments() {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -3973,6 +4076,8 @@ fn tool_install_requirements_txt_arguments() {
         .arg("black")
         .arg("--with-requirements")
         .arg("requirements.txt")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -4025,6 +4130,8 @@ fn tool_install_requirements_txt_arguments() {
         .arg("black")
         .arg("--with-requirements")
         .arg("requirements.txt")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -4047,6 +4154,8 @@ fn tool_install_requirements_txt_arguments() {
         .arg("requirements.txt")
         .arg("--index-url")
         .arg("https://test.pypi.org/simple")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -4070,14 +4179,15 @@ fn tool_install_requirements_txt_arguments() {
 fn tool_install_upgrade() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     // Install `black`.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black==24.1.1")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -4114,6 +4224,8 @@ fn tool_install_upgrade() {
     // since it's already satisfied in the environment.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -4144,6 +4256,8 @@ fn tool_install_upgrade() {
         .arg("black")
         .arg("--with")
         .arg("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -4179,6 +4293,8 @@ fn tool_install_upgrade() {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
         .arg("--upgrade")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -4215,8 +4331,8 @@ fn tool_install_upgrade() {
 fn tool_install_python_requests() {
     let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_counts()
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     // Install `black`.
@@ -4224,6 +4340,8 @@ fn tool_install_python_requests() {
         .arg("-p")
         .arg("3.12")
         .arg("black")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -4244,6 +4362,8 @@ fn tool_install_python_requests() {
         .arg("-p")
         .arg("3.12")
         .arg("black")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -4255,6 +4375,8 @@ fn tool_install_python_requests() {
         .arg("-p")
         .arg("3.11")
         .arg("black")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -4279,8 +4401,8 @@ fn tool_install_python_requests() {
 fn tool_install_python_preference() {
     let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_counts()
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     // Install `black`.
@@ -4288,6 +4410,8 @@ fn tool_install_python_preference() {
         .arg("-p")
         .arg("3.12")
         .arg("black")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
     exit_code: 0 (success)
     ----- stderr -----
@@ -4308,6 +4432,8 @@ fn tool_install_python_preference() {
         .arg("-p")
         .arg("3.12")
         .arg("black")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
     exit_code: 0 (success)
     ----- stderr -----
@@ -4321,6 +4447,8 @@ fn tool_install_python_preference() {
         .arg("--python-preference")
         .arg("only-system")
         .arg("black")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
     exit_code: 0 (success)
     ----- stderr -----
@@ -4344,6 +4472,8 @@ fn tool_install_python_preference() {
         .arg("--python-preference")
         .arg("only-system")
         .arg("black")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
     exit_code: 0 (success)
     ----- stderr -----
@@ -4357,6 +4487,8 @@ fn tool_install_python_preference() {
         .arg("--python-preference")
         .arg("only-managed")
         .arg("black")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
     exit_code: 0 (success)
     ----- stderr -----
@@ -4379,6 +4511,8 @@ fn tool_install_python_preference() {
         .arg("--python-preference")
         .arg("only-managed")
         .arg("black")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
     exit_code: 0 (success)
     ----- stderr -----
@@ -4391,13 +4525,15 @@ fn tool_install_python_preference() {
 fn tool_install_preserve_environment() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     // Install `black`.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black==24.1.1")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -4418,17 +4554,21 @@ fn tool_install_preserve_environment() {
         .arg("black==24.1.1")
         .arg("--with")
         .arg("packaging==0.0.1")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies
-      cause: Because black==24.1.1 depends on packaging>=22.0 and you require black==24.1.1, we can conclude that you require packaging>=22.0.
-             And because you require packaging==0.0.1, we can conclude that your requirements are unsatisfiable.
+      × No solution found when resolving dependencies:
+      ╰─▶ Because black==24.1.1 depends on packaging>=22.0 and you require black==24.1.1, we can conclude that you require packaging>=22.0.
+          And because you require packaging==0.0.1, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Install `black`. The tool should already be installed, since we didn't remove the environment.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black==24.1.1")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -4442,12 +4582,15 @@ fn tool_install_preserve_environment() {
 fn tool_install_warn_path() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
 
     // Install `black`.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black==24.1.1")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env_remove(EnvVars::PATH), @r#"
     exit_code: 0 (success)
     ----- stderr -----
@@ -4470,14 +4613,15 @@ fn tool_install_warn_path() {
 fn tool_install_bad_receipt() -> Result<()> {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     // Install `black`
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -4507,6 +4651,8 @@ fn tool_install_bad_receipt() -> Result<()> {
     // Reinstall `black`, which should remove the invalid receipt.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -4532,14 +4678,15 @@ fn tool_install_malformed_dist_info() {
     let context = uv_test::test_context!("3.12")
         .with_exclude_newer("2025-01-18T00:00:00Z")
         .with_filtered_counts()
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     // Install `executable-application`
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("executable-application")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -4604,8 +4751,7 @@ fn tool_install_malformed_dist_info() {
 fn tool_install_settings() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -4613,6 +4759,8 @@ fn tool_install_settings() {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("flask>=3")
         .arg("--resolution=lowest-direct")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -4679,6 +4827,8 @@ fn tool_install_settings() {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("flask>=3")
         .arg("--resolution=highest")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -4709,6 +4859,8 @@ fn tool_install_settings() {
         .arg("flask>=3")
         .arg("--resolution=highest")
         .arg("--upgrade")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -4744,14 +4896,15 @@ fn tool_install_settings() {
 fn tool_install_at_version() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     // Install `black` at `24.1.0`.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black@24.1.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -4789,6 +4942,8 @@ fn tool_install_at_version() {
         .arg("black@24.1.0")
         .arg("--from")
         .arg("black==24.1.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 2 (failure)
     ----- stderr -----
@@ -4801,14 +4956,15 @@ fn tool_install_at_version() {
 fn tool_install_at_latest() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     // Install `black` at latest.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black@latest")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -4847,8 +5003,7 @@ fn tool_install_from_at_latest() {
     let context = uv_test::test_context!("3.12")
         .with_exclude_newer("2025-01-18T00:00:00Z")
         .with_filtered_counts()
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -4856,6 +5011,8 @@ fn tool_install_from_at_latest() {
         .arg("app")
         .arg("--from")
         .arg("executable-application@latest")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -4888,8 +5045,7 @@ fn tool_install_from_at_version() {
     let context = uv_test::test_context!("3.12")
         .with_exclude_newer("2025-01-18T00:00:00Z")
         .with_filtered_counts()
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -4897,6 +5053,8 @@ fn tool_install_from_at_version() {
         .arg("app")
         .arg("--from")
         .arg("executable-application@0.2.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -4928,14 +5086,15 @@ fn tool_install_from_at_version() {
 fn tool_install_at_latest_upgrade() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     // Install `black`.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black==24.1.1")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -4972,6 +5131,8 @@ fn tool_install_at_latest_upgrade() {
     // since it's already satisfied in the environment.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -5000,6 +5161,8 @@ fn tool_install_at_latest_upgrade() {
     // Install with `{package}@{latest}`. `black` should be reinstalled with a more recent version.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black@latest")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -5035,8 +5198,7 @@ fn tool_install_at_latest_upgrade() {
 fn tool_install_constraints() -> Result<()> {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -5051,6 +5213,8 @@ fn tool_install_constraints() -> Result<()> {
         .arg("black")
         .arg("--constraints")
         .arg(constraints_txt.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -5092,6 +5256,8 @@ fn tool_install_constraints() -> Result<()> {
         .arg("black")
         .arg("--constraints")
         .arg(constraints_txt.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -5108,6 +5274,8 @@ fn tool_install_constraints() -> Result<()> {
         .arg("black")
         .arg("--constraints")
         .arg(constraints_txt.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -5128,8 +5296,7 @@ fn tool_install_constraints() -> Result<()> {
 fn tool_install_overrides() -> Result<()> {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -5144,6 +5311,8 @@ fn tool_install_overrides() -> Result<()> {
         .arg("black")
         .arg("--overrides")
         .arg(overrides_txt.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -5188,13 +5357,15 @@ fn tool_install_overrides() -> Result<()> {
 fn tool_install_python() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     // Install `python`
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("python")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 2 (failure)
     ----- stderr -----
@@ -5204,6 +5375,8 @@ fn tool_install_python() {
     // Install `python@<version>`
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("python@3.12")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 2 (failure)
     ----- stderr -----
@@ -5215,14 +5388,16 @@ fn tool_install_python() {
 fn tool_install_mismatched_name() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
         .arg("--from")
         .arg("https://files.pythonhosted.org/packages/af/47/93213ee66ef8fae3b93b3e29206f6b251e65c97bd91d8e1c5596ef15af0a/flask-3.1.0-py3-none-any.whl")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 2 (failure)
     ----- stderr -----
@@ -5233,6 +5408,8 @@ fn tool_install_mismatched_name() {
         .arg("black")
         .arg("--from")
         .arg("flask @ https://files.pythonhosted.org/packages/af/47/93213ee66ef8fae3b93b3e29206f6b251e65c97bd91d8e1c5596ef15af0a/flask-3.1.0-py3-none-any.whl")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 2 (failure)
     ----- stderr -----
@@ -5243,6 +5420,8 @@ fn tool_install_mismatched_name() {
         .arg("flask")
         .arg("--from")
         .arg("black @ https://files.pythonhosted.org/packages/af/47/93213ee66ef8fae3b93b3e29206f6b251e65c97bd91d8e1c5596ef15af0a/flask-3.1.0-py3-none-any.whl")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 2 (failure)
     ----- stderr -----
@@ -5257,8 +5436,7 @@ async fn tool_install_credentials() {
     let context = uv_test::test_context!("3.12")
         .with_exclude_newer("2025-01-18T00:00:00Z")
         .with_filtered_counts()
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -5267,6 +5445,8 @@ async fn tool_install_credentials() {
         .arg("executable-application")
          .arg("--index")
         .arg(proxy.authenticated_url("public", "heron", "/basic-auth/simple"))
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -5334,8 +5514,7 @@ async fn tool_install_default_credentials() -> Result<()> {
     let context = uv_test::test_context!("3.12")
         .with_exclude_newer("2025-01-18T00:00:00Z")
         .with_filtered_counts()
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -5356,6 +5535,8 @@ async fn tool_install_default_credentials() -> Result<()> {
         .arg("executable-application")
         .arg("--config-file")
         .arg(uv_toml.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -5417,12 +5598,14 @@ async fn tool_install_default_credentials() -> Result<()> {
     // Attempt to upgrade without providing the credentials (from the config file).
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("executable-application")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to upgrade executable-application
-      cause: Failed to fetch: `http://[LOCALHOST]/basic-auth/simple/executable-application/`
-      cause: Missing credentials for http://[LOCALHOST]/basic-auth/simple/executable-application/
+      Caused by: Failed to fetch: `http://[LOCALHOST]/basic-auth/simple/executable-application/`
+      Caused by: Missing credentials for http://[LOCALHOST]/basic-auth/simple/executable-application/
     ");
 
     // Attempt to upgrade.
@@ -5430,6 +5613,8 @@ async fn tool_install_default_credentials() -> Result<()> {
         .arg("executable-application")
         .arg("--config-file")
         .arg(uv_toml.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -5441,133 +5626,86 @@ async fn tool_install_default_credentials() -> Result<()> {
 
 /// Test installing a tool with `--with-executables-from`.
 #[test]
-fn tool_install_with_executables_from() -> Result<()> {
-    let scenario = toml::from_str::<Scenario>(indoc! {r#"
-        name = "tool-executables"
-
-        [root]
-
-        [expected]
-        satisfiable = true
-
-        [packages.main-tool.versions."1.0.0"]
-        requires_python = ">=3.11"
-        sdist = false
-        requires = ["dependency-tool"]
-        entry_points = ["main"]
-
-        [packages.dependency-tool.versions."1.0.0"]
-        requires_python = ">=3.11"
-        sdist = false
-        entry_points = ["dep-one", "dep-two"]
-
-        [packages.extra-tool.versions."1.0.0"]
-        requires_python = ">=3.11"
-        sdist = false
-        entry_points = ["extra"]
-    "#})?;
-    let index = PackseServer::from_scenario(&scenario);
+fn tool_install_with_executables_from() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("--with-executables-from")
-        .arg("dependency-tool,extra-tool")
-        .arg("main-tool==1.0.0")
-        .arg("--index-url")
-        .arg(index.index_url())
+        .arg("ansible-core,black")
+        .arg("ansible==9.3.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + dependency-tool==1.0.0
-     + extra-tool==1.0.0
-     + main-tool==1.0.0
-    Installed 2 executables from `dependency-tool`: dep-one, dep-two
-    Installed 1 executable from `extra-tool`: extra
-    Installed 1 executable: main
+     + ansible==9.3.0
+     + ansible-core==2.16.4
+     + black==24.3.0
+     + cffi==1.16.0
+     + click==8.1.7
+     + cryptography==42.0.5
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+     + pycparser==2.21
+     + pyyaml==6.0.1
+     + resolvelib==1.0.1
+    Installed 11 executables from `ansible-core`: ansible, ansible-config, ansible-connection, ansible-console, ansible-doc, ansible-galaxy, ansible-inventory, ansible-playbook, ansible-pull, ansible-test, ansible-vault
+    Installed 2 executables from `black`: black, blackd
+    Installed 1 executable: ansible-community
     ");
 
-    let receipt = fs_err::read_to_string(tool_dir.join("main-tool").join("uv-receipt.toml"))?;
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(receipt, @r#"
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("ansible").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [
-            { name = "main-tool", specifier = "==1.0.0" },
-            { name = "dependency-tool" },
-            { name = "extra-tool" },
+            { name = "ansible", specifier = "==9.3.0" },
+            { name = "ansible-core" },
+            { name = "black" },
         ]
         entrypoints = [
-            { name = "dep-one", install-path = "[TEMP_DIR]/bin/dep-one", from = "dependency-tool" },
-            { name = "dep-two", install-path = "[TEMP_DIR]/bin/dep-two", from = "dependency-tool" },
-            { name = "extra", install-path = "[TEMP_DIR]/bin/extra", from = "extra-tool" },
-            { name = "main", install-path = "[TEMP_DIR]/bin/main", from = "main-tool" },
+            { name = "ansible", install-path = "[TEMP_DIR]/bin/ansible", from = "ansible-core" },
+            { name = "ansible-community", install-path = "[TEMP_DIR]/bin/ansible-community", from = "ansible" },
+            { name = "ansible-config", install-path = "[TEMP_DIR]/bin/ansible-config", from = "ansible-core" },
+            { name = "ansible-connection", install-path = "[TEMP_DIR]/bin/ansible-connection", from = "ansible-core" },
+            { name = "ansible-console", install-path = "[TEMP_DIR]/bin/ansible-console", from = "ansible-core" },
+            { name = "ansible-doc", install-path = "[TEMP_DIR]/bin/ansible-doc", from = "ansible-core" },
+            { name = "ansible-galaxy", install-path = "[TEMP_DIR]/bin/ansible-galaxy", from = "ansible-core" },
+            { name = "ansible-inventory", install-path = "[TEMP_DIR]/bin/ansible-inventory", from = "ansible-core" },
+            { name = "ansible-playbook", install-path = "[TEMP_DIR]/bin/ansible-playbook", from = "ansible-core" },
+            { name = "ansible-pull", install-path = "[TEMP_DIR]/bin/ansible-pull", from = "ansible-core" },
+            { name = "ansible-test", install-path = "[TEMP_DIR]/bin/ansible-test", from = "ansible-core" },
+            { name = "ansible-vault", install-path = "[TEMP_DIR]/bin/ansible-vault", from = "ansible-core" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
-        index-url = "http://[LOCALHOST]/simple/"
         exclude-newer = "2024-03-25T00:00:00Z"
         "#);
     });
 
-    uv_snapshot!(context.filters(), Command::new(bin_dir.join("dep-one")), @"
-    exit_code: 0 (success)
-    ----- stdout -----
-    Hello from dependency-tool!
-    ");
-
     uv_snapshot!(context.filters(), context.tool_uninstall()
-        .arg("main-tool")
+        .arg("ansible")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Uninstalled 4 executables: dep-one, dep-two, extra, main
+    Uninstalled 14 executables: ansible, ansible-community, ansible-config, ansible-connection, ansible-console, ansible-doc, ansible-galaxy, ansible-inventory, ansible-playbook, ansible-pull, ansible-test, ansible-vault, black, blackd
     ");
-    Ok(())
-}
-
-#[test]
-fn tool_install_sdist_entry_point() -> Result<()> {
-    let scenario = toml::from_str::<Scenario>(indoc! {r#"
-        name = "sdist-entry-point"
-
-        [root]
-
-        [expected]
-        satisfiable = true
-
-        [packages.scenario-tool.versions."1.0.0"]
-        wheel = false
-        entry_points = ["scenario.tool"]
-    "#})?;
-    let index = PackseServer::from_scenario(&scenario);
-    let context = uv_test::test_context!("3.12").with_tool_dirs();
-    let bin_dir = context.temp_dir.child("bin");
-
-    context
-        .tool_install()
-        .arg("scenario-tool")
-        .arg("--index-url")
-        .arg(index.index_url())
-        .env(EnvVars::PATH, bin_dir.as_os_str())
-        .assert()
-        .success();
-
-    uv_snapshot!(context.filters(), Command::new(bin_dir.join("scenario.tool")), @"
-    exit_code: 0 (success)
-    ----- stdout -----
-    Hello from scenario-tool!
-    ");
-
-    Ok(())
 }
 
 /// Test installing a tool with `--with-executables-from`, but the package has no entrypoints.
@@ -5575,8 +5713,8 @@ fn tool_install_sdist_entry_point() -> Result<()> {
 fn tool_install_with_executables_from_no_entrypoints() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     // Try to install flask with executables from requests (which has no executables)
@@ -5584,6 +5722,8 @@ fn tool_install_with_executables_from_no_entrypoints() {
         .arg("--with-executables-from")
         .arg("requests")
         .arg("flask")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stdout -----
@@ -5613,9 +5753,7 @@ fn tool_install_with_executables_from_no_entrypoints() {
 
 #[test]
 fn tool_install_find_links() {
-    let context = uv_test::test_context!("3.13")
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+    let context = uv_test::test_context!("3.13").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -5623,7 +5761,9 @@ fn tool_install_find_links() {
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--find-links")
         .arg(context.workspace_root.join("test/links/"))
-        .arg("basic-app"), @"
+        .arg("basic-app")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stdout -----
     Hello from basic-app!
@@ -5640,6 +5780,8 @@ fn tool_install_find_links() {
         .arg("--find-links")
         .arg(context.workspace_root.join("test/links/"))
         .arg("basic-app")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -5685,7 +5827,9 @@ fn tool_install_find_links() {
         .arg("--offline")
         .arg("--find-links")
         .arg(context.workspace_root.join("test/links/"))
-        .arg("basic-app"), @"
+        .arg("basic-app")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stdout -----
     Hello from basic-app!
@@ -5694,12 +5838,14 @@ fn tool_install_find_links() {
     // Run the installed version without `--find-links`.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--offline")
-        .arg("basic-app"), @"
+        .arg("basic-app")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving tool dependencies
-      cause: Because basic-app==0.1 needs to be downloaded from a registry and only basic-app==0.1 is available, we can conclude that all versions of basic-app cannot be used.
-             And because you require basic-app, we can conclude that your requirements are unsatisfiable.
+      × No solution found when resolving tool dependencies:
+      ╰─▶ Because basic-app==0.1 needs to be downloaded from a registry and only basic-app==0.1 is available, we can conclude that all versions of basic-app cannot be used.
+          And because you require basic-app, we can conclude that your requirements are unsatisfiable.
 
     hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     ");
@@ -5709,8 +5855,8 @@ fn tool_install_find_links() {
 fn tool_install_python_platform() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     // Install `black` for macos.
@@ -5718,6 +5864,8 @@ fn tool_install_python_platform() {
         .arg("black")
         .arg("--python-platform")
         .arg("macos")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -5738,6 +5886,8 @@ fn tool_install_python_platform() {
         .arg("black")
         .arg("--python-platform")
         .arg("linux")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -5757,8 +5907,7 @@ fn tool_install_python_platform() {
 fn tool_install_removed_python() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
     let (_, python_executable) = context.python_versions.first().unwrap();
@@ -5768,6 +5917,8 @@ fn tool_install_removed_python() {
         .arg("black")
         .arg("--python")
         .arg(python_executable)
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -5817,6 +5968,8 @@ fn tool_install_removed_python() {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
         .arg("--reinstall")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -5835,7 +5988,7 @@ fn tool_install_removed_python() {
 
 #[test]
 fn tool_install_locks_are_preview() {
-    let context = uv_test::test_context!("3.12").with_tool_dirs();
+    let context = uv_test::test_context!("3.12");
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
     let links = context.workspace_root.join("test/links");
@@ -5846,6 +5999,8 @@ fn tool_install_locks_are_preview() {
         .arg("--no-index")
         .arg("--find-links")
         .arg(&links)
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .assert()
         .success();
@@ -5860,6 +6015,8 @@ fn tool_install_locks_are_preview() {
         .arg("--find-links")
         .arg(&links)
         .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .assert()
         .success();
@@ -5889,7 +6046,8 @@ fn tool_install_locks_are_preview() {
 
 #[test]
 fn tool_install_lock_supports_local_wheel() {
-    let context = uv_test::test_context!("3.12").with_tool_dirs();
+    let context = uv_test::test_context!("3.12");
+    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
     let wheel = context
         .workspace_root
@@ -5900,6 +6058,8 @@ fn tool_install_lock_supports_local_wheel() {
             .tool_install()
             .arg(&wheel)
             .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+            .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+            .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
             .env(EnvVars::PATH, bin_dir.as_os_str())
             .assert()
             .success();
@@ -5930,7 +6090,7 @@ fn tool_install_lock_supports_local_wheel() {
 
 #[test]
 fn tool_install_lock_verifies_hashes() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_tool_dirs();
+    let context = uv_test::test_context!("3.12");
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
     let wheel = context
@@ -5941,6 +6101,8 @@ fn tool_install_lock_verifies_hashes() -> Result<()> {
         .tool_install()
         .arg(&wheel)
         .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .assert()
         .success();
@@ -5956,17 +6118,19 @@ fn tool_install_lock_verifies_hashes() -> Result<()> {
         .arg(&wheel)
         .arg("--force")
         .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @r#"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: Failed to read `simple-launcher @ file://[WORKSPACE]/test/links/simple_launcher-0.1.0-py3-none-any.whl`
-      cause: Hash mismatch for `simple-launcher @ file://[WORKSPACE]/test/links/simple_launcher-0.1.0-py3-none-any.whl`
+      × Failed to read `simple-launcher @ file://[WORKSPACE]/test/links/simple_launcher-0.1.0-py3-none-any.whl`
+      ╰─▶ Hash mismatch for `simple-launcher @ file://[WORKSPACE]/test/links/simple_launcher-0.1.0-py3-none-any.whl`
 
-             Expected:
-               sha256:0000000000000000000000000000000000000000000000000000000000000000
+          Expected:
+            sha256:0000000000000000000000000000000000000000000000000000000000000000
 
-             Computed:
-               sha256:5327e0bb67cdb46800999de6dcf034bf0a5335702883494af0d8b7f6ca48cee4
+          Computed:
+            sha256:5327e0bb67cdb46800999de6dcf034bf0a5335702883494af0d8b7f6ca48cee4
     "#);
 
     Ok(())
@@ -5974,9 +6138,8 @@ fn tool_install_lock_verifies_hashes() -> Result<()> {
 
 #[test]
 fn tool_install_lock_refreshes_local_directory_constraint() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_counts()
-        .with_tool_dirs();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
     let local_package = context.temp_dir.child("simple-launcher");
     local_package.create_dir_all()?;
@@ -6010,6 +6173,8 @@ fn tool_install_lock_refreshes_local_directory_constraint() -> Result<()> {
         .arg("--constraints")
         .arg(constraints_txt.as_os_str())
         .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .assert()
         .success();
@@ -6019,6 +6184,8 @@ fn tool_install_lock_refreshes_local_directory_constraint() -> Result<()> {
         .arg("--constraints")
         .arg(constraints_txt.as_os_str())
         .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -6044,6 +6211,8 @@ fn tool_install_lock_refreshes_local_directory_constraint() -> Result<()> {
         .arg("--constraints")
         .arg(constraints_txt.as_os_str())
         .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -6055,37 +6224,6 @@ fn tool_install_lock_refreshes_local_directory_constraint() -> Result<()> {
     Installed 1 executable: simple-launcher
     ");
 
-    // A validation warning should retain the parse error that prevents reusing the tool lock.
-    local_package.child("pyproject.toml").write_str(indoc! {r#"
-        [project]
-        name = "simple-launcher"
-        version = 42
-    "#})?;
-    uv_snapshot!(context.filters(), context.tool_install()
-        .arg("simple-launcher")
-        .arg("--constraints")
-        .arg(constraints_txt.as_os_str())
-        .arg("--offline")
-        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    exit_code: 1 (failure)
-    ----- stderr -----
-    warning: Failed to validate existing tool lock
-      cause: Failed to parse `[TEMP_DIR]/simple-launcher/pyproject.toml`
-      cause: TOML parse error at line 3, column 11
-               |
-             3 | version = 42
-               |           ^^
-             invalid type: integer `42`, expected a string
-    error: Failed to build `simple-launcher @ file://[TEMP_DIR]/simple-launcher`
-      cause: Failed to parse metadata from built wheel
-      cause: TOML parse error at line 3, column 11
-               |
-             3 | version = 42
-               |           ^^
-             invalid type: integer `42`, expected a string
-    ");
-
     Ok(())
 }
 
@@ -6094,8 +6232,8 @@ fn tool_install_lock_refreshes_local_directory_constraint() -> Result<()> {
 fn tool_install_lock_revalidates_changed_constraints() -> Result<()> {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
     let constraints_txt = context.temp_dir.child("constraints.txt");
     constraints_txt.write_str("platformdirs>=4\n")?;
@@ -6106,6 +6244,8 @@ fn tool_install_lock_revalidates_changed_constraints() -> Result<()> {
         .arg("--constraints")
         .arg(constraints_txt.as_os_str())
         .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .assert()
         .success();
@@ -6117,6 +6257,8 @@ fn tool_install_lock_revalidates_changed_constraints() -> Result<()> {
         .arg("--constraints")
         .arg(constraints_txt.as_os_str())
         .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -6128,252 +6270,5 @@ fn tool_install_lock_revalidates_changed_constraints() -> Result<()> {
     Installed 2 executables: black, blackd
     ");
 
-    Ok(())
-}
-
-#[test]
-fn tool_install_with_build_hashes() -> Result<()> {
-    for preview in ["--no-preview", "--preview-features=tool-install-locks"] {
-        let context = uv_test::test_context!("3.12")
-            .with_filtered_exe_suffix()
-            .with_tool_dirs();
-        let bin_dir = context.temp_dir.child("bin");
-        let (filename, wheel) = generate_wheel(
-            &"build-dependency".parse()?,
-            &"1.0.0".parse()?,
-            &[],
-            &BTreeMap::new(),
-            None,
-            "py3-none-any",
-            &[],
-        );
-        let hash = hex::encode(Sha256::digest(&wheel));
-        context
-            .temp_dir
-            .child("wheels")
-            .child(filename)
-            .write_binary(&wheel)?;
-        let (filename, wheel) = generate_wheel_with_files(
-            &"hash-tool".parse()?,
-            &"1.0.0".parse()?,
-            &[],
-            &BTreeMap::new(),
-            None,
-            "py3-none-any",
-            &[
-                ("hash_tool/cli.py", "def main():\n    print('tool-ok')\n"),
-                (
-                    "hash_tool-1.0.0.dist-info/entry_points.txt",
-                    "[console_scripts]\nhash-tool = hash_tool.cli:main\n",
-                ),
-            ],
-        );
-        context
-            .temp_dir
-            .child("wheels")
-            .child(filename)
-            .write_binary(&wheel)?;
-        let context = context.with_filter((hash.clone(), "[BUILD_HASH]"));
-        let project = context.temp_dir.child("project");
-        project.child("pyproject.toml").write_str(indoc! {r#"
-            [build-system]
-            requires = ["build-dependency==1.0.0"]
-            build-backend = "backend"
-            backend-path = ["."]
-        "#})?;
-        project.child("backend.py").write_str(indoc! {r#"
-            import shutil
-            from pathlib import Path
-
-            import build_dependency
-
-            Path(__file__).with_name("backend-executed").touch()
-
-            def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-                wheel = Path(__file__).parent.parent / "wheels" / "hash_tool-1.0.0-py3-none-any.whl"
-                shutil.copyfile(wheel, Path(wheel_directory) / wheel.name)
-                return wheel.name
-        "#})?;
-        let constraints = context.temp_dir.child("constraints.txt");
-        constraints.write_str(&format!("build-dependency==1.0.0 --hash=sha256:{hash}\n"))?;
-
-        let install = || {
-            let mut command = context.tool_install();
-            command
-                .arg("hash-tool @ ./project")
-                .args(["--no-index", "--find-links", "wheels"])
-                .args(["--build-constraint", "constraints.txt", "--no-cache"])
-                .arg(preview)
-                .env(EnvVars::PATH, bin_dir.as_os_str());
-            command
-        };
-        allow_duplicates! {
-            uv_snapshot!(context.filters(), install(), @"
-            exit_code: 0 (success)
-            ----- stderr -----
-            Resolved 1 package in [TIME]
-            Prepared 1 package in [TIME]
-            Installed 1 package in [TIME]
-             + hash-tool==1.0.0 (from file://[TEMP_DIR]/project)
-            Installed 1 executable: hash-tool
-            ");
-        }
-        allow_duplicates! {
-            insta::with_settings!({ filters => context.filters() }, {
-                assert_snapshot!(context.read("tools/hash-tool/uv-receipt.toml"), @r#"
-                [tool]
-                requirements = [{ name = "hash-tool", directory = "[TEMP_DIR]/project" }]
-                build-constraint-dependencies = [{ name = "build-dependency", specifier = "==1.0.0", hashes = ["sha256:[BUILD_HASH]"] }]
-                entrypoints = [
-                    { name = "hash-tool", install-path = "[TEMP_DIR]/bin/hash-tool", from = "hash-tool" },
-                ]
-
-                [tool.options]
-                no-index = true
-                find-links = ["file://[TEMP_DIR]/wheels"]
-                exclude-newer = "2024-03-25T00:00:00Z"
-                "#);
-            });
-        }
-
-        // The supplied hash is checked even when it isn't required.
-        fs_err::remove_file(project.child("backend-executed"))?;
-        constraints.write_str(&format!(
-            "build-dependency==1.0.0 --hash=sha256:{}\n",
-            "0".repeat(64)
-        ))?;
-        allow_duplicates! {
-            uv_snapshot!(context.filters(), install().arg("--reinstall"), @"
-            exit_code: 1 (failure)
-            ----- stderr -----
-            error: Failed to build `hash-tool @ file://[TEMP_DIR]/project`
-              cause: Failed to install requirements from `build-system.requires`
-              cause: Failed to download `build-dependency==1.0.0`
-              cause: Hash mismatch for `build-dependency==1.0.0`
-
-                     Expected:
-                       sha256:0000000000000000000000000000000000000000000000000000000000000000
-
-                     Computed:
-                       sha256:[BUILD_HASH]
-            ");
-        }
-        project
-            .child("backend-executed")
-            .assert(predicate::path::missing());
-
-        // Name inference must check hashes before importing the build backend.
-        allow_duplicates! {
-            uv_snapshot!(context.filters(), context.tool_install()
-                .arg("./project")
-                .args(["--no-index", "--find-links", "wheels"])
-                .args(["--build-constraint", "constraints.txt", "--no-cache"])
-                .arg(preview)
-                .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-            exit_code: 2 (failure)
-            ----- stderr -----
-            error: Failed to install requirements from `build-system.requires`
-              cause: Failed to download `build-dependency==1.0.0`
-              cause: Hash mismatch for `build-dependency==1.0.0`
-
-                     Expected:
-                       sha256:0000000000000000000000000000000000000000000000000000000000000000
-
-                     Computed:
-                       sha256:[BUILD_HASH]
-            ");
-        }
-        project
-            .child("backend-executed")
-            .assert(predicate::path::missing());
-
-        allow_duplicates! {
-            uv_snapshot!(context.filters(), context.tool_run()
-                .args(["--from", "./project"])
-                .args(["--no-index", "--find-links", "wheels"])
-                .args(["--build-constraint", "constraints.txt", "--no-cache"])
-                .arg(preview)
-                .arg("hash-tool"), @"
-            exit_code: 1 (failure)
-            ----- stderr -----
-            error: Failed to resolve `--with` requirement
-              cause: Failed to install requirements from `build-system.requires`
-              cause: Failed to download `build-dependency==1.0.0`
-              cause: Hash mismatch for `build-dependency==1.0.0`
-
-                     Expected:
-                       sha256:0000000000000000000000000000000000000000000000000000000000000000
-
-                     Computed:
-                       sha256:[BUILD_HASH]
-            ");
-        }
-        project
-            .child("backend-executed")
-            .assert(predicate::path::missing());
-
-        // Upgrades must retain the original hashes without re-reading the constraints file.
-        fs_err::remove_file(&constraints)?;
-        let mut upgrade = context.tool_upgrade();
-        upgrade
-            .args(["hash-tool", "--reinstall", "--no-cache"])
-            .arg(preview)
-            .env(EnvVars::PATH, bin_dir.as_os_str());
-        if preview == "--no-preview" {
-            uv_snapshot!(context.filters(), upgrade, @"
-            exit_code: 0 (success)
-            ----- stderr -----
-            Modified hash-tool environment
-             ~ hash-tool==1.0.0 (from file://[TEMP_DIR]/project)
-            Nothing to upgrade
-            ");
-        } else {
-            upgrade.assert().success();
-        }
-        project
-            .child("backend-executed")
-            .assert(predicate::path::exists());
-
-        // Unpinned hashes are ignored in verification mode, including when saved in a tool receipt.
-        fs_err::remove_file(project.child("backend-executed"))?;
-        constraints.write_str(&format!(
-            "build-dependency>=1.0.0 --hash=sha256:{}\n",
-            "0".repeat(64)
-        ))?;
-        install().arg("--reinstall").assert().success();
-        project
-            .child("backend-executed")
-            .assert(predicate::path::exists());
-        allow_duplicates! {
-            insta::with_settings!({ filters => context.filters() }, {
-                assert_snapshot!(context.read("tools/hash-tool/uv-receipt.toml"), @r#"
-                [tool]
-                requirements = [{ name = "hash-tool", directory = "[TEMP_DIR]/project" }]
-                build-constraint-dependencies = [{ name = "build-dependency", specifier = ">=1.0.0", hashes = ["sha256:0000000000000000000000000000000000000000000000000000000000000000"] }]
-                entrypoints = [
-                    { name = "hash-tool", install-path = "[TEMP_DIR]/bin/hash-tool", from = "hash-tool" },
-                ]
-
-                [tool.options]
-                no-index = true
-                find-links = ["file://[TEMP_DIR]/wheels"]
-                exclude-newer = "2024-03-25T00:00:00Z"
-                "#);
-            });
-        }
-
-        fs_err::remove_file(project.child("backend-executed"))?;
-        fs_err::remove_file(constraints)?;
-        context
-            .tool_upgrade()
-            .args(["hash-tool", "--reinstall", "--no-cache"])
-            .arg(preview)
-            .env(EnvVars::PATH, bin_dir.as_os_str())
-            .assert()
-            .success();
-        project
-            .child("backend-executed")
-            .assert(predicate::path::exists());
-    }
     Ok(())
 }

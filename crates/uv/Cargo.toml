@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.12.17"
+version = "0.12.3"
 description = "A Python package and project manager"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -39,7 +39,6 @@ uv-git = { workspace = true }
 uv-git-types = { workspace = true }
 uv-install-wheel = { workspace = true, default-features = false }
 uv-installer = { workspace = true }
-uv-lock = { workspace = true }
 uv-logging = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
@@ -59,7 +58,6 @@ uv-scripts = { workspace = true }
 uv-settings = { workspace = true }
 uv-shell = { workspace = true }
 uv-static = { workspace = true }
-uv-threads = { workspace = true }
 uv-test = { workspace = true, optional = true }
 uv-tool = { workspace = true }
 uv-torch = { workspace = true }
@@ -93,8 +91,11 @@ indexmap = { workspace = true }
 indicatif = { workspace = true }
 indoc = { workspace = true }
 itertools = { workspace = true }
+miette = { workspace = true, features = ["fancy-no-backtrace"] }
+open = { workspace = true }
 owo-colors = { workspace = true }
 petgraph = { workspace = true }
+reqwest = { workspace = true }
 rkyv = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }
@@ -113,6 +114,7 @@ tracing-subscriber = { workspace = true, features = ["env-filter", "registry"] }
 tracing-tree = { workspace = true }
 unicode-width = { workspace = true }
 url = { workspace = true }
+uuid = { workspace = true, features = ["v4"] }
 version-ranges = { workspace = true }
 walkdir = { workspace = true }
 which = { workspace = true }
@@ -133,6 +135,8 @@ uv-test = { workspace = true }
 
 assert_cmd = { workspace = true }
 assert_fs = { workspace = true }
+astral-tokio-tar = { workspace = true }
+async-compression = { workspace = true, features = ["zstd"] }
 backon = { workspace = true }
 byteorder = { workspace = true }
 bytes = { workspace = true }
@@ -146,7 +150,7 @@ indoc = { workspace = true }
 insta = { workspace = true }
 predicates = { workspace = true }
 regex = { workspace = true }
-reqwest = { workspace = true, default-features = false }
+reqwest = { workspace = true, features = ["blocking"], default-features = false }
 sha2 = { workspace = true }
 tempfile = { workspace = true }
 tokio-stream = { workspace = true }

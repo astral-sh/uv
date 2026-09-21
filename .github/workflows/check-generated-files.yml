@@ -9,32 +9,28 @@ on:
         type: string
         default: "true"
 
-permissions:
-  contents: read
+permissions: {}
 
 env:
   CARGO_INCREMENTAL: 0
   CARGO_NET_RETRY: 10
   CARGO_TERM_COLOR: always
   RUSTUP_MAX_RETRIES: 10
-  UV_LOCKED: 1
 
 jobs:
   cargo-dev-generate-all:
     timeout-minutes: 10
-    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     name: "cargo dev generate-all"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: "Install uv"
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
-          # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.12.13"
-          checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+          version: "0.12.1"
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
       - name: "Generate all"
@@ -49,4 +45,4 @@ jobs:
         if: ${{ inputs.schema-changed == 'true' }}
         run: cargo dev generate-json-schema --mode check
       - name: "Check uv-extract dirhash test vectors"
-        run: cargo dev generate-dirhash-test-vectors --mode check
+        run: uv run --script crates/uv-extract/test_vectors/generate.py | diff -u crates/uv-extract/test_vectors/test_vectors.json -

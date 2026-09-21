@@ -221,7 +221,7 @@ impl fmt::Display for IncompatibleWheelError {
 
 impl std::error::Error for IncompatibleWheelError {}
 
-impl uv_errors::Hinted for IncompatibleWheelError {
+impl uv_errors::Hint for IncompatibleWheelError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         if let Some(hint) = &self.compatibility_hint {
             uv_errors::Hints::from(hint.to_string())
@@ -439,11 +439,7 @@ impl<'a> Planner<'a> {
                             let cache_info = pointer.to_cache_info();
                             let build_info = pointer.to_build_info();
                             let archive = pointer.into_archive();
-                            if archive.satisfies(hasher.archive_policy(dist.as_ref()))
-                                && wheel
-                                    .size
-                                    .is_none_or(|expected| archive.size == Some(expected))
-                            {
+                            if archive.satisfies(hasher.get(dist.as_ref())) {
                                 let cached_dist = CachedDirectUrlDist {
                                     filename: wheel.filename.clone(),
                                     url: VerbatimParsedUrl {
@@ -461,7 +457,7 @@ impl<'a> Planner<'a> {
                                 continue;
                             }
                             debug!(
-                                "Cached URL wheel requirement does not match expected hashes or size for: {wheel}"
+                                "Cached URL wheel requirement does not match expected hash policy for: {wheel}"
                             );
                         }
                         Ok(None) => {}
@@ -512,7 +508,7 @@ impl<'a> Planner<'a> {
                                     let cache_info = pointer.to_cache_info();
                                     let build_info = pointer.to_build_info();
                                     let archive = pointer.into_archive();
-                                    if archive.satisfies(hasher.archive_policy(dist.as_ref())) {
+                                    if archive.satisfies(hasher.get(dist.as_ref())) {
                                         let cached_dist = CachedDirectUrlDist {
                                             filename: wheel.filename.clone(),
                                             url: VerbatimParsedUrl {
@@ -576,7 +572,7 @@ impl<'a> Planner<'a> {
                             let cache_info = pointer.to_cache_info();
                             let build_info = pointer.to_build_info();
                             let archive = pointer.into_archive();
-                            if archive.satisfies(hasher.archive_policy(dist.as_ref())) {
+                            if archive.satisfies(hasher.get(dist.as_ref())) {
                                 let cached_dist = CachedDirectUrlDist {
                                     filename: wheel.filename.clone(),
                                     url: VerbatimParsedUrl {

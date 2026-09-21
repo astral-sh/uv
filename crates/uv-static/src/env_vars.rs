@@ -32,12 +32,12 @@ impl EnvVars {
     pub const UV_OFFLINE: &'static str = "UV_OFFLINE";
 
     /// Equivalent to the `--default-index` command-line argument. If set, uv will use
-    /// this index as the default index when searching for packages.
+    /// this URL as the default index when searching for packages.
     #[attr_added_in("0.4.23")]
     pub const UV_DEFAULT_INDEX: &'static str = "UV_DEFAULT_INDEX";
 
     /// Equivalent to the `--index` command-line argument. If set, uv will use this
-    /// space-separated list of additional indexes when searching for packages.
+    /// space-separated list of URLs as additional indexes when searching for packages.
     #[attr_added_in("0.4.23")]
     pub const UV_INDEX: &'static str = "UV_INDEX";
 
@@ -140,13 +140,6 @@ impl EnvVars {
     /// uv will require that all dependencies have a hash specified in the requirements file.
     #[attr_added_in("0.1.34")]
     pub const UV_REQUIRE_HASHES: &'static str = "UV_REQUIRE_HASHES";
-
-    /// Require wheel metadata to be fetched with HTTP range requests when separate metadata is
-    /// unavailable. If set to `true`, uv will fail instead of downloading the entire wheel.
-    #[attr_hidden]
-    #[attr_added_in("0.12.8")]
-    pub const UV_REQUIRE_METADATA_RANGE_REQUESTS: &'static str =
-        "UV_REQUIRE_METADATA_RANGE_REQUESTS";
 
     /// Equivalent to the `--constraints` command-line argument. If set, uv will use this
     /// file as the constraints file. Uses space-separated list of files.
@@ -319,15 +312,13 @@ impl EnvVars {
     #[attr_added_in("0.5.30")]
     pub const UV_NO_BINARY_PACKAGE: &'static str = "UV_NO_BINARY_PACKAGE";
 
-    /// Equivalent to the `--no-build` command-line argument. If set, uv will not build source
-    /// distributions. First-party packages, such as projects in the workspace, will still be
-    /// built.
+    /// Equivalent to the `--no-build` command-line argument. If set, uv will not build
+    /// source distributions.
     #[attr_added_in("0.1.40")]
     pub const UV_NO_BUILD: &'static str = "UV_NO_BUILD";
 
-    /// Equivalent to the `--no-build-package` command line argument. If set, uv will not build
-    /// source distributions for the given space-delimited list of packages. First-party packages,
-    /// such as projects in the workspace, will still be built.
+    /// Equivalent to the `--no-build-package` command line argument. If set, uv will
+    /// not build source distributions for the given space-delimited list of packages.
     #[attr_added_in("0.6.5")]
     pub const UV_NO_BUILD_PACKAGE: &'static str = "UV_NO_BUILD_PACKAGE";
 
@@ -676,12 +667,6 @@ impl EnvVars {
     #[attr_hidden]
     #[attr_added_in("0.11.22")]
     pub const UV_INTERNAL__BUILD_DIR: &'static str = "UV_INTERNAL__BUILD_DIR";
-
-    /// Set to `1` to include Git metadata in development builds.
-    /// Release builds include Git metadata by default.
-    #[attr_hidden]
-    #[attr_added_in("0.12.16")]
-    pub const UV_INTERNAL__BUILD_GIT_INFO: &'static str = "UV_INTERNAL__BUILD_GIT_INFO";
 
     /// Used to force showing the derivation tree during resolver error reporting.
     #[attr_hidden]
@@ -1094,7 +1079,7 @@ impl EnvVars {
 
     /// Overrides the executable Python uses to determine its environment.
     #[attr_hidden]
-    #[attr_added_in("0.12.4")]
+    #[attr_added_in("next release")]
     pub const PYTHONEXECUTABLE: &'static str = "PYTHONEXECUTABLE";
 
     /// Used to correctly detect virtual environments when using trampolines.
@@ -1216,11 +1201,6 @@ impl EnvVars {
     #[attr_hidden]
     #[attr_added_in("0.1.11")]
     pub const CARGO_MANIFEST_DIR: &'static str = "CARGO_MANIFEST_DIR";
-
-    /// The Cargo profile family: `debug` for profiles derived from `dev`, or `release`.
-    #[attr_hidden]
-    #[attr_added_in("0.12.16")]
-    pub const PROFILE: &'static str = "PROFILE";
 
     /// Specifies the directory where Cargo stores build artifacts (target directory).
     #[attr_hidden]
@@ -1460,6 +1440,14 @@ impl EnvVars {
     #[attr_added_in("0.11.14")]
     pub const UV_AZURE_ENDPOINT_URL: &'static str = "UV_AZURE_ENDPOINT_URL";
 
+    /// The URL of the pyx Simple API server.
+    #[attr_added_in("0.8.15")]
+    pub const PYX_API_URL: &'static str = "PYX_API_URL";
+
+    /// The domain of the pyx CDN.
+    #[attr_added_in("0.8.15")]
+    pub const PYX_CDN_DOMAIN: &'static str = "PYX_CDN_DOMAIN";
+
     /// The pyx API key (e.g., `sk-pyx-...`).
     #[attr_added_in("0.8.15")]
     pub const PYX_API_KEY: &'static str = "PYX_API_KEY";
@@ -1477,6 +1465,10 @@ impl EnvVars {
     #[attr_hidden]
     #[attr_added_in("0.8.15")]
     pub const UV_AUTH_TOKEN: &'static str = "UV_AUTH_TOKEN";
+
+    /// Specifies the directory where uv stores pyx credentials.
+    #[attr_added_in("0.8.15")]
+    pub const PYX_CREDENTIALS_DIR: &'static str = "PYX_CREDENTIALS_DIR";
 
     /// The AWS region to use when signing S3 requests.
     #[attr_added_in("0.8.21")]

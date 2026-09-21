@@ -5,10 +5,8 @@ use fs_err::File;
 use futures_lite::future::block_on;
 use futures_lite::io::{AsyncSeek, AsyncWrite, AsyncWriteExt};
 use globset::{GlobSet, GlobSetBuilder};
-use itertools::Itertools;
 use rustc_hash::FxHashSet;
 use sha2::{Digest, Sha256};
-use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 use std::io::{BufReader, Read, Seek, SeekFrom, Write};
 use std::path::{Component, Path, PathBuf};
@@ -23,7 +21,6 @@ use uv_fs::{Simplified, normalize_path};
 use uv_globfilter::{GlobDirFilter, PortableGlobParser};
 use uv_platform_tags::{AbiTag, LanguageTag, PlatformTag};
 use uv_preview::PreviewFeature;
-use uv_pypi_types::BuildKind;
 use uv_warnings::warn_user_once;
 
 use crate::metadata::DEFAULT_EXCLUDES;
@@ -51,7 +48,7 @@ pub fn build_wheel(
     show_warnings: bool,
 ) -> Result<WheelFilename, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
-    for warning in pyproject_toml.check_build_system(uv_version, BuildKind::Wheel) {
+    for warning in pyproject_toml.check_build_system(uv_version) {
         warn_user_once!("{warning}");
     }
     crate::check_metadata_directory(source_tree, metadata_directory, &pyproject_toml)?;
@@ -100,7 +97,7 @@ pub fn list_wheel(
     show_warnings: bool,
 ) -> Result<(WheelFilename, FileList), Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
-    for warning in pyproject_toml.check_build_system(uv_version, BuildKind::Wheel) {
+    for warning in pyproject_toml.check_build_system(uv_version) {
         warn_user_once!("{warning}");
     }
 
@@ -256,7 +253,7 @@ pub fn build_editable(
     show_warnings: bool,
 ) -> Result<WheelFilename, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
-    for warning in pyproject_toml.check_build_system(uv_version, BuildKind::Editable) {
+    for warning in pyproject_toml.check_build_system(uv_version) {
         warn_user_once!("{warning}");
     }
     let settings = pyproject_toml
@@ -387,22 +384,20 @@ fn write_data_files<'data>(
 
 /// Build a globset matcher for all files that must be excluded from a wheel.
 fn build_wheel_exclude_matcher(settings: &BuildBackendSettings) -> Result<GlobSet, Error> {
-    let defaults = if settings.default_excludes {
-        DEFAULT_EXCLUDES
-    } else {
-        &[]
-    };
-    let excludes = defaults.iter().copied().chain(
-        settings
-            .wheel_exclude
-            .iter()
-            .chain(&settings.source_exclude)
-            .map(String::as_str),
-    );
-    debug!(
-        "Wheel excludes: {:?}",
-        excludes.clone().unique().collect::<Vec<_>>()
-    );
+    let mut excludes: Vec<String> = Vec::new();
+    if settings.default_excludes {
+        excludes.extend(DEFAULT_EXCLUDES.iter().map(ToString::to_string));
+    }
+    for exclude in settings
+        .wheel_exclude
+        .iter()
+        .chain(&settings.source_exclude)
+    {
+        if !excludes.contains(exclude) {
+            excludes.push(exclude.clone());
+        }
+    }
+    debug!("Wheel excludes: {:?}", excludes);
     build_exclude_matcher(excludes)
 }
 
@@ -413,7 +408,7 @@ pub fn metadata(
     uv_version: &str,
 ) -> Result<String, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
-    for warning in pyproject_toml.check_build_system(uv_version, BuildKind::Wheel) {
+    for warning in pyproject_toml.check_build_system(uv_version) {
         warn_user_once!("{warning}");
     }
 
@@ -520,21 +515,17 @@ fn write_record(
 }
 
 /// Build a globset matcher for excludes.
-pub(crate) fn build_exclude_matcher<'a>(
-    excludes: impl IntoIterator<Item = &'a str>,
+pub(crate) fn build_exclude_matcher(
+    excludes: impl IntoIterator<Item = impl AsRef<str>>,
 ) -> Result<GlobSet, Error> {
     let mut exclude_builder = GlobSetBuilder::new();
-    let mut seen = FxHashSet::default();
     for exclude in excludes {
-        if !seen.insert(exclude) {
-            continue;
-        }
-
+        let exclude = exclude.as_ref();
         // Excludes are unanchored
         let exclude = if let Some(exclude) = exclude.strip_prefix("/") {
-            Cow::Borrowed(exclude)
+            exclude.to_string()
         } else {
-            Cow::Owned(format!("**/{exclude}"))
+            format!("**/{exclude}").to_string()
         };
         let glob = PortableGlobParser::Uv
             .parse(&exclude)
@@ -544,7 +535,6 @@ pub(crate) fn build_exclude_matcher<'a>(
             })?;
         exclude_builder.add(glob);
     }
-    drop(seen);
     let exclude_matcher = exclude_builder
         .build()
         .map_err(|err| Error::GlobSetTooLarge {
@@ -1042,8 +1032,7 @@ impl DirectoryWriter for FilesystemWriter {
 #[cfg(test)]
 mod test {
     use super::*;
-    use indoc::indoc;
-    use insta::{assert_debug_snapshot, assert_snapshot};
+    use insta::assert_snapshot;
     use std::path::Path;
     use std::str::FromStr;
     use tempfile::TempDir;
@@ -1053,118 +1042,6 @@ mod test {
     use uv_pep440::Version;
     use uv_platform_tags::{AbiTag, PlatformTag};
     use walkdir::WalkDir;
-
-    #[test]
-    fn test_exclude_matcher_deduplicates() -> Result<(), Error> {
-        let matcher = build_exclude_matcher([
-            "*.pyc",
-            "/src/foo/private.txt",
-            r"/src/foo/escaped\[name\].txt",
-            "*.pyc",
-            "/src/foo/private.txt",
-        ])?;
-        assert_eq!(matcher.len(), 3);
-
-        assert!(matcher.is_match("src/foo/cache.pyc"));
-        assert!(matcher.is_match("src/foo/private.txt"));
-        assert!(matcher.is_match("src/foo/escaped[name].txt"));
-
-        assert!(!matcher.is_match("src/foo/nested/private.txt"));
-        assert!(!matcher.is_match("src/foo/escapedxnamex.txt"));
-        Ok(())
-    }
-
-    #[test]
-    fn test_wheel_exclude_defaults() -> Result<(), Error> {
-        let mut settings = BuildBackendSettings::default();
-        assert_eq!(build_wheel_exclude_matcher(&settings)?.len(), 3);
-
-        settings.default_excludes = false;
-        assert!(build_wheel_exclude_matcher(&settings)?.is_empty());
-
-        settings.source_exclude = vec!["*.pyc".to_string(), "*.bin".to_string()];
-        settings.wheel_exclude = vec!["*.bin".to_string(), "*.log".to_string()];
-        assert_eq!(build_wheel_exclude_matcher(&settings)?.len(), 3);
-
-        settings.default_excludes = true;
-        let matcher = build_wheel_exclude_matcher(&settings)?;
-        assert_eq!(matcher.len(), 5);
-        assert!(matcher.is_match("src/foo/data.bin"));
-        assert!(matcher.is_match("src/foo/output.log"));
-        Ok(())
-    }
-
-    #[test]
-    fn test_source_and_wheel_excludes() -> Result<(), Error> {
-        let _preview = uv_preview::test::with_features(&[]);
-        let source = TempDir::new()?;
-        fs_err::create_dir_all(source.path().join("src/foo"))?;
-        fs_err::write(
-            source.path().join("pyproject.toml"),
-            indoc! {r#"
-                [project]
-                name = "foo"
-                version = "1.0.0"
-
-                [tool.uv.build-backend]
-                source-exclude = ["*.source", "*.source", "*.pyc"]
-                wheel-exclude = ["*.wheel", "*.source"]
-
-                [build-system]
-                requires = ["uv_build>=0.12,<0.13"]
-                build-backend = "uv_build"
-            "#},
-        )?;
-        for name in [
-            "__init__.py",
-            "keep.txt",
-            "omit.source",
-            "omit.wheel",
-            "cache.pyc",
-        ] {
-            fs_err::write(source.path().join("src/foo").join(name), "")?;
-        }
-
-        let (_, source_files) = crate::list_source_dist(source.path(), "1.0.0+test", false)?;
-        let source_names = source_files.into_iter().map(|(name, _)| name).join("\n");
-        assert_snapshot!(source_names, @"
-        foo-1.0.0/PKG-INFO
-        foo-1.0.0/pyproject.toml
-        foo-1.0.0/pyproject.toml.orig
-        foo-1.0.0/src/foo/__init__.py
-        foo-1.0.0/src/foo/keep.txt
-        foo-1.0.0/src/foo/omit.wheel
-        ");
-
-        let (_, wheel_files) = list_wheel(source.path(), "1.0.0+test", false)?;
-        let wheel_names = wheel_files.into_iter().map(|(name, _)| name).join("\n");
-        assert_snapshot!(wheel_names, @"
-        foo/__init__.py
-        foo/keep.txt
-        foo-1.0.0.dist-info/WHEEL
-        foo-1.0.0.dist-info/METADATA
-        ");
-        Ok(())
-    }
-
-    #[test]
-    fn test_wheel_exclude_error_order() {
-        let settings = BuildBackendSettings {
-            wheel_exclude: vec!["*.pyc".to_string(), "../wheel".to_string()],
-            source_exclude: vec!["../source".to_string()],
-            ..BuildBackendSettings::default()
-        };
-        let error = build_wheel_exclude_matcher(&settings).expect_err("invalid wheel exclude");
-        assert_debug_snapshot!(error, @r#"
-        PortableGlob {
-            field: "tool.uv.build-backend.*-exclude",
-            source: ParentDirectory {
-                glob: "**/../wheel",
-                pos: 3,
-            },
-        }
-        "#);
-    }
 
     #[test]
     fn test_wheel() {

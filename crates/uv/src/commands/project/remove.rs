@@ -10,7 +10,7 @@ use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    ActiveEnvironment, Concurrency, DependencyGroups, DryRun, ExtrasSpecification, InstallOptions,
+    Concurrency, DependencyGroups, DryRun, ExtrasSpecification, InstallOptions,
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
@@ -27,15 +27,15 @@ use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::add::{AddTarget, PythonTarget};
-use crate::commands::project::edit::ProjectEdit;
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectError,
     ProjectInterpreter, ScriptInterpreter, UniversalState, WorkspacePython,
+    default_dependency_groups,
 };
-use crate::commands::{ExitStatus, UvError, project};
+use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
@@ -44,7 +44,7 @@ pub(crate) async fn remove(
     project_dir: &Path,
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,
-    active: ActiveEnvironment,
+    active: Option<bool>,
     no_sync: bool,
     packages: Vec<PackageName>,
     dependency_type: DependencyType,
@@ -189,26 +189,12 @@ pub(crate) async fn remove(
 
     let content = toml.to_string();
 
-    let (path, lock_target) = match &target {
-        RemoveTarget::Script(script) => (script.path.clone(), LockTarget::from(script)),
-        RemoveTarget::Project(project) => (
-            project.root().join("pyproject.toml"),
-            LockTarget::from(project.workspace()),
-        ),
-    };
-    let edit = ProjectEdit::new(
-        [path]
-            .into_iter()
-            .chain(frozen.is_none().then(|| lock_target.lock_path())),
-    )?;
-
     // Save the modified `pyproject.toml` or script.
     target.write(&content)?;
 
     // If `--frozen`, exit early. There's no reason to lock and sync, since we don't need a `uv.lock`
     // to exist at all.
     if frozen.is_some() {
-        edit.commit();
         return Ok(ExitStatus::Success);
     }
 
@@ -220,7 +206,6 @@ pub(crate) async fn remove(
                 "Updated `{}`",
                 script.path.user_display().cyan()
             )?;
-            edit.commit();
             return Ok(ExitStatus::Success);
         }
     }
@@ -230,7 +215,7 @@ pub(crate) async fn remove(
 
     // Determine enabled groups and extras
     let default_groups = match &target {
-        RemoveTarget::Project(project) => project.default_groups()?,
+        RemoveTarget::Project(project) => default_dependency_groups(project.pyproject_toml())?,
         RemoveTarget::Script(_) => DefaultGroups::default(),
     };
     let groups = DependencyGroups::default().with_defaults(default_groups);
@@ -258,8 +243,7 @@ pub(crate) async fn remove(
                     python_downloads,
                     &install_mirrors,
                     ProjectEnvironmentPolicy::Optional,
-                    // Suppress warnings about the active environment when we won't modify it.
-                    active.without_warning(),
+                    active,
                     cache,
                     printer,
                 )
@@ -349,18 +333,21 @@ pub(crate) async fn remove(
     .await
     {
         Ok(result) => result.into_lock(),
-        Err(err) => return Err(UvError::from(err).into()),
+        Err(ProjectError::Operation(err)) => {
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+        }
+        Err(err) => return Err(err.into()),
     };
 
     let AddTarget::Project(project, environment) = target else {
         // If we're not adding to a project, exit early.
-        edit.commit();
         return Ok(ExitStatus::Success);
     };
 
     let PythonTarget::Environment(venv) = &*environment else {
         // If we're not syncing, exit early.
-        edit.commit();
         return Ok(ExitStatus::Success);
     };
 
@@ -404,10 +391,14 @@ pub(crate) async fn remove(
     .await
     {
         Ok(_) => {}
-        Err(err) => return Err(UvError::from(err).into()),
+        Err(ProjectError::Operation(err)) => {
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+        }
+        Err(err) => return Err(err.into()),
     }
 
-    edit.commit();
     Ok(ExitStatus::Success)
 }
 
@@ -482,7 +473,7 @@ pub(crate) struct DependencyNotFoundError {
     found_in: Vec<DependencyType>,
 }
 
-impl uv_errors::Hinted for DependencyNotFoundError {
+impl uv_errors::Hint for DependencyNotFoundError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         self.found_in
             .iter()

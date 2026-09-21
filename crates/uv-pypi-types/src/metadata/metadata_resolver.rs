@@ -272,7 +272,6 @@ impl ResolutionMetadata {
 
 #[cfg(test)]
 mod tests {
-    use std::assert_matches;
     use std::str::FromStr;
 
     use uv_normalize::PackageName;
@@ -285,11 +284,11 @@ mod tests {
     fn test_parse_metadata() {
         let s = "Metadata-Version: 1.0";
         let meta = ResolutionMetadata::parse_metadata(s.as_bytes());
-        assert_matches!(meta, Err(MetadataError::FieldNotFound("Name")));
+        assert!(matches!(meta, Err(MetadataError::FieldNotFound("Name"))));
 
         let s = "Metadata-Version: 1.0\nName: asdf";
         let meta = ResolutionMetadata::parse_metadata(s.as_bytes());
-        assert_matches!(meta, Err(MetadataError::FieldNotFound("Version")));
+        assert!(matches!(meta, Err(MetadataError::FieldNotFound("Version"))));
 
         let s = "Metadata-Version: 1.0\nName: asdf\nVersion: 1.0";
         let meta = ResolutionMetadata::parse_metadata(s.as_bytes()).unwrap();
@@ -308,22 +307,25 @@ mod tests {
 
         let s = "Metadata-Version: 1.0\nName: =?utf-8?q?=C3=A4_space?= <x@y.org>\nVersion: 1.0";
         let meta = ResolutionMetadata::parse_metadata(s.as_bytes());
-        assert_matches!(meta, Err(MetadataError::InvalidName(_)));
+        assert!(matches!(meta, Err(MetadataError::InvalidName(_))));
     }
 
     #[test]
     fn test_parse_pkg_info() {
         let s = "Metadata-Version: 2.1";
         let meta = ResolutionMetadata::parse_pkg_info(s.as_bytes());
-        assert_matches!(meta, Err(MetadataError::UnsupportedMetadataVersion(_)));
+        assert!(matches!(
+            meta,
+            Err(MetadataError::UnsupportedMetadataVersion(_))
+        ));
 
         let s = "Metadata-Version: 2.2\nName: asdf";
         let meta = ResolutionMetadata::parse_pkg_info(s.as_bytes());
-        assert_matches!(meta, Err(MetadataError::FieldNotFound("Version")));
+        assert!(matches!(meta, Err(MetadataError::FieldNotFound("Version"))));
 
         let s = "Metadata-Version: 2.3\nName: asdf";
         let meta = ResolutionMetadata::parse_pkg_info(s.as_bytes());
-        assert_matches!(meta, Err(MetadataError::FieldNotFound("Version")));
+        assert!(matches!(meta, Err(MetadataError::FieldNotFound("Version"))));
 
         let s = "Metadata-Version: 2.3\nName: asdf\nVersion: 1.0";
         let meta = ResolutionMetadata::parse_pkg_info(s.as_bytes()).unwrap();
@@ -332,7 +334,7 @@ mod tests {
 
         let s = "Metadata-Version: 2.3\nName: asdf\nVersion: 1.0\nDynamic: Requires-Dist";
         let meta = ResolutionMetadata::parse_pkg_info(s.as_bytes()).unwrap_err();
-        assert_matches!(meta, MetadataError::DynamicField("Requires-Dist"));
+        assert!(matches!(meta, MetadataError::DynamicField("Requires-Dist")));
 
         let s = "Metadata-Version: 2.3\nName: asdf\nVersion: 1.0\nRequires-Dist: foo";
         let meta = ResolutionMetadata::parse_pkg_info(s.as_bytes()).unwrap();
@@ -349,7 +351,7 @@ mod tests {
     "#;
         let pyproject = PyProjectToml::from_toml(s, "pyproject.toml").unwrap();
         let meta = ResolutionMetadata::parse_pyproject_toml(pyproject, None);
-        assert_matches!(meta, Err(MetadataError::FieldNotFound("version")));
+        assert!(matches!(meta, Err(MetadataError::FieldNotFound("version"))));
 
         let s = r#"
         [project]
@@ -358,7 +360,7 @@ mod tests {
     "#;
         let pyproject = PyProjectToml::from_toml(s, "pyproject.toml").unwrap();
         let meta = ResolutionMetadata::parse_pyproject_toml(pyproject, None);
-        assert_matches!(meta, Err(MetadataError::DynamicField("version")));
+        assert!(matches!(meta, Err(MetadataError::DynamicField("version"))));
 
         let s = r#"
         [project]

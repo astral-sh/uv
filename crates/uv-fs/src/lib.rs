@@ -1,135 +1,26 @@
-use std::io::{self, Write};
+use std::io;
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
-
-#[cfg(unix)]
-use std::os::unix::fs::MetadataExt;
-#[cfg(windows)]
-use std::os::windows::io::AsRawHandle;
-
-#[cfg(target_os = "linux")]
-use std::time::{Duration, UNIX_EPOCH};
 
 #[cfg(feature = "tokio")]
 use std::io::Read;
 
 #[cfg(feature = "tokio")]
 use encoding_rs_io::DecodeReaderBytes;
-#[cfg(target_os = "linux")]
-use rustix::fs::{AtFlags, CWD as RUSTIX_CWD, StatxFlags, statx};
+use tempfile::NamedTempFile;
 use tracing::{debug, warn};
-#[cfg(windows)]
-use windows::Win32::Foundation::HANDLE;
-#[cfg(windows)]
-use windows::Win32::Storage::FileSystem::{BY_HANDLE_FILE_INFORMATION, GetFileInformationByHandle};
 
 pub use crate::locked_file::*;
-pub use crate::named_temp_file::{NamedTempFile, PersistError, tempfile_in};
 pub use crate::path::*;
 pub use crate::read::ValidatedReader;
-pub use crate::space::{PhysicalSpaceError, physical_space, supports_fine_grained_accounting};
+pub use crate::space::{physical_space, supports_physical_space};
 
 pub mod cachedir;
-#[cfg(target_os = "macos")]
-mod hardlink_macos;
 pub mod link;
 mod locked_file;
-mod named_temp_file;
 mod path;
 mod read;
 mod space;
 pub mod which;
-
-/// Return the number of hardlinks to a file.
-#[cfg(unix)]
-pub fn hardlink_count(path: &Path) -> io::Result<u64> {
-    Ok(fs_err::metadata(path)?.nlink())
-}
-
-/// Return the number of hardlinks to a file.
-#[cfg(windows)]
-#[expect(unsafe_code)]
-pub fn hardlink_count(path: &Path) -> io::Result<u64> {
-    let file = fs_err::File::open(path)?;
-    let mut information = BY_HANDLE_FILE_INFORMATION::default();
-    // SAFETY: The file handle remains open for the duration of the call, and `information`
-    // points to a valid, writable structure of the type expected by the Windows API.
-    unsafe { GetFileInformationByHandle(HANDLE(file.as_raw_handle()), &raw mut information) }?;
-    Ok(u64::from(information.nNumberOfLinks))
-}
-
-/// Return an error on platforms that cannot report hardlink counts.
-#[cfg(not(any(unix, windows)))]
-pub fn hardlink_count(_path: &Path) -> io::Result<u64> {
-    Err(io::Error::new(
-        io::ErrorKind::Unsupported,
-        "hardlink counts are not supported on this platform",
-    ))
-}
-
-/// Collect regular files whose only hardlink is their entry in this directory.
-///
-/// Ignores symlink entries and uses bulk metadata reads on macOS. Returns `None` when the fast path
-/// is unavailable, required attributes are missing, or subdirectories need a recursive walk.
-/// No candidates are returned unless the entire directory can use the fast path.
-///
-/// Callers deleting these files must prevent concurrent changes to the directory and hardlink
-/// counts throughout both the scan and deletion.
-pub fn files_with_one_hardlink(path: &Path) -> io::Result<Option<Vec<PathBuf>>> {
-    #[cfg(target_os = "macos")]
-    {
-        hardlink_macos::files_with_one_hardlink(path)
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = path;
-        Ok(None)
-    }
-}
-
-/// Return a path's creation time, including on Linux targets where [`std::fs::Metadata::created`]
-/// does not expose the filesystem birth time.
-pub fn created_time(path: &Path, metadata: &std::fs::Metadata) -> io::Result<SystemTime> {
-    #[cfg(target_os = "linux")]
-    {
-        let _ = metadata;
-
-        let metadata = statx(
-            RUSTIX_CWD,
-            path,
-            AtFlags::empty(),
-            StatxFlags::BASIC_STATS | StatxFlags::BTIME,
-        )?;
-
-        if metadata.stx_mask & StatxFlags::BTIME.bits() == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::Unsupported,
-                "creation time is not available for the filesystem",
-            ));
-        }
-
-        let birth_time = metadata.stx_btime;
-        let seconds = Duration::from_secs(birth_time.tv_sec.unsigned_abs());
-        let created = if birth_time.tv_sec < 0 {
-            UNIX_EPOCH.checked_sub(seconds)
-        } else {
-            UNIX_EPOCH.checked_add(seconds)
-        };
-
-        created
-            .filter(|_| birth_time.tv_nsec < 1_000_000_000)
-            .and_then(|created| {
-                created.checked_add(Duration::from_nanos(u64::from(birth_time.tv_nsec)))
-            })
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "invalid creation time"))
-    }
-
-    #[cfg(not(target_os = "linux"))]
-    {
-        let _ = path;
-        metadata.created()
-    }
-}
 
 /// Attempt to check if the two paths refer to the same file.
 ///
@@ -170,30 +61,25 @@ pub fn is_same_file_allow_missing(left: &Path, right: &Path) -> Option<bool> {
 ///
 /// This should generally only be used when one specifically wants to support reading UTF-16
 /// transparently.
+///
+/// If the file path is `-`, then contents are read from stdin instead.
 #[cfg(feature = "tokio")]
 pub async fn read_to_string_transcode(path: impl AsRef<Path>) -> std::io::Result<String> {
     let path = path.as_ref();
-    let raw = fs_err::tokio::read(path).await?;
-    transcode_to_string(&raw, &format!("file {}", path.display()))
-}
-
-/// Reads data from stdin and requires that it be valid UTF-8 or UTF-16.
-///
-/// This uses BOM sniffing to determine if the data should be transcoded from UTF-16 to Rust's
-/// `String` type (which uses UTF-8).
-#[cfg(feature = "tokio")]
-pub fn read_stdin_to_string_transcode() -> std::io::Result<String> {
-    let mut raw = Vec::with_capacity(1024);
-    std::io::stdin().read_to_end(&mut raw)?;
-    transcode_to_string(&raw, "stdin")
-}
-
-#[cfg(feature = "tokio")]
-fn transcode_to_string(raw: &[u8], source: &str) -> std::io::Result<String> {
+    let raw = if path == Path::new("-") {
+        let mut buf = Vec::with_capacity(1024);
+        std::io::stdin().read_to_end(&mut buf)?;
+        buf
+    } else {
+        fs_err::tokio::read(path).await?
+    };
     let mut buf = String::with_capacity(1024);
-    DecodeReaderBytes::new(raw)
+    DecodeReaderBytes::new(&*raw)
         .read_to_string(&mut buf)
-        .map_err(|err| std::io::Error::other(format!("failed to decode {source}: {err}")))?;
+        .map_err(|err| {
+            let path = path.display();
+            std::io::Error::other(format!("failed to decode file {path}: {err}"))
+        })?;
     Ok(buf)
 }
 
@@ -323,16 +209,17 @@ fn replace_with_symlink_dir(src: &Path, dst: &Path) -> std::io::Result<()> {
 /// On Unix, this method creates a temporary file, then moves it into place.
 #[cfg(unix)]
 pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
+    // Attempt to create the symlink directly.
     match fs_err::os::unix::fs::symlink(src.as_ref(), dst.as_ref()) {
         Ok(()) => Ok(()),
         Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
-            let temp_file = tempfile::Builder::new().make_in(
-                dst.as_ref()
-                    .parent()
-                    .expect("Symlink path must have a parent"),
-                |path| fs_err::os::unix::fs::symlink(src.as_ref(), path),
-            )?;
-            fs_err::rename(temp_file.path(), dst.as_ref())?;
+            // Create a symlink, using a temporary file to ensure atomicity.
+            let temp_dir = tempfile::tempdir_in(dst.as_ref().parent().unwrap())?;
+            let temp_file = temp_dir.path().join("link");
+            fs_err::os::unix::fs::symlink(src, &temp_file)?;
+
+            // Move the symlink into the target location.
+            fs_err::rename(&temp_file, dst.as_ref())?;
 
             Ok(())
         }
@@ -395,7 +282,6 @@ pub fn remove_symlink(path: impl AsRef<Path>) -> io::Result<()> {
 
 #[cfg(all(test, windows))]
 mod windows_tests {
-    use std::assert_matches;
     use std::os::windows::ffi::OsStrExt;
 
     use super::*;
@@ -449,10 +335,10 @@ mod windows_tests {
 
         let err = create_junction(&target, &link).unwrap_err();
         assert_eq!(err.kind(), std::io::ErrorKind::InvalidFilename);
-        assert_matches!(
+        assert!(matches!(
             fs_err::symlink_metadata(&link),
             Err(err) if err.kind() == std::io::ErrorKind::NotFound
-        );
+        ));
         Ok(())
     }
 }
@@ -478,6 +364,24 @@ pub fn symlink_or_copy_file(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std
     Ok(())
 }
 
+/// Return a [`NamedTempFile`] in the specified directory.
+///
+/// Sets the permissions of the temporary file to `0o666`, to match the non-temporary file default.
+/// ([`NamedTempfile`] defaults to `0o600`.)
+#[cfg(unix)]
+pub fn tempfile_in(path: &Path) -> std::io::Result<NamedTempFile> {
+    use std::os::unix::fs::PermissionsExt;
+    tempfile::Builder::new()
+        .permissions(std::fs::Permissions::from_mode(0o666))
+        .tempfile_in(path)
+}
+
+/// Return a [`NamedTempFile`] in the specified directory.
+#[cfg(not(unix))]
+pub fn tempfile_in(path: &Path) -> std::io::Result<NamedTempFile> {
+    tempfile::Builder::new().tempfile_in(path)
+}
+
 /// Write `data` to `path` atomically using a temporary file and atomic rename.
 #[cfg(feature = "tokio")]
 pub async fn write_atomic(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std::io::Result<()> {
@@ -492,12 +396,12 @@ pub async fn write_atomic(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std
 
 /// Write `data` to `path` atomically using a temporary file and atomic rename.
 pub fn write_atomic_sync(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std::io::Result<()> {
-    let mut temp_file = tempfile_in(
+    let temp_file = tempfile_in(
         path.as_ref()
             .parent()
             .expect("Write path must have a parent"),
     )?;
-    temp_file.write_all(data.as_ref())?;
+    fs_err::write(&temp_file, &data)?;
     persist_with_retry_sync(temp_file, path.as_ref())
 }
 
@@ -1030,8 +934,6 @@ pub fn clear_virtualenv(location: &Path) -> io::Result<bool> {
 
 #[cfg(test)]
 mod tests {
-    use std::assert_matches;
-
     use super::*;
 
     #[test]
@@ -1045,10 +947,10 @@ mod tests {
         create_symlink(&target, &link)?;
         remove_symlink(&link)?;
 
-        assert_matches!(
+        assert!(matches!(
             fs_err::symlink_metadata(&link),
             Err(err) if err.kind() == io::ErrorKind::NotFound
-        );
+        ));
         assert_eq!(fs_err::read_to_string(target.join("file"))?, "content");
         Ok(())
     }
@@ -1065,10 +967,10 @@ mod tests {
 
         remove_virtualenv(&environment)?;
 
-        assert_matches!(
+        assert!(matches!(
             fs_err::symlink_metadata(environment),
             Err(err) if err.kind() == io::ErrorKind::NotFound
-        );
+        ));
         assert!(marker.is_file());
         Ok(())
     }

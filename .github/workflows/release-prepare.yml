@@ -11,13 +11,10 @@ on:
 
 permissions: {}
 
-env:
-  UV_LOCKED: 1
-
 jobs:
   prepare-release:
     if: github.repository == 'astral-sh/uv'
-    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     environment: automations
     permissions:
       contents: read
@@ -28,14 +25,12 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
-          # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.12.13"
-          checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
+          version: "latest"
           enable-cache: true
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           save-if: false
 
@@ -78,7 +73,7 @@ jobs:
         uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1.11
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.147.0"
+          codex-version: "0.146.0"
           model: gpt-5.6-sol
           effort: high
           permission-profile: ":read-only"
@@ -125,13 +120,11 @@ jobs:
               --jq '.[0].url'
           )"
           if [ -n "$pull_request" ]; then
-            gh pr edit "$pull_request" --add-assignee "$GITHUB_TRIGGERING_ACTOR"
             printf '%s\n' "$pull_request"
           else
             gh pr create \
               --base main \
               --head "$branch" \
-              --assignee "$GITHUB_TRIGGERING_ACTOR" \
               --fill-first
           fi
         env:

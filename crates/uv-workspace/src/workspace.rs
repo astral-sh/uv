@@ -1,6 +1,5 @@
 //! Resolve the current [`ProjectWorkspace`] or [`Workspace`].
 
-use std::assert_matches;
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
@@ -9,18 +8,17 @@ use std::fmt::Display;
 use std::hash::BuildHasherDefault;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use uv_distribution_types::RequirementScope;
 
-use glob::{GlobError, MatchOptions, Pattern, PatternError, glob};
+use glob::{GlobError, Pattern, PatternError, glob};
 use itertools::Itertools;
 use rustc_hash::{FxHashSet, FxHasher};
 use tracing::{debug, trace, warn};
 
 use uv_cache::Cache;
-use uv_configuration::{ActiveEnvironment, DependencyGroupsWithDefaults, ExcludeDependency};
-use uv_distribution_types::{Index, MinimumLibcVersion, Requirement, RequirementSource};
+use uv_configuration::{DependencyGroupsWithDefaults, ExcludeDependency};
+use uv_distribution_types::{Index, Requirement, RequirementSource};
 use uv_fs::{CWD, Simplified, normalize_path};
-use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, GroupName, PackageName};
+use uv_normalize::{DEV_DEPENDENCIES, GroupName, PackageName};
 use uv_once_map::OnceMap;
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerTree, VerbatimUrl};
@@ -30,8 +28,8 @@ use uv_warnings::warn_user_once;
 
 use crate::dependency_groups::{DependencyGroupError, FlatDependencyGroup, FlatDependencyGroups};
 use crate::pyproject::{
-    BuildConstraintDependency, OverrideDependency, Project, PyProjectToml, PyprojectTomlError,
-    Source, Sources, ToolUvSources, ToolUvWorkspace, WorkspaceReference,
+    OverrideDependency, Project, PyProjectToml, PyprojectTomlError, Source, Sources, ToolUvSources,
+    ToolUvWorkspace, WorkspaceReference,
 };
 
 /// The workspace project environment selected by configuration and command-line options.
@@ -244,17 +242,6 @@ pub enum WorkspaceErrorKind {
     // fail.
     #[error("Failed to normalize workspace member path")]
     Normalize(#[source] std::io::Error),
-}
-
-/// An error selecting the default dependency groups for a project.
-#[derive(Debug, thiserror::Error)]
-pub enum DefaultGroupsError {
-    #[error("Package `{0}` not found in workspace")]
-    MissingPackage(PackageName),
-    #[error(
-        "Default group `{0}` (from `tool.uv.default-groups`) is not defined in the project's `dependency-groups` table"
-    )]
-    MissingGroup(GroupName),
 }
 
 #[derive(Debug, Default, Clone, Hash, PartialEq, Eq)]
@@ -587,7 +574,6 @@ impl Workspace {
                         url,
                     }
                 },
-                scope: RequirementScope::Global,
                 origin: None,
             })
         })
@@ -723,7 +709,6 @@ impl Workspace {
                         url,
                     }
                 },
-                scope: RequirementScope::Global,
                 origin: None,
             })
         })
@@ -745,15 +730,6 @@ impl Workspace {
             .as_ref()
             .and_then(|tool| tool.uv.as_ref())
             .and_then(|uv| uv.required_environments.as_ref())
-    }
-
-    /// Returns the workspace's libc baselines and exclusions.
-    pub fn minimum_libc_version(&self) -> Option<MinimumLibcVersion> {
-        self.pyproject_toml
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.minimum_libc_version)
     }
 
     /// Returns the set of conflicts for the workspace.
@@ -896,7 +872,7 @@ impl Workspace {
     }
 
     /// Returns the set of build constraints for the workspace.
-    pub fn build_constraints(&self) -> Vec<BuildConstraintDependency> {
+    pub fn build_constraints(&self) -> Vec<uv_pep508::Requirement<VerbatimParsedUrl>> {
         let Some(build_constraints) = self
             .pyproject_toml
             .tool
@@ -920,10 +896,10 @@ impl Workspace {
     /// If `UV_PROJECT_ENVIRONMENT` is set, it will take precedence. If a relative path is provided,
     /// it is resolved relative to the install path.
     ///
-    /// If `active` is [`ActiveEnvironment::Prefer`], the `VIRTUAL_ENV` variable will be preferred.
-    /// If it is [`ActiveEnvironment::Ignore`], warnings about mismatches between the active
-    /// environment and the project environment will be silenced.
-    pub fn environment_selection(&self, active: ActiveEnvironment) -> ProjectEnvironmentSelection {
+    /// If `active` is `true`, the `VIRTUAL_ENV` variable will be preferred. If it is `false`, any
+    /// warnings about mismatch between the active environment and the project environment will be
+    /// silenced.
+    pub fn environment_selection(&self, active: Option<bool>) -> ProjectEnvironmentSelection {
         /// Resolve the `UV_PROJECT_ENVIRONMENT` value, if any.
         fn from_project_environment_variable(workspace: &Workspace) -> Option<PathBuf> {
             let value = std::env::var_os(EnvVars::UV_PROJECT_ENVIRONMENT)?;
@@ -972,7 +948,7 @@ impl Workspace {
                 uv_fs::is_same_file_allow_missing(&from_virtual_env, &project_environment_path)
                     .unwrap_or(false);
             match active {
-                ActiveEnvironment::Prefer => {
+                Some(true) => {
                     if !matches_project {
                         debug!(
                             "Using active virtual environment `{}` instead of project environment `{}`",
@@ -982,18 +958,18 @@ impl Workspace {
                     }
                     return ProjectEnvironmentSelection::Active(from_virtual_env);
                 }
-                ActiveEnvironment::Ignore => {}
-                ActiveEnvironment::Warn if !matches_project => {
+                Some(false) => {}
+                None if !matches_project => {
                     warn_user_once!(
                         "`VIRTUAL_ENV={}` does not match the project environment path `{}` and will be ignored; use `--active` to target the active environment instead",
                         from_virtual_env.user_display(),
                         project_environment_path.user_display()
                     );
                 }
-                ActiveEnvironment::Warn => {}
+                None => {}
             }
         } else {
-            if active == ActiveEnvironment::Prefer {
+            if active.unwrap_or_default() {
                 debug!(
                     "Use of the active virtual environment was requested, but `VIRTUAL_ENV` is not set"
                 );
@@ -1021,11 +997,6 @@ impl Workspace {
     /// The `pyproject.toml` of the workspace.
     pub fn pyproject_toml(&self) -> &PyProjectToml {
         &self.pyproject_toml
-    }
-
-    /// Return the default dependency groups for the workspace root.
-    pub fn default_groups(&self) -> Result<DefaultGroups, DefaultGroupsError> {
-        self.pyproject_toml.default_groups()
     }
 
     /// Returns `true` if the path is excluded by the workspace.
@@ -1085,10 +1056,10 @@ impl Workspace {
         if let Some(root_member) = current_project
             && !workspace_members.contains_key(&root_member.project.name)
         {
-            assert_matches!(
+            assert!(matches!(
                 options.members,
                 MemberDiscovery::None | MemberDiscovery::Ignore(_)
-            );
+            ));
             debug!(
                 "Adding current workspace member: `{}`",
                 root_member.root.simplified_display()
@@ -1197,7 +1168,7 @@ impl Workspace {
         let mut exclusions = None;
 
         // Add all other workspace members.
-        for member_glob in workspace_definition.members.as_deref().unwrap_or_default() {
+        for member_glob in workspace_definition.clone().members.unwrap_or_default() {
             // Normalize the member glob to remove leading `./` and other relative path components
             let normalized_glob = normalize_path(Path::new(member_glob.as_str()));
             let absolute_glob = PathBuf::from(glob::Pattern::escape(
@@ -1224,8 +1195,9 @@ impl Workspace {
                 if !seen.insert(member_root.clone()) {
                     continue;
                 }
-                let member_root =
-                    std::path::absolute(&member_root).map_err(WorkspaceErrorKind::Normalize)?;
+                let member_root = std::path::absolute(&member_root)
+                    .map_err(WorkspaceErrorKind::Normalize)?
+                    .clone();
 
                 // If the directory is explicitly ignored, skip it.
                 let skip = match &options.members {
@@ -1436,11 +1408,6 @@ impl WorkspaceMember {
     /// The `pyproject.toml` of the project, found at `<root>/pyproject.toml`.
     pub fn pyproject_toml(&self) -> &PyProjectToml {
         &self.pyproject_toml
-    }
-
-    /// Return the default dependency groups for this workspace member.
-    fn default_groups(&self) -> Result<DefaultGroups, DefaultGroupsError> {
-        self.pyproject_toml.default_groups()
     }
 }
 
@@ -1690,11 +1657,6 @@ impl ProjectWorkspace {
     /// Returns the current project as a [`WorkspaceMember`].
     pub fn current_project(&self) -> &WorkspaceMember {
         &self.workspace().packages[&self.project_name]
-    }
-
-    /// Return the default dependency groups for the current project.
-    fn default_groups(&self) -> Result<DefaultGroups, DefaultGroupsError> {
-        self.current_project().default_groups()
     }
 
     /// Set the `pyproject.toml` for the current project.
@@ -2079,10 +2041,6 @@ fn is_included_in_workspace(
     workspace_root: &Path,
     workspace: &ToolUvWorkspace,
 ) -> Result<bool, WorkspaceError> {
-    let options = MatchOptions {
-        require_literal_separator: true,
-        ..MatchOptions::new()
-    };
     for member_glob in workspace.members.iter().flatten() {
         // Normalize the member glob to remove leading `./` and other relative path components
         let normalized_glob = normalize_path(Path::new(member_glob.as_str()));
@@ -2093,7 +2051,7 @@ fn is_included_in_workspace(
         let absolute_glob = absolute_glob.to_string_lossy();
         let include_pattern = glob::Pattern::new(&absolute_glob)
             .map_err(|err| WorkspaceErrorKind::Pattern(absolute_glob.to_string(), err))?;
-        if include_pattern.matches_path_with(project_path, options) {
+        if include_pattern.matches_path(project_path) {
             return Ok(true);
         }
     }
@@ -2294,6 +2252,22 @@ impl VirtualProject {
         })
     }
 
+    /// Clone while detaching from the original workspace `Arc`, freeing the original state for
+    /// modification.
+    ///
+    /// This is intended for rollbacks only.
+    #[must_use]
+    pub fn clone_detach(&self) -> Self {
+        match self {
+            Self::Project(project) => Self::Project(ProjectWorkspace {
+                project_root: project.project_root.clone(),
+                project_name: project.project_name.clone(),
+                workspace: Arc::new((*project.workspace).clone()),
+            }),
+            Self::NonProject(workspace) => Self::NonProject(Arc::new((**workspace).clone())),
+        }
+    }
+
     /// Return the root of the project.
     pub fn root(&self) -> &Path {
         match self {
@@ -2307,38 +2281,6 @@ impl VirtualProject {
         match self {
             Self::Project(project) => project.current_project().pyproject_toml(),
             Self::NonProject(workspace) => &workspace.pyproject_toml,
-        }
-    }
-
-    /// Return the default dependency groups for the current project.
-    pub fn default_groups(&self) -> Result<DefaultGroups, DefaultGroupsError> {
-        match self {
-            Self::Project(project) => project.default_groups(),
-            Self::NonProject(workspace) => workspace.default_groups(),
-        }
-    }
-
-    /// Return the default dependency groups for a package selection.
-    ///
-    /// A single selected package uses that member's defaults. With zero or multiple packages,
-    /// use the current project's defaults. Every selected package must belong to the workspace.
-    pub fn default_groups_for_packages(
-        &self,
-        packages: &[PackageName],
-    ) -> Result<DefaultGroups, DefaultGroupsError> {
-        if let [name] = packages {
-            self.workspace()
-                .packages()
-                .get(name)
-                .ok_or_else(|| DefaultGroupsError::MissingPackage(name.clone()))?
-                .default_groups()
-        } else {
-            for name in packages {
-                if !self.workspace().packages().contains_key(name) {
-                    return Err(DefaultGroupsError::MissingPackage(name.clone()));
-                }
-            }
-            self.default_groups()
         }
     }
 
@@ -2648,7 +2590,6 @@ mod tests {
                       "build-constraint-dependencies": null,
                       "environments": null,
                       "required-environments": null,
-                      "minimum-libc-version": null,
                       "conflicts": null,
                       "build-backend": null
                     }
@@ -2750,7 +2691,6 @@ mod tests {
                       "build-constraint-dependencies": null,
                       "environments": null,
                       "required-environments": null,
-                      "minimum-libc-version": null,
                       "conflicts": null,
                       "build-backend": null
                     }
@@ -3086,7 +3026,6 @@ mod tests {
                       "build-constraint-dependencies": null,
                       "environments": null,
                       "required-environments": null,
-                      "minimum-libc-version": null,
                       "conflicts": null,
                       "build-backend": null
                     }
@@ -3197,7 +3136,6 @@ mod tests {
                       "build-constraint-dependencies": null,
                       "environments": null,
                       "required-environments": null,
-                      "minimum-libc-version": null,
                       "conflicts": null,
                       "build-backend": null
                     }
@@ -3321,7 +3259,6 @@ mod tests {
                       "build-constraint-dependencies": null,
                       "environments": null,
                       "required-environments": null,
-                      "minimum-libc-version": null,
                       "conflicts": null,
                       "build-backend": null
                     }
@@ -3419,7 +3356,6 @@ mod tests {
                       "build-constraint-dependencies": null,
                       "environments": null,
                       "required-environments": null,
-                      "minimum-libc-version": null,
                       "conflicts": null,
                       "build-backend": null
                     }

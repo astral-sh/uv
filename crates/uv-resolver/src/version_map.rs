@@ -11,9 +11,9 @@ use uv_client::{FlatIndexEntry, OwnedArchive, SimpleDetailMetadata, VersionFiles
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl, MinimumLibcVersion,
-    PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, RequiresPython,
-    SourceDistCompatibility, WheelCompatibility,
+    HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
+    RegistryBuiltWheel, RegistrySourceDist, RequiresPython, SourceDistCompatibility,
+    WheelCompatibility,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -55,7 +55,6 @@ impl VersionMap {
         available_version_cutoff: Option<Timestamp>,
         flat_index: Option<FlatDistributions>,
         build_options: &BuildOptions,
-        minimum_libc_version: Option<MinimumLibcVersion>,
     ) -> Self {
         let mut local = false;
         let mut entries = Vec::with_capacity(simple_metadata.iter().size_hint().0);
@@ -105,7 +104,6 @@ impl VersionMap {
                 requires_python,
                 included_version_cutoff,
                 available_version_cutoff,
-                minimum_libc_version,
             }),
         }
     }
@@ -116,16 +114,20 @@ impl VersionMap {
         tags: Option<&Tags>,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
-        minimum_libc_version: Option<MinimumLibcVersion>,
     ) -> Self {
-        FlatDistributions::from_entries(
-            flat_metadata,
-            tags,
-            hasher,
-            build_options,
-            minimum_libc_version,
-        )
-        .into()
+        let mut local = false;
+        let mut map = BTreeMap::new();
+
+        for (version, prioritized_dist) in
+            FlatDistributions::from_entries(flat_metadata, tags, hasher, build_options)
+        {
+            local |= version.is_local();
+            map.insert(version, prioritized_dist);
+        }
+
+        Self {
+            inner: VersionMapInner::Eager(VersionMapEager { map, local }),
+        }
     }
 
     /// Return the [`ResolutionMetadata`] for the given version, if any.
@@ -501,8 +503,6 @@ struct VersionMapLazy {
     hasher: HashStrategy,
     /// The `requires-python` constraint for the resolution.
     requires_python: RequiresPython,
-    /// The libc baselines required during universal resolution.
-    minimum_libc_version: Option<MinimumLibcVersion>,
 }
 
 impl VersionMapLazy {
@@ -689,12 +689,7 @@ impl VersionMapLazy {
                             index: self.index.clone(),
                             size_is_authoritative: false,
                         };
-                        priority_dist.insert_built(
-                            dist,
-                            hashes,
-                            compatibility,
-                            self.minimum_libc_version,
-                        );
+                        priority_dist.insert_built(dist, hashes, compatibility);
                     }
                     DistFilename::SourceDistFilename(filename) => {
                         let compatibility = self.source_dist_compatibility(
@@ -734,16 +729,16 @@ impl VersionMapLazy {
         excluded: bool,
         upload_time: Option<i64>,
     ) -> SourceDistCompatibility {
+        // Check if builds are disabled
+        if self.no_build {
+            return SourceDistCompatibility::Incompatible(IncompatibleSource::NoBuild);
+        }
+
         // Check if after upload time cutoff
         if excluded {
             return SourceDistCompatibility::Incompatible(IncompatibleSource::ExcludeNewer(
                 upload_time,
             ));
-        }
-
-        // Check if builds are disabled
-        if self.no_build {
-            return SourceDistCompatibility::Incompatible(IncompatibleSource::NoBuild);
         }
 
         // Check if yanked
@@ -768,9 +763,7 @@ impl VersionMapLazy {
         }
 
         // Check if hashes line up. If hashes aren't required, they're considered matching.
-        let hash_policy = self
-            .hasher
-            .archive_policy_for_package(&filename.name, &filename.version);
+        let hash_policy = self.hasher.get_package(&filename.name, &filename.version);
         let required_hashes = hash_policy.digests();
         let hash = if required_hashes.is_empty() {
             HashComparison::Matched
@@ -797,14 +790,14 @@ impl VersionMapLazy {
         excluded: bool,
         upload_time: Option<i64>,
     ) -> WheelCompatibility {
-        // Check if after upload time cutoff
-        if excluded {
-            return WheelCompatibility::Incompatible(IncompatibleWheel::ExcludeNewer(upload_time));
-        }
-
         // Check if binaries are disabled
         if self.no_binary {
             return WheelCompatibility::Incompatible(IncompatibleWheel::NoBinary);
+        }
+
+        // Check if after upload time cutoff
+        if excluded {
+            return WheelCompatibility::Incompatible(IncompatibleWheel::ExcludeNewer(upload_time));
         }
 
         // Check if yanked
@@ -834,7 +827,7 @@ impl VersionMapLazy {
         };
 
         // Check if hashes line up. If hashes aren't required, they're considered matching.
-        let hash_policy = self.hasher.archive_policy_for_package(name, version);
+        let hash_policy = self.hasher.get_package(name, version);
         let required_hashes = hash_policy.digests();
         let hash = if required_hashes.is_empty() {
             HashComparison::Matched

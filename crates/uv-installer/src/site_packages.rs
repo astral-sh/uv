@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use fs_err as fs;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
-use uv_configuration::{DependencyMode, ExcludeDependency, Excludes, Override, Overrides};
+use uv_configuration::{ExcludeDependency, Excludes, Override, Overrides};
 use uv_distribution_filename::EggInfoFilename;
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, Diagnostic, ExtraBuildRequires, ExtraBuildVariables,
@@ -325,8 +325,7 @@ impl SitePackages {
         Ok(diagnostics)
     }
 
-    /// Returns if the installed packages satisfy the given requirements, including transitive
-    /// dependencies when requested by [`DependencyMode`].
+    /// Returns if the installed packages satisfy the given requirements.
     pub fn satisfies_spec(
         &self,
         requirements: &[UnresolvedRequirementSpecification],
@@ -334,8 +333,6 @@ impl SitePackages {
         overrides: &[UnresolvedRequirementSpecification],
         override_dependencies: &[Override<Requirement>],
         exclude_dependencies: &[ExcludeDependency],
-        dependency_metadata: &DependencyMetadata,
-        dependency_mode: DependencyMode,
         installation: InstallationStrategy,
         markers: &ResolverMarkerEnvironment,
         tags: &Tags,
@@ -443,8 +440,6 @@ impl SitePackages {
             constraints.iter().map(|constraint| &constraint.requirement),
             &overrides,
             &excludes,
-            dependency_metadata,
-            dependency_mode,
             installation,
             markers,
             tags,
@@ -462,8 +457,6 @@ impl SitePackages {
         constraints: impl Iterator<Item = &'a Requirement>,
         overrides: &'a Overrides,
         excludes: &'a Excludes,
-        dependency_metadata: &DependencyMetadata,
-        dependency_mode: DependencyMode,
         installation: InstallationStrategy,
         markers: &ResolverMarkerEnvironment,
         tags: &Tags,
@@ -557,23 +550,10 @@ impl SitePackages {
                         }
                     }
 
-                    // With `--no-deps`, only the requested requirements and their constraints
-                    // need to be satisfied. Avoid reading metadata for dependencies that the
-                    // resolver would not include either.
-                    if dependency_mode.is_direct() {
-                        continue;
-                    }
-
                     // Recurse into the dependencies.
-                    let metadata = if let Some(metadata) =
-                        dependency_metadata.get(name, Some(distribution.version()))
-                    {
-                        Cow::Owned(metadata)
-                    } else {
-                        Cow::Borrowed(distribution.read_metadata().with_context(|| {
-                            format!("Failed to read metadata for: {distribution}")
-                        })?)
-                    };
+                    let metadata = distribution
+                        .read_metadata()
+                        .with_context(|| format!("Failed to read metadata for: {distribution}"))?;
 
                     // Add the dependencies to the queue.
                     let dependencies = metadata
@@ -630,12 +610,12 @@ pub enum InstallationStrategy {
     Strict,
 }
 
-/// Whether all requirements are already satisfied for the requested [`DependencyMode`].
+/// We check if all requirements are already satisfied, recursing through the requirements tree.
 #[derive(Debug)]
 pub enum SatisfiesResult {
-    /// All requirements are satisfied, including transitive dependencies when requested.
+    /// All requirements are recursively satisfied.
     Fresh {
-        /// The set of all requirements checked, including the transitive closure when requested.
+        /// The flattened set (transitive closure) of all requirements checked.
         recursive_requirements: FxHashSet<Requirement>,
     },
     /// We found an unsatisfied requirement. Since we exit early, we only know about the first

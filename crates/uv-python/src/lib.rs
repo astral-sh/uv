@@ -174,7 +174,7 @@ impl std::fmt::Display for MissingPythonHint {
     }
 }
 
-impl uv_errors::Hinted for Error {
+impl uv_errors::Hint for Error {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::MissingPython(_, Some(hint)) => uv_errors::Hints::from(hint.to_string()),
@@ -203,7 +203,6 @@ impl From<PythonNotFound> for Error {
 // TODO(zanieb): We should write a mock interpreter script that works on Windows
 #[cfg(all(test, unix))]
 mod tests {
-    use std::assert_matches;
     use std::{
         env,
         ffi::{OsStr, OsString},
@@ -676,9 +675,8 @@ mod tests {
                 &context.cache,
             )
         });
-        assert_matches!(
-            result,
-            Ok(Err(PythonNotFound { .. })),
+        assert!(
+            matches!(result, Ok(Err(PythonNotFound { .. }))),
             "With an empty path, no Python installation should be detected got {result:?}"
         );
 
@@ -691,9 +689,8 @@ mod tests {
                 &context.cache,
             )
         });
-        assert_matches!(
-            result,
-            Ok(Err(PythonNotFound { .. })),
+        assert!(
+            matches!(result, Ok(Err(PythonNotFound { .. }))),
             "With an unset path, no Python installation should be detected got {result:?}"
         );
 
@@ -716,9 +713,8 @@ mod tests {
                 &context.cache,
             )
         });
-        assert_matches!(
-            result,
-            Ok(Err(PythonNotFound { .. })),
+        assert!(
+            matches!(result, Ok(Err(PythonNotFound { .. }))),
             "With a non-executable Python, no Python installation should be detected; got {result:?}"
         );
 
@@ -738,12 +734,14 @@ mod tests {
                 &context.cache,
             )
         })??;
-        assert_matches!(
-            interpreter,
-            PythonInstallation {
-                source: PythonSource::SearchPathFirst,
-                interpreter: _
-            },
+        assert!(
+            matches!(
+                interpreter,
+                PythonInstallation {
+                    source: PythonSource::SearchPathFirst,
+                    interpreter: _
+                }
+            ),
             "We should find the valid executable; got {interpreter:?}"
         );
 
@@ -778,12 +776,14 @@ mod tests {
                 ))
         })?;
 
-        assert_matches!(
-            interpreter,
-            PythonInstallation {
-                source: PythonSource::SearchPathFirst,
-                interpreter: _
-            },
+        assert!(
+            matches!(
+                interpreter,
+                PythonInstallation {
+                    source: PythonSource::SearchPathFirst,
+                    interpreter: _
+                }
+            ),
             "We should find the local Python without reading download metadata; got {interpreter:?}"
         );
         assert_eq!(
@@ -842,12 +842,14 @@ mod tests {
                 &context.cache,
             )
         })??;
-        assert_matches!(
-            python,
-            PythonInstallation {
-                source: PythonSource::SearchPath,
-                interpreter: _
-            },
+        assert!(
+            matches!(
+                python,
+                PythonInstallation {
+                    source: PythonSource::SearchPath,
+                    interpreter: _
+                }
+            ),
             "We should skip the bad executables in favor of the good one; got {python:?}"
         );
         assert_eq!(python.interpreter().sys_executable(), python_path);
@@ -1047,9 +1049,8 @@ mod tests {
             .key()
             .to_string();
         let key_request = PythonRequest::parse(&key);
-        assert_matches!(
-            key_request,
-            PythonRequest::Key(_),
+        assert!(
+            matches!(key_request, PythonRequest::Key(_)),
             "Expected an installation key request, got {key_request:?}"
         );
 
@@ -1129,9 +1130,8 @@ mod tests {
                 &context.cache,
             )
         });
-        assert_matches!(
-            result,
-            Err(discovery::Error::Query(..)),
+        assert!(
+            matches!(result, Err(discovery::Error::Query(..))),
             "If only Python 2 is available, we should report the interpreter query error; got {result:?}"
         );
 
@@ -1166,12 +1166,14 @@ mod tests {
                 &context.cache,
             )
         })??;
-        assert_matches!(
-            python,
-            PythonInstallation {
-                source: PythonSource::SearchPath,
-                interpreter: _
-            },
+        assert!(
+            matches!(
+                python,
+                PythonInstallation {
+                    source: PythonSource::SearchPath,
+                    interpreter: _
+                }
+            ),
             "We should skip the Python 2 installation and find the Python 3 interpreter; got {python:?}"
         );
         assert_eq!(python.interpreter().sys_executable(), python3.path());
@@ -1289,12 +1291,14 @@ mod tests {
             )
         })??;
 
-        assert_matches!(
-            python,
-            PythonInstallation {
-                source: PythonSource::SearchPath,
-                interpreter: _
-            },
+        assert!(
+            matches!(
+                python,
+                PythonInstallation {
+                    source: PythonSource::SearchPath,
+                    interpreter: _
+                }
+            ),
             "We should find a python; got {python:?}"
         );
         assert_eq!(
@@ -1320,12 +1324,14 @@ mod tests {
             )
         })??;
 
-        assert_matches!(
-            python,
-            PythonInstallation {
-                source: PythonSource::SearchPath,
-                interpreter: _
-            },
+        assert!(
+            matches!(
+                python,
+                PythonInstallation {
+                    source: PythonSource::SearchPath,
+                    interpreter: _
+                }
+            ),
             "We should find a python; got {python:?}"
         );
         assert_eq!(
@@ -1350,9 +1356,8 @@ mod tests {
                 &context.cache,
             )
         })?;
-        assert_matches!(
-            result,
-            Err(PythonNotFound { .. }),
+        assert!(
+            matches!(result, Err(PythonNotFound { .. })),
             "We should not find a python; got {result:?}"
         );
 
@@ -1372,9 +1377,8 @@ mod tests {
                 &context.cache,
             )
         })?;
-        assert_matches!(
-            result,
-            Err(PythonNotFound { .. }),
+        assert!(
+            matches!(result, Err(PythonNotFound { .. })),
             "We should not find a python; got {result:?}"
         );
 
@@ -1420,12 +1424,14 @@ mod tests {
             )
         })?;
 
-        assert_matches!(
-            python,
-            PythonInstallation {
-                source: PythonSource::SearchPath,
-                interpreter: _
-            },
+        assert!(
+            matches!(
+                python,
+                PythonInstallation {
+                    source: PythonSource::SearchPath,
+                    interpreter: _
+                }
+            ),
             "We should find a python; got {python:?}"
         );
         assert_eq!(
@@ -1451,12 +1457,14 @@ mod tests {
             )
         })?;
 
-        assert_matches!(
-            python,
-            PythonInstallation {
-                source: PythonSource::SearchPath,
-                interpreter: _
-            },
+        assert!(
+            matches!(
+                python,
+                PythonInstallation {
+                    source: PythonSource::SearchPath,
+                    interpreter: _
+                }
+            ),
             "We should find a python; got {python:?}"
         );
         assert_eq!(
@@ -1484,12 +1492,14 @@ mod tests {
                     &context.cache,
                 )
             })?;
-        assert_matches!(
-            python,
-            PythonInstallation {
-                source: PythonSource::SearchPathFirst,
-                interpreter: _
-            },
+        assert!(
+            matches!(
+                python,
+                PythonInstallation {
+                    source: PythonSource::SearchPathFirst,
+                    interpreter: _
+                }
+            ),
             "We should skip the active environment in favor of the requested version; got {python:?}"
         );
 
@@ -1512,12 +1522,14 @@ mod tests {
                     &context.cache,
                 )
             })?;
-        assert_matches!(
-            python,
-            PythonInstallation {
-                source: PythonSource::ActiveEnvironment,
-                interpreter: _
-            },
+        assert!(
+            matches!(
+                python,
+                PythonInstallation {
+                    source: PythonSource::ActiveEnvironment,
+                    interpreter: _
+                }
+            ),
             "We should prefer the active environment after relaxing; got {python:?}"
         );
         assert_eq!(
@@ -1625,9 +1637,8 @@ mod tests {
             },
         )?;
 
-        assert_matches!(
-            result,
-            Err(PythonNotFound { .. }),
+        assert!(
+            matches!(result, Err(PythonNotFound { .. })),
             "We should not allow the non-virtual environment; got {result:?}"
         );
 
@@ -1703,9 +1714,8 @@ mod tests {
             },
         )?;
 
-        assert_matches!(
-            result,
-            Err(PythonNotFound { .. }),
+        assert!(
+            matches!(result, Err(PythonNotFound { .. })),
             "We should not allow the base environment when looking for virtual environments"
         );
 
@@ -1790,9 +1800,8 @@ mod tests {
             },
         )?;
 
-        assert_matches!(
-            result,
-            Err(PythonNotFound { .. }),
+        assert!(
+            matches!(result, Err(PythonNotFound { .. })),
             "Base environment detected via _CONDA_ROOT should be excluded from virtual environments; got {result:?}"
         );
 
@@ -2225,9 +2234,8 @@ mod tests {
                 &context.cache,
             )
         })?;
-        assert_matches!(
-            result,
-            Err(PythonNotFound { .. }),
+        assert!(
+            matches!(result, Err(PythonNotFound { .. })),
             "We should not find an python; got {result:?}"
         );
 
@@ -2243,9 +2251,8 @@ mod tests {
                 )
             },
         )?;
-        assert_matches!(
-            result,
-            Err(PythonNotFound { .. }),
+        assert!(
+            matches!(result, Err(PythonNotFound { .. })),
             "We should not find an python; got {result:?}"
         );
         Ok(())
@@ -2269,12 +2276,13 @@ mod tests {
                 &context.cache,
             )
         });
-        assert_matches!(
+        assert!(
+            matches!(
                 &result,
                 Err(discovery::Error::VirtualEnv(
                     crate::virtualenv::Error::MissingPyVenvCfg(path)
                 )) if path == child_venv.path()
-            ,
+            ),
             "A broken symlink at `.venv` should be eagerly rejected; got {result:?}"
         );
 
@@ -2297,11 +2305,12 @@ mod tests {
         });
         fs_err::set_permissions(&context.workdir, permissions)?;
 
-        assert_matches!(
+        assert!(
+            matches!(
                 &result,
                 Err(discovery::Error::VirtualEnv(crate::virtualenv::Error::Io(error)))
                     if error.kind() == io::ErrorKind::PermissionDenied
-            ,
+            ),
             "A virtual environment metadata error should not be ignored; got {result:?}"
         );
 
@@ -2335,9 +2344,8 @@ mod tests {
                 &context.cache,
             )
         })?;
-        assert_matches!(
-            result,
-            Err(PythonNotFound { .. }),
+        assert!(
+            matches!(result, Err(PythonNotFound { .. })),
             "We should not find it without a specific request"
         );
 
@@ -2349,9 +2357,8 @@ mod tests {
                 &context.cache,
             )
         })?;
-        assert_matches!(
-            result,
-            Err(PythonNotFound { .. }),
+        assert!(
+            matches!(result, Err(PythonNotFound { .. })),
             "We should not find it via a matching version request"
         );
 
@@ -2595,9 +2602,8 @@ mod tests {
                 &context.cache,
             )
         })?;
-        assert_matches!(
-            result,
-            Err(PythonNotFound { .. }),
+        assert!(
+            matches!(result, Err(PythonNotFound { .. })),
             "We should not find the file; got {result:?}"
         );
 
@@ -2640,9 +2646,8 @@ mod tests {
                 &context.cache,
             )
         })?;
-        assert_matches!(
-            result,
-            Err(PythonNotFound { .. }),
+        assert!(
+            matches!(result, Err(PythonNotFound { .. })),
             "We should not allow a system interpreter; got {result:?}"
         );
 
@@ -2691,9 +2696,8 @@ mod tests {
                 &context.cache,
             )
         })?;
-        assert_matches!(
-            result,
-            Err(PythonNotFound { .. }),
+        assert!(
+            matches!(result, Err(PythonNotFound { .. })),
             "We should not find the pypy interpreter if not named `python` or requested; got {result:?}"
         );
 
@@ -2917,9 +2921,8 @@ mod tests {
                 &context.cache,
             )
         })?;
-        assert_matches!(
-            result,
-            Err(PythonNotFound { .. }),
+        assert!(
+            matches!(result, Err(PythonNotFound { .. })),
             "We should not the graalpy interpreter if not named `python` or requested; got {result:?}"
         );
 
@@ -3223,12 +3226,14 @@ mod tests {
             )
         })??;
 
-        assert_matches!(
-            python,
-            PythonInstallation {
-                source: PythonSource::SearchPathFirst,
-                interpreter: _
-            },
+        assert!(
+            matches!(
+                python,
+                PythonInstallation {
+                    source: PythonSource::SearchPathFirst,
+                    interpreter: _
+                }
+            ),
             "We should find a python; got {python:?}"
         );
         assert_eq!(
@@ -3273,12 +3278,14 @@ mod tests {
             )
         })??;
 
-        assert_matches!(
-            python,
-            PythonInstallation {
-                source: PythonSource::SearchPathFirst,
-                interpreter: _
-            },
+        assert!(
+            matches!(
+                python,
+                PythonInstallation {
+                    source: PythonSource::SearchPathFirst,
+                    interpreter: _
+                }
+            ),
             "We should find a python; got {python:?}"
         );
         assert_eq!(

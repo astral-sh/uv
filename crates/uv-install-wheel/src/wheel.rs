@@ -167,10 +167,7 @@ const RESERVED_VERSIONED_SCRIPT_NAME_PREFIX_ERROR: &str = "python3.";
 const RESERVED_FREE_THREADED_SCRIPT_NAME_PREFIXES_ERROR: &[&str; 2] = &["python3.", "pythonw3."];
 const RESERVED_SCRIPT_NAMES_WARN: &[&str; 2] = &["activate", "activate_this.py"];
 
-/// Return the reserved interpreter name if a script would overwrite a Python executable.
-///
-/// Expects a lowercase string.
-pub fn reserved_script_name(name: &str) -> Option<&str> {
+fn reserved_script_name(name: &str) -> Option<&str> {
     let normalized_name = name.strip_suffix(".py").unwrap_or(name);
     (RESERVED_SCRIPT_NAMES_ERROR.contains(&normalized_name)
         || normalized_name
@@ -989,15 +986,16 @@ pub(crate) fn write_record(
 ///
 /// This function is given both the location of the unpacked wheel and the list of files from the
 /// wheel that were unpacked to avoid a walkdir for this check.
-///
-/// Returns the relative path to the `RECORD` file if it was rewritten.
 pub fn validate_and_heal_record<'a>(
     wheel_dir: &Path,
-    unpacked_wheel: impl IntoIterator<Item = (&'a Path, u64)>,
+    unpacked_wheel: impl IntoIterator<Item = &'a (PathBuf, u64)>,
     dist: impl Display,
-) -> Result<Option<PathBuf>, Error> {
+) -> Result<(), Error> {
     // On the filesystem: The unpacked files of the wheel.
-    let mut files: BTreeMap<&Path, u64> = unpacked_wheel.into_iter().collect();
+    let mut files: BTreeMap<&Path, u64> = unpacked_wheel
+        .into_iter()
+        .map(|(path, size)| (path.as_path(), *size))
+        .collect();
 
     // In the record: The files we expect in the wheel.
     let dist_info_prefix = find_dist_info(wheel_dir)?;
@@ -1049,8 +1047,7 @@ pub fn validate_and_heal_record<'a>(
                 .join("`, `")
         );
     }
-    let healed = !extra_record_entries.is_empty() || !files.is_empty();
-    if healed {
+    if !extra_record_entries.is_empty() || !files.is_empty() {
         debug!("Rewriting RECORD to match actual wheel contents for {dist}");
         // We already removed RECORD entries with no matching unpacked file, now add files that
         // were unpacked but not listed in the archive.
@@ -1069,7 +1066,7 @@ pub fn validate_and_heal_record<'a>(
         write_record(wheel_dir, &dist_info_prefix, record)?;
     }
 
-    Ok(healed.then(|| PathBuf::from(dist_info_dir).join("RECORD")))
+    Ok(())
 }
 
 /// Parse a file with email message format such as WHEEL and METADATA
@@ -1222,7 +1219,6 @@ impl RenameOrCopy {
 
 #[cfg(test)]
 mod test {
-    use std::assert_matches;
     use std::io::{Cursor, ErrorKind};
     use std::path::Path;
 
@@ -1321,10 +1317,10 @@ mod test {
             .err()
             .ok_or_else(|| anyhow::anyhow!("invalid UTF-8 should fail to parse"))?;
 
-        assert_matches!(
+        assert!(matches!(
             error,
             Error::Io(err) if err.kind() == ErrorKind::InvalidData
-        );
+        ));
 
         Ok(())
     }

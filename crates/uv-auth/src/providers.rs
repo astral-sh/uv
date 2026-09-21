@@ -155,11 +155,11 @@ static AZURE_ENDPOINT_URL: LazyLock<Result<Option<Url>, ParseError>> =
 
 /// A provider for authentication credentials for Azure endpoints.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AzureEndpointProvider;
+pub(crate) struct AzureEndpointProvider;
 
 impl AzureEndpointProvider {
     /// Returns `true` if the URL matches the configured Azure endpoint.
-    pub fn is_azure_endpoint(url: &Url, preview: Preview) -> Result<bool> {
+    pub(crate) fn is_azure_endpoint(url: &Url, preview: Preview) -> Result<bool> {
         if let Some(azure_endpoint_url) = AZURE_ENDPOINT_URL
             .as_ref()
             .map_err(|error| *error)

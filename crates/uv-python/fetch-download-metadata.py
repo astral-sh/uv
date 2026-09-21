@@ -4,9 +4,6 @@
 # dependencies = [
 #   "httpx < 1",
 # ]
-# [tool.uv]
-# no-build = true
-# exclude-newer = "P7D"
 # ///
 """
 Fetch Python version download metadata.

@@ -17,12 +17,11 @@ permissions: {}
 
 env:
   MAX_FLAKE_RERUN_ATTEMPTS: "3"
-  UV_LOCKED: 1
 
 jobs:
   diagnose:
     if: github.repository == 'astral-sh/uv' || github.repository == 'astral-sh/uv-dev'
-    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     environment: automations
     timeout-minutes: 20
     permissions:
@@ -38,7 +37,6 @@ jobs:
           persist-credentials: false
 
       - name: "Collect workflow failure context"
-        id: context
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HEAD_SHA: ${{ inputs.head_sha }}
@@ -79,42 +77,29 @@ jobs:
           fi
           if ! jq --exit-status '.conclusion | IN("failure", "timed_out", "startup_failure")' \
             .workflow-failure-event.json > /dev/null; then
-            echo "The workflow run is no longer failed; skipping diagnosis."
-            exit 0
+            echo "The workflow run did not fail; refusing to diagnose it." >&2
+            exit 1
           fi
 
-          # Fetch jobs separately to avoid gh's limit of 25 per-job log fallbacks.
-          run_attempt="$(jq -r '.attempt' .workflow-failure-event.json)"
-          jq -r '
-            .jobs[]
-            | select(.conclusion | IN("action_required", "failure", "startup_failure", "timed_out"))
-            | .databaseId
-          ' .workflow-failure-event.json > "$RUNNER_TEMP/workflow-failure-job-ids.txt"
-
-          while IFS= read -r job_id; do
-            gh run view \
-              --repo "$GITHUB_REPOSITORY" \
-              --attempt "$run_attempt" \
-              --job "$job_id" \
-              --log-failed
-          done < "$RUNNER_TEMP/workflow-failure-job-ids.txt" > .workflow-failure-log.txt
+          gh run view "$RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --attempt "$(jq -r '.attempt' .workflow-failure-event.json)" \
+            --log-failed \
+            > .workflow-failure-log.txt
 
           {
             printf 'Workflow failure diagnosis automation for run %s\n\n' "$RUN_ID"
             cat agents/prompts/diagnose-workflow-failure.md
           } > "$RUNNER_TEMP/diagnose-workflow-failure-prompt.md"
 
-          echo "ready=true" >> "$GITHUB_OUTPUT"
-
       - name: "Diagnose workflow failure"
         id: diagnose
-        if: steps.context.outputs.ready == 'true'
         uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1.11
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.147.0"
+          codex-version: "0.146.0"
           codex-home: "agents/codex"
           effort: high
           permission-profile: "workflow-failure"
@@ -125,7 +110,7 @@ jobs:
           output-schema-file: "agents/schemas/workflow-failure.json"
 
       - name: "Upload Codex thread"
-        if: always() && steps.context.outputs.ready == 'true'
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: codex-thread-workflow-failure-${{ github.run_id }}-${{ github.run_attempt }}
@@ -137,7 +122,7 @@ jobs:
     if: >-
       needs.diagnose.outputs.result != '' &&
       fromJSON(needs.diagnose.outputs.result).failure_kind == 'flaky'
-    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     environment: automations
     timeout-minutes: 5
     concurrency:
@@ -229,7 +214,7 @@ jobs:
       needs.diagnose.outputs.result != '' &&
       (fromJSON(needs.diagnose.outputs.result).decision == 'create' ||
       fromJSON(needs.diagnose.outputs.result).decision == 'duplicate')
-    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     environment: automations
     timeout-minutes: 5
     permissions:
@@ -300,7 +285,7 @@ jobs:
             .decision == "create"
             and (.issue.title | type == "string" and length > 0)
             and (.issue.body | type == "string" and length > 0)
-            and (.issue.label | IN("bug", "internal:ci", "internal:ci-flake"))
+            and (.issue.label | IN("bug", "ci-flake"))
             and (.issue.body | test("@[A-Za-z0-9][A-Za-z0-9-]*") | not)
           ' "$RUNNER_TEMP/diagnosis.json" > /dev/null; then
             echo "The workflow failure diagnosis is invalid or contains a user mention; refusing to open an issue." >&2

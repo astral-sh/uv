@@ -35,30 +35,6 @@ pub enum GitResolverError {
     ReqwestMiddleware(#[from] reqwest_middleware::Error),
 }
 
-impl GitResolverError {
-    /// Return whether this is an expected user-facing failure.
-    pub fn is_user_failure(&self) -> bool {
-        match self {
-            Self::Git(error) => {
-                for cause in error.chain() {
-                    if let Some(error) = cause.downcast_ref::<reqwest::Error>() {
-                        return error.status() == Some(reqwest::StatusCode::NOT_FOUND);
-                    }
-                    if cause.is::<std::io::Error>() {
-                        return false;
-                    }
-                }
-                true
-            }
-            Self::Reqwest(error) => error.status() == Some(reqwest::StatusCode::NOT_FOUND),
-            Self::ReqwestMiddleware(error) => {
-                error.status() == Some(reqwest::StatusCode::NOT_FOUND)
-            }
-            Self::Io(_) | Self::LockedFile(_) | Self::Join(_) => false,
-        }
-    }
-}
-
 /// HTTP settings for fetching a Git repository.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct GitHttpSettings {
@@ -188,14 +164,10 @@ impl GitResolver {
         let precise = response.text().await?;
         let precise =
             GitOid::from_str(&precise).map_err(|err| GitResolverError::Git(err.into()))?;
-        let url = url
-            .clone()
-            .with_precise(precise)
-            .map_err(|error| GitResolverError::Git(error.into()))?;
 
         // Insert the resolved URL into the in-memory cache. This ensures that subsequent fetches
         // resolve to the same precise commit.
-        self.insert(RepositoryReference::from(&url), precise);
+        self.insert(RepositoryReference::from(url), precise);
 
         Ok(Some(precise))
     }
@@ -216,11 +188,7 @@ impl GitResolver {
         // single process are consistent.
         let url = {
             if let Some(precise) = self.get(&reference) {
-                Cow::Owned(
-                    url.clone()
-                        .with_precise(precise)
-                        .map_err(|error| GitResolverError::Git(error.into()))?,
-                )
+                Cow::Owned(url.clone().with_precise(precise))
             } else {
                 Cow::Borrowed(url)
             }
@@ -280,7 +248,7 @@ impl GitResolver {
     pub fn precise(&self, url: GitUrl) -> Option<GitUrl> {
         let reference = RepositoryReference::from(&url);
         let precise = self.get(&reference)?;
-        url.with_precise(precise).ok()
+        Some(url.with_precise(precise))
     }
 
     /// Returns `true` if the two Git URLs refer to the same precise commit.

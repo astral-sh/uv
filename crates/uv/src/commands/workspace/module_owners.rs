@@ -10,11 +10,11 @@ use uv_configuration::{
 use uv_distribution_types::{Dist, Name, ResolvedDist};
 use uv_fs::PortablePathBuf;
 use uv_installer::SitePackages;
-use uv_lock::{Installable, Metadata};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
 use uv_pypi_types::ModuleName;
 use uv_python::PythonEnvironment;
+use uv_resolver::{Installable, Metadata};
 use uv_settings::MalwareCheckSettings;
 use uv_workspace::WorkspaceCache;
 
@@ -29,10 +29,9 @@ use crate::settings::{InstallerSettingsRef, ResolverSettings};
 
 /// Map importable modules to package IDs, optionally syncing all locked extras and groups first.
 ///
-/// By default, synchronization is sufficient (inexact), so required distributions are available
-/// to inspect without removing unrelated packages from an existing environment. Exact
-/// synchronization removes those unrelated packages instead. Only distributions in the selected
-/// resolution are assigned package IDs.
+/// This uses a sufficient (inexact) sync so required distributions are available to inspect
+/// without removing unrelated packages from an existing environment. Only distributions in the
+/// selected resolution are assigned package IDs, so those unrelated packages are not reported.
 pub(crate) async fn collect_module_owners(
     target: InstallTarget<'_>,
     venv: &PythonEnvironment,
@@ -44,15 +43,14 @@ pub(crate) async fn collect_module_owners(
     workspace_cache: &WorkspaceCache,
     preview: Preview,
     malware_settings: &MalwareCheckSettings,
-    sync: Option<Modifications>,
+    sync: bool,
 ) -> Result<BTreeMap<ModuleName, Vec<String>>> {
     let (extras, groups) = target_selection(target);
-    let package_ids = selected_package_ids(target, venv, &extras, &groups, settings)?;
-    if package_ids.is_none() && !matches!(sync, Some(Modifications::Exact)) {
+    let Some(package_ids) = selected_package_ids(target, venv, &extras, &groups, settings)? else {
         return Ok(BTreeMap::new());
-    }
+    };
 
-    if let Some(modifications) = sync {
+    if sync {
         let reinstall = Reinstall::None;
         let installer_settings = InstallerSettingsRef {
             index_locations: &settings.index_locations,
@@ -79,7 +77,7 @@ pub(crate) async fn collect_module_owners(
             &groups,
             None,
             InstallOptions::default(),
-            modifications,
+            Modifications::Sufficient,
             None,
             installer_settings,
             client_builder,
@@ -96,10 +94,6 @@ pub(crate) async fn collect_module_owners(
         )
         .await?;
     }
-
-    let Some(package_ids) = package_ids else {
-        return Ok(BTreeMap::new());
-    };
 
     find_module_owners_in_environment(venv, &package_ids)
 }

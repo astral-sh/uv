@@ -12,6 +12,7 @@ use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_static::EnvVars;
 
 pub(crate) mod pypi;
+pub(crate) mod pyx;
 
 #[derive(Debug, Error)]
 pub enum TrustedPublishingError {
@@ -37,15 +38,18 @@ pub enum TrustedPublishingError {
     #[error(
         "Server returned error code {0}, is trusted publishing correctly configured?\nResponse: {1}\nToken claims, which must match the publisher configuration: {2:#?}"
     )]
-    TokenRejected(StatusCode, String, Box<OidcTokenClaims>),
+    TokenRejected(StatusCode, String, OidcTokenClaims),
     /// When trusted publishing is misconfigured, the error above should occur, not this one.
     #[error(
         "Server returned error code {0}, and the OIDC has an unexpected format.\nResponse: {1}"
     )]
     InvalidOidcToken(StatusCode, String),
+    /// The user gave us a malformed upload URL for trusted publishing with pyx.
+    #[error("The upload URL `{0}` does not look like a valid pyx upload URL")]
+    InvalidPyxUploadUrl(DisplaySafeUrl),
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize)]
 #[serde(transparent)]
 pub struct TrustedPublishingToken(String);
 
@@ -71,12 +75,6 @@ struct MintTokenRequest {
 #[derive(Deserialize)]
 struct PublishToken {
     token: TrustedPublishingToken,
-}
-
-/// The body for querying `https://pypi.org/_/oidc/burn-token`.
-#[derive(Serialize)]
-struct BurnTokenRequest<'a> {
-    token: &'a TrustedPublishingToken,
 }
 
 /// The payload of the OIDC token.
@@ -123,7 +121,7 @@ pub struct BuildkiteTokenClaims {
 
 /// A service (i.e. uploadable index) that supports trusted publishing.
 ///
-/// Token acquisition should go through the default [`Self::get_token`]; implementors
+/// Interactions should go through the default [`get_token`]; implementors
 /// should implement the constituent trait methods.
 pub(crate) trait TrustedPublishingService {
     /// Borrow an HTTP client with middleware.
@@ -137,12 +135,6 @@ pub(crate) trait TrustedPublishingService {
         &self,
         oidc_token: ambient_id::IdToken,
     ) -> Result<TrustedPublishingToken, TrustedPublishingError>;
-
-    /// Request revocation of a short-lived upload token once publishing has finished.
-    async fn burn_token(
-        &self,
-        token: &TrustedPublishingToken,
-    ) -> Result<(), TrustedPublishingError>;
 
     /// Perform the full trusted publishing token exchange.
     async fn get_token(&self) -> Result<Option<TrustedPublishingToken>, TrustedPublishingError> {

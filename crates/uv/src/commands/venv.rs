@@ -9,15 +9,15 @@ use thiserror::Error;
 use tracing::warn;
 
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    ActiveEnvironment, BuildOptions, Concurrency, Constraints, DependencyGroups, DryRun,
-    IndexStrategy, KeyringProviderType, NoBinary, NoBuild, NoSources,
+    BuildOptions, Concurrency, Constraints, DependencyGroups, DryRun, IndexStrategy,
+    KeyringProviderType, NoBinary, NoBuild, NoSources,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{
-    ConfigSettings, DependencyMetadata, ExtraBuildRequires, IndexLocations, PackageConfigSettings,
-    Requirement,
+    ConfigSettings, DependencyMetadata, ExtraBuildRequires, Index, IndexLocations,
+    PackageConfigSettings, Requirement,
 };
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
@@ -48,6 +48,8 @@ use crate::commands::project::{
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
 
+use super::project::default_dependency_groups;
+
 #[derive(Error, Debug)]
 enum VenvError {
     #[error("Failed to create virtual environment")]
@@ -55,6 +57,9 @@ enum VenvError {
 
     #[error("Failed to install seed packages into virtual environment")]
     Seed(#[source] AnyErrorBuild),
+
+    #[error("Failed to extract interpreter tags for installing seed packages")]
+    Tags(#[source] uv_platform_tags::TagsError),
 
     #[error("Failed to resolve `--find-links` entry")]
     FlatIndex(#[source] uv_client::FlatIndexError),
@@ -126,12 +131,7 @@ pub(crate) async fn venv(
         .as_ref()
         .map(VirtualProject::workspace)
         .filter(|workspace| path.is_none() && workspace.install_path() == project_dir)
-        .map(|workspace| {
-            (
-                workspace,
-                workspace.environment_selection(ActiveEnvironment::Ignore),
-            )
-        });
+        .map(|workspace| (workspace, workspace.environment_selection(Some(false))));
 
     let centralized_workspace = project_environment
         .as_ref()
@@ -143,7 +143,7 @@ pub(crate) async fn venv(
     // If the default dependency-groups demand a higher requires-python
     // we should bias an empty venv to that to avoid churn.
     let default_groups = match &project {
-        Some(project) => project.default_groups()?,
+        Some(project) => default_dependency_groups(project.pyproject_toml())?,
         None => DefaultGroups::default(),
     };
     let groups = DependencyGroups::default().with_defaults(default_groups);
@@ -298,9 +298,20 @@ pub(crate) async fn venv(
             .build()?;
 
         // Resolve the flat indexes from `--find-links`.
-        let flat_index = FlatIndex::load(&client, cache, index_locations)
-            .await
-            .map_err(VenvError::FlatIndex)?;
+        let flat_index = {
+            let tags = interpreter.tags().map_err(VenvError::Tags)?;
+            let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
+            let entries = client
+                .fetch_all(index_locations.flat_indexes().map(Index::url))
+                .await
+                .map_err(VenvError::FlatIndex)?;
+            FlatIndex::from_entries(
+                entries,
+                Some(tags),
+                &HashStrategy::None,
+                &BuildOptions::new(NoBinary::None, NoBuild::All),
+            )
+        };
 
         // Initialize any shared state.
         let state = SharedState::default();

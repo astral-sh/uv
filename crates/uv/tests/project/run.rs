@@ -144,7 +144,9 @@ fn run_with_python_version() -> Result<()> {
 
 #[test]
 fn run_args() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
+    let context = uv_test::test_context!("3.12");
+
+    let context = context
         .with_filter((
             r"Usage: uv(?:\.exe)? run \[OPTIONS\] (?s:.*?)(\n----- stderr -----|$)",
             "[UV RUN HELP]$1",
@@ -433,8 +435,8 @@ fn run_pep723_script() -> Result<()> {
     uv_snapshot!(context.filters(), context.run().arg("--group").arg("foo").arg("main.py"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving script dependencies
-      cause: Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
+      × No solution found when resolving script dependencies:
+      ╰─▶ Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
     ");
 
     // If the script can't be resolved, we should reference the script.
@@ -452,8 +454,8 @@ fn run_pep723_script() -> Result<()> {
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("main.py"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving script dependencies
-      cause: Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
+      × No solution found when resolving script dependencies:
+      ╰─▶ Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
     ");
 
     // If the script contains an unclosed PEP 723 tag, we should error.
@@ -497,34 +499,6 @@ fn run_pep723_script() -> Result<()> {
     ----- stderr -----
     error: The script contains multiple PEP 723 metadata blocks
     ");
-
-    Ok(())
-}
-
-#[test]
-fn run_pep723_script_empty_dependency() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-
-    let test_script = context.temp_dir.child("script.py");
-    test_script.write_str(indoc! { r#"
-        # /// script
-        # requires-python = ">=3.11"
-        # dependencies = [""]
-        # ///
-       "#
-    })?;
-
-    // The invalid requirement is empty, so the PEP 508 error should not include an orphaned caret;
-    // see astral-sh/uv#21089.
-    uv_snapshot!(context.filters(), context.run().arg("--script").arg("script.py"), @r#"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    error: TOML parse error at line 2, column 17
-      |
-    2 | dependencies = [""]
-      |                 ^^
-    Empty field is not allowed for PEP508
-    "#);
 
     Ok(())
 }
@@ -813,63 +787,6 @@ fn run_pep723_script_index() -> Result<()> {
     Ok(())
 }
 
-/// Run a PEP 723-compatible script with a relative index and pinned and unpinned dependencies.
-#[test]
-fn run_pep723_script_relative_index() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-
-    let scripts = context.temp_dir.child("scripts");
-    let links = scripts.child("links");
-    links.create_dir_all()?;
-    fs_err::copy(
-        context
-            .workspace_root
-            .join("test/links/ok-1.0.0-py3-none-any.whl"),
-        links.child("ok-1.0.0-py3-none-any.whl"),
-    )?;
-    fs_err::copy(
-        context
-            .workspace_root
-            .join("test/links/validation-1.0.0-py3-none-any.whl"),
-        links.child("validation-1.0.0-py3-none-any.whl"),
-    )?;
-
-    let test_script = scripts.child("main.py");
-    test_script.write_str(indoc! { r#"
-        # /// script
-        # requires-python = ">=3.11"
-        # dependencies = ["ok", "validation"]
-        #
-        # [[tool.uv.index]]
-        # name = "local"
-        # url = "./links"
-        # format = "flat"
-        #
-        # [tool.uv.sources]
-        # ok = { index = "local" }
-        # ///
-
-        import ok
-        import validation
-        "#
-    })?;
-
-    let elsewhere = context.temp_dir.child("elsewhere");
-    elsewhere.create_dir_all()?;
-
-    uv_snapshot!(context.filters(), context.run().current_dir(elsewhere).arg("--offline").arg(test_script.path()), @r"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + ok==1.0.0
-     + validation==1.0.0
-    ");
-
-    Ok(())
-}
-
 /// Package-scoped source disabling must not discard unrelated script sources or indexes.
 #[test]
 fn run_pep723_script_no_sources_package() -> Result<()> {
@@ -1053,10 +970,10 @@ fn run_pep723_script_build_constraints() -> Result<()> {
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: Failed to download and build `requests==1.2.0`
-      cause: Failed to resolve requirements from `setup.py` build
-      cause: No solution found when resolving: `setuptools>=40.8.0`
-      cause: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
+      × Failed to download and build `requests==1.2.0`
+      ├─▶ Failed to resolve requirements from `setup.py` build
+      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
+      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Compatible build constraints.
@@ -1197,7 +1114,7 @@ fn run_pep723_script_lock() -> Result<()> {
 
     // Re-running the script with `--locked` should error.
     uv_snapshot!(context.filters(), context.run().arg("--locked").arg("main.py"), @"
-    exit_code: 1 (failure)
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
@@ -1492,8 +1409,8 @@ fn run_with() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Checked 2 packages in [TIME]
-    error: No solution found when resolving `--with` dependencies
-      cause: Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
+      × No solution found when resolving `--with` dependencies:
+      ╰─▶ Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
     ");
 
     Ok(())
@@ -1982,10 +1899,10 @@ fn run_with_build_constraints() -> Result<()> {
      + idna==3.6
      + sniffio==1.3.1
      + typing-extensions==4.10.0
-    error: Failed to download and build `requests==1.2.0`
-      cause: Failed to resolve requirements from `setup.py` build
-      cause: No solution found when resolving: `setuptools>=40.8.0`
-      cause: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
+      × Failed to download and build `requests==1.2.0`
+      ├─▶ Failed to resolve requirements from `setup.py` build
+      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
+      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Change the build constraint to be compatible with `requests==1.2`.
@@ -2286,8 +2203,8 @@ fn run_with_editable() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Checked 3 packages in [TIME]
-    error: Failed to resolve `--with` requirement
-      cause: Distribution not found at: file://[TEMP_DIR]/foo
+      × Failed to resolve `--with` requirement
+      ╰─▶ Distribution not found at: file://[TEMP_DIR]/foo
     ");
 
     Ok(())
@@ -2542,7 +2459,7 @@ fn run_locked() -> Result<()> {
 
     // Running with `--locked` should error, if no lockfile is present.
     uv_snapshot!(context.filters(), context.run().arg("--locked").arg("--").arg("python").arg("--version"), @"
-    exit_code: 1 (failure)
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`, but `--locked` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
     ");
@@ -2626,7 +2543,7 @@ fn run_locked() -> Result<()> {
 
     // Running with `--locked` should error.
     uv_snapshot!(context.filters(), context.run().arg("--locked").arg("--").arg("python").arg("--version"), @"
-    exit_code: 1 (failure)
+    exit_code: 2 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
@@ -2701,7 +2618,7 @@ fn run_frozen() -> Result<()> {
 
     // Running with `--frozen` should error, if no lockfile is present.
     uv_snapshot!(context.filters(), context.run().arg("--frozen").arg("--").arg("python").arg("--version"), @"
-    exit_code: 1 (failure)
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
     ");
@@ -3285,7 +3202,7 @@ fn run_from_directory() -> Result<()> {
     Installed 1 package in [TIME]
      + foo==1.0.0 (from file://[TEMP_DIR]/project)
     error: Failed to spawn: `./project/main.py`
-      cause: [OS ERROR 2]
+      Caused by: [OS ERROR 2]
     ");
 
     // Even if we write a `.python-version` file in the current directory, we should prefer the
@@ -4080,11 +3997,11 @@ fn run_invalid_project_table() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
-      cause: TOML parse error at line 1, column 2
-               |
-             1 | [project.urls]
-               |  ^^^^^^^
-             `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set
+      Caused by: TOML parse error at line 1, column 2
+          |
+        1 | [project.urls]
+          |  ^^^^^^^
+        `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set
     ");
 
     Ok(())
@@ -4123,7 +4040,7 @@ fn run_script_without_build_system() -> Result<()> {
     Resolved 1 package in [TIME]
     Checked in [TIME]
     error: Failed to spawn: `entry`
-      cause: No such file or directory (os error 2)
+      Caused by: No such file or directory (os error 2)
     ");
 
     Ok(())
@@ -4668,46 +4585,6 @@ fn run_active_script_environment() -> Result<()> {
     Ok(())
 }
 
-/// Regression test for <https://github.com/astral-sh/uv/issues/21364>.
-#[test]
-fn run_active_script_environment_non_virtualenv() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-
-    let test_script = context.temp_dir.child("main.py");
-    test_script.write_str(indoc! { r#"
-        # /// script
-        # requires-python = ">=3.12"
-        # dependencies = []
-        # ///
-
-        print("Hello, world!")
-       "#
-    })?;
-
-    let active_environment = context.temp_dir.child("foo");
-    active_environment.create_dir_all()?;
-    active_environment
-        .child("important.txt")
-        .write_str("important data")?;
-
-    context
-        .run()
-        .arg("--active")
-        .arg("--script")
-        .arg("main.py")
-        .env(EnvVars::VIRTUAL_ENV, "foo")
-        .assert()
-        .success();
-
-    active_environment.assert(predicate::path::is_dir());
-    // Silently deleting user data outside a virtual environment is undesirable.
-    active_environment
-        .child("important.txt")
-        .assert(predicate::path::missing());
-
-    Ok(())
-}
-
 #[test]
 #[cfg(not(windows))]
 fn run_gui_script_explicit_stdin_unix() -> Result<()> {
@@ -4743,12 +4620,11 @@ fn run_gui_script_explicit_stdin_unix() -> Result<()> {
 
 #[test]
 fn run_remote_pep723_script() {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_python_names()
-        .with_filter((
-            r"(?m)^Downloaded remote script to:.*\.py$",
-            "Downloaded remote script to: [TEMP_PATH].py",
-        ));
+    let context = uv_test::test_context!("3.12").with_filtered_python_names();
+    let context = context.with_filter((
+        r"(?m)^Downloaded remote script to:.*\.py$",
+        "Downloaded remote script to: [TEMP_PATH].py",
+    ));
     uv_snapshot!(context.filters(), context.run().arg("https://raw.githubusercontent.com/astral-sh/uv/df45b9ac2584824309ff29a6a09421055ad730f6/scripts/uv-run-remote-script-test.py").arg(EnvVars::CI), @"
     exit_code: 0 (success)
     ----- stdout -----
@@ -4781,8 +4657,8 @@ fn run_remote_pep723_script_with_nonexistent_ssl_cert_file() {
     ----- stderr -----
     warning: Invalid `SSL_CERT_FILE`. Path does not exist: [TEMP_DIR]/missing.pem. No default certificates will be trusted.
     error: error sending request for url (https://raw.githubusercontent.com/astral-sh/uv/df45b9ac2584824309ff29a6a09421055ad730f6/scripts/uv-run-remote-script-test.py)
-      cause: client error (Connect)
-      cause: invalid peer certificate: UnknownIssuer
+      Caused by: client error (Connect)
+      Caused by: invalid peer certificate: UnknownIssuer
     ");
 }
 
@@ -4809,8 +4685,8 @@ fn run_remote_requirements_offline_redacts_credentials() -> Result<()> {
 #[test]
 fn run_remote_pep723_requirements_fetch_error_does_not_leak_credentials() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filter((
-        r"(?m)^  cause: .*(Connection refused|No connection could be made).*$",
-        "  cause: [CONNECTION_REFUSED]",
+        r"(?m)^  Caused by: .*(Connection refused|No connection could be made).*$",
+        "  Caused by: [CONNECTION_REFUSED]",
     ));
 
     let script = context.temp_dir.child("main.py");
@@ -4829,10 +4705,10 @@ fn run_remote_pep723_requirements_fetch_error_does_not_leak_credentials() -> Res
     exit_code: 2 (failure)
     ----- stderr -----
     error: Request failed after 3 retries
-      cause: error sending request for url (http://[LOCALHOST]/requirements.py)
-      cause: client error (Connect)
-      cause: tcp connect error
-      cause: [CONNECTION_REFUSED]
+      Caused by: error sending request for url (http://[LOCALHOST]/requirements.py)
+      Caused by: client error (Connect)
+      Caused by: tcp connect error
+      Caused by: [CONNECTION_REFUSED]
     ");
 
     Ok(())
@@ -5094,16 +4970,18 @@ fn run_with_malformed_env() -> Result<()> {
 
 #[test]
 fn run_with_not_existing_env_file() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filter((
-        r"(?m)^error: Failed to read environment file `.env.development`: .*$",
-        "error: Failed to read environment file `.env.development`: [ERR]",
-    ));
+    let context = uv_test::test_context!("3.12");
 
     context.temp_dir.child("test.py").write_str(indoc! { "
         import os
         print(os.environ.get('THE_EMPIRE_VARIABLE'))
        "
     })?;
+
+    let context = context.with_filter((
+        r"(?m)^error: Failed to read environment file `.env.development`: .*$",
+        "error: Failed to read environment file `.env.development`: [ERR]",
+    ));
 
     uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env.development").arg("test.py"), @"
     exit_code: 2 (failure)
@@ -5836,12 +5714,13 @@ fn detect_infinite_recursion() -> Result<()> {
 
     fs_err::set_permissions(test_script.path(), PermissionsExt::from_mode(0o0744))?;
 
-    let mut command = context.external_command(&test_script);
+    let mut cmd = std::process::Command::new(test_script.as_os_str());
+    context.add_shared_env(&mut cmd, false);
 
     // Set the max recursion depth to a lower amount to speed up testing.
-    command.env(EnvVars::UV_RUN_MAX_RECURSION_DEPTH, "5");
+    cmd.env(EnvVars::UV_RUN_MAX_RECURSION_DEPTH, "5");
 
-    uv_snapshot!(context.filters(), command, @"
+    uv_snapshot!(context.filters(), cmd, @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: `uv run` was recursively invoked 6 times which exceeds the limit of 5

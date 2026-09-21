@@ -83,7 +83,6 @@ pub use crate::index_name::*;
 pub use crate::index_url::*;
 pub use crate::installed::*;
 pub use crate::known_platform::*;
-pub use crate::minimum_libc_version::MinimumLibcVersion;
 pub use crate::origin::*;
 pub use crate::pip_index::*;
 pub use crate::prioritized_distribution::*;
@@ -117,7 +116,6 @@ mod index_url;
 mod installed;
 mod installed_modules;
 mod known_platform;
-mod minimum_libc_version;
 mod origin;
 mod pip_index;
 mod prioritized_distribution;
@@ -385,13 +383,6 @@ pub struct PathSourceDist {
     pub url: VerbatimUrl,
 }
 
-/// Whether a source distribution is a first-party workspace member.
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub enum FirstParty {
-    Yes,
-    No,
-}
-
 /// A source distribution that exists in a local directory.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct DirectorySourceDist {
@@ -402,8 +393,6 @@ pub struct DirectorySourceDist {
     pub editable: Option<bool>,
     /// Whether the package should be built and installed.
     pub r#virtual: Option<bool>,
-    /// Whether the package is a first-party workspace member.
-    pub first_party: FirstParty,
     /// The URL as it was provided by the user.
     pub url: VerbatimUrl,
 }
@@ -543,7 +532,6 @@ impl Dist {
             install_path: install_path.into_boxed_path(),
             editable,
             r#virtual,
-            first_party: FirstParty::No,
             url,
         })))
     }
@@ -791,25 +779,6 @@ impl SourceDist {
         match self {
             Self::Directory(DirectorySourceDist { r#virtual, .. }) => r#virtual.unwrap_or(false),
             _ => false,
-        }
-    }
-
-    /// Returns `true` if the distribution is a first-party workspace member.
-    pub fn is_first_party(&self) -> bool {
-        match self {
-            Self::Directory(DirectorySourceDist {
-                first_party: FirstParty::Yes,
-                ..
-            }) => true,
-            Self::Directory(DirectorySourceDist {
-                first_party: FirstParty::No,
-                ..
-            })
-            | Self::Registry(_)
-            | Self::DirectUrl(_)
-            | Self::GitDirectory(_)
-            | Self::GitPath(_)
-            | Self::Path(_) => false,
         }
     }
 
@@ -1222,9 +1191,9 @@ impl RemoteSource for File {
 impl RemoteSource for Url {
     fn filename(&self) -> Result<Cow<'_, str>, Error> {
         // Identify the last segment of the URL as the filename.
-        let mut path_segments = self.path_segments().ok_or_else(|| {
-            Error::MissingPathSegments(DisplaySafeUrl::ref_cast(self).to_string())
-        })?;
+        let mut path_segments = self
+            .path_segments()
+            .ok_or_else(|| Error::MissingPathSegments(self.to_string()))?;
 
         // This is guaranteed by the contract of `Url::path_segments`.
         let last = path_segments
@@ -1323,13 +1292,20 @@ impl RemoteSource for GitPathSourceDist {
     fn filename(&self) -> Result<Cow<'_, str>, Error> {
         // The filename is the last segment of the URL, before any `@`.
         match self.url.filename()? {
-            Cow::Borrowed(filename) if let Some((_, suffix)) = filename.rsplit_once('@') => {
-                Ok(Cow::Borrowed(suffix))
+            Cow::Borrowed(filename) => {
+                if let Some((_, filename)) = filename.rsplit_once('@') {
+                    Ok(Cow::Borrowed(filename))
+                } else {
+                    Ok(Cow::Borrowed(filename))
+                }
             }
-            Cow::Owned(ref filename) if let Some((_, suffix)) = filename.rsplit_once('@') => {
-                Ok(Cow::Owned(suffix.to_owned()))
+            Cow::Owned(filename) => {
+                if let Some((_, filename)) = filename.rsplit_once('@') {
+                    Ok(Cow::Owned(filename.to_owned()))
+                } else {
+                    Ok(Cow::Owned(filename))
+                }
             }
-            filename => Ok(filename),
         }
     }
 
@@ -1342,13 +1318,20 @@ impl RemoteSource for GitDirectorySourceDist {
     fn filename(&self) -> Result<Cow<'_, str>, Error> {
         // The filename is the last segment of the URL, before any `@`.
         match self.url.filename()? {
-            Cow::Borrowed(filename) if let Some((_, suffix)) = filename.rsplit_once('@') => {
-                Ok(Cow::Borrowed(suffix))
+            Cow::Borrowed(filename) => {
+                if let Some((_, filename)) = filename.rsplit_once('@') {
+                    Ok(Cow::Borrowed(filename))
+                } else {
+                    Ok(Cow::Borrowed(filename))
+                }
             }
-            Cow::Owned(ref filename) if let Some((_, suffix)) = filename.rsplit_once('@') => {
-                Ok(Cow::Owned(suffix.to_owned()))
+            Cow::Owned(filename) => {
+                if let Some((_, filename)) = filename.rsplit_once('@') {
+                    Ok(Cow::Owned(filename.to_owned()))
+                } else {
+                    Ok(Cow::Owned(filename))
+                }
             }
-            filename => Ok(filename),
         }
     }
 
@@ -1817,53 +1800,5 @@ mod test {
             let url = UrlString::from(url.clone());
             assert_eq!(url.filename().unwrap(), "foo-0.1.0.tar.gz", "{url}");
         }
-    }
-
-    #[test]
-    fn remote_source_redacts_missing_path_segments() {
-        for (input, expected) in [
-            (
-                "mailto:ferris@example.com?X-Amz-Signature=sentinel",
-                "mailto:ferris@example.com?X-Amz-Signature=****",
-            ),
-            (
-                "ssh://user:secret@example.com?sig=sentinel",
-                "ssh://user:****@example.com?sig=****",
-            ),
-            (
-                "mailto:ferris@example.com?sig=one&X-Amz-Credential=two&X-Amz-Security-Token=three&X-Amz-Signature=four&token=kept#fragment",
-                "mailto:ferris@example.com?sig=****&X-Amz-Credential=****&X-Amz-Security-Token=****&X-Amz-Signature=****&token=kept#fragment",
-            ),
-            (
-                "mailto:ferris@example.com?x-amz%2dsignature=sentinel&safe=value",
-                "mailto:ferris@example.com?x-amz-signature=****&safe=value",
-            ),
-            (
-                "mailto:ferris@example.com?token=kept#fragment",
-                "mailto:ferris@example.com?token=kept#fragment",
-            ),
-        ] {
-            let url = url::Url::parse(input).unwrap();
-            let error = RemoteSource::filename(&url).unwrap_err();
-            let crate::Error::MissingPathSegments(payload) = &error else {
-                panic!("expected missing path segments");
-            };
-            assert_eq!(payload, expected);
-            assert_eq!(
-                error.to_string(),
-                format!("Could not extract path segments from URL: {expected}")
-            );
-            assert_eq!(
-                format!("{error:?}"),
-                format!("MissingPathSegments({expected:?})")
-            );
-            assert!(std::error::Error::source(&error).is_none());
-            assert_eq!(url.as_str(), input);
-        }
-
-        let input = "https://example.org/demo%20name.whl?sig=sentinel";
-        let url = url::Url::parse(input).unwrap();
-        assert_eq!(RemoteSource::filename(&url).unwrap(), "demo name.whl");
-        assert_eq!(url.as_str(), input);
     }
 }

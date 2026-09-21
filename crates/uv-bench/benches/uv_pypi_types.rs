@@ -1,10 +1,9 @@
 use std::hint::black_box;
 
 use criterion::{
-    BenchmarkGroup, BenchmarkId, Criterion, Throughput, criterion_group, criterion_main,
-    measurement::WallTime,
+    BenchmarkId, Criterion, Throughput, criterion_group, criterion_main, measurement::WallTime,
 };
-use uv_pypi_types::{Digest, PypiSimpleDetail};
+use uv_pypi_types::{PypiSimpleDetail, PyxSimpleDetail};
 
 fn simple_api_fixture(file_count: usize) -> serde_json::Value {
     let files = (0..file_count)
@@ -52,6 +51,8 @@ fn deserialize_simple_api(criterion: &mut Criterion<WallTime>) {
     for file_count in [32, 4096] {
         let fixture = simple_api_fixture(file_count);
         let json = serde_json::to_vec(&fixture).expect("benchmark input should serialize");
+        let messagepack =
+            rmp_serde::to_vec_named(&fixture).expect("benchmark input should serialize");
 
         group.throughput(Throughput::Bytes(json.len() as u64));
 
@@ -65,64 +66,34 @@ fn deserialize_simple_api(criterion: &mut Criterion<WallTime>) {
                 });
             },
         );
-    }
 
-    group.finish();
-}
-
-fn digest_size<const BYTES: usize>(group: &mut BenchmarkGroup<'_, WallTime>) {
-    const PATTERN: [u8; 8] = [0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef];
-
-    let bytes = std::array::from_fn(|index| PATTERN[index % PATTERN.len()]);
-    let digest = Digest::<BYTES>::from_bytes(bytes);
-    let uppercase = digest.as_str().to_ascii_uppercase();
-
-    group.throughput(Throughput::Bytes((BYTES * 2) as u64));
-    for (case, hex) in [
-        ("lowercase", digest.as_str()),
-        ("uppercase", uppercase.as_str()),
-    ] {
         group.bench_with_input(
-            BenchmarkId::new(format!("from_hex/{case}"), BYTES),
-            hex,
-            |benchmark, hex| {
+            BenchmarkId::new("pyx_json", file_count),
+            &json,
+            |benchmark, json| {
                 benchmark.iter(|| {
-                    Digest::<BYTES>::from_hex(black_box(hex))
+                    serde_json::from_slice::<PyxSimpleDetail>(black_box(json))
+                        .expect("benchmark input should be valid")
+                });
+            },
+        );
+
+        group.throughput(Throughput::Bytes(messagepack.len() as u64));
+
+        group.bench_with_input(
+            BenchmarkId::new("pyx_messagepack", file_count),
+            &messagepack,
+            |benchmark, messagepack| {
+                benchmark.iter(|| {
+                    rmp_serde::from_slice::<PyxSimpleDetail>(black_box(messagepack))
                         .expect("benchmark input should be valid")
                 });
             },
         );
     }
 
-    group.throughput(Throughput::Bytes(BYTES as u64));
-    group.bench_with_input(
-        BenchmarkId::new("from_bytes", BYTES),
-        &bytes,
-        |benchmark, bytes| {
-            benchmark.iter(|| Digest::from_bytes(black_box(*bytes)));
-        },
-    );
-
-    group.throughput(Throughput::Bytes((BYTES * 2) as u64));
-    group.bench_with_input(
-        BenchmarkId::new("decode", BYTES),
-        &digest,
-        |benchmark, digest| {
-            benchmark.iter(|| black_box(digest).decode());
-        },
-    );
-}
-
-fn digest(criterion: &mut Criterion<WallTime>) {
-    let mut group = criterion.benchmark_group("digest");
-
-    digest_size::<16>(&mut group);
-    digest_size::<32>(&mut group);
-    digest_size::<48>(&mut group);
-    digest_size::<64>(&mut group);
-
     group.finish();
 }
 
-criterion_group!(uv_pypi_types, deserialize_simple_api, digest);
+criterion_group!(uv_pypi_types, deserialize_simple_api);
 criterion_main!(uv_pypi_types);

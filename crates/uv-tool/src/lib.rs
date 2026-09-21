@@ -13,12 +13,11 @@ use uv_dirs::user_executable_directory;
 use uv_fs::{LockedFile, LockedFileError, LockedFileMode, Simplified};
 use uv_install_wheel::read_record;
 use uv_installer::SitePackages;
-use uv_normalize::PackageName;
+use uv_normalize::{InvalidNameError, PackageName};
 use uv_pep440::Version;
 use uv_python::{BrokenLink, Interpreter, PythonEnvironment};
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
-use uv_warnings::warn_user;
 
 pub(crate) use receipt::ToolReceipt;
 pub use tool::{Tool, ToolEntrypoint};
@@ -78,6 +77,8 @@ pub enum Error {
     #[error("Failed to find a directory to install executables into")]
     NoExecutableDirectory,
     #[error(transparent)]
+    ToolName(#[from] InvalidNameError),
+    #[error(transparent)]
     EnvironmentError(#[from] uv_python::Error),
     #[error("Failed to find a receipt for tool `{0}` at {1}")]
     MissingToolReceipt(String, PathBuf),
@@ -100,6 +101,7 @@ impl Error {
             | Self::VirtualEnvError(_)
             | Self::EntrypointRead(_)
             | Self::NoExecutableDirectory
+            | Self::ToolName(_)
             | Self::EnvironmentError(_)
             | Self::MissingToolReceipt(_, _)
             | Self::EnvironmentRead(_, _)
@@ -146,8 +148,6 @@ impl InstalledTools {
 
     /// Return the metadata for all installed tools.
     ///
-    /// Directories with invalid package names are skipped with a warning.
-    ///
     /// If a tool is present, but is missing a receipt or the receipt is invalid, the tool will be
     /// included with an error.
     ///
@@ -162,13 +162,7 @@ impl InstalledTools {
             else {
                 continue;
             };
-            let Ok(name) = PackageName::from_str(name) else {
-                warn_user!(
-                    "Ignoring tool directory `{}` with an invalid package name; move it outside the tool directory, or remove it if no longer needed",
-                    directory.user_display()
-                );
-                continue;
-            };
+            let name = PackageName::from_str(name)?;
             let path = directory.join("uv-receipt.toml");
             let contents = match fs_err::read_to_string(&path) {
                 Ok(contents) => contents,

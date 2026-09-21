@@ -139,16 +139,6 @@ cargo run -- venv
 cargo run -- pip install requests
 ```
 
-Development builds omit Git metadata from the version string so commits do not trigger
-recompilation. To include the commit hash and date, set `UV_INTERNAL__BUILD_GIT_INFO=1` when
-building:
-
-```shell
-UV_INTERNAL__BUILD_GIT_INFO=1 cargo run -- --version
-```
-
-Release builds, including profiles that inherit from `release`, include Git metadata by default.
-
 ## Formatting
 
 ```shell
@@ -156,7 +146,7 @@ Release builds, including profiles that inherit from `release`, include Git meta
 cargo fmt --all
 
 # Python
-uv run --only-group=check ruff format .
+uvx ruff format .
 
 # Markdown, YAML, and other files (requires Node.js)
 npx prettier@3.9.0 --write .
@@ -166,48 +156,43 @@ docker run --rm -v .:/src/ -w /src/ node:alpine npx prettier@3.9.0 --write .
 
 ## Linting
 
-Linting requires [shellcheck](https://github.com/koalaman/shellcheck) to be installed separately.
-Validating `pyproject.toml` against the checked-in uv schema also requires
-[jq](https://jqlang.org/).
+Linting requires [shellcheck](https://github.com/koalaman/shellcheck) and
+[cargo-shear](https://github.com/Boshen/cargo-shear) to be installed separately.
 
 ```shell
 # Rust
 cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
 # Python
-uv run --only-group=check ruff check .
+uvx ruff check .
 
 # Python type checking
-uv run --only-group=check ty check python/uv
-
-# Python project metadata and uv schema
-./scripts/validate-pyproject.sh
-
-# Generated files
-cargo dev generate-all --mode dry-run
+uvx ty check python/uv
 
 # Shell scripts
 shellcheck <script>
 
 # Spell checking
-uv run --only-group=check typos
+uvx typos
 
 # Unused Rust dependencies
-uv run --only-group=check cargo-shear
+cargo shear
 ```
 
 ### Compiling for Windows from Unix
 
-To run clippy for a Windows target from Linux or macOS, you can use `cargo-xwin`. We provide a build
-of `cargo-xwin` as part of our development toolchain, but you'll need to install one or more Windows
-targets:
+To run clippy for a Windows target from Linux or macOS, you can use
+[cargo-xwin](https://github.com/rust-cross/cargo-xwin):
 
 ```shell
+# Install cargo-xwin
+cargo install cargo-xwin --locked
+
 # Add the Windows target
 rustup target add x86_64-pc-windows-msvc
 
 # Run clippy for Windows
-uv run --only-dev cargo xwin clippy --workspace --all-targets --all-features --locked -- -D warnings
+cargo xwin clippy --workspace --all-targets --all-features --locked -- -D warnings
 ```
 
 ## Crate structure

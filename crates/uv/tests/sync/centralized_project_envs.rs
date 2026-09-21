@@ -127,7 +127,9 @@ fn sync_centralized_env_switch_python() -> Result<()> {
 #[test]
 #[cfg(feature = "test-python-managed")]
 fn sync_centralized_env_distinguishes_python_patch() -> Result<()> {
-    let context = uv_test::test_context_with_versions!(&[]).with_managed_python_dirs();
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_managed_python_dirs()
+        .with_python_download_cache();
     context
         .python_install()
         .arg("3.12.9")
@@ -167,7 +169,9 @@ fn sync_centralized_env_distinguishes_python_patch() -> Result<()> {
 #[test]
 #[cfg(feature = "test-python-managed")]
 fn sync_centralized_env_survives_python_patch_upgrade() -> Result<()> {
-    let context = uv_test::test_context_with_versions!(&[]).with_managed_python_dirs();
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_managed_python_dirs()
+        .with_python_download_cache();
     context.python_install().arg("3.12.9").assert().success();
     write_project(&context, ">=3.12", &[])?;
 
@@ -432,31 +436,40 @@ fn sync_centralized_env_dry_run() -> Result<()> {
 
 #[test]
 fn cache_prune_removes_and_recreates_centralized_environment() -> Result<()> {
-    let context = uv_test::test_context_with_versions!(&["3.12"]).with_cache_dir("cache");
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
     write_project(&context, ">=3.12", &[])?;
+    let cache_dir = "cache";
 
     context
         .sync()
+        .env(EnvVars::UV_CACHE_DIR, cache_dir)
         .arg("--preview-features")
         .arg("centralized-project-envs")
         .assert()
         .success();
     let link = context.temp_dir.child(".venv");
     let target = fs_err::read_link(link.path())?;
-    assert!(target.starts_with(context.cache_dir.child("environments-v2").path()));
-    assert!(target.is_dir());
 
-    context.prune().assert().success();
+    context
+        .prune()
+        .env(EnvVars::UV_CACHE_DIR, cache_dir)
+        .assert()
+        .success();
     assert!(!target.exists());
     assert_eq!(target, fs_err::read_link(link.path())?);
 
     // Without the preview, uv replaces the dangling cache link with a local environment.
-    context.sync().assert().success();
+    context
+        .sync()
+        .env(EnvVars::UV_CACHE_DIR, cache_dir)
+        .assert()
+        .success();
     assert!(link.is_dir());
     assert!(fs_err::read_link(link.path()).is_err());
 
     context
         .sync()
+        .env(EnvVars::UV_CACHE_DIR, cache_dir)
         .arg("--preview-features")
         .arg("centralized-project-envs")
         .assert()

@@ -13,23 +13,9 @@ use linux_raw_sys::ioctl::{
     FIEMAP_EXTENT_DATA_INLINE, FIEMAP_EXTENT_DELALLOC, FIEMAP_EXTENT_ENCODED, FIEMAP_EXTENT_LAST,
     FIEMAP_EXTENT_NOT_ALIGNED, FIEMAP_EXTENT_SHARED, FIEMAP_EXTENT_UNKNOWN, FS_IOC_FIEMAP,
 };
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "ios"))]
-use rustix::io::Errno;
-use thiserror::Error;
 
-/// An error encountered while measuring a file's physical storage.
-#[derive(Debug, Error)]
-pub enum PhysicalSpaceError {
-    /// The filesystem cannot report exclusively owned physical storage.
-    #[error("the filesystem does not support physical space accounting")]
-    UnsupportedFilesystem,
-    /// The file's physical storage could not be measured.
-    #[error(transparent)]
-    UnmeasurableFile(#[from] io::Error),
-}
-
-/// Return whether the current platform supports fine-grained space accounting.
-pub const fn supports_fine_grained_accounting() -> bool {
+/// Return whether the current platform can identify individual files' physical storage.
+pub const fn supports_physical_space() -> bool {
     cfg!(any(
         target_os = "linux",
         target_os = "macos",
@@ -41,10 +27,7 @@ pub const fn supports_fine_grained_accounting() -> bool {
 ///
 /// The result excludes data retained by another hardlink, copy-on-write clone, or snapshot.
 /// Filesystem metadata is not included.
-pub fn physical_space(
-    path: &Path,
-    metadata: &std::fs::Metadata,
-) -> Result<u64, PhysicalSpaceError> {
+pub fn physical_space(path: &Path, metadata: &std::fs::Metadata) -> io::Result<u64> {
     if !metadata.is_file() {
         #[cfg(unix)]
         {
@@ -75,13 +58,16 @@ pub fn physical_space(
     #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "ios")))]
     {
         let _ = path;
-        Err(PhysicalSpaceError::UnsupportedFilesystem)
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "per-file space measurement is unsupported on this platform",
+        ))
     }
 }
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 #[expect(unsafe_code)]
-fn apple_physical_space(path: &Path) -> Result<u64, PhysicalSpaceError> {
+fn apple_physical_space(path: &Path) -> io::Result<u64> {
     let path = CString::new(path.as_os_str().as_bytes())
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
     let mut attributes = libc::attrlist {
@@ -108,26 +94,25 @@ fn apple_physical_space(path: &Path) -> Result<u64, PhysicalSpaceError> {
         )
     };
     if result != 0 {
-        let error = io::Error::last_os_error();
-        if Errno::from_io_error(&error) == Some(Errno::NOTSUP) {
-            return Err(PhysicalSpaceError::UnsupportedFilesystem);
-        }
-        return Err(error.into());
+        return Err(io::Error::last_os_error());
     }
 
     let returned_fork_attributes =
         u32::from_ne_bytes(response[20..24].try_into().map_err(io::Error::other)?);
     if returned_fork_attributes & libc::ATTR_CMNEXT_PRIVATESIZE == 0 {
-        return Err(PhysicalSpaceError::UnsupportedFilesystem);
+        return Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "the filesystem does not report private file sizes",
+        ));
     }
 
     let private_size = i64::from_ne_bytes(response[24..32].try_into().map_err(io::Error::other)?);
-    Ok(u64::try_from(private_size).map_err(io::Error::other)?)
+    u64::try_from(private_size).map_err(io::Error::other)
 }
 
 #[cfg(target_os = "linux")]
 #[expect(unsafe_code)]
-fn linux_physical_space(path: &Path) -> Result<u64, PhysicalSpaceError> {
+fn linux_physical_space(path: &Path) -> io::Result<u64> {
     const MAX_EXTENTS: usize = 32;
 
     #[derive(Default)]
@@ -182,13 +167,8 @@ fn linux_physical_space(path: &Path) -> Result<u64, PhysicalSpaceError> {
                 rustix::ioctl::Updater::<{ FS_IOC_FIEMAP as rustix::ioctl::Opcode }, _>::new(
                     &mut request,
                 ),
-            )
+            )?;
         }
-        .map_err(|error| match error {
-            // Linux returns `ENOTTY` when the ioctl is unsupported for this file.
-            Errno::NOTSUP | Errno::NOTTY => PhysicalSpaceError::UnsupportedFilesystem,
-            error => PhysicalSpaceError::UnmeasurableFile(error.into()),
-        })?;
 
         let mapped_extents =
             usize::try_from(request.header.mapped_extents).map_err(io::Error::other)?;
@@ -196,8 +176,7 @@ fn linux_physical_space(path: &Path) -> Result<u64, PhysicalSpaceError> {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "the filesystem returned more extents than requested",
-            )
-            .into());
+            ));
         }
         if mapped_extents == 0 {
             return Ok(physical);
@@ -218,8 +197,7 @@ fn linux_physical_space(path: &Path) -> Result<u64, PhysicalSpaceError> {
                 return Err(io::Error::new(
                     io::ErrorKind::Unsupported,
                     "the filesystem cannot report the physical size of an extent",
-                )
-                .into());
+                ));
             }
 
             physical = physical.saturating_add(extent.length);
@@ -235,8 +213,7 @@ fn linux_physical_space(path: &Path) -> Result<u64, PhysicalSpaceError> {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "the filesystem returned a non-advancing extent",
-            )
-            .into());
+            ));
         }
         start = next;
     }

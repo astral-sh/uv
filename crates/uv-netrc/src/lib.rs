@@ -108,8 +108,6 @@ impl Netrc {
 
 #[cfg(test)]
 mod tests {
-    use std::assert_matches;
-
     use super::*;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -164,7 +162,8 @@ password hY5>yKqU&$vq&0
     #[test]
     fn test_from_file_failed() {
         let err = Netrc::from_file(Path::new("/netrc/file/not/exists/on/no/netrc")).unwrap_err();
-        assert_matches!(&err, Error::Io(err) if err.kind() == ErrorKind::NotFound,
+        assert!(
+            matches!(&err, Error::Io(err) if err.kind() == ErrorKind::NotFound),
             "expected NotFound I/O error, got {err}",
         );
     }

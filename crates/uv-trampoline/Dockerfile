@@ -6,8 +6,9 @@
 
 ARG UBUNTU_SNAPSHOT=20260127T200000Z
 
-ARG RUST_NIGHTLY=nightly-2026-03-11
+ARG RUST_NIGHTLY=nightly-2025-11-02
 
+ARG CARGO_XWIN_VERSION=0.21.4
 ARG XWIN_SDK_VERSION=10.0.22621
 ARG XWIN_CRT_VERSION=14.44.17.14
 
@@ -30,7 +31,6 @@ RUN apt install -y --update ca-certificates && \
         llvm \
         clang \
         lld \
-        python3 \
     && ln -s /usr/bin/llvm-mt /usr/bin/mt.exe \
     && rm -rf /var/lib/apt/lists/*
 
@@ -46,21 +46,14 @@ RUN rustup component add rust-src --toolchain ${RUST_NIGHTLY}-x86_64-unknown-lin
         x86_64-pc-windows-msvc \
         aarch64-pc-windows-msvc
 
-# Install cargo-xwin
-FROM base AS cargo-xwin
-
-COPY --from=ghcr.io/astral-sh/uv:0.12.15@sha256:62f8c047d0a0e9ece6b53fc63df902585a67a47a7f318ddec4a37db586edc8e3 /uv /usr/local/bin/uv
-
-COPY toolchain/pyproject.toml toolchain/uv.lock ./
-RUN uv sync --locked --no-dev --python /usr/bin/python3
-
-# Prefetch the Windows SDK/CRT
+# Install cargo-xwin and prefetch the Windows SDK/CRT
 FROM base AS xwin-cache
 
+ARG CARGO_XWIN_VERSION
 ARG XWIN_SDK_VERSION
 ARG XWIN_CRT_VERSION
 
-COPY --from=cargo-xwin ${HOME}/.venv/bin/cargo-xwin /usr/local/bin/cargo-xwin
+RUN cargo install cargo-xwin@${CARGO_XWIN_VERSION}
 
 RUN cargo xwin cache xwin \
       --xwin-sdk-version ${XWIN_SDK_VERSION} \
@@ -71,4 +64,4 @@ FROM base
 
 COPY --from=xwin-cache ${HOME}/xwin-cache ${HOME}/xwin-cache
 RUN chmod a+rwX ${HOME}/xwin-cache
-COPY --from=cargo-xwin ${HOME}/.venv/bin/cargo-xwin /usr/local/bin/cargo-xwin
+COPY --from=xwin-cache ${CARGO_HOME}/bin/cargo-xwin ${CARGO_HOME}/bin/cargo-xwin

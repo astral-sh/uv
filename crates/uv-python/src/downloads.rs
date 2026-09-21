@@ -15,7 +15,6 @@ use reqwest::Response;
 use reqwest_retry::RetryError;
 use reqwest_retry::policies::ExponentialBackoff;
 use serde::{Deserialize, Serialize};
-use tempfile::TempDir;
 use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncWriteExt, BufWriter, ReadBuf};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
@@ -27,14 +26,14 @@ use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
 use uv_client::{
     BaseClient, BaseClientBuilder, CacheControl, CachedClient, CachedClientError, ClientBuildError,
-    Connectivity, RetriableError, RetryState, WrappedReqwestError, fetch_with_url_fallback,
+    Connectivity, RetriableError, WrappedReqwestError, fetch_with_url_fallback,
     retryable_on_request_failure,
 };
 use uv_distribution_filename::{ExtensionError, SourceDistExtension};
 use uv_extract::hash::Hasher;
 use uv_fs::{Simplified, rename_with_retry};
 use uv_platform::{self as platform, Arch, Libc, Os, Platform};
-use uv_pypi_types::{Digest, HashAlgorithm, HashDigest};
+use uv_pypi_types::{HashAlgorithm, HashDigest};
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_static::{
     EnvVars, astral_mirror_base_url, astral_mirror_url_from_env, custom_astral_mirror_url,
@@ -211,7 +210,7 @@ fn effective_cpython_mirror(astral_mirror_url: Option<&str>) -> String {
 pub struct ManagedPythonDownload {
     key: PythonInstallationKey,
     url: Cow<'static, str>,
-    sha256: Option<Digest<32>>,
+    sha256: Option<Cow<'static, str>>,
     build: Option<&'static str>,
 }
 
@@ -965,7 +964,7 @@ struct JsonPythonDownload {
     patch: u8,
     prerelease: Option<String>,
     url: String,
-    sha256: Option<Digest<32>>,
+    sha256: Option<String>,
     variant: Option<String>,
     build: Option<String>,
 }
@@ -1143,7 +1142,7 @@ async fn fetch_downloads_from_url(
         .build()
         .map_err(|err| Error::NetworkError(url.clone(), WrappedReqwestError::from(err)))?;
 
-    let response_callback = async |response: Response, _: &mut RetryState| {
+    let response_callback = async |response: Response| {
         let bytes = response
             .bytes()
             .await
@@ -1183,7 +1182,7 @@ impl ManagedPythonDownload {
         self.key.os()
     }
 
-    pub(crate) fn sha256(&self) -> Option<&Digest<32>> {
+    pub(crate) fn sha256(&self) -> Option<&Cow<'static, str>> {
         self.sha256.as_ref()
     }
 
@@ -1261,15 +1260,15 @@ impl ManagedPythonDownload {
 
         let temp_dir = tempfile::tempdir_in(scratch_dir).map_err(Error::DownloadDirError)?;
 
-        let temp_dir = if let Some(python_builds_dir) =
+        if let Some(python_builds_dir) =
             env::var_os(EnvVars::UV_PYTHON_CACHE_DIR).filter(|s| !s.is_empty())
         {
             let python_builds_dir = PathBuf::from(python_builds_dir);
             fs_err::create_dir_all(&python_builds_dir)?;
-            let hash_prefix = match self.sha256.as_ref() {
-                Some(digest) => {
+            let hash_prefix = match self.sha256.as_deref() {
+                Some(sha) => {
                     // Shorten the hash to avoid too-long-filename errors
-                    &digest.as_str()[..9]
+                    &sha[..9]
                 }
                 None => "none",
             };
@@ -1320,14 +1319,14 @@ impl ManagedPythonDownload {
             // Extract the downloaded archive into a temporary directory.
             self.extract_reader(
                 reader,
-                temp_dir,
+                temp_dir.path(),
                 &filename,
                 ext,
                 size,
                 reporter,
                 Direction::Extract,
             )
-            .await?
+            .await?;
         } else {
             // Avoid overlong log lines
             debug!("Downloading {url}");
@@ -1339,15 +1338,15 @@ impl ManagedPythonDownload {
             let (reader, size) = read_url(&url, client).await?;
             self.extract_reader(
                 reader,
-                temp_dir,
+                temp_dir.path(),
                 &filename,
                 ext,
                 size,
                 reporter,
                 Direction::Download,
             )
-            .await?
-        };
+            .await?;
+        }
 
         // Extract the top-level directory.
         let mut extracted = match uv_extract::strip_component(temp_dir.path()) {
@@ -1469,48 +1468,47 @@ impl ManagedPythonDownload {
     async fn extract_reader(
         &self,
         reader: impl AsyncRead + Unpin,
-        target: TempDir,
+        target: &Path,
         filename: &String,
         ext: SourceDistExtension,
         size: Option<u64>,
         reporter: Option<&dyn Reporter>,
         direction: Direction,
-    ) -> Result<TempDir, Error> {
-        let mut hashers = self
-            .sha256
-            .as_ref()
-            .map(|_| Hasher::from(HashAlgorithm::Sha256));
-        let mut hasher = uv_extract::hash::HashReader::new(reader, hashers.as_mut_slice());
+    ) -> Result<(), Error> {
+        let mut hashers = if self.sha256.is_some() {
+            vec![Hasher::from(HashAlgorithm::Sha256)]
+        } else {
+            vec![]
+        };
+        let mut hasher = uv_extract::hash::HashReader::new(reader, &mut hashers);
 
-        let target = if let Some(reporter) = reporter {
+        if let Some(reporter) = reporter {
             let progress_key = reporter.on_request_start(direction, &self.key, size);
             let mut reader = ProgressReader::new(&mut hasher, progress_key, reporter);
-            let (target, _) = uv_extract::stream::archive(&mut reader, ext, target)
+            uv_extract::stream::archive(&mut reader, ext, target)
                 .await
                 .map_err(|err| Error::ExtractError(filename.to_owned(), err))?;
             reporter.on_request_complete(direction, progress_key);
-            target
         } else {
-            let (target, _) = uv_extract::stream::archive(&mut hasher, ext, target)
+            uv_extract::stream::archive(&mut hasher, ext, target)
                 .await
                 .map_err(|err| Error::ExtractError(filename.to_owned(), err))?;
-            target
-        };
+        }
         hasher.finish().await.map_err(Error::HashExhaustion)?;
 
         // Check the hash
-        if let Some((expected, hasher)) = self.sha256.as_ref().zip(hashers) {
-            let actual = HashDigest::from(hasher);
-            if actual.digest() != expected.as_str() {
+        if let Some(expected) = self.sha256.as_deref() {
+            let actual = HashDigest::from(hashers.pop().unwrap()).digest;
+            if !actual.eq_ignore_ascii_case(expected) {
                 return Err(Error::HashMismatch {
                     installation: self.key.to_string(),
-                    expected: expected.as_str().to_string(),
-                    actual: actual.digest().to_string(),
+                    expected: expected.to_string(),
+                    actual: actual.to_string(),
                 });
             }
         }
 
-        Ok(target)
+        Ok(())
     }
 
     #[cfg(test)]
@@ -1686,7 +1684,7 @@ fn parse_json_downloads(
             };
 
             let url = Cow::Owned(entry.url);
-            let sha256 = entry.sha256;
+            let sha256 = entry.sha256.map(Cow::Owned);
             let build = entry
                 .build
                 .map(|s| Box::leak(s.into_boxed_str()) as &'static str);
@@ -1858,7 +1856,6 @@ async fn read_url(
 
 #[cfg(test)]
 mod tests {
-    use std::assert_matches;
     use std::collections::HashSet;
 
     use crate::PythonVariant;
@@ -2004,7 +2001,7 @@ mod tests {
     fn test_python_download_request_from_str_too_many_parts() {
         let result = PythonDownloadRequest::from_str("cpython-3.12-linux-x86_64-gnu-extra");
 
-        assert_matches!(result, Err(Error::TooManyParts(_)));
+        assert!(matches!(result, Err(Error::TooManyParts(_))));
     }
 
     /// We don't allow an empty request.
@@ -2012,7 +2009,7 @@ mod tests {
     fn test_python_download_request_from_str_empty() {
         let result = PythonDownloadRequest::from_str("");
 
-        assert_matches!(result, Err(Error::EmptyRequest));
+        assert!(matches!(result, Err(Error::EmptyRequest)), "{result:?}");
     }
 
     /// Parse a request with all "any" segments.
@@ -2055,7 +2052,10 @@ mod tests {
     fn test_python_download_request_from_str_invalid_leading_segment() {
         let result = PythonDownloadRequest::from_str("foobar-3.14-windows");
 
-        assert_matches!(result, Err(Error::ImplementationError(_)));
+        assert!(
+            matches!(result, Err(Error::ImplementationError(_))),
+            "{result:?}"
+        );
     }
 
     /// Parse a request with segments in an invalid order.
@@ -2063,7 +2063,10 @@ mod tests {
     fn test_python_download_request_from_str_out_of_order() {
         let result = PythonDownloadRequest::from_str("3.12-cpython");
 
-        assert_matches!(result, Err(Error::InvalidRequestPlatform(_)));
+        assert!(
+            matches!(result, Err(Error::InvalidRequestPlatform(_))),
+            "{result:?}"
+        );
     }
 
     /// Parse a request with too many "any" segments.
@@ -2071,7 +2074,7 @@ mod tests {
     fn test_python_download_request_from_str_too_many_any() {
         let result = PythonDownloadRequest::from_str("any-any-any-any-any-any");
 
-        assert_matches!(result, Err(Error::TooManyParts(_)));
+        assert!(matches!(result, Err(Error::TooManyParts(_))));
     }
 
     /// Test that build filtering works correctly
@@ -2310,7 +2313,7 @@ mod tests {
         ManagedPythonDownload {
             key,
             url: Cow::Borrowed(url),
-            sha256: Some(Digest::from_bytes([0xab; 32])),
+            sha256: Some(Cow::Borrowed("abc123")),
             build: Some("20240713"),
         }
     }

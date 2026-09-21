@@ -12,7 +12,7 @@ use tracing::{debug, instrument};
 
 use uv_build_backend::check_direct_build;
 use uv_cache::{Cache, CacheBucket};
-use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildIsolation, BuildKind, BuildOptions, BuildOutput, Concurrency, Constraints,
     DependencyGroupsWithDefaults, HashCheckingMode, IndexStrategy, KeyringProviderType, NoSources,
@@ -23,10 +23,10 @@ use uv_distribution_filename::{
     DistFilename, SourceDistExtension, SourceDistFilename, WheelFilename,
 };
 use uv_distribution_types::{
-    ConfigSettings, DependencyMetadata, ExtraBuildVariables, IndexLocations,
-    NameRequirementSpecification, PackageConfigSettings, SourceDist,
+    ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations,
+    PackageConfigSettings, Requirement, SourceDist,
 };
-use uv_errors::{ErrorOptions, Hinted, Hints, write_error_chain_with_options};
+use uv_errors::{ErrorOptions, Hint, Hints, write_error_chain_with_options};
 use uv_fs::{Simplified, normalize_path, relative_to};
 use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
@@ -78,7 +78,7 @@ pub(crate) enum Error {
     #[error(transparent)]
     BuildFrontend(#[from] uv_build_frontend::Error),
     #[error(transparent)]
-    Project(#[from] Box<ProjectError>),
+    Project(#[from] ProjectError),
     #[error("Failed to write message")]
     Fmt(#[from] fmt::Error),
     #[error("Can't use `--force-pep517` with `--list`")]
@@ -102,13 +102,7 @@ pub(crate) enum Error {
     VersionMismatch(Version, Version),
 }
 
-impl From<ProjectError> for Error {
-    fn from(error: ProjectError) -> Self {
-        Self::Project(Box::new(error))
-    }
-}
-
-impl Hinted for Error {
+impl Hint for Error {
     fn hints(&self) -> Hints<'_> {
         match self {
             Self::BuildBackend(err) => err.hints(),
@@ -138,14 +132,11 @@ impl Hinted for Error {
                 }
             }
             Self::Extract(uv_extract::Error::TarCodec(err)) => {
-                let is_python_executable = |path: &Path| {
-                    path.file_name()
-                        .is_some_and(|name| name.to_string_lossy().starts_with("python"))
-                };
-                // An archive entry is only a virtual environment interpreter if it sits in `bin`.
                 let is_virtual_environment_python = |path: &Path| {
                     path.parent().is_some_and(|parent| parent.ends_with("bin"))
-                        && is_python_executable(path)
+                        && path
+                            .file_name()
+                            .is_some_and(|name| name.to_string_lossy().starts_with("python"))
                 };
                 let involves_virtual_environment_python = match err {
                     tar_codec::ExtractError::UnsafePath {
@@ -154,12 +145,9 @@ impl Hinted for Error {
                         reason,
                         ..
                     } => {
-                        // `UnsafePath` carries only the link target, never the entry that
-                        // declared it, and a base interpreter is not required to live in `bin`,
-                        // so the target is matched on its file name alone.
                         *context == "symbolic-link target"
                             && matches!(*reason, "is absolute" | "escapes the destination root")
-                            && is_python_executable(Path::new(value))
+                            && is_virtual_environment_python(Path::new(value))
                     }
                     tar_codec::ExtractError::InvalidLink {
                         path,
@@ -169,7 +157,7 @@ impl Hinted for Error {
                     } => {
                         *reason == "ambient target is not allowed"
                             && (is_virtual_environment_python(path)
-                                || is_python_executable(Path::new(target)))
+                                || is_virtual_environment_python(Path::new(target)))
                     }
                     _ => false,
                 };
@@ -202,7 +190,7 @@ pub(crate) async fn build_frontend(
     force_pep517: bool,
     clear: bool,
     build_constraints: Vec<RequirementsSource>,
-    build_constraints_from_workspace: Vec<NameRequirementSpecification>,
+    build_constraints_from_workspace: Vec<Requirement>,
     hash_checking: Option<HashCheckingMode>,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
@@ -280,7 +268,7 @@ async fn build_impl(
     force_pep517: bool,
     clear: bool,
     build_constraints: &[RequirementsSource],
-    build_constraints_from_workspace: &[NameRequirementSpecification],
+    build_constraints_from_workspace: &[Requirement],
     hash_checking: Option<HashCheckingMode>,
     python_request: Option<&str>,
     install_mirrors: PythonInstallMirrors,
@@ -521,7 +509,7 @@ async fn build_impl(
                 let hints = crate::commands::diagnostics::hints_for_error(&err);
                 write_error_chain_with_options(
                     err.as_ref(),
-                    &hints,
+                    hints,
                     ErrorOptions::default().with_stream(printer.stderr_important()),
                 )?;
 
@@ -558,7 +546,7 @@ async fn build_package(
     force_pep517: bool,
     clear: bool,
     build_constraints: &[RequirementsSource],
-    build_constraints_from_workspace: &[NameRequirementSpecification],
+    build_constraints_from_workspace: &[Requirement],
     build_isolation: &BuildIsolation,
     extra_build_dependencies: &ExtraBuildDependencies,
     extra_build_variables: &ExtraBuildVariables,
@@ -635,34 +623,29 @@ async fn build_package(
     .into_interpreter();
 
     // Read build constraints.
-    let command_line_constraints =
+    let build_constraints =
         operations::read_constraints(build_constraints, &client_builder).await?;
-    let build_constraints = Constraints::from_specifications(
-        command_line_constraints
-            .iter()
-            .cloned()
-            .chain(build_constraints_from_workspace.iter().cloned()),
-    );
 
+    // Collect the set of required hashes.
     let hasher = if let Some(hash_checking) = hash_checking {
-        // Under `--require-hashes`, include all command-line constraints, but only workspace
-        // constraints with supplied hashes. Other workspace constraints still restrict builds.
-        let hash_constraints = Constraints::from_specifications(
-            command_line_constraints.iter().cloned().chain(
-                build_constraints_from_workspace
-                    .iter()
-                    .filter(|entry| !hash_checking.is_require() || !entry.hashes.is_empty())
-                    .cloned(),
-            ),
-        );
-        HashStrategy::from_constraints(
-            &hash_constraints,
+        HashStrategy::from_requirements(
+            std::iter::empty(),
+            build_constraints
+                .iter()
+                .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
             Some(&interpreter.to_resolver_marker_environment()),
             hash_checking,
         )?
     } else {
-        HashStrategy::default()
+        HashStrategy::None
     };
+
+    let build_constraints = Constraints::from_requirements(
+        build_constraints
+            .into_iter()
+            .map(|constraint| constraint.requirement)
+            .chain(build_constraints_from_workspace.iter().cloned()),
+    );
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
@@ -688,7 +671,13 @@ async fn build_package(
     };
 
     // Resolve the flat indexes from `--find-links`.
-    let flat_index = FlatIndex::load(&client, cache, index_locations).await?;
+    let flat_index = {
+        let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
+        let entries = client
+            .fetch_all(index_locations.flat_indexes().map(Index::url))
+            .await?;
+        FlatIndex::from_entries(entries, None, &hasher, build_options)
+    };
 
     // Initialize any shared state.
     let state = SharedState::default();
@@ -736,12 +725,7 @@ async fn build_package(
             return Err(Error::ListForcePep517);
         }
 
-        if let Err(reason) = check_direct_build(
-            source.path(),
-            uv_version::version(),
-            &interpreter.to_resolver_marker_environment(),
-            build_constraints.requirements().cloned().map(Into::into),
-        ) {
+        if let Err(reason) = check_direct_build(source.path(), uv_version::version()) {
             return Err(Error::ListNonUv {
                 name: source.path().user_display().to_string(),
                 reason: reason.to_string(),
@@ -752,12 +736,7 @@ async fn build_package(
     } else if force_pep517 {
         BuildAction::Pep517
     } else {
-        match check_direct_build(
-            source.path(),
-            uv_version::version(),
-            &interpreter.to_resolver_marker_environment(),
-            build_constraints.requirements().cloned().map(Into::into),
-        ) {
+        match check_direct_build(source.path(), uv_version::version()) {
             Ok(()) => BuildAction::DirectBuild,
             Err(reason) => {
                 debug!(
@@ -839,7 +818,7 @@ async fn build_package(
             let ext = SourceDistExtension::from_path(path.as_path())
                 .map_err(|err| Error::InvalidSourceDistExt(path.user_display().to_string(), err))?;
             let temp_dir = tempfile::tempdir_in(cache.bucket(CacheBucket::SourceDistributions))?;
-            let (temp_dir, _) = uv_extract::stream::archive(reader, ext, temp_dir).await?;
+            uv_extract::stream::archive(reader, ext, temp_dir.path()).await?;
 
             // Extract the top-level directory from the archive.
             let extracted = match uv_extract::strip_component(temp_dir.path()) {
@@ -946,7 +925,7 @@ async fn build_package(
                 Error::InvalidSourceDistExt(source.path().user_display().to_string(), err)
             })?;
             let temp_dir = tempfile::tempdir_in(&output_dir)?;
-            let (temp_dir, _) = uv_extract::stream::archive(reader, ext, temp_dir).await?;
+            uv_extract::stream::archive(reader, ext, temp_dir.path()).await?;
 
             // If the source distribution has a normalized filename, check its identity.
             let source_dist = source

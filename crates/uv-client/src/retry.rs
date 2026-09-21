@@ -15,7 +15,7 @@ use url::Url;
 
 use uv_redacted::DisplaySafeUrl;
 
-use crate::{RequestBuilder, WrappedReqwestError};
+use crate::WrappedReqwestError;
 
 /// An extension over [`DefaultRetryableStrategy`] that logs transient request failures and
 /// adds additional retry cases.
@@ -32,23 +32,15 @@ impl RetryableStrategy for UvRetryableStrategy {
         if retryable == Some(Retryable::Transient) {
             match res {
                 Ok(response) => {
-                    debug!(
-                        "Transient request failure for: {}",
-                        DisplaySafeUrl::ref_cast(response.url())
-                    );
+                    debug!("Transient request failure for: {}", response.url());
                 }
                 Err(err) => {
-                    let url = request_error_url(err).map(DisplaySafeUrl::ref_cast);
-                    let redact = |message: &str| {
-                        url.map_or_else(|| message.to_owned(), |url| url.redact_in(message))
-                    };
                     let context = iter::successors(err.source(), |&err| err.source())
-                        .map(|err| format!("  Caused by: {}", redact(&err.to_string())))
+                        .map(|err| format!("  Caused by: {err}"))
                         .join("\n");
-                    let error = redact(&err.to_string());
                     debug!(
-                        "Transient request failure for {}, retrying: {error}\n{context}",
-                        url.map_or_else(|| "unknown URL".to_owned(), ToString::to_string)
+                        "Transient request failure for {}, retrying: {err}\n{context}",
+                        err.url().map(Url::as_str).unwrap_or("unknown URL")
                     );
                 }
             }
@@ -78,7 +70,7 @@ impl RetryState {
 
     /// The number of retries across all requests.
     ///
-    /// Includes retries reported by the HTTP middleware.
+    /// After a failed retryable request, this equals the maximum number of retries.
     pub(crate) fn total_retries(&self) -> u32 {
         self.total_retries
     }
@@ -86,49 +78,6 @@ impl RetryState {
     /// The total duration from the first request to the (failure) of the last request.
     pub(crate) fn duration(&self) -> Result<Duration, SystemTimeError> {
         self.start_time.elapsed()
-    }
-
-    /// Send a request and count any retries performed by the middleware.
-    pub async fn send(
-        &mut self,
-        request: RequestBuilder<'_>,
-    ) -> reqwest_middleware::Result<Response> {
-        let result = request.send().await;
-        self.record_request_retries(result.as_ref());
-        result
-    }
-
-    /// Count middleware retries before invoking the callback with the updated [`RetryState`].
-    pub(crate) async fn handle_response<Payload, CallbackError, Callback>(
-        &mut self,
-        response: Response,
-        callback: Callback,
-    ) -> Result<Payload, CallbackError>
-    where
-        Callback: AsyncFnOnce(Response, &mut Self) -> Result<Payload, CallbackError>,
-    {
-        self.record_request_retries(Ok(&response));
-        callback(response, self).await
-    }
-
-    /// Account for retries performed by the middleware before handling a response or error.
-    ///
-    /// Call once per request, including successful requests whose bodies may later fail.
-    fn record_request_retries(&mut self, result: Result<&Response, &reqwest_middleware::Error>) {
-        let retries = match result {
-            Ok(response) => response
-                .extensions()
-                .get::<reqwest_retry::RetryCount>()
-                .map_or(0, |retries| retries.value()),
-            Err(reqwest_middleware::Error::Middleware(err)) => {
-                match err.downcast_ref::<reqwest_retry::RetryError>() {
-                    Some(reqwest_retry::RetryError::WithRetries { retries, .. }) => *retries,
-                    Some(reqwest_retry::RetryError::Error(_)) | None => 0,
-                }
-            }
-            Err(reqwest_middleware::Error::Reqwest(_)) => 0,
-        };
-        self.total_retries += retries;
     }
 
     /// Determines whether request should be retried.
@@ -198,11 +147,6 @@ pub fn retryable_on_request_failure(err: &(dyn Error + 'static)) -> Option<Retry
         trace!(
             "Considering retry of response HTTP {status} for {url}",
             url = DisplaySafeUrl::from_url(url.clone())
-        );
-    } else if let Some(url) = request_error_url(err) {
-        trace!(
-            "Considering retry of error: {}",
-            DisplaySafeUrl::ref_cast(url).redact_in(&format!("{err:?}"))
         );
     } else {
         trace!("Considering retry of error: {err:?}");
@@ -344,31 +288,6 @@ fn is_tls_certificate_error(reqwest_err: &reqwest::Error) -> bool {
     }
 }
 
-/// Finds the request URL for diagnostics, including transparent middleware and retry wrappers.
-fn request_error_url<'a>(err: &'a (dyn Error + 'static)) -> Option<&'a Url> {
-    iter::successors(Some(err), |&err| {
-        if let Some(io_error) = err.downcast_ref::<io::Error>()
-            && let Some(inner) = io_error.get_ref()
-        {
-            Some(inner as &(dyn Error + 'static))
-        } else {
-            err.source()
-        }
-    })
-    .find_map(|err| {
-        err.downcast_ref::<reqwest::Error>()
-            .and_then(reqwest::Error::url)
-            .or_else(|| {
-                err.downcast_ref::<reqwest_middleware::Error>()
-                    .and_then(reqwest_middleware::Error::url)
-            })
-            .or_else(|| {
-                err.downcast_ref::<WrappedReqwestError>()
-                    .and_then(|err| err.url())
-            })
-    })
-}
-
 /// Find the first source error of a specific type, including errors wrapped by [`io::Error`].
 ///
 /// Inspired by <https://github.com/seanmonstar/reqwest/issues/1602#issuecomment-1220996681>
@@ -401,77 +320,10 @@ mod tests {
     use insta::assert_debug_snapshot;
     use reqwest::Client;
     use reqwest_middleware::ClientWithMiddleware;
-    use tracing_test::traced_test;
     use wiremock::matchers::path;
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use crate::{UvRetryableStrategy, retryable_on_request_failure};
-
-    #[tokio::test]
-    #[traced_test]
-    async fn retry_logs_redact_signed_urls() -> Result<()> {
-        let server = MockServer::start().await;
-        Mock::given(path("/wheel"))
-            .respond_with(ResponseTemplate::new(503))
-            .mount(&server)
-            .await;
-        let response = Client::new()
-            .get(format!(
-                "{}/wheel?sig=azure-secret&X-Amz-Signature=aws-secret",
-                server.uri()
-            ))
-            .send()
-            .await?;
-        assert!(matches!(
-            UvRetryableStrategy.handle(&Ok(response)),
-            Some(Retryable::Transient)
-        ));
-
-        let response = Client::new()
-            .get(format!(
-                "{}/wheel?sig=azure-secret&X-Amz-Signature=aws-secret",
-                server.uri()
-            ))
-            .send()
-            .await?;
-        let err = response
-            .error_for_status()
-            .expect_err("expected a 503 response");
-        assert!(matches!(
-            UvRetryableStrategy.handle(&Err(err.into())),
-            Some(Retryable::Transient)
-        ));
-
-        let response = Client::new()
-            .get(format!(
-                "{}/wheel?sig=azure-secret&X-Amz-Signature=aws-secret",
-                server.uri()
-            ))
-            .send()
-            .await?;
-        let err = response
-            .error_for_status()
-            .expect_err("expected a 503 response");
-        let err = reqwest_middleware::Error::middleware(reqwest_retry::RetryError::WithRetries {
-            retries: 1,
-            err: err.into(),
-        });
-        assert!(matches!(
-            UvRetryableStrategy.handle(&Err(err)),
-            Some(Retryable::Transient)
-        ));
-
-        logs_assert(|lines| {
-            let logs = lines.join("\n");
-            assert!(logs.contains("Transient request failure"));
-            assert!(logs.contains("Considering retry"));
-            assert!(logs.contains("sig=****&X-Amz-Signature=****"));
-            assert!(!logs.contains("azure-secret"));
-            assert!(!logs.contains("aws-secret"));
-            Ok(())
-        });
-        Ok(())
-    }
 
     /// Enumerate which status codes we are retrying.
     #[tokio::test]

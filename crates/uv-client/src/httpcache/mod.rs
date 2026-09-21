@@ -1416,7 +1416,6 @@ fn parse_seconds(value: &[u8]) -> Option<u64> {
 
 #[cfg(test)]
 mod tests {
-    use std::assert_matches;
     use std::time::Duration;
 
     use super::*;
@@ -1486,10 +1485,10 @@ mod tests {
             .insert(http::header::ACCEPT, "text/html".parse().unwrap());
 
         assert!(archived.matches_stale_request(&request));
-        assert_matches!(
+        assert!(matches!(
             archived.before_request(&mut request),
             BeforeRequest::Stale(_)
-        );
+        ));
 
         let request = http_request(http::Method::HEAD, "https://example.com/");
         assert!(archived.matches_stale_request(&request));

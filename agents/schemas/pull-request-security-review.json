@@ -2,10 +2,6 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
-    "reviewed_paths": {
-      "type": "array",
-      "items": { "type": "string" }
-    },
     "findings": {
       "type": "array",
       "items": {
@@ -51,5 +47,5 @@
       }
     }
   },
-  "required": ["reviewed_paths", "findings"]
+  "required": ["findings"]
 }

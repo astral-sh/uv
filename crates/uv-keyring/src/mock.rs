@@ -196,8 +196,6 @@ impl MockCredential {
 
 #[cfg(test)]
 mod tests {
-    use std::assert_matches;
-
     use super::MockCredential;
     use crate::{Entry, Error, tests::generate_random_string};
 
@@ -255,9 +253,11 @@ mod tests {
             "mock error".to_string(),
             "is an error".to_string(),
         ));
-        assert_matches!(
-            entry.set_password(password).await,
-            Err(Error::Invalid(_, _)),
+        assert!(
+            matches!(
+                entry.set_password(password).await,
+                Err(Error::Invalid(_, _))
+            ),
             "set: No error"
         );
         entry
@@ -265,9 +265,8 @@ mod tests {
             .await
             .expect("set: Error not cleared");
         mock.set_error(Error::NoEntry);
-        assert_matches!(
-            entry.get_password().await,
-            Err(Error::NoEntry),
+        assert!(
+            matches!(entry.get_password().await, Err(Error::NoEntry)),
             "get: No error"
         );
         let stored_password = entry.get_password().await.expect("get: Error not cleared");
@@ -276,18 +275,16 @@ mod tests {
             "Retrieved and set ascii passwords don't match"
         );
         mock.set_error(Error::TooLong("mock".to_string(), 3));
-        assert_matches!(
-            entry.delete_credential().await,
-            Err(Error::TooLong(_, 3)),
+        assert!(
+            matches!(entry.delete_credential().await, Err(Error::TooLong(_, 3))),
             "delete: No error"
         );
         entry
             .delete_credential()
             .await
             .expect("delete: Error not cleared");
-        assert_matches!(
-            entry.get_password().await,
-            Err(Error::NoEntry),
+        assert!(
+            matches!(entry.get_password().await, Err(Error::NoEntry)),
             "Able to read a deleted ascii password"
         );
     }

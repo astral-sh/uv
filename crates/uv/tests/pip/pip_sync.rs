@@ -48,7 +48,7 @@ fn cert() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to read certificate file `ca-bundle.pem`
-      cause: [OS ERROR 2]
+      Caused by: [OS ERROR 2]
     ");
 
     Ok(())
@@ -68,7 +68,7 @@ fn missing_venv() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to inspect Python interpreter from active virtual environment at `.venv/[BIN]/[PYTHON]`
-      cause: Python interpreter not found at `[VENV]/[BIN]/[PYTHON]`
+      Caused by: Python interpreter not found at `[VENV]/[BIN]/[PYTHON]`
     ");
 
     assert!(predicates::path::missing().eval(&context.venv));
@@ -827,7 +827,7 @@ fn reject_sdist_archive_type_bz2() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--strict"), @"
-    exit_code: 1 (failure)
+    exit_code: 2 (failure)
     ----- stderr -----
     error: Source distribution `[WORKSPACE]/test/links/bz2-1.0.0.tar.bz2` has a non-PEP 625-compliant filename; only `.tar.gz` and `.zip` archives are accepted
     "
@@ -980,8 +980,8 @@ fn install_no_index() -> Result<()> {
         .arg("--strict"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies
-      cause: Because iniconfig was not found in the provided package locations and you require iniconfig==2.0.0, we can conclude that your requirements are unsatisfiable.
+      × No solution found when resolving dependencies:
+      ╰─▶ Because iniconfig was not found in the provided package locations and you require iniconfig==2.0.0, we can conclude that your requirements are unsatisfiable.
 
     hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "
@@ -1023,8 +1023,8 @@ fn install_no_index_cached() -> Result<()> {
         .arg("--strict"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies
-      cause: Because iniconfig was not found in the provided package locations and you require iniconfig==2.0.0, we can conclude that your requirements are unsatisfiable.
+      × No solution found when resolving dependencies:
+      ╰─▶ Because iniconfig was not found in the provided package locations and you require iniconfig==2.0.0, we can conclude that your requirements are unsatisfiable.
 
     hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "
@@ -1217,11 +1217,11 @@ fn install_unnamed_wheel_url_rejects_path_traversal() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
-        .arg("--strict"), @r#"
-    exit_code: 1 (failure)
+        .arg("--strict"), @"
+    exit_code: 2 (failure)
     ----- stderr -----
-    error: The wheel filename "pkg-1.0-py3-none-../../../target.whl" is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods
-    "#
+    error: The wheel filename \"pkg-1.0-py3-none-../../../target.whl\" is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods
+    "
     );
 
     Ok(())
@@ -1238,11 +1238,11 @@ fn install_unnamed_wheel_url_rejects_stream_separator() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
-        .arg("--strict"), @r#"
-    exit_code: 1 (failure)
+        .arg("--strict"), @"
+    exit_code: 2 (failure)
     ----- stderr -----
-    error: The wheel filename "pkg-1.0-py3-none-target:stream.whl" is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods
-    "#
+    error: The wheel filename \"pkg-1.0-py3-none-target:stream.whl\" is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods
+    "
     );
 
     Ok(())
@@ -1274,7 +1274,7 @@ fn mismatched_version() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     error: Failed to install: tomli-3.7.2-py3-none-any.whl (tomli==3.7.2 (from file://[TEMP_DIR]/tomli-3.7.2-py3-none-any.whl))
-      cause: Wheel version does not match filename (2.0.1 != 3.7.2), which indicates a malformed wheel. If this is intentional, set `UV_SKIP_WHEEL_FILENAME_CHECK=1`.
+      Caused by: Wheel version does not match filename (2.0.1 != 3.7.2), which indicates a malformed wheel. If this is intentional, set `UV_SKIP_WHEEL_FILENAME_CHECK=1`.
     "
     );
 
@@ -1316,8 +1316,8 @@ fn mismatched_name() -> Result<()> {
         .arg("--strict"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies
-      cause: Because foo has an invalid package format and you require foo, we can conclude that your requirements are unsatisfiable.
+      × No solution found when resolving dependencies:
+      ╰─▶ Because foo has an invalid package format and you require foo, we can conclude that your requirements are unsatisfiable.
 
     hint: The structure of `foo` was invalid
       Caused by: The .dist-info directory tomli-2.0.1 does not start with the normalized package name: foo
@@ -1403,9 +1403,7 @@ fn install_build_system_no_backend() -> Result<()> {
 /// Check that we show the right messages on cached, direct URL source distribution installs.
 #[test]
 fn install_url_source_dist_cached() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_file_counts()
-        .with_filtered_sizes_and_units();
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("source_distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz")?;
@@ -1448,8 +1446,11 @@ fn install_url_source_dist_cached() -> Result<()> {
     // Clear the cache, then re-run the installation in a new virtual environment.
     context.reset_venv();
 
+    let filters = std::iter::once(("Removed \\d+ files?", "Removed [N] files"))
+        .chain(context.filters())
+        .collect::<Vec<_>>();
     uv_snapshot!(
-        context.filters(),
+        filters,
         context.clean().arg("source_distribution"), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1562,10 +1563,7 @@ fn install_git_source_dist_cached() -> Result<()> {
 /// Check that we show the right messages on cached, registry source distribution installs.
 #[test]
 fn install_registry_source_dist_cached() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
-        .with_exclude_newer("2025-01-29T00:00:00Z")
-        .with_filtered_file_counts()
-        .with_filtered_sizes_and_units();
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("source_distribution==0.0.1")?;
@@ -1608,7 +1606,10 @@ fn install_registry_source_dist_cached() -> Result<()> {
     // Clear the cache, then re-run the installation in a new virtual environment.
     context.reset_venv();
 
-    uv_snapshot!(context.filters(), context.clean()
+    let filters = std::iter::once(("Removed \\d+ files?", "Removed [N] files"))
+        .chain(context.filters())
+        .collect::<Vec<_>>();
+    uv_snapshot!(filters, context.clean()
         .arg("source_distribution"), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1639,9 +1640,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
 /// Check that we show the right messages on cached, local source distribution installs.
 #[test]
 fn install_path_source_dist_cached() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_file_counts()
-        .with_filtered_sizes_and_units();
+    let context = uv_test::test_context!("3.12");
 
     // Download a source distribution.
     let archive = context.temp_dir.child("source_distribution-0.0.1.tar.gz");
@@ -1694,8 +1693,11 @@ fn install_path_source_dist_cached() -> Result<()> {
     // Clear the cache, then re-run the installation in a new virtual environment.
     context.reset_venv();
 
+    let filters = std::iter::once(("Removed \\d+ files?", "Removed [N] files"))
+        .chain(context.filters())
+        .collect::<Vec<_>>();
     uv_snapshot!(
-        context.filters(),
+        filters,
         context.clean().arg("source-distribution"), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1726,9 +1728,7 @@ fn install_path_source_dist_cached() -> Result<()> {
 /// Check that we show the right messages on cached, local source distribution installs.
 #[test]
 fn install_path_built_dist_cached() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_file_counts()
-        .with_filtered_sizes_and_units();
+    let context = uv_test::test_context!("3.12");
 
     // Download a wheel.
     let archive = context.temp_dir.child("tomli-2.0.1-py3-none-any.whl");
@@ -1775,8 +1775,11 @@ fn install_path_built_dist_cached() -> Result<()> {
     // Clear the cache, then re-run the installation in a new virtual environment.
     context.reset_venv();
 
+    let filters = std::iter::once(("Removed \\d+ files?", "Removed [N] files"))
+        .chain(context.filters())
+        .collect::<Vec<_>>();
     uv_snapshot!(
-        context.filters(),
+        filters,
         context.clean().arg("tomli"), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1805,9 +1808,7 @@ fn install_path_built_dist_cached() -> Result<()> {
 /// Check that we show the right messages on cached, direct URL built distribution installs.
 #[test]
 fn install_url_built_dist_cached() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_file_counts()
-        .with_filtered_sizes_and_units();
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("tqdm @ https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl")?;
@@ -1854,8 +1855,11 @@ fn install_url_built_dist_cached() -> Result<()> {
     // Clear the cache, then re-run the installation in a new virtual environment.
     context.reset_venv();
 
+    let filters = std::iter::once(("Removed \\d+ files?", "Removed [N] files"))
+        .chain(context_filters.clone())
+        .collect::<Vec<_>>();
     uv_snapshot!(
-        context_filters,
+        filters,
         context.clean().arg("tqdm"), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -1894,8 +1898,8 @@ fn duplicate_package_overlap() -> Result<()> {
         .arg("--strict"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies
-      cause: Because you require markupsafe==2.1.3 and markupsafe==2.1.2, we can conclude that your requirements are unsatisfiable.
+      × No solution found when resolving dependencies:
+      ╰─▶ Because you require markupsafe==2.1.3 and markupsafe==2.1.2, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -2494,8 +2498,8 @@ fn incompatible_wheel() -> Result<()> {
         .arg("--strict"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies
-      cause: Because foo has an invalid package format and you require foo, we can conclude that your requirements are unsatisfiable.
+      × No solution found when resolving dependencies:
+      ╰─▶ Because foo has an invalid package format and you require foo, we can conclude that your requirements are unsatisfiable.
 
     hint: The structure of `foo` was invalid
       Caused by: Failed to read from zip file
@@ -2632,8 +2636,8 @@ fn find_links_offline_no_match() -> Result<()> {
         .arg(context.workspace_root.join("test/links/")), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies
-      cause: Because numpy was not found in the cache and you require numpy, we can conclude that your requirements are unsatisfiable.
+      × No solution found when resolving dependencies:
+      ╰─▶ Because numpy was not found in the cache and you require numpy, we can conclude that your requirements are unsatisfiable.
 
     hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     "
@@ -2742,8 +2746,8 @@ fn offline() -> Result<()> {
         .arg("--offline"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies
-      cause: Because black was not found in the cache and you require black==23.10.1, we can conclude that your requirements are unsatisfiable.
+      × No solution found when resolving dependencies:
+      ╰─▶ Because black was not found in the cache and you require black==23.10.1, we can conclude that your requirements are unsatisfiable.
 
     hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     "
@@ -2821,8 +2825,8 @@ fn incompatible_constraint() -> Result<()> {
         .arg("constraints.txt"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies
-      cause: Because you require anyio==3.7.0 and anyio==3.6.0, we can conclude that your requirements are unsatisfiable.
+      × No solution found when resolving dependencies:
+      ╰─▶ Because you require anyio==3.7.0 and anyio==3.6.0, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -2906,8 +2910,8 @@ fn repeat_requirement_incompatible() -> Result<()> {
         .arg("requirements.in"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies
-      cause: Because you require anyio<4.0.0 and anyio==4.0.0, we can conclude that your requirements are unsatisfiable.
+      × No solution found when resolving dependencies:
+      ╰─▶ Because you require anyio<4.0.0 and anyio==4.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     Ok(())
@@ -3177,9 +3181,9 @@ requires-python = ">=3.13"
         .arg("requirements.in"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies
-      cause: Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
-             And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
+      × No solution found when resolving dependencies:
+      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
+          And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -3214,9 +3218,9 @@ requires-python = ">=3.13"
         .arg("requirements.in"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies
-      cause: Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
-             And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
+      × No solution found when resolving dependencies:
+      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
+          And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -3401,14 +3405,14 @@ fn require_hashes_wheel_no_binary() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to download and build `anyio==4.0.0`
-      cause: Hash mismatch for `anyio==4.0.0`
+      × Failed to download and build `anyio==4.0.0`
+      ╰─▶ Hash mismatch for `anyio==4.0.0`
 
-             Expected:
-               sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Expected:
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
 
-             Computed:
-               sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+          Computed:
+            sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
     "
     );
 
@@ -3487,14 +3491,14 @@ fn require_hashes_source_only_binary() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to download `anyio==4.0.0`
-      cause: Hash mismatch for `anyio==4.0.0`
+      × Failed to download `anyio==4.0.0`
+      ╰─▶ Hash mismatch for `anyio==4.0.0`
 
-             Expected:
-               sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+          Expected:
+            sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
 
-             Computed:
-               sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Computed:
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
     "
     );
 
@@ -3516,14 +3520,14 @@ fn require_hashes_wrong_digest() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to download `anyio==4.0.0`
-      cause: Hash mismatch for `anyio==4.0.0`
+      × Failed to download `anyio==4.0.0`
+      ╰─▶ Hash mismatch for `anyio==4.0.0`
 
-             Expected:
-               sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Expected:
+            sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
 
-             Computed:
-               sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Computed:
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
     "
     );
 
@@ -3537,7 +3541,7 @@ fn require_hashes_wrong_algorithm() -> Result<()> {
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
-        .write_str("anyio==4.0.0 --hash=sha512:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5fcfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
+        .write_str("anyio==4.0.0 --hash=sha512:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
@@ -3545,15 +3549,15 @@ fn require_hashes_wrong_algorithm() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to download `anyio==4.0.0`
-      cause: Hash mismatch for `anyio==4.0.0`
+      × Failed to download `anyio==4.0.0`
+      ╰─▶ Hash mismatch for `anyio==4.0.0`
 
-             Expected:
-               sha512:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5fcfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Expected:
+            sha512:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
 
-             Computed:
-               sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
-               sha512:f30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
+          Computed:
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+            sha512:f30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
     "
     );
 
@@ -3607,14 +3611,14 @@ fn require_hashes_source_url() -> Result<()> {
         .arg("--require-hashes"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
-      cause: Hash mismatch for `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
+      × Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
+      ╰─▶ Hash mismatch for `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
 
-             Expected:
-               sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+          Expected:
+            sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
 
-             Computed:
-               sha256:1f83ed7498336c7f2ab9b002cf22583d91115ebc624053dc4eb3a45694490106
+          Computed:
+            sha256:1f83ed7498336c7f2ab9b002cf22583d91115ebc624053dc4eb3a45694490106
     "
     );
 
@@ -3635,14 +3639,14 @@ fn require_hashes_source_url_mismatch() -> Result<()> {
         .arg("--require-hashes"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
-      cause: Hash mismatch for `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
+      × Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
+      ╰─▶ Hash mismatch for `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
 
-             Expected:
-               sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+          Expected:
+            sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
 
-             Computed:
-               sha256:1f83ed7498336c7f2ab9b002cf22583d91115ebc624053dc4eb3a45694490106
+          Computed:
+            sha256:1f83ed7498336c7f2ab9b002cf22583d91115ebc624053dc4eb3a45694490106
     "
     );
 
@@ -3697,14 +3701,14 @@ fn require_hashes_wheel_url() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to download `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
-      cause: Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
+      × Failed to download `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
+      ╰─▶ Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
 
-             Expected:
-               sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Expected:
+            sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
 
-             Computed:
-               sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Computed:
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
     "
     );
 
@@ -3745,22 +3749,16 @@ fn require_hashes_wheel_url_mismatch() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to download `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
-      cause: Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
+      × Failed to download `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
+      ╰─▶ Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
 
-             Expected:
-               sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Expected:
+            sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
 
-             Computed:
-               sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Computed:
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
     "
     );
-
-    // A rejected wheel must not be published to the archive cache.
-    context
-        .cache_dir
-        .child("archive-v0")
-        .assert(predicates::path::missing());
 
     Ok(())
 }
@@ -3780,8 +3778,8 @@ fn require_hashes_git() -> Result<()> {
         .arg("--require-hashes"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: Failed to download and build `anyio @ git+https://github.com/agronholm/anyio@4a23745badf5bf5ef7928f1e346e9986bd696d82`
-      cause: Hash-checking is not supported for Git repositories: `anyio @ git+https://github.com/agronholm/anyio@4a23745badf5bf5ef7928f1e346e9986bd696d82`
+      × Failed to download and build `anyio @ git+https://github.com/agronholm/anyio@4a23745badf5bf5ef7928f1e346e9986bd696d82`
+      ╰─▶ Hash-checking is not supported for Git repositories: `anyio @ git+https://github.com/agronholm/anyio@4a23745badf5bf5ef7928f1e346e9986bd696d82`
     "
     );
 
@@ -3807,8 +3805,8 @@ fn require_hashes_source_tree() -> Result<()> {
         .arg("--require-hashes"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: Failed to build `black @ file://[WORKSPACE]/test/packages/black_editable`
-      cause: Hash-checking is not supported for local directories: `black @ file://[WORKSPACE]/test/packages/black_editable`
+      × Failed to build `black @ file://[WORKSPACE]/test/packages/black_editable`
+      ╰─▶ Hash-checking is not supported for local directories: `black @ file://[WORKSPACE]/test/packages/black_editable`
     "
     );
 
@@ -3847,14 +3845,14 @@ fn require_hashes_re_download() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to download `anyio==4.0.0`
-      cause: Hash mismatch for `anyio==4.0.0`
+      × Failed to download `anyio==4.0.0`
+      ╰─▶ Hash mismatch for `anyio==4.0.0`
 
-             Expected:
-               sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Expected:
+            sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
 
-             Computed:
-               sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Computed:
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
     "
     );
 
@@ -3958,14 +3956,14 @@ fn require_hashes_wheel_path_blake2b_mismatch() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to read `tqdm @ file://[WORKSPACE]/test/links/tqdm-1000.0.0-py3-none-any.whl`
-      cause: Hash mismatch for `tqdm @ file://[WORKSPACE]/test/links/tqdm-1000.0.0-py3-none-any.whl`
+      × Failed to read `tqdm @ file://[WORKSPACE]/test/links/tqdm-1000.0.0-py3-none-any.whl`
+      ╰─▶ Hash mismatch for `tqdm @ file://[WORKSPACE]/test/links/tqdm-1000.0.0-py3-none-any.whl`
 
-             Expected:
-               blake2b:ad611597f5e771ac942d300426f16a38f1579ab572bf4bca968a53709db0a292
+          Expected:
+            blake2b:ad611597f5e771ac942d300426f16a38f1579ab572bf4bca968a53709db0a292
 
-             Computed:
-               blake2b:fd611597f5e771ac942d300426f16a38f1579ab572bf4bca968a53709db0a292
+          Computed:
+            blake2b:fd611597f5e771ac942d300426f16a38f1579ab572bf4bca968a53709db0a292
     "
     );
 
@@ -3992,22 +3990,16 @@ fn require_hashes_wheel_path_mismatch() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to read `tqdm @ file://[WORKSPACE]/test/links/tqdm-1000.0.0-py3-none-any.whl`
-      cause: Hash mismatch for `tqdm @ file://[WORKSPACE]/test/links/tqdm-1000.0.0-py3-none-any.whl`
+      × Failed to read `tqdm @ file://[WORKSPACE]/test/links/tqdm-1000.0.0-py3-none-any.whl`
+      ╰─▶ Hash mismatch for `tqdm @ file://[WORKSPACE]/test/links/tqdm-1000.0.0-py3-none-any.whl`
 
-             Expected:
-               sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Expected:
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
 
-             Computed:
-               sha256:a34996d4bd5abb2336e14ff0a2d22b92cfd0f0ed344e6883041ce01953276a13
+          Computed:
+            sha256:a34996d4bd5abb2336e14ff0a2d22b92cfd0f0ed344e6883041ce01953276a13
     "
     );
-
-    // A rejected wheel must not be published to the archive cache.
-    context
-        .cache_dir
-        .child("archive-v0")
-        .assert(predicates::path::missing());
 
     Ok(())
 }
@@ -4060,14 +4052,14 @@ fn require_hashes_source_path_mismatch() -> Result<()> {
         .arg("--require-hashes"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: Failed to build `tqdm @ file://[WORKSPACE]/test/links/tqdm-999.0.0.tar.gz`
-      cause: Hash mismatch for `tqdm @ file://[WORKSPACE]/test/links/tqdm-999.0.0.tar.gz`
+      × Failed to build `tqdm @ file://[WORKSPACE]/test/links/tqdm-999.0.0.tar.gz`
+      ╰─▶ Hash mismatch for `tqdm @ file://[WORKSPACE]/test/links/tqdm-999.0.0.tar.gz`
 
-             Expected:
-               sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Expected:
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
 
-             Computed:
-               sha256:89fa05cffa7f457658373b85de302d24d0c205ceda2819a8739e324b75e9430b
+          Computed:
+            sha256:89fa05cffa7f457658373b85de302d24d0c205ceda2819a8739e324b75e9430b
     "
     );
 
@@ -4223,16 +4215,16 @@ fn require_hashes_repeated_hash() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to download `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
-      cause: Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
+      × Failed to download `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
+      ╰─▶ Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
 
-             Expected:
-               sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
-               sha512:e30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
+          Expected:
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+            sha512:e30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
 
-             Computed:
-               sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
-               sha512:f30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
+          Computed:
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+            sha512:f30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
     "
     );
 
@@ -4252,16 +4244,16 @@ fn require_hashes_repeated_hash() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to download `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
-      cause: Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
+      × Failed to download `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
+      ╰─▶ Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
 
-             Expected:
-               sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
-               sha512:e30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
+          Expected:
+            sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+            sha512:e30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
 
-             Computed:
-               sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
-               sha512:f30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
+          Computed:
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+            sha512:f30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
     "
     );
 
@@ -4321,10 +4313,10 @@ fn require_hashes_at_least_one() -> Result<()> {
     error: `md5` hashes are insecure and cannot be used with `--require-hashes` but no other hashes are available for: anyio==4.0.0
     ");
 
-    // Request `anyio` with an uppercase `sha256` hash.
+    // Request `anyio` with a `sha256` hash.
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
-        .write_str("anyio==4.0.0 --hash=sha256:F7ED51751B2C2ADD651E5747C891B47E26D2A21BE5D32D9311DFE9692F3E5D7A")?;
+        .write_str("anyio==4.0.0 --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a")?;
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
@@ -4382,7 +4374,7 @@ fn require_hashes_at_least_one() -> Result<()> {
     // This should be true even if the second hash is wrong.
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
-        .write_str("anyio==4.0.0 --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a --hash=md5:12341234123412341234123412341234")?;
+        .write_str("anyio==4.0.0 --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a --hash=md5:1234")?;
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
@@ -4446,9 +4438,7 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
 
     // Second, use an incorrect hash.
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str(
-        "basic-package==0.1.0 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000",
-    )?;
+    requirements_txt.write_str("basic-package==0.1.0 --hash=sha256:123")?;
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
@@ -4461,14 +4451,14 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to download `basic-package==0.1.0`
-      cause: Hash mismatch for `basic-package==0.1.0`
+      × Failed to download `basic-package==0.1.0`
+      ╰─▶ Hash mismatch for `basic-package==0.1.0`
 
-             Expected:
-               sha256:0000000000000000000000000000000000000000000000000000000000000000
+          Expected:
+            sha256:123
 
-             Computed:
-               sha256:7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82
+          Computed:
+            sha256:7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82
     "
     );
 
@@ -4490,14 +4480,14 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to download `basic-package==0.1.0`
-      cause: Hash mismatch for `basic-package==0.1.0`
+      × Failed to download `basic-package==0.1.0`
+      ╰─▶ Hash mismatch for `basic-package==0.1.0`
 
-             Expected:
-               sha256:af478ff91ec60856c99a540b8df13d756513bebb65bc301fb27e0d1f974532b4
+          Expected:
+            sha256:af478ff91ec60856c99a540b8df13d756513bebb65bc301fb27e0d1f974532b4
 
-             Computed:
-               sha256:7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82
+          Computed:
+            sha256:7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82
     "
     );
 
@@ -4520,10 +4510,10 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to download and build `basic-package==0.1.0`
-      cause: Failed to resolve requirements from `build-system.requires`
-      cause: No solution found when resolving: `uv-build>=0.8.3, <0.9.0`
-      cause: Because uv-build was not found in the package registry and you require uv-build>=0.8.3,<0.9.0, we can conclude that your requirements are unsatisfiable.
+      × Failed to download and build `basic-package==0.1.0`
+      ├─▶ Failed to resolve requirements from `build-system.requires`
+      ├─▶ No solution found when resolving: `uv-build>=0.8.3, <0.9.0`
+      ╰─▶ Because uv-build was not found in the package registry and you require uv-build>=0.8.3,<0.9.0, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -4563,9 +4553,7 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
 
     // First, request some other hash.
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str(
-        "example-a-961b4c22==1.0.0 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000",
-    )?;
+    requirements_txt.write_str("example-a-961b4c22==1.0.0 --hash=sha256:123")?;
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
@@ -4576,14 +4564,14 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to download `example-a-961b4c22==1.0.0`
-      cause: Hash mismatch for `example-a-961b4c22==1.0.0`
+      × Failed to download `example-a-961b4c22==1.0.0`
+      ╰─▶ Hash mismatch for `example-a-961b4c22==1.0.0`
 
-             Expected:
-               sha256:0000000000000000000000000000000000000000000000000000000000000000
+          Expected:
+            sha256:123
 
-             Computed:
-               sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
+          Computed:
+            sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
     "
     );
 
@@ -4601,14 +4589,14 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to download `example-a-961b4c22==1.0.0`
-      cause: Hash mismatch for `example-a-961b4c22==1.0.0`
+      × Failed to download `example-a-961b4c22==1.0.0`
+      ╰─▶ Hash mismatch for `example-a-961b4c22==1.0.0`
 
-             Expected:
-               sha256:8838f9d005ff0432b258ba648d9cabb1cbdf06ac29d14f788b02edae544032ea
+          Expected:
+            sha256:8838f9d005ff0432b258ba648d9cabb1cbdf06ac29d14f788b02edae544032ea
 
-             Computed:
-               sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
+          Computed:
+            sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
     "
     );
 
@@ -4672,15 +4660,15 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to download and build `example-a-961b4c22==1.0.0`
-      cause: Hash mismatch for `example-a-961b4c22==1.0.0`
+      × Failed to download and build `example-a-961b4c22==1.0.0`
+      ╰─▶ Hash mismatch for `example-a-961b4c22==1.0.0`
 
-             Expected:
-               sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
-               sha256:a3cf07a05aac526131a2e8b6e4375ee6c6eaac8add05b88035e960ac6cd999ee
+          Expected:
+            sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
+            sha256:a3cf07a05aac526131a2e8b6e4375ee6c6eaac8add05b88035e960ac6cd999ee
 
-             Computed:
-               sha256:294e788dbe500fdc39e8b88e82652ab67409a1dc9dd06543d0fe0ae31b713eb3
+          Computed:
+            sha256:294e788dbe500fdc39e8b88e82652ab67409a1dc9dd06543d0fe0ae31b713eb3
     "
     );
 
@@ -4731,46 +4719,11 @@ fn require_hashes_registry_valid_hash() -> Result<()> {
         .arg("https://astral-test.github.io/astral-test-hash/valid-hash/simple-html/"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: No solution found when resolving dependencies
-      cause: Because example-a-961b4c22 was not found in the package registry and you require example-a-961b4c22==1.0.0, we can conclude that your requirements are unsatisfiable.
+      × No solution found when resolving dependencies:
+      ╰─▶ Because example-a-961b4c22 was not found in the package registry and you require example-a-961b4c22==1.0.0, we can conclude that your requirements are unsatisfiable.
     "
     );
 
-    Ok(())
-}
-
-/// Verify the index's wheel hash even when no explicit hash policy is requested.
-#[test]
-fn index_wheel_hash_mismatch() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    context
-        .temp_dir
-        .child("requirements.txt")
-        .write_str("example-a-961b4c22==1.0.0")?;
-
-    uv_snapshot!(context.pip_sync()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .arg("requirements.txt")
-        .arg("--only-binary=:all:")
-        .arg("--index-url")
-        .arg("https://astral-test.github.io/astral-test-hash/invalid-hash/simple-html/"), @"
-    exit_code: 1 (failure)
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    error: Failed to download `example-a-961b4c22==1.0.0`
-      cause: Hash mismatch for `example-a-961b4c22==1.0.0`
-
-             Expected:
-               sha256:8838f9d005ff0432b258ba648d9cabb1cbdf06ac29d14f788b02edae544032ea
-
-             Computed:
-               sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
-    ");
-
-    context
-        .cache_dir
-        .child("archive-v0")
-        .assert(predicates::path::missing());
     Ok(())
 }
 
@@ -4781,9 +4734,7 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
 
     // First, request some other hash.
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str(
-        "example-a-961b4c22==1.0.0 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000",
-    )?;
+    requirements_txt.write_str("example-a-961b4c22==1.0.0 --hash=sha256:123")?;
 
     uv_snapshot!(context.pip_sync()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
@@ -4795,14 +4746,14 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to download `example-a-961b4c22==1.0.0`
-      cause: Hash mismatch for `example-a-961b4c22==1.0.0`
+      × Failed to download `example-a-961b4c22==1.0.0`
+      ╰─▶ Hash mismatch for `example-a-961b4c22==1.0.0`
 
-             Expected:
-               sha256:0000000000000000000000000000000000000000000000000000000000000000
+          Expected:
+            sha256:123
 
-             Computed:
-               sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
+          Computed:
+            sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
     "
     );
 
@@ -4821,19 +4772,19 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to download `example-a-961b4c22==1.0.0`
-      cause: Hash mismatch for `example-a-961b4c22==1.0.0`
+      × Failed to download `example-a-961b4c22==1.0.0`
+      ╰─▶ Hash mismatch for `example-a-961b4c22==1.0.0`
 
-             Expected:
-               sha256:8838f9d005ff0432b258ba648d9cabb1cbdf06ac29d14f788b02edae544032ea
+          Expected:
+            sha256:8838f9d005ff0432b258ba648d9cabb1cbdf06ac29d14f788b02edae544032ea
 
-             Computed:
-               sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
+          Computed:
+            sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
     "
     );
 
-    // Third, request the correct hash despite the registry's incorrect hash. The explicit policy
-    // takes precedence, and the rejected downloads must not have populated the cache.
+    // Third, request the correct hash, that the registry _thinks_ is correct. We should accept
+    // it, since it's already cached under this hash.
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e")?;
@@ -4854,7 +4805,8 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
     "
     );
 
-    // The explicit policy must also take precedence when refreshing the cache.
+    // Fourth, request the correct hash, that the registry _thinks_ is correct, but without the
+    // cache. We _should_ accept it, but we currently don't.
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e")?;
@@ -4894,15 +4846,15 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to download and build `example-a-961b4c22==1.0.0`
-      cause: Hash mismatch for `example-a-961b4c22==1.0.0`
+      × Failed to download and build `example-a-961b4c22==1.0.0`
+      ╰─▶ Hash mismatch for `example-a-961b4c22==1.0.0`
 
-             Expected:
-               sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
-               sha256:a3cf07a05aac526131a2e8b6e4375ee6c6eaac8add05b88035e960ac6cd999ee
+          Expected:
+            sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
+            sha256:a3cf07a05aac526131a2e8b6e4375ee6c6eaac8add05b88035e960ac6cd999ee
 
-             Computed:
-               sha256:294e788dbe500fdc39e8b88e82652ab67409a1dc9dd06543d0fe0ae31b713eb3
+          Computed:
+            sha256:294e788dbe500fdc39e8b88e82652ab67409a1dc9dd06543d0fe0ae31b713eb3
     "
     );
 
@@ -4969,36 +4921,16 @@ fn require_hashes_url_invalid() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to download `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374`
-      cause: Hash mismatch for `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374`
+      × Failed to download `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374`
+      ╰─▶ Hash mismatch for `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374`
 
-             Expected:
-               sha256:c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
+          Expected:
+            sha256:c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
 
-             Computed:
-               sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
+          Computed:
+            sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
     "
     );
-
-    Ok(())
-}
-
-/// Reject malformed URL hashes without downloading the distribution.
-#[test]
-fn require_hashes_url_malformed() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str(
-        "iniconfig @ https://files.pythonhosted.org/packages/iniconfig-2.0.0-py3-none-any.whl#subdirectory=src&sha256=123",
-    )?;
-
-    uv_snapshot!(context.pip_sync()
-        .arg("requirements.txt")
-        .arg("--require-hashes"), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    error: Invalid hash digest length (expected 64 hexadecimal characters, found 3)
-    ");
 
     Ok(())
 }
@@ -5088,6 +5020,7 @@ fn target_built_distribution() -> Result<()> {
         .arg("-c")
         .arg("import iniconfig")
         .env(EnvVars::PYTHONPATH, context.temp_dir.child("target").path())
+        .current_dir(&context.temp_dir)
         .assert()
         .success();
 
@@ -5183,6 +5116,7 @@ fn target_source_distribution() -> Result<()> {
         .arg("-c")
         .arg("import iniconfig")
         .env(EnvVars::PYTHONPATH, context.temp_dir.child("target").path())
+        .current_dir(&context.temp_dir)
         .assert()
         .success();
 
@@ -5247,6 +5181,7 @@ fn target_no_build_isolation() -> Result<()> {
         .arg("-c")
         .arg("import wheel")
         .env(EnvVars::PYTHONPATH, context.temp_dir.child("target").path())
+        .current_dir(&context.temp_dir)
         .assert()
         .success();
 
@@ -5320,6 +5255,7 @@ fn prefix() -> Result<()> {
             EnvVars::PYTHONPATH,
             site_packages_path(&context.temp_dir.join("prefix"), "python3.12"),
         )
+        .current_dir(&context.temp_dir)
         .assert()
         .success();
 
@@ -5384,10 +5320,10 @@ fn incompatible_build_constraint() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to download and build `requests==1.2.0`
-      cause: Failed to resolve requirements from `setup.py` build
-      cause: No solution found when resolving: `setuptools>=40.8.0`
-      cause: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
+      × Failed to download and build `requests==1.2.0`
+      ├─▶ Failed to resolve requirements from `setup.py` build
+      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
+      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -5402,12 +5338,10 @@ fn compatible_build_constraint() -> Result<()> {
     requirements_txt.write_str("requests==1.2")?;
 
     let constraints_txt = context.temp_dir.child("build_constraints.txt");
-    // Verify mode ignores hashes on unpinned constraints and does not activate extras.
-    constraints_txt.write_str("setuptools[foo]>=40 --hash=sha256:incorrect")?;
+    constraints_txt.write_str("setuptools>=40")?;
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
-        .arg("--verify-hashes")
         .arg("--build-constraint")
         .arg("build_constraints.txt"), @"
     exit_code: 0 (success)
@@ -5546,9 +5480,9 @@ fn semicolon_no_space() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Couldn't parse requirement in `requirements.txt` at position 0
-      cause: Expected direct URL (`https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl;python_version%20%3E%20'3.10'`) to end in a supported file extension: `.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`
-             iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl;python_version > '3.10'
-                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      Caused by: Expected direct URL (`https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl;python_version%20%3E%20'3.10'`) to end in a supported file extension: `.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`
+        iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl;python_version > '3.10'
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     "
     );
 
@@ -5684,61 +5618,12 @@ fn pep_751_requires_packages() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Not a valid `pylock.toml` file: pylock.toml
-      cause: TOML parse error at line 1, column 1
-               |
-             1 |
-               | ^
-             missing field `packages`
+      Caused by: TOML parse error at line 1, column 1
+          |
+        1 |
+          | ^
+        missing field `packages`
     "#);
-
-    Ok(())
-}
-
-#[test]
-fn pep_751_empty_hashes() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let server = PackseServer::new("simple/single-package.toml");
-    context
-        .temp_dir
-        .child("pylock.toml")
-        .write_str(&formatdoc! {r#"
-        lock-version = "1.0"
-        created-by = "uv"
-
-        [[packages]]
-        name = "a"
-        version = "1.0.0"
-        wheels = [{{ url = "{wheel_url}", hashes = {{}} }}]
-    "#,
-            wheel_url = server.file_url("a-1.0.0-py3-none-any.whl"),
-        })?;
-
-    // Empty hash tables should warn without preventing installation by default.
-    uv_snapshot!(context.filters(), context.pip_sync()
-        .arg("--preview")
-        .arg("--offline")
-        .arg("--dry-run")
-        .arg("pylock.toml"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    warning: Empty hash tables in `pylock.toml` will be rejected in a future uv version. Rerun the original `uv export` or `uv pip compile` command to regenerate the file.
-    Would download 1 package
-    Would install 1 package
-     + a==1.0.0
-    ");
-
-    // Empty hash tables should warn even when verification is disabled.
-    uv_snapshot!(context.filters(), context.pip_sync()
-        .arg("--preview")
-        .arg("--no-verify-hashes")
-        .arg("pylock.toml"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    warning: Empty hash tables in `pylock.toml` will be rejected in a future uv version. Rerun the original `uv export` or `uv pip compile` command to regenerate the file.
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + a==1.0.0
-    ");
 
     Ok(())
 }
@@ -5793,12 +5678,12 @@ fn pep_751_validates_remote_archive_size() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("--preview")
-        .arg("pylock.toml"), @"
+        .arg("pylock.toml"), @r#"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: Failed to download `a @ http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`
-      cause: Size mismatch for `a @ http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`: expected 1 bytes, but downloaded 921 bytes
-    ");
+      × Failed to download `a @ http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`
+      ╰─▶ Size mismatch for `a @ http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`: expected 1 bytes, but downloaded 921 bytes
+    "#);
 
     context.temp_dir.child("pylock.toml").write_str(&formatdoc! {
         r#"
@@ -5815,12 +5700,12 @@ fn pep_751_validates_remote_archive_size() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("--preview")
-        .arg("pylock.toml"), @"
+        .arg("pylock.toml"), @r#"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: Failed to download `a==1.0.0`
-      cause: Size mismatch for `a==1.0.0`: expected 1 bytes, but downloaded 921 bytes
-    ");
+      × Failed to download `a==1.0.0`
+      ╰─▶ Size mismatch for `a==1.0.0`: expected 1 bytes, but downloaded 921 bytes
+    "#);
 
     context.temp_dir.child("pylock.toml").write_str(&formatdoc! {
         r#"
@@ -5840,8 +5725,8 @@ fn pep_751_validates_remote_archive_size() -> Result<()> {
         .arg("pylock.toml"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: Failed to download and build `a==1.0.0`
-      cause: Size mismatch for `a==1.0.0`: expected 1 bytes, but downloaded 607 bytes
+      × Failed to download and build `a==1.0.0`
+      ╰─▶ Size mismatch for `a==1.0.0`: expected 1 bytes, but downloaded 607 bytes
     ");
 
     Ok(())
@@ -5859,9 +5744,7 @@ fn pep_751_validates_cached_remote_archive_size() -> Result<()> {
         .assert()
         .success();
 
-    context.reset_venv();
-
-    let pylock = formatdoc! {
+    context.temp_dir.child("pylock.toml").write_str(&formatdoc! {
         r#"
         lock-version = "1.0"
         created-by = "uv"
@@ -5869,221 +5752,19 @@ fn pep_751_validates_cached_remote_archive_size() -> Result<()> {
         [[packages]]
         name = "a"
         version = "1.0.0"
-        archive = {{ url = "{wheel_url}", size = 921, hashes = {{ sha256 = "f936eedc194aa91ca01a4c6c9981136ca6c75ce6df47e3951b12522881dce809" }} }}
+        archive = {{ url = "{wheel_url}", size = 1, hashes = {{ sha256 = "f936eedc194aa91ca01a4c6c9981136ca6c75ce6df47e3951b12522881dce809" }} }}
         "#,
-    };
-    context.temp_dir.child("pylock.toml").write_str(&pylock)?;
+    })?;
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("--preview")
         .arg("--offline")
-        .arg("pylock.toml"), @r#"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Installed 1 package in [TIME]
-     + a==1.0.0 (from http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl)
-    "#);
-
-    context.reset_venv();
-
-    context
-        .temp_dir
-        .child("pylock.toml")
-        .write_str(&pylock.replace("size = 921", "size = 1"))?;
-
-    uv_snapshot!(context.filters(), context.pip_sync()
-        .arg("--preview")
-        .arg("--offline")
-        .arg("pylock.toml"), @"
-    exit_code: 1 (failure)
-    ----- stderr -----
-    error: Failed to download `a @ http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`
-      cause: Size mismatch for `a @ http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`: expected 1 bytes, but downloaded 921 bytes
-    ");
-
-    Ok(())
-}
-
-#[test]
-fn pep_751_validates_cached_registry_wheel_size() -> Result<()> {
-    let server = PackseServer::new("simple/single-package.toml");
-    let context = uv_test::test_context!("3.12");
-    let pylock = formatdoc! {
-        r#"
-        lock-version = "1.0"
-        created-by = "uv"
-
-        [[packages]]
-        name = "a"
-        version = "1.0.0"
-        index = "{index}"
-        wheels = [{{ url = "{wheel_url}", size = 921, hashes = {{ sha256 = "f936eedc194aa91ca01a4c6c9981136ca6c75ce6df47e3951b12522881dce809" }} }}]
-        "#,
-        index = server.index_url(),
-        wheel_url = server.file_url("a-1.0.0-py3-none-any.whl"),
-    };
-    context.temp_dir.child("pylock.toml").write_str(&pylock)?;
-    context
-        .pip_sync()
-        .arg("--preview")
-        .arg("--index-url")
-        .arg(server.index_url())
-        .arg("pylock.toml")
-        .assert()
-        .success();
-
-    context.reset_venv();
-    uv_snapshot!(context.filters(), context.pip_sync()
-        .arg("--preview")
-        .arg("--index-url")
-        .arg(server.index_url())
-        .arg("--offline")
-        .arg("pylock.toml"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Installed 1 package in [TIME]
-     + a==1.0.0
-    ");
-
-    context.reset_venv();
-    context
-        .temp_dir
-        .child("pylock.toml")
-        .write_str(&pylock.replace("size = 921", "size = 1"))?;
-    uv_snapshot!(context.filters(), context.pip_sync()
-        .arg("--preview")
-        .arg("--index-url")
-        .arg(server.index_url())
-        .arg("--offline")
-        .arg("pylock.toml"), @"
-    exit_code: 1 (failure)
-    ----- stderr -----
-    error: Failed to download `a==1.0.0`
-      cause: Size mismatch for `a==1.0.0`: expected 1 bytes, but downloaded 921 bytes
-    ");
-
-    Ok(())
-}
-
-#[test]
-fn pep_751_validates_cached_registry_sdist_size() -> Result<()> {
-    let server = PackseServer::new("simple/single-package.toml");
-    let context = uv_test::test_context!("3.12");
-    let (_, hash) = server
-        .files()
-        .find(|(filename, _)| *filename == "a-1.0.0.tar.gz")
-        .expect("source distribution");
-    let pylock = formatdoc! {
-        r#"
-        lock-version = "1.0"
-        created-by = "uv"
-
-        [[packages]]
-        name = "a"
-        version = "1.0.0"
-        index = "{index}"
-        sdist = {{ url = "{sdist_url}", size = 607, hashes = {{ sha256 = "{hash}" }} }}
-        "#,
-        index = server.index_url(),
-        sdist_url = server.file_url("a-1.0.0.tar.gz"),
-    };
-    context.temp_dir.child("pylock.toml").write_str(&pylock)?;
-    context
-        .pip_sync()
-        .arg("--preview")
-        .arg("--index-url")
-        .arg(server.index_url())
-        .arg("pylock.toml")
-        .assert()
-        .success();
-
-    context.reset_venv();
-    uv_snapshot!(context.filters(), context.pip_sync()
-        .arg("--preview")
-        .arg("--index-url")
-        .arg(server.index_url())
-        .arg("--offline")
-        .arg("pylock.toml"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Installed 1 package in [TIME]
-     + a==1.0.0
-    ");
-
-    context.reset_venv();
-    context
-        .temp_dir
-        .child("pylock.toml")
-        .write_str(&pylock.replace("size = 607", "size = 1"))?;
-    uv_snapshot!(context.filters(), context.pip_sync()
-        .arg("--preview")
-        .arg("--index-url")
-        .arg(server.index_url())
-        .arg("--offline")
-        .arg("pylock.toml"), @"
-    exit_code: 1 (failure)
-    ----- stderr -----
-    error: Failed to download and build `a==1.0.0`
-      cause: Size mismatch for `a==1.0.0`: expected 1 bytes, but downloaded 607 bytes
-    ");
-
-    Ok(())
-}
-
-#[test]
-fn pep_751_validates_cached_url_sdist_size() -> Result<()> {
-    let server = PackseServer::new("simple/single-package.toml");
-    let context = uv_test::test_context!("3.12");
-    let (_, hash) = server
-        .files()
-        .find(|(filename, _)| *filename == "a-1.0.0.tar.gz")
-        .expect("source distribution");
-    let pylock = formatdoc! {
-        r#"
-        lock-version = "1.0"
-        created-by = "uv"
-
-        [[packages]]
-        name = "a"
-        version = "1.0.0"
-        archive = {{ url = "{sdist_url}", size = 607, hashes = {{ sha256 = "{hash}" }} }}
-        "#,
-        sdist_url = server.file_url("a-1.0.0.tar.gz"),
-    };
-    context.temp_dir.child("pylock.toml").write_str(&pylock)?;
-    context
-        .pip_sync()
-        .arg("--preview")
-        .arg("--index-url")
-        .arg(server.index_url())
-        .arg("pylock.toml")
-        .assert()
-        .success();
-
-    context.reset_venv();
-    uv_snapshot!(context.filters(), context.pip_sync()
-        .arg("--preview")
-        .arg("--offline")
-        .arg("pylock.toml"), @r#"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Installed 1 package in [TIME]
-     + a==1.0.0 (from http://[LOCALHOST]/files/a-1.0.0.tar.gz)
-    "#);
-
-    context.reset_venv();
-    context
-        .temp_dir
-        .child("pylock.toml")
-        .write_str(&pylock.replace("size = 607", "size = 1"))?;
-    uv_snapshot!(context.filters(), context.pip_sync()
-        .arg("--preview")
-        .arg("--offline")
+        .arg("--reinstall")
         .arg("pylock.toml"), @r#"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: Failed to download and build `a @ http://[LOCALHOST]/files/a-1.0.0.tar.gz`
-      cause: Size mismatch for `a @ http://[LOCALHOST]/files/a-1.0.0.tar.gz`: expected 1 bytes, but downloaded 607 bytes
+      × Failed to download `a @ http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`
+      ╰─▶ Size mismatch for `a @ http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`: expected 1 bytes, but downloaded 921 bytes
     "#);
 
     Ok(())
@@ -6414,7 +6095,7 @@ fn pep_751_direct_url_tags() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to determine installation plan
-      cause: A URL (https://files.pythonhosted.org/packages/6b/b0/18f76bba336fa5aecf79d45dcd6c806c280ec44538b3c13671d49099fdd0/MarkupSafe-3.0.2-cp312-cp312-macosx_11_0_arm64.whl) dependency is incompatible with the current platform
+      Caused by: A URL (https://files.pythonhosted.org/packages/6b/b0/18f76bba336fa5aecf79d45dcd6c806c280ec44538b3c13671d49099fdd0/MarkupSafe-3.0.2-cp312-cp312-macosx_11_0_arm64.whl) dependency is incompatible with the current platform
 
     hint: The wheel is compatible with macOS (`macosx_11_0_arm64`), but you're on Linux (`manylinux_2_28_x86_64`)
     "
@@ -6450,7 +6131,7 @@ fn incompatible_python_version_direct_url() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to determine installation plan
-      cause: A URL (https://files.pythonhosted.org/packages/ae/11/7c546fcf42145f29b71e4d6f429e96d8d68e5a7ba1830b2e68d7418f0bbd/numpy-2.3.2-cp313-cp313-win32.whl) dependency is incompatible with the current platform
+      Caused by: A URL (https://files.pythonhosted.org/packages/ae/11/7c546fcf42145f29b71e4d6f429e96d8d68e5a7ba1830b2e68d7418f0bbd/numpy-2.3.2-cp313-cp313-win32.whl) dependency is incompatible with the current platform
 
     hint: The wheel is compatible with CPython 3.13 (`cp313`), but you're using CPython 3.12 (`cp312`)
     "
@@ -6474,7 +6155,7 @@ fn incompatible_direct_url_redacts_credentials() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to determine installation plan
-      cause: A URL (https://user:****@files.pythonhosted.org/packages/ae/11/7c546fcf42145f29b71e4d6f429e96d8d68e5a7ba1830b2e68d7418f0bbd/numpy-2.3.2-cp313-cp313-win32.whl?X-Amz-Signature=****) dependency is incompatible with the current platform
+      Caused by: A URL (https://user:****@files.pythonhosted.org/packages/ae/11/7c546fcf42145f29b71e4d6f429e96d8d68e5a7ba1830b2e68d7418f0bbd/numpy-2.3.2-cp313-cp313-win32.whl?X-Amz-Signature=****) dependency is incompatible with the current platform
 
     hint: The wheel is compatible with CPython 3.13 (`cp313`), but you're using CPython 3.12 (`cp312`)
     "
@@ -6498,7 +6179,7 @@ fn incompatible_platform_direct_url() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to determine installation plan
-      cause: A URL (https://files.pythonhosted.org/packages/ae/11/7c546fcf42145f29b71e4d6f429e96d8d68e5a7ba1830b2e68d7418f0bbd/numpy-2.3.2-cp313-cp313-win32.whl) dependency is incompatible with the current platform
+      Caused by: A URL (https://files.pythonhosted.org/packages/ae/11/7c546fcf42145f29b71e4d6f429e96d8d68e5a7ba1830b2e68d7418f0bbd/numpy-2.3.2-cp313-cp313-win32.whl) dependency is incompatible with the current platform
 
     hint: The wheel is compatible with Windows (`win32`), but you're on Linux (`manylinux_2_28_x86_64`)
     "
@@ -6512,7 +6193,9 @@ fn incompatible_platform_direct_url() -> Result<()> {
 #[test]
 fn sync_missing_python_no_target() -> Result<()> {
     // Create a context that only has Python 3.11 available.
-    let context = uv_test::test_context!("3.11").with_managed_python_dirs();
+    let context = uv_test::test_context!("3.11")
+        .with_python_download_cache()
+        .with_managed_python_dirs();
 
     let requirements = context.temp_dir.child("requirements.txt");
     requirements.write_str("anyio")?;
@@ -6534,6 +6217,7 @@ fn sync_missing_python_no_target() -> Result<()> {
 fn sync_with_target_installs_missing_python() -> Result<()> {
     // Create a context that only has Python 3.11 available.
     let context = uv_test::test_context!("3.11")
+        .with_python_download_cache()
         .with_managed_python_dirs()
         .with_filtered_latest_python_versions();
 

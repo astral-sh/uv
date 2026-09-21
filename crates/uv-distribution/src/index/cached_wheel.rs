@@ -45,8 +45,6 @@ pub struct CachedWheel {
     pub(super) cache_info: CacheInfo,
     /// The [`BuildInfo`] for the wheel, if it was built.
     pub(super) build_info: Option<BuildInfo>,
-    /// The size of the wheel archive, if it was downloaded.
-    pub(super) size: Option<u64>,
 }
 
 impl CachedWheel {
@@ -68,7 +66,6 @@ impl CachedWheel {
             hashes,
             cache_info,
             build_info: Some(build_info),
-            size: None,
         }
     }
 
@@ -97,7 +94,6 @@ impl CachedWheel {
             hashes,
             cache_info,
             build_info,
-            size: archive.size,
         })
     }
 
@@ -126,7 +122,6 @@ impl CachedWheel {
             hashes,
             cache_info,
             build_info,
-            size: archive.size,
         })
     }
 

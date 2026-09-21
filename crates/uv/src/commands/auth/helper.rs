@@ -2,11 +2,14 @@ use std::collections::HashMap;
 use std::fmt::Write;
 use std::io::Read;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
-use uv_auth::{AuthBackend, Credentials};
+use uv_auth::{
+    AuthBackend, Credentials, DEFAULT_TOLERANCE_SECS, PyxTokenStore, is_default_pyx_domain,
+};
+use uv_client::BaseClientBuilder;
 use uv_preview::{Preview, PreviewFeature};
 use uv_redacted::DisplaySafeUrl;
 use uv_warnings::warn_user;
@@ -44,7 +47,6 @@ impl TryFrom<Credentials> for BazelCredentialResponse {
     fn try_from(creds: Credentials) -> Result<Self> {
         let header_str = creds
             .to_header_value()
-            .context("Invalid authorization header")?
             .to_str()
             // TODO: this is infallible in practice
             .context("Failed to convert header value to string")?
@@ -60,8 +62,11 @@ impl TryFrom<Credentials> for BazelCredentialResponse {
 
 async fn credentials_for_url(
     url: &DisplaySafeUrl,
+    client_builder: BaseClientBuilder<'_>,
     preview: Preview,
 ) -> Result<Option<Credentials>> {
+    let pyx_store = PyxTokenStore::from_settings()?;
+
     // Use only the username from the URL, if present - discarding the password
     let url_credentials = Credentials::from_url(url)?;
     let username = url_credentials.as_ref().and_then(|c| c.username());
@@ -72,6 +77,28 @@ async fn credentials_for_url(
         debug!("URL '{url}' contain a password; ignoring");
     }
 
+    if pyx_store.is_known_domain(url) || is_default_pyx_domain(url) {
+        if username.is_some() {
+            bail!(
+                "Cannot specify a username for URLs under {}",
+                url.host()
+                    .map(|host| host.to_string())
+                    .unwrap_or(url.to_string())
+            );
+        }
+        let client = client_builder
+            .auth_integration(uv_client::AuthIntegration::NoAuthMiddleware)
+            .build()?;
+        let token = pyx_store
+            .access_token(
+                client.for_host(pyx_store.api()).raw_client(),
+                DEFAULT_TOLERANCE_SECS,
+            )
+            .await
+            .context("Authentication failure")?
+            .context("No access token found")?;
+        return Ok(Some(Credentials::bearer(token.into_bytes())));
+    }
     let backend = AuthBackend::from_settings(preview).await?;
     let credentials = match &backend {
         AuthBackend::System(provider) => provider.fetch(url, username).await,
@@ -92,7 +119,11 @@ async fn credentials_for_url(
 /// - Errors: Written to stderr with non-zero exit code
 ///
 /// Full spec is [available here](https://github.com/bazelbuild/proposals/blob/main/designs/2022-06-07-bazel-credential-helpers.md)
-pub(crate) async fn helper(preview: Preview, printer: Printer) -> Result<ExitStatus> {
+pub(crate) async fn helper(
+    client_builder: BaseClientBuilder<'_>,
+    preview: Preview,
+    printer: Printer,
+) -> Result<ExitStatus> {
     if !preview.is_enabled(PreviewFeature::AuthHelper) {
         warn_user!(
             "The `uv auth helper` command is experimental and may change without warning. Pass `--preview-features {}` to disable this warning",
@@ -104,7 +135,7 @@ pub(crate) async fn helper(preview: Preview, printer: Printer) -> Result<ExitSta
 
     // TODO: make this logic generic over the protocol by providing `request.uri` from a
     // trait - that should help with adding new protocols
-    let credentials = credentials_for_url(&request.uri, preview).await?;
+    let credentials = credentials_for_url(&request.uri, client_builder, preview).await?;
 
     let response = serde_json::to_string(
         &credentials

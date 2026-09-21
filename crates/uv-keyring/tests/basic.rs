@@ -1,7 +1,6 @@
 #![cfg(feature = "native-auth")]
 
 use common::{generate_random_bytes_of_len, generate_random_string, init_logger};
-use std::assert_matches;
 use uv_keyring::{Entry, Error};
 
 mod common;
@@ -12,9 +11,8 @@ async fn test_missing_entry() {
 
     let name = generate_random_string();
     let entry = Entry::new(&name, &name).expect("Can't create entry");
-    assert_matches!(
-        entry.get_password().await,
-        Err(Error::NoEntry),
+    assert!(
+        matches!(entry.get_password().await, Err(Error::NoEntry)),
         "Missing entry has password"
     );
 }
@@ -43,9 +41,8 @@ async fn test_empty_password() {
         .delete_credential()
         .await
         .expect("Can't delete password");
-    assert_matches!(
-        entry.get_password().await,
-        Err(Error::NoEntry),
+    assert!(
+        matches!(entry.get_password().await, Err(Error::NoEntry)),
         "Able to read a deleted password"
     );
 }
@@ -73,9 +70,8 @@ async fn test_round_trip_ascii_password() {
         .delete_credential()
         .await
         .expect("Can't delete ascii password");
-    assert_matches!(
-        entry.get_password().await,
-        Err(Error::NoEntry),
+    assert!(
+        matches!(entry.get_password().await, Err(Error::NoEntry)),
         "Able to read a deleted ascii password"
     );
 }
@@ -103,9 +99,8 @@ async fn test_round_trip_non_ascii_password() {
         .delete_credential()
         .await
         .expect("Can't delete non-ascii password");
-    assert_matches!(
-        entry.get_password().await,
-        Err(Error::NoEntry),
+    assert!(
+        matches!(entry.get_password().await, Err(Error::NoEntry)),
         "Able to read a deleted non-ascii password"
     );
 }
@@ -131,9 +126,8 @@ async fn test_round_trip_random_secret() {
         .delete_credential()
         .await
         .expect("Can't delete random secret");
-    assert_matches!(
-        entry.get_password().await,
-        Err(Error::NoEntry),
+    assert!(
+        matches!(entry.get_password().await, Err(Error::NoEntry)),
         "Able to read a deleted random secret"
     );
 }
@@ -174,9 +168,8 @@ async fn test_update() {
         .delete_credential()
         .await
         .expect("Can't delete updated password");
-    assert_matches!(
-        entry.get_password().await,
-        Err(Error::NoEntry),
+    assert!(
+        matches!(entry.get_password().await, Err(Error::NoEntry)),
         "Able to read a deleted updated password"
     );
 }

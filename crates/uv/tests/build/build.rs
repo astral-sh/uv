@@ -1,6 +1,4 @@
-use std::collections::BTreeMap;
-
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use async_zip::base::read::mem::ZipFileReader;
@@ -8,12 +6,10 @@ use futures::executor::block_on;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
-use sha2::{Digest, Sha256};
 use std::env::current_dir;
 use std::path::Path;
 use url::Url;
 use uv_static::EnvVars;
-use uv_test::packse::generate_wheel;
 use uv_test::{DEFAULT_PYTHON_VERSION, apply_filters, get_bin, uv_snapshot};
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
@@ -36,7 +32,12 @@ fn zip_file_names(path: &Path) -> Result<Vec<String>> {
 
 #[test]
 fn build_basic() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filter((r"\\\.", ""));
+    let context = uv_test::test_context!("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"\\\.", "")])
+        .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
 
@@ -63,7 +64,7 @@ fn build_basic() -> Result<()> {
     project.child("README").touch()?;
 
     // Build the specified path.
-    uv_snapshot!(context.filters(), context.build().arg("project"), @"
+    uv_snapshot!(&filters, context.build().arg("project"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Building source distribution...
@@ -84,7 +85,7 @@ fn build_basic() -> Result<()> {
     fs_err::remove_dir_all(project.child("dist"))?;
 
     // Build the current working directory.
-    uv_snapshot!(context.filters(), context.build().current_dir(project.path()), @"
+    uv_snapshot!(&filters, context.build().current_dir(project.path()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Building source distribution...
@@ -105,16 +106,16 @@ fn build_basic() -> Result<()> {
     fs_err::remove_dir_all(project.child("dist"))?;
 
     // Error if there's nothing to build.
-    uv_snapshot!(context.filters(), context.build(), @"
+    uv_snapshot!(&filters, context.build(), @"
     exit_code: 2 (failure)
     ----- stderr -----
     Building source distribution...
     error: Failed to build `[TEMP_DIR]/`
-      cause: [TEMP_DIR]/ does not appear to be a Python project, as neither `pyproject.toml` nor `setup.py` are present in the directory
+      Caused by: [TEMP_DIR]/ does not appear to be a Python project, as neither `pyproject.toml` nor `setup.py` are present in the directory
     ");
 
-    // Build to a specified path, even if builds are disabled for the project by name.
-    uv_snapshot!(context.filters(), context.build().arg("--out-dir").arg("out").arg("--no-build-package").arg("project").current_dir(project.path()), @"
+    // Build to a specified path.
+    uv_snapshot!(&filters, context.build().arg("--out-dir").arg("out").current_dir(project.path()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Building source distribution...
@@ -129,27 +130,6 @@ fn build_basic() -> Result<()> {
         .assert(predicate::path::is_file());
     project
         .child("out")
-        .child("project-0.1.0-py3-none-any.whl")
-        .assert(predicate::path::is_file());
-
-    // A global build restriction still allows explicitly building the project and its sdist.
-    project.child("uv.toml").write_str("no-build = true\n")?;
-
-    uv_snapshot!(context.filters(), context.build().current_dir(project.path()), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Building source distribution...
-    Building wheel from source distribution...
-    Successfully built dist/project-0.1.0.tar.gz
-    Successfully built dist/project-0.1.0-py3-none-any.whl
-    ");
-
-    project
-        .child("dist")
-        .child("project-0.1.0.tar.gz")
-        .assert(predicate::path::is_file());
-    project
-        .child("dist")
         .child("project-0.1.0-py3-none-any.whl")
         .assert(predicate::path::is_file());
 
@@ -243,7 +223,7 @@ fn build_sdist_missing_backend_path() -> Result<()> {
     Building source distribution...
     Building wheel from source distribution...
     error: Failed to build `[TEMP_DIR]/project`
-      cause: `backend-path` entry `backend_dir` does not exist or is not a directory
+      Caused by: `backend-path` entry `backend_dir` does not exist or is not a directory
     ");
 
     Ok(())
@@ -276,7 +256,7 @@ fn build_backend_path_outside_source_tree() -> Result<()> {
     ----- stderr -----
     Building wheel...
     error: Failed to build `[TEMP_DIR]/project`
-      cause: `backend-path` entry `../backend` must be a relative path within the source tree
+      Caused by: `backend-path` entry `../backend` must be a relative path within the source tree
     ");
 
     Ok(())
@@ -310,7 +290,7 @@ fn build_backend_path_absolute_inside_source_tree() -> Result<()> {
     ----- stderr -----
     Building wheel...
     error: Failed to build `[TEMP_DIR]/project`
-      cause: `backend-path` entry `[TEMP_DIR]/project/backend` must be a relative path within the source tree
+      Caused by: `backend-path` entry `[TEMP_DIR]/project/backend` must be a relative path within the source tree
     ");
 
     Ok(())
@@ -345,7 +325,7 @@ fn build_backend_path_symlink_outside_source_tree() -> Result<()> {
     ----- stderr -----
     Building wheel...
     error: Failed to build `[TEMP_DIR]/project`
-      cause: `backend-path` entry `backend` must be a relative path within the source tree
+      Caused by: `backend-path` entry `backend` must be a relative path within the source tree
     ");
 
     Ok(())
@@ -353,7 +333,12 @@ fn build_backend_path_symlink_outside_source_tree() -> Result<()> {
 
 #[test]
 fn build_sdist() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filter((r"\\\.", ""));
+    let context = uv_test::test_context!("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"\\\.", "")])
+        .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
 
@@ -380,7 +365,7 @@ fn build_sdist() -> Result<()> {
     project.child("README").touch()?;
 
     // Build the specified path.
-    uv_snapshot!(context.filters(), context.build().arg("--sdist").current_dir(&project), @"
+    uv_snapshot!(&filters, context.build().arg("--sdist").current_dir(&project), @"
     exit_code: 0 (success)
     ----- stderr -----
     Building source distribution...
@@ -401,55 +386,12 @@ fn build_sdist() -> Result<()> {
 
 #[test]
 fn build_wheel() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filter((r"\\\.", ""));
-
-    let project = context.temp_dir.child("project");
-
-    let pyproject_toml = project.child("pyproject.toml");
-    pyproject_toml.write_str(
-        r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = ["anyio==3.7.0"]
-
-        [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
-        "#,
-    )?;
-
-    project
-        .child("src")
-        .child("project")
-        .child("__init__.py")
-        .touch()?;
-    project.child("README").touch()?;
-
-    // Explicit wheel builds are allowed even when dependency builds are disabled.
-    uv_snapshot!(context.filters(), context.build().arg("--wheel").arg("--no-build").current_dir(&project), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Building wheel...
-    Successfully built dist/project-0.1.0-py3-none-any.whl
-    ");
-
-    project
-        .child("dist")
-        .child("project-0.1.0.tar.gz")
-        .assert(predicate::path::missing());
-    project
-        .child("dist")
-        .child("project-0.1.0-py3-none-any.whl")
-        .assert(predicate::path::is_file());
-
-    Ok(())
-}
-
-#[test]
-fn build_sdist_wheel() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filter((r"\\\.", ""));
+    let context = uv_test::test_context!("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"\\\.", "")])
+        .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
 
@@ -476,7 +418,60 @@ fn build_sdist_wheel() -> Result<()> {
     project.child("README").touch()?;
 
     // Build the specified path.
-    uv_snapshot!(context.filters(), context.build().arg("--sdist").arg("--wheel").current_dir(&project), @"
+    uv_snapshot!(&filters, context.build().arg("--wheel").current_dir(&project), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building wheel...
+    Successfully built dist/project-0.1.0-py3-none-any.whl
+    ");
+
+    project
+        .child("dist")
+        .child("project-0.1.0.tar.gz")
+        .assert(predicate::path::missing());
+    project
+        .child("dist")
+        .child("project-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::is_file());
+
+    Ok(())
+}
+
+#[test]
+fn build_sdist_wheel() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"\\\.", "")])
+        .collect::<Vec<_>>();
+
+    let project = context.temp_dir.child("project");
+
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+
+    project
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+    project.child("README").touch()?;
+
+    // Build the specified path.
+    uv_snapshot!(&filters, context.build().arg("--sdist").arg("--wheel").current_dir(&project), @"
     exit_code: 0 (success)
     ----- stderr -----
     Building source distribution...
@@ -499,7 +494,12 @@ fn build_sdist_wheel() -> Result<()> {
 
 #[test]
 fn build_wheel_from_sdist() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filter((r"\\\.", ""));
+    let context = uv_test::test_context!("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"\\\.", "")])
+        .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
 
@@ -526,7 +526,7 @@ fn build_wheel_from_sdist() -> Result<()> {
     project.child("README").touch()?;
 
     // Build the sdist.
-    uv_snapshot!(context.filters(), context.build().arg("--sdist").current_dir(&project), @"
+    uv_snapshot!(&filters, context.build().arg("--sdist").current_dir(&project), @"
     exit_code: 0 (success)
     ----- stderr -----
     Building source distribution...
@@ -543,23 +543,23 @@ fn build_wheel_from_sdist() -> Result<()> {
         .assert(predicate::path::missing());
 
     // Error if `--wheel` is not specified.
-    uv_snapshot!(context.filters(), context.build().arg("./dist/project-0.1.0.tar.gz").current_dir(&project), @"
+    uv_snapshot!(&filters, context.build().arg("./dist/project-0.1.0.tar.gz").current_dir(&project), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to build `[TEMP_DIR]/project/dist/project-0.1.0.tar.gz`
-      cause: Pass `--wheel` explicitly to build a wheel from a source distribution
+      Caused by: Pass `--wheel` explicitly to build a wheel from a source distribution
     ");
 
     // Error if `--sdist` is specified.
-    uv_snapshot!(context.filters(), context.build().arg("./dist/project-0.1.0.tar.gz").arg("--sdist").current_dir(&project), @"
+    uv_snapshot!(&filters, context.build().arg("./dist/project-0.1.0.tar.gz").arg("--sdist").current_dir(&project), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to build `[TEMP_DIR]/project/dist/project-0.1.0.tar.gz`
-      cause: Building an `--sdist` from a source distribution is not supported
+      Caused by: Building an `--sdist` from a source distribution is not supported
     ");
 
-    // Explicit wheel builds from an sdist are allowed even when dependency builds are disabled.
-    uv_snapshot!(context.filters(), context.build().arg("./dist/project-0.1.0.tar.gz").arg("--wheel").arg("--no-build").current_dir(&project), @"
+    // Build the wheel from the sdist.
+    uv_snapshot!(&filters, context.build().arg("./dist/project-0.1.0.tar.gz").arg("--wheel").current_dir(&project), @"
     exit_code: 0 (success)
     ----- stderr -----
     Building wheel from source distribution...
@@ -576,11 +576,11 @@ fn build_wheel_from_sdist() -> Result<()> {
         .assert(predicate::path::is_file());
 
     // Passing a wheel is an error.
-    uv_snapshot!(context.filters(), context.build().arg("./dist/project-0.1.0-py3-none-any.whl").arg("--wheel").current_dir(&project), @"
+    uv_snapshot!(&filters, context.build().arg("./dist/project-0.1.0-py3-none-any.whl").arg("--wheel").current_dir(&project), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to build `[TEMP_DIR]/project/dist/project-0.1.0-py3-none-any.whl`
-      cause: `dist/project-0.1.0-py3-none-any.whl` is not a valid build source. Expected to receive a source directory, or a source distribution ending in one of: `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`.
+      Caused by: `dist/project-0.1.0-py3-none-any.whl` is not a valid build source. Expected to receive a source directory, or a source distribution ending in one of: `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`.
     ");
 
     Ok(())
@@ -588,7 +588,12 @@ fn build_wheel_from_sdist() -> Result<()> {
 
 #[test]
 fn build_fail() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filter((r"\\\.", ""));
+    let context = uv_test::test_context!("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"\\\.", "")])
+        .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
 
@@ -628,7 +633,7 @@ fn build_fail() -> Result<()> {
     )?;
 
     // Build the specified path.
-    uv_snapshot!(context.filters(), context.build().arg("project"), @r#"
+    uv_snapshot!(&filters, context.build().arg("project"), @r#"
     exit_code: 2 (failure)
     ----- stderr -----
     Building source distribution...
@@ -645,8 +650,8 @@ fn build_fail() -> Result<()> {
         from setuptools import setup
     IndentationError: unexpected indent
     error: Failed to build `[TEMP_DIR]/project`
-      cause: The build backend returned an error
-      cause: Call to `setuptools.build_meta.get_requires_for_build_sdist` failed (exit status: 1)
+      Caused by: The build backend returned an error
+      Caused by: Call to `setuptools.build_meta.build_sdist` failed (exit status: 1)
 
     hint: Build failures usually indicate a problem with the package or the build environment
     "#);
@@ -656,10 +661,16 @@ fn build_fail() -> Result<()> {
 
 #[test]
 fn build_workspace() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
-        .with_filter((r"\\\.", ""))
-        .with_filter((r"\[project\]", "[PKG]"))
-        .with_filter((r"\[member\]", "[PKG]"));
+    let context = uv_test::test_context!("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([
+            (r"\\\.", ""),
+            (r"\[project\]", "[PKG]"),
+            (r"\[member\]", "[PKG]"),
+        ])
+        .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
 
@@ -733,7 +744,7 @@ fn build_workspace() -> Result<()> {
     r#virtual.child("README").touch()?;
 
     // Build the member.
-    uv_snapshot!(context.filters(), context.build().arg("--package").arg("member").current_dir(&project), @"
+    uv_snapshot!(&filters, context.build().arg("--package").arg("member").current_dir(&project), @"
     exit_code: 0 (success)
     ----- stderr -----
     Building source distribution...
@@ -752,7 +763,7 @@ fn build_workspace() -> Result<()> {
         .assert(predicate::path::is_file());
 
     // Build all packages.
-    uv_snapshot!(context.filters(), context.build().arg("--all").arg("--no-build-logs").current_dir(&project), @"
+    uv_snapshot!(&filters, context.build().arg("--all").arg("--no-build-logs").current_dir(&project), @"
     exit_code: 0 (success)
     ----- stderr -----
     [PKG] Building source distribution...
@@ -783,7 +794,7 @@ fn build_workspace() -> Result<()> {
         .assert(predicate::path::is_file());
 
     // If a source is provided, discover the workspace from the source.
-    uv_snapshot!(context.filters(), context.build().arg("./project").arg("--package").arg("member"), @"
+    uv_snapshot!(&filters, context.build().arg("./project").arg("--package").arg("member"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Building source distribution...
@@ -793,7 +804,7 @@ fn build_workspace() -> Result<()> {
     ");
 
     // If a source is provided, discover the workspace from the source.
-    uv_snapshot!(context.filters(), context.build().arg("./project").arg("--all").arg("--no-build-logs"), @"
+    uv_snapshot!(&filters, context.build().arg("./project").arg("--all").arg("--no-build-logs"), @"
     exit_code: 0 (success)
     ----- stderr -----
     [PKG] Building source distribution...
@@ -807,23 +818,23 @@ fn build_workspace() -> Result<()> {
     ");
 
     // Fail when `--package` is provided without a workspace.
-    uv_snapshot!(context.filters(), context.build().arg("--package").arg("member"), @"
+    uv_snapshot!(&filters, context.build().arg("--package").arg("member"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: `--package` was provided, but no workspace was found
-      cause: No `pyproject.toml` found in current directory or any parent directory
+      Caused by: No `pyproject.toml` found in current directory or any parent directory
     ");
 
     // Fail when `--all` is provided without a workspace.
-    uv_snapshot!(context.filters(), context.build().arg("--all"), @"
+    uv_snapshot!(&filters, context.build().arg("--all"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: `--all-packages` was provided, but no workspace was found
-      cause: No `pyproject.toml` found in current directory or any parent directory
+      Caused by: No `pyproject.toml` found in current directory or any parent directory
     ");
 
     // Fail when `--package` is a non-existent member without a workspace.
-    uv_snapshot!(context.filters(), context.build().arg("--package").arg("fail").current_dir(&project), @"
+    uv_snapshot!(&filters, context.build().arg("--package").arg("fail").current_dir(&project), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Package `fail` not found in workspace
@@ -834,10 +845,16 @@ fn build_workspace() -> Result<()> {
 
 #[test]
 fn build_all_with_failure() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
-        .with_filter((r"\\\.", ""))
-        .with_filter((r"\[project\]", "[PKG]"))
-        .with_filter((r"\[member-\w+\]", "[PKG]"));
+    let context = uv_test::test_context!("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([
+            (r"\\\.", ""),
+            (r"\[project\]", "[PKG]"),
+            (r"\[member-\w+\]", "[PKG]"),
+        ])
+        .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
 
@@ -929,7 +946,7 @@ fn build_all_with_failure() -> Result<()> {
     )?;
 
     // Build all the packages
-    uv_snapshot!(context.filters(), context.build().arg("--all").arg("--no-build-logs").current_dir(&project), @"
+    uv_snapshot!(&filters, context.build().arg("--all").arg("--no-build-logs").current_dir(&project), @"
     exit_code: 2 (failure)
     ----- stderr -----
     [PKG] Building source distribution...
@@ -940,8 +957,8 @@ fn build_all_with_failure() -> Result<()> {
     Successfully built dist/member_a-0.1.0.tar.gz
     Successfully built dist/member_a-0.1.0-py3-none-any.whl
     error: Failed to build `member-b @ [TEMP_DIR]/project/packages/member_b`
-      cause: The build backend returned an error
-      cause: Call to `setuptools.build_meta.get_requires_for_build_sdist` failed (exit status: 1)
+      Caused by: The build backend returned an error
+      Caused by: Call to `setuptools.build_meta.build_sdist` failed (exit status: 1)
 
     hint: Build failures usually indicate a problem with the package or the build environment
     Successfully built dist/project-0.1.0.tar.gz
@@ -972,7 +989,12 @@ fn build_all_with_failure() -> Result<()> {
 
 #[test]
 fn build_constraints() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filter((r"\\\.", ""));
+    let context = uv_test::test_context!("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"\\\.", "")])
+        .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
 
@@ -1001,14 +1023,14 @@ fn build_constraints() -> Result<()> {
         .touch()?;
     project.child("README").touch()?;
 
-    uv_snapshot!(context.filters(), context.build().arg("--build-constraint").arg("constraints.txt").current_dir(&project), @"
+    uv_snapshot!(&filters, context.build().arg("--build-constraint").arg("constraints.txt").current_dir(&project), @"
     exit_code: 2 (failure)
     ----- stderr -----
     Building source distribution...
     error: Failed to build `[TEMP_DIR]/project`
-      cause: Failed to resolve requirements from `build-system.requires`
-      cause: No solution found when resolving: `hatchling>=1.0`
-      cause: Because you require hatchling>=1.0 and hatchling==0.1.0, we can conclude that your requirements are unsatisfiable.
+      Caused by: Failed to resolve requirements from `build-system.requires`
+      Caused by: No solution found when resolving: `hatchling>=1.0`
+      Caused by: Because you require hatchling>=1.0 and hatchling==0.1.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     project
@@ -1029,9 +1051,12 @@ fn build_constraints() -> Result<()> {
 /// workspace root.
 #[test]
 fn build_all_respects_workspace_build_constraint_dependencies() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
-        .with_filter((r"\\\.", ""))
-        .with_filter((r"\[member\]", "[PKG]"));
+    let context = uv_test::test_context!("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"\\\.", ""), (r"\[member\]", "[PKG]")])
+        .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
 
@@ -1089,7 +1114,7 @@ fn build_all_respects_workspace_build_constraint_dependencies() -> Result<()> {
 
     let stderr = apply_filters(
         String::from_utf8_lossy(&output.stderr).into_owned(),
-        context.filters(),
+        &filters,
     );
 
     assert!(
@@ -1126,9 +1151,12 @@ fn build_all_respects_workspace_build_constraint_dependencies() -> Result<()> {
 /// `build-constraint-dependencies` are not applied here.
 #[test]
 fn build_source_path_ignores_workspace_build_constraint_dependencies() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
-        .with_filter((r"\\\.", ""))
-        .with_filter((r"\[member\]", "[PKG]"));
+    let context = uv_test::test_context!("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"\\\.", ""), (r"\[member\]", "[PKG]")])
+        .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
 
@@ -1177,7 +1205,7 @@ fn build_source_path_ignores_workspace_build_constraint_dependencies() -> Result
         .touch()?;
     member.child("README").touch()?;
 
-    uv_snapshot!(context.filters(), context.build().arg("./project").arg("--all").arg("--no-build-logs"), @"
+    uv_snapshot!(&filters, context.build().arg("./project").arg("--all").arg("--no-build-logs"), @"
     exit_code: 0 (success)
     ----- stderr -----
     [PKG] Building source distribution...
@@ -1203,11 +1231,17 @@ fn build_source_path_ignores_workspace_build_constraint_dependencies() -> Result
 /// <https://github.com/astral-sh/uv/issues/19074>.
 #[test]
 fn build_workspace_transitive_build_dependency() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
-        .with_filter((r"\\\.", ""))
-        .with_filter((r"\[my-util\]", "[PKG]"))
-        .with_filter((r"\[my-backend\]", "[PKG]"))
-        .with_filter((r"\[my-tool\]", "[PKG]"));
+    let context = uv_test::test_context!("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([
+            (r"\\\.", ""),
+            (r"\[my-util\]", "[PKG]"),
+            (r"\[my-backend\]", "[PKG]"),
+            (r"\[my-tool\]", "[PKG]"),
+        ])
+        .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
 
@@ -1299,7 +1333,7 @@ fn build_workspace_transitive_build_dependency() -> Result<()> {
     my_tool.child("README.md").touch()?;
 
     uv_snapshot!(
-        &context.filters(),
+        &filters,
         context
             .build()
             .arg("--wheel")
@@ -1324,7 +1358,12 @@ fn build_workspace_transitive_build_dependency() -> Result<()> {
 
 #[test]
 fn build_sha() -> Result<()> {
-    let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION).with_filter((r"\\\.", ""));
+    let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION);
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"\\\.", "")])
+        .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
 
@@ -1350,18 +1389,8 @@ fn build_sha() -> Result<()> {
         .touch()?;
     project.child("README").touch()?;
 
-    // Validate the original declaration, including extras, before dropping empty constraints.
-    let constraints = project.child("constraints.txt");
-    constraints.write_str("hatchling[foo]")?;
-
-    uv_snapshot!(context.filters(), context.build().arg("--build-constraint").arg("constraints.txt").arg("--require-hashes").current_dir(&project), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    error: Failed to build `[TEMP_DIR]/project`
-      cause: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: hatchling[foo]
-    ");
-
     // Reject an incorrect hash.
+    let constraints = project.child("constraints.txt");
     constraints.write_str(indoc::indoc! {r"
         hatchling==1.22.4 \
             --hash=sha256:a248cb506794bececcddeddb1678bc722f9cfcacf02f98f7c0af6b9ed893caf2 \
@@ -1388,21 +1417,21 @@ fn build_sha() -> Result<()> {
             # via hatchling
     "})?;
 
-    uv_snapshot!(context.filters(), context.build().arg("--build-constraint").arg("constraints.txt").current_dir(&project), @"
+    uv_snapshot!(&filters, context.build().arg("--build-constraint").arg("constraints.txt").current_dir(&project), @"
     exit_code: 2 (failure)
     ----- stderr -----
     Building source distribution...
     error: Failed to build `[TEMP_DIR]/project`
-      cause: Failed to install requirements from `build-system.requires`
-      cause: Failed to download `hatchling==1.22.4`
-      cause: Hash mismatch for `hatchling==1.22.4`
+      Caused by: Failed to install requirements from `build-system.requires`
+      Caused by: Failed to download `hatchling==1.22.4`
+      Caused by: Hash mismatch for `hatchling==1.22.4`
 
-             Expected:
-               sha256:a248cb506794bececcddeddb1678bc722f9cfcacf02f98f7c0af6b9ed893caf2
-               sha256:e16da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc
+        Expected:
+          sha256:a248cb506794bececcddeddb1678bc722f9cfcacf02f98f7c0af6b9ed893caf2
+          sha256:e16da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc
 
-             Computed:
-               sha256:f56da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc
+        Computed:
+          sha256:f56da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc
     ");
 
     project
@@ -1417,21 +1446,21 @@ fn build_sha() -> Result<()> {
     fs_err::remove_dir_all(project.child("dist"))?;
 
     // Reject a missing hash with `--requires-hashes`.
-    uv_snapshot!(context.filters(), context.build().arg("--build-constraint").arg("constraints.txt").arg("--require-hashes").current_dir(&project), @"
+    uv_snapshot!(&filters, context.build().arg("--build-constraint").arg("constraints.txt").arg("--require-hashes").current_dir(&project), @"
     exit_code: 2 (failure)
     ----- stderr -----
     Building source distribution...
     error: Failed to build `[TEMP_DIR]/project`
-      cause: Failed to install requirements from `build-system.requires`
-      cause: Failed to download `hatchling==1.22.4`
-      cause: Hash mismatch for `hatchling==1.22.4`
+      Caused by: Failed to install requirements from `build-system.requires`
+      Caused by: Failed to download `hatchling==1.22.4`
+      Caused by: Hash mismatch for `hatchling==1.22.4`
 
-             Expected:
-               sha256:a248cb506794bececcddeddb1678bc722f9cfcacf02f98f7c0af6b9ed893caf2
-               sha256:e16da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc
+        Expected:
+          sha256:a248cb506794bececcddeddb1678bc722f9cfcacf02f98f7c0af6b9ed893caf2
+          sha256:e16da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc
 
-             Computed:
-               sha256:f56da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc
+        Computed:
+          sha256:f56da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc
     ");
 
     project
@@ -1449,14 +1478,14 @@ fn build_sha() -> Result<()> {
     let constraints = project.child("constraints.txt");
     constraints.write_str("hatchling==1.22.4")?;
 
-    uv_snapshot!(context.filters(), context.build().arg("--build-constraint").arg("constraints.txt").arg("--require-hashes").current_dir(&project), @"
+    uv_snapshot!(&filters, context.build().arg("--build-constraint").arg("constraints.txt").arg("--require-hashes").current_dir(&project), @"
     exit_code: 2 (failure)
     ----- stderr -----
     Building source distribution...
     error: Failed to build `[TEMP_DIR]/project`
-      cause: Failed to resolve requirements from `build-system.requires`
-      cause: No solution found when resolving: `hatchling`
-      cause: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `hatchling`
+      Caused by: Failed to resolve requirements from `build-system.requires`
+      Caused by: No solution found when resolving: `hatchling`
+      Caused by: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `hatchling`
     ");
 
     project
@@ -1498,7 +1527,7 @@ fn build_sha() -> Result<()> {
             # via hatchling
     "})?;
 
-    uv_snapshot!(context.filters(), context.build().arg("--build-constraint").arg("constraints.txt").current_dir(&project), @"
+    uv_snapshot!(&filters, context.build().arg("--build-constraint").arg("constraints.txt").current_dir(&project), @"
     exit_code: 0 (success)
     ----- stderr -----
     Building source distribution...
@@ -1521,7 +1550,12 @@ fn build_sha() -> Result<()> {
 
 #[tokio::test]
 async fn build_transitive_url_build_requirement_hashes() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filter((r"\\\.", ""));
+    let context = uv_test::test_context!("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"\\\.", "")])
+        .collect::<Vec<_>>();
 
     let ok_wheel = current_dir()?.join("../../test/links/ok-1.0.0-py3-none-any.whl");
     let validation_wheel =
@@ -1594,7 +1628,7 @@ async fn build_transitive_url_build_requirement_hashes() -> Result<()> {
             return wheel_name
     "#})?;
     uv_snapshot!(
-        &context.filters(),
+        &filters,
         context
             .build()
             .arg("--wheel")
@@ -1735,7 +1769,12 @@ fn build_hide_build_output_env_var() -> Result<()> {
 /// Test that `UV_HIDE_BUILD_OUTPUT` hides build output even on failure.
 #[test]
 fn build_hide_build_output_on_failure() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filter((r"\\\.", ""));
+    let context = uv_test::test_context!("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"\\\.", "")])
+        .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
 
@@ -1763,13 +1802,13 @@ fn build_hide_build_output_on_failure() -> Result<()> {
         "#})?;
 
     // With `UV_HIDE_BUILD_OUTPUT`, the output is hidden even on failure.
-    uv_snapshot!(context.filters(), context.build().arg("project").env(EnvVars::UV_HIDE_BUILD_OUTPUT, "1").env("FOO", "bar"), @"
+    uv_snapshot!(&filters, context.build().arg("project").env(EnvVars::UV_HIDE_BUILD_OUTPUT, "1").env("FOO", "bar"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     Building source distribution...
     error: Failed to build `[TEMP_DIR]/project`
-      cause: The build backend returned an error
-      cause: Call to `setuptools.build_meta.get_requires_for_build_sdist` failed (exit status: 1)
+      Caused by: The build backend returned an error
+      Caused by: Call to `setuptools.build_meta.build_sdist` failed (exit status: 1)
 
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
@@ -1779,7 +1818,12 @@ fn build_hide_build_output_on_failure() -> Result<()> {
 
 #[test]
 fn build_tool_uv_sources() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filter((r"\\\.", ""));
+    let context = uv_test::test_context!("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"\\\.", "")])
+        .collect::<Vec<_>>();
 
     let build = context.temp_dir.child("backend");
     build.child("pyproject.toml").write_str(
@@ -1843,36 +1887,7 @@ fn build_tool_uv_sources() -> Result<()> {
         .touch()?;
     project.child("README").touch()?;
 
-    // Build restrictions still apply to dependencies. Check before building the backend so a
-    // cached wheel cannot make these commands succeed.
-    uv_snapshot!(context.filters(), context.build().arg("--no-build").current_dir(project.path()), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    Building source distribution...
-    error: Failed to build `[TEMP_DIR]/project`
-      cause: Failed to install requirements from `build-system.requires`
-      cause: Building source distributions is disabled, but attempted to build `backend`
-    ");
-
-    uv_snapshot!(context.filters(), context.build().arg("--no-build-package").arg("backend").current_dir(project.path()), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    Building source distribution...
-    error: Failed to build `[TEMP_DIR]/project`
-      cause: Failed to install requirements from `build-system.requires`
-      cause: Building source distributions is disabled, but attempted to build `backend`
-    ");
-
-    project
-        .child("dist")
-        .child("project-0.1.0.tar.gz")
-        .assert(predicate::path::missing());
-    project
-        .child("dist")
-        .child("project-0.1.0-py3-none-any.whl")
-        .assert(predicate::path::missing());
-
-    uv_snapshot!(context.filters(), context.build().current_dir(project.path()), @"
+    uv_snapshot!(filters, context.build().current_dir(project.path()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Building source distribution...
@@ -1928,8 +1943,8 @@ fn build_named_index_config_file_hint() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     error: Failed to build `[TEMP_DIR]/project`
-      cause: Failed to parse entry: `hatchling`
-      cause: Package `hatchling` references an undeclared index: `privindex`
+      Caused by: Failed to parse entry: `hatchling`
+      Caused by: Package `hatchling` references an undeclared index: `privindex`
 
     hint: Index `privindex` was found in a project-level `uv.toml`, but indexes referenced via `tool.uv.sources` must be defined in the project's `pyproject.toml`
     ");
@@ -1985,10 +2000,16 @@ fn build_git_boundary_in_dist_build() -> Result<()> {
 
 #[test]
 fn build_non_package() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
-        .with_filter((r"\\\.", ""))
-        .with_filter((r"\[project\]", "[PKG]"))
-        .with_filter((r"\[member\]", "[PKG]"));
+    let context = uv_test::test_context!("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([
+            (r"\\\.", ""),
+            (r"\[project\]", "[PKG]"),
+            (r"\[member\]", "[PKG]"),
+        ])
+        .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
 
@@ -2026,7 +2047,7 @@ fn build_non_package() -> Result<()> {
     member.child("README").touch()?;
 
     // Build the member.
-    uv_snapshot!(context.filters(), context.build().arg("--package").arg("member").current_dir(&project), @r#"
+    uv_snapshot!(&filters, context.build().arg("--package").arg("member").current_dir(&project), @r#"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Package `member` is missing a `build-system`. For example, to build with `uv_build`, add the following to `packages/member/pyproject.toml`:
@@ -2047,7 +2068,7 @@ fn build_non_package() -> Result<()> {
         .assert(predicate::path::missing());
 
     // Build all packages.
-    uv_snapshot!(context.filters(), context.build().arg("--all").arg("--no-build-logs").current_dir(&project), @r#"
+    uv_snapshot!(&filters, context.build().arg("--all").arg("--no-build-logs").current_dir(&project), @r#"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Workspace does not contain any buildable packages. For example, to build `member` with `uv_build`, add a `build-system` to `packages/member/pyproject.toml`:
@@ -2162,47 +2183,6 @@ fn build_fast_path() -> Result<()> {
     Ok(())
 }
 
-/// Warn about an unbounded build backend only when producing a source distribution.
-#[test]
-fn build_fast_path_unbounded_backend() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([(r"such as `<\d+\.\d+`", "such as `<[NEXT_BREAKING]`")])
-        .collect::<Vec<_>>();
-    let project = context.temp_dir.child("project");
-
-    project.child("pyproject.toml").write_str(indoc! {r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-
-        [build-system]
-        requires = ["uv-build"]
-        build-backend = "uv_build"
-    "#})?;
-    project.child("src/project/__init__.py").touch()?;
-
-    uv_snapshot!(&filters, context.build().arg("project").arg("--wheel"), @r"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Building wheel...
-    Successfully built project/dist/project-0.1.0-py3-none-any.whl
-    ");
-
-    uv_snapshot!(&filters, context.build().arg("project").arg("--sdist"), @r#"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Building source distribution...
-    warning: `build_system.requires = ["uv-build"]` is missing an upper bound on the `uv_build` version such as `<[NEXT_BREAKING]`. Without bounding the `uv_build` version, the source distribution will break when a future, breaking version of `uv_build` is released.
-    Successfully built project/dist/project-0.1.0.tar.gz
-    "#);
-
-    Ok(())
-}
-
 /// Only mention the bundled build backend when verbose logging is enabled.
 #[test]
 fn build_fast_path_verbose() -> Result<()> {
@@ -2254,161 +2234,6 @@ fn build_fast_path_verbose() -> Result<()> {
     Ok(())
 }
 
-/// Exact backend pins must match the running uv version; compatible ranges can use the fast path.
-#[test]
-fn build_fast_path_exact_pin() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let project = context.temp_dir.child("project");
-    let pyproject_toml = project.child("pyproject.toml");
-
-    pyproject_toml.write_str(indoc! {r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-
-        [build-system]
-        requires = ["uv_build==0.11.33"]
-        build-backend = "uv_build"
-    "#})?;
-    project.child("src/project/__init__.py").touch()?;
-
-    uv_snapshot!(context.filters(), context.build()
-        .arg("project")
-        .arg("--wheel")
-        .arg("--no-index"), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    Building wheel...
-    error: Failed to build `[TEMP_DIR]/project`
-      cause: Failed to resolve requirements from `build-system.requires`
-      cause: No solution found when resolving: `uv-build==0.11.33`
-      cause: Because uv-build was not found in the provided package locations and you require uv-build==0.11.33, we can conclude that your requirements are unsatisfiable.
-
-    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
-    ");
-
-    for requirement in [
-        format!("uv_build=={}", uv_version::version()),
-        "uv_build>=0.11,<0.12".to_string(),
-        "uv_build==0.11.*".to_string(),
-        "uv_build==0.11.33 ; python_version < '0'".to_string(),
-    ] {
-        pyproject_toml.write_str(&formatdoc! {r#"
-            [project]
-            name = "project"
-            version = "0.1.0"
-            requires-python = ">=3.12"
-
-            [build-system]
-            requires = ["{requirement}"]
-            build-backend = "uv_build"
-        "#})?;
-
-        context
-            .build()
-            .arg("project")
-            .arg("--wheel")
-            .arg("--no-index")
-            .assert()
-            .success();
-    }
-
-    Ok(())
-}
-
-/// Active exact build constraints must match the running uv version to use the fast path.
-#[test]
-fn build_fast_path_constraint_exact_pin() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let project = context.temp_dir.child("project");
-
-    project.child("pyproject.toml").write_str(indoc! {r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-
-        [build-system]
-        requires = ["uv_build>=0.11,<10000"]
-        build-backend = "uv_build"
-    "#})?;
-    project.child("src/project/__init__.py").touch()?;
-
-    let constraints = context.temp_dir.child("constraints.txt");
-    constraints.write_str("uv_build==0.11.33")?;
-
-    uv_snapshot!(context.filters(), context.pip_install()
-        .arg("./project")
-        .arg("--no-index")
-        .arg("--build-constraint")
-        .arg("constraints.txt"), @"
-    exit_code: 1 (failure)
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    error: Failed to build `project @ file://[TEMP_DIR]/project`
-      cause: Failed to resolve requirements from `build-system.requires`
-      cause: No solution found when resolving: `uv-build>=0.11, <10000`
-      cause: Because uv-build was not found in the provided package locations and you require uv-build==0.11.33, we can conclude that your requirements are unsatisfiable.
-
-    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
-    ");
-
-    constraints.write_str("uv_build>=0.11,==0.11.33")?;
-
-    uv_snapshot!(context.filters(), context.build()
-        .arg("project")
-        .arg("--wheel")
-        .arg("--no-index")
-        .arg("--build-constraint")
-        .arg("constraints.txt"), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    Building wheel...
-    error: Failed to build `[TEMP_DIR]/project`
-      cause: Failed to resolve requirements from `build-system.requires`
-      cause: No solution found when resolving: `uv-build>=0.11, <10000`
-      cause: Because uv-build was not found in the provided package locations and you require uv-build==0.11.33, we can conclude that your requirements are unsatisfiable.
-
-    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
-    ");
-
-    // Listing files requires the fast path and must reject the incompatible constraint.
-    uv_snapshot!(context.filters(), context.build()
-        .arg("project")
-        .arg("--wheel")
-        .arg("--list")
-        .arg("--build-constraint")
-        .arg("constraints.txt"), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    error: Failed to build `[TEMP_DIR]/project`
-      cause: Can only use `--list` with a compatible uv build backend, but `project` is not compatible because `uv_build==0.11.33` does not match the running uv version
-    ");
-
-    for constraint in [
-        format!("uv_build=={}", uv_version::version()),
-        "uv_build==0.11.33 ; python_version < '0'".to_string(),
-        "uv_build==0.11.*".to_string(),
-        "other-package==0.11.33".to_string(),
-        "uv_build>=0.11,<0.12".to_string(),
-    ] {
-        constraints.write_str(&constraint)?;
-
-        context
-            .build()
-            .arg("project")
-            .arg("--wheel")
-            .arg("--no-index")
-            .arg("--build-constraint")
-            .arg("constraints.txt")
-            .assert()
-            .success();
-    }
-
-    Ok(())
-}
-
 /// Reject path-shaped script entry point names before writing wheel metadata.
 #[test]
 fn build_unsafe_script_entry_point_name() -> Result<()> {
@@ -2443,8 +2268,8 @@ fn build_unsafe_script_entry_point_name() -> Result<()> {
     ----- stderr -----
     Building wheel...
     error: Failed to build `[TEMP_DIR]/`
-      cause: Invalid project metadata
-      cause: Script entry point name `../script` must include a non-dot character and consist only of letters, numbers, dots, underscores and dashes
+      Caused by: Invalid project metadata
+      Caused by: Script entry point name `../script` must include a non-dot character and consist only of letters, numbers, dots, underscores and dashes
     ");
 
     Ok(())
@@ -2484,8 +2309,8 @@ fn build_dot_script_entry_point_name() -> Result<()> {
     ----- stderr -----
     Building wheel...
     error: Failed to build `[TEMP_DIR]/`
-      cause: Invalid project metadata
-      cause: Script entry point name `.` must include a non-dot character and consist only of letters, numbers, dots, underscores and dashes
+      Caused by: Invalid project metadata
+      Caused by: Script entry point name `.` must include a non-dot character and consist only of letters, numbers, dots, underscores and dashes
     ");
 
     Ok(())
@@ -2525,8 +2350,8 @@ fn build_nested_script_entry_point_name() -> Result<()> {
     ----- stderr -----
     Building wheel...
     error: Failed to build `[TEMP_DIR]/`
-      cause: Invalid project metadata
-      cause: Script entry point name `nested/script` must include a non-dot character and consist only of letters, numbers, dots, underscores and dashes
+      Caused by: Invalid project metadata
+      Caused by: Script entry point name `nested/script` must include a non-dot character and consist only of letters, numbers, dots, underscores and dashes
     ");
 
     Ok(())
@@ -2655,14 +2480,12 @@ fn build_list_files() -> Result<()> {
 /// Test `--list` option errors.
 #[test]
 fn build_list_files_errors() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
-        // In CI, we run with link mode settings.
-        .with_filter(("--link-mode <LINK_MODE> ", ""))
-        // Normalize Windows workspace paths.
-        .with_filter(("/crates/uv/../../", "/"));
+    let context = uv_test::test_context!("3.12");
 
     let built_by_uv = current_dir()?.join("../../test/packages/built-by-uv");
 
+    let context = context.with_filter(("--link-mode <LINK_MODE> ", ""));
+    // In CI, we run with link mode settings.
     uv_snapshot!(context.filters(), context.build()
         .arg(&built_by_uv)
         .arg("--out-dir")
@@ -2680,6 +2503,8 @@ fn build_list_files_errors() -> Result<()> {
 
     // Not a uv build backend package, we can't list it.
     let anyio_local = current_dir()?.join("../../test/packages/anyio_local");
+    // Windows normalization
+    let context = context.with_filter(("/crates/uv/../../", "/"));
     uv_snapshot!(context.filters(), context.build()
         .arg(&anyio_local)
         .arg("--out-dir")
@@ -2688,7 +2513,7 @@ fn build_list_files_errors() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to build `[WORKSPACE]/test/packages/anyio_local`
-      cause: Can only use `--list` with a compatible uv build backend, but `[WORKSPACE]/test/packages/anyio_local` is not compatible because `build_system.build-backend` is not `uv_build`, but `flit_core.buildapi`
+      Caused by: Can only use `--list` with a compatible uv build backend, but `[WORKSPACE]/test/packages/anyio_local` is not compatible because `build_system.build-backend` is not `uv_build`, but `flit_core.buildapi`
     ");
     Ok(())
 }
@@ -2719,7 +2544,7 @@ fn build_version_mismatch() -> Result<()> {
     ----- stderr -----
     Building wheel from source distribution...
     error: Failed to build `[TEMP_DIR]/anyio-1.2.3.tar.gz`
-      cause: The source distribution declares version 1.2.3, but the wheel declares version 4.3.0+foo
+      Caused by: The source distribution declares version 1.2.3, but the wheel declares version 4.3.0+foo
     ");
     Ok(())
 }
@@ -2755,7 +2580,7 @@ fn build_name_mismatch() -> Result<()> {
     Building source distribution...
     Building wheel...
     error: Failed to build `[TEMP_DIR]/project`
-      cause: The source distribution declares name alpha, but the wheel declares name beta
+      Caused by: The source distribution declares name alpha, but the wheel declares name beta
     ");
 
     Ok(())
@@ -2855,7 +2680,7 @@ fn build_workspace_virtual_root() -> Result<()> {
     warning: `[TEMP_DIR]/` appears to be a workspace root without a Python project; consider using `uv sync` to install the workspace, or add a `[build-system]` table to `pyproject.toml`
     Building wheel from source distribution...
     error: Failed to build `[TEMP_DIR]/`
-      cause: The source distribution declares name cache, but the wheel declares name unknown
+      Caused by: The source distribution declares name cache, but the wheel declares name unknown
     ");
     Ok(())
 }
@@ -2881,14 +2706,19 @@ fn build_pyproject_toml_not_a_project() -> Result<()> {
     warning: `[TEMP_DIR]/` does not appear to be a Python project, as the `pyproject.toml` does not include a `[build-system]` table, and neither `setup.py` nor `setup.cfg` are present in the directory
     Building wheel from source distribution...
     error: Failed to build `[TEMP_DIR]/`
-      cause: The source distribution declares name cache, but the wheel declares name unknown
+      Caused by: The source distribution declares name cache, but the wheel declares name unknown
     ");
     Ok(())
 }
 
 #[test]
 fn build_with_nonnormalized_name() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filter((r"\\\.", ""));
+    let context = uv_test::test_context!("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"\\\.", "")])
+        .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
 
@@ -2915,7 +2745,7 @@ fn build_with_nonnormalized_name() -> Result<()> {
     project.child("README").touch()?;
 
     // Build the specified path.
-    uv_snapshot!(context.filters(), context.build().arg("--no-build-logs").current_dir(&project), @"
+    uv_snapshot!(&filters, context.build().arg("--no-build-logs").current_dir(&project), @"
     exit_code: 0 (success)
     ----- stderr -----
     Building source distribution...
@@ -2965,7 +2795,7 @@ fn force_pep517() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     error: Failed to build `[TEMP_DIR]/`
-      cause: Expected a Python module at: src/does_not_exist/__init__.py
+      Caused by: Expected a Python module at: src/does_not_exist/__init__.py
     ");
 
     uv_snapshot!(context.filters(), context.build().arg("--force-pep517").env(EnvVars::RUST_BACKTRACE, "0"), @"
@@ -2974,8 +2804,8 @@ fn force_pep517() -> Result<()> {
     Building source distribution...
     Error: Missing module directory for `does_not_exist` in `src`. Found: `temp`
     error: Failed to build `[TEMP_DIR]/`
-      cause: The build backend returned an error
-      cause: Call to `uv_build.build_sdist` failed (exit status: 1)
+      Caused by: The build backend returned an error
+      Caused by: Call to `uv_build.build_sdist` failed (exit status: 1)
 
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
@@ -2986,7 +2816,6 @@ fn force_pep517() -> Result<()> {
 /// Check that we show a hint when there's a venv in the source distribution.
 ///
 /// <https://github.com/astral-sh/uv/issues/15096>
-/// <https://github.com/astral-sh/uv/issues/21128>
 // Windows uses trampolines instead of symlinks. You don't want those in your source distribution
 // either, but that's for the build backend to catch, we're only checking for the unix error hint
 // in uv here.
@@ -3031,21 +2860,15 @@ fn venv_included_in_sdist() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     error: Failed to build `[TEMP_DIR]/`
-      cause: Invalid tar file
-      cause: failed to unpack `[CACHE_DIR]/sdists-v9/[TMP]/project-0.1.0/.venv/bin/python`
-      cause: symlink path `[PYTHON-3.12]` is absolute, but external symlinks are not allowed
+      Caused by: Invalid tar file
+      Caused by: failed to unpack `[CACHE_DIR]/sdists-v9/[TMP]/project-0.1.0/.venv/bin/python`
+      Caused by: symlink path `[PYTHON-3.12]` is absolute, but external symlinks are not allowed
 
     hint: The source distribution includes a virtual environment. Virtual environments must be excluded from source distributions.
     ");
 
-    // Point the virtual environment at the test interpreter's `python/3.12/python3` shim to
-    // exercise a base interpreter outside `bin`, as in Gentoo's test layout.
-    let venv_python = context.venv.child("bin").child("python");
-    fs_err::remove_file(&venv_python)?;
-    venv_python.symlink_to_file(context.root.child("python").child("3.12").child("python3"))?;
-
     // The preview tar-codec backend reports a structured unsafe-link error and preserves the same
-    // user-facing hint, regardless of the base interpreter's installation layout.
+    // user-facing hint.
     uv_snapshot!(context.filters(), context
         .build()
         .arg("--preview-features")
@@ -3054,8 +2877,8 @@ fn venv_included_in_sdist() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     error: Failed to build `[TEMP_DIR]/`
-      cause: Invalid tar file
-      cause: at byte [OFFSET]: unsafe symbolic-link target "[PYTHON-3.12]": is absolute
+      Caused by: Invalid tar file
+      Caused by: at byte [OFFSET]: unsafe symbolic-link target "[PYTHON-3.12]": is absolute
 
     hint: The source distribution includes a virtual environment. Virtual environments must be excluded from source distributions.
     "#);
@@ -3064,9 +2887,9 @@ fn venv_included_in_sdist() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to build `[TEMP_DIR]/`
-      cause: Invalid tar file
-      cause: failed to unpack `[CACHE_DIR]/sdists-v9/[TMP]/project-0.1.0/.venv/bin/python`
-      cause: symlink path `[PYTHON-3.12]` is absolute, but external symlinks are not allowed
+      Caused by: Invalid tar file
+      Caused by: failed to unpack `[CACHE_DIR]/sdists-v9/[TMP]/project-0.1.0/.venv/bin/python`
+      Caused by: symlink path `[PYTHON-3.12]` is absolute, but external symlinks are not allowed
 
     hint: The source distribution includes a virtual environment. Virtual environments must be excluded from source distributions.
     ");
@@ -3230,182 +3053,5 @@ fn build_no_gitignore() -> Result<()> {
         .child(".gitignore")
         .assert(predicate::path::missing());
 
-    Ok(())
-}
-
-#[test]
-fn build_workspace_constraint_hashes() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let mut build_hash = String::new();
-    for (name, version) in [("build-dependency", "1.0.0"), ("project", "0.1.0")] {
-        let (filename, wheel) = generate_wheel(
-            &name.parse()?,
-            &version.parse()?,
-            &[],
-            &BTreeMap::new(),
-            None,
-            "py3-none-any",
-            &[],
-        );
-        if name == "build-dependency" {
-            build_hash = hex::encode(Sha256::digest(&wheel));
-        }
-        context
-            .temp_dir
-            .child("wheels")
-            .child(filename)
-            .write_binary(&wheel)?;
-    }
-    let context = context.with_filter((build_hash.clone(), "[BUILD_HASH]"));
-    context.temp_dir.child("backend.py").write_str(indoc! {r#"
-        import shutil
-        from pathlib import Path
-
-        import build_dependency
-
-        Path(__file__).with_name("backend-executed").touch()
-
-        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-            source = Path(__file__).parent / "wheels" / "project-0.1.0-py3-none-any.whl"
-            shutil.copyfile(source, Path(wheel_directory) / source.name)
-            return source.name
-    "#})?;
-    let pyproject = context.temp_dir.child("pyproject.toml");
-    let constraints = context.temp_dir.child("constraints.txt");
-    let incorrect_hash = "0".repeat(64);
-    pyproject.write_str(&formatdoc! {r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-
-        [build-system]
-        requires = ["build-dependency==1.0.0"]
-        build-backend = "backend"
-        backend-path = ["."]
-
-        [tool.uv]
-        no-index = true
-        find-links = ["wheels"]
-        build-constraint-dependencies = [
-            {{ requirement = "build-dependency==1.0.0", hashes = ["sha256:{incorrect_hash}"] }},
-        ]
-    "#})?;
-    constraints.write_str(&format!(
-        "build-dependency==1.0.0 --hash=sha256:{build_hash}\n"
-    ))?;
-
-    // Workspace hashes are checked even without command-line constraints.
-    uv_snapshot!(context.filters(), context.build()
-        .arg("--wheel")
-        .arg("--no-cache"), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    Building wheel...
-    error: Failed to build `[TEMP_DIR]/`
-      cause: Failed to install requirements from `build-system.requires`
-      cause: Failed to download `build-dependency==1.0.0`
-      cause: Hash mismatch for `build-dependency==1.0.0`
-
-             Expected:
-               sha256:0000000000000000000000000000000000000000000000000000000000000000
-
-             Computed:
-               sha256:[BUILD_HASH]
-    ");
-    context
-        .temp_dir
-        .child("backend-executed")
-        .assert(predicate::path::missing());
-
-    // Workspace constraints follow command-line constraints, so their hashes take precedence.
-    uv_snapshot!(context.filters(), context.build()
-        .arg("--wheel")
-        .arg("--no-cache")
-        .args(["--build-constraint", "constraints.txt"]), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    Building wheel...
-    error: Failed to build `[TEMP_DIR]/`
-      cause: Failed to install requirements from `build-system.requires`
-      cause: Failed to download `build-dependency==1.0.0`
-      cause: Hash mismatch for `build-dependency==1.0.0`
-
-             Expected:
-               sha256:0000000000000000000000000000000000000000000000000000000000000000
-
-             Computed:
-               sha256:[BUILD_HASH]
-    ");
-    context
-        .temp_dir
-        .child("backend-executed")
-        .assert(predicate::path::missing());
-
-    // An explicit opt-out applies to hashes in both workspace and command-line constraints.
-    uv_snapshot!(context.filters(), context.build()
-        .arg("--wheel")
-        .arg("--no-cache")
-        .args(["--build-constraint", "constraints.txt", "--no-verify-hashes"]), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Building wheel...
-    Successfully built dist/project-0.1.0-py3-none-any.whl
-    ");
-    fs_err::remove_file(context.temp_dir.child("backend-executed"))?;
-
-    let registry_pyproject = context.read("pyproject.toml");
-    let wheel = context
-        .temp_dir
-        .child("wheels/build_dependency-1.0.0-py3-none-any.whl");
-    let wheel_url =
-        Url::from_file_path(wheel.path()).map_err(|()| anyhow!("invalid wheel path"))?;
-    let requirement = format!("build-dependency @ {wheel_url}");
-    pyproject.write_str(&registry_pyproject.replace(
-        "requirement = \"build-dependency==1.0.0\"",
-        &format!("requirement = \"{requirement}\""),
-    ))?;
-    constraints.write_str(&format!("{requirement} --hash=sha256:{build_hash}\n"))?;
-    uv_snapshot!(context.filters(), context.build()
-        .arg("--wheel")
-        .arg("--no-cache")
-        .args(["--build-constraint", "constraints.txt"]), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    Building wheel...
-    error: Failed to build `[TEMP_DIR]/`
-      cause: Failed to install requirements from `build-system.requires`
-      cause: Failed to read `build-dependency @ file://[TEMP_DIR]/wheels/build_dependency-1.0.0-py3-none-any.whl`
-      cause: Hash mismatch for `build-dependency @ file://[TEMP_DIR]/wheels/build_dependency-1.0.0-py3-none-any.whl`
-
-             Expected:
-               sha256:0000000000000000000000000000000000000000000000000000000000000000
-
-             Computed:
-               sha256:[BUILD_HASH]
-    ");
-    context
-        .temp_dir
-        .child("backend-executed")
-        .assert(predicate::path::missing());
-
-    // A correct workspace hash also takes precedence over an incorrect command-line hash.
-    constraints.write_str(&format!(
-        "build-dependency==1.0.0 --hash=sha256:{incorrect_hash}\n"
-    ))?;
-    pyproject.write_str(&registry_pyproject.replace(&incorrect_hash, &build_hash))?;
-    uv_snapshot!(context.filters(), context.build()
-        .arg("--wheel")
-        .arg("--no-cache")
-        .args(["--build-constraint", "constraints.txt"]), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Building wheel...
-    Successfully built dist/project-0.1.0-py3-none-any.whl
-    ");
-    context
-        .temp_dir
-        .child("backend-executed")
-        .assert(predicate::path::exists());
     Ok(())
 }

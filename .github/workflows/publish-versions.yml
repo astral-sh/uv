@@ -13,13 +13,9 @@ on:
 
 permissions: {}
 
-env:
-  ACTIONS_CACHE_MODE: none
-  UV_LOCKED: 1
-
 jobs:
   publish-versions:
-    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     environment:
       name: release
     env:
@@ -36,12 +32,7 @@ jobs:
         run: git clone https://${{ secrets.ASTRAL_VERSIONS_PAT }}@github.com/astral-sh/versions.git astral-versions
 
       - name: "Install uv"
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
-        with:
-          # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.12.13"
-          checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
-          enable-cache: false
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
 
       - name: "Update versions"
         env:
@@ -83,5 +74,4 @@ jobs:
         run: |
           # Wait for PR to be created before merging
           sleep 10
-          # Use admin to bypass required review
-          gh pr merge --squash --admin "$BRANCH_NAME"
+          gh pr merge --squash "$BRANCH_NAME"
