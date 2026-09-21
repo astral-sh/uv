@@ -18,9 +18,9 @@ use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 
-/// A file indicates that if present, `git reset` has been done and a repo
-/// checkout is ready to go. See [`GitCheckout::reset`] for why we need this.
-const CHECKOUT_READY_LOCK: &str = ".ok";
+/// Extension for the marker beside a completed checkout.
+/// See [`GitCheckout::reset`] for why we need this.
+const CHECKOUT_READY_EXTENSION: &str = "ok";
 
 #[derive(Debug, thiserror::Error)]
 pub enum GitError {
@@ -453,6 +453,13 @@ impl GitCheckout {
         revision: GitOid,
         original_remote_url: &DisplaySafeUrl,
     ) -> Result<Self> {
+        // Invalidate readiness before replacing the checkout, including an interrupted clone.
+        match fs_err::remove_file(into.with_extension(CHECKOUT_READY_EXTENSION)) {
+            Ok(()) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) => return Err(err.into()),
+        }
+
         let dirname = into.parent().unwrap();
         fs_err::create_dir_all(dirname)?;
         match fs_err::remove_dir_all(into) {
@@ -499,7 +506,10 @@ impl GitCheckout {
         match self.repo.rev_parse("HEAD") {
             Ok(id) if id == self.revision => {
                 // See comments in reset() for why we check this
-                self.repo.path.join(CHECKOUT_READY_LOCK).exists()
+                self.repo
+                    .path
+                    .with_extension(CHECKOUT_READY_EXTENSION)
+                    .exists()
             }
             _ => false,
         }
@@ -518,18 +528,16 @@ impl GitCheckout {
     }
 
     /// This performs `git reset --hard` to the revision of this checkout and updates submodules,
-    /// with additional interrupt protection by a dummy file [`CHECKOUT_READY_LOCK`].
+    /// with additional interrupt protection by a marker file.
     ///
     /// If we're interrupted while performing any of the processes in this method (e.g., we die
     /// because of a signal) uv needs to be sure to try to check out this
     /// repo again on the next go-round.
     ///
-    /// To enable this we have a dummy file in our checkout, [`.ok`],
-    /// which if present means that the repo has been successfully checked out and is
-    /// ready to go. Hence if we start to update submodules, we make sure this file
-    /// *doesn't* exist, and then once we're done we create the file.
+    /// The marker sits beside the checkout with an [`.ok` extension], so tracked files cannot
+    /// collide with it. It is removed before cloning and created only after preparation succeeds.
     ///
-    /// [`.ok`]: CHECKOUT_READY_LOCK
+    /// [`.ok` extension]: CHECKOUT_READY_EXTENSION
     /// `git reset --hard [<commit>]` can break relative submodule URLs, so we update submodules
     /// using the original remote URL.
     fn reset(
@@ -537,9 +545,6 @@ impl GitCheckout {
         with_lfs: Option<bool>,
         original_remote_url: &DisplaySafeUrl,
     ) -> Result<Option<bool>> {
-        let ok_file = self.repo.path.join(CHECKOUT_READY_LOCK);
-        let _ = paths::remove_file(&ok_file);
-
         // We want to skip smudge if lfs was disabled for the repository
         // as smudge filters can trigger on a reset even if lfs artifacts
         // were not originally "fetched".
@@ -611,7 +616,7 @@ impl GitCheckout {
         // When Git LFS is enabled, the objects must also be fetched and
         // validated successfully as part of the corresponding db.
         if with_lfs.is_none() || lfs_validation == Some(true) {
-            paths::create(ok_file)?;
+            paths::create(self.repo.path.with_extension(CHECKOUT_READY_EXTENSION))?;
         }
 
         Ok(lfs_validation)
