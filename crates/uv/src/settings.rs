@@ -16,12 +16,13 @@ use uv_cli::comma::CommaSeparatedRequirements;
 use uv_cli::{
     AddArgs, AuditArgs, AuditCommonArgs, AuditOutputFormat, AuthLoginArgs, AuthLogoutArgs,
     AuthTokenArgs, ColorChoice, ExternalCommand, GlobalArgs, InitArgs, ListFormat, LockArgs, Maybe,
-    MetadataArgs, PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs,
-    PipShowArgs, PipSyncArgs, PipTreeArgs, PipUninstallArgs, ProjectDependencyGroupsArgs,
-    PythonFindArgs, PythonInstallArgs, PythonListArgs, PythonListFormat, PythonPinArgs,
-    PythonUninstallArgs, PythonUpgradeArgs, RemoveArgs, RunArgs, SyncArgs, SyncFormat,
-    ToolAuditArgs, ToolDirArgs, ToolInstallArgs, ToolListArgs, ToolRunArgs, ToolUninstallArgs,
-    TreeArgs, TreeFormat, UpgradeArgs, VenvArgs, VersionArgs, VersionBumpSpec, VersionFormat,
+    MetadataArgs, PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipInstallFormat,
+    PipListArgs, PipShowArgs, PipSyncArgs, PipTreeArgs, PipUninstallArgs,
+    ProjectDependencyGroupsArgs, PythonFindArgs, PythonInstallArgs, PythonListArgs,
+    PythonListFormat, PythonPinArgs, PythonUninstallArgs, PythonUpgradeArgs, RemoveArgs, RunArgs,
+    SyncArgs, SyncFormat, ToolAuditArgs, ToolDirArgs, ToolInstallArgs, ToolListArgs, ToolRunArgs,
+    ToolUninstallArgs, TreeArgs, TreeFormat, UpgradeArgs, VenvArgs, VersionArgs, VersionBumpSpec,
+    VersionFormat,
 };
 use uv_cli::{
     AuthorFrom, BuildArgs, BuildOptionsArgs, CheckArgs, ExcludeNewerArgs, ExportArgs, FormatArgs,
@@ -3808,6 +3809,7 @@ pub(crate) struct PipInstallSettings {
     pub(crate) excludes: Vec<RequirementsInput>,
     pub(crate) build_constraints: Vec<RequirementsInput>,
     pub(crate) dry_run: DryRun,
+    pub(crate) output_format: PipInstallFormat,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
     pub(crate) overrides_from_workspace: Vec<Override<Requirement>>,
     pub(crate) excludes_from_workspace: Vec<ExcludeDependency>,
@@ -3867,6 +3869,7 @@ impl PipInstallSettings {
             strict,
             no_strict,
             dry_run,
+            output_format,
             torch_backend,
             compat_args: _,
             check,
@@ -3942,6 +3945,7 @@ impl PipInstallSettings {
             } else {
                 DryRun::from_args(dry_run)
             },
+            output_format,
             constraints_from_workspace,
             overrides_from_workspace,
             excludes_from_workspace,

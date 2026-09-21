@@ -132,6 +132,29 @@ $ uv pip install --group some/path/pyproject.toml:foo --group other/pyproject.to
     For instance, `uv pip install -r some/path/pyproject.toml --group foo` sources `foo`
     from `./pyproject.toml` and **not** `some/path/pyproject.toml`.
 
+## Previewing an installation
+
+Use `--dry-run` to see the planned package changes without modifying the environment:
+
+```console
+$ uv pip install --dry-run 'ruff==0.3.0'
+```
+
+Add `--output-format json` to read the plan programmatically:
+
+```console
+$ uv pip install --dry-run --output-format json 'ruff==0.3.0'
+```
+
+The report is written to stdout, while progress and diagnostic messages go to stderr. Use `--quiet`
+to hide progress messages. The report includes `dry_run: true` and a `changes` list, with each entry
+containing a package name, an action (`installed`, `uninstalled`, or `reinstalled`), and a version when
+known. An empty `changes` list means the environment already satisfies the request.
+
+Successful dry runs exit with status zero even when changes are planned. If the command fails, no
+JSON report is written. JSON output requires `--dry-run`; its schema is experimental and identified
+by `schema.version: "preview"`.
+
 ## Uninstalling a package
 
 To uninstall a package, e.g., Flask:

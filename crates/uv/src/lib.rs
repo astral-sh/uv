@@ -1065,6 +1065,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 cache,
                 workspace_cache,
                 args.dry_run,
+                args.output_format,
                 printer,
                 globals.preview,
             ))

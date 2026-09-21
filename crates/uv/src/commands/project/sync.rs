@@ -43,8 +43,9 @@ use uv_workspace::pyproject::Source;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
 
 use crate::commands::editable::apply_editable_mode;
+use crate::commands::install_report::{PackageChangesReport, SchemaReport};
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
-use crate::commands::pip::operations::{ChangedDist, Changelog, Modifications};
+use crate::commands::pip::operations::{Changelog, Modifications};
 use crate::commands::pip::resolution_markers;
 use crate::commands::pip::{operations, resolution_tags};
 use crate::commands::project::install_target::InstallTarget;
@@ -1279,20 +1280,6 @@ impl From<&Pep723Script> for ScriptReport {
     }
 }
 
-#[derive(Serialize, Debug, Default)]
-#[serde(rename_all = "snake_case")]
-enum SchemaVersion {
-    /// An unstable, experimental schema.
-    #[default]
-    Preview,
-}
-
-#[derive(Serialize, Debug, Default)]
-struct SchemaReport {
-    /// The version of the schema.
-    version: SchemaVersion,
-}
-
 /// A report of the uv sync operation
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -1511,66 +1498,6 @@ impl SyncReport {
 
         Some(message)
     }
-}
-
-/// A summary of all package changes performed during sync.
-#[derive(Serialize, Debug, Clone, Default)]
-struct PackageChangesReport(Vec<PackageChangeReport>);
-
-impl PackageChangesReport {
-    fn from_changelog(changelog: &Changelog) -> Self {
-        let mut changes: Vec<_> =
-            changelog
-                .uninstalled
-                .iter()
-                .map(|dist| PackageChangeReport::from_dist(dist, PackageChangeAction::Uninstalled))
-                .chain(changelog.installed.iter().map(|dist| {
-                    PackageChangeReport::from_dist(dist, PackageChangeAction::Installed)
-                }))
-                .chain(changelog.reinstalled.iter().map(|dist| {
-                    PackageChangeReport::from_dist(dist, PackageChangeAction::Reinstalled)
-                }))
-                .collect();
-
-        changes.sort_by(|a, b| {
-            a.name
-                .cmp(&b.name)
-                .then_with(|| a.action.cmp(&b.action))
-                .then_with(|| a.version.cmp(&b.version))
-        });
-        Self(changes)
-    }
-}
-
-/// A summary of a single package change performed during sync.
-#[derive(Serialize, Debug, Clone)]
-struct PackageChangeReport {
-    /// The normalized package name.
-    name: PackageName,
-    /// The resolved version of the package.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    version: Option<uv_pep440::Version>,
-    /// The action that was taken for the package.
-    action: PackageChangeAction,
-}
-
-impl PackageChangeReport {
-    fn from_dist(dist: &ChangedDist, action: PackageChangeAction) -> Self {
-        Self {
-            name: dist.name().clone(),
-            version: dist.version().cloned(),
-            action,
-        }
-    }
-}
-
-/// The action taken on an individual package during sync.
-#[derive(Serialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-#[serde(rename_all = "snake_case")]
-enum PackageChangeAction {
-    Uninstalled,
-    Installed,
-    Reinstalled,
 }
 
 /// The report for a lock operation.

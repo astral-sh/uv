@@ -69,6 +69,15 @@ pub enum SyncFormat {
 }
 
 #[derive(Debug, Default, Clone, Copy, clap::ValueEnum)]
+pub enum PipInstallFormat {
+    /// Display the result in a human-readable format.
+    #[default]
+    Text,
+    /// Display the result in JSON format.
+    Json,
+}
+
+#[derive(Debug, Default, Clone, Copy, clap::ValueEnum)]
 pub enum AuditOutputFormat {
     /// Display the result in a human-readable format.
     #[default]
@@ -2536,6 +2545,13 @@ pub struct PipInstallArgs {
     /// Resolve and report any necessary changes, exiting with code 1 if changes are needed.
     #[arg(long, conflicts_with = "dry_run")]
     pub check: bool,
+
+    /// Select the output format for a dry run.
+    ///
+    /// JSON output requires `--dry-run`. It is written to stdout; diagnostic messages are written
+    /// to stderr. The JSON schema is experimental and may change without warning.
+    #[arg(long, value_enum, default_value_t = PipInstallFormat::default(), requires_if("json", "dry_run"))]
+    pub output_format: PipInstallFormat,
 
     /// The backend to use when fetching packages in the PyTorch ecosystem (e.g., `cpu`, `cu126`, or `auto`)
     ///
