@@ -261,8 +261,11 @@ impl<'a> RequirementExpander<'a> {
             })
             .filter(move |requirement| self.is_requirement_applicable(requirement, extra))
             .flat_map(move |requirement| {
-                iter::once(requirement.clone())
-                    .chain(self.constraints_for_requirement(requirement, extra))
+                iter::once(requirement.clone()).chain(self.constraints_for_requirement(
+                    requirement,
+                    extra,
+                    context.override_package(),
+                ))
             })
     }
 
@@ -321,6 +324,7 @@ impl<'a> RequirementExpander<'a> {
         &'data self,
         requirement: Cow<'data, Requirement>,
         extra: Option<&'parameters ExtraName>,
+        package: Option<(&PackageName, &Version)>,
     ) -> impl Iterator<Item = Cow<'data, Requirement>> + 'parameters
     where
         'data: 'parameters,
@@ -329,9 +333,7 @@ impl<'a> RequirementExpander<'a> {
         let python_marker = self.python_marker;
         let python_requirement = self.python_requirement;
         self.constraints
-            .get(&requirement.name)
-            .into_iter()
-            .flatten()
+            .get_for(package, &requirement.name)
             .filter_map(move |constraint| {
                 // If the requirement would not be selected with any Python version
                 // supported by the root, skip it.

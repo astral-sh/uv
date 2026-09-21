@@ -20,7 +20,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 use tracing::instrument;
 use uv_build_backend::BuildBackendSettings;
-use uv_configuration::{ExcludeDependency, GitLfsSetting, Override};
+use uv_configuration::{Constraint, ExcludeDependency, GitLfsSetting, Override};
 use uv_distribution_types::{
     Index, IndexName, MinimumLibcVersion, NameRequirementSpecification, RequirementSource,
 };
@@ -591,27 +591,29 @@ pub struct ToolUv {
     /// own; instead, the package must be requested elsewhere in the project's first-party or
     /// transitive dependencies.
     ///
+    /// A table with `package` and `dependencies` applies constraints only to dependencies declared
+    /// by that package. The selector accepts a `name` and optional exact `version`. Global and all
+    /// matching scoped constraints are combined. Scoped constraints support version specifiers
+    /// only, and cannot use URL, path, or explicit index sources.
+    ///
     /// !!! note
     ///     In `uv lock`, `uv sync`, and `uv run`, uv will only read `constraint-dependencies` from
     ///     the `pyproject.toml` at the workspace root, and will ignore any declarations in other
     ///     workspace members or `uv.toml` files.
-    #[cfg_attr(
-        feature = "schemars",
-        schemars(
-            with = "Option<Vec<String>>",
-            description = "PEP 508-style requirements, e.g., `ruff==0.5.0`, or `ruff @ https://...`."
-        )
-    )]
     #[option(
         default = "[]",
-        value_type = "list[str]",
+        value_type = "list[str | dict]",
         example = r#"
             # Ensure that the grpcio version is always less than 1.65, if it's requested by a
             # direct or transitive dependency.
-            constraint-dependencies = ["grpcio<1.65"]
+            constraint-dependencies = [
+                "grpcio<1.65",
+                { package = { name = "anyio", version = "3.7.0" }, dependencies = ["idna<3"] },
+            ]
         "#
     )]
-    pub(crate) constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+    pub(crate) constraint_dependencies:
+        Option<Vec<Constraint<uv_pep508::Requirement<VerbatimParsedUrl>>>>,
 
     /// Constraints to apply when solving build dependencies.
     ///

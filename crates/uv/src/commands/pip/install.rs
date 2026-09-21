@@ -12,7 +12,7 @@ use uv_cache::Cache;
 use uv_cli::PipInstallFormat;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    BuildIsolation, BuildOptions, Concurrency, Constraints, DryRun, EditableMode,
+    BuildIsolation, BuildOptions, Concurrency, Constraint, Constraints, DryRun, EditableMode,
     ExcludeDependency, ExtrasSpecification, HashCheckingMode, IndexStrategy, NoSources, Override,
     Reinstall, Upgrade,
 };
@@ -84,7 +84,7 @@ pub(crate) async fn pip_install(
     overrides: &[RequirementsSource],
     excludes: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
-    constraints_from_workspace: Vec<Requirement>,
+    constraints_from_workspace: Vec<Constraint<Requirement>>,
     overrides_from_workspace: Vec<Override<Requirement>>,
     excludes_from_workspace: Vec<ExcludeDependency>,
     build_constraints_from_workspace: Vec<NameRequirementSpecification>,
@@ -184,13 +184,13 @@ pub(crate) async fn pip_install(
         }
     }
 
-    let constraints: Vec<NameRequirementSpecification> = constraints
+    let constraints: Vec<Constraint<NameRequirementSpecification>> = constraints
         .iter()
         .cloned()
         .chain(
             constraints_from_workspace
                 .into_iter()
-                .map(NameRequirementSpecification::from),
+                .map(|entry| entry.map(NameRequirementSpecification::from)),
         )
         .collect();
 
@@ -404,6 +404,7 @@ pub(crate) async fn pip_install(
                 .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
             constraints
                 .iter()
+                .filter_map(Constraint::as_requirement)
                 .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
             Some(&marker_env),
             hash_checking,

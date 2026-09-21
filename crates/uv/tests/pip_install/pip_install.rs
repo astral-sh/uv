@@ -17585,3 +17585,87 @@ fn compile_bytecode_excludes_stdlib() -> Result<()> {
 
     Ok(())
 }
+
+/// Revalidate scoped constraints before treating an installed dependency graph as satisfied.
+#[test]
+fn scoped_constraint_revalidates_installed_dependencies() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let config = r#"
+        [tool.uv]
+        constraint-dependencies = [
+            { package = { name = "anyio", version = "3.7.0" }, dependencies = ["idna==3.2"] },
+        ]
+    "#;
+    context.temp_dir.child("pyproject.toml").write_str(config)?;
+    uv_snapshot!(context.filters(), context.pip_install().arg("anyio==3.7.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.2
+     + sniffio==1.3.1
+    ");
+    uv_snapshot!(context.filters(), context.pip_install().arg("anyio==3.7.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checked 1 package in [TIME]
+    ");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&config.replace("idna==3.2", "idna==3.1"))?;
+    uv_snapshot!(context.filters(), context.pip_install().arg("anyio==3.7.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - idna==3.2
+     + idna==3.1
+    ");
+    Ok(())
+}
+
+/// Installed optional dependencies must also satisfy their parent's scoped constraints.
+#[test]
+fn scoped_constraint_revalidates_extra_dependencies() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let config = r#"
+        [tool.uv]
+        constraint-dependencies = [
+            { package = { name = "requests" }, dependencies = ["pysocks==1.7.1"] },
+        ]
+    "#;
+    context.temp_dir.child("pyproject.toml").write_str(config)?;
+    uv_snapshot!(context.filters(), context.pip_install().arg("requests[socks]==2.31.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 6 packages in [TIME]
+    Installed 6 packages in [TIME]
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + pysocks==1.7.1
+     + requests==2.31.0
+     + urllib3==2.2.1
+    ");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&config.replace("1.7.1", "1.7.0"))?;
+    uv_snapshot!(context.filters(), context.pip_install().arg("requests[socks]==2.31.0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - pysocks==1.7.1
+     + pysocks==1.7.0
+    ");
+    Ok(())
+}

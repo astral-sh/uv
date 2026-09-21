@@ -14,9 +14,9 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    BuildIsolation, BuildOptions, Concurrency, Constraints, ExcludeDependency, ExtrasSpecification,
-    HashCheckingMode, IndexStrategy, NoBinary, NoBuild, NoSources, Override, PipCompileFormat,
-    Reinstall, Upgrade,
+    BuildIsolation, BuildOptions, Concurrency, Constraint, Constraints, ExcludeDependency,
+    ExtrasSpecification, HashCheckingMode, IndexStrategy, NoBinary, NoBuild, NoSources, Override,
+    PipCompileFormat, Reinstall, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -71,7 +71,7 @@ pub(crate) async fn pip_compile(
     overrides: &[RequirementsSource],
     excludes: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
-    constraints_from_workspace: Vec<Requirement>,
+    constraints_from_workspace: Vec<Constraint<Requirement>>,
     overrides_from_workspace: Vec<Override<Requirement>>,
     excludes_from_workspace: Vec<ExcludeDependency>,
     build_constraints_from_workspace: Vec<NameRequirementSpecification>,
@@ -248,7 +248,7 @@ pub(crate) async fn pip_compile(
         .chain(
             constraints_from_workspace
                 .into_iter()
-                .map(NameRequirementSpecification::from),
+                .map(|entry| entry.map(NameRequirementSpecification::from)),
         )
         .collect();
 

@@ -6,10 +6,10 @@ use serde::{Deserialize, Serialize};
 
 use uv_cache_info::CacheKey;
 use uv_configuration::{
-    AnnotationStyle, BuildIsolation, ExcludeDependency, ExcludeNewerPackage, ForkStrategy,
-    IndexStrategy, KeyringProviderType, PackageNameSpecifier, PrereleaseMode, PrereleasePackage,
-    ProxyUrl, Reinstall, RequiredVersion, ResolutionMode, TargetTriple, TrustedHost,
-    TrustedPublishing, Upgrade, serialize_exclude_newer_package_with_spans,
+    AnnotationStyle, BuildIsolation, Constraint, ExcludeDependency, ExcludeNewerPackage,
+    ForkStrategy, IndexStrategy, KeyringProviderType, PackageNameSpecifier, PrereleaseMode,
+    PrereleasePackage, ProxyUrl, Reinstall, RequiredVersion, ResolutionMode, TargetTriple,
+    TrustedHost, TrustedPublishing, Upgrade, serialize_exclude_newer_package_with_spans,
 };
 use uv_distribution_types::{
     ConfigSettings, ExcludeNewerOverride, ExcludeNewerSpan, ExcludeNewerValue, ExtraBuildVariables,
@@ -154,7 +154,7 @@ pub struct Options {
     pub exclude_dependencies: Option<Vec<ExcludeDependency>>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
-    pub constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+    pub constraint_dependencies: Option<Vec<Constraint<Requirement<VerbatimParsedUrl>>>>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub build_constraint_dependencies: Option<Vec<BuildConstraintDependency>>,
@@ -2637,7 +2637,7 @@ struct OptionsWire {
     // They're respected in both `pyproject.toml` and `uv.toml` files.
     override_dependencies: Option<Vec<OverrideDependency>>,
     exclude_dependencies: Option<Vec<ExcludeDependency>>,
-    constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+    constraint_dependencies: Option<Vec<Constraint<Requirement<VerbatimParsedUrl>>>>,
     build_constraint_dependencies: Option<Vec<BuildConstraintDependency>>,
     environments: Option<SupportedEnvironments>,
     required_environments: Option<SupportedEnvironments>,

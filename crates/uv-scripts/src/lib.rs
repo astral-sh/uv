@@ -11,6 +11,7 @@ use thiserror::Error;
 use tracing::instrument;
 use url::Url;
 
+use uv_configuration::Constraint;
 use uv_configuration::NoSources;
 use uv_normalize::PackageName;
 use uv_pep440::VersionSpecifiers;
@@ -427,7 +428,7 @@ pub struct ToolUv {
     pub top_level: ResolverInstallerSchema,
     pub override_dependencies: Option<Vec<OverrideDependency>>,
     pub exclude_dependencies: Option<Vec<ExcludeDependency>>,
-    pub constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+    pub constraint_dependencies: Option<Vec<Constraint<uv_pep508::Requirement<VerbatimParsedUrl>>>>,
     pub build_constraint_dependencies: Option<Vec<BuildConstraintDependency>>,
     pub extra_build_dependencies: Option<BTreeMap<PackageName, Vec<ExtraBuildDependency>>>,
     pub sources: Option<BTreeMap<PackageName, Sources>>,

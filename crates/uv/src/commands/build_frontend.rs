@@ -1066,7 +1066,7 @@ impl BuildDependencyCheck<'_> {
         match site_packages
             .satisfies_requirements(
                 requirements,
-                self.constraints.requirements(),
+                self.constraints,
                 &Overrides::default(),
                 &Excludes::default(),
                 self.build_dispatch.dependency_metadata(),

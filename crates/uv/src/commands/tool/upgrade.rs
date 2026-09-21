@@ -9,7 +9,9 @@ use tracing::{debug, trace};
 use uv_cache::Cache;
 use uv_cache_key::CanonicalUrl;
 use uv_client::BaseClientBuilder;
-use uv_configuration::{Concurrency, Constraints, DryRun, HashCheckingMode, TargetTriple};
+use uv_configuration::{
+    Concurrency, Constraint, Constraints, DryRun, HashCheckingMode, TargetTriple,
+};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{ExtraBuildRequires, Index, Name, Requirement, RequirementSource};
 use uv_fs::{CWD, Simplified};
@@ -350,8 +352,8 @@ async fn upgrade_tool(
     let manifest_constraints = existing_tool_receipt
         .constraints()
         .iter()
-        .chain(constraints)
         .cloned()
+        .chain(constraints.iter().cloned().map(Constraint::Requirement))
         .collect::<Vec<_>>();
     let manifest_overrides = existing_tool_receipt.overrides().to_vec();
     let manifest_excludes = existing_tool_receipt.excludes().to_vec();
@@ -646,13 +648,21 @@ async fn upgrade_tool(
 }
 
 fn pinned_requirement_version(tool: &Tool, name: &PackageName) -> Option<Version> {
-    pinned_version_from(tool.requirements(), name)
-        .or_else(|| pinned_version_from(tool.constraints(), name))
+    pinned_version_from(tool.requirements().iter(), name).or_else(|| {
+        pinned_version_from(
+            tool.constraints()
+                .iter()
+                .filter_map(Constraint::as_requirement),
+            name,
+        )
+    })
 }
 
-fn pinned_version_from(requirements: &[Requirement], name: &PackageName) -> Option<Version> {
+fn pinned_version_from<'a>(
+    requirements: impl Iterator<Item = &'a Requirement>,
+    name: &PackageName,
+) -> Option<Version> {
     requirements
-        .iter()
         .filter(|requirement| requirement.name == *name)
         .find_map(|requirement| match &requirement.source {
             RequirementSource::Registry { specifier, .. } => {

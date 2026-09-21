@@ -14,8 +14,9 @@ use tracing::{debug, warn};
 use uv_cache::{Cache, Refresh};
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, Constraints, DependencyGroupsWithDefaults, ExcludeDependency,
-    ExtrasSpecification, GitLfsSetting, HashCheckingMode, InstallOptions, Override, TargetTriple,
+    BuildOptions, Concurrency, Constraint, Constraints, DependencyGroupsWithDefaults,
+    ExcludeDependency, ExtrasSpecification, GitLfsSetting, HashCheckingMode, InstallOptions,
+    Override, TargetTriple,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{
@@ -312,7 +313,7 @@ impl ToolLock {
     /// Build the lock manifest for a tool environment.
     pub(crate) fn manifest(
         requirements: &[Requirement],
-        constraints: &[Requirement],
+        constraints: &[Constraint<Requirement>],
         overrides: &[Requirement],
         excludes: &[ExcludeDependency],
         build_constraints: &[NameRequirementSpecification],
@@ -400,7 +401,7 @@ impl ToolLock {
     pub(crate) async fn validate(
         self,
         requirements: &[Requirement],
-        constraints: &[Requirement],
+        constraints: &[Constraint<Requirement>],
         overrides: &[Requirement],
         excludes: &[ExcludeDependency],
         build_constraints: &Constraints,
@@ -739,7 +740,7 @@ pub(crate) fn finalize_tool_install(
     force: bool,
     python: Option<PythonRequest>,
     requirements: Vec<Requirement>,
-    constraints: Vec<Requirement>,
+    constraints: Vec<Constraint<Requirement>>,
     overrides: Vec<Requirement>,
     excludes: Vec<ExcludeDependency>,
     build_constraints: Vec<NameRequirementSpecification>,

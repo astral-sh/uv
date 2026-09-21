@@ -22,10 +22,10 @@ use url::Url;
 
 use uv_cache_key::RepositoryUrl;
 use uv_configuration::{
-    BuildOptions, Constraints, DependencyGroupsWithDefaults, ExcludeDependency, ExcludeNewer,
-    ExcludeNewerPackage, Excludes, ExtrasSpecificationWithDefaults, ForkStrategy, InstallTarget,
-    Override, Overrides, PackageOverride, Prerelease, PrereleaseMode, PrereleasePackage,
-    ResolutionMode, ScopedOverrideSourceError,
+    BuildOptions, Constraint, Constraints, DependencyGroupsWithDefaults, ExcludeDependency,
+    ExcludeNewer, ExcludeNewerPackage, Excludes, ExtrasSpecificationWithDefaults, ForkStrategy,
+    InstallTarget, Override, Overrides, PackageOverride, Prerelease, PrereleaseMode,
+    PrereleasePackage, ResolutionMode, ScopedOverrideSourceError,
 };
 use uv_distribution::{
     DistributionDatabase, FlatRequiresDist, Metadata as DistributionMetadata, RequiresDist,
@@ -4000,7 +4000,7 @@ impl Lock {
         members: &[PackageName],
         required_members: &BTreeMap<PackageName, Editability>,
         requirements: &[Requirement],
-        constraints: &[Requirement],
+        constraints: &[Constraint<Requirement>],
         overrides: &[Override<Requirement>],
         excludes: &[ExcludeDependency],
         build_constraints: &Constraints,
@@ -4094,19 +4094,33 @@ impl Lock {
             let expected: BTreeSet<_> = constraints
                 .iter()
                 .cloned()
-                .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
+                .map(|entry| {
+                    entry.try_map(|requirement| {
+                        normalize_requirement(requirement, root, &self.requires_python)
+                    })
+                })
                 .collect::<Result<_, _>>()?;
             let actual: BTreeSet<_> = self
                 .manifest
                 .constraints
                 .iter()
                 .cloned()
-                .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
+                .map(|entry| {
+                    entry.try_map(|requirement| {
+                        normalize_requirement(requirement, root, &self.requires_python)
+                    })
+                })
                 .collect::<Result<_, _>>()?;
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedConstraints(expected, actual));
             }
             expected
+                .into_iter()
+                .filter_map(|entry| match entry {
+                    Constraint::Requirement(requirement) => Some(requirement),
+                    Constraint::Package(_) => None,
+                })
+                .collect()
         };
 
         // Validate that the lockfile was generated with the same overrides.
@@ -5881,7 +5895,10 @@ pub enum SatisfiesResult<'lock> {
     /// The lockfile uses a different set of requirements.
     MismatchedRequirements(BTreeSet<Requirement>, BTreeSet<Requirement>),
     /// The lockfile uses a different set of constraints.
-    MismatchedConstraints(BTreeSet<Requirement>, BTreeSet<Requirement>),
+    MismatchedConstraints(
+        BTreeSet<Constraint<Requirement>>,
+        BTreeSet<Constraint<Requirement>>,
+    ),
     /// The lockfile uses a different set of overrides.
     MismatchedOverrides(
         BTreeSet<Override<Requirement>>,
@@ -6057,7 +6074,7 @@ pub struct ResolverManifest {
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
     /// The constraints provided to the resolver.
     #[serde(default)]
-    constraints: BTreeSet<Requirement>,
+    constraints: BTreeSet<Constraint<Requirement>>,
     /// The overrides provided to the resolver.
     #[serde(default)]
     overrides: BTreeSet<Override<Requirement>>,
@@ -6078,7 +6095,7 @@ impl ResolverManifest {
     pub fn new(
         members: impl IntoIterator<Item = PackageName>,
         requirements: impl IntoIterator<Item = Requirement>,
-        constraints: impl IntoIterator<Item = Requirement>,
+        constraints: impl IntoIterator<Item = Constraint<Requirement>>,
         overrides: impl IntoIterator<Item = Override<Requirement>>,
         excludes: impl IntoIterator<Item = ExcludeDependency>,
         build_constraints: impl IntoIterator<Item = NameRequirementSpecification>,
@@ -6112,7 +6129,7 @@ impl ResolverManifest {
             constraints: self
                 .constraints
                 .into_iter()
-                .map(|requirement| requirement.relative_to(root))
+                .map(|entry| entry.try_map(|requirement| requirement.relative_to(root)))
                 .collect::<Result<BTreeSet<_>, _>>()?,
             overrides: self
                 .overrides
