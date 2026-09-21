@@ -25,6 +25,13 @@ pub struct PackageOverride<T> {
     pub dependencies: Box<[T]>,
 }
 
+impl<T> PackageOverride<T> {
+    /// Return the name of the package whose dependencies are overridden.
+    pub fn package_name(&self) -> &PackageName {
+        &self.package.name
+    }
+}
+
 /// The package and optional version selected by a [`PackageOverride`].
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]

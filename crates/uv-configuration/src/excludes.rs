@@ -17,6 +17,13 @@ pub struct PackageExclusion {
     dependencies: Box<[PackageName]>,
 }
 
+impl PackageExclusion {
+    /// Return the name of the package whose dependencies are excluded.
+    pub fn package_name(&self) -> &PackageName {
+        &self.package.name
+    }
+}
+
 /// The package and optional version selected by a [`PackageExclusion`].
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]

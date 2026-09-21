@@ -338,6 +338,9 @@ pub enum PreviewFeature {
     /// Exclude `exclude-newer-package` entries from the lockfile when not included in the
     /// project's resolved dependencies.
     MissingExcludeNewerPackageLock,
+    /// Omit scoped overrides and exclusions from the lockfile when their parent and any overridden
+    /// dependencies are outside the resolution.
+    MissingScopedSettingsLock,
     /// Allows using `uv export --batch`.
     BatchExport,
     /// Allows setting minimum libc versions for universal resolutions.

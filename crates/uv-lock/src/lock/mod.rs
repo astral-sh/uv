@@ -2816,6 +2816,53 @@ impl Lock {
         self
     }
 
+    /// Omit scoped overrides and exclusions that cannot affect the resolution.
+    #[must_use]
+    pub fn without_unused_scoped_settings(mut self) -> Self {
+        let packages =
+            self.relevant_scoped_packages(&self.manifest.overrides, &self.manifest.excludes);
+        self.manifest.overrides.retain(|entry| match entry {
+            Override::Requirement(_) => true,
+            Override::Package(package) => packages.contains(package.package_name()),
+        });
+        self.manifest.excludes.retain(|entry| match entry {
+            ExcludeDependency::Dependency(_) => true,
+            ExcludeDependency::Package(package) => packages.contains(package.package_name()),
+        });
+        self
+    }
+
+    /// Return parent names whose scoped settings can affect locked packages.
+    ///
+    /// Overrides for absent parents can still enable prereleases or yanked versions for their
+    /// dependencies. Retain their complete scopes, including exclusions that affect that policy.
+    fn relevant_scoped_packages<'a>(
+        &self,
+        overrides: impl IntoIterator<Item = &'a Override<Requirement>>,
+        excludes: impl IntoIterator<Item = &'a ExcludeDependency>,
+    ) -> FxHashSet<PackageName> {
+        let mut packages = FxHashSet::default();
+        for entry in overrides {
+            if let Override::Package(package) = entry
+                && (!self.packages_for_name(package.package_name()).is_empty()
+                    || package
+                        .dependencies
+                        .iter()
+                        .any(|requirement| !self.packages_for_name(&requirement.name).is_empty()))
+            {
+                packages.insert(package.package_name().clone());
+            }
+        }
+        for entry in excludes {
+            if let ExcludeDependency::Package(package) = entry
+                && !self.packages_for_name(package.package_name()).is_empty()
+            {
+                packages.insert(package.package_name().clone());
+            }
+        }
+        packages
+    }
+
     /// Returns `true` if this [`Lock`] includes `provides-extra` metadata.
     pub fn supports_provides_extra(&self) -> bool {
         // `provides-extra` was added in Version 1 Revision 1.
@@ -4109,8 +4156,19 @@ impl Lock {
             expected
         };
 
-        // Validate that the lockfile was generated with the same overrides.
+        // Include both configurations so removing a previously relevant override or exclusion
+        // still invalidates the lockfile. Changes to unrelated scopes do not affect validation.
+        let scoped_packages = self.relevant_scoped_packages(
+            overrides.iter().chain(&self.manifest.overrides),
+            excludes.iter().chain(&self.manifest.excludes),
+        );
+
+        // Validate that the lockfile was generated with the same relevant overrides.
         let normalized_overrides = {
+            let relevant = |entry: &&Override<Requirement>| match entry {
+                Override::Requirement(_) => true,
+                Override::Package(package) => scoped_packages.contains(package.package_name()),
+            };
             let normalize = |entry: Override<Requirement>| -> Result<_, LockError> {
                 match entry {
                     Override::Requirement(requirement) => Ok(Override::Requirement(
@@ -4132,6 +4190,7 @@ impl Lock {
             };
             let expected: BTreeSet<_> = overrides
                 .iter()
+                .filter(relevant)
                 .cloned()
                 .map(normalize)
                 .collect::<Result<_, _>>()?;
@@ -4139,6 +4198,7 @@ impl Lock {
                 .manifest
                 .overrides
                 .iter()
+                .filter(relevant)
                 .cloned()
                 .map(normalize)
                 .collect::<Result<_, _>>()?;
@@ -4148,10 +4208,22 @@ impl Lock {
             expected
         };
 
-        // Validate that the lockfile was generated with the same excludes.
+        // Validate that the lockfile was generated with the same relevant excludes.
         {
-            let expected: BTreeSet<_> = excludes.iter().cloned().collect();
-            let actual: BTreeSet<_> = self.manifest.excludes.iter().cloned().collect();
+            let relevant = |entry: &&ExcludeDependency| match entry {
+                ExcludeDependency::Dependency(_) => true,
+                ExcludeDependency::Package(package) => {
+                    scoped_packages.contains(package.package_name())
+                }
+            };
+            let expected: BTreeSet<_> = excludes.iter().filter(relevant).cloned().collect();
+            let actual: BTreeSet<_> = self
+                .manifest
+                .excludes
+                .iter()
+                .filter(relevant)
+                .cloned()
+                .collect();
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedExcludes(expected, actual));
             }

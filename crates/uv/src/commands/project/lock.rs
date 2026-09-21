@@ -1141,6 +1141,12 @@ async fn do_lock(
                 lock
             };
 
+            let lock = if preview.is_enabled(PreviewFeature::MissingScopedSettingsLock) {
+                lock.without_unused_scoped_settings()
+            } else {
+                lock
+            };
+
             let unchanged = if let Some(check_lockfile_contents) = check_lockfile_contents {
                 previous.is_some() && check_lockfile_contents == lock.to_toml()?.as_str()
             } else {

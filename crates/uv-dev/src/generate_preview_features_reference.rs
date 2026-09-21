@@ -137,6 +137,8 @@ mod tests {
         - `minimum-libc-version`: Allows setting minimum libc versions for universal resolutions.
         - `missing-exclude-newer-package-lock`: Exclude `exclude-newer-package` entries from the lockfile when not included in the
           project's resolved dependencies.
+        - `missing-scoped-settings-lock`: Omit scoped overrides and exclusions from the lockfile when their parent and any overridden
+          dependencies are outside the resolution.
         - `native-auth`: Enables storage of credentials in a [system-native location](../concepts/authentication/http.md#the-uv-credentials-store).
         - `no-distutils-patch`: Stops installing the `_virtualenv.py` / `_virtualenv.pth` distutils configuration monkeypatch
           in virtual environments for Python 3.10 and later.

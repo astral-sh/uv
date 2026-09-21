@@ -3422,6 +3422,367 @@ fn lock_project_with_overrides() -> Result<()> {
     Ok(())
 }
 
+/// Unused scoped overrides and exclusions do not invalidate existing locks.
+#[test]
+fn lock_unused_scoped_settings() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    let project = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#};
+    let settings = indoc! {r#"
+        [tool.uv]
+        override-dependencies = [
+            { package = { name = "absent", version = "1.0" }, dependencies = ["iniconfig==2.0.0"] },
+        ]
+        exclude-dependencies = [
+            { package = { name = "absent", version = "1.0" }, dependencies = ["idna"] },
+        ]
+    "#};
+    pyproject_toml.write_str(&format!("{project}\n{settings}"))?;
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        overrides = [{ package = { name = "absent", version = "1.0" }, dependencies = [{ name = "iniconfig", specifier = "==2.0.0" }] }]
+        excludes = [{ package = { name = "absent", version = "1.0" }, dependencies = ["idna"] }]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        "#);
+    });
+
+    // Changing unused overrides and exclusions does not invalidate an older lock.
+    pyproject_toml.write_str(
+        &format!("{project}\n{settings}").replace("version = \"1.0\"", "version = \"2.0\""),
+    )?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // Removing unused settings is also safe.
+    pyproject_toml.write_str(project)?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // Adding settings for a different absent parent is also safe.
+    pyproject_toml.write_str(&format!("{project}\n{settings}").replace("absent", "other"))?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    Ok(())
+}
+
+/// Preview locks prune unrelated scopes while retaining complete scopes for resolved parents.
+#[test]
+fn lock_pruned_scoped_settings() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    let project = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["global-override", "global-excluded"]
+
+        [tool.uv]
+        preview-features = ["missing-scoped-settings-lock"]
+        override-dependencies = [
+            "global-override; python_version < '0'",
+            { package = { name = "child", version = "1.0" }, dependencies = ["iniconfig==2.0.0"] },
+            { package = { name = "child", version = "2.0" }, dependencies = ["iniconfig==1.1.1"] },
+            { package = { name = "unrelated" }, dependencies = ["unused==1.0"] },
+        ]
+        exclude-dependencies = [
+            "global-excluded",
+            { package = { name = "child" }, dependencies = ["iniconfig"] },
+            { package = { name = "unrelated" }, dependencies = ["unused"] },
+        ]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+    "#};
+    context
+        .temp_dir
+        .child("child/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+    "#})?;
+    pyproject_toml.write_str(project)?;
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        overrides = [{ name = "global-override", marker = "python_full_version < '0'" }]
+        excludes = ["global-excluded"]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+
+        [package.metadata]
+        requires-dist = [
+            { name = "global-excluded" },
+            { name = "global-override" },
+        ]
+        "#);
+    });
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-preview"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // Adding the parent makes both versioned override scopes and its exclusions relevant.
+    let project = project.replace(
+        "dependencies = [\"global-override\", \"global-excluded\"]",
+        "dependencies = [\"global-override\", \"global-excluded\", \"child\"]",
+    );
+    pyproject_toml.write_str(&project)?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Added child v1.0
+    ");
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        overrides = [
+            { package = { name = "child", version = "1.0" }, dependencies = [{ name = "iniconfig", specifier = "==2.0.0" }] },
+            { package = { name = "child", version = "2.0" }, dependencies = [{ name = "iniconfig", specifier = "==1.1.1" }] },
+            { name = "global-override", marker = "python_full_version < '0'" },
+        ]
+        excludes = [
+            { package = { name = "child" }, dependencies = ["iniconfig"] },
+            "global-excluded",
+        ]
+
+        [[package]]
+        name = "child"
+        version = "1.0"
+        source = { directory = "child" }
+
+        [package.metadata]
+        requires-dist = [{ name = "iniconfig" }]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "child" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "child", directory = "child" },
+            { name = "global-excluded" },
+            { name = "global-override" },
+        ]
+        "#);
+    });
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // Unrelated scopes may still change.
+    pyproject_toml.write_str(&project.replace("unused==1.0", "unused==2.0"))?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // Overrides remain relevant even when their dependency is excluded from the graph.
+    pyproject_toml.write_str(&project.replace("iniconfig==2.0.0", "iniconfig==1.0.0"))?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    // Exclusions also remain relevant even though the excluded package is absent.
+    pyproject_toml.write_str(&project.replace(
+        "dependencies = [\"iniconfig\"]",
+        "dependencies = [\"iniconfig\", \"another\"]",
+    ))?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    Ok(())
+}
+
+/// Absent parent scopes can still affect candidate selection for resolved dependencies.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_pruned_scoped_settings_candidate_policy() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2026-01-01T00:00:00Z");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    let project = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12,<3.13"
+        dependencies = ["numpy>=2.3"]
+
+        [tool.uv]
+        preview-features = ["missing-scoped-settings-lock"]
+        override-dependencies = [
+            { package = { name = "absent" }, dependencies = ["numpy==2.4.0rc1"] },
+        ]
+        exclude-dependencies = [
+            { package = { name = "absent" }, dependencies = ["numpy"] },
+        ]
+    "#};
+    pyproject_toml.write_str(project)?;
+    uv_snapshot!(context.filters(), context.tree(), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    project v0.1.0
+    └── numpy v2.3.5
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // Removing the exclusion allows the override to opt NumPy into prereleases.
+    pyproject_toml
+        .write_str(&project.replace("dependencies = [\"numpy\"]", "dependencies = []"))?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    // Retain a previously relevant scope during validation even if its new dependency is absent.
+    pyproject_toml.write_str(&project.replace("numpy==2.4.0rc1", "unrelated==1.0"))?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    Ok(())
+}
+
+/// Script locks can also omit unrelated scoped settings.
+#[test]
+fn lock_pruned_scoped_settings_script() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("script.py").write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        #
+        # [tool.uv]
+        # preview-features = ["missing-scoped-settings-lock"]
+        # override-dependencies = [
+        #     { package = { name = "absent" }, dependencies = ["idna==3.6"] },
+        # ]
+        # exclude-dependencies = [
+        #     { package = { name = "absent" }, dependencies = ["sniffio"] },
+        # ]
+        # ///
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved in [TIME]
+    ");
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("script.py.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "#);
+    });
+    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py").arg("--locked").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved in [TIME]
+    ");
+    Ok(())
+}
+
 /// Lock a project with `tool.uv.override-dependencies` scoped to a package version.
 #[cfg(feature = "test-universal")]
 #[test]
