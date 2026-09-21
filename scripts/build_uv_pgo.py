@@ -3,9 +3,6 @@
 # /// script
 # requires-python = ">=3.11"
 # dependencies = []
-# [tool.uv]
-# no-build = true
-# exclude-newer = "P7D"
 # ///
 
 from __future__ import annotations
@@ -80,7 +77,6 @@ CORPUS_PROJECTS = (
         python_version="3.13",
         additional_environments=("sys_platform == 'win32'",),
         exclude_dependencies=(
-            "backports-zstd",
             "confluent-kafka",
             "emmett-core",
             "granian",
@@ -373,8 +369,6 @@ def run_workloads(
         raise RuntimeError(f"uv binary not found: {binary}")
 
     training_environment = environment.copy()
-    # Training creates lockfiles for the corpus independently of CI's locked mode.
-    training_environment.pop("UV_LOCKED", None)
     training_environment.pop("UV_OFFLINE", None)
     training_environment.update(
         {
@@ -502,8 +496,7 @@ def run_workloads(
             )
         )
 
-    # The Windows trampoline calls process::exit, bypassing LLVM's profile flush.
-    if launcher.is_file() and launcher.suffix != ".exe":
+    if launcher.is_file():
         commands.append(("launcher", [str(launcher), "--version"]))
 
     for label, command in commands:
