@@ -2816,6 +2816,16 @@ impl Lock {
         self
     }
 
+    /// Omit dependency metadata for packages outside the resolution.
+    #[must_use]
+    pub fn without_unused_dependency_metadata(mut self) -> Self {
+        let packages: FxHashSet<_> = self.packages.iter().map(Package::name).collect();
+        self.manifest
+            .dependency_metadata
+            .retain(|metadata| packages.contains(&metadata.name));
+        self
+    }
+
     /// Returns `true` if this [`Lock`] includes `provides-extra` metadata.
     pub fn supports_provides_extra(&self) -> bool {
         // `provides-extra` was added in Version 1 Revision 1.
@@ -4233,14 +4243,22 @@ impl Lock {
             }
         }
 
-        // Validate that the lockfile was generated with the same static metadata.
+        // Validate the static metadata for packages in the resolution. If an absent package is
+        // added to the requirements, the requirement checks will invalidate the lockfile instead.
         {
             let expected = dependency_metadata
                 .values()
+                .filter(|metadata| !self.packages_for_name(&metadata.name).is_empty())
                 .cloned()
                 .collect::<BTreeSet<_>>();
-            let actual = &self.manifest.dependency_metadata;
-            if expected != *actual {
+            let actual = self
+                .manifest
+                .dependency_metadata
+                .iter()
+                .filter(|metadata| !self.packages_for_name(&metadata.name).is_empty())
+                .cloned()
+                .collect::<BTreeSet<_>>();
+            if expected != actual {
                 return Ok(SatisfiesResult::MismatchedStaticMetadata(expected, actual));
             }
         }
@@ -5900,7 +5918,7 @@ pub enum SatisfiesResult<'lock> {
         BTreeMap<GroupName, BTreeSet<Requirement>>,
     ),
     /// The lockfile uses different static metadata.
-    MismatchedStaticMetadata(BTreeSet<StaticMetadata>, &'lock BTreeSet<StaticMetadata>),
+    MismatchedStaticMetadata(BTreeSet<StaticMetadata>, BTreeSet<StaticMetadata>),
     /// The lockfile is missing a workspace member.
     MissingRoot(PackageName),
     /// The lockfile referenced a remote index that was not provided

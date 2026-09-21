@@ -338,6 +338,9 @@ pub enum PreviewFeature {
     /// Exclude `exclude-newer-package` entries from the lockfile when not included in the
     /// project's resolved dependencies.
     MissingExcludeNewerPackageLock,
+    /// Exclude `dependency-metadata` entries from the lockfile when not included in the
+    /// project's resolved dependencies.
+    MissingDependencyMetadataLock,
     /// Allows using `uv export --batch`.
     BatchExport,
     /// Allows setting minimum libc versions for universal resolutions.

@@ -135,6 +135,8 @@ mod tests {
           installing packages.
         - `metadata-json`: Includes JSON metadata files in built wheels.
         - `minimum-libc-version`: Allows setting minimum libc versions for universal resolutions.
+        - `missing-dependency-metadata-lock`: Exclude `dependency-metadata` entries from the lockfile when not included in the
+          project's resolved dependencies.
         - `missing-exclude-newer-package-lock`: Exclude `exclude-newer-package` entries from the lockfile when not included in the
           project's resolved dependencies.
         - `native-auth`: Enables storage of credentials in a [system-native location](../concepts/authentication/http.md#the-uv-credentials-store).

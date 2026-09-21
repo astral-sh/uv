@@ -29429,6 +29429,283 @@ fn lock_simplified_environments() -> Result<()> {
     Ok(())
 }
 
+/// Metadata for packages outside the resolution does not invalidate existing locks.
+#[test]
+fn lock_dependency_metadata_absent() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    let project = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#};
+    let metadata = indoc! {r#"
+        [[tool.uv.dependency-metadata]]
+        name = "anyio"
+        version = "3.7.0"
+        requires-dist = ["iniconfig"]
+    "#};
+    pyproject_toml.write_str(&format!("{project}\n{metadata}"))?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+
+        [[manifest.dependency-metadata]]
+        name = "anyio"
+        version = "3.7.0"
+        requires-dist = ["iniconfig"]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        "#);
+    });
+
+    // Changing unused metadata does not invalidate a lock containing the old entry.
+    pyproject_toml
+        .write_str(&format!("{project}\n{metadata}").replace("iniconfig", "typing-extensions"))?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // Removing unused metadata is also safe.
+    pyproject_toml.write_str(project)?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // Adding metadata for another unused package is also safe.
+    pyproject_toml.write_str(&format!("{project}\n{metadata}").replace("anyio", "idna"))?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Preview locks retain metadata only for package names in the resolution.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_dependency_metadata_pruned() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    let project = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        preview-features = ["missing-dependency-metadata-lock"]
+
+        [[tool.uv.dependency-metadata]]
+        name = "anyio"
+        version = "3.7.0"
+
+        [[tool.uv.dependency-metadata]]
+        name = "anyio"
+        version = "3.6.0"
+
+        [[tool.uv.dependency-metadata]]
+        name = "anyio"
+
+        [[tool.uv.dependency-metadata]]
+        name = "idna"
+        version = "3.6"
+
+        [[tool.uv.dependency-metadata]]
+        name = "sniffio"
+    "#};
+    pyproject_toml.write_str(project)?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        "#);
+    });
+
+    // Locks that omit unused metadata can be validated without preview enabled.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-preview"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // Adding a dependency invalidates the lock and makes its metadata relevant.
+    let project = project.replace("dependencies = []", "dependencies = [\"anyio==3.7.0\"]");
+    pyproject_toml.write_str(&project)?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Added anyio v3.7.0
+    ");
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+
+        [[manifest.dependency-metadata]]
+        name = "anyio"
+
+        [[manifest.dependency-metadata]]
+        name = "anyio"
+        version = "3.6.0"
+
+        [[manifest.dependency-metadata]]
+        name = "anyio"
+        version = "3.7.0"
+
+        [[package]]
+        name = "anyio"
+        version = "3.7.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/c6/b3/fefbf7e78ab3b805dec67d698dc18dd505af7a18a8dd08868c9b4fa736b5/anyio-3.7.0.tar.gz", hash = "sha256:275d9973793619a5374e1c89a4f4ad3f4b0a5510a2b5b939444bee8f4c4d37ce", size = 142737, upload-time = "2023-05-27T11:12:46.688Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/68/fe/7ce1926952c8a403b35029e194555558514b365ad77d75125f521a2bec62/anyio-3.7.0-py3-none-any.whl", hash = "sha256:eddca883c4175f14df8aedce21054bfca3adb70ffe76a9f607aef9d7fa2ea7f0", size = 80873, upload-time = "2023-05-27T11:12:44.474Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "anyio" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "anyio", specifier = "==3.7.0" }]
+        "#);
+    });
+
+    // Versioned and versionless metadata for resolved packages remain valid.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // Changing metadata for an unrelated package does not invalidate the lock.
+    pyproject_toml.write_str(&project.replace("version = \"3.6\"", "version = \"3.5\""))?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // Changes to relevant metadata still invalidate the lock.
+    pyproject_toml.write_str(&project.replace(
+        "version = \"3.7.0\"",
+        "version = \"3.7.0\"\nrequires-dist = [\"iniconfig\"]",
+    ))?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
+/// Script locks also omit metadata for packages outside their resolution.
+#[test]
+fn lock_dependency_metadata_pruned_script() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("script.py").write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        #
+        # [tool.uv]
+        # preview-features = ["missing-dependency-metadata-lock"]
+        #
+        # [[tool.uv.dependency-metadata]]
+        # name = "anyio"
+        # version = "3.7.0"
+        # requires-dist = ["iniconfig"]
+        # ///
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved in [TIME]
+    ");
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("script.py.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "#);
+    });
+    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py").arg("--locked").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved in [TIME]
+    ");
+
+    Ok(())
+}
+
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_dependency_metadata() -> Result<()> {
