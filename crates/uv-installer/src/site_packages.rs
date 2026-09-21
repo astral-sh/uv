@@ -516,27 +516,25 @@ impl SitePackages {
                     return Ok(SatisfiesResult::Unsatisfied(requirement));
                 }
                 [distribution] => {
-                    // Validate that the requirement is satisfied.
-                    if requirement.evaluate_markers(Some(markers), &[]) {
-                        match RequirementSatisfaction::check(
-                            name,
-                            distribution,
-                            &requirement.source,
-                            None,
-                            installation,
-                            tags,
-                            config_settings,
-                            config_settings_package,
-                            extra_build_requires,
-                            extra_build_variables,
-                        ) {
-                            RequirementSatisfaction::Mismatch
-                            | RequirementSatisfaction::OutOfDate
-                            | RequirementSatisfaction::CacheInvalid => {
-                                return Ok(SatisfiesResult::Unsatisfied(requirement));
-                            }
-                            RequirementSatisfaction::Satisfied => {}
+                    // Requirements were filtered with the parent extras before entering the stack.
+                    match RequirementSatisfaction::check(
+                        name,
+                        distribution,
+                        &requirement.source,
+                        None,
+                        installation,
+                        tags,
+                        config_settings,
+                        config_settings_package,
+                        extra_build_requires,
+                        extra_build_variables,
+                    ) {
+                        RequirementSatisfaction::Mismatch
+                        | RequirementSatisfaction::OutOfDate
+                        | RequirementSatisfaction::CacheInvalid => {
+                            return Ok(SatisfiesResult::Unsatisfied(requirement));
                         }
+                        RequirementSatisfaction::Satisfied => {}
                     }
 
                     // Validate that the installed version satisfies the constraints.
@@ -557,7 +555,7 @@ impl SitePackages {
                                 RequirementSatisfaction::Mismatch
                                 | RequirementSatisfaction::OutOfDate
                                 | RequirementSatisfaction::CacheInvalid => {
-                                    return Ok(SatisfiesResult::Unsatisfied(requirement));
+                                    return Ok(SatisfiesResult::Unsatisfied((*constraint).clone()));
                                 }
                                 RequirementSatisfaction::Satisfied => {}
                             }

@@ -1305,6 +1305,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
 
             commands::build_frontend(
                 &project_dir,
+                args.skip_dependency_check,
                 args.src,
                 args.package,
                 args.all_packages,

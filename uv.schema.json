@@ -1884,7 +1884,8 @@
             "content-addressed-cache",
             "missing-exclude-newer-package-lock",
             "batch-export",
-            "minimum-libc-version"
+            "minimum-libc-version",
+            "build-dependency-check"
           ]
         },
         {

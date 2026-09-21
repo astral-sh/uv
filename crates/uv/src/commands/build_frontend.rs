@@ -31,7 +31,7 @@ use uv_fs::{Simplified, normalize_path, relative_to};
 use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
     ConfigDiscovery, EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVersionFile, VersionFileDiscoveryOptions,
@@ -190,6 +190,7 @@ impl Hinted for Error {
 #[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn build_frontend(
     project_dir: &Path,
+    skip_dependency_check: bool,
     src: Option<PathBuf>,
     package: Option<PackageName>,
     all_packages: bool,
@@ -219,6 +220,7 @@ pub(crate) async fn build_frontend(
 ) -> Result<ExitStatus> {
     let build_result = build_impl(
         project_dir,
+        skip_dependency_check,
         src.as_deref(),
         package.as_ref(),
         all_packages,
@@ -268,6 +270,7 @@ enum BuildResult {
 #[expect(clippy::fn_params_excessive_bools)]
 async fn build_impl(
     project_dir: &Path,
+    skip_dependency_check: bool,
     src: Option<&Path>,
     package: Option<&PackageName>,
     all_packages: bool,
@@ -464,6 +467,7 @@ async fn build_impl(
     let results: Vec<_> = futures::future::join_all(packages.into_iter().map(|source| {
         let future = build_package(
             source.clone(),
+            skip_dependency_check,
             output_dir,
             python_request,
             install_mirrors.clone(),
@@ -540,6 +544,7 @@ async fn build_impl(
 #[expect(clippy::fn_params_excessive_bools)]
 async fn build_package(
     source: AnnotatedSource<'_>,
+    skip_dependency_check: bool,
     output_dir: Option<&Path>,
     python_request: Option<&str>,
     install_mirrors: PythonInstallMirrors,
@@ -722,6 +727,9 @@ async fn build_package(
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
+    )
+    .with_build_dependency_check(
+        preview.is_enabled(PreviewFeature::BuildDependencyCheck) && !skip_dependency_check,
     );
 
     prepare_output_directory(&output_dir, gitignore).await?;

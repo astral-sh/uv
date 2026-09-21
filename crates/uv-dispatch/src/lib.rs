@@ -14,11 +14,12 @@ use thiserror::Error;
 use tracing::{debug, instrument, trace};
 
 use uv_build_backend::check_direct_build;
-use uv_build_frontend::{SourceBuild, SourceBuildContext};
+use uv_build_frontend::{Error as BuildFrontendError, SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_configuration::{
-    BuildKind, BuildOptions, Constraints, IndexStrategy, NoSources, Overrides, Reinstall,
+    BuildKind, BuildOptions, Constraints, DependencyMode, IndexStrategy, NoSources, Overrides,
+    Reinstall,
 };
 use uv_configuration::{BuildOutput, Concurrency, Excludes};
 use uv_distribution::DistributionDatabase;
@@ -29,7 +30,9 @@ use uv_distribution_types::{
     PackageConfigSettings, Requirement, Resolution, SourceDist, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
-use uv_installer::{InstallationStrategy, Installer, Plan, Planner, Preparer, SitePackages};
+use uv_installer::{
+    InstallationStrategy, Installer, Plan, Planner, Preparer, SatisfiesResult, SitePackages,
+};
 use uv_preview::Preview;
 use uv_pypi_types::Conflicts;
 use uv_python::{Interpreter, PythonEnvironment};
@@ -133,6 +136,7 @@ pub struct BuildDispatch<'a> {
     shared_state: SharedState,
     dependency_metadata: &'a DependencyMetadata,
     build_isolation: BuildIsolation<'a>,
+    check_build_dependencies: bool,
     extra_build_requires: &'a ExtraBuildRequires,
     extra_build_variables: &'a ExtraBuildVariables,
     link_mode: uv_install_wheel::LinkMode,
@@ -189,6 +193,7 @@ impl<'a> BuildDispatch<'a> {
             config_settings,
             config_settings_package,
             build_isolation,
+            check_build_dependencies: false,
             extra_build_requires,
             extra_build_variables,
             link_mode,
@@ -203,6 +208,64 @@ impl<'a> BuildDispatch<'a> {
             concurrency,
             preview,
         }
+    }
+
+    /// Check requirements in the existing environment before nonisolated builds.
+    #[must_use]
+    pub fn with_build_dependency_check(mut self, check: bool) -> Self {
+        self.check_build_dependencies = check;
+        self
+    }
+
+    /// Validate static requirements before importing the backend, then check its additional requirements.
+    async fn check_build_requirements(
+        &self,
+        builder: &SourceBuild,
+        install_path: &Path,
+        sources: NoSources,
+    ) -> Result<(), uv_build_frontend::Error> {
+        let Some(environment) = builder.shared_environment() else {
+            // Isolated builds install their requirements during setup.
+            return Ok(());
+        };
+        let site_packages = SitePackages::from_environment(environment).map_err(|err| {
+            BuildFrontendError::RequirementsCheck(BuildDispatchError::from(err).into())
+        })?;
+        let tags = environment.interpreter().tags().map_err(|err| {
+            BuildFrontendError::RequirementsCheck(BuildDispatchError::from(err).into())
+        })?;
+        let markers = environment.interpreter().to_resolver_marker_environment();
+        let check = |requirements: &[Requirement]| -> Result<(), BuildFrontendError> {
+            match site_packages
+                .satisfies_requirements(
+                    requirements.iter(),
+                    self.constraints.requirements(),
+                    &Overrides::default(),
+                    &Excludes::default(),
+                    self.dependency_metadata,
+                    DependencyMode::Transitive,
+                    InstallationStrategy::Permissive,
+                    &markers,
+                    tags,
+                    self.config_settings,
+                    self.config_settings_package,
+                    self.extra_build_requires,
+                    self.extra_build_variables,
+                )
+                .map_err(|err| {
+                    BuildFrontendError::RequirementsCheck(BuildDispatchError::from(err).into())
+                })? {
+                SatisfiesResult::Fresh { .. } => Ok(()),
+                SatisfiesResult::Unsatisfied(requirement) => {
+                    Err(BuildFrontendError::UnsatisfiedBuildRequirement(requirement))
+                }
+            }
+        };
+        check(&builder.build_requirements().cloned().collect::<Vec<_>>())?;
+        let requirements = builder
+            .get_requires_for_build(self, install_path, sources, self.client.credentials_cache())
+            .await?;
+        check(&requirements)
     }
 
     /// Fork the dispatch with a different hash strategy.
@@ -598,6 +661,10 @@ impl BuildContext for BuildDispatch<'_> {
         )
         .boxed_local()
         .await?;
+        if self.check_build_dependencies {
+            self.check_build_requirements(&builder, install_path, sources.clone())
+                .await?;
+        }
         Ok(builder)
     }
 
