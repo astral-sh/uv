@@ -106,7 +106,7 @@ jobs:
           DIST_CMD: ${{ (inputs.tag && inputs.tag != 'dry-run' && format('host --steps=create --tag={0}', inputs.tag)) || 'plan' }}
       - name: "Upload dist-manifest.json"
         id: upload
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dist-manifest-plan-${{ github.run_id }}-${{ github.run_attempt }}
           path: plan-dist-manifest.json
@@ -189,7 +189,7 @@ jobs:
           mv "$temp_manifest" target/distrib/local-dist-manifest.json
       - name: Upload synthesized local dist manifest
         id: upload
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dist-manifest-local-${{ github.run_id }}-${{ github.run_attempt }}
           path: target/distrib/local-dist-manifest.json
@@ -252,13 +252,13 @@ jobs:
             done
       - name: "Upload artifacts"
         id: artifacts
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-github-global-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ steps.cargo-dist.outputs.paths }}
       - name: "Upload global dist manifest"
         id: manifest
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dist-manifest-global-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ env.BUILD_MANIFEST_NAME }}
@@ -309,7 +309,7 @@ jobs:
           DIST_TAG_FLAG: ${{ needs.plan.outputs.tag-flag }}
       - name: "Upload dist-manifest.json"
         id: manifest
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-github-manifest-${{ github.run_id }}-${{ github.run_attempt }}
           path: dist-manifest.json
