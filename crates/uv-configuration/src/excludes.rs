@@ -125,7 +125,7 @@ impl Excludes {
     /// at a version where the override is not shadowed by an exact override scope.
     pub fn contains_for_scope(
         &self,
-        overrides: &Overrides,
+        overrides: Option<&Overrides>,
         package: &PackageName,
         version: Option<&Version>,
         dependency: &PackageName,
@@ -147,10 +147,10 @@ impl Excludes {
             && entries
                 .iter()
                 .filter(|entry| {
-                    entry
-                        .version
-                        .as_ref()
-                        .is_some_and(|version| !overrides.has_exact_scope(package, version))
+                    entry.version.as_ref().is_some_and(|version| {
+                        !overrides
+                            .is_some_and(|overrides| overrides.has_exact_scope(package, version))
+                    })
                 })
                 .all(|entry| entry.excludes.contains(dependency))
     }

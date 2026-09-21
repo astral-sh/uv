@@ -12,8 +12,9 @@ use tracing::debug;
 use uv_cache::{Cache, Refresh};
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    ActiveEnvironment, Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun,
-    ExcludeDependency, ExtrasSpecification, Override, PackageOverride, Reinstall, Upgrade,
+    ActiveEnvironment, Concurrency, Constraint, Constraints, DependencyGroupsWithDefaults, DryRun,
+    ExcludeDependency, ExtrasSpecification, Override, PackageConstraint, PackageOverride,
+    Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
@@ -291,7 +292,7 @@ pub(crate) enum LockMode<'env> {
 /// A lock operation.
 pub(crate) struct LockOperation<'env> {
     mode: LockMode<'env>,
-    constraints: Vec<NameRequirementSpecification>,
+    constraints: Vec<Constraint<NameRequirementSpecification>>,
     refresh: Option<&'env Refresh>,
     check_lockfile_contents: bool,
     settings: &'env ResolverSettings,
@@ -340,7 +341,7 @@ impl<'env> LockOperation<'env> {
     #[must_use]
     pub(crate) fn with_constraints(
         mut self,
-        constraints: Vec<NameRequirementSpecification>,
+        constraints: Vec<Constraint<NameRequirementSpecification>>,
     ) -> Self {
         self.constraints = constraints;
         self
@@ -488,7 +489,7 @@ async fn do_lock(
     existing_lock: Option<Lock>,
     mode: LockMode<'_>,
     check_lockfile_contents: Option<String>,
-    external: Vec<NameRequirementSpecification>,
+    external: Vec<Constraint<NameRequirementSpecification>>,
     refresh: Option<&Refresh>,
     settings: &ResolverSettings,
     client_builder: &BaseClientBuilder<'_>,
@@ -588,16 +589,46 @@ async fn do_lock(
         }
         lowered_overrides
     };
-    let constraints = target
-        .lower(
-            constraints,
-            index_locations,
-            sources,
-            cache,
-            workspace_cache,
-            client_builder.credentials_cache(),
-        )
-        .await?;
+    let constraints = {
+        let mut lowered = Vec::new();
+        for entry in constraints {
+            match entry {
+                Constraint::Requirement(requirement) => {
+                    lowered.extend(
+                        target
+                            .lower(
+                                vec![requirement],
+                                index_locations,
+                                sources,
+                                cache,
+                                workspace_cache,
+                                client_builder.credentials_cache(),
+                            )
+                            .await?
+                            .into_iter()
+                            .map(Constraint::Requirement),
+                    );
+                }
+                Constraint::Package(package) => {
+                    lowered.push(Constraint::Package(PackageConstraint {
+                        package: package.package,
+                        dependencies: target
+                            .lower(
+                                package.dependencies.into_vec(),
+                                index_locations,
+                                sources,
+                                cache,
+                                workspace_cache,
+                                client_builder.credentials_cache(),
+                            )
+                            .await?
+                            .into_boxed_slice(),
+                    }));
+                }
+            }
+        }
+        lowered
+    };
     let build_constraints = target
         .lower_build_constraints(
             index_locations,
@@ -1072,7 +1103,7 @@ async fn do_lock(
                 constraints
                     .iter()
                     .cloned()
-                    .map(NameRequirementSpecification::from)
+                    .map(|entry| entry.map(NameRequirementSpecification::from))
                     .chain(external)
                     .collect(),
                 Vec::new(),
@@ -1180,7 +1211,7 @@ impl ValidatedLock {
         required_members: &BTreeMap<PackageName, Editability>,
         requirements: &[Requirement],
         dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
-        constraints: &[Requirement],
+        constraints: &[Constraint<Requirement>],
         overrides: &[Override<Requirement>],
         excludes: &[ExcludeDependency],
         build_constraints: &Constraints,

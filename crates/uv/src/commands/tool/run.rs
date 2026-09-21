@@ -16,7 +16,9 @@ use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
-use uv_configuration::{Concurrency, Constraints, DependencyMode, GitLfsSetting, TargetTriple};
+use uv_configuration::{
+    Concurrency, Constraint, Constraints, DependencyMode, GitLfsSetting, TargetTriple,
+};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::InstalledDist;
 use uv_distribution_types::{
@@ -1056,7 +1058,7 @@ async fn get_or_create_environment(
         .constraints
         .clone()
         .into_iter()
-        .map(|constraint| constraint.requirement)
+        .map(|entry| entry.map(|constraint| constraint.requirement))
         .collect::<Vec<_>>();
 
     // Resolve the overrides.
@@ -1127,7 +1129,14 @@ async fn get_or_create_environment(
                     if matches!(
                         site_packages.satisfies_requirements(
                             requirements.iter(),
-                            constraints.iter().chain(latest.iter()),
+                            &Constraints::from_entries(
+                                constraints
+                                    .iter()
+                                    .cloned()
+                                    .chain(latest.iter().cloned().map(Constraint::Requirement))
+                                    .map(|entry| entry.map(NameRequirementSpecification::from))
+                            )
+                            .map_err(anyhow::Error::from)?,
                             &uv_configuration::Overrides::from_requirements(overrides.clone()),
                             &exclusions,
                             dependency_metadata,
@@ -1160,8 +1169,8 @@ async fn get_or_create_environment(
             .collect(),
         constraints: constraints
             .into_iter()
-            .chain(latest)
-            .map(NameRequirementSpecification::from)
+            .chain(latest.map(Constraint::Requirement))
+            .map(|entry| entry.map(NameRequirementSpecification::from))
             .collect(),
         overrides: overrides
             .into_iter()

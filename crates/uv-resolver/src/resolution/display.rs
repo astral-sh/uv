@@ -157,6 +157,21 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                         );
                     }
                 }
+                for requirement in self
+                    .resolution
+                    .constraints
+                    .get_for(Some((&parent.name, &parent.version)), &dependency.name)
+                    .filter(|requirement| {
+                        requirement.evaluate_markers(self.env.marker_environment(), &[])
+                    })
+                {
+                    if let Some(origin) = &requirement.origin {
+                        sources.add(
+                            &requirement.name,
+                            SourceAnnotation::Constraint(origin.clone()),
+                        );
+                    }
+                }
             }
 
             sources

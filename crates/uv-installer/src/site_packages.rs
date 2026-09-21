@@ -7,7 +7,9 @@ use anyhow::{Context, Result};
 use fs_err as fs;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
-use uv_configuration::{DependencyMode, ExcludeDependency, Excludes, Override, Overrides};
+use uv_configuration::{
+    Constraint, Constraints, DependencyMode, ExcludeDependency, Excludes, Override, Overrides,
+};
 use uv_distribution_filename::EggInfoFilename;
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, Diagnostic, ExtraBuildRequires, ExtraBuildVariables,
@@ -330,7 +332,7 @@ impl SitePackages {
     pub fn satisfies_spec(
         &self,
         requirements: &[UnresolvedRequirementSpecification],
-        constraints: &[NameRequirementSpecification],
+        constraints: &[Constraint<NameRequirementSpecification>],
         overrides: &[UnresolvedRequirementSpecification],
         override_dependencies: &[Override<Requirement>],
         exclude_dependencies: &[ExcludeDependency],
@@ -438,9 +440,10 @@ impl SitePackages {
         )?;
         let excludes = Excludes::from_entries(exclude_dependencies.iter().cloned());
 
+        let constraints = Constraints::from_entries(constraints.iter().cloned())?;
         match self.satisfies_requirements(
             requirements.iter().map(Cow::as_ref),
-            constraints.iter().map(|constraint| &constraint.requirement),
+            &constraints,
             &overrides,
             &excludes,
             dependency_metadata,
@@ -469,10 +472,10 @@ impl SitePackages {
     /// Like [`SitePackages::satisfies_spec`], but with resolved names for all requirements.
     ///
     /// If `build_settings` is `None`, accept installed distributions regardless of their build settings.
-    pub fn satisfies_requirements<'a, 'b>(
+    pub fn satisfies_requirements<'a>(
         &self,
         requirements: impl Iterator<Item = &'a Requirement>,
-        constraints: impl Iterator<Item = &'b Requirement>,
+        constraints: &Constraints,
         overrides: &Overrides,
         excludes: &Excludes,
         dependency_metadata: &DependencyMetadata,
@@ -482,15 +485,6 @@ impl SitePackages {
         tags: &Tags,
         build_settings: Option<BuildSettings<'_>>,
     ) -> Result<SatisfiesResult<Requirement>> {
-        // Collect the constraints by package name.
-        let constraints: FxHashMap<&PackageName, Vec<&Requirement>> =
-            constraints.fold(FxHashMap::default(), |mut constraints, constraint| {
-                constraints
-                    .entry(&constraint.name)
-                    .or_default()
-                    .push(constraint);
-                constraints
-            });
         let mut stack = Vec::with_capacity(requirements.size_hint().0);
         let mut seen =
             FxHashSet::with_capacity_and_hasher(requirements.size_hint().0, FxBuildHasher);
@@ -583,14 +577,21 @@ impl SitePackages {
                         .cloned()
                         .map(Requirement::from)
                         .collect::<Vec<_>>();
-                    for dependency in overrides
-                        .apply_for(name, distribution.version(), &dependencies)
+                    for dependency in constraints
+                        .apply_for_package(
+                            Some((name, distribution.version())),
+                            overrides.apply_for(name, distribution.version(), &dependencies),
+                        )
                         .filter(|dependency| {
                             !excludes.contains_for(name, distribution.version(), &dependency.name)
                         })
                     {
                         if dependency.evaluate_markers(Some(markers), &requirement.extras) {
-                            let dependency = dependency.into_owned();
+                            let mut dependency = dependency.into_owned();
+                            // The queue is checked without the parent's extras, so resolve them
+                            // here after deciding that this dependency edge is active.
+                            dependency.marker =
+                                dependency.marker.simplify_extras(&requirement.extras);
                             if seen.insert(dependency.clone()) {
                                 stack.push(dependency);
                             }

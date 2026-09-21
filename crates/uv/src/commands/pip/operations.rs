@@ -14,8 +14,8 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{
-    BuildOptions, Concurrency, Constraints, DependencyGroups, DryRun, ExcludeDependency, Excludes,
-    ExtrasSpecification, Override, Overrides, Reinstall, Upgrade,
+    BuildOptions, Concurrency, Constraint, Constraints, DependencyGroups, DryRun,
+    ExcludeDependency, Excludes, ExtrasSpecification, Override, Overrides, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, SourcedDependencyGroups};
@@ -94,17 +94,24 @@ pub(crate) async fn read_constraints(
     constraints: &[RequirementsSource],
     client_builder: &BaseClientBuilder<'_>,
 ) -> Result<Vec<NameRequirementSpecification>, Error> {
-    Ok(
-        RequirementsSpecification::from_sources(&[], constraints, &[], &[], None, client_builder)
-            .await?
-            .constraints,
-    )
+    RequirementsSpecification::from_sources(&[], constraints, &[], &[], None, client_builder)
+        .await?
+        .constraints
+        .into_iter()
+        .map(|entry| match entry {
+            Constraint::Requirement(requirement) => Ok(requirement),
+            Constraint::Package(_) => Err(anyhow::anyhow!(
+                "Package-scoped runtime constraints cannot be used as build constraints"
+            )
+            .into()),
+        })
+        .collect()
 }
 
 /// Resolve a set of requirements, similar to running `pip compile`.
 pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     requirements: Vec<UnresolvedRequirementSpecification>,
-    constraints: Vec<NameRequirementSpecification>,
+    constraints: Vec<Constraint<NameRequirementSpecification>>,
     overrides: Vec<UnresolvedRequirementSpecification>,
     lowered_overrides: Vec<Override<Requirement>>,
     excludes: Vec<ExcludeDependency>,
@@ -318,12 +325,16 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     };
 
     // Collect constraints, overrides, and excludes.
-    let constraints = Constraints::from_requirements(
-        constraints
-            .into_iter()
-            .map(|constraint| constraint.requirement)
-            .chain(upgrade.constraints().cloned()),
-    );
+    let constraints = Constraints::from_entries(
+        constraints.into_iter().chain(
+            upgrade
+                .constraints()
+                .cloned()
+                .map(NameRequirementSpecification::from)
+                .map(Constraint::Requirement),
+        ),
+    )
+    .map_err(anyhow::Error::from)?;
     let overrides = Overrides::from_entries(
         lowered_overrides
             .into_iter()

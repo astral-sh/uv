@@ -128,10 +128,10 @@
       ]
     },
     "constraint-dependencies": {
-      "description": "PEP 508-style requirements, e.g., `ruff==0.5.0`, or `ruff @ https://...`.",
+      "description": "Constraints to apply when resolving the project's dependencies.\n\nConstraints are used to restrict the versions of dependencies that are selected during\nresolution.\n\nIncluding a package as a constraint will _not_ trigger installation of the package on its\nown; instead, the package must be requested elsewhere in the project's first-party or\ntransitive dependencies.\n\nA table with `package` and `dependencies` applies constraints only to dependencies declared\nby that package. The selector accepts a `name` and optional exact `version`. Global and all\nmatching scoped constraints are combined. Scoped constraints support version specifiers\nonly, and cannot use URL, path, or explicit index sources.\n\n!!! note\n    In `uv lock`, `uv sync`, and `uv run`, uv will only read `constraint-dependencies` from\n    the `pyproject.toml` at the workspace root, and will ignore any declarations in other\n    workspace members or `uv.toml` files.",
       "type": ["array", "null"],
       "items": {
-        "type": "string"
+        "$ref": "#/definitions/Constraint"
       }
     },
     "default-groups": {
@@ -896,6 +896,17 @@
       },
       "required": ["preview", "preview-features"]
     },
+    "Constraint": {
+      "description": "A constraint, either global or scoped to a specific package version.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/PackageConstraint"
+        },
+        {
+          "$ref": "#/definitions/Requirement"
+        }
+      ]
+    },
     "DefaultGroups": {
       "description": "Either the literal \"all\" or a list of groups",
       "oneOf": [
@@ -1296,6 +1307,38 @@
       "additionalProperties": {
         "$ref": "#/definitions/ConfigSettings"
       }
+    },
+    "PackageConstraint": {
+      "description": "A constraint that applies to the dependencies of a specific package version.",
+      "type": "object",
+      "properties": {
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Requirement"
+          }
+        },
+        "package": {
+          "$ref": "#/definitions/PackageConstraintTarget"
+        }
+      },
+      "additionalProperties": false,
+      "required": ["package", "dependencies"]
+    },
+    "PackageConstraintTarget": {
+      "description": "The package and optional version selected by a [`PackageConstraint`].",
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "#/definitions/PackageName"
+        },
+        "version": {
+          "description": "PEP 440-style package version, e.g., `1.2.3`",
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": false,
+      "required": ["name"]
     },
     "PackageExclusion": {
       "description": "A set of exclusions that applies to the dependencies of a specific package version.",

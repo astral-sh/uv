@@ -10,7 +10,7 @@ use tracing::info_span;
 use uv_auth::CredentialsCache;
 use uv_cache::Cache;
 use uv_configuration::{
-    Constraints, DependencyGroupsWithDefaults, ExcludeDependency, NoSources, Upgrade,
+    Constraint, Constraints, DependencyGroupsWithDefaults, ExcludeDependency, NoSources, Upgrade,
 };
 use uv_distribution::LoweredRequirement;
 use uv_distribution_types::{
@@ -94,7 +94,7 @@ impl<'lock> LockTarget<'lock> {
     }
 
     /// Returns the set of constraints for the [`LockTarget`].
-    pub(crate) fn constraints(self) -> Vec<uv_pep508::Requirement<VerbatimParsedUrl>> {
+    pub(crate) fn constraints(self) -> Vec<Constraint<uv_pep508::Requirement<VerbatimParsedUrl>>> {
         match self {
             Self::Workspace(workspace) => workspace.constraints(),
             Self::Script(script) => script

@@ -147,11 +147,14 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                     } else {
                         hasher.augment_with_metadata_requirements(requirements)?
                     };
-                    for requirement in self.constraints.apply(self.overrides.apply_for(
-                        lookahead.package(),
-                        lookahead.version(),
-                        lookahead.requirements(),
-                    )) {
+                    for requirement in self.constraints.apply_for_package(
+                        Some((lookahead.package(), lookahead.version())),
+                        self.overrides.apply_for(
+                            lookahead.package(),
+                            lookahead.version(),
+                            lookahead.requirements(),
+                        ),
+                    ) {
                         if !self.excludes.contains_for(
                             lookahead.package(),
                             lookahead.version(),

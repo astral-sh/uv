@@ -14,9 +14,9 @@ use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::{cache_digest, cache_name};
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    ActiveEnvironment, Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun,
-    ExtrasSpecification, GitLfsSetting, HashCheckingMode, Override, PackageOverride, Reinstall,
-    TargetTriple, Upgrade,
+    ActiveEnvironment, Concurrency, Constraint, Constraints, DependencyGroupsWithDefaults, DryRun,
+    ExtrasSpecification, GitLfsSetting, HashCheckingMode, Override, PackageConstraint,
+    PackageOverride, Reinstall, TargetTriple, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
@@ -3298,33 +3298,65 @@ pub(crate) async fn script_specification(
             .collect::<Result<Vec<_>, _>>()?,
         );
     }
-    let constraint_dependencies = script
-        .metadata()
-        .tool
-        .as_ref()
-        .and_then(|tool| tool.uv.as_ref())
-        .and_then(|uv| uv.constraint_dependencies.as_ref())
-        .into_iter()
-        .flatten()
-        .cloned();
-    let mut constraints = Vec::new();
-    for requirement in constraint_dependencies {
-        constraints.extend(
-            LoweredRequirement::from_non_workspace_requirement(
-                requirement,
-                script_dir.as_ref(),
-                script_sources.as_ref(),
-                &script_indexes,
-                &settings.index_locations,
-                cache,
-                workspace_cache,
-                credentials_cache,
-            )
-            .await
-            .map_ok(LoweredRequirement::into_inner)
-            .collect::<Result<Vec<_>, _>>()?,
-        );
-    }
+    let constraints = {
+        let constraint_entries = script
+            .metadata()
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.constraint_dependencies.as_ref())
+            .into_iter()
+            .flatten()
+            .cloned();
+        let mut constraints = Vec::new();
+        for entry in constraint_entries {
+            match entry {
+                Constraint::Requirement(requirement) => {
+                    constraints.extend(
+                        LoweredRequirement::from_non_workspace_requirement(
+                            requirement,
+                            script_dir.as_ref(),
+                            script_sources.as_ref(),
+                            &script_indexes,
+                            &settings.index_locations,
+                            cache,
+                            workspace_cache,
+                            credentials_cache,
+                        )
+                        .await
+                        .map_ok(LoweredRequirement::into_inner)
+                        .map_ok(Constraint::Requirement)
+                        .collect::<Result<Vec<_>, _>>()?,
+                    );
+                }
+                Constraint::Package(package) => {
+                    let mut dependencies = Vec::new();
+                    for requirement in package.dependencies.into_vec() {
+                        dependencies.extend(
+                            LoweredRequirement::from_non_workspace_requirement(
+                                requirement,
+                                script_dir.as_ref(),
+                                script_sources.as_ref(),
+                                &script_indexes,
+                                &settings.index_locations,
+                                cache,
+                                workspace_cache,
+                                credentials_cache,
+                            )
+                            .await
+                            .map_ok(LoweredRequirement::into_inner)
+                            .collect::<Result<Vec<_>, _>>()?,
+                        );
+                    }
+                    constraints.push(Constraint::Package(PackageConstraint {
+                        package: package.package,
+                        dependencies: dependencies.into_boxed_slice(),
+                    }));
+                }
+            }
+        }
+        constraints
+    };
     let overrides = {
         let override_entries = script
             .metadata()
@@ -3396,7 +3428,11 @@ pub(crate) async fn script_specification(
         .collect::<Vec<_>>();
 
     let mut specification =
-        RequirementsSpecification::from_excludes(requirements, constraints, Vec::new(), Vec::new());
+        RequirementsSpecification::from_excludes(requirements, Vec::new(), Vec::new(), Vec::new());
+    specification.constraints = constraints
+        .into_iter()
+        .map(|entry| entry.map(uv_distribution_types::NameRequirementSpecification::from))
+        .collect();
     specification.override_dependencies = overrides;
     specification.excludes = excludes;
     Ok(Some(specification))

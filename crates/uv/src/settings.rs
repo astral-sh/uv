@@ -35,8 +35,8 @@ use uv_cli::{
 use uv_client::{Certificates, Connectivity, MetadataRangeRequest};
 use uv_configuration::RequirementsInput;
 use uv_configuration::{
-    ActiveEnvironment, BuildIsolation, BuildOptions, Concurrency, DependencyGroups, DevMode,
-    DryRun, EditableMode, EnvFile, ExcludeDependency, ExportFormat, ExtrasSpecification,
+    ActiveEnvironment, BuildIsolation, BuildOptions, Concurrency, Constraint, DependencyGroups,
+    DevMode, DryRun, EditableMode, EnvFile, ExcludeDependency, ExportFormat, ExtrasSpecification,
     GitLfsSetting, HashCheckingMode, IndexStrategy, InstallOptions, KeyringProviderType, NoBinary,
     NoBuild, NoSources, Override, PackageOverride, PipCompileFormat, ProjectBuildBackend, ProxyUrl,
     Reinstall, RequiredVersion, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
@@ -3472,7 +3472,7 @@ pub(crate) struct PipCompileSettings {
     pub(crate) overrides: Vec<RequirementsInput>,
     pub(crate) excludes: Vec<RequirementsInput>,
     pub(crate) build_constraints: Vec<RequirementsInput>,
-    pub(crate) constraints_from_workspace: Vec<Requirement>,
+    pub(crate) constraints_from_workspace: Vec<Constraint<Requirement>>,
     pub(crate) overrides_from_workspace: Vec<Override<Requirement>>,
     pub(crate) excludes_from_workspace: Vec<ExcludeDependency>,
     pub(crate) build_constraints_from_workspace: Vec<NameRequirementSpecification>,
@@ -3551,7 +3551,9 @@ impl PipCompileSettings {
                 .unwrap_or_default()
                 .into_iter()
                 .map(|requirement| {
-                    Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
+                    requirement.map(|requirement| {
+                        Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
+                    })
                 })
                 .collect()
         } else {
@@ -3808,7 +3810,7 @@ pub(crate) struct PipInstallSettings {
     pub(crate) excludes: Vec<RequirementsInput>,
     pub(crate) build_constraints: Vec<RequirementsInput>,
     pub(crate) dry_run: DryRun,
-    pub(crate) constraints_from_workspace: Vec<Requirement>,
+    pub(crate) constraints_from_workspace: Vec<Constraint<Requirement>>,
     pub(crate) overrides_from_workspace: Vec<Override<Requirement>>,
     pub(crate) excludes_from_workspace: Vec<ExcludeDependency>,
     pub(crate) build_constraints_from_workspace: Vec<NameRequirementSpecification>,
@@ -3879,7 +3881,9 @@ impl PipInstallSettings {
                 .unwrap_or_default()
                 .into_iter()
                 .map(|requirement| {
-                    Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
+                    requirement.map(|requirement| {
+                        Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
+                    })
                 })
                 .collect()
         } else {

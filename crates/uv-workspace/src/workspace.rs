@@ -17,7 +17,9 @@ use rustc_hash::{FxHashSet, FxHasher};
 use tracing::{debug, trace, warn};
 
 use uv_cache::Cache;
-use uv_configuration::{ActiveEnvironment, DependencyGroupsWithDefaults, ExcludeDependency};
+use uv_configuration::{
+    ActiveEnvironment, Constraint, DependencyGroupsWithDefaults, ExcludeDependency,
+};
 use uv_distribution_types::{Index, MinimumLibcVersion, Requirement, RequirementSource};
 use uv_fs::{CWD, Simplified, normalize_path};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, GroupName, PackageName};
@@ -882,7 +884,7 @@ impl Workspace {
     }
 
     /// Returns the set of constraints for the workspace.
-    pub fn constraints(&self) -> Vec<uv_pep508::Requirement<VerbatimParsedUrl>> {
+    pub fn constraints(&self) -> Vec<Constraint<uv_pep508::Requirement<VerbatimParsedUrl>>> {
         let Some(constraints) = self
             .pyproject_toml
             .tool

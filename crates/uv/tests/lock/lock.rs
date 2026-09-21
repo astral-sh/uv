@@ -43791,3 +43791,199 @@ fn lock_frozen_warning() -> Result<()> {
 
     Ok(())
 }
+
+/// Scoped constraints intersect with global constraints and survive lockfile round trips.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_project_with_scoped_constraints() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject = r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv]
+        constraint-dependencies = [
+            "idna!=2.9,<3.4",
+            { package = { name = "anyio" }, dependencies = ["idna>=2.9"] },
+            { package = { name = "anyio", version = "3.7.0" }, dependencies = ["idna<3", "requests==0"] },
+            { package = { name = "anyio", version = "3.6.2" }, dependencies = ["idna==0"] },
+            { package = { name = "absent" }, dependencies = ["idna==0"] },
+        ]
+    "#;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject)?;
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        constraints = [
+            { package = { name = "absent" }, dependencies = [{ name = "idna", specifier = "==0" }] },
+            { package = { name = "anyio" }, dependencies = [{ name = "idna", specifier = ">=2.9" }] },
+            { package = { name = "anyio", version = "3.6.2" }, dependencies = [{ name = "idna", specifier = "==0" }] },
+            { package = { name = "anyio", version = "3.7.0" }, dependencies = [{ name = "idna", specifier = "<3" }, { name = "requests", specifier = "==0" }] },
+            { name = "idna", specifier = "!=2.9,<3.4" },
+        ]
+
+        [[package]]
+        name = "anyio"
+        version = "3.7.0"
+        source = { registry = "https://pypi.org/simple" }
+        dependencies = [
+            { name = "idna" },
+            { name = "sniffio" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/c6/b3/fefbf7e78ab3b805dec67d698dc18dd505af7a18a8dd08868c9b4fa736b5/anyio-3.7.0.tar.gz", hash = "sha256:275d9973793619a5374e1c89a4f4ad3f4b0a5510a2b5b939444bee8f4c4d37ce", size = 142737, upload-time = "2023-05-27T11:12:46.688Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/68/fe/7ce1926952c8a403b35029e194555558514b365ad77d75125f521a2bec62/anyio-3.7.0-py3-none-any.whl", hash = "sha256:eddca883c4175f14df8aedce21054bfca3adb70ffe76a9f607aef9d7fa2ea7f0", size = 80873, upload-time = "2023-05-27T11:12:44.474Z" },
+        ]
+
+        [[package]]
+        name = "idna"
+        version = "2.10"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/ea/b7/e0e3c1c467636186c39925827be42f16fee389dc404ac29e930e9136be70/idna-2.10.tar.gz", hash = "sha256:b307872f855b18632ce0c21c5e45be78c0ea7ae4c15c828c20788b26921eb3f6", size = 175616, upload-time = "2020-06-27T23:45:05.21Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/a2/38/928ddce2273eaa564f6f50de919327bf3a00f091b5baba8dfa9460f3a8a8/idna-2.10-py2.py3-none-any.whl", hash = "sha256:b97d804b1e9b523befed77c48dacec60e6dcb0b5391d57af6a65a312a90648c0", size = 58811, upload-time = "2020-06-27T23:45:03.457Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "anyio" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "anyio", specifier = "==3.7.0" }]
+
+        [[package]]
+        name = "sniffio"
+        version = "1.3.1"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372, upload-time = "2024-02-25T23:20:04.057Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235, upload-time = "2024-02-25T23:20:01.196Z" },
+        ]
+        "#);
+    });
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    // Changing the selected version invalidates the lock and deactivates the exact scope.
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject.replace("version = \"3.7.0\"", "version = \"3.7.1\""))?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    // A constraint cannot replace AnyIO's declared `idna>=2.8` requirement.
+    context.temp_dir.child("pyproject.toml").write_str(
+        &pyproject
+            .replace("idna>=2.9", "idna<2.8")
+            .replace("idna!=2.9,<3.4", "idna<3.4"),
+    )?;
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because anyio==3.7.0 depends on idna>=2.8 and idna<2.8, we can conclude that anyio==3.7.0 cannot be used.
+             And because your project depends on anyio==3.7.0, we can conclude that your project's requirements are unsatisfiable.
+    ");
+    Ok(())
+}
+
+/// Scoped constraints cannot authorize alternate sources globally.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_project_with_scoped_constraint_url() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("pyproject.toml").write_str(r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+        [tool.uv]
+        constraint-dependencies = [
+            { package = { name = "anyio" }, dependencies = ["idna @ https://example.org/idna.whl"] },
+        ]
+    "#)?;
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Scoped constraint for `anyio` cannot use a URL, path, or explicit index for `idna`; scoped constraints currently support version specifiers only
+    ");
+    Ok(())
+}
+
+/// Lock a project with a pre-release pin from a scoped constraint.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_project_with_scoped_constraint_prerelease() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2026-01-01T00:00:00Z");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12,<3.13"
+        dependencies = ["pandas==2.2.3"]
+
+        [tool.uv]
+        constraint-dependencies = [
+            { package = { name = "pandas", version = "2.2.3" }, dependencies = ["numpy==2.4.0rc1"] },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.tree(), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    project v0.1.0
+    └── pandas v2.2.3
+        ├── numpy v2.4.0rc1
+        ├── python-dateutil v2.9.0.post0
+        │   └── six v1.17.0
+        ├── pytz v2025.2
+        └── tzdata v2025.3
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    ");
+
+    Ok(())
+}

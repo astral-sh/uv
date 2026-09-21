@@ -38,7 +38,7 @@ use url::Url;
 use uv_cache_key::CanonicalUrl;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    DependencyGroups, ExcludeDependency, NoBinary, NoBuild, Override, PackageOverride,
+    Constraint, DependencyGroups, ExcludeDependency, NoBinary, NoBuild, Override, PackageOverride,
     RequirementsInput,
 };
 use uv_distribution_types::{Index, Requirement};
@@ -62,7 +62,7 @@ pub struct RequirementsSpecification {
     /// The requirements for the project.
     pub requirements: Vec<UnresolvedRequirementSpecification>,
     /// The constraints for the project.
-    pub constraints: Vec<NameRequirementSpecification>,
+    pub constraints: Vec<Constraint<NameRequirementSpecification>>,
     /// The overrides for the project.
     pub overrides: Vec<UnresolvedRequirementSpecification>,
     /// The overrides that have already been lowered to named requirements.
@@ -125,18 +125,15 @@ impl RequirementsSpecification {
         if let Some(tool_uv) = metadata.tool.as_ref().and_then(|tool| tool.uv.as_ref()) {
             let constraints = tool_uv
                 .constraint_dependencies
-                .as_ref()
-                .map(|dependencies| {
-                    dependencies
-                        .iter()
-                        .map(|dependency| {
-                            NameRequirementSpecification::from(Requirement::from(
-                                dependency.to_owned(),
-                            ))
-                        })
-                        .collect::<Vec<NameRequirementSpecification>>()
+                .iter()
+                .flatten()
+                .cloned()
+                .map(|entry| {
+                    entry.map(|requirement| {
+                        NameRequirementSpecification::from(Requirement::from(requirement))
+                    })
                 })
-                .unwrap_or_default();
+                .collect();
 
             let override_dependencies = tool_uv
                 .override_dependencies
@@ -229,6 +226,7 @@ impl RequirementsSpecification {
                 .into_iter()
                 .map(Requirement::from)
                 .map(NameRequirementSpecification::from)
+                .map(Constraint::Requirement)
                 .collect(),
             index_url: requirements_txt.index_url.map(IndexUrl::from),
             extra_index_urls: requirements_txt
@@ -610,10 +608,12 @@ impl RequirementsSpecification {
             for entry in source.requirements {
                 match entry.requirement {
                     UnresolvedRequirement::Named(requirement) => {
-                        spec.constraints.push(NameRequirementSpecification {
-                            requirement,
-                            hashes: entry.hashes,
-                        });
+                        spec.constraints.push(Constraint::Requirement(
+                            NameRequirementSpecification {
+                                requirement,
+                                hashes: entry.hashes,
+                            },
+                        ));
                     }
                     UnresolvedRequirement::Unnamed(requirement) => {
                         return Err(anyhow::anyhow!(
@@ -712,7 +712,7 @@ impl RequirementsSpecification {
     /// constraints, overrides, and excludes.
     pub fn from_excludes(
         requirements: Vec<Requirement>,
-        constraints: Vec<Requirement>,
+        constraints: Vec<Constraint<Requirement>>,
         overrides: Vec<Requirement>,
         excludes: Vec<ExcludeDependency>,
     ) -> Self {
@@ -723,7 +723,7 @@ impl RequirementsSpecification {
                 .collect(),
             constraints: constraints
                 .into_iter()
-                .map(NameRequirementSpecification::from)
+                .map(|entry| entry.map(NameRequirementSpecification::from))
                 .collect(),
             overrides: overrides
                 .into_iter()

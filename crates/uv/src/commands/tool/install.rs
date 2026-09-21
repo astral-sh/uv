@@ -10,8 +10,8 @@ use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyMode, DryRun, Excludes, GitLfsSetting, HashCheckingMode,
-    Overrides, Reinstall, TargetTriple, Upgrade,
+    Concurrency, Constraint, Constraints, DependencyMode, DryRun, Excludes, GitLfsSetting,
+    HashCheckingMode, Overrides, Reinstall, TargetTriple, Upgrade,
 };
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
@@ -435,7 +435,7 @@ pub(crate) async fn install(
     let receipt_constraints = spec
         .constraints
         .into_iter()
-        .map(|constraint| constraint.requirement)
+        .map(|entry| entry.map(|constraint| constraint.requirement))
         .collect::<Vec<_>>();
 
     // Resolve the overrides.
@@ -623,7 +623,14 @@ pub(crate) async fn install(
                 let already_installed = matches!(
                     site_packages.satisfies_requirements(
                         requirements.iter(),
-                        receipt_constraints.iter().chain(latest.iter()),
+                        &Constraints::from_entries(
+                            receipt_constraints
+                                .iter()
+                                .cloned()
+                                .chain(latest.iter().cloned().map(Constraint::Requirement))
+                                .map(|entry| entry.map(NameRequirementSpecification::from))
+                        )
+                        .map_err(anyhow::Error::from)?,
                         &Overrides::from_requirements(receipt_overrides.clone()),
                         &Excludes::from_entries(receipt_excludes.iter().cloned()),
                         dependency_metadata,
@@ -671,8 +678,8 @@ pub(crate) async fn install(
         constraints: receipt_constraints
             .iter()
             .cloned()
-            .chain(latest)
-            .map(NameRequirementSpecification::from)
+            .chain(latest.map(Constraint::Requirement))
+            .map(|entry| entry.map(NameRequirementSpecification::from))
             .collect(),
         overrides: receipt_overrides
             .iter()

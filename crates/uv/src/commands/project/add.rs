@@ -16,9 +16,9 @@ use uv_cache::Cache;
 use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    ActiveEnvironment, Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DevMode,
-    DryRun, EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, GitLfsSetting,
-    InstallOptions, NoSources,
+    ActiveEnvironment, Concurrency, Constraint, DependencyGroups, DependencyGroupsWithDefaults,
+    DevMode, DryRun, EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults,
+    GitLfsSetting, InstallOptions, NoSources,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
@@ -1078,7 +1078,7 @@ async fn lock_and_sync(
     raw: bool,
     bound_kind: Option<AddBoundsKind>,
     dry_run: bool,
-    constraints: Vec<NameRequirementSpecification>,
+    constraints: Vec<Constraint<NameRequirementSpecification>>,
     settings: &ResolverInstallerSettings,
     client_builder: &BaseClientBuilder<'_>,
     installer_metadata: bool,

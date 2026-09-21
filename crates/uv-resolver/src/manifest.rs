@@ -134,30 +134,47 @@ impl Manifest {
 
     /// Return all requirements that affect manifest-wide candidate selection policy.
     ///
-    /// Scoped overrides are included even when their scope is not selected. Whether a scoped
-    /// override applies is only known during resolution, after yanked-version policy has already
+    /// Scoped overrides and constraints are included even when their scope is not selected. Whether a scoped
+    /// declaration applies is only known during resolution, after yanked-version policy has already
     /// been initialized.
     pub(crate) fn candidate_selection_requirements<'a>(
         &'a self,
         env: &'a ResolverEnvironment,
         mode: DependencyMode,
     ) -> impl Iterator<Item = Cow<'a, Requirement>> + 'a {
-        self.requirements(env, mode).chain(
-            self.overrides
-                .scoped_requirements()
-                .filter(|(package, version, requirement)| {
-                    !self.excludes.contains_for_scope(
-                        &self.overrides,
-                        package,
-                        *version,
-                        &requirement.name,
-                    )
-                })
-                .map(|(_, _, requirement)| Cow::Borrowed(requirement))
-                .filter(move |requirement| {
-                    requirement.evaluate_markers(env.marker_environment(), &[])
-                }),
-        )
+        self.requirements(env, mode)
+            .chain(
+                self.overrides
+                    .scoped_requirements()
+                    .filter(|(package, version, requirement)| {
+                        !self.excludes.contains_for_scope(
+                            Some(&self.overrides),
+                            package,
+                            *version,
+                            &requirement.name,
+                        )
+                    })
+                    .map(|(_, _, requirement)| Cow::Borrowed(requirement))
+                    .filter(move |requirement| {
+                        requirement.evaluate_markers(env.marker_environment(), &[])
+                    }),
+            )
+            .chain(
+                self.constraints
+                    .scoped_requirements()
+                    .filter(|(package, version, requirement)| {
+                        !self.excludes.contains_for_scope(
+                            None,
+                            package,
+                            *version,
+                            &requirement.name,
+                        )
+                    })
+                    .map(|(_, _, requirement)| Cow::Borrowed(requirement))
+                    .filter(move |requirement| {
+                        requirement.evaluate_markers(env.marker_environment(), &[])
+                    }),
+            )
     }
 
     /// Like [`Self::requirements`], but without the overrides.

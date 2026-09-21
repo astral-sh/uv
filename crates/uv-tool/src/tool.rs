@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use serde::Deserialize;
 use toml_edit::{Array, Item, Table, Value, value};
 
+use uv_configuration::Constraint;
 use uv_configuration::ExcludeDependency;
 use uv_distribution_types::{NameRequirementSpecification, Requirement};
 use uv_fs::{PortablePath, Simplified};
@@ -21,7 +22,7 @@ pub struct Tool {
     /// `--with`.
     requirements: Vec<Requirement>,
     /// The constraints requested by the user during installation.
-    constraints: Vec<Requirement>,
+    constraints: Vec<Constraint<Requirement>>,
     /// The overrides requested by the user during installation.
     overrides: Vec<Requirement>,
     /// The excludes requested by the user during installation.
@@ -42,7 +43,7 @@ struct ToolWire {
     #[serde(default)]
     requirements: Vec<RequirementWire>,
     #[serde(default)]
-    constraints: Vec<Requirement>,
+    constraints: Vec<Constraint<Requirement>>,
     #[serde(default)]
     overrides: Vec<Requirement>,
     #[serde(default)]
@@ -173,7 +174,7 @@ impl Tool {
     /// Create a new `Tool`.
     pub fn new(
         requirements: Vec<Requirement>,
-        constraints: Vec<Requirement>,
+        constraints: Vec<Constraint<Requirement>>,
         overrides: Vec<Requirement>,
         excludes: Vec<ExcludeDependency>,
         build_constraints: Vec<NameRequirementSpecification>,
@@ -359,7 +360,7 @@ impl Tool {
         &self.requirements
     }
 
-    pub fn constraints(&self) -> &[Requirement] {
+    pub fn constraints(&self) -> &[Constraint<Requirement>] {
         &self.constraints
     }
 

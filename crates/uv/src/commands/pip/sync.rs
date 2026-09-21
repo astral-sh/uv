@@ -8,8 +8,8 @@ use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    BuildIsolation, BuildOptions, Concurrency, Constraints, DryRun, ExtrasSpecification,
-    HashCheckingMode, IndexStrategy, NoSources, Reinstall, Upgrade,
+    BuildIsolation, BuildOptions, Concurrency, Constraint, Constraints, DryRun,
+    ExtrasSpecification, HashCheckingMode, IndexStrategy, NoSources, Reinstall, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -276,6 +276,7 @@ pub(crate) async fn pip_sync(
                 .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
             constraints
                 .iter()
+                .filter_map(Constraint::as_requirement)
                 .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
             Some(&marker_env),
             hash_checking,
