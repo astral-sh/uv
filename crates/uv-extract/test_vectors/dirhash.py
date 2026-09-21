@@ -5,12 +5,12 @@
 # dependencies = [
 #     "blake3>=1.0.9",
 # ]
-# [tool.uv]
-# no-build = true
-# exclude-newer = "P7D"
 # ///
 
-"""Independent Python implementation of ``uv_extract::dirhash``."""
+"""Independent Python implementation of ``uv_extract::dirhash``.
+
+The Rust ``test_vectors_json`` test case exercises this implementation in CI.
+"""
 
 import sys
 from pathlib import Path

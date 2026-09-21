@@ -45,4 +45,4 @@ jobs:
         if: ${{ inputs.schema-changed == 'true' }}
         run: cargo dev generate-json-schema --mode check
       - name: "Check uv-extract dirhash test vectors"
-        run: uv run --script crates/uv-extract/test_vectors/generate.py | diff -u crates/uv-extract/test_vectors/test_vectors.json -
+        run: cargo dev generate-dirhash-test-vectors --mode check
