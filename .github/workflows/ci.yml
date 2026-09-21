@@ -6,7 +6,8 @@ on:
   pull_request:
   workflow_dispatch:
 
-permissions: {}
+permissions:
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref_name }}-${{ github.event.pull_request.number || github.sha }}
@@ -113,6 +114,7 @@ jobs:
     uses: $/.github/workflows/test-integration.yml
     secrets: inherit
     permissions:
+      contents: read
       id-token: write
     with:
       sha: ${{ github.sha }}

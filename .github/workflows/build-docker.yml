@@ -33,7 +33,8 @@ env:
   UV_GHCR_IMAGE: ghcr.io/${{ github.repository_owner }}/${{ inputs.push-dev && 'uv-dev' || 'uv' }}
   UV_DOCKERHUB_IMAGE: ${{ !inputs.push-dev && 'docker.io/astral/uv' || '' }}
 
-permissions: {}
+permissions:
+  contents: read
 
 jobs:
   docker-plan:

@@ -1,7 +1,8 @@
 on:
   workflow_call:
 
-permissions: {}
+permissions:
+  contents: read
 
 jobs:
   lock:
