@@ -8,8 +8,8 @@ on:
         required: true
         type: string
       head_sha:
-        description: "The uv-dev pull request head SHA at dispatch time"
-        required: false
+        description: "The uv-dev pull request head SHA approved for promotion"
+        required: true
         type: string
 
 permissions: {}
@@ -36,9 +36,15 @@ jobs:
       - name: Verify pull request
         id: verify
         env:
+          EXPECTED_HEAD_SHA: ${{ inputs.head_sha }}
           GH_TOKEN: ${{ github.token }}
           PULL_REQUEST_NUMBER: ${{ inputs.pull_request }}
         run: |
+          if [[ ! "$EXPECTED_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "An approved pull request head SHA is required; refusing to promote it." >&2
+            exit 1
+          fi
+
           gh pr view "$PULL_REQUEST_NUMBER" \
             --repo "$GITHUB_REPOSITORY" \
             --json number,title,body,state,isDraft,baseRefName,headRefName,isCrossRepository \
@@ -80,6 +86,7 @@ jobs:
         id: promote
         env:
           BASE_REF: ${{ steps.verify.outputs.base_ref }}
+          EXPECTED_HEAD_SHA: ${{ inputs.head_sha }}
           GH_TOKEN: ${{ steps.token.outputs.token }}
           HEAD_REF: ${{ steps.verify.outputs.head_ref }}
           PULL_REQUEST_NUMBER: ${{ inputs.pull_request }}
@@ -107,8 +114,14 @@ jobs:
             echo "The pull request does not have a human promoter; refusing to promote it." >&2
             exit 1
           fi
+          echo "promoter=$promoter" >> "$GITHUB_OUTPUT"
 
           source_head=$(jq --raw-output '.head.sha' <<< "$source_pull_request")
+          if [ "$source_head" != "$EXPECTED_HEAD_SHA" ]; then
+            echo "changed_head=$source_head" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           base_head=$(jq --raw-output '.base.sha' <<< "$source_pull_request")
 
           if ! gh api --method GET "repos/astral-sh/uv/git/ref/heads/$BASE_REF" --silent; then
@@ -304,8 +317,10 @@ jobs:
           echo "number=$upstream_number" >> "$GITHUB_OUTPUT"
 
       - name: Close uv-dev pull request
-        if: steps.promote.outputs.queued != 'true'
+        id: close
+        if: steps.promote.outputs.number != ''
         env:
+          EXPECTED_HEAD_SHA: ${{ inputs.head_sha }}
           GH_TOKEN: ${{ steps.token.outputs.token }}
           PULL_REQUEST_NUMBER: ${{ inputs.pull_request }}
           UPSTREAM_NUMBER: ${{ steps.promote.outputs.number }}
@@ -321,13 +336,44 @@ jobs:
           upstream_url="https://github.com/astral-sh/uv/pull/$UPSTREAM_NUMBER"
           source_head=$(jq --raw-output '.headRefOid' <<< "$pull_request")
           promoted_head=$(gh pr view "$UPSTREAM_NUMBER" --repo astral-sh/uv --json headRefOid --jq .headRefOid)
-          comment="Promoted to [#$UPSTREAM_NUMBER]($upstream_url)."
-          if [ "$source_head" != "$promoted_head" ]; then
-            comment="Closed with un-sync'd commits. $comment"
+          if [ "$source_head" != "$EXPECTED_HEAD_SHA" ]; then
+            echo "changed_head=$source_head" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$promoted_head" != "$EXPECTED_HEAD_SHA" ]; then
+            echo "changed_head=$promoted_head" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
           gh pr close "$PULL_REQUEST_NUMBER" \
             --repo "$GITHUB_REPOSITORY" \
-            --comment "$comment"
+            --comment "Promoted to [#$UPSTREAM_NUMBER]($upstream_url)."
 
           echo "Promoted uv-dev pull request #$PULL_REQUEST_NUMBER to [#$UPSTREAM_NUMBER]($upstream_url)." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Return changed pull request to draft
+        if: steps.promote.outputs.changed_head != '' || steps.close.outputs.changed_head != ''
+        env:
+          CHANGED_HEAD: ${{ steps.promote.outputs.changed_head || steps.close.outputs.changed_head }}
+          EXPECTED_HEAD_SHA: ${{ inputs.head_sha }}
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          PROMOTER: ${{ steps.promote.outputs.promoter }}
+          PULL_REQUEST_NUMBER: ${{ inputs.pull_request }}
+          UPSTREAM_NUMBER: ${{ steps.promote.outputs.number }}
+        run: |
+          gh pr ready "$PULL_REQUEST_NUMBER" --repo "$GITHUB_REPOSITORY" --undo
+          gh api \
+            --method POST \
+            "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/assignees" \
+            --raw-field "assignees[]=$PROMOTER" \
+            --silent
+
+          comment="Promotion stopped because commit $CHANGED_HEAD does not match the approved commit $EXPECTED_HEAD_SHA. Returned this pull request to draft and assigned @$PROMOTER. Please review the updated changes and mark it ready for review again."
+          if [ -n "$UPSTREAM_NUMBER" ]; then
+            comment="$comment An upstream pull request was already created at [#$UPSTREAM_NUMBER](https://github.com/astral-sh/uv/pull/$UPSTREAM_NUMBER)."
+          fi
+          gh pr comment "$PULL_REQUEST_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" \
+            --body "$comment"
+
+          echo "Returned uv-dev pull request #$PULL_REQUEST_NUMBER to draft because its promotion no longer matches the approved commit $EXPECTED_HEAD_SHA." >> "$GITHUB_STEP_SUMMARY"
