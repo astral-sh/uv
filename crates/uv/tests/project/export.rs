@@ -5692,6 +5692,162 @@ fn cyclonedx_export_basic() -> Result<()> {
           "bom-ref": "urllib3-2@2.2.0",
           "name": "urllib3",
           "version": "2.2.0",
+          "purl": "pkg:pypi/urllib3@2.2.0",
+          "externalReferences": [
+            {
+              "type": "distribution",
+              "url": "https://files.pythonhosted.org/packages/e2/cc/abf6746cc90bc52df4ba730f301b89b3b844d6dc133cb89a01cfe2511eb9/urllib3-2.2.0.tar.gz",
+              "hashes": [
+                {
+                  "alg": "SHA-256",
+                  "content": "051d961ad0c62a94e50ecf1af379c3aba230c66c710493493560c0c223c49f20"
+                }
+              ]
+            },
+            {
+              "type": "distribution",
+              "url": "https://files.pythonhosted.org/packages/88/75/311454fd3317aefe18415f04568edc20218453b709c63c58b9292c71be17/urllib3-2.2.0-py3-none-any.whl",
+              "hashes": [
+                {
+                  "alg": "SHA-256",
+                  "content": "ce3711610ddce217e6d113a2732fafad960a03fd0318c91faa79481e35c11224"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "project-1@0.1.0",
+          "dependsOn": [
+            "urllib3-2@2.2.0"
+          ]
+        },
+        {
+          "ref": "urllib3-2@2.2.0"
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--hashes"), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
+          "name": "project",
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "urllib3-2@2.2.0",
+          "name": "urllib3",
+          "version": "2.2.0",
+          "purl": "pkg:pypi/urllib3@2.2.0",
+          "externalReferences": [
+            {
+              "type": "distribution",
+              "url": "https://files.pythonhosted.org/packages/e2/cc/abf6746cc90bc52df4ba730f301b89b3b844d6dc133cb89a01cfe2511eb9/urllib3-2.2.0.tar.gz",
+              "hashes": [
+                {
+                  "alg": "SHA-256",
+                  "content": "051d961ad0c62a94e50ecf1af379c3aba230c66c710493493560c0c223c49f20"
+                }
+              ]
+            },
+            {
+              "type": "distribution",
+              "url": "https://files.pythonhosted.org/packages/88/75/311454fd3317aefe18415f04568edc20218453b709c63c58b9292c71be17/urllib3-2.2.0-py3-none-any.whl",
+              "hashes": [
+                {
+                  "alg": "SHA-256",
+                  "content": "ce3711610ddce217e6d113a2732fafad960a03fd0318c91faa79481e35c11224"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "project-1@0.1.0",
+          "dependsOn": [
+            "urllib3-2@2.2.0"
+          ]
+        },
+        {
+          "ref": "urllib3-2@2.2.0"
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--no-hashes"), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
+          "name": "project",
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "urllib3-2@2.2.0",
+          "name": "urllib3",
+          "version": "2.2.0",
           "purl": "pkg:pypi/urllib3@2.2.0"
         }
       ],
@@ -5737,7 +5893,7 @@ fn cyclonedx_export_direct_url() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--no-hashes"), @r#"
     exit_code: 0 (success)
     ----- stdout -----
     {
@@ -5970,7 +6126,7 @@ fn cyclonedx_export_mixed_source_types() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--no-hashes"), @r#"
     exit_code: 0 (success)
     ----- stdout -----
     {
@@ -6077,7 +6233,7 @@ fn cyclonedx_export_project_extra() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--no-hashes"), @r#"
     exit_code: 0 (success)
     ----- stdout -----
     {
@@ -6162,7 +6318,7 @@ fn cyclonedx_export_project_extra_with_optional_flag() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-extras"), @r#"
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-extras").arg("--no-hashes"), @r#"
     exit_code: 0 (success)
     ----- stdout -----
     {
@@ -6302,7 +6458,7 @@ fn cyclonedx_export_with_workspace_member() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-extras"), @r#"
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-extras").arg("--no-hashes"), @r#"
     exit_code: 0 (success)
     ----- stdout -----
     {
@@ -6449,7 +6605,7 @@ fn cyclonedx_export_workspace_non_root() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--package").arg("child"), @r#"
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--package").arg("child").arg("--no-hashes"), @r#"
     exit_code: 0 (success)
     ----- stdout -----
     {
@@ -6555,7 +6711,7 @@ fn cyclonedx_export_workspace_with_extras() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--no-hashes"), @r#"
     exit_code: 0 (success)
     ----- stdout -----
     {
@@ -6629,7 +6785,7 @@ fn cyclonedx_export_workspace_with_extras() -> Result<()> {
     warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
-    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-extras"), @r#"
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-extras").arg("--no-hashes"), @r#"
     exit_code: 0 (success)
     ----- stdout -----
     {
@@ -6782,7 +6938,7 @@ fn cyclonedx_export_workspace_frozen() -> Result<()> {
       ╰─▶ `child` references a workspace in `tool.uv.sources` (e.g., `child = { workspace = true }`), but is not a workspace member
     ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-packages").arg("--frozen"), @r#"
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-packages").arg("--frozen").arg("--no-hashes"), @r#"
     exit_code: 0 (success)
     ----- stdout -----
     {
@@ -6942,7 +7098,7 @@ fn cyclonedx_export_workspace_all_packages() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-packages"), @r#"
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-packages").arg("--no-hashes"), @r#"
     exit_code: 0 (success)
     ----- stdout -----
     {
@@ -7133,7 +7289,29 @@ fn cyclonedx_export_all_packages_non_workspace_root_dependency() -> Result<()> {
           "bom-ref": "urllib3-2@2.2.0",
           "name": "urllib3",
           "version": "2.2.0",
-          "purl": "pkg:pypi/urllib3@2.2.0"
+          "purl": "pkg:pypi/urllib3@2.2.0",
+          "externalReferences": [
+            {
+              "type": "distribution",
+              "url": "https://files.pythonhosted.org/packages/e2/cc/abf6746cc90bc52df4ba730f301b89b3b844d6dc133cb89a01cfe2511eb9/urllib3-2.2.0.tar.gz",
+              "hashes": [
+                {
+                  "alg": "SHA-256",
+                  "content": "051d961ad0c62a94e50ecf1af379c3aba230c66c710493493560c0c223c49f20"
+                }
+              ]
+            },
+            {
+              "type": "distribution",
+              "url": "https://files.pythonhosted.org/packages/88/75/311454fd3317aefe18415f04568edc20218453b709c63c58b9292c71be17/urllib3-2.2.0-py3-none-any.whl",
+              "hashes": [
+                {
+                  "alg": "SHA-256",
+                  "content": "ce3711610ddce217e6d113a2732fafad960a03fd0318c91faa79481e35c11224"
+                }
+              ]
+            }
+          ]
         },
         {
           "type": "library",
@@ -7236,7 +7414,7 @@ fn cyclonedx_export_workspace_mixed_dependencies() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--no-hashes"), @r#"
     exit_code: 0 (success)
     ----- stdout -----
     {
@@ -7378,7 +7556,7 @@ fn cyclonedx_export_dependency_marker() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--no-hashes"), @r#"
     exit_code: 0 (success)
     ----- stdout -----
     {
@@ -7479,7 +7657,7 @@ fn cyclonedx_export_multiple_dependency_markers() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--no-hashes"), @r#"
     exit_code: 0 (success)
     ----- stdout -----
     {
@@ -7604,7 +7782,7 @@ fn cyclonedx_export_dependency_extra() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--no-hashes"), @r#"
     exit_code: 0 (success)
     ----- stdout -----
     {
@@ -7738,7 +7916,8 @@ fn cyclonedx_export_prune() -> Result<()> {
             .arg("--format")
             .arg("cyclonedx1.5")
             .arg("--prune")
-            .arg("jupyter-core"),
+            .arg("jupyter-core")
+            .arg("--no-hashes"),
             @r#"
     exit_code: 0 (success)
     ----- stdout -----
@@ -7920,7 +8099,7 @@ fn cyclonedx_export_group() -> Result<()> {
     context.lock().assert().success();
 
     // Default exports include dev group
-    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--no-hashes"), @r#"
     exit_code: 0 (success)
     ----- stdout -----
     {
@@ -7988,7 +8167,7 @@ fn cyclonedx_export_group() -> Result<()> {
     "#);
 
     // Export only specific group
-    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--only-group").arg("bar"), @r#"
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--only-group").arg("bar").arg("--no-hashes"), @r#"
     exit_code: 0 (success)
     ----- stdout -----
     {
@@ -8039,7 +8218,7 @@ fn cyclonedx_export_group() -> Result<()> {
     "#);
 
     // Export with additional group
-    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--group").arg("foo"), @r#"
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--group").arg("foo").arg("--no-hashes"), @r#"
     exit_code: 0 (success)
     ----- stdout -----
     {
@@ -8188,7 +8367,7 @@ fn cyclonedx_export_non_project() -> Result<()> {
     "#);
 
     // Export with group specified
-    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--group").arg("url"), @r#"
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--group").arg("url").arg("--no-hashes"), @r#"
     exit_code: 0 (success)
     ----- stdout -----
     {
@@ -8288,7 +8467,7 @@ fn cyclonedx_export_no_emit() -> Result<()> {
     context.lock().assert().success();
 
     // Exclude `urllib3`.
-    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--no-emit-package").arg("urllib3"), @r#"
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--no-emit-package").arg("urllib3").arg("--no-hashes"), @r#"
     exit_code: 0 (success)
     ----- stdout -----
     {
@@ -8363,7 +8542,7 @@ fn cyclonedx_export_no_emit() -> Result<()> {
     "#);
 
     // Exclude `project`.
-    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--no-emit-project"), @r#"
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--no-emit-project").arg("--no-hashes"), @r#"
     exit_code: 0 (success)
     ----- stdout -----
     {
@@ -8484,7 +8663,7 @@ fn cyclonedx_export_relative_path() -> Result<()> {
 
     context.lock().current_dir(&project).assert().success();
 
-    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").current_dir(&project), @r#"
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").current_dir(&project).arg("--no-hashes"), @r#"
     exit_code: 0 (success)
     ----- stdout -----
     {
@@ -8577,7 +8756,7 @@ fn cyclonedx_export_cyclic_dependencies() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--no-hashes"), @r#"
     exit_code: 0 (success)
     ----- stdout -----
     {
@@ -8775,7 +8954,7 @@ fn cyclonedx_export_dev_dependencies() -> Result<()> {
     context.lock().assert().success();
 
     // Default export includes dev dependencies
-    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--no-hashes"), @r#"
     exit_code: 0 (success)
     ----- stdout -----
     {
@@ -8844,7 +9023,7 @@ fn cyclonedx_export_dev_dependencies() -> Result<()> {
     "#);
 
     // Export without dev dependencies
-    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--no-dev"), @r#"
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--no-dev").arg("--no-hashes"), @r#"
     exit_code: 0 (success)
     ----- stdout -----
     {
@@ -8902,7 +9081,7 @@ fn cyclonedx_export_dev_dependencies() -> Result<()> {
     "#);
 
     // Export only dev dependencies
-    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--only-dev"), @r#"
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--only-dev").arg("--no-hashes"), @r#"
     exit_code: 0 (success)
     ----- stdout -----
     {
@@ -9005,7 +9184,7 @@ fn cyclonedx_export_all_packages_conflicting_workspace_members() -> Result<()> {
     context.lock().assert().success();
 
     // Export with --all-packages to CycloneDX format should succeed as conflict detection is skipped
-    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-packages"), @r#"
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-packages").arg("--no-hashes"), @r#"
     exit_code: 0 (success)
     ----- stdout -----
     {
@@ -9555,7 +9734,7 @@ fn cyclonedx_export_alternative_registry() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--no-hashes"), @r#"
     exit_code: 0 (success)
     ----- stdout -----
     {
@@ -9769,7 +9948,7 @@ fn cyclonedx_export_virtual_workspace_fixture() -> Result<()> {
 
     // Export from the virtual workspace root (no [project] section) without --all-packages
     // This should create a synthetic root in metadata.component
-    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").current_dir(&workspace), @r#"
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").current_dir(&workspace).arg("--no-hashes"), @r#"
     exit_code: 0 (success)
     ----- stdout -----
     {
