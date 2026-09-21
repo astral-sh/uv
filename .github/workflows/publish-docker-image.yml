@@ -79,7 +79,7 @@ jobs:
 
       - uses: depot/setup-action@15c09a5f77a0840ad4bce955686522a257853461 # v1.7.1
 
-      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
         with:
           # Install a version that supports `imagetools create --metadata-file`
           # (https://github.com/docker/buildx/issues/2407).
