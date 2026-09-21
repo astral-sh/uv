@@ -106,6 +106,17 @@ pub enum LockParseError {
         source: toml::de::Error,
     },
 
+    /// The lockfile cannot be parsed and uses a newer schema revision.
+    #[error(
+        "failed to parse lockfile using a newer schema revision ({revision}, but only revisions up to {supported} are supported)"
+    )]
+    UnparsableRevision {
+        supported: u32,
+        revision: u32,
+        #[source]
+        source: toml::de::Error,
+    },
+
     /// The lockfile is not valid TOML or cannot be deserialized.
     #[error(transparent)]
     Toml(#[from] toml::de::Error),
@@ -3549,14 +3560,21 @@ impl Lock {
             Err(_) => match toml::from_str(input) {
                 Ok(lock) => lock,
                 Err(source) => {
-                    if let Ok(lock) = toml::from_str::<LockVersion>(input)
-                        && lock.version() != VERSION
-                    {
-                        return Err(LockParseError::UnparsableVersion {
-                            supported: VERSION,
-                            version: lock.version(),
-                            source,
-                        });
+                    if let Ok(lock) = toml::from_str::<LockVersion>(input) {
+                        if lock.version() != VERSION {
+                            return Err(LockParseError::UnparsableVersion {
+                                supported: VERSION,
+                                version: lock.version(),
+                                source,
+                            });
+                        }
+                        if lock.revision > REVISION.max(METADATA_FREE_REVISION) {
+                            return Err(LockParseError::UnparsableRevision {
+                                supported: REVISION.max(METADATA_FREE_REVISION),
+                                revision: lock.revision,
+                                source,
+                            });
+                        }
                     }
                     return Err(LockParseError::Toml(source));
                 }
@@ -6267,13 +6285,15 @@ impl TryFrom<LockWire> for Lock {
     }
 }
 
-/// Like [`Lock`], but limited to the version field. Used for error reporting: by limiting parsing
-/// to the version field, we can verify compatibility for lockfiles that may otherwise be
+/// Like [`Lock`], but limited to the version and revision fields. Used for error reporting: by
+/// limiting parsing to these fields, we can verify compatibility for lockfiles that may otherwise be
 /// unparsable.
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct LockVersion {
     version: u32,
+    #[serde(default)]
+    revision: u32,
 }
 
 impl LockVersion {
