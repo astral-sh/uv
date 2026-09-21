@@ -33,13 +33,8 @@ and feature-status labels as orthogonal when applicable. When a change affects a
 recommend `preview` in addition to the applicable change-type label, such as `bug` for a bug fix or
 `enhancement` for an improvement.
 
-Infer `test:*`, `build:*`, and `coverage` CI-control labels from the changed code and the pull
-request's intent. Treat these as rare opt-in controls: recommend one only with concrete evidence
-that it materially selects appropriate test or build coverage for the pull request, and do not infer
-it from a similarly named path alone. These CI-control labels are additional to the usual
-three-label semantic limit.
-
-Do not recommend `codex`, `bot:*`, `do-not-merge`, or issue-management labels.
+Do not recommend CI-control, automation-trigger, merge-control, deployment, `codex`, `bot:*`, or
+issue-management labels. The available labels have been restricted to semantic classifications.
 
 Set `labels` to the recommended label names. Leave the array empty when no label is clearly
 supported. Set `summary` to a concise, evidence-based explanation of the recommendations, clearly

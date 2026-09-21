@@ -4,7 +4,9 @@
   "properties": {
     "labels": {
       "type": "array",
-      "items": { "type": "string" }
+      "items": { "type": "string" },
+      "maxItems": 3,
+      "uniqueItems": true
     },
     "summary": { "type": "string" }
   },

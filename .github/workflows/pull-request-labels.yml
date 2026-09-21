@@ -56,6 +56,8 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --limit 1000 \
             --json name,description \
+            | jq --slurpfile allowed "$GITHUB_WORKSPACE/.github/allowed-pull-request-labels.json" \
+              '[.[] | select(.name as $label | $allowed[0] | index($label))]' \
             > .pull-request-labels.json
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -88,12 +90,49 @@ jobs:
         env:
           LABEL_RESULT: ${{ needs.labels.outputs.result }}
 
-  apply:
+  validate:
     needs: labels
     if: >-
       github.repository == 'astral-sh/uv-dev' &&
-      needs.labels.outputs.result != '' &&
-      fromJSON(needs.labels.outputs.result).labels[0] != null
+      needs.labels.outputs.result != ''
+    runs-on: ubuntu-latest
+    permissions: {}
+    outputs:
+      labels: ${{ steps.validate.outputs.labels }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: "Validate recommended labels"
+        id: validate
+        run: |
+          if ! labels=$(jq --exit-status --compact-output --slurp \
+            --slurpfile allowed .github/allowed-pull-request-labels.json '
+              select(length == 1)
+              | .[0]
+              | select(type == "object")
+              | .labels
+              | select(type == "array" and length <= 3)
+              | select(length == (unique | length))
+              | select(all(.[];
+                  type == "string"
+                  and (. as $label | $allowed[0] | index($label) != null)))
+            ' <<< "$LABEL_RESULT"); then
+            echo "Codex recommended an invalid or disallowed pull request label." >&2
+            exit 1
+          fi
+
+          echo "labels=$labels" >> "$GITHUB_OUTPUT"
+        env:
+          LABEL_RESULT: ${{ needs.labels.outputs.result }}
+
+  apply:
+    needs: validate
+    if: >-
+      needs.validate.outputs.labels != '' &&
+      fromJSON(needs.validate.outputs.labels)[0] != null
     runs-on: ubuntu-slim
     environment: automations
     timeout-minutes: 5
@@ -113,8 +152,7 @@ jobs:
       - name: "Apply recommended labels"
         run: |
           # POST adds labels without removing any labels already on the pull request.
-          printf '%s\n' "$LABEL_RESULT" \
-            | jq '{labels}' \
+          jq --null-input --argjson labels "$LABELS" '{labels: $labels}' \
             | gh api \
                 --method POST \
                 "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/labels" \
@@ -122,5 +160,5 @@ jobs:
                 --silent
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
-          LABEL_RESULT: ${{ needs.labels.outputs.result }}
+          LABELS: ${{ needs.validate.outputs.labels }}
           PULL_REQUEST_NUMBER: ${{ inputs.pull_request }}
