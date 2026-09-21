@@ -32,12 +32,12 @@ impl EnvVars {
     pub const UV_OFFLINE: &'static str = "UV_OFFLINE";
 
     /// Equivalent to the `--default-index` command-line argument. If set, uv will use
-    /// this URL as the default index when searching for packages.
+    /// this index as the default index when searching for packages.
     #[attr_added_in("0.4.23")]
     pub const UV_DEFAULT_INDEX: &'static str = "UV_DEFAULT_INDEX";
 
     /// Equivalent to the `--index` command-line argument. If set, uv will use this
-    /// space-separated list of URLs as additional indexes when searching for packages.
+    /// space-separated list of additional indexes when searching for packages.
     #[attr_added_in("0.4.23")]
     pub const UV_INDEX: &'static str = "UV_INDEX";
 
