@@ -316,13 +316,7 @@ fn cache_project_inside_cache_no_cache() -> Result<()> {
 fn cache_init_failure() -> Result<()> {
     use uv_test::ReadOnlyDirectoryGuard;
 
-    let context = uv_test::test_context!("3.12")
-        .with_cache_dir("cache_parent/cache")
-        .with_filter((r"cache_parent/cache", "[CACHE_DIR]"))
-        .with_filter((
-            r"failed to create directory `.*`",
-            "failed to create directory `[CACHE_DIR]`",
-        ));
+    let context = uv_test::test_context!("3.12").with_cache_dir("cache_parent/cache");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -345,8 +339,8 @@ fn cache_init_failure() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync(), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to initialize cache at `[CACHE_DIR]`
-      Caused by: failed to create directory `[CACHE_DIR]`: Permission denied (os error 13)
+    error: Failed to initialize cache at `cache_parent/cache`
+      Caused by: failed to create directory `[CACHE_DIR]/`: Permission denied (os error 13)
     ");
 
     Ok(())
