@@ -34,7 +34,7 @@ on:
         type: string
       runner:
         description: "The runner to use for bug fixing"
-        default: github-ubuntu-24.04-x86_64-4
+        default: ubuntu-latest
         required: false
         type: string
     outputs:
@@ -46,9 +46,6 @@ on:
         value: ${{ jobs.publish.outputs.pull-request }}
 
 permissions: {}
-
-env:
-  UV_LOCKED: 1
 
 jobs:
   fix:
@@ -66,9 +63,7 @@ jobs:
       context-sha: ${{ steps.issue-context.outputs.head-sha }}
       created: ${{ steps.commit-fix.outputs.created }}
       existing-head: ${{ steps.prepare.outputs.existing-head }}
-      parent-head-sha: ${{ steps.prepare.outputs.parent-head-sha }}
       publish: ${{ steps.commit-fix.outputs.publish }}
-      pull-request-title: ${{ steps.commit-fix.outputs.pull-request-title }}
       result: ${{ steps.commit-fix.outputs.result }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -78,14 +73,14 @@ jobs:
 
       - name: "Load issue context"
         id: issue-context
-        uses: $/.github/actions/load-issue-context
+        uses: ./.github/actions/load-issue-context
         with:
           issue-number: ${{ inputs.issue-number }}
           path: ${{ runner.temp }}/issue-context
 
       - name: "Load reproduction Codex thread"
         id: reproduction-thread
-        uses: $/.github/actions/load-codex-thread
+        uses: ./.github/actions/load-codex-thread
         with:
           repository: ${{ github.repository }}
           run-id: ${{ github.run_id }}
@@ -93,32 +88,12 @@ jobs:
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/codex-home/sessions
 
-      - name: "Check uv runner support"
-        if: ${{ !((runner.os == 'Linux' && runner.arch == 'X64') || (runner.os == 'macOS' && runner.arch == 'ARM64')) }}
-        shell: bash
-        run: |
-          echo "Unsupported uv runner: $RUNNER_OS/$RUNNER_ARCH" >&2
-          exit 1
-
-      - name: "Install uv on Linux x64"
-        if: ${{ runner.os == 'Linux' && runner.arch == 'X64' }}
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
-          # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.12.13"
-          checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
           enable-cache: false
 
-      - name: "Install uv on macOS ARM64"
-        if: ${{ runner.os == 'macOS' && runner.arch == 'ARM64' }}
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
-        with:
-          # renovate: datasource=github-release-attachments depName=astral-sh/uv
-          version: "0.12.13"
-          checksum: "7e6ddb9316acc00f2296c82ff4d99977870ee34b2f0ddcae9444d714db9364ed"
-          enable-cache: false
-
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           save-if: false
 
@@ -161,43 +136,17 @@ jobs:
           gh api "repos/astral-sh/uv-dev/pulls/$pull_request_number" \
             > "$RUNNER_TEMP/bug-regression-pull-request.json"
           if ! jq --exit-status \
-            --arg head_ref "$PARENT_HEAD_REF" '
-              (.state == "open" or .state == "closed")
+            --arg head_ref "$PARENT_HEAD_REF" \
+            --arg head_sha "$PARENT_HEAD_SHA" '
+              .state == "open"
               and .base.ref == "main"
               and .base.repo.full_name == "astral-sh/uv-dev"
               and .head.repo.full_name == "astral-sh/uv-dev"
               and .head.ref == $head_ref
-              and (.head.sha | test("^[0-9a-f]{40}$"))
+              and .head.sha == $head_sha
             ' "$RUNNER_TEMP/bug-regression-pull-request.json" > /dev/null; then
-            echo "The regression-test pull request no longer matches its verified branch." >&2
+            echo "The regression-test pull request no longer matches its verified head." >&2
             exit 1
-          fi
-          expected_parent_head_sha="$PARENT_HEAD_SHA"
-          PARENT_HEAD_SHA="$(jq --raw-output '.head.sha' \
-            "$RUNNER_TEMP/bug-regression-pull-request.json")"
-
-          if jq --exit-status '.state == "closed"' \
-            "$RUNNER_TEMP/bug-regression-pull-request.json" > /dev/null; then
-            gh api repos/astral-sh/uv/pulls \
-              --method GET \
-              --raw-field state=all \
-              --raw-field head="astral-sh:$PARENT_HEAD_REF" \
-              --raw-field base=main \
-              > "$RUNNER_TEMP/promoted-regression-pull-requests.json"
-            if ! jq --exit-status \
-              --arg head_ref "$PARENT_HEAD_REF" \
-              --arg head_sha "$PARENT_HEAD_SHA" '
-                length == 1
-                and (.[0].state == "open" or .[0].merged_at != null)
-                and .[0].base.ref == "main"
-                and .[0].base.repo.full_name == "astral-sh/uv"
-                and .[0].head.repo.full_name == "astral-sh/uv"
-                and .[0].head.ref == $head_ref
-                and .[0].head.sha == $head_sha
-              ' "$RUNNER_TEMP/promoted-regression-pull-requests.json" > /dev/null; then
-              echo "The closed regression-test pull request was not promoted at its verified head." >&2
-              exit 1
-            fi
           fi
 
           git -c core.hooksPath=/dev/null fetch --no-tags \
@@ -207,9 +156,9 @@ jobs:
             exit 1
           fi
 
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" "$PARENT_HEAD_SHA" ||
-            ! git merge-base --is-ancestor "$expected_parent_head_sha" "$PARENT_HEAD_SHA"; then
-            echo "The regression-test branch does not extend its verified revision." >&2
+          parent_base="$(git rev-parse "$PARENT_HEAD_SHA^")"
+          if [ "$parent_base" != "$GITHUB_SHA" ]; then
+            echo "The regression-test commit does not extend the trusted workflow revision." >&2
             exit 1
           fi
 
@@ -221,7 +170,7 @@ jobs:
                 exit 1
                 ;;
             esac
-          done < <(git diff --name-only -z "$GITHUB_SHA" "$PARENT_HEAD_SHA")
+          done < <(git diff --name-only -z "$parent_base" "$PARENT_HEAD_SHA")
 
           fix_branch="automations/fix-bug/$issue_number"
           gh pr list \
@@ -304,7 +253,6 @@ jobs:
           {
             echo "existing=$existing"
             echo "existing-head=$fix_head"
-            echo "parent-head-sha=$PARENT_HEAD_SHA"
           } >> "$GITHUB_OUTPUT"
 
       - name: "Fix reproduced bug"
@@ -312,14 +260,13 @@ jobs:
         if: steps.prepare.outputs.existing != 'true'
         uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1.11
         env:
-          CARGO_HOME: ${{ runner.temp }}/cargo-home
           GH_TOKEN: ${{ github.token }}
           INSTA_UPDATE: "no"
           TMPDIR: ${{ runner.temp }}
           UV_CACHE_DIR: ${{ runner.temp }}/uv-fix-bug-cache
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.147.0"
+          codex-version: "0.146.0"
           codex-home: "${{ runner.temp }}/codex-home"
           effort: high
           codex-args: >-
@@ -343,17 +290,14 @@ jobs:
         env:
           EXISTING_FIX: ${{ steps.prepare.outputs.existing }}
           FIX_RESULT: ${{ steps.fix-bug.outputs.final-message }}
-          PARENT_HEAD_SHA: ${{ steps.prepare.outputs.parent-head-sha }}
+          PARENT_HEAD_SHA: ${{ inputs.parent-head-sha }}
         run: |
           if [ "$EXISTING_FIX" = "true" ]; then
-            FIX_RESULT="$(jq --null-input --compact-output \
-              --arg issue_title "$(jq --raw-output '.title' \
-                "$RUNNER_TEMP/issue-triage-event.json")" '{
-                outcome: "fixed",
-                summary: "Reused the existing verified automated bug fix.",
-                validation: ["Verified the production fix and existing regression test."],
-                pull_request_title: $issue_title
-              }')"
+            FIX_RESULT="$(jq --null-input --compact-output '{
+              outcome: "fixed",
+              summary: "Reused the existing verified automated bug fix.",
+              validation: ["Verified the production fix and existing regression test."]
+            }')"
           fi
 
           printf '%s\n' "$FIX_RESULT" > "$RUNNER_TEMP/bug-fix-result.json"
@@ -367,21 +311,17 @@ jobs:
             {
               echo "created=false"
               echo "publish=false"
-              jq --raw-output '
-                del(.pull_request_title) | "result=\(tojson)"
-              ' "$RUNNER_TEMP/bug-fix-result.json"
+              jq --raw-output '"result=\(tojson)"' "$RUNNER_TEMP/bug-fix-result.json"
             } >> "$GITHUB_OUTPUT"
             jq --raw-output '.summary' "$RUNNER_TEMP/bug-fix-result.json" \
               >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
-          if [ "$fix_outcome" != "fixed" ] || ! jq --exit-status '
-            (.validation | length > 0)
-            and (.pull_request_title | type == "string" and length > 0
-              and (test("[\\r\\n]") | not))
-          ' "$RUNNER_TEMP/bug-fix-result.json" > /dev/null; then
-            echo "The modified checkout does not contain a validated bug fix and pull request." >&2
+          if [ "$fix_outcome" != "fixed" ] ||
+            ! jq --exit-status '.validation | length > 0' \
+              "$RUNNER_TEMP/bug-fix-result.json" > /dev/null; then
+            echo "The modified checkout does not contain a validated bug fix." >&2
             exit 1
           fi
 
@@ -395,7 +335,7 @@ jobs:
                 source_changed=true
                 ;;
               crates/uv/tests/*|crates/uv-client/tests/it/*)
-                if git diff --name-only "$GITHUB_SHA" "$PARENT_HEAD_SHA" -- "$path" |
+                if git diff --name-only "$PARENT_HEAD_SHA^" "$PARENT_HEAD_SHA" -- "$path" |
                   grep -Fxq "$path"; then
                   regression_changed=true
                 fi
@@ -436,11 +376,7 @@ jobs:
           {
             echo "created=$created"
             echo "publish=true"
-            jq --raw-output '"pull-request-title=\(.pull_request_title)"' \
-              "$RUNNER_TEMP/bug-fix-result.json"
-            jq --raw-output '
-              del(.pull_request_title) | "result=\(tojson)"
-            ' "$RUNNER_TEMP/bug-fix-result.json"
+            jq --raw-output '"result=\(tojson)"' "$RUNNER_TEMP/bug-fix-result.json"
           } >> "$GITHUB_OUTPUT"
           {
             printf '%s\n\n' '### Reproduced bug fixed'
@@ -470,7 +406,7 @@ jobs:
   publish:
     needs: fix
     if: needs.fix.outputs.publish == 'true'
-    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
+    runs-on: ubuntu-slim
     environment: automations
     timeout-minutes: 10
     permissions:
@@ -498,7 +434,7 @@ jobs:
           GIT_CONFIG_NOSYSTEM: "1"
           ISSUE_NUMBER: ${{ inputs.issue-number }}
           PARENT_HEAD_REF: ${{ inputs.parent-head-ref }}
-          PARENT_HEAD_SHA: ${{ needs.fix.outputs.parent-head-sha }}
+          PARENT_HEAD_SHA: ${{ inputs.parent-head-sha }}
           PARENT_PULL_REQUEST: ${{ inputs.parent-pull-request }}
         run: |
           pull_request_number="${PARENT_PULL_REQUEST##*/}"
@@ -507,7 +443,7 @@ jobs:
           if ! jq --exit-status \
             --arg head_ref "$PARENT_HEAD_REF" \
             --arg head_sha "$PARENT_HEAD_SHA" '
-              (.state == "open" or .state == "closed")
+              .state == "open"
               and .base.ref == "main"
               and .base.repo.full_name == "astral-sh/uv-dev"
               and .head.repo.full_name == "astral-sh/uv-dev"
@@ -516,30 +452,6 @@ jobs:
             ' "$RUNNER_TEMP/bug-regression-pull-request.json" > /dev/null; then
             echo "The regression-test pull request changed; refusing to publish the fix." >&2
             exit 1
-          fi
-
-          if jq --exit-status '.state == "closed"' \
-            "$RUNNER_TEMP/bug-regression-pull-request.json" > /dev/null; then
-            gh api repos/astral-sh/uv/pulls \
-              --method GET \
-              --raw-field state=all \
-              --raw-field head="astral-sh:$PARENT_HEAD_REF" \
-              --raw-field base=main \
-              > "$RUNNER_TEMP/promoted-regression-pull-requests.json"
-            if ! jq --exit-status \
-              --arg head_ref "$PARENT_HEAD_REF" \
-              --arg head_sha "$PARENT_HEAD_SHA" '
-                length == 1
-                and (.[0].state == "open" or .[0].merged_at != null)
-                and .[0].base.ref == "main"
-                and .[0].base.repo.full_name == "astral-sh/uv"
-                and .[0].head.repo.full_name == "astral-sh/uv"
-                and .[0].head.ref == $head_ref
-                and .[0].head.sha == $head_sha
-              ' "$RUNNER_TEMP/promoted-regression-pull-requests.json" > /dev/null; then
-              echo "The closed regression-test pull request was not promoted at its verified head." >&2
-              exit 1
-            fi
           fi
 
           git -c core.hooksPath=/dev/null fetch --no-tags \
@@ -590,7 +502,7 @@ jobs:
                 source_changed=true
                 ;;
               crates/uv/tests/*|crates/uv-client/tests/it/*)
-                if git diff --name-only "$GITHUB_SHA" "$PARENT_HEAD_SHA" -- "$path" |
+                if git diff --name-only "$PARENT_HEAD_SHA^" "$PARENT_HEAD_SHA" -- "$path" |
                   grep -Fxq "$path"; then
                   regression_changed=true
                 fi
@@ -633,13 +545,11 @@ jobs:
         id: open-pr
         env:
           FIXED_HEAD_SHA: ${{ steps.verify.outputs.head_sha }}
-          FIX_SUMMARY: ${{ fromJSON(needs.fix.outputs.result).summary }}
           GH_TOKEN: ${{ steps.token.outputs.token }}
           GIT_CONFIG_GLOBAL: /dev/null
           GIT_CONFIG_NOSYSTEM: "1"
           ISSUE_NUMBER: ${{ inputs.issue-number }}
           PARENT_HEAD_REF: ${{ inputs.parent-head-ref }}
-          PULL_REQUEST_TITLE: ${{ needs.fix.outputs.pull-request-title }}
         run: |
           branch="automations/fix-bug/$ISSUE_NUMBER"
           gh pr list \
@@ -672,16 +582,14 @@ jobs:
           pull_request="$(jq --raw-output '.[0].url // empty' \
             "$RUNNER_TEMP/bug-fix-pull-requests.json")"
           if [ -z "$pull_request" ]; then
-            printf '%s Fixes astral-sh/uv#%s\n' \
-              "$FIX_SUMMARY" "$ISSUE_NUMBER" > "$RUNNER_TEMP/bug-fix-pull-request.md"
             pull_request="$(
               gh pr create \
                 --repo astral-sh/uv-dev \
                 --base "$PARENT_HEAD_REF" \
                 --head "$branch" \
                 --draft \
-                --title "$PULL_REQUEST_TITLE" \
-                --body-file "$RUNNER_TEMP/bug-fix-pull-request.md"
+                --title "Fix uv#$ISSUE_NUMBER" \
+                --body "Fixes astral-sh/uv#$ISSUE_NUMBER by correcting the reproduced behavior and updating its regression test."
             )"
           fi
           echo "url=$pull_request" >> "$GITHUB_OUTPUT"
@@ -696,7 +604,7 @@ jobs:
       needs.fix.result == 'success' &&
       needs.fix.outputs.result != '' &&
       (needs.publish.result == 'success' || needs.publish.result == 'skipped')
-    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     environment: automations
     timeout-minutes: 10
     concurrency:
