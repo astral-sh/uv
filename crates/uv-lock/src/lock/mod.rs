@@ -3251,6 +3251,7 @@ impl Lock {
                 .cloned()
                 .map(|entry| entry.map(|requirement| requirement.into_absolute(root))),
         )
+        .with_excludes(self.manifest.build_excludes.iter().cloned())
     }
 
     /// Return the set of packages that should be audited, respecting the
@@ -4234,6 +4235,17 @@ impl Lock {
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedBuildOverrides(expected, actual));
             }
+        }
+
+        let expected_build_excludes = build_constraints
+            .exclude_entries()
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        if expected_build_excludes != self.manifest.build_excludes {
+            return Ok(SatisfiesResult::MismatchedBuildExcludes(
+                expected_build_excludes,
+                self.manifest.build_excludes.clone(),
+            ));
         }
 
         // Validate that the lockfile was generated with the dependency groups.
@@ -5938,6 +5950,8 @@ pub enum SatisfiesResult<'lock> {
     ),
     /// The lockfile uses a different set of excludes.
     MismatchedExcludes(BTreeSet<ExcludeDependency>, BTreeSet<ExcludeDependency>),
+    /// The lockfile uses different exclusions for build environments.
+    MismatchedBuildExcludes(BTreeSet<ExcludeDependency>, BTreeSet<ExcludeDependency>),
     /// The lockfile uses different overrides for build environments.
     MismatchedBuildOverrides(
         BTreeSet<Override<Requirement>>,
@@ -6124,6 +6138,9 @@ pub struct ResolverManifest {
     /// Overrides for isolated build environments.
     #[serde(default)]
     build_overrides: BTreeSet<Override<Requirement>>,
+    /// Exclusions for build environments.
+    #[serde(default)]
+    build_excludes: BTreeSet<ExcludeDependency>,
     /// The static metadata provided to the resolver.
     #[serde(default)]
     dependency_metadata: BTreeSet<StaticMetadata>,
@@ -6150,6 +6167,7 @@ impl ResolverManifest {
             excludes: excludes.into_iter().collect(),
             build_constraints: build_constraints.into_iter().collect(),
             build_overrides: BTreeSet::new(),
+            build_excludes: BTreeSet::new(),
             dependency_groups: dependency_groups
                 .into_iter()
                 .map(|(group, requirements)| (group, requirements.into_iter().collect()))
@@ -6165,6 +6183,16 @@ impl ResolverManifest {
         overrides: impl IntoIterator<Item = Override<Requirement>>,
     ) -> Self {
         self.build_overrides = overrides.into_iter().collect();
+        self
+    }
+
+    /// Record the exclusions used while resolving build environments.
+    #[must_use]
+    pub fn with_build_excludes(
+        mut self,
+        excludes: impl IntoIterator<Item = ExcludeDependency>,
+    ) -> Self {
+        self.build_excludes = excludes.into_iter().collect();
         self
     }
 
@@ -6202,6 +6230,7 @@ impl ResolverManifest {
                 })
                 .collect::<Result<BTreeSet<_>, io::Error>>()?,
             excludes: self.excludes,
+            build_excludes: self.build_excludes,
             build_overrides: self
                 .build_overrides
                 .into_iter()

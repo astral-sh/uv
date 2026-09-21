@@ -138,6 +138,7 @@ Ok(
             excludes: {},
             build_constraints: {},
             build_overrides: {},
+            build_excludes: {},
             dependency_metadata: {},
         },
     },

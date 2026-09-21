@@ -145,6 +145,23 @@ impl<'lock> LockTarget<'lock> {
         }
     }
 
+    /// Return exclusions selected for individual build environments.
+    fn build_excludes(self) -> Vec<ExcludeDependency> {
+        match self {
+            Self::Workspace(workspace) => workspace.build_excludes(),
+            Self::Script(script) => script
+                .metadata
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.build_exclude_dependencies.as_ref())
+                .into_iter()
+                .flatten()
+                .cloned()
+                .collect(),
+        }
+    }
+
     /// Return the dependency groups that are attached to the target directly, as opposed to being
     /// attached to any members within the target.
     pub(crate) fn dependency_groups(
@@ -504,7 +521,9 @@ impl<'lock> LockTarget<'lock> {
                 })),
             }
         }
-        Ok(BuildRequirements::from_entries(constraints).with_overrides(overrides))
+        Ok(BuildRequirements::from_entries(constraints)
+            .with_overrides(overrides)
+            .with_excludes(self.build_excludes()))
     }
 
     /// Lower the requirements for the [`LockTarget`], relative to the target root.

@@ -305,6 +305,7 @@ fn validate_uv_toml(path: &Path, options: &Options) -> Result<(), Error> {
         constraint_dependencies: _,
         build_constraint_dependencies: _,
         build_override_dependencies: _,
+        build_exclude_dependencies: _,
         environments,
         required_environments,
         minimum_libc_version,
@@ -463,6 +464,7 @@ fn warn_uv_toml_masked_fields(options: &Options) {
         constraint_dependencies,
         build_constraint_dependencies,
         build_override_dependencies,
+        build_exclude_dependencies,
         environments: _,
         required_environments: _,
         minimum_libc_version: _,
@@ -666,6 +668,9 @@ fn warn_uv_toml_masked_fields(options: &Options) {
     }
     if build_override_dependencies.is_some() {
         masked_fields.push("build-override-dependencies");
+    }
+    if build_exclude_dependencies.is_some() {
+        masked_fields.push("build-exclude-dependencies");
     }
     if !masked_fields.is_empty() {
         let field_listing = masked_fields.join("\n- ");

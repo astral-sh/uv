@@ -4277,3 +4277,197 @@ fn scoped_build_overrides_sources() -> Result<()> {
     ");
     Ok(())
 }
+
+/// Build exclusions apply to direct, transitive, and hook requirements, leaving runtime dependencies intact.
+#[test]
+fn scoped_build_excludes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["idna==3.3"]
+        [tool.uv.workspace]
+        members = ["foo", "bar"]
+        [tool.uv]
+        package = false
+        build-exclude-dependencies = [
+            "build-missing",
+            "dynamic-missing",
+            { package = { name = "foo" }, dependencies = ["urllib3"] },
+            { package = { name = "foo", version = "0.1.0" }, dependencies = ["idna"] },
+            { package = { name = "bar", version = "9.0.0" }, dependencies = ["requests"] },
+        ]
+        build-override-dependencies = [
+            { package = { name = "foo" }, dependencies = ["idna==0"] },
+        ]
+    "#})?;
+    for name in ["foo", "bar"] {
+        let project = context.temp_dir.child(name);
+        write_scoped_constraint_project(&project, name, "requests==2.31.0", "requests", "2.31.0")?;
+        let pyproject = project.child("pyproject.toml");
+        pyproject.write_str(
+            &fs_err::read_to_string(&pyproject)?
+                .replace("requires = [", "requires = [\"build-missing\", "),
+        )?;
+        let backend = project.child("backend.py");
+        let comparison = if name == "foo" {
+            "is None"
+        } else {
+            "is not None"
+        };
+        backend.write_str(&fs_err::read_to_string(&backend)?
+            .replace("import importlib.metadata", "import importlib.metadata\nimport importlib.util")
+            .replace("def check():", &format!("def check():\n    assert importlib.util.find_spec('idna') {comparison}\n    assert importlib.util.find_spec('urllib3') is not None"))
+            .replace("return [\"tomli>=1\"]", "return ['idna', 'dynamic-missing']"))?;
+    }
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--no-editable"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + bar==0.1.0 (from file://[TEMP_DIR]/bar)
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+     + idna==3.3
+    ");
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--no-editable").arg("--frozen").arg("--reinstall"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 3 packages in [TIME]
+    Uninstalled 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     ~ bar==0.1.0 (from file://[TEMP_DIR]/bar)
+     ~ foo==0.1.0 (from file://[TEMP_DIR]/foo)
+     ~ idna==3.3
+    ");
+    context.temp_dir.child("pyproject.toml").write_str(
+        &context
+            .read("pyproject.toml")
+            .replace("dynamic-missing", "other-missing"),
+    )?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    Ok(())
+}
+
+/// Nonisolated checks ignore excluded declared and dynamic requirements.
+#[test]
+fn scoped_build_excludes_preflight() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let project = context.temp_dir.child("foo");
+    write_scoped_constraint_project(&project, "foo", "build-missing", "build-missing", "1")?;
+    project.child("backend.py").write_str(
+        &fs_err::read_to_string(project.child("backend.py"))?.replace(
+            "assert importlib.metadata.version(\"build-missing\") == \"1\"",
+            "pass",
+        ),
+    )?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["foo"]
+        [tool.uv]
+        build-exclude-dependencies = [
+            { package = { name = "foo" }, dependencies = ["build-missing", "tomli"] },
+        ]
+    "#})?;
+    uv_snapshot!(context.filters(), context.build().args(["--wheel", "--package", "foo", "--preview-features", "build-dependency-check", "--no-build-isolation", "--offline"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building wheel...
+    Successfully built dist/foo-0.1.0-py3-none-any.whl
+    ");
+    Ok(())
+}
+
+/// The bundled backend cannot satisfy an excluded backend dependency.
+#[test]
+fn scoped_build_excludes_bundled_backend() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        [build-system]
+        requires = ["uv_build>=0.11,<10000"]
+        build-backend = "uv_build"
+        [tool.uv]
+        build-exclude-dependencies = [
+            { package = { name = "project" }, dependencies = ["uv_build"] },
+        ]
+    "#})?;
+    context.temp_dir.child("src/project/__init__.py").touch()?;
+    uv_snapshot!(context.filters(), context.build().arg("--wheel").arg("--list"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to build `[TEMP_DIR]/`
+      cause: Can only use `--list` with a compatible uv build backend, but `.` is not compatible because `uv_build` is excluded from build dependencies
+    ");
+    Ok(())
+}
+
+/// The default-backend cache must not reuse dependencies excluded from another build environment.
+#[test]
+fn scoped_build_excludes_default_backend_cache() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["foo", "bar"]
+        [tool.uv]
+        build-constraint-dependencies = ["setuptools==68.2.2"]
+        build-exclude-dependencies = [
+            { package = { name = "foo" }, dependencies = ["setuptools"] },
+        ]
+    "#})?;
+    for name in ["foo", "bar"] {
+        write_scoped_constraint_project(
+            &context.temp_dir.child(name),
+            name,
+            "setuptools>=40.8.0",
+            "setuptools",
+            "68.2.2",
+        )?;
+    }
+    let backend = context.temp_dir.child("foo/backend.py");
+    backend.write_str(
+        &fs_err::read_to_string(&backend)?
+            .replace(
+                "import importlib.metadata",
+                "import importlib.metadata\nimport importlib.util",
+            )
+            .replace(
+                "assert importlib.metadata.version(\"setuptools\") == \"68.2.2\"",
+                "assert importlib.util.find_spec('setuptools') is None",
+            ),
+    )?;
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--no-editable").env(EnvVars::UV_CONCURRENT_BUILDS, "1"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + bar==0.1.0 (from file://[TEMP_DIR]/bar)
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+    ");
+    Ok(())
+}

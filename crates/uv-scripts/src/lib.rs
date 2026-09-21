@@ -429,6 +429,7 @@ pub struct ToolUv {
     pub override_dependencies: Option<Vec<OverrideDependency>>,
     pub exclude_dependencies: Option<Vec<ExcludeDependency>>,
     pub constraint_dependencies: Option<Vec<Constraint<uv_pep508::Requirement<VerbatimParsedUrl>>>>,
+    pub build_exclude_dependencies: Option<Vec<ExcludeDependency>>,
     pub build_override_dependencies: Option<Vec<OverrideDependency>>,
     pub build_constraint_dependencies: Option<Vec<Constraint<BuildConstraintDependency>>>,
     pub extra_build_dependencies: Option<BTreeMap<PackageName, Vec<ExtraBuildDependency>>>,

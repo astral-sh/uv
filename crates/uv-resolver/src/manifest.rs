@@ -106,6 +106,13 @@ impl Manifest {
         self
     }
 
+    /// Exclude packages throughout the resolution, including overridden requirements.
+    #[must_use]
+    pub fn with_excludes(mut self, excludes: Excludes) -> Self {
+        self.excludes = excludes;
+        self
+    }
+
     #[must_use]
     pub fn with_lookaheads(mut self, mut lookaheads: Vec<RequestedRequirements>) -> Self {
         // Package metadata defaults to forced-relative paths. Restore the user's path preference for

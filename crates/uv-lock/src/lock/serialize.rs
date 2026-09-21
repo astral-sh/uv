@@ -224,6 +224,7 @@ fn write_manifest(writer: &mut LockWriter, manifest: &ResolverManifest) -> Resul
         || !manifest.excludes.is_empty()
         || !manifest.build_constraints.is_empty()
         || !manifest.build_overrides.is_empty()
+        || !manifest.build_excludes.is_empty()
         || has_dependency_groups
         || !manifest.dependency_metadata.is_empty();
     if !has_manifest {
@@ -242,6 +243,7 @@ fn write_manifest(writer: &mut LockWriter, manifest: &ResolverManifest) -> Resul
     write_serialized_non_empty_array(writer, "excludes", &manifest.excludes)?;
     write_serialized_non_empty_array(writer, "build-constraints", &manifest.build_constraints)?;
     write_serialized_non_empty_array(writer, "build-overrides", &manifest.build_overrides)?;
+    write_serialized_non_empty_array(writer, "build-excludes", &manifest.build_excludes)?;
 
     if has_dependency_groups {
         writer.table(&["manifest", "dependency-groups"])?;

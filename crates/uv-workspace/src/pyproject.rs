@@ -677,6 +677,30 @@ pub struct ToolUv {
     )]
     pub(crate) build_override_dependencies: Option<Vec<OverrideDependency>>,
 
+    /// Dependencies to exclude from build environments.
+    ///
+    /// Excluded packages are removed from direct and transitive build requirements, including
+    /// requirements returned by backend hooks. Exclusions take precedence over build overrides.
+    /// This does not affect runtime dependencies.
+    ///
+    /// A table with `package` and `dependencies` selects the package being built. Its exclusions
+    /// apply throughout that package's build environment. The selector accepts a `name` and optional
+    /// exact `version`; version-specific scopes only apply when that version is known.
+    /// An exact-version scope replaces the name-only scope. Global exclusions always apply.
+    ///
+    /// In project commands, only declarations at the workspace root are used.
+    #[option(
+        default = "[]",
+        value_type = "list[str | dict]",
+        example = r#"
+            build-exclude-dependencies = [
+                "ninja",
+                { package = { name = "foo" }, dependencies = ["torch"] },
+            ]
+        "#
+    )]
+    pub(crate) build_exclude_dependencies: Option<Vec<ExcludeDependency>>,
+
     /// A list of supported environments against which to resolve dependencies.
     ///
     /// By default, uv will resolve for all possible environments during a `uv lock` operation.

@@ -13,8 +13,8 @@ use crate::Overrides;
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct PackageExclusion {
-    package: PackageExclusionTarget,
-    dependencies: Box<[PackageName]>,
+    pub(crate) package: PackageExclusionTarget,
+    pub(crate) dependencies: Box<[PackageName]>,
 }
 
 /// The package and optional version selected by a [`PackageExclusion`].
@@ -22,7 +22,7 @@ pub struct PackageExclusion {
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct PackageExclusionTarget {
-    name: PackageName,
+    pub(crate) name: PackageName,
     #[cfg_attr(
         feature = "schemars",
         schemars(
@@ -30,7 +30,7 @@ pub struct PackageExclusionTarget {
             description = "PEP 440-style package version, e.g., `1.2.3`"
         )
     )]
-    version: Option<Version>,
+    pub(crate) version: Option<Version>,
 }
 
 /// An exclusion, either global or scoped to a specific package version.

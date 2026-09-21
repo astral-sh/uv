@@ -281,6 +281,7 @@ pub(crate) async fn sync(
                             .cloned()
                             .map(|entry| entry.map(Requirement::from)),
                     )
+                    .with_excludes(uv.build_exclude_dependencies.iter().flatten().cloned())
                 });
 
             match update_environment(

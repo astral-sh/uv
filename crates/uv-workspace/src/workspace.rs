@@ -925,6 +925,20 @@ impl Workspace {
         build_overrides.clone()
     }
 
+    /// Return exclusions for build environments declared by the workspace root.
+    pub fn build_excludes(&self) -> Vec<ExcludeDependency> {
+        let Some(build_excludes) = self
+            .pyproject_toml
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.build_exclude_dependencies.as_ref())
+        else {
+            return vec![];
+        };
+        build_excludes.clone()
+    }
+
     /// The path to the workspace root, the directory containing the top level `pyproject.toml` with
     /// the `uv.tool.workspace`, or the `pyproject.toml` in an implicit single workspace project.
     pub fn install_path(&self) -> &PathBuf {
@@ -2663,6 +2677,7 @@ mod tests {
                       "constraint-dependencies": null,
                       "build-constraint-dependencies": null,
                       "build-override-dependencies": null,
+                      "build-exclude-dependencies": null,
                       "environments": null,
                       "required-environments": null,
                       "minimum-libc-version": null,
@@ -2766,6 +2781,7 @@ mod tests {
                       "constraint-dependencies": null,
                       "build-constraint-dependencies": null,
                       "build-override-dependencies": null,
+                      "build-exclude-dependencies": null,
                       "environments": null,
                       "required-environments": null,
                       "minimum-libc-version": null,
@@ -3103,6 +3119,7 @@ mod tests {
                       "constraint-dependencies": null,
                       "build-constraint-dependencies": null,
                       "build-override-dependencies": null,
+                      "build-exclude-dependencies": null,
                       "environments": null,
                       "required-environments": null,
                       "minimum-libc-version": null,
@@ -3215,6 +3232,7 @@ mod tests {
                       "constraint-dependencies": null,
                       "build-constraint-dependencies": null,
                       "build-override-dependencies": null,
+                      "build-exclude-dependencies": null,
                       "environments": null,
                       "required-environments": null,
                       "minimum-libc-version": null,
@@ -3340,6 +3358,7 @@ mod tests {
                       "constraint-dependencies": null,
                       "build-constraint-dependencies": null,
                       "build-override-dependencies": null,
+                      "build-exclude-dependencies": null,
                       "environments": null,
                       "required-environments": null,
                       "minimum-libc-version": null,
@@ -3439,6 +3458,7 @@ mod tests {
                       "constraint-dependencies": null,
                       "build-constraint-dependencies": null,
                       "build-override-dependencies": null,
+                      "build-exclude-dependencies": null,
                       "environments": null,
                       "required-environments": null,
                       "minimum-libc-version": null,

@@ -134,6 +134,8 @@ pub enum DirectBuildIncompatibility {
     WrongPackage(PackageName),
     #[error("`uv_build` has a build dependency override")]
     BuildOverride,
+    #[error("`uv_build` is excluded from build dependencies")]
+    BuildExcluded,
     #[error("`build_system.requires` uses a URL requirement")]
     UrlRequirement,
     #[error("`uv_build{0}` is not a known compatible range")]

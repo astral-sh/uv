@@ -1155,6 +1155,7 @@ async fn do_lock(
                 dependency_metadata.values().cloned(),
             )
             .with_build_overrides(build_constraints.override_entries().cloned())
+            .with_build_excludes(build_constraints.exclude_entries().cloned())
             .relative_to(target.install_path())?;
 
             let previous = existing_lock.map(ValidatedLock::into_lock);
@@ -1565,6 +1566,13 @@ impl ValidatedLock {
             SatisfiesResult::MismatchedBuildOverrides(expected, actual) => {
                 debug!(
                     "Resolving despite existing lockfile due to mismatched build overrides:\n  Requested: {:?}\n  Existing: {:?}",
+                    expected, actual
+                );
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MismatchedBuildExcludes(expected, actual) => {
+                debug!(
+                    "Resolving despite existing lockfile due to mismatched build excludes:\n  Requested: {:?}\n  Existing: {:?}",
                     expected, actual
                 );
                 Ok(Self::Preferable(lock))

@@ -4,7 +4,7 @@ use uv_distribution_types::{NameRequirementSpecification, Requirement};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 
-use crate::{Constraint, Constraints, Override, Overrides};
+use crate::{Constraint, Constraints, ExcludeDependency, Excludes, Override, Overrides};
 
 /// Dependency policies selected by the identity of the package whose build environment is resolved.
 #[derive(Debug, Default, Clone)]
@@ -12,6 +12,7 @@ pub struct BuildRequirements {
     entries: Vec<Constraint<NameRequirementSpecification>>,
     global: Constraints,
     overrides: Vec<Override<Requirement>>,
+    excludes: Vec<ExcludeDependency>,
 }
 
 impl BuildRequirements {
@@ -37,6 +38,7 @@ impl BuildRequirements {
             entries,
             global,
             overrides: Vec::new(),
+            excludes: Vec::new(),
         }
     }
 
@@ -53,6 +55,7 @@ impl BuildRequirements {
                 .chain(self.entries),
         )
         .with_overrides(self.overrides)
+        .with_excludes(self.excludes)
     }
 
     /// Configure overrides without applying them to the runtime dependency graph.
@@ -110,6 +113,50 @@ impl BuildRequirements {
         )
     }
 
+    /// Configure exclusions for build environments.
+    #[must_use]
+    pub fn with_excludes(mut self, excludes: impl IntoIterator<Item = ExcludeDependency>) -> Self {
+        self.excludes = excludes.into_iter().collect();
+        self
+    }
+
+    /// Return the exclusion declarations recorded in the lockfile.
+    pub fn exclude_entries(&self) -> impl Iterator<Item = &ExcludeDependency> {
+        self.excludes.iter()
+    }
+
+    /// Select global exclusions and the most specific matching scope for a build environment.
+    pub fn excludes_for_package(
+        &self,
+        name: Option<&PackageName>,
+        version: Option<&Version>,
+    ) -> Excludes {
+        let exact = self.excludes.iter().any(|entry| match entry {
+            ExcludeDependency::Dependency(_) => false,
+            ExcludeDependency::Package(package) => {
+                Some(&package.package.name) == name
+                    && package.package.version.is_some()
+                    && package.package.version.as_ref() == version
+            }
+        });
+        self.excludes
+            .iter()
+            .flat_map(|entry| match entry {
+                ExcludeDependency::Dependency(dependency) => std::slice::from_ref(dependency),
+                ExcludeDependency::Package(package)
+                    if Some(&package.package.name) == name
+                        && package.package.version.is_some() == exact
+                        && (package.package.version.is_none()
+                            || package.package.version.as_ref() == version) =>
+                {
+                    package.dependencies.as_ref()
+                }
+                ExcludeDependency::Package(_) => &[],
+            })
+            .cloned()
+            .collect()
+    }
+
     /// Return the constraint declarations, including scopes and archive hashes, in input order.
     pub fn entries(&self) -> impl Iterator<Item = &Constraint<NameRequirementSpecification>> {
         self.entries.iter()
@@ -122,7 +169,14 @@ impl BuildRequirements {
 
     /// Whether this build environment has package-specific dependency settings.
     pub fn has_scope(&self, name: Option<&PackageName>, version: Option<&Version>) -> bool {
-        self.overrides.iter().any(|entry| match entry {
+        self.excludes.iter().any(|entry| match entry {
+            ExcludeDependency::Dependency(_) => false,
+            ExcludeDependency::Package(package) => {
+                Some(&package.package.name) == name
+                    && (package.package.version.is_none()
+                        || package.package.version.as_ref() == version)
+            }
+        }) || self.overrides.iter().any(|entry| match entry {
             Override::Requirement(_) => false,
             Override::Package(package) => {
                 name.is_some_and(|name| package.package.matches(name, version))

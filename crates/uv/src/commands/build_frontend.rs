@@ -764,6 +764,16 @@ async fn build_package(
             &interpreter.to_resolver_marker_environment(),
             |name, version| {
                 if build_constraints
+                    .excludes_for_package(name, version)
+                    .contains(
+                        &"uv-build"
+                            .parse()
+                            .expect("uv-build is a valid package name"),
+                    )
+                {
+                    return Err(DirectBuildIncompatibility::BuildExcluded);
+                }
+                if build_constraints
                     .overrides_for_package(name, version)
                     .global_requirements()
                     .any(|requirement| requirement.name.as_str() == "uv-build")
@@ -793,6 +803,16 @@ async fn build_package(
             uv_version::version(),
             &interpreter.to_resolver_marker_environment(),
             |name, version| {
+                if build_constraints
+                    .excludes_for_package(name, version)
+                    .contains(
+                        &"uv-build"
+                            .parse()
+                            .expect("uv-build is a valid package name"),
+                    )
+                {
+                    return Err(DirectBuildIncompatibility::BuildExcluded);
+                }
                 if build_constraints
                     .overrides_for_package(name, version)
                     .global_requirements()
@@ -1071,10 +1091,14 @@ impl BuildDependencyCheck<'_> {
         let overrides = self
             .constraints
             .overrides_for_package(builder.package_name(), builder.package_version());
+        let excludes = self
+            .constraints
+            .excludes_for_package(builder.package_name(), builder.package_version());
         self.check_requirements(
             builder.build_requirements(),
             &constraints,
             &overrides,
+            &excludes,
             &site_packages,
             environment,
         )?;
@@ -1090,6 +1114,7 @@ impl BuildDependencyCheck<'_> {
             requirements.iter(),
             &constraints,
             &overrides,
+            &excludes,
             &site_packages,
             environment,
         )
@@ -1101,6 +1126,7 @@ impl BuildDependencyCheck<'_> {
         requirements: impl Iterator<Item = &'a Requirement>,
         constraints: &Constraints,
         overrides: &Overrides,
+        excludes: &Excludes,
         site_packages: &SitePackages,
         environment: &PythonEnvironment,
     ) -> Result<(), Error> {
@@ -1114,7 +1140,7 @@ impl BuildDependencyCheck<'_> {
                 requirements,
                 constraints,
                 overrides,
-                &Excludes::default(),
+                excludes,
                 self.build_dispatch.dependency_metadata(),
                 DependencyMode::Transitive,
                 InstallationStrategy::Permissive,

@@ -3495,6 +3495,13 @@ fn workspace_build_requirements(filesystem: Option<&FilesystemOptions>) -> Build
                 })
             }),
     )
+    .with_excludes(
+        filesystem
+            .and_then(|configuration| configuration.build_exclude_dependencies.as_ref())
+            .into_iter()
+            .flatten()
+            .cloned(),
+    )
 }
 
 /// The resolved settings to use for a `pip compile` invocation.

@@ -50,6 +50,13 @@
         "$ref": "#/definitions/Constraint2"
       }
     },
+    "build-exclude-dependencies": {
+      "description": "Dependencies to exclude from build environments.\n\nExcluded packages are removed from direct and transitive build requirements, including\nrequirements returned by backend hooks. Exclusions take precedence over build overrides.\nThis does not affect runtime dependencies.\n\nA table with `package` and `dependencies` selects the package being built. Its exclusions\napply throughout that package's build environment. The selector accepts a `name` and optional\nexact `version`; version-specific scopes only apply when that version is known.\nAn exact-version scope replaces the name-only scope. Global exclusions always apply.\n\nIn project commands, only declarations at the workspace root are used.",
+      "type": ["array", "null"],
+      "items": {
+        "$ref": "#/definitions/ExcludeDependency"
+      }
+    },
     "build-override-dependencies": {
       "description": "Overrides to apply when solving build dependencies.\n\nAn override replaces a build requirement's version or source, even if the replacement\nconflicts with the original requirement. It does not install an otherwise unused dependency.\n\nA table with `package` and `dependencies` selects the package being built. Its overrides\napply throughout that package's build environment, including transitive dependencies and\nrequirements returned by backend hooks. The selector accepts a `name` and optional exact\n`version`; version-specific scopes only apply when that version is known.\n\nAn exact-version scope replaces the name-only scope. The selected scope replaces global\noverrides for the dependency names it contains; other global overrides still apply.\n\nIn project commands, only declarations at the workspace root are used.",
       "type": ["array", "null"],

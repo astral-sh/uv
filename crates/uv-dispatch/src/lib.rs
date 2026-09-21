@@ -21,7 +21,7 @@ use uv_configuration::{
     BuildKind, BuildOptions, BuildRequirements, Constraints, HashCheckingMode, IndexStrategy,
     NoSources, Reinstall,
 };
-use uv_configuration::{BuildOutput, Concurrency, Excludes};
+use uv_configuration::{BuildOutput, Concurrency};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
@@ -332,6 +332,10 @@ impl BuildContext for BuildDispatch<'_> {
             .constraints
             .overrides_for_package(package_name, package_version);
 
+        let excludes = self
+            .constraints
+            .excludes_for_package(package_name, package_version);
+
         // Walk any URL requirements transitively so their sub-URLs (for example, a workspace
         // member that depends on another workspace member) are known before the resolver runs
         // its URL allow-list check. This mirrors what the project resolver does in
@@ -340,7 +344,12 @@ impl BuildContext for BuildDispatch<'_> {
         let hasher = self
             .hasher
             .clone()
-            .augment_with_requirements(requirements.iter().chain(overrides.global_requirements()))
+            .augment_with_requirements(
+                requirements
+                    .iter()
+                    .chain(overrides.global_requirements())
+                    .filter(|requirement| !excludes.contains(&requirement.name)),
+            )
             .map_err(uv_requirements::Error::from)?;
         let hash_mode = match self.hasher.verification() {
             HashVerification::None => None,
@@ -370,7 +379,7 @@ impl BuildContext for BuildDispatch<'_> {
         } else {
             hasher
         };
-        let excludes = Excludes::default();
+
         let (lookaheads, hasher) = LookaheadResolver::new(
             requirements,
             &constraints,
@@ -392,6 +401,7 @@ impl BuildContext for BuildDispatch<'_> {
         let manifest = Manifest::simple(requirements.to_vec())
             .with_constraints(constraints.into_owned())
             .with_overrides(overrides)
+            .with_excludes(excludes)
             .with_lookaheads(lookaheads);
 
         let resolver = Resolver::new(
@@ -666,6 +676,17 @@ impl BuildContext for BuildDispatch<'_> {
             uv_version::version(),
             &self.interpreter.to_resolver_marker_environment(),
             |name, version| {
+                if self
+                    .constraints
+                    .excludes_for_package(name, version)
+                    .contains(
+                        &"uv-build"
+                            .parse()
+                            .expect("uv-build is a valid package name"),
+                    )
+                {
+                    return Err(DirectBuildIncompatibility::BuildExcluded);
+                }
                 if self
                     .constraints
                     .overrides_for_package(name, version)

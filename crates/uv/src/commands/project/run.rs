@@ -378,6 +378,7 @@ pub(crate) async fn run(
                             .cloned()
                             .map(|entry| entry.map(Requirement::from)),
                     )
+                    .with_excludes(uv.build_exclude_dependencies.iter().flatten().cloned())
                 })
                 .unwrap_or_default();
 
