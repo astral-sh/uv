@@ -2622,11 +2622,7 @@ fn version_set_workspace() -> Result<()> {
 
     // Set one child's version, creating the lock and initial sync
     let mut version_cmd = context.version();
-    version_cmd
-        .arg("--package")
-        .arg("child2")
-        .arg("1.1.1")
-        .current_dir(&context.temp_dir);
+    version_cmd.arg("--package").arg("child2").arg("1.1.1");
 
     uv_snapshot!(context.filters(), version_cmd, @"
     exit_code: 0 (success)
@@ -2682,11 +2678,7 @@ fn version_set_workspace() -> Result<()> {
 
     // Set the other child's version, refreshing the lock and sync
     let mut version_cmd = context.version();
-    version_cmd
-        .arg("--package")
-        .arg("child1")
-        .arg("1.2.3")
-        .current_dir(&context.temp_dir);
+    version_cmd.arg("--package").arg("child1").arg("1.2.3");
 
     uv_snapshot!(context.filters(), version_cmd, @"
     exit_code: 0 (success)
@@ -3015,11 +3007,7 @@ fn version_set_evil_constraints() -> Result<()> {
     // This will not appear in the sync, but it will show up in the lock,
     // because we use "sufficient" sync semantics
     let mut version_cmd = context.version();
-    version_cmd
-        .arg("--project")
-        .arg("idna")
-        .arg("2.0.0")
-        .current_dir(&context.temp_dir);
+    version_cmd.arg("--project").arg("idna").arg("2.0.0");
 
     uv_snapshot!(context.filters(), version_cmd, @"
     exit_code: 0 (success)

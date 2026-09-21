@@ -1703,8 +1703,7 @@ fn add_remove_workspace() -> Result<()> {
     add_cmd
         .arg("child2 @ git+https://github.com/astral-test/uv-public-pypackage")
         .arg("--package")
-        .arg("child1")
-        .current_dir(&context.temp_dir);
+        .arg("child1");
 
     uv_snapshot!(context.filters(), add_cmd, @"
     exit_code: 2 (failure)
@@ -1715,11 +1714,7 @@ fn add_remove_workspace() -> Result<()> {
     // Workspace packages should be detected automatically.
     let child1 = context.temp_dir.join("child1");
     let mut add_cmd = context.add();
-    add_cmd
-        .arg("child2")
-        .arg("--package")
-        .arg("child1")
-        .current_dir(&context.temp_dir);
+    add_cmd.arg("child2").arg("--package").arg("child1");
 
     uv_snapshot!(context.filters(), add_cmd, @"
     exit_code: 0 (success)
