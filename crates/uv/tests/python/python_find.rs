@@ -1120,6 +1120,41 @@ fn python_find_freethreaded_314() {
 
 #[test]
 #[cfg(feature = "test-python-managed")]
+#[cfg(target_os = "macos")]
+fn python_find_version_range_variant_order() {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_python_sources()
+        .with_managed_python_dirs()
+        .with_python_download_cache()
+        .with_filtered_python_install_bin()
+        .with_filtered_exe_suffix();
+
+    context.python_install().arg("3.15t").assert().success();
+    context.python_install().arg("3.15").assert().success();
+
+    // Managed installations have their own deterministic ordering.
+    uv_snapshot!(context.filters(), context.python_find().arg("==3.15.*"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.15-[PLATFORM]/[INSTALL-BIN]/python3.15
+    ");
+
+    // When the installed executables are discovered on the search path, the result depends on the
+    // order returned by the filesystem.
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg("==3.15.*")
+        .arg("--python-preference")
+        .arg("system")
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, context.bin_dir.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [BIN]/python3.15t
+    ");
+}
+
+#[test]
+#[cfg(feature = "test-python-managed")]
 fn python_find_prerelease_version_specifiers() {
     let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
