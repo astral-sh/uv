@@ -188,6 +188,20 @@ impl TestContext {
         self
     }
 
+    /// Set the number of HTTP retries for all commands in this context.
+    #[must_use]
+    pub fn with_http_retries(mut self, http_retries: &str) -> Self {
+        self.extra_env
+            .push((EnvVars::UV_HTTP_RETRIES.into(), http_retries.into()));
+        self
+    }
+
+    /// Configure one HTTP retry with a one-second timeout for all commands in this context.
+    #[must_use]
+    pub fn with_fast_http_retry(self) -> Self {
+        self.with_http_timeout("1").with_http_retries("1")
+    }
+
     /// Set the "concurrent installs" for all commands in this context.
     #[must_use]
     pub fn with_concurrent_installs(mut self, concurrent_installs: &str) -> Self {
