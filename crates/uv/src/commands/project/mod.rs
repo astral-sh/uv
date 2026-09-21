@@ -142,7 +142,7 @@ pub(crate) enum ProjectError {
     UnsupportedLockVersion(u32, u32),
 
     #[error(
-        "Failed to parse `uv.lock`, which uses an unsupported schema version (v{1}, but only v{0} is supported)."
+        "Failed to parse `uv.lock`, which uses the schema version {1}, while this version of uv only supports version {0}"
     )]
     UnparsableLockVersion(u32, u32, #[source] toml::de::Error),
 
