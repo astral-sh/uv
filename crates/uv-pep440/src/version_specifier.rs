@@ -71,7 +71,7 @@ impl VersionSpecifiers {
         //
         // Tie-break on the operator so semantically equivalent same-version intervals such as
         // `>=1.4.4,<=1.4.4` and `<=1.4.4,>=1.4.4` normalize to the same representation.
-        specifiers.sort_by(|a, b| {
+        specifiers.sort_unstable_by(|a, b| {
             a.version()
                 .cmp(b.version())
                 .then_with(|| a.operator().cmp(b.operator()))
