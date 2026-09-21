@@ -6,6 +6,7 @@ use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use async_zip::base::write::ZipFileWriter;
 use async_zip::{Compression, ZipEntryBuilder};
 use futures::executor::block_on;
+use indoc::{formatdoc, indoc};
 use url::Url;
 
 use uv_static::EnvVars;
@@ -460,6 +461,75 @@ fn workspace_metadata_script_includes_existing_environment() -> Result<()> {
 }
 
 #[test]
+fn workspace_metadata_script_exact_sync_removes_extraneous_packages() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+        "#
+    })?;
+
+    let extraneous = context
+        .temp_dir
+        .child("metadata_extra-0.1.0-py3-none-any.whl");
+    write_wheel(
+        extraneous.path(),
+        "metadata-extra",
+        "metadata_extra-0.1.0",
+        &[("extra_module.py", "")],
+    )?;
+
+    context
+        .pip_install()
+        .arg(extraneous.path())
+        .assert()
+        .success();
+
+    context
+        .workspace_metadata()
+        .arg("--script")
+        .arg(script.path())
+        .arg("--sync")
+        .arg("--active")
+        .env(EnvVars::VIRTUAL_ENV, context.venv.path())
+        .assert()
+        .success();
+    context.pip_show().arg("metadata-extra").assert().success();
+
+    let assert = context
+        .workspace_metadata()
+        .arg("--script")
+        .arg(script.path())
+        .arg("--sync")
+        .arg("--exact")
+        .arg("--active")
+        .env(EnvVars::VIRTUAL_ENV, context.venv.path())
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+
+    insta::assert_json_snapshot!(serde_json::json!({
+        "extraneous_installed": context
+            .pip_show()
+            .arg("metadata-extra")
+            .output()?
+            .status
+            .success(),
+        "module_owners": metadata.get("module_owners"),
+    }), @r#"
+    {
+      "extraneous_installed": false,
+      "module_owners": null
+    }
+    "#);
+
+    Ok(())
+}
+
+#[test]
 fn workspace_metadata_script_dependency_edges() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -751,6 +821,148 @@ fn workspace_metadata_sync_active_environment() -> Result<()> {
         metadata["environment"]["root"].as_str().map(Path::new),
         Some(active.path())
     );
+
+    Ok(())
+}
+
+#[test]
+fn workspace_metadata_exact_requires_sync() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.workspace_metadata().arg("--exact"), @r"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: the following required arguments were not provided:
+      --sync
+
+    Usage: uv workspace metadata --sync --cache-dir [CACHE_DIR] --exact --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    ");
+}
+
+#[test]
+fn workspace_metadata_exact_sync_removes_extraneous_packages() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let required = context
+        .temp_dir
+        .child("metadata_required-0.1.0-py3-none-any.whl");
+    write_wheel(
+        required.path(),
+        "metadata-required",
+        "metadata_required-0.1.0",
+        &[("required_module.py", "")],
+    )?;
+    let required_url = Url::from_file_path(required.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
+
+    let extraneous = context
+        .temp_dir
+        .child("metadata_extra-0.1.0-py3-none-any.whl");
+    write_wheel(
+        extraneous.path(),
+        "metadata-extra",
+        "metadata_extra-0.1.0",
+        &[("extra_module.py", "")],
+    )?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+            [project]
+            name = "module-owner-root"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["metadata-required @ {required_url}"]
+            "#
+        })?;
+
+    context
+        .pip_install()
+        .arg(extraneous.path())
+        .assert()
+        .success();
+
+    let assert = context
+        .workspace_metadata()
+        .arg("--sync")
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    let extraneous_installed = context
+        .pip_show()
+        .arg("metadata-extra")
+        .output()?
+        .status
+        .success();
+    let required_installed = context
+        .pip_show()
+        .arg("metadata-required")
+        .output()?
+        .status
+        .success();
+
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(serde_json::json!({
+            "extraneous_installed": extraneous_installed,
+            "module_owners": metadata["module_owners"],
+            "required_installed": required_installed,
+        }), @r#"
+        {
+          "extraneous_installed": true,
+          "module_owners": {
+            "required_module": [
+              {
+                "package_id": "metadata-required==0.1.0@path+[TEMP_DIR]/metadata_required-0.1.0-py3-none-any.whl"
+              }
+            ]
+          },
+          "required_installed": true
+        }
+        "#);
+    });
+
+    let assert = context
+        .workspace_metadata()
+        .arg("--sync")
+        .arg("--exact")
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    let extraneous_installed = context
+        .pip_show()
+        .arg("metadata-extra")
+        .output()?
+        .status
+        .success();
+    let required_installed = context
+        .pip_show()
+        .arg("metadata-required")
+        .output()?
+        .status
+        .success();
+
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(serde_json::json!({
+            "extraneous_installed": extraneous_installed,
+            "module_owners": metadata["module_owners"],
+            "required_installed": required_installed,
+        }), @r#"
+        {
+          "extraneous_installed": false,
+          "module_owners": {
+            "required_module": [
+              {
+                "package_id": "metadata-required==0.1.0@path+[TEMP_DIR]/metadata_required-0.1.0-py3-none-any.whl"
+              }
+            ]
+          },
+          "required_installed": true
+        }
+        "#);
+    });
 
     Ok(())
 }

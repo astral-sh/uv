@@ -14,6 +14,7 @@ use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
+use crate::commands::pip::operations::Modifications;
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
@@ -34,7 +35,7 @@ pub(crate) async fn metadata(
     frozen: Option<FrozenSource>,
     dry_run: DryRun,
     refresh: Refresh,
-    sync: bool,
+    sync: Option<Modifications>,
     active: bool,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
@@ -113,7 +114,7 @@ pub(crate) async fn metadata(
                     python_preference,
                     python_downloads,
                     &install_mirrors,
-                    if sync {
+                    if sync.is_some() {
                         ProjectEnvironmentPolicy::Compatible
                     } else {
                         ProjectEnvironmentPolicy::Optional
@@ -173,7 +174,7 @@ pub(crate) async fn metadata(
                 },
             };
             let mut export = metadata_for_target(install_target)?;
-            let environment = if sync {
+            let environment = if sync.is_some() {
                 Some(match target {
                     LockTarget::Workspace(workspace) => ProjectEnvironment::get_or_init(
                         workspace,
