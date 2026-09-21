@@ -116,6 +116,7 @@ async fn constraint_specifications_preserve_hashes() -> Result<()> {
         specification
             .constraints
             .iter()
+            .filter_map(uv_configuration::Constraint::as_requirement)
             .map(|entry| (entry.requirement.to_string(), entry.hashes.as_slice()))
             .collect::<Vec<_>>(),
         @r#"
