@@ -662,7 +662,10 @@ fn format_exclude_newer() -> Result<()> {
 
 #[test]
 fn format_no_matching_version() -> Result<()> {
-    let context = uv_test::test_context_with_versions!(&[]);
+    let context = uv_test::test_context_with_versions!(&[]).with_filter((
+        r"\b[a-z0-9_]+-(?:apple|pc|unknown)-[a-z0-9_]+(?:-[a-z0-9_]+)?\b",
+        "[PLATFORM]",
+    ));
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -679,10 +682,6 @@ fn format_no_matching_version() -> Result<()> {
     "})?;
 
     // Run format with impossible version constraints - should fail
-    let context = context.with_filter((
-        r"\b[a-z0-9_]+-(?:apple|pc|unknown)-[a-z0-9_]+(?:-[a-z0-9_]+)?\b",
-        "[PLATFORM]",
-    ));
     uv_snapshot!(context.filters(), context.format().arg("--version").arg(">=999.0.0"), @"
     exit_code: 2 (failure)
     ----- stderr -----

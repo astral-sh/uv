@@ -2515,8 +2515,7 @@ fn check_rejects_tool_arguments() {
 
 #[test]
 fn check_ty_version_no_match() {
-    let context = uv_test::test_context_with_versions!(&[]);
-    let context = context.with_filter((
+    let context = uv_test::test_context_with_versions!(&[]).with_filter((
         r"\b[a-z0-9_]+-(?:apple|pc|unknown)-[a-z0-9_]+(?:-[a-z0-9_]+)?\b",
         "[PLATFORM]",
     ));

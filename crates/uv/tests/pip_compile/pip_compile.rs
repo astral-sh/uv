@@ -13835,9 +13835,8 @@ fn git_source_refs() -> Result<()> {
 #[cfg(feature = "test-git")]
 #[cfg_attr(windows, ignore = "Git error messages differ on Windows")]
 fn git_source_missing_tag() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-
-    let context = context.with_filter(("`.*/git fetch (.*)`", "`git fetch $1`"));
+    let context =
+        uv_test::test_context!("3.12").with_filter(("`.*/git fetch (.*)`", "`git fetch $1`"));
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"

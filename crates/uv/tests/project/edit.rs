@@ -10977,8 +10977,7 @@ async fn add_index_empty_directory() -> Result<()> {
 
 #[test]
 fn add_index_with_ambiguous_relative_path() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let context = context.with_filter((r"\./|\.\\", r"[PREFIX]"));
+    let context = uv_test::test_context!("3.12").with_filter((r"\./|\.\\", r"[PREFIX]"));
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
