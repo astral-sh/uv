@@ -2305,8 +2305,10 @@ fn invalid_editable_no_url() -> Result<()> {
         .arg("requirements.txt"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Unsupported editable requirement in `requirements.txt`
-      Caused by: Editable `black` must refer to a local directory, not a versioned package
+    error: Unsupported editable requirement in `requirements.txt` at line 1: `black==0.1.0`
+      Caused by: Registry requirements cannot be editable
+
+    hint: Editable requirements must refer to a local directory
     "
     );
 
@@ -2314,23 +2316,43 @@ fn invalid_editable_no_url() -> Result<()> {
 }
 
 #[test]
-fn invalid_editable_unnamed_https_url() -> Result<()> {
+fn invalid_editable_unnamed_remote_url_requirements_txt() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("-e https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl")?;
+    requirements_txt
+        .write_str("-e http://user:password@example.com/black-1.0.0-py3-none-any.whl")?;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Unsupported editable requirement in `requirements.txt`
-      Caused by: Editable must refer to a local directory, not an HTTPS URL: `https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl`
+    error: Unsupported editable requirement in `requirements.txt` at line 1: `http://user:****@example.com/black-1.0.0-py3-none-any.whl`
+      Caused by: Remote archives cannot be editable
+
+    hint: Editable requirements must refer to a local directory
     "
     );
 
     Ok(())
+}
+
+#[test]
+fn invalid_editable_unnamed_remote_url_cli() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-e")
+        .arg("http://user:password@example.com/black-1.0.0-py3-none-any.whl"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Unsupported editable requirement: `http://user:****@example.com/black-1.0.0-py3-none-any.whl`
+      Caused by: Remote archives cannot be editable
+
+    hint: Editable requirements must refer to a local directory
+    "
+    );
 }
 
 #[test]
@@ -2338,15 +2360,21 @@ fn invalid_editable_named_https_url() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("-e black @ https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl")?;
+    requirements_txt.write_str(indoc! {"
+        # This requirement is not editable.
+        anyio==3.7.0
+        -e black @ https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl
+    "})?;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Unsupported editable requirement in `requirements.txt`
-      Caused by: Editable `black` must refer to a local directory, not an HTTPS URL: `https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl`
+    error: Unsupported editable requirement in `requirements.txt` at line 3: `black @ https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl`
+      Caused by: Remote archives cannot be editable
+
+    hint: Editable requirements must refer to a local directory
     "
     );
 

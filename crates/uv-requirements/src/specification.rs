@@ -261,12 +261,16 @@ impl RequirementsSpecification {
                 )],
                 ..Self::default()
             },
-            RequirementsSource::Editable(requirement) => Self {
-                requirements: vec![UnresolvedRequirementSpecification::from(
-                    requirement.clone().into_editable()?,
-                )],
-                ..Self::default()
-            },
+            RequirementsSource::Editable(requirement) => {
+                let mut requirement = requirement.clone();
+                requirement.make_editable().with_context(|| {
+                    format!("Unsupported editable requirement: `{requirement}`")
+                })?;
+                Self {
+                    requirements: vec![UnresolvedRequirementSpecification::from(requirement)],
+                    ..Self::default()
+                }
+            }
             RequirementsSource::RequirementsTxt(path) => {
                 if !(path.starts_with("http://") || path.starts_with("https://") || path.exists()) {
                     return Err(anyhow::anyhow!("File not found: `{}`", path.user_display()));

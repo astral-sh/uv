@@ -1,37 +1,26 @@
 use std::fmt::Display;
 use std::path::Path;
 
-use uv_normalize::PackageName;
+use uv_errors::{Hint, Hints};
 use uv_pep508::{
     Pep508Error, Pep508ErrorSource, RequirementOrigin, TracingReporter, UnnamedRequirement,
+    VersionOrUrl,
 };
-use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl, VerbatimParsedUrl};
+use uv_pypi_types::VerbatimParsedUrl;
 
 #[derive(Debug, thiserror::Error)]
-pub enum EditableError {
-    #[error("Editable `{0}` must refer to a local directory")]
-    MissingVersion(PackageName),
+pub enum MakeEditableError {
+    #[error("Registry requirements cannot be editable")]
+    Registry,
 
-    #[error("Editable `{0}` must refer to a local directory, not a versioned package")]
-    Versioned(PackageName),
+    #[error(transparent)]
+    Url(#[from] uv_pypi_types::MakeEditableError),
+}
 
-    #[error("Editable `{0}` must refer to a local directory, not an archive: `{1}`")]
-    File(PackageName, String),
-
-    #[error("Editable `{0}` must refer to a local directory, not an HTTPS URL: `{1}`")]
-    Https(PackageName, String),
-
-    #[error("Editable `{0}` must refer to a local directory, not a Git URL: `{1}`")]
-    Git(PackageName, String),
-
-    #[error("Editable must refer to a local directory, not an archive: `{0}`")]
-    UnnamedFile(String),
-
-    #[error("Editable must refer to a local directory, not an HTTPS URL: `{0}`")]
-    UnnamedHttps(String),
-
-    #[error("Editable must refer to a local directory, not a Git URL: `{0}`")]
-    UnnamedGit(String),
+impl Hint for MakeEditableError {
+    fn hints(&self) -> Hints<'_> {
+        Hints::from("Editable requirements must refer to a local directory")
+    }
 }
 
 /// A requirement specifier in a `requirements.txt` file.
@@ -57,79 +46,24 @@ impl RequirementsTxtRequirement {
         }
     }
 
-    /// Convert the [`RequirementsTxtRequirement`] into an editable requirement.
+    /// Make the [`RequirementsTxtRequirement`] editable in place.
     ///
     /// # Errors
     ///
-    /// Returns [`EditableError`] if the requirement cannot be interpreted as editable.
-    /// Specifically, only local directory URLs are supported.
-    pub fn into_editable(self) -> Result<Self, EditableError> {
-        match self {
+    /// Returns [`MakeEditableError`] if the requirement does not refer to a local directory.
+    pub fn make_editable(&mut self) -> Result<(), MakeEditableError> {
+        let url = match self {
             Self::Named(requirement) => {
-                let Some(version_or_url) = requirement.version_or_url else {
-                    return Err(EditableError::MissingVersion(requirement.name));
+                let Some(VersionOrUrl::Url(url)) = requirement.version_or_url.as_mut() else {
+                    return Err(MakeEditableError::Registry);
                 };
-
-                let uv_pep508::VersionOrUrl::Url(url) = version_or_url else {
-                    return Err(EditableError::Versioned(requirement.name));
-                };
-
-                let parsed_url = match url.parsed_url {
-                    ParsedUrl::Directory(parsed_url) => parsed_url,
-                    ParsedUrl::Path(_) => {
-                        return Err(EditableError::File(requirement.name, url.to_string()));
-                    }
-                    ParsedUrl::Archive(_) => {
-                        return Err(EditableError::Https(requirement.name, url.to_string()));
-                    }
-                    ParsedUrl::GitDirectory(_) => {
-                        return Err(EditableError::Git(requirement.name, url.to_string()));
-                    }
-                    ParsedUrl::GitPath(_) => {
-                        return Err(EditableError::Git(requirement.name, url.to_string()));
-                    }
-                };
-
-                Ok(Self::Named(uv_pep508::Requirement {
-                    version_or_url: Some(uv_pep508::VersionOrUrl::Url(VerbatimParsedUrl {
-                        verbatim: url.verbatim,
-                        parsed_url: ParsedUrl::Directory(ParsedDirectoryUrl {
-                            editable: Some(true),
-                            ..parsed_url
-                        }),
-                    })),
-                    ..requirement
-                }))
+                url
             }
-            Self::Unnamed(requirement) => {
-                let parsed_url = match requirement.url.parsed_url {
-                    ParsedUrl::Directory(parsed_url) => parsed_url,
-                    ParsedUrl::Path(_) => {
-                        return Err(EditableError::UnnamedFile(requirement.to_string()));
-                    }
-                    ParsedUrl::Archive(_) => {
-                        return Err(EditableError::UnnamedHttps(requirement.to_string()));
-                    }
-                    ParsedUrl::GitDirectory(_) => {
-                        return Err(EditableError::UnnamedGit(requirement.to_string()));
-                    }
-                    ParsedUrl::GitPath(_) => {
-                        return Err(EditableError::UnnamedGit(requirement.to_string()));
-                    }
-                };
+            Self::Unnamed(requirement) => &mut requirement.url,
+        };
 
-                Ok(Self::Unnamed(UnnamedRequirement {
-                    url: VerbatimParsedUrl {
-                        verbatim: requirement.url.verbatim,
-                        parsed_url: ParsedUrl::Directory(ParsedDirectoryUrl {
-                            editable: Some(true),
-                            ..parsed_url
-                        }),
-                    },
-                    ..requirement
-                }))
-            }
-        }
+        url.make_editable()?;
+        Ok(())
     }
 
     /// Parse a requirement as seen in a `requirements.txt` file.
