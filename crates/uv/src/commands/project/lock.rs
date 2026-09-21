@@ -1108,11 +1108,11 @@ async fn do_lock(
             let previous = existing_lock.map(ValidatedLock::into_lock);
             let lock = Lock::from_resolution(
                 &resolution,
+                manifest,
                 target.install_path(),
                 lock_supported_environments.clone().into_markers(),
                 index_locations,
             )?
-            .with_manifest(manifest)
             .with_conflicts(conflicts)
             .with_required_environments(lock_required_environments.into_markers());
 
