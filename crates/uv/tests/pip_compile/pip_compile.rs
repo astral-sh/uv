@@ -434,6 +434,194 @@ fn compile_constraints_many_versions() -> Result<()> {
     Ok(())
 }
 
+/// Solve a conflict where `earlier` prefers `joint<2`, then report the decisions for `later`.
+#[cfg(feature = "test-universal")]
+fn compile_earlier_direct_conflict(later_releases: &str) -> Result<(String, String)> {
+    let scenario = toml::from_str::<Scenario>(&formatdoc! {r#"
+        name = "earlier-direct-conflict"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.earlier.versions]
+        "1.0.0" = {{ requires = ["joint>=2", "unused"] }}
+        "2.0.0" = {{ requires = ["joint<2"] }}
+
+        [packages.joint.versions]
+        "1.0.0" = {{}}
+        "2.0.0" = {{}}
+        "2.0.1" = {{}}
+        "2.0.2" = {{}}
+        "2.0.3" = {{}}
+        "2.0.4" = {{}}
+        "2.0.5" = {{}}
+        "2.0.6" = {{}}
+        "2.0.7" = {{}}
+        "3.0.0" = {{}}
+
+        [packages.later.versions]
+        "1.0.0" = {{ requires = ["joint==1.0.0"] }}
+        {later_releases}
+
+        [packages.unused.versions]
+        "1.0.0" = {{}}
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str("earlier\njoint\nlater\n")?;
+
+    let output = context
+        .pip_compile()
+        .arg("requirements.in")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--no-header")
+        .arg("--no-annotate")
+        .env(EnvVars::RUST_LOG, "uv_resolver::resolver=debug")
+        .assert()
+        .success();
+    let stderr = String::from_utf8_lossy(&output.get_output().stderr);
+    let decisions = stderr
+        .lines()
+        .filter_map(|line| line.split_once("DEBUG ").map(|(_, message)| message))
+        .filter_map(|message| {
+            if let Some(version) = message.strip_prefix("Selecting: later==") {
+                version
+                    .split_once(' ')
+                    .map(|(version, _)| format!("Selecting: later=={version}"))
+            } else if message == "Keeping direct dependency later behind an earlier direct requirement on joint"
+                || message == "Package later has too many conflicts (affected), prioritizing"
+                || message == "Package joint has too many conflicts (culprit), deprioritizing and backtracking"
+            {
+                Some(message.to_string())
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    Ok((
+        String::from_utf8_lossy(&output.get_output().stdout).into_owned(),
+        decisions,
+    ))
+}
+
+/// Repeated conflicting ranges should not cause a later direct requirement to displace an earlier
+/// direct requirement or revisit releases after reprioritization.
+#[cfg(feature = "test-universal")]
+#[test]
+fn compile_repeated_direct_conflict_range() -> Result<()> {
+    let (requirements, decisions) = compile_earlier_direct_conflict(indoc! {r#"
+        "2.0.0" = { requires = ["joint>=2"] }
+        "2.0.1" = { requires = ["joint>=2"] }
+        "2.0.2" = { requires = ["joint>=2"] }
+        "2.0.3" = { requires = ["joint>=2"] }
+        "2.0.4" = { requires = ["joint>=2"] }
+        "2.0.5" = { requires = ["joint>=2"] }
+    "#})?;
+
+    insta::assert_snapshot!(requirements, @"
+    earlier==2.0.0
+    joint==1.0.0
+    later==1.0.0
+    ");
+    insta::assert_snapshot!(decisions, @"
+    Selecting: later==2.0.5
+    Selecting: later==2.0.4
+    Selecting: later==2.0.3
+    Keeping direct dependency later behind an earlier direct requirement on joint
+    Selecting: later==2.0.2
+    Keeping direct dependency later behind an earlier direct requirement on joint
+    Selecting: later==2.0.1
+    Keeping direct dependency later behind an earlier direct requirement on joint
+    Selecting: later==2.0.0
+    Keeping direct dependency later behind an earlier direct requirement on joint
+    Selecting: later==1.0.0
+    ");
+
+    Ok(())
+}
+
+/// Version pins that change with each release should still allow ordinary conflict reprioritization.
+#[cfg(feature = "test-universal")]
+#[test]
+fn compile_repeated_direct_conflict_changing_pins() -> Result<()> {
+    let (requirements, decisions) = compile_earlier_direct_conflict(indoc! {r#"
+        "2.0.0" = { requires = ["joint==2.0.0"] }
+        "2.0.1" = { requires = ["joint==2.0.1"] }
+        "2.0.2" = { requires = ["joint==2.0.2"] }
+        "2.0.3" = { requires = ["joint==2.0.3"] }
+        "2.0.4" = { requires = ["joint==2.0.4"] }
+        "2.0.5" = { requires = ["joint==2.0.5"] }
+    "#})?;
+
+    insta::assert_snapshot!(requirements, @"
+    earlier==2.0.0
+    joint==1.0.0
+    later==1.0.0
+    ");
+    insta::assert_snapshot!(decisions, @"
+    Selecting: later==2.0.5
+    Selecting: later==2.0.4
+    Selecting: later==2.0.3
+    Selecting: later==2.0.2
+    Selecting: later==2.0.1
+    Package later has too many conflicts (affected), prioritizing
+    Package joint has too many conflicts (culprit), deprioritizing and backtracking
+    Selecting: later==2.0.4
+    Selecting: later==2.0.0
+    Selecting: later==1.0.0
+    ");
+
+    Ok(())
+}
+
+/// A different range or an exact pin between two matching ranges restarts repeated-conflict
+/// tracking; only the following release with that same range can suppress reprioritization again.
+#[cfg(feature = "test-universal")]
+#[test]
+fn compile_repeated_direct_conflict_intervening_requirements() -> Result<()> {
+    let (requirements, decisions) = compile_earlier_direct_conflict(indoc! {r#"
+        "2.0.0" = { requires = ["joint>=2"] }
+        "2.0.1" = { requires = ["joint>=2"] }
+        "2.0.2" = { requires = ["joint==2.0.2"] }
+        "2.0.3" = { requires = ["joint>=2"] }
+        "2.0.4" = { requires = ["joint>=2"] }
+        "2.0.5" = { requires = ["joint>=3"] }
+        "2.0.6" = { requires = ["joint>=2"] }
+        "2.0.7" = { requires = ["joint>=2"] }
+    "#})?;
+
+    insta::assert_snapshot!(requirements, @"
+    earlier==2.0.0
+    joint==1.0.0
+    later==1.0.0
+    ");
+    insta::assert_snapshot!(decisions, @"
+    Selecting: later==2.0.7
+    Selecting: later==2.0.6
+    Selecting: later==2.0.5
+    Selecting: later==2.0.4
+    Selecting: later==2.0.3
+    Keeping direct dependency later behind an earlier direct requirement on joint
+    Selecting: later==2.0.2
+    Package later has too many conflicts (affected), prioritizing
+    Package joint has too many conflicts (culprit), deprioritizing and backtracking
+    Selecting: later==2.0.6
+    Selecting: later==2.0.1
+    Selecting: later==2.0.0
+    Keeping direct dependency later behind an earlier direct requirement on joint
+    Selecting: later==1.0.0
+    ");
+
+    Ok(())
+}
+
 /// Resolve a package from a `requirements.in` file, with an inline constraint.
 #[test]
 fn compile_constraints_inline() -> Result<()> {

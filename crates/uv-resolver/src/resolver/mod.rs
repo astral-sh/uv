@@ -12,7 +12,7 @@ use std::{mem, thread};
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
 use papaya::{HashMap, ResizeMode};
-use pubgrub::{Id, IncompId, Incompatibility, Kind, Ranges, State, Term};
+use pubgrub::{Id, IncompId, Incompatibility, Kind, Ranges, State, Term, VersionSet};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::{self, Receiver};
 use tokio::sync::oneshot;
@@ -2651,6 +2651,12 @@ pub(crate) struct ForkState<'index> {
     /// dependencies). These priorities help determine which package to
     /// consider next during resolution.
     priorities: PubGrubPriorities,
+    /// The order in which distinct direct dependency names were first seen from the root or
+    /// workspace members. Marker and extra variants share their base package's position.
+    direct_package_order: FxHashMap<PackageName, usize>,
+    /// The last non-pinned dependency range from an immediate conflict for each direct package.
+    direct_conflict_ranges:
+        FxHashMap<Id<PubGrubPackage>, (Id<PubGrubPackage>, Range<Version>, Version)>,
     /// This keeps track of the set of versions for each package that we've
     /// already visited during resolution. This avoids doing redundant work.
     added_dependencies: FxHashMap<Id<PubGrubPackage>, FxHashSet<Version>>,
@@ -2712,6 +2718,8 @@ impl<'index> ForkState<'index> {
             fork_urls: ForkUrls::default(),
             fork_indexes: ForkIndexes::default(),
             priorities: PubGrubPriorities::default(),
+            direct_package_order: FxHashMap::default(),
+            direct_conflict_ranges: FxHashMap::default(),
             added_dependencies: FxHashMap::default(),
             pre_visited: FxHashMap::default(),
             selected_versions: FxHashMap::default(),
@@ -2775,6 +2783,12 @@ impl<'index> ForkState<'index> {
             } else {
                 // A dependency from the root package or `requirements.txt`.
                 debug!("Adding direct dependency: {package}{version}");
+                if let Some(name) = package.name_no_root() {
+                    let order = self.direct_package_order.len();
+                    self.direct_package_order
+                        .entry(name.clone())
+                        .or_insert(order);
+                }
 
                 // Warn the user if a direct dependency lacks a lower bound in `--lowest` resolution.
                 let missing_lower_bound = version
@@ -2923,6 +2937,33 @@ impl<'index> ForkState<'index> {
                 // marker is "copying" the obligations from the main package through conflicts.
                 continue;
             }
+            // Repeated requirements from different releases can justify the same earlier choice
+            // without contributing more evidence that either package should change priority.
+            if let Some(version) = version {
+                if let Some(rejected) =
+                    self.conflicts_with_earlier_direct(affected, incompatible, incompatibility)
+                {
+                    let repeated = self.direct_conflict_ranges.get(&affected).is_some_and(
+                        |(previous_incompatible, previous_rejected, previous_version)| {
+                            *previous_incompatible == incompatible
+                                && previous_rejected == &rejected
+                                && previous_version != version
+                        },
+                    );
+                    self.direct_conflict_ranges
+                        .insert(affected, (incompatible, rejected, version.clone()));
+                    if repeated {
+                        debug!(
+                            "Keeping direct dependency {} behind an earlier direct requirement on {}",
+                            self.pubgrub.package_store[affected],
+                            self.pubgrub.package_store[incompatible],
+                        );
+                        continue;
+                    }
+                } else {
+                    self.direct_conflict_ranges.remove(&affected);
+                }
+            }
             culprit_is_real = true;
             let culprit_count = self
                 .conflict_tracker
@@ -2934,8 +2975,7 @@ impl<'index> ForkState<'index> {
                 self.conflict_tracker.deprioritize.push(incompatible);
             }
         }
-        // Don't track conflicts between a marker package and the main package, when the
-        // marker is "copying" the obligations from the main package through conflicts.
+        // Only count conflicts that can change the priority of both packages.
         if culprit_is_real {
             if tracing::enabled!(Level::DEBUG) {
                 let incompatibility = self.pubgrub.incompatibility_store[incompatibility]
@@ -2961,6 +3001,84 @@ impl<'index> ForkState<'index> {
                 self.conflict_tracker.prioritize.push(self.next);
             }
         }
+    }
+
+    /// Return a non-pinned dependency range for which a selected, earlier direct dependency
+    /// requires strictly older versions. If subsequent releases repeat the same incompatible
+    /// range, promoting the affected package can needlessly abandon the earlier choice. Pins
+    /// can change with each release in projects with synchronized package versions.
+    fn conflicts_with_earlier_direct(
+        &self,
+        affected: Id<PubGrubPackage>,
+        incompatible: Id<PubGrubPackage>,
+        conflict: IncompId<PubGrubPackage, Range<Version>, UnavailableReason>,
+    ) -> Option<Range<Version>> {
+        let Some(affected_order) = self.pubgrub.package_store[affected]
+            .name_no_root()
+            .and_then(|name| self.direct_package_order.get(name))
+        else {
+            return None;
+        };
+        let conflict = &self.pubgrub.incompatibility_store[conflict];
+        let Kind::FromDependencyOf(parent, dependency) = conflict.kind else {
+            return None;
+        };
+        if parent != affected || dependency != incompatible {
+            return None;
+        }
+        let Some((_, Some(rejected))) = conflict.dependency_version_sets() else {
+            return None;
+        };
+        if rejected.is_singleton_constraint() {
+            return None;
+        }
+        let Some((Bound::Included(rejected_lower) | Bound::Excluded(rejected_lower), _)) =
+            rejected.bounding_range()
+        else {
+            return None;
+        };
+        let Some(incompatibilities) = self.pubgrub.incompatibilities.get(&incompatible) else {
+            return None;
+        };
+        incompatibilities
+            .iter()
+            .any(|incompatibility| {
+                let incompatibility = &self.pubgrub.incompatibility_store[*incompatibility];
+                let Kind::FromDependencyOf(parent, dependency) = incompatibility.kind else {
+                    return false;
+                };
+                if dependency != incompatible
+                    || self.pubgrub.package_store[parent].name_no_root()
+                        == self.pubgrub.package_store[incompatible].name_no_root()
+                {
+                    return false;
+                }
+                let Some(parent_order) = self.pubgrub.package_store[parent]
+                    .name_no_root()
+                    .and_then(|name| self.direct_package_order.get(name))
+                else {
+                    return false;
+                };
+                if parent_order >= affected_order {
+                    return false;
+                }
+                let Some((parent_range, Some(earlier_requirement))) =
+                    incompatibility.dependency_version_sets()
+                else {
+                    return false;
+                };
+                let Some((_, Bound::Included(earlier_upper) | Bound::Excluded(earlier_upper))) =
+                    earlier_requirement.bounding_range()
+                else {
+                    return false;
+                };
+                earlier_upper <= rejected_lower
+                    && earlier_requirement.is_disjoint(rejected)
+                    && self.pubgrub.partial_solution.extract_solution().any(
+                        |(selected, version)| selected == parent && parent_range.contains(&version),
+                    )
+            })
+            .then(|| rejected.clone())
     }
 
     /// Change the priority of often conflicting packages and backtrack.
