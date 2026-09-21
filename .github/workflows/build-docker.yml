@@ -182,7 +182,7 @@ jobs:
           username: astralshbot
           password: ${{ secrets.DOCKERHUB_TOKEN_RO }}
 
-      - uses: depot/setup-action@15c09a5f77a0840ad4bce955686522a257853461 # v1.7.1
+      - uses: depot/setup-action@91bc8495a33ebfc504ffc89e5674379ccf23c29c # v1.7.2
 
       - name: Check tag consistency
         if: ${{ needs.docker-plan.outputs.push-version == 'true' }}
@@ -281,7 +281,7 @@ jobs:
           username: astralshbot
           password: ${{ secrets.DOCKERHUB_TOKEN_RO }}
 
-      - uses: depot/setup-action@15c09a5f77a0840ad4bce955686522a257853461 # v1.7.1
+      - uses: depot/setup-action@91bc8495a33ebfc504ffc89e5674379ccf23c29c # v1.7.2
 
       - name: Authenticate to Depot Registry
         if: ${{ needs.docker-plan.outputs.save == 'true' }}

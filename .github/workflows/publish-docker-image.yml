@@ -77,7 +77,7 @@ jobs:
           persist-credentials: false
           sparse-checkout: scripts/docker
 
-      - uses: depot/setup-action@15c09a5f77a0840ad4bce955686522a257853461 # v1.7.1
+      - uses: depot/setup-action@91bc8495a33ebfc504ffc89e5674379ccf23c29c # v1.7.2
 
       - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
         with:
