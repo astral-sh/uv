@@ -123,10 +123,27 @@ pub(crate) async fn run(
     no_env_file: bool,
     preview: Preview,
 ) -> anyhow::Result<ExitStatus> {
-    /// Whether or not a path looks like a Python script based on the file extension.
-    fn has_python_script_ext(path: &Path) -> bool {
-        path.extension()
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("py") || ext.eq_ignore_ascii_case("pyw"))
+    /// Whether the target looks like a Python script rather than a package source.
+    fn is_python_script(target: &str) -> bool {
+        let has_script_extension = Path::new(target)
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("py") || ext.eq_ignore_ascii_case("pyw"));
+        if !has_script_extension {
+            return false;
+        }
+
+        // A package source can end in `.py`, including named and unnamed Git requirements.
+        // Bare names like `script.py` remain ambiguous and should still receive the script hint.
+        match RequirementsSpecification::parse_package(target) {
+            Ok(requirement) => matches!(
+                requirement.requirement,
+                UnresolvedRequirement::Named(Requirement {
+                    source: RequirementSource::Registry { .. },
+                    ..
+                })
+            ),
+            Err(_) => true,
+        }
     }
 
     if settings.resolver.torch_backend.is_some() {
@@ -160,7 +177,7 @@ pub(crate) async fn run(
     };
 
     if let Some(ref from) = from {
-        if has_python_script_ext(Path::new(from)) {
+        if is_python_script(from) {
             let package_name = PackageName::from_str(from)?;
             return Err(ToolRunScriptError::FromScript {
                 package_name,
@@ -173,7 +190,7 @@ pub(crate) async fn run(
         let target_path = Path::new(target);
 
         // If the user tries to invoke `uvx script.py`, hint them towards `uv run`.
-        if has_python_script_ext(target_path) {
+        if is_python_script(target) {
             return if target_path.try_exists()? {
                 Err(ToolRunScriptError::TargetScriptExists {
                     path: target_path.to_path_buf(),
