@@ -24,7 +24,7 @@ use uv_distribution_types::{
     RequirementSource, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_errors::HintOrdering;
-use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
+use uv_installer::{BuildSettings, InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
@@ -1135,10 +1135,12 @@ async fn get_or_create_environment(
                             InstallationStrategy::Permissive,
                             &markers,
                             &tags,
-                            config_setting,
-                            config_settings_package,
-                            &extra_build_requires,
-                            extra_build_variables,
+                            Some(BuildSettings {
+                                config_settings: config_setting,
+                                config_settings_package,
+                                extra_build_requires: &extra_build_requires,
+                                extra_build_variables,
+                            }),
                         ),
                         Ok(SatisfiesResult::Fresh { .. })
                     ) {

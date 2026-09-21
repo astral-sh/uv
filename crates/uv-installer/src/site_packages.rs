@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::iter::Flatten;
+use std::iter::{Flatten, once};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -25,7 +25,7 @@ use uv_redacted::DisplaySafeUrl;
 use uv_types::InstalledPackagesProvider;
 use uv_warnings::warn_user;
 
-use crate::satisfies::RequirementSatisfaction;
+use crate::satisfies::{BuildSettings, RequirementSatisfaction};
 
 /// An index over the packages installed in an environment.
 ///
@@ -448,10 +448,12 @@ impl SitePackages {
             installation,
             markers,
             tags,
-            config_settings,
-            config_settings_package,
-            extra_build_requires,
-            extra_build_variables,
+            Some(BuildSettings {
+                config_settings,
+                config_settings_package,
+                extra_build_requires,
+                extra_build_variables,
+            }),
         )? {
             SatisfiesResult::Fresh {
                 recursive_requirements,
@@ -465,21 +467,20 @@ impl SitePackages {
     }
 
     /// Like [`SitePackages::satisfies_spec`], but with resolved names for all requirements.
-    pub fn satisfies_requirements<'a>(
+    ///
+    /// If `build_settings` is `None`, accept installed distributions regardless of their build settings.
+    pub fn satisfies_requirements<'a, 'b>(
         &self,
-        requirements: impl ExactSizeIterator<Item = &'a Requirement>,
-        constraints: impl Iterator<Item = &'a Requirement>,
-        overrides: &'a Overrides,
-        excludes: &'a Excludes,
+        requirements: impl Iterator<Item = &'a Requirement>,
+        constraints: impl Iterator<Item = &'b Requirement>,
+        overrides: &Overrides,
+        excludes: &Excludes,
         dependency_metadata: &DependencyMetadata,
         dependency_mode: DependencyMode,
         installation: InstallationStrategy,
         markers: &ResolverMarkerEnvironment,
         tags: &Tags,
-        config_settings: &ConfigSettings,
-        config_settings_package: &PackageConfigSettings,
-        extra_build_requires: &ExtraBuildRequires,
-        extra_build_variables: &ExtraBuildVariables,
+        build_settings: Option<BuildSettings<'_>>,
     ) -> Result<SatisfiesResult<Requirement>> {
         // Collect the constraints by package name.
         let constraints: FxHashMap<&PackageName, Vec<&Requirement>> =
@@ -490,12 +491,13 @@ impl SitePackages {
                     .push(constraint);
                 constraints
             });
-        let mut stack = Vec::with_capacity(requirements.len());
-        let mut seen = FxHashSet::with_capacity_and_hasher(requirements.len(), FxBuildHasher);
+        let mut stack = Vec::with_capacity(requirements.size_hint().0);
+        let mut seen =
+            FxHashSet::with_capacity_and_hasher(requirements.size_hint().0, FxBuildHasher);
 
         // Add the direct requirements to the queue.
-        for requirement in overrides
-            .apply(requirements)
+        for requirement in requirements
+            .flat_map(|requirement| overrides.apply(once(requirement)))
             .filter(|requirement| !excludes.contains(&requirement.name))
         {
             if requirement.evaluate_markers(Some(markers), &[]) {
@@ -516,27 +518,22 @@ impl SitePackages {
                     return Ok(SatisfiesResult::Unsatisfied(requirement));
                 }
                 [distribution] => {
-                    // Validate that the requirement is satisfied.
-                    if requirement.evaluate_markers(Some(markers), &[]) {
-                        match RequirementSatisfaction::check(
-                            name,
-                            distribution,
-                            &requirement.source,
-                            None,
-                            installation,
-                            tags,
-                            config_settings,
-                            config_settings_package,
-                            extra_build_requires,
-                            extra_build_variables,
-                        ) {
-                            RequirementSatisfaction::Mismatch
-                            | RequirementSatisfaction::OutOfDate
-                            | RequirementSatisfaction::CacheInvalid => {
-                                return Ok(SatisfiesResult::Unsatisfied(requirement));
-                            }
-                            RequirementSatisfaction::Satisfied => {}
+                    // Requirements were filtered with the parent extras before entering the stack.
+                    match RequirementSatisfaction::check(
+                        name,
+                        distribution,
+                        &requirement.source,
+                        None,
+                        installation,
+                        tags,
+                        build_settings,
+                    ) {
+                        RequirementSatisfaction::Mismatch
+                        | RequirementSatisfaction::OutOfDate
+                        | RequirementSatisfaction::CacheInvalid => {
+                            return Ok(SatisfiesResult::Unsatisfied(requirement));
                         }
+                        RequirementSatisfaction::Satisfied => {}
                     }
 
                     // Validate that the installed version satisfies the constraints.
@@ -549,15 +546,12 @@ impl SitePackages {
                                 None,
                                 installation,
                                 tags,
-                                config_settings,
-                                config_settings_package,
-                                extra_build_requires,
-                                extra_build_variables,
+                                build_settings,
                             ) {
                                 RequirementSatisfaction::Mismatch
                                 | RequirementSatisfaction::OutOfDate
                                 | RequirementSatisfaction::CacheInvalid => {
-                                    return Ok(SatisfiesResult::Unsatisfied(requirement));
+                                    return Ok(SatisfiesResult::Unsatisfied((*constraint).clone()));
                                 }
                                 RequirementSatisfaction::Satisfied => {}
                             }

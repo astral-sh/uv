@@ -26,7 +26,7 @@ use uv_python::PythonEnvironment;
 use uv_redacted::DisplaySafeUrl;
 use uv_types::HashStrategy;
 
-use crate::satisfies::RequirementSatisfaction;
+use crate::satisfies::{BuildSettings, RequirementSatisfaction};
 use crate::{InstallationStrategy, SitePackages};
 
 /// A wheel dependency is incompatible with the current platform.
@@ -334,10 +334,12 @@ impl<'a> Planner<'a> {
                             dist.version(),
                             installation,
                             tags,
-                            config_settings,
-                            config_settings_package,
-                            extra_build_requires,
-                            extra_build_variables,
+                            Some(BuildSettings {
+                                config_settings,
+                                config_settings_package,
+                                extra_build_requires,
+                                extra_build_variables,
+                            }),
                         ) {
                             RequirementSatisfaction::Mismatch => {
                                 debug!(

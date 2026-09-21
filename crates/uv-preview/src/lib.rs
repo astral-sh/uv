@@ -342,6 +342,8 @@ pub enum PreviewFeature {
     BatchExport,
     /// Allows setting minimum libc versions for universal resolutions.
     MinimumLibcVersion,
+    /// Checks build dependencies before nonisolated builds with `uv build`.
+    BuildDependencyCheck,
 }
 
 impl Display for PreviewFeature {

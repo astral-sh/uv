@@ -4296,6 +4296,7 @@ impl PipCheckSettings {
 /// The resolved settings to use for a `build` invocation.
 #[derive(Debug, Clone)]
 pub(crate) struct BuildSettings {
+    pub(crate) skip_dependency_check: bool,
     pub(crate) src: Option<PathBuf>,
     pub(crate) package: Option<PackageName>,
     pub(crate) all_packages: bool,
@@ -4324,6 +4325,7 @@ impl BuildSettings {
         environment: EnvironmentOptions,
     ) -> anyhow::Result<Self> {
         let BuildArgs {
+            skip_dependency_check,
             src,
             out_dir,
             package,
@@ -4375,6 +4377,7 @@ impl BuildSettings {
         };
 
         Ok(Self {
+            skip_dependency_check,
             src,
             package,
             all_packages,

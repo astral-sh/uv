@@ -10,12 +10,15 @@ use owo_colors::OwoColorize;
 use thiserror::Error;
 use tracing::{debug, instrument};
 
+use uv_auth::CredentialsCache;
 use uv_build_backend::check_direct_build;
+use uv_build_frontend::SourceBuild;
 use uv_cache::{Cache, CacheBucket};
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     BuildIsolation, BuildKind, BuildOptions, BuildOutput, Concurrency, Constraints,
-    DependencyGroupsWithDefaults, HashCheckingMode, IndexStrategy, KeyringProviderType, NoSources,
+    DependencyGroupsWithDefaults, DependencyMode, Excludes, HashCheckingMode, IndexStrategy,
+    KeyringProviderType, NoSources, Overrides,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
@@ -24,14 +27,15 @@ use uv_distribution_filename::{
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, IndexLocations,
-    NameRequirementSpecification, PackageConfigSettings, SourceDist,
+    NameRequirementSpecification, PackageConfigSettings, Requirement, SourceDist,
 };
 use uv_errors::{ErrorOptions, Hinted, Hints, write_error_chain_with_options};
 use uv_fs::{Simplified, normalize_path, relative_to};
 use uv_install_wheel::LinkMode;
+use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
     ConfigDiscovery, EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVersionFile, VersionFileDiscoveryOptions,
@@ -77,6 +81,10 @@ pub(crate) enum Error {
     BuildDispatch(AnyErrorBuild),
     #[error(transparent)]
     BuildFrontend(#[from] uv_build_frontend::Error),
+    #[error("Failed to check build requirements")]
+    RequirementsCheck(#[source] anyhow::Error),
+    #[error("Build requirement is not satisfied: `{0}`")]
+    UnsatisfiedBuildRequirement(Box<Requirement>),
     #[error(transparent)]
     Project(#[from] Box<ProjectError>),
     #[error("Failed to write message")]
@@ -190,6 +198,7 @@ impl Hinted for Error {
 #[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn build_frontend(
     project_dir: &Path,
+    skip_dependency_check: bool,
     src: Option<PathBuf>,
     package: Option<PackageName>,
     all_packages: bool,
@@ -219,6 +228,7 @@ pub(crate) async fn build_frontend(
 ) -> Result<ExitStatus> {
     let build_result = build_impl(
         project_dir,
+        skip_dependency_check,
         src.as_deref(),
         package.as_ref(),
         all_packages,
@@ -268,6 +278,7 @@ enum BuildResult {
 #[expect(clippy::fn_params_excessive_bools)]
 async fn build_impl(
     project_dir: &Path,
+    skip_dependency_check: bool,
     src: Option<&Path>,
     package: Option<&PackageName>,
     all_packages: bool,
@@ -464,6 +475,7 @@ async fn build_impl(
     let results: Vec<_> = futures::future::join_all(packages.into_iter().map(|source| {
         let future = build_package(
             source.clone(),
+            skip_dependency_check,
             output_dir,
             python_request,
             install_mirrors.clone(),
@@ -540,6 +552,7 @@ async fn build_impl(
 #[expect(clippy::fn_params_excessive_bools)]
 async fn build_package(
     source: AnnotatedSource<'_>,
+    skip_dependency_check: bool,
     output_dir: Option<&Path>,
     python_request: Option<&str>,
     install_mirrors: PythonInstallMirrors,
@@ -723,6 +736,17 @@ async fn build_package(
         concurrency.clone(),
         preview,
     );
+    let dependency_check = match types_build_isolation {
+        uv_types::BuildIsolation::Isolated => None,
+        uv_types::BuildIsolation::Shared(_) | uv_types::BuildIsolation::SharedPackage(..) => {
+            (preview.is_enabled(PreviewFeature::BuildDependencyCheck) && !skip_dependency_check)
+                .then_some(BuildDependencyCheck {
+                    build_dispatch: &build_dispatch,
+                    constraints: &build_constraints,
+                    credentials_cache: client.credentials_cache(),
+                })
+        }
+    };
 
     prepare_output_directory(&output_dir, gitignore).await?;
 
@@ -807,6 +831,7 @@ async fn build_package(
                     printer,
                     "source distribution",
                     &build_dispatch,
+                    dependency_check.as_ref(),
                     &sources,
                     dist,
                     subdirectory,
@@ -824,6 +849,7 @@ async fn build_package(
                 printer,
                 "source distribution",
                 &build_dispatch,
+                dependency_check.as_ref(),
                 &sources,
                 dist,
                 subdirectory,
@@ -856,6 +882,7 @@ async fn build_package(
                 printer,
                 "wheel from source distribution",
                 &build_dispatch,
+                dependency_check.as_ref(),
                 sources,
                 dist,
                 subdirectory,
@@ -875,6 +902,7 @@ async fn build_package(
                 printer,
                 "source distribution",
                 &build_dispatch,
+                dependency_check.as_ref(),
                 &sources,
                 dist,
                 subdirectory,
@@ -893,6 +921,7 @@ async fn build_package(
                 printer,
                 "wheel",
                 &build_dispatch,
+                dependency_check.as_ref(),
                 sources,
                 dist,
                 subdirectory,
@@ -912,6 +941,7 @@ async fn build_package(
                 printer,
                 "source distribution",
                 &build_dispatch,
+                dependency_check.as_ref(),
                 &sources,
                 dist,
                 subdirectory,
@@ -928,6 +958,7 @@ async fn build_package(
                 printer,
                 "wheel",
                 &build_dispatch,
+                dependency_check.as_ref(),
                 sources,
                 dist,
                 subdirectory,
@@ -971,6 +1002,7 @@ async fn build_package(
                 printer,
                 "wheel from source distribution",
                 &build_dispatch,
+                dependency_check.as_ref(),
                 sources,
                 dist,
                 subdirectory,
@@ -984,6 +1016,75 @@ async fn build_package(
     }
 
     Ok(build_results)
+}
+
+/// Validate dependencies in the caller-provided environment for `uv build`.
+struct BuildDependencyCheck<'a> {
+    build_dispatch: &'a BuildDispatch<'a>,
+    constraints: &'a Constraints,
+    credentials_cache: &'a CredentialsCache,
+}
+
+impl BuildDependencyCheck<'_> {
+    /// Check declared requirements before importing the backend, then check its additional requirements.
+    async fn check(
+        &self,
+        builder: &SourceBuild,
+        install_path: &Path,
+        sources: NoSources,
+    ) -> Result<(), Error> {
+        let Some(environment) = builder.shared_environment() else {
+            // Package-specific isolation can still select an isolated environment for this build.
+            return Ok(());
+        };
+        let site_packages =
+            SitePackages::from_environment(environment).map_err(Error::RequirementsCheck)?;
+        self.check_requirements(builder.build_requirements(), &site_packages, environment)?;
+        let requirements = builder
+            .get_requires_for_build(
+                self.build_dispatch,
+                install_path,
+                sources,
+                self.credentials_cache,
+            )
+            .await?;
+        self.check_requirements(requirements.iter(), &site_packages, environment)
+    }
+
+    /// Validate borrowed requirements against the packages installed in the build environment.
+    fn check_requirements<'a>(
+        &self,
+        requirements: impl Iterator<Item = &'a Requirement>,
+        site_packages: &SitePackages,
+        environment: &PythonEnvironment,
+    ) -> Result<(), Error> {
+        let tags = environment
+            .interpreter()
+            .tags()
+            .map_err(|err| Error::RequirementsCheck(err.into()))?;
+        let markers = environment.interpreter().to_resolver_marker_environment();
+        match site_packages
+            .satisfies_requirements(
+                requirements,
+                self.constraints.requirements(),
+                &Overrides::default(),
+                &Excludes::default(),
+                self.build_dispatch.dependency_metadata(),
+                DependencyMode::Transitive,
+                InstallationStrategy::Permissive,
+                &markers,
+                tags,
+                // Build settings configure this project, not its preinstalled dependencies.
+                None,
+            )
+            .map_err(Error::RequirementsCheck)?
+        {
+            SatisfiesResult::Fresh { .. } => Ok(()),
+            SatisfiesResult::Unsatisfied(requirement) => {
+                Err(Error::UnsatisfiedBuildRequirement(Box::new(requirement)))
+            }
+        }
+    }
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -1019,6 +1120,7 @@ async fn build_sdist(
     build_kind_message: &str,
     // Below is only used with PEP 517 builds
     build_dispatch: &BuildDispatch<'_>,
+    dependency_check: Option<&BuildDependencyCheck<'_>>,
     sources: &NoSources,
     dist: Option<&SourceDist>,
     subdirectory: Option<&Path>,
@@ -1105,6 +1207,11 @@ async fn build_sdist(
                 )
                 .await
                 .map_err(|err| Error::BuildDispatch(err.into()))?;
+            if let Some(dependency_check) = dependency_check {
+                dependency_check
+                    .check(&builder, source.path(), sources.clone())
+                    .await?;
+            }
             let filename = builder.build(output_dir).await?;
             BuildMessage::Build {
                 normalized_filename: DistFilename::SourceDistFilename(
@@ -1130,6 +1237,7 @@ async fn build_wheel(
     build_kind_message: &str,
     // Below is only used with PEP 517 builds
     build_dispatch: &BuildDispatch<'_>,
+    dependency_check: Option<&BuildDependencyCheck<'_>>,
     sources: NoSources,
     dist: Option<&SourceDist>,
     subdirectory: Option<&Path>,
@@ -1212,6 +1320,11 @@ async fn build_wheel(
                 )
                 .await
                 .map_err(|err| Error::BuildDispatch(err.into()))?;
+            if let Some(dependency_check) = dependency_check {
+                dependency_check
+                    .check(&builder, source.path(), sources.clone())
+                    .await?;
+            }
             let filename = builder.build(output_dir).await?;
             BuildMessage::Build {
                 normalized_filename: DistFilename::WheelFilename(

@@ -1023,6 +1023,425 @@ fn build_constraints() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn build_dependency_check_missing_declared_requirement() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["missing-backend>=1"]
+        build-backend = "backend"
+        backend-path = ["."]
+    "#})?;
+    project.child("backend.py").write_str(indoc! {r#"
+        raise RuntimeError("backend must not be imported")
+    "#})?;
+    uv_snapshot!(context.filters(), context.build().args([
+        "--preview-features", "build-dependency-check", "--no-build-isolation",
+    ]).arg("--offline").current_dir(&project), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Building source distribution...
+    error: Failed to build `[TEMP_DIR]/project`
+      cause: Build requirement is not satisfied: `missing-backend>=1`
+    ");
+    project
+        .child("dist/project-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::missing());
+    Ok(())
+}
+
+#[test]
+fn build_dependency_check_dynamic_requirements() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["idna>=3.3"]
+        build-backend = "backend"
+        backend-path = ["."]
+    "#})?;
+    project.child("backend.py").write_str(indoc! {r#"
+        import os
+        from pathlib import Path
+        import tarfile
+        import zipfile
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            filename = "project-0.1.0-py3-none-any.whl"
+            with zipfile.ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+                wheel.writestr("project-0.1.0.dist-info/METADATA", "Metadata-Version: 2.3\nName: project\nVersion: 0.1.0\n")
+                wheel.writestr("project-0.1.0.dist-info/WHEEL", "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n")
+                wheel.writestr("project-0.1.0.dist-info/RECORD", "")
+            return filename
+
+        def build_sdist(sdist_directory, config_settings=None):
+            filename = "project-0.1.0.tar.gz"
+            with tarfile.open(Path(sdist_directory) / filename, "w:gz") as sdist:
+                for name in ["pyproject.toml", "backend.py"]:
+                    sdist.add(name, arcname=f"project-0.1.0/{name}")
+            return filename
+
+        def get_requires_for_build_wheel(config_settings):
+            assert os.environ["BUILD_CHECK_ENV"] == "preserved"
+            assert config_settings == {"dependency": "idna>=3.6"}
+            Path("wheel-hook-called").touch()
+            return [config_settings["dependency"]]
+
+        def get_requires_for_build_sdist(config_settings):
+            Path("sdist-hook-called").touch()
+            return []
+    "#})?;
+    uv_snapshot!(context.filters(), context.pip_install().arg("idna==3.3"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + idna==3.3
+    ");
+    uv_snapshot!(context.filters(), context.build().args([
+        "--preview-features", "build-dependency-check", "--no-build-isolation",
+    ]).arg("--wheel").arg("--offline")
+        .arg("-Cdependency=idna>=3.6").env("BUILD_CHECK_ENV", "preserved").current_dir(&project), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Building wheel...
+    error: Failed to build `[TEMP_DIR]/project`
+      cause: Build requirement is not satisfied: `idna>=3.6`
+    ");
+    project
+        .child("wheel-hook-called")
+        .assert(predicate::path::exists());
+    project
+        .child("sdist-hook-called")
+        .assert(predicate::path::missing());
+    // Build the dependency with settings that differ from the project's build settings.
+    uv_snapshot!(context.filters(), context.pip_install().arg("idna==3.6")
+        .arg("--no-binary=idna").arg("-Cdependency=installed"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - idna==3.3
+     + idna==3.6
+    ");
+    uv_snapshot!(context.filters(), context.build().args([
+        "--preview-features", "build-dependency-check", "--no-build-isolation",
+    ]).arg("--offline")
+        .arg("-Cdependency=idna>=3.6").env("BUILD_CHECK_ENV", "preserved").current_dir(&project), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building source distribution...
+    Building wheel from source distribution...
+    Successfully built dist/project-0.1.0.tar.gz
+    Successfully built dist/project-0.1.0-py3-none-any.whl
+    ");
+    project
+        .child("sdist-hook-called")
+        .assert(predicate::path::exists());
+    project
+        .child("dist/project-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::exists());
+    Ok(())
+}
+
+#[test]
+fn build_dependency_check_constraints_and_extra_build_dependencies() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["idna>=3.3"]
+        build-backend = "backend"
+        backend-path = ["."]
+    "#})?;
+    project.child("backend.py").write_str(indoc! {r#"
+        raise RuntimeError("backend must not be imported")
+    "#})?;
+    uv_snapshot!(context.filters(), context.pip_install().arg("idna==3.3"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + idna==3.3
+    ");
+    let constraints = context.temp_dir.child("constraints.txt");
+    constraints.write_str("idna>=3.6\n")?;
+    uv_snapshot!(context.filters(), context.build().args([
+        "--preview-features", "build-dependency-check", "--no-build-isolation",
+    ]).arg("--offline")
+        .arg("--build-constraint").arg(constraints.path()).current_dir(&project), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Building source distribution...
+    error: Failed to build `[TEMP_DIR]/project`
+      cause: Build requirement is not satisfied: `idna>=3.6`
+    ");
+    project.child("pyproject.toml").write_str(&format!(
+        "{}\n{}",
+        fs_err::read_to_string(project.child("pyproject.toml"))?,
+        "[tool.uv.extra-build-dependencies]\nproject = ['extra-build-dependency>=1']\n",
+    ))?;
+    uv_snapshot!(context.filters(), context.build().args([
+        "--preview-features", "build-dependency-check", "--no-build-isolation",
+    ]).arg("--offline").current_dir(&project), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Building source distribution...
+    error: Failed to build `[TEMP_DIR]/project`
+      cause: Build requirement is not satisfied: `extra-build-dependency>=1`
+    ");
+    Ok(())
+}
+
+#[test]
+fn build_dependency_check_bundled_backend() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build=={}"]
+        build-backend = "uv_build"
+    "#, uv_version::version()})?;
+    project.child("src/project/__init__.py").touch()?;
+    uv_snapshot!(context.filters(), context.build().args([
+        "--preview-features", "build-dependency-check", "--no-build-isolation",
+    ]).arg("--offline").current_dir(&project), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building source distribution...
+    Building wheel from source distribution...
+    Successfully built dist/project-0.1.0.tar.gz
+    Successfully built dist/project-0.1.0-py3-none-any.whl
+    ");
+    project
+        .child("dist/project-0.1.0.tar.gz")
+        .assert(predicate::path::exists());
+    project
+        .child("dist/project-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::exists());
+    Ok(())
+}
+
+#[test]
+fn build_dependency_check_preview_and_skip_dependency_check() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["missing-backend>=1"]
+        build-backend = "backend"
+        backend-path = ["."]
+    "#})?;
+    project.child("backend.py").write_str(indoc! {r#"
+        from pathlib import Path
+        import zipfile
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            filename = "project-0.1.0-py3-none-any.whl"
+            with zipfile.ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+                wheel.writestr("project-0.1.0.dist-info/METADATA", "Metadata-Version: 2.3\nName: project\nVersion: 0.1.0\n")
+                wheel.writestr("project-0.1.0.dist-info/WHEEL", "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n")
+                wheel.writestr("project-0.1.0.dist-info/RECORD", "")
+            return filename
+
+        def get_requires_for_build_wheel(config_settings=None):
+            raise RuntimeError("dependency hook must not be called")
+    "#})?;
+    // Dependency checks require the preview feature.
+    uv_snapshot!(context.filters(), context.build().args(["--wheel", "--no-build-isolation", "--offline"])
+        .current_dir(&project), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building wheel...
+    Successfully built dist/project-0.1.0-py3-none-any.whl
+    ");
+    // Skip static and dynamic checks even when the preview is enabled.
+    uv_snapshot!(context.filters(), context.build().args([
+        "--preview-features", "build-dependency-check", "--no-build-isolation",
+    ]).args(["--wheel", "--offline", "--skip-dependency-check"])
+        .current_dir(&project), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building wheel...
+    Successfully built dist/project-0.1.0-py3-none-any.whl
+    ");
+    Ok(())
+}
+
+#[test]
+fn build_dependency_check_checks_extracted_sdist() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        build-backend = "backend"
+        backend-path = ["."]
+    "#})?;
+    project.child("backend.py").write_str(indoc! {r#"
+        from pathlib import Path
+        import tarfile
+
+        def get_requires_for_build_sdist(config_settings=None):
+            return []
+
+        def get_requires_for_build_wheel(config_settings=None):
+            # Only the extracted sdist has a backend that reports this requirement.
+            return ["missing-in-sdist>=1"] if Path("PKG-INFO").exists() else []
+
+        def build_sdist(sdist_directory, config_settings=None):
+            import io
+            filename = "project-0.1.0.tar.gz"
+            with tarfile.open(Path(sdist_directory) / filename, "w:gz") as sdist:
+                for name in ["pyproject.toml", "backend.py"]:
+                    sdist.add(name, arcname=f"project-0.1.0/{name}")
+                content = b"Metadata-Version: 2.3\nName: project\nVersion: 0.1.0\n"
+                info = tarfile.TarInfo("project-0.1.0/PKG-INFO")
+                info.size = len(content)
+                sdist.addfile(info, io.BytesIO(content))
+            return filename
+    "#})?;
+    uv_snapshot!(context.filters(), context.build().args([
+        "--preview-features", "build-dependency-check", "--no-build-isolation",
+    ]).arg("--offline").current_dir(&project), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Building source distribution...
+    Building wheel from source distribution...
+    error: Failed to build `[TEMP_DIR]/project`
+      cause: Build requirement is not satisfied: `missing-in-sdist>=1`
+    ");
+    project
+        .child("dist/project-0.1.0.tar.gz")
+        .assert(predicate::path::exists());
+    project
+        .child("dist/project-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::missing());
+    Ok(())
+}
+
+#[test]
+fn build_dependency_check_package_specific_isolation() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["missing-backend>=1"]
+        build-backend = "backend"
+        backend-path = ["."]
+    "#})?;
+    project.child("backend.py").write_str(indoc! {r#"
+        raise RuntimeError("backend must not be imported")
+    "#})?;
+    uv_snapshot!(context.filters(), context.build().args([
+        "--wheel", "--offline", "--preview-features", "build-dependency-check",
+        "--no-build-isolation-package", "project",
+    ]).current_dir(&project), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Building wheel...
+    error: Failed to build `[TEMP_DIR]/project`
+      cause: Build requirement is not satisfied: `missing-backend>=1`
+    ");
+    Ok(())
+}
+
+#[test]
+fn build_dependency_check_isolated_build_calls_dependency_hook_once() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        build-backend = "backend"
+        backend-path = ["."]
+    "#})?;
+    project.child("backend.py").write_str(indoc! {r#"
+        from pathlib import Path
+        import zipfile
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            filename = "project-0.1.0-py3-none-any.whl"
+            with zipfile.ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+                wheel.writestr("project-0.1.0.dist-info/METADATA", "Metadata-Version: 2.3\nName: project\nVersion: 0.1.0\n")
+                wheel.writestr("project-0.1.0.dist-info/WHEEL", "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n")
+                wheel.writestr("project-0.1.0.dist-info/RECORD", "")
+            return filename
+
+        def get_requires_for_build_wheel(config_settings=None):
+            import sys
+            assert sys.prefix != sys.base_prefix
+            assert not Path("hook-called").exists()
+            Path("hook-called").touch()
+            return []
+    "#})?;
+    uv_snapshot!(context.filters(), context.build().args([
+        "--wheel", "--offline", "--preview-features", "build-dependency-check",
+    ]).current_dir(&project), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building wheel...
+    Successfully built dist/project-0.1.0-py3-none-any.whl
+    ");
+    // A package-specific exemption for another package must still use an isolated build.
+    fs_err::remove_file(project.child("hook-called"))?;
+    uv_snapshot!(context.filters(), context.build().args([
+        "--wheel", "--offline", "--preview-features", "build-dependency-check",
+        "--no-build-isolation-package", "other-project",
+    ]).current_dir(&project), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building wheel...
+    Successfully built dist/project-0.1.0-py3-none-any.whl
+    ");
+    Ok(())
+}
+
 /// Regression test for <https://github.com/astral-sh/uv/issues/18283>.
 ///
 /// `uv build --all` should respect `tool.uv.build-constraint-dependencies` declared at the
