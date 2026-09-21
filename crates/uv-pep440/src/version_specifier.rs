@@ -71,7 +71,7 @@ impl VersionSpecifiers {
         //
         // Tie-break on the operator so semantically equivalent same-version intervals such as
         // `>=1.4.4,<=1.4.4` and `<=1.4.4,>=1.4.4` normalize to the same representation.
-        specifiers.sort_unstable_by(|a, b| {
+        specifiers.sort_by(|a, b| {
             a.version()
                 .cmp(b.version())
                 .then_with(|| a.operator().cmp(b.operator()))
@@ -964,7 +964,7 @@ fn parse_version_specifiers(
     spec: &str,
     specifier_count: usize,
 ) -> Result<Vec<VersionSpecifier>, VersionSpecifiersParseError> {
-    let mut version_ranges = Vec::with_capacity(specifier_count);
+    let mut version_ranges = Vec::with_capacity(specifier_count.max(8));
     let mut start: usize = 0;
     let separator = ",";
     for version_range_spec in spec.split(separator) {
