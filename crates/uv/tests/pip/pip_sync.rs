@@ -1084,6 +1084,55 @@ fn warn_on_yanked_dry_run() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn check_sync() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("iniconfig==2.0.0")?;
+
+    uv_snapshot!(context.pip_sync().arg("requirements.txt").arg("--check"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Would download 1 package
+    Would install 1 package
+     + iniconfig==2.0.0
+    ");
+
+    // Checking must leave the environment unchanged.
+    uv_snapshot!(context.pip_sync().arg("requirements.txt"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    uv_snapshot!(context.pip_sync().arg("requirements.txt").arg("--check").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Checked 1 package in [TIME]
+    Would make no changes
+    ");
+
+    // Sync also checks for packages that would be removed.
+    requirements_txt.write_str("")?;
+    uv_snapshot!(context.pip_sync().arg("requirements.txt").arg("--allow-empty-requirements").arg("--check"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: Requirements file `requirements.txt` does not contain any dependencies
+    Resolved in [TIME]
+    Would uninstall 1 package
+     - iniconfig==2.0.0
+    ");
+
+    context.assert_command("import iniconfig").success();
+
+    Ok(())
+}
+
 /// Resolve a local wheel.
 #[test]
 fn install_local_wheel() -> Result<()> {

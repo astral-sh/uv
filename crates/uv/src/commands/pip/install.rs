@@ -656,6 +656,7 @@ pub(crate) async fn pip_install(
     .await
     {
         Ok(..) => {}
+        Err(operations::Error::OutdatedEnvironment(_)) => return Ok(ExitStatus::Failure),
         Err(err) => {
             return Err(UvError::from(err).into());
         }
