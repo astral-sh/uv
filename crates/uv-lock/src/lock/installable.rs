@@ -873,7 +873,13 @@ trait InstallableExt<'lock>: Installable<'lock> {
             }
         }
 
-        Ok(Resolution::new(petgraph))
+        let build_lock = self
+            .lock()
+            .build_lock()
+            .map(super::LockedBuilds::fingerprint)
+            .transpose()
+            .map_err(|err| LockErrorKind::InvalidBuildLock(err.to_string()))?;
+        Ok(Resolution::new(petgraph).with_build_lock_fingerprint(build_lock))
     }
 }
 

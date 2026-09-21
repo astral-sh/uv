@@ -8,9 +8,9 @@ use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_cache_info::CacheInfo;
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
-    BuildInfo, BuildVariables, CachedRegistryDist, ConfigSettings, ExtraBuildRequirement,
-    ExtraBuildRequires, ExtraBuildVariables, Hashed, Index, IndexLocations, IndexUrl,
-    PackageConfigSettings, RegistryBuiltDist, RegistrySourceDist,
+    BuildInfo, BuildLockFingerprint, BuildVariables, CachedRegistryDist, ConfigSettings,
+    ExtraBuildRequirement, ExtraBuildRequires, ExtraBuildVariables, Hashed, Index, IndexLocations,
+    IndexUrl, PackageConfigSettings, RegistryBuiltDist, RegistrySourceDist,
 };
 use uv_fs::{directories, files};
 use uv_normalize::PackageName;
@@ -99,6 +99,7 @@ pub struct RegistryWheelIndex<'a> {
     config_settings_package: &'a PackageConfigSettings,
     extra_build_requires: &'a ExtraBuildRequires,
     extra_build_variables: &'a ExtraBuildVariables,
+    build_lock_fingerprint: Option<&'a BuildLockFingerprint>,
 }
 
 impl<'a> RegistryWheelIndex<'a> {
@@ -122,8 +123,18 @@ impl<'a> RegistryWheelIndex<'a> {
             config_settings_package,
             extra_build_requires,
             extra_build_variables,
+            build_lock_fingerprint: None,
             index: FxHashMap::default(),
         }
+    }
+
+    #[must_use]
+    pub fn with_build_lock_fingerprint(
+        mut self,
+        fingerprint: Option<&'a BuildLockFingerprint>,
+    ) -> Self {
+        self.build_lock_fingerprint = fingerprint;
+        self
     }
 
     /// Return a cached wheel that satisfies a registry wheel requirement.
@@ -134,7 +145,11 @@ impl<'a> RegistryWheelIndex<'a> {
         no_binary: bool,
     ) -> Option<&CachedRegistryDist> {
         let wheel = wheel.best_wheel();
+        let locked_build = self.build_lock_fingerprint.is_some();
         self.get(&wheel.filename.name).find_map(|entry| {
+            if locked_build && entry.is_built() {
+                return None;
+            }
             if !entry.matches_wheel(&wheel.index, &wheel.filename, no_build, no_binary) {
                 return None;
             }
@@ -159,7 +174,11 @@ impl<'a> RegistryWheelIndex<'a> {
         no_build: bool,
         no_binary: bool,
     ) -> Option<&CachedRegistryDist> {
+        let locked_build = self.build_lock_fingerprint.is_some();
         self.get(&source.name).find_map(|entry| {
+            if locked_build && !entry.is_built() {
+                return None;
+            }
             if !entry.matches_source(
                 &source.index,
                 &source.name,
@@ -204,6 +223,7 @@ impl<'a> RegistryWheelIndex<'a> {
                 self.config_settings_package,
                 self.extra_build_requires,
                 self.extra_build_variables,
+                self.build_lock_fingerprint,
             )),
         }) as _
     }
@@ -219,6 +239,7 @@ impl<'a> RegistryWheelIndex<'a> {
         config_settings_package: &PackageConfigSettings,
         extra_build_requires: &ExtraBuildRequires,
         extra_build_variables: &ExtraBuildVariables,
+        build_lock_fingerprint: Option<&BuildLockFingerprint>,
     ) -> Vec<IndexEntry<'index>> {
         let mut entries = vec![];
 
@@ -343,7 +364,8 @@ impl<'a> RegistryWheelIndex<'a> {
                         config_settings.into_owned(),
                         extra_build_deps.to_vec(),
                         extra_build_vars.cloned(),
-                    );
+                    )
+                    .with_build_lock_fingerprint(build_lock_fingerprint);
                     let cache_shard = build_info
                         .cache_shard()
                         .map(|digest| cache_shard.shard(digest))

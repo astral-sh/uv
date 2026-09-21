@@ -241,6 +241,8 @@ pub enum PreviewFeature {
     PackageConflicts,
     /// Allows specifying additional dependencies for package builds.
     ExtraBuildDependencies,
+    /// Allows creating required project build-dependency locks with `uv lock --build-dependencies`.
+    BuildDependencyLocking,
     /// Warns when multiple packages would install conflicting Python modules into the same
     /// environment.
     DetectModuleConflicts,

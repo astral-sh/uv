@@ -91,6 +91,9 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
         in_flight: &InFlight,
         resolution: &Resolution,
     ) -> Result<Vec<CachedDist>, Error> {
+        if resolution.build_lock_fingerprint() != self.database.build_lock_fingerprint() {
+            return Err(Error::BuildLockContextMismatch);
+        }
         // Sort the distributions by size.
         distributions
             .sort_unstable_by_key(|distribution| Reverse(distribution.size().unwrap_or(u64::MAX)));
@@ -208,6 +211,8 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
+    #[error("The selected resolution requires a different locked build context")]
+    BuildLockContextMismatch,
     #[error("Building source distributions is disabled, but attempted to build `{0}`")]
     NoBuild(PackageName),
     #[error("Using pre-built wheels is disabled, but attempted to use `{0}`")]
@@ -229,7 +234,10 @@ impl Error {
     /// Return whether this is an expected user-facing failure.
     pub fn is_user_failure(&self) -> bool {
         match self {
-            Self::NoBuild(_) | Self::NoBinary(_) | Self::CyclicBuildDependency(_) => true,
+            Self::NoBuild(_)
+            | Self::NoBinary(_)
+            | Self::CyclicBuildDependency(_)
+            | Self::BuildLockContextMismatch => true,
             Self::Dist(_, _, _, error) => error.is_user_failure(),
             Self::Thread(_) => false,
         }

@@ -520,6 +520,7 @@ impl SitePackages {
                             config_settings_package,
                             extra_build_requires,
                             extra_build_variables,
+                            None,
                         ) {
                             RequirementSatisfaction::Mismatch
                             | RequirementSatisfaction::OutOfDate
@@ -544,6 +545,7 @@ impl SitePackages {
                                 config_settings_package,
                                 extra_build_requires,
                                 extra_build_variables,
+                                None,
                             ) {
                                 RequirementSatisfaction::Mismatch
                                 | RequirementSatisfaction::OutOfDate

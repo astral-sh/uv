@@ -64,6 +64,9 @@ explicitly created or updated using `uv lock`:
 $ uv lock
 ```
 
+The optional [build-dependency locking preview](../../reference/internals/build-dependencies.md)
+also records the isolated environments used to build selected source packages.
+
 ## Syncing the environment
 
 While the environment is synced [automatically](#automatic-lock-and-sync), it may also be explicitly

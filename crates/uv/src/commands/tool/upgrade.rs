@@ -280,6 +280,8 @@ async fn upgrade_tool(
     preview: Preview,
 ) -> Result<UpgradeReport> {
     let tool_locks = preview.is_enabled(PreviewFeature::ToolInstallLocks);
+    let tool_dir = installed_tools.tool_dir(name);
+    ToolLock::read(&tool_dir)?;
     // Ensure the tool is installed.
     let existing_tool_receipt = match installed_tools.get_tool_receipt(name) {
         Ok(Some(receipt)) => receipt,
@@ -378,7 +380,6 @@ async fn upgrade_tool(
     // requested tool.
     let requested_interpreter =
         interpreter.filter(|interpreter| !environment.environment().uses(interpreter));
-    let tool_dir = installed_tools.tool_dir(name);
     // TODO(zanieb): When updating an existing environment, build it in the cache directory then
     // copy it into the tool directory.
     let (environment, outcome, tool_lock) = if tool_locks {

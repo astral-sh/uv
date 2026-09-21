@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
@@ -29,6 +30,7 @@ use uv_distribution_types::{
 use uv_errors::{ErrorOptions, Hinted, Hints, write_error_chain_with_options};
 use uv_fs::{Simplified, normalize_path, relative_to};
 use uv_install_wheel::LinkMode;
+use uv_lock::{BuildExecutor, Lock};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_preview::Preview;
@@ -46,6 +48,7 @@ use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceError};
 
 use crate::commands::ExitStatus;
 use crate::commands::pip::operations;
+use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{ProjectError, find_requires_python};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
@@ -65,6 +68,8 @@ pub(crate) enum Error {
     ClientBuild(#[from] uv_client::ClientBuildError),
     #[error(transparent)]
     BuildPlan(anyhow::Error),
+    #[error(transparent)]
+    BuildLock(anyhow::Error),
     #[error(transparent)]
     Extract(#[from] uv_extract::Error),
     #[error(transparent)]
@@ -350,6 +355,28 @@ async fn build_impl(
     )
     .await;
 
+    let locked = if let Ok(workspace) = &workspace {
+        LockTarget::Workspace(workspace).read_build_lock().await?
+    } else {
+        // A removed or invalid project file must not make an adjacent required lock disappear
+        // from consideration. Without a workspace we cannot establish its package identities.
+        match fs_err::tokio::read_to_string(src.directory().join("uv.lock")).await {
+            Ok(encoded) if Lock::from_toml_if_build_locked(&encoded)?.is_some() => {
+                anyhow::bail!(
+                    "The source directory has a required build lock, but its workspace could not be discovered"
+                );
+            }
+            Ok(_) => {}
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+            Err(err) => return Err(err.into()),
+        }
+        None
+    };
+    let build_contract = locked
+        .as_ref()
+        .zip(workspace.as_deref().ok())
+        .map(|(lock, workspace)| (lock, workspace.install_path().as_path()));
+
     // Limit to the stable version range.
     let min_version = Version::from_str(uv_version::version()).unwrap();
     debug_assert!(
@@ -446,6 +473,19 @@ async fn build_impl(
         vec![AnnotatedSource::from(src)]
     };
 
+    if build_contract.is_some() {
+        anyhow::ensure!(
+            !list
+                && packages.iter().all(|source| {
+                    matches!(
+                        BuildPlan::determine(source, sdist, wheel),
+                        Ok(BuildPlan::Wheel)
+                    )
+                }),
+            "A project build lock supports `uv build --wheel` from a locked source directory; source distribution and file-list builds are not yet supported"
+        );
+    }
+
     // Build backends can include arbitrary files from the source directory in the distribution.
     // Warn if the active cache is within the source since cache contents may be included in the
     // build.
@@ -469,6 +509,7 @@ async fn build_impl(
             install_mirrors.clone(),
             config_discovery,
             workspace.as_deref(),
+            build_contract,
             python_preference,
             python_downloads,
             cache,
@@ -545,6 +586,7 @@ async fn build_package(
     install_mirrors: PythonInstallMirrors,
     config_discovery: ConfigDiscovery,
     workspace: Result<&Workspace, &WorkspaceError>,
+    build_contract: Option<(&Lock, &Path)>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     cache: &Cache,
@@ -589,11 +631,6 @@ async fn build_package(
             }
         }
     };
-
-    // Clear the output directory if requested
-    if clear && output_dir.exists() {
-        fs_err::remove_dir_all(&*output_dir)?;
-    }
 
     // (1) Explicit request from user
     let mut interpreter_request = python_request.map(PythonRequest::parse);
@@ -643,6 +680,17 @@ async fn build_package(
             .cloned()
             .chain(build_constraints_from_workspace.iter().cloned()),
     );
+    if let Some((lock, root)) = build_contract
+        && build_constraints.specifications().collect::<BTreeSet<_>>()
+            != lock
+                .build_constraints(root)
+                .specifications()
+                .collect::<BTreeSet<_>>()
+    {
+        return Err(Error::BuildLock(anyhow::anyhow!(
+            "Build constraints differ from the project build lock; update the lock before building"
+        )));
+    }
 
     let hasher = if let Some(hash_checking) = hash_checking {
         // Under `--require-hashes`, include all command-line constraints, but only workspace
@@ -688,7 +736,11 @@ async fn build_package(
     };
 
     // Resolve the flat indexes from `--find-links`.
-    let flat_index = FlatIndex::load(&client, cache, index_locations).await?;
+    let flat_index = if build_contract.is_some() {
+        FlatIndex::default()
+    } else {
+        FlatIndex::load(&client, cache, index_locations).await?
+    };
 
     // Initialize any shared state.
     let state = SharedState::default();
@@ -698,7 +750,7 @@ async fn build_package(
             .into_inner();
 
     // Create a build dispatch.
-    let build_dispatch = BuildDispatch::new(
+    let mut build_dispatch = BuildDispatch::new(
         &client,
         cache,
         &build_constraints,
@@ -723,6 +775,56 @@ async fn build_package(
         concurrency.clone(),
         preview,
     );
+
+    let locked_source = if let Some((lock, root)) = build_contract {
+        let builds = lock.build_lock().expect("required build contract");
+        let source = lock
+            .build_sources(
+                root,
+                interpreter
+                    .tags()
+                    .map_err(|err| Error::BuildLock(err.into()))?,
+                interpreter.markers(),
+                build_options,
+            )
+            .map_err(|err| Error::BuildLock(err.into()))?
+            .into_iter()
+            .find_map(|(candidate, _)| match candidate {
+                SourceDist::Directory(mut directory)
+                    if normalize_path(directory.install_path.as_ref())
+                        == normalize_path(source.path()) =>
+                {
+                    directory.editable = Some(false);
+                    Some(SourceDist::Directory(directory))
+                }
+                _ => None,
+            })
+            .ok_or_else(|| {
+                Error::BuildLock(anyhow::anyhow!(
+                    "The project build lock does not cover `{}`",
+                    source.path().user_display()
+                ))
+            })?;
+        builds
+            .validate_source(
+                &source,
+                root,
+                &BuildExecutor::from_interpreter(&interpreter)
+                    .map_err(|err| Error::BuildLock(err.into()))?,
+            )
+            .map_err(|err| Error::BuildLock(err.into()))?;
+        build_dispatch = build_dispatch
+            .with_build_lock(builds, root)
+            .map_err(Error::BuildLock)?;
+        Some(source)
+    } else {
+        None
+    };
+
+    // Validate the required build contract before changing the output directory.
+    if clear && output_dir.exists() {
+        fs_err::remove_dir_all(&*output_dir)?;
+    }
 
     prepare_output_directory(&output_dir, gitignore).await?;
 
@@ -749,7 +851,7 @@ async fn build_package(
         }
 
         BuildAction::List
-    } else if force_pep517 {
+    } else if force_pep517 || build_contract.is_some() {
         BuildAction::Pep517
     } else {
         match check_direct_build(
@@ -778,7 +880,7 @@ async fn build_package(
     }
 
     // Prepare some common arguments for the build.
-    let dist = None;
+    let dist = locked_source.as_ref();
     let subdirectory = None;
     let version_id = source.path().file_name().and_then(|name| name.to_str());
 

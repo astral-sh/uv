@@ -3,9 +3,9 @@ use std::borrow::Cow;
 use uv_cache::{Cache, CacheBucket, CacheShard, WheelCache};
 use uv_cache_info::CacheInfo;
 use uv_distribution_types::{
-    BuildInfo, BuildVariables, ConfigSettings, DirectUrlSourceDist, DirectorySourceDist,
-    ExtraBuildRequirement, ExtraBuildRequires, ExtraBuildVariables, GitDirectorySourceDist,
-    GitPathSourceDist, Hashed, PackageConfigSettings, PathSourceDist,
+    BuildInfo, BuildLockFingerprint, BuildVariables, ConfigSettings, DirectUrlSourceDist,
+    DirectorySourceDist, ExtraBuildRequirement, ExtraBuildRequires, ExtraBuildVariables,
+    GitDirectorySourceDist, GitPathSourceDist, Hashed, PackageConfigSettings, PathSourceDist,
 };
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
@@ -29,6 +29,7 @@ pub struct BuiltWheelIndex<'a> {
     config_settings_package: &'a PackageConfigSettings,
     extra_build_requires: &'a ExtraBuildRequires,
     extra_build_variables: &'a ExtraBuildVariables,
+    build_lock_fingerprint: Option<&'a BuildLockFingerprint>,
 }
 
 impl<'a> BuiltWheelIndex<'a> {
@@ -50,7 +51,17 @@ impl<'a> BuiltWheelIndex<'a> {
             config_settings_package,
             extra_build_requires,
             extra_build_variables,
+            build_lock_fingerprint: None,
         }
+    }
+
+    #[must_use]
+    pub fn with_build_lock_fingerprint(
+        mut self,
+        fingerprint: Option<&'a BuildLockFingerprint>,
+    ) -> Self {
+        self.build_lock_fingerprint = fingerprint;
+        self
     }
 
     /// Return the most compatible [`CachedWheel`] for a given source distribution at a direct URL.
@@ -90,7 +101,8 @@ impl<'a> BuiltWheelIndex<'a> {
             config_settings.into_owned(),
             extra_build_deps.to_vec(),
             extra_build_vars.cloned(),
-        );
+        )
+        .with_build_lock_fingerprint(self.build_lock_fingerprint);
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -142,7 +154,8 @@ impl<'a> BuiltWheelIndex<'a> {
             config_settings.into_owned(),
             extra_build_deps.to_vec(),
             extra_build_vars.cloned(),
-        );
+        )
+        .with_build_lock_fingerprint(self.build_lock_fingerprint);
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -196,7 +209,8 @@ impl<'a> BuiltWheelIndex<'a> {
             config_settings.into_owned(),
             extra_build_deps.to_vec(),
             extra_build_vars.cloned(),
-        );
+        )
+        .with_build_lock_fingerprint(self.build_lock_fingerprint);
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -233,7 +247,8 @@ impl<'a> BuiltWheelIndex<'a> {
             config_settings.into_owned(),
             extra_build_deps.to_vec(),
             extra_build_vars.cloned(),
-        );
+        )
+        .with_build_lock_fingerprint(self.build_lock_fingerprint);
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -278,7 +293,8 @@ impl<'a> BuiltWheelIndex<'a> {
             config_settings.into_owned(),
             extra_build_deps.to_vec(),
             extra_build_vars.cloned(),
-        );
+        )
+        .with_build_lock_fingerprint(self.build_lock_fingerprint);
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))

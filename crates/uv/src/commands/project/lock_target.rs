@@ -360,6 +360,16 @@ impl<'lock> LockTarget<'lock> {
             .map(|(lock, _contents)| lock))
     }
 
+    /// Read mandatory build coverage without validating an ordinary runtime-only lock.
+    pub(crate) async fn read_build_lock(self) -> Result<Option<Lock>, ProjectError> {
+        let lock_path = self.lock_path();
+        match fs_err::tokio::read_to_string(&lock_path).await {
+            Ok(encoded) => Ok(Lock::from_toml_if_build_locked(&encoded)?),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(err) => Err(err.into()),
+        }
+    }
+
     /// Read an existing lockfile and validate that it contains the discovered workspace members.
     pub(crate) async fn read_frozen(
         self,
@@ -390,21 +400,30 @@ impl<'lock> LockTarget<'lock> {
     /// Returns `Ok(None)` if the lockfile does not exist.
     pub(crate) async fn read_with_contents(self) -> Result<Option<(Lock, String)>, ProjectError> {
         let lock_path = self.lock_path();
-        match fs_err::tokio::read_to_string(&lock_path).await {
-            Ok(encoded) => {
-                let lock = info_span!("parse uv lock", path = %lock_path.display())
-                    .in_scope(|| Lock::from_toml(&encoded))?;
-                Ok(Some((lock, encoded)))
-            }
+        let Some(encoded) = self.read_contents().await? else {
+            return Ok(None);
+        };
+        let lock = info_span!("parse uv lock", path = %lock_path.display())
+            .in_scope(|| Lock::from_toml(&encoded))?;
+        Ok(Some((lock, encoded)))
+    }
+
+    /// Read the exact lockfile contents without parsing them.
+    pub(crate) async fn read_contents(self) -> Result<Option<String>, std::io::Error> {
+        match fs_err::tokio::read_to_string(self.lock_path()).await {
+            Ok(encoded) => Ok(Some(encoded)),
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
-            Err(err) => Err(err.into()),
+            Err(err) => Err(err),
         }
     }
 
     /// Write the lockfile to disk.
     pub(crate) async fn commit(self, lock: &Lock) -> Result<(), ProjectError> {
         let encoded = lock.to_toml()?;
-        fs_err::tokio::write(self.lock_path(), encoded).await?;
+        let path = self.lock_path();
+        uv_fs::write_atomic(&path, encoded.as_bytes())
+            .await
+            .map_err(|source| ProjectError::LockWrite(path, source))?;
         Ok(())
     }
 

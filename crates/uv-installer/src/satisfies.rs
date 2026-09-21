@@ -9,9 +9,9 @@ use uv_cache_info::CacheInfo;
 use uv_cache_key::{CanonicalUrl, RepositoryUrl};
 use uv_distribution_filename::ExpandedTags;
 use uv_distribution_types::{
-    BuildInfo, BuildVariables, ConfigSettings, ExtraBuildRequirement, ExtraBuildRequires,
-    ExtraBuildVariables, InstalledDirectUrlDist, InstalledDist, InstalledDistKind,
-    PackageConfigSettings, RequirementSource,
+    BuildInfo, BuildLockFingerprint, BuildVariables, ConfigSettings, ExtraBuildRequirement,
+    ExtraBuildRequires, ExtraBuildVariables, InstalledDirectUrlDist, InstalledDist,
+    InstalledDistKind, PackageConfigSettings, RequirementSource,
 };
 use uv_git_types::{GitLfs, GitOid};
 use uv_normalize::PackageName;
@@ -44,11 +44,24 @@ impl RequirementSatisfaction {
         config_settings_package: &PackageConfigSettings,
         extra_build_requires: &ExtraBuildRequires,
         extra_build_variables: &ExtraBuildVariables,
+        build_lock: Option<&BuildLockFingerprint>,
     ) -> Self {
         trace!(
             "Comparing installed with source: {:?} {:?}",
             distribution, source
         );
+
+        // A selected source requires positive provenance; an absent receipt is not evidence that
+        // an installed wheel was built with the required graph.
+        if build_lock.is_some()
+            && distribution
+                .build_info()
+                .and_then(BuildInfo::build_lock_fingerprint)
+                != build_lock
+        {
+            debug!("Missing or mismatched locked build provenance for {name}: {distribution}");
+            return Self::OutOfDate;
+        }
 
         // If the distribution was built with other settings, it is out of date.
         if distribution.build_info().is_some_and(|dist_build_info| {
@@ -60,7 +73,8 @@ impl RequirementSatisfaction {
                 config_settings.into_owned(),
                 extra_build_requires.to_vec(),
                 extra_build_variables.cloned(),
-            );
+            )
+            .with_build_lock_fingerprint(build_lock);
             dist_build_info != &build_info
         }) {
             debug!("Build info mismatch for {name}: {distribution}");

@@ -14207,14 +14207,15 @@ fn sync_does_not_remove_empty_virtual_environment_directory() -> Result<()> {
 
     // Note we do _not_ fail to create the virtual environment — we fail later when writing to the
     // project directory
-    uv_snapshot!(context.filters(), context.sync().current_dir(&project_dir), @"
+    uv_snapshot!(context.filters(), context.sync().current_dir(&project_dir), @r#"
     exit_code: 2 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Resolved 2 packages in [TIME]
-    error: failed to write to file `[TEMP_DIR]/project/uv.lock`: Permission denied (os error 13)
-    ");
+    error: Failed to write lockfile at `uv.lock`
+      cause: Permission denied (os error 13) at path "[TEMP_DIR]/project/[TMP]"
+    "#);
 
     Ok(())
 }

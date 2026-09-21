@@ -4063,6 +4063,18 @@ pub struct SyncArgs {
 
 #[derive(Args)]
 pub struct LockArgs {
+    /// Lock the isolated build dependencies needed by this project on the current interpreter.
+    ///
+    /// This preview feature upgrades the lockfile format. Older uv versions cannot read the
+    /// resulting lockfile. Source packages must have static runtime metadata, and build dependencies
+    /// must be installable from wheels.
+    #[arg(long, conflicts_with_all = ["no_build_dependencies", "check_exists", "frozen"])]
+    pub build_dependencies: bool,
+
+    /// Remove the build-dependency contract from the lockfile.
+    #[arg(long, conflicts_with_all = ["build_dependencies", "check_exists", "frozen"])]
+    pub no_build_dependencies: bool,
+
     /// Check if the lockfile is up-to-date.
     ///
     /// Asserts that the `uv.lock` would remain unchanged after a resolution. If the lockfile is

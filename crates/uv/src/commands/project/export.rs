@@ -328,6 +328,12 @@ pub(crate) async fn export(
         Err(err) => return Err(UvError::from(err).into()),
     };
 
+    if lock.build_lock().is_some() {
+        bail!(
+            "`uv export` cannot represent the required build-dependency contract; remove it explicitly with `uv lock --no-build-dependencies` before exporting"
+        );
+    }
+
     if let Some(batch) = &batch {
         let ExportTarget::Project(project) = &target else {
             bail!("`--batch` does not support scripts");

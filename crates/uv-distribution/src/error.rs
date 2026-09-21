@@ -38,6 +38,8 @@ pub enum Error {
     NoBuild,
     #[error("Building source distributions for `{0}` is disabled")]
     NoBuildPackage(PackageName),
+    #[error("Build requirement discovery for `{0}` requires static source metadata")]
+    StaticMetadataRequired(String),
 
     // Network error
     #[error(transparent)]
@@ -294,6 +296,7 @@ impl Error {
         match self {
             Self::NoBuild
             | Self::NoBuildPackage(_)
+            | Self::StaticMetadataRequired(_)
             | Self::InvalidUrl(_)
             | Self::NonFileUrl(_)
             | Self::WheelFilename(_)

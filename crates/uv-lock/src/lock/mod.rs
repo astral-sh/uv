@@ -69,6 +69,10 @@ use uv_types::{BuildContext, HashStrategy};
 use uv_warnings::warn_user_once;
 use uv_workspace::{Editability, WorkspaceMember};
 
+pub use crate::lock::build::{
+    BuildExecutor, BuildLockError, BuildOperation, BuildSourceId, BuildSourceInput, BuildStage,
+    LockedBuild, LockedBuilds, ensure_build_wheels,
+};
 pub use crate::lock::deserialize::Error as CanonicalLockError;
 pub use crate::lock::export::RequirementsTxtExport;
 pub use crate::lock::export::{
@@ -78,6 +82,7 @@ pub use crate::lock::installable::{Installable, InstallableRootKind};
 pub use crate::lock::map::PackageMap;
 pub use crate::lock::tree::{TreeDisplay, TreeJsonTarget};
 
+mod build;
 mod deserialize;
 pub(crate) mod export;
 mod installable;
@@ -87,17 +92,20 @@ mod tree;
 
 /// The current version of the lockfile format.
 const VERSION: u32 = 1;
+const BUILD_LOCK_VERSION: u32 = 2;
 
 /// An error returned when parsing a lockfile.
 #[derive(Debug, thiserror::Error)]
 pub enum LockParseError {
     /// The lockfile uses an unsupported schema version.
-    #[error("unsupported lockfile schema version (v{version}, but only v{supported} is supported)")]
+    #[error(
+        "unsupported lockfile schema version (v{version}; the newest supported version is v{supported})"
+    )]
     UnsupportedVersion { supported: u32, version: u32 },
 
     /// The lockfile cannot be parsed and uses an unsupported schema version.
     #[error(
-        "failed to parse lockfile using an unsupported schema version (v{version}, but only v{supported} is supported)"
+        "failed to parse lockfile using an unsupported schema version (v{version}; the newest supported version is v{supported})"
     )]
     UnparsableVersion {
         supported: u32,
@@ -293,11 +301,8 @@ pub struct Lock {
     /// The (major) version of the lockfile format.
     ///
     /// Changes to the major version indicate backwards- and forwards-incompatible changes to the
-    /// lockfile format. A given uv version only supports a single major version of the lockfile
-    /// format.
-    ///
-    /// In other words, a version of uv that supports version 2 of the lockfile format will not be
-    /// able to read lockfiles generated under version 1 or 3.
+    /// lockfile format. Version 1 describes runtime resolution. Version 2 additionally requires
+    /// build-resolution enforcement; readers that only understand version 1 must reject it.
     version: u32,
     /// The revision of the lockfile format.
     ///
@@ -334,6 +339,8 @@ pub struct Lock {
     by_id: FxHashMap<PackageId, PackageIndex>,
     /// The input requirements to the resolution.
     manifest: ResolverManifest,
+    /// Independent, mandatory build resolutions. Ordinary runtime-only locks omit this field.
+    builds: Option<LockedBuilds>,
 }
 
 /// Return the marker domain covered by the supported environments and `requires-python`.
@@ -423,7 +430,7 @@ impl<'lock> DependencySelectionContext<'lock> {
 }
 
 /// The dependency section in which a locked edge is stored.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 enum DependencyContext<'a> {
     Production,
     Extra(&'a ExtraName),
@@ -2754,6 +2761,7 @@ impl Lock {
             packages,
             by_id,
             manifest,
+            builds: None,
         };
         Ok(lock)
     }
@@ -2824,7 +2832,7 @@ impl Lock {
 
     /// Returns `true` if this [`Lock`] can validate packages without declaration metadata.
     pub fn supports_missing_package_metadata(&self) -> bool {
-        (self.version(), self.revision()) >= (VERSION, METADATA_FREE_REVISION)
+        self.revision() >= METADATA_FREE_REVISION
     }
 
     /// Returns `true` if this [`Lock`] includes entries for empty `dependency-group` metadata.
@@ -3007,6 +3015,299 @@ impl Lock {
     /// Returns the root requirements that were used to generate this lock.
     fn requirements(&self) -> &BTreeSet<Requirement> {
         &self.manifest.requirements
+    }
+
+    /// Return the mandatory build coverage, if present.
+    pub fn build_lock(&self) -> Option<&LockedBuilds> {
+        self.builds.as_ref()
+    }
+
+    /// Attach independently validated build resolutions and fence older lockfile readers.
+    pub fn with_build_lock(mut self, mut build_lock: LockedBuilds) -> Result<Self, BuildLockError> {
+        build_lock.canonicalize();
+        build_lock.validate()?;
+        let sources = self
+            .packages
+            .iter()
+            .map(|package| BuildSourceId::normalize(package.id.clone()))
+            .collect::<BTreeSet<_>>();
+        if build_lock
+            .resolutions
+            .iter()
+            .any(|build| !sources.contains(build.source()))
+        {
+            return Err(BuildLockError::Invalid(
+                "build coverage refers to a source outside the runtime lock",
+            ));
+        }
+        for package in &self.packages {
+            let id = BuildSourceId::normalize(package.id.clone());
+            if !build_lock
+                .resolutions
+                .iter()
+                .any(|build| build.source() == &id)
+            {
+                continue;
+            }
+            let archive = match &package.id.source {
+                Source::Registry(_) | Source::Direct(..) | Source::Path(_) => true,
+                Source::Git(_, git) => git.path.is_some(),
+                Source::Directory(_) | Source::Editable(_) | Source::Virtual(_) => false,
+            };
+            if archive && package.sdist.as_ref().and_then(SourceDist::hash).is_none() {
+                return Err(BuildLockError::Invalid(
+                    "a covered source archive is missing its hash",
+                ));
+            }
+        }
+        self.version = BUILD_LOCK_VERSION;
+        self.builds = Some(build_lock);
+        Ok(self)
+    }
+
+    /// Remove the mandatory build contract, returning the ordinary runtime lock format.
+    #[must_use]
+    pub fn without_build_lock(mut self) -> Self {
+        self.version = VERSION;
+        self.builds = None;
+        self
+    }
+
+    /// Record hashes measured while probing the exact source archive selected from this lock.
+    ///
+    /// Package-level resolver hashes are not evidence about an individual registry artifact.
+    /// Reconstructing the selected source also prevents a digest from being assigned to a
+    /// different archive with the same package identity.
+    pub fn record_build_source_hash(
+        &mut self,
+        source: &uv_distribution_types::SourceDist,
+        root: &Path,
+        hashes: &HashDigests,
+        index_locations: &IndexLocations,
+    ) -> Result<(), LockError> {
+        let hash = match source {
+            uv_distribution_types::SourceDist::Registry(source) => select_registry_hash(
+                hashes,
+                &source.index,
+                index_locations,
+                source.file.filename.as_ref(),
+            )?,
+            uv_distribution_types::SourceDist::DirectUrl(_)
+            | uv_distribution_types::SourceDist::Path(_)
+            | uv_distribution_types::SourceDist::GitPath(_) => {
+                hashes.iter().max().cloned().map(Hash::from)
+            }
+            uv_distribution_types::SourceDist::Directory(_)
+            | uv_distribution_types::SourceDist::GitDirectory(_) => return Ok(()),
+        }
+        .ok_or(BuildLockError::Invalid(
+            "a source archive was captured without a measured hash",
+        ))?;
+        let id = BuildSourceId::from_source_dist(source, root)?;
+        let mut matched = false;
+        for index in 0..self.packages.len() {
+            let package = &self.packages[index];
+            if BuildSourceId::normalize(package.id.clone()) != id {
+                continue;
+            }
+            let first_party = if self.is_workspace_member(package) {
+                FirstParty::Yes
+            } else {
+                FirstParty::No
+            };
+            if package.to_source_dist(root, first_party)?.as_ref() != Some(source) {
+                continue;
+            }
+            let Some(sdist) = self.packages[index].sdist.as_mut() else {
+                continue;
+            };
+            let metadata = match sdist {
+                SourceDist::Url { metadata, .. }
+                | SourceDist::Path { metadata, .. }
+                | SourceDist::Metadata { metadata } => metadata,
+            };
+            if metadata
+                .hash
+                .as_ref()
+                .is_some_and(|expected| !hashes.as_slice().contains(&expected.0))
+            {
+                return Err(BuildLockError::Invalid(
+                    "the measured source archive does not match its locked hash",
+                )
+                .into());
+            }
+            metadata.hash = Some(hash.clone());
+            matched = true;
+        }
+        if !matched {
+            return Err(BuildLockError::Invalid(
+                "the measured source archive is not present in the runtime lock",
+            )
+            .into());
+        }
+        Ok(())
+    }
+
+    /// Identify sources reachable under any valid project, extra, or group selection on this
+    /// executor. Artifact compatibility and dependency applicability remain separate decisions.
+    pub fn build_sources(
+        &self,
+        root: &Path,
+        tags: &uv_platform_tags::Tags,
+        markers: &MarkerEnvironment,
+        build_options: &BuildOptions,
+    ) -> Result<Vec<(uv_distribution_types::SourceDist, HashDigests)>, LockError> {
+        let reachable = self.build_reachability(markers);
+        let mut sources = Vec::new();
+        for (index, package) in self.packages.iter().enumerate() {
+            if !reachable.contains(&PackageIndex(index)) {
+                continue;
+            }
+            if build_options.no_build_package(package.name()) && !self.is_workspace_member(package)
+            {
+                continue;
+            }
+            let HashedDist { dist, hashes } = package.to_dist(
+                root,
+                TagPolicy::Required(tags),
+                build_options,
+                markers,
+                if self.is_workspace_member(package) {
+                    FirstParty::Yes
+                } else {
+                    FirstParty::No
+                },
+            )?;
+            if let Dist::Source(source) = dist
+                && !source.is_virtual()
+            {
+                sources.push((source, hashes));
+            }
+        }
+        Ok(sources)
+    }
+
+    /// Project the ordinary lock graph onto one marker environment while retaining all valid
+    /// conflict choices. The fixed point tracks activation of transitive extras separately.
+    fn build_reachability(&self, markers: &MarkerEnvironment) -> FxHashSet<PackageIndex> {
+        fn enqueue<'lock>(
+            lock: &'lock Lock,
+            markers: &MarkerEnvironment,
+            index: PackageIndex,
+            context: DependencyContext<'lock>,
+            mut marker: UniversalMarker,
+            reached: &mut FxHashMap<(PackageIndex, DependencyContext<'lock>), UniversalMarker>,
+            queue: &mut VecDeque<(PackageIndex, DependencyContext<'lock>)>,
+        ) {
+            marker.and(UniversalMarker::from_combined(
+                context.conflict_marker(lock.package(index).name(), &lock.conflicts),
+            ));
+            let marker =
+                UniversalMarker::new(MarkerTree::TRUE, marker.conflict_for_environment(markers));
+            if marker.is_false() {
+                return;
+            }
+            let key = (index, context);
+            let previous = reached.entry(key).or_insert(UniversalMarker::FALSE);
+            let before = *previous;
+            previous.or(marker);
+            if *previous != before {
+                queue.push_back(key);
+            }
+        }
+
+        let world = UniversalMarker::new(
+            MarkerTree::TRUE,
+            ConflictMarker::from_conflicts(&self.conflicts),
+        );
+        let mut reached = FxHashMap::default();
+        let mut queue = VecDeque::new();
+        for (index, package) in self.packages.iter().enumerate() {
+            if !self.is_workspace_member(package) {
+                continue;
+            }
+            for context in iter::once(DependencyContext::Production)
+                .chain(
+                    package
+                        .optional_dependencies
+                        .keys()
+                        .map(DependencyContext::Extra),
+                )
+                .chain(
+                    package
+                        .dependency_groups
+                        .keys()
+                        .map(DependencyContext::Group),
+                )
+            {
+                enqueue(
+                    self,
+                    markers,
+                    PackageIndex(index),
+                    context,
+                    world,
+                    &mut reached,
+                    &mut queue,
+                );
+            }
+        }
+        for requirement in self
+            .manifest
+            .requirements
+            .iter()
+            .chain(self.manifest.dependency_groups.values().flatten())
+        {
+            for (index, package) in self
+                .packages
+                .iter()
+                .enumerate()
+                .filter(|(_, package)| package.name() == &requirement.name)
+            {
+                let mut marker = world;
+                marker.and(UniversalMarker::from_combined(requirement.marker));
+                if !package.fork_markers.is_empty() {
+                    let mut forks = UniversalMarker::FALSE;
+                    for fork in &package.fork_markers {
+                        forks.or(*fork);
+                    }
+                    marker.and(forks);
+                }
+                for context in iter::once(DependencyContext::Production)
+                    .chain(requirement.extras.iter().map(DependencyContext::Extra))
+                {
+                    enqueue(
+                        self,
+                        markers,
+                        PackageIndex(index),
+                        context,
+                        marker,
+                        &mut reached,
+                        &mut queue,
+                    );
+                }
+            }
+        }
+        while let Some((index, context)) = queue.pop_front() {
+            let parent = reached[&(index, context)];
+            for dependency in context.dependencies(self.package(index)) {
+                let mut marker = parent;
+                marker.and(dependency.complexified_marker);
+                for context in iter::once(DependencyContext::Production)
+                    .chain(dependency.extra.iter().map(DependencyContext::Extra))
+                {
+                    enqueue(
+                        self,
+                        markers,
+                        dependency.index,
+                        context,
+                        marker,
+                        &mut reached,
+                        &mut queue,
+                    );
+                }
+            }
+        }
+        reached.into_keys().map(|(index, _)| index).collect()
     }
 
     /// Intersect a requirement marker with the forks that contain a package, then simplify it
@@ -3550,10 +3851,10 @@ impl Lock {
                 Ok(lock) => lock,
                 Err(source) => {
                     if let Ok(lock) = toml::from_str::<LockVersion>(input)
-                        && lock.version() != VERSION
+                        && !matches!(lock.version(), VERSION | BUILD_LOCK_VERSION)
                     {
                         return Err(LockParseError::UnparsableVersion {
-                            supported: VERSION,
+                            supported: BUILD_LOCK_VERSION,
                             version: lock.version(),
                             source,
                         });
@@ -3563,14 +3864,32 @@ impl Lock {
             },
         };
 
-        if lock.version() != VERSION {
+        if !matches!(lock.version(), VERSION | BUILD_LOCK_VERSION) {
             return Err(LockParseError::UnsupportedVersion {
-                supported: VERSION,
+                supported: BUILD_LOCK_VERSION,
                 version: lock.version(),
             });
         }
 
         Ok(lock)
+    }
+
+    /// Read a required build contract for a command that does not otherwise consume runtime
+    /// locks. Valid version-1 TOML without build coverage does not need full lock validation.
+    /// Unknown versions and a build table hidden in version 1 must still be checked strictly.
+    pub fn from_toml_if_build_locked(input: &str) -> Result<Option<Self>, LockParseError> {
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "kebab-case")]
+        struct Header {
+            version: u32,
+            build_lock: Option<serde::de::IgnoredAny>,
+        }
+        let header: Header = toml::from_str(input)?;
+        if header.version == VERSION && header.build_lock.is_none() {
+            Ok(None)
+        } else {
+            Self::from_toml(input).map(Some)
+        }
     }
 
     /// Returns the TOML representation of this lockfile.
@@ -6180,6 +6499,7 @@ struct LockWire {
     manifest: ResolverManifest,
     #[serde(rename = "package", alias = "distribution", default)]
     packages: Vec<PackageWire>,
+    build_lock: Option<LockedBuilds>,
 }
 
 impl TryFrom<LockWire> for Lock {
@@ -6250,7 +6570,7 @@ impl TryFrom<LockWire> for Lock {
             minimum_libc_version: options_wire.minimum_libc_version,
             exclude_newer: options_wire.exclude_newer.into(),
         };
-        let lock = Self::new(
+        let mut lock = Self::new(
             wire.version,
             wire.revision.unwrap_or(0),
             packages,
@@ -6262,6 +6582,21 @@ impl TryFrom<LockWire> for Lock {
             required_environments,
             fork_markers,
         )?;
+
+        if let Some(build_lock) = wire.build_lock {
+            if lock.version != BUILD_LOCK_VERSION {
+                return Err(LockErrorKind::InvalidBuildLock(
+                    "build resolutions require lockfile version 2".to_owned(),
+                )
+                .into());
+            }
+            lock = lock.with_build_lock(build_lock).map_err(LockError::from)?;
+        } else if lock.version == BUILD_LOCK_VERSION {
+            return Err(LockErrorKind::InvalidBuildLock(
+                "lockfile version 2 requires a build-lock table".to_owned(),
+            )
+            .into());
+        }
 
         Ok(lock)
     }
@@ -9678,6 +10013,8 @@ impl std::fmt::Display for WheelTagHint {
 /// is with the caller somewhere in such cases.
 #[derive(Debug, thiserror::Error)]
 enum LockErrorKind {
+    #[error("{0}")]
+    InvalidBuildLock(String),
     /// An error that occurs when the overrides for validating a
     /// metadata-free lockfile cannot be scoped to their packages.
     #[error(transparent)]

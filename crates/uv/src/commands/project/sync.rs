@@ -791,6 +791,32 @@ pub(crate) async fn do_sync<'a>(
     // Constrain any build requirements marked as `match-runtime = true`.
     let extra_build_requires = extra_build_requires.match_runtime(&resolution)?;
 
+    // Check the build contract before an installed-state or built-wheel cache shortcut can
+    // satisfy the plan. The target markers above are distinct from the actual build interpreter.
+    if let Some(builds) = target.lock().build_lock() {
+        builds
+            .validate_resolution(&resolution, target.install_path(), venv.interpreter())
+            .map_err(anyhow::Error::from)?;
+        if !matches!(build_isolation, uv_configuration::BuildIsolation::Isolate) {
+            return Err(
+                anyhow::anyhow!("Build dependency locking requires build isolation").into(),
+            );
+        }
+        if *config_setting != uv_distribution_types::ConfigSettings::default()
+            || *config_settings_package != uv_distribution_types::PackageConfigSettings::default()
+            || !extra_build_requires.is_empty()
+            || !extra_build_variables.is_empty()
+        {
+            return Err(anyhow::anyhow!("Build dependency locking does not yet support config settings, extra build dependencies, or extra build variables").into());
+        }
+        if !sources.is_none() {
+            return Err(anyhow::anyhow!(
+                "Build dependency locking does not yet support disabling package sources"
+            )
+            .into());
+        }
+    }
+
     // Extract the hashes from the lockfile.
     let hasher = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?;
 
@@ -872,7 +898,11 @@ pub(crate) async fn do_sync<'a>(
         .with_constraint_hashes(&build_hasher)?;
 
     // Resolve the flat indexes from `--find-links`.
-    let flat_index = FlatIndex::load(&client, cache, index_locations).await?;
+    let flat_index = if target.lock().build_lock().is_some() {
+        FlatIndex::default()
+    } else {
+        FlatIndex::load(&client, cache, index_locations).await?
+    };
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
@@ -900,6 +930,11 @@ pub(crate) async fn do_sync<'a>(
         concurrency.clone(),
         preview,
     );
+    let build_dispatch = if let Some(builds) = target.lock().build_lock() {
+        build_dispatch.with_build_lock(builds, target.install_path())?
+    } else {
+        build_dispatch
+    };
 
     // Run a malware check against OSV before installing.
     maybe_check_malware(
