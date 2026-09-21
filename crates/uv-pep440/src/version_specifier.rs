@@ -964,7 +964,7 @@ fn parse_version_specifiers(
     spec: &str,
     specifier_count: usize,
 ) -> Result<Vec<VersionSpecifier>, VersionSpecifiersParseError> {
-    let mut version_ranges = Vec::with_capacity(specifier_count.max(8));
+    let mut version_ranges = Vec::with_capacity(specifier_count);
     let mut start: usize = 0;
     let separator = ",";
     for version_range_spec in spec.split(separator) {
