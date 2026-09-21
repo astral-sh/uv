@@ -176,7 +176,7 @@ jobs:
       - name: "Retain benchmark profiles"
         id: profiles
         # Retain every independent sample for the variance experiment.
-        run: ./target/debug/uv run --script scripts/codspeed-profiles.py start "$RUNNER_TEMP/codspeed-simulation" simulation >> "$GITHUB_OUTPUT"
+        run: GITHUB_SHA="$(git rev-parse HEAD)" ./target/debug/uv run --script scripts/codspeed-profiles.py start "$RUNNER_TEMP/codspeed-simulation" simulation >> "$GITHUB_OUTPUT"
 
       - name: "Run benchmarks"
         uses: CodSpeedHQ/action@4296e51e7041e24dadb86d1d6e8b9320d223dbe8 # v5.0.3
