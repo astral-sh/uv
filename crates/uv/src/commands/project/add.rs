@@ -435,7 +435,7 @@ pub(crate) async fn add(
                 )
                 .await?;
             let build_hasher = HashStrategy::from_constraints(
-                &build_constraints,
+                build_constraints.global(),
                 Some(&target.interpreter().to_resolver_marker_environment()),
                 uv_configuration::HashCheckingMode::Verify,
             )?;

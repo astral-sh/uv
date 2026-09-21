@@ -429,7 +429,7 @@ mod resolver {
 
     use uv_cache::Cache;
     use uv_client::RegistryClient;
-    use uv_configuration::{BuildOptions, Concurrency, Constraints, IndexStrategy, NoSources};
+    use uv_configuration::{BuildConstraints, BuildOptions, Concurrency, IndexStrategy, NoSources};
     use uv_dispatch::{BuildDispatch, SharedState};
     use uv_distribution::DistributionDatabase;
     use uv_distribution_types::{
@@ -508,7 +508,7 @@ mod resolver {
                 .timestamp()
                 .into(),
         );
-        let build_constraints = Constraints::default();
+        let build_constraints = BuildConstraints::default();
         let flat_index = FlatIndex::default();
         let hashes = HashStrategy::default();
         let state = SharedState::default();

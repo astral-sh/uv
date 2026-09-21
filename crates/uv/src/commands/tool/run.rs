@@ -17,7 +17,8 @@ use uv_cache_info::Timestamp;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraint, Constraints, DependencyMode, GitLfsSetting, TargetTriple,
+    BuildConstraints, Concurrency, Constraint, Constraints, DependencyMode, GitLfsSetting,
+    TargetTriple,
 };
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::InstalledDist;
@@ -830,7 +831,7 @@ async fn get_or_create_environment(
     .await?
     .into_interpreter();
 
-    let build_constraints = Constraints::from_specifications(
+    let build_constraints = BuildConstraints::from_specifications(
         operations::read_constraints(build_constraints, client_builder).await?,
     );
 

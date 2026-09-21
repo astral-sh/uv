@@ -14,7 +14,7 @@ use tracing::{debug, warn};
 use uv_cache::{Cache, Refresh};
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, Constraint, Constraints, DependencyGroupsWithDefaults,
+    BuildConstraints, BuildOptions, Concurrency, Constraint, DependencyGroupsWithDefaults,
     ExcludeDependency, ExtrasSpecification, GitLfsSetting, HashCheckingMode, InstallOptions,
     Override, TargetTriple,
 };
@@ -316,7 +316,7 @@ impl ToolLock {
         constraints: &[Constraint<Requirement>],
         overrides: &[Requirement],
         excludes: &[ExcludeDependency],
-        build_constraints: &[NameRequirementSpecification],
+        build_constraints: &[Constraint<NameRequirementSpecification>],
         dependency_metadata: &DependencyMetadata,
     ) -> ResolverManifest {
         ResolverManifest::new(
@@ -404,7 +404,7 @@ impl ToolLock {
         constraints: &[Constraint<Requirement>],
         overrides: &[Requirement],
         excludes: &[ExcludeDependency],
-        build_constraints: &Constraints,
+        build_constraints: &BuildConstraints,
         refresh: &Refresh,
         interpreter: &Interpreter,
         settings: &ResolverSettings,
@@ -472,7 +472,7 @@ impl ToolLock {
             .build();
         let hasher = HashStrategy::collect(HashCollection::Url);
         let build_hasher = HashStrategy::from_constraints(
-            build_constraints,
+            build_constraints.global(),
             Some(&interpreter.to_resolver_marker_environment()),
             HashCheckingMode::Verify,
         )?;
@@ -743,7 +743,7 @@ pub(crate) fn finalize_tool_install(
     constraints: Vec<Constraint<Requirement>>,
     overrides: Vec<Requirement>,
     excludes: Vec<ExcludeDependency>,
-    build_constraints: Vec<NameRequirementSpecification>,
+    build_constraints: Vec<Constraint<NameRequirementSpecification>>,
     lock: Option<&ToolLock>,
     printer: Printer,
 ) -> anyhow::Result<()> {

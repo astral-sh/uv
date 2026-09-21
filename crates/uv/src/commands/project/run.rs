@@ -21,7 +21,7 @@ use uv_cache::Cache;
 use uv_cli::{ExternalCommand, GlobalArgs};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    ActiveEnvironment, Concurrency, Constraints, DependencyGroups, DryRun, EditableMode, EnvFile,
+    ActiveEnvironment, Concurrency, DependencyGroups, DryRun, EditableMode, EnvFile,
     ExtrasSpecification, InstallOptions, RequirementsInput, TargetTriple,
 };
 use uv_distribution::LoweredExtraBuildDependencies;
@@ -177,7 +177,7 @@ pub(crate) async fn run(
 
     // The lockfile used for the base environment.
     let mut base_lock: Option<(Lock, PathBuf)> = None;
-    let mut unlocked_build_constraints = Constraints::default();
+    let mut unlocked_build_constraints = uv_configuration::BuildConstraints::default();
 
     // Determine whether the command to execute is a PEP 723 script.
     let temp_dir;
@@ -368,11 +368,11 @@ pub(crate) async fn run(
                         .and_then(|uv| uv.build_constraint_dependencies.as_ref())
                 })
                 .map(|constraints| {
-                    Constraints::from_specifications(
+                    uv_configuration::BuildConstraints::from_entries(
                         constraints
                             .iter()
                             .cloned()
-                            .map(NameRequirementSpecification::from),
+                            .map(|entry| entry.map(NameRequirementSpecification::from)),
                     )
                 })
                 .unwrap_or_default();

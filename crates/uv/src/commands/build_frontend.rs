@@ -16,9 +16,9 @@ use uv_build_frontend::SourceBuild;
 use uv_cache::{Cache, CacheBucket};
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    BuildIsolation, BuildKind, BuildOptions, BuildOutput, Concurrency, Constraints,
-    DependencyGroupsWithDefaults, DependencyMode, Excludes, HashCheckingMode, IndexStrategy,
-    KeyringProviderType, NoSources, Overrides,
+    BuildConstraints, BuildIsolation, BuildKind, BuildOptions, BuildOutput, Concurrency,
+    Constraint, Constraints, DependencyGroupsWithDefaults, DependencyMode, Excludes,
+    HashCheckingMode, IndexStrategy, KeyringProviderType, NoSources, Overrides,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
@@ -211,7 +211,7 @@ pub(crate) async fn build_frontend(
     force_pep517: bool,
     clear: bool,
     build_constraints: Vec<RequirementsSource>,
-    build_constraints_from_workspace: Vec<NameRequirementSpecification>,
+    build_constraints_from_workspace: Vec<Constraint<NameRequirementSpecification>>,
     hash_checking: Option<HashCheckingMode>,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
@@ -291,7 +291,7 @@ async fn build_impl(
     force_pep517: bool,
     clear: bool,
     build_constraints: &[RequirementsSource],
-    build_constraints_from_workspace: &[NameRequirementSpecification],
+    build_constraints_from_workspace: &[Constraint<NameRequirementSpecification>],
     hash_checking: Option<HashCheckingMode>,
     python_request: Option<&str>,
     install_mirrors: PythonInstallMirrors,
@@ -571,7 +571,7 @@ async fn build_package(
     force_pep517: bool,
     clear: bool,
     build_constraints: &[RequirementsSource],
-    build_constraints_from_workspace: &[NameRequirementSpecification],
+    build_constraints_from_workspace: &[Constraint<NameRequirementSpecification>],
     build_isolation: &BuildIsolation,
     extra_build_dependencies: &ExtraBuildDependencies,
     extra_build_variables: &ExtraBuildVariables,
@@ -650,10 +650,11 @@ async fn build_package(
     // Read build constraints.
     let command_line_constraints =
         operations::read_constraints(build_constraints, &client_builder).await?;
-    let build_constraints = Constraints::from_specifications(
+    let build_constraints = BuildConstraints::from_entries(
         command_line_constraints
             .iter()
             .cloned()
+            .map(Constraint::Requirement)
             .chain(build_constraints_from_workspace.iter().cloned()),
     );
 
@@ -664,6 +665,7 @@ async fn build_package(
             command_line_constraints.iter().cloned().chain(
                 build_constraints_from_workspace
                     .iter()
+                    .filter_map(Constraint::as_requirement)
                     .filter(|entry| !hash_checking.is_require() || !entry.hashes.is_empty())
                     .cloned(),
             ),
@@ -764,7 +766,14 @@ async fn build_package(
             source.path(),
             uv_version::version(),
             &interpreter.to_resolver_marker_environment(),
-            build_constraints.requirements().cloned().map(Into::into),
+            |name, version| {
+                build_constraints
+                    .for_package(name, version)
+                    .requirements()
+                    .cloned()
+                    .map(Into::into)
+                    .collect()
+            },
         ) {
             return Err(Error::ListNonUv {
                 name: source.path().user_display().to_string(),
@@ -780,7 +789,14 @@ async fn build_package(
             source.path(),
             uv_version::version(),
             &interpreter.to_resolver_marker_environment(),
-            build_constraints.requirements().cloned().map(Into::into),
+            |name, version| {
+                build_constraints
+                    .for_package(name, version)
+                    .requirements()
+                    .cloned()
+                    .map(Into::into)
+                    .collect()
+            },
         ) {
             Ok(()) => BuildAction::DirectBuild,
             Err(reason) => {
@@ -1021,7 +1037,7 @@ async fn build_package(
 /// Validate dependencies in the caller-provided environment for `uv build`.
 struct BuildDependencyCheck<'a> {
     build_dispatch: &'a BuildDispatch<'a>,
-    constraints: &'a Constraints,
+    constraints: &'a BuildConstraints,
     credentials_cache: &'a CredentialsCache,
 }
 
@@ -1039,7 +1055,15 @@ impl BuildDependencyCheck<'_> {
         };
         let site_packages =
             SitePackages::from_environment(environment).map_err(Error::RequirementsCheck)?;
-        self.check_requirements(builder.build_requirements(), &site_packages, environment)?;
+        let constraints = self
+            .constraints
+            .for_package(builder.package_name(), builder.package_version());
+        self.check_requirements(
+            builder.build_requirements(),
+            &constraints,
+            &site_packages,
+            environment,
+        )?;
         let requirements = builder
             .get_requires_for_build(
                 self.build_dispatch,
@@ -1048,13 +1072,19 @@ impl BuildDependencyCheck<'_> {
                 self.credentials_cache,
             )
             .await?;
-        self.check_requirements(requirements.iter(), &site_packages, environment)
+        self.check_requirements(
+            requirements.iter(),
+            &constraints,
+            &site_packages,
+            environment,
+        )
     }
 
     /// Validate borrowed requirements against the packages installed in the build environment.
     fn check_requirements<'a>(
         &self,
         requirements: impl Iterator<Item = &'a Requirement>,
+        constraints: &Constraints,
         site_packages: &SitePackages,
         environment: &PythonEnvironment,
     ) -> Result<(), Error> {
@@ -1066,7 +1096,7 @@ impl BuildDependencyCheck<'_> {
         match site_packages
             .satisfies_requirements(
                 requirements,
-                self.constraints,
+                constraints,
                 &Overrides::default(),
                 &Excludes::default(),
                 self.build_dispatch.dependency_metadata(),

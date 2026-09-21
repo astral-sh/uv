@@ -14,8 +14,8 @@ use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::{cache_digest, cache_name};
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    ActiveEnvironment, Concurrency, Constraint, Constraints, DependencyGroupsWithDefaults, DryRun,
-    ExtrasSpecification, GitLfsSetting, HashCheckingMode, Override, PackageConstraint,
+    ActiveEnvironment, BuildConstraints, Concurrency, Constraint, DependencyGroupsWithDefaults,
+    DryRun, ExtrasSpecification, GitLfsSetting, HashCheckingMode, Override, PackageConstraint,
     PackageOverride, Reinstall, TargetTriple, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -2286,7 +2286,7 @@ pub(crate) async fn resolve_names(
     requirements: Vec<UnresolvedRequirementSpecification>,
     interpreter: &Interpreter,
     settings: &ResolverInstallerSettings,
-    build_constraints: &Constraints,
+    build_constraints: &BuildConstraints,
     client_builder: &BaseClientBuilder<'_>,
     state: &SharedState,
     concurrency: &Concurrency,
@@ -2386,7 +2386,7 @@ pub(crate) async fn resolve_names(
     // optional on the downstream APIs.
     let hasher = HashStrategy::default();
     let build_hasher = HashStrategy::from_constraints(
-        build_constraints,
+        build_constraints.global(),
         Some(&interpreter.to_resolver_marker_environment()),
         HashCheckingMode::Verify,
     )?;
@@ -2497,7 +2497,7 @@ pub(crate) async fn resolve_environment(
     interpreter: &Interpreter,
     python_platform: Option<&TargetTriple>,
     source_tree_editable_policy: SourceTreeEditablePolicy,
-    build_constraints: Constraints,
+    build_constraints: BuildConstraints,
     settings: &ResolverSettings,
     client_builder: &BaseClientBuilder<'_>,
     state: &PlatformState,
@@ -2629,7 +2629,7 @@ pub(crate) async fn resolve_environment(
         EnvironmentResolution::Universal => HashStrategy::collect(HashCollection::Url),
     };
     let build_hasher = HashStrategy::from_constraints(
-        &build_constraints,
+        build_constraints.global(),
         Some(&interpreter.to_resolver_marker_environment()),
         HashCheckingMode::Verify,
     )?;
@@ -2737,7 +2737,7 @@ pub(crate) async fn sync_environment(
     resolution: &Resolution,
     hasher: HashStrategy,
     modifications: Modifications,
-    build_constraints: Constraints,
+    build_constraints: BuildConstraints,
     settings: InstallerSettingsRef<'_>,
     client_builder: &BaseClientBuilder<'_>,
     state: &PlatformState,
@@ -2792,7 +2792,7 @@ pub(crate) async fn sync_environment(
     };
 
     let build_hasher = HashStrategy::from_constraints(
-        &build_constraints,
+        build_constraints.global(),
         Some(&interpreter.to_resolver_marker_environment()),
         HashCheckingMode::Verify,
     )?;
@@ -2891,7 +2891,7 @@ pub(crate) async fn update_environment(
     modifications: Modifications,
     python_platform: Option<&TargetTriple>,
     source_tree_editable_policy: SourceTreeEditablePolicy,
-    build_constraints: Constraints,
+    build_constraints: BuildConstraints,
     extra_build_requires: ExtraBuildRequires,
     settings: &ResolverInstallerSettings,
     client_builder: &BaseClientBuilder<'_>,
@@ -3049,7 +3049,7 @@ pub(crate) async fn update_environment(
         .build();
 
     let build_hasher = HashStrategy::from_constraints(
-        &build_constraints,
+        build_constraints.global(),
         Some(&interpreter.to_resolver_marker_environment()),
         HashCheckingMode::Verify,
     )?;

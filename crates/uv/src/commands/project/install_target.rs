@@ -7,7 +7,7 @@ use itertools::Either;
 use rustc_hash::FxHashSet;
 
 use uv_configuration::{
-    BuildOptions, Constraints, DependencyGroupsWithDefaults, ExtrasSpecification,
+    BuildOptions, DependencyGroupsWithDefaults, ExtrasSpecification,
     ExtrasSpecificationWithDefaults, InstallOptions,
 };
 use uv_distribution_types::{Index, Resolution};
@@ -400,7 +400,7 @@ impl<'lock> InstallTarget<'lock> {
         }
     }
 
-    pub(crate) fn build_constraints(&self) -> Constraints {
+    pub(crate) fn build_constraints(&self) -> uv_configuration::BuildConstraints {
         self.lock().build_constraints(self.install_path())
     }
 

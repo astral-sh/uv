@@ -3475,7 +3475,7 @@ pub(crate) struct PipCompileSettings {
     pub(crate) constraints_from_workspace: Vec<Constraint<Requirement>>,
     pub(crate) overrides_from_workspace: Vec<Override<Requirement>>,
     pub(crate) excludes_from_workspace: Vec<ExcludeDependency>,
-    pub(crate) build_constraints_from_workspace: Vec<NameRequirementSpecification>,
+    pub(crate) build_constraints_from_workspace: Vec<Constraint<NameRequirementSpecification>>,
     pub(crate) environments: SupportedEnvironments,
     pub(crate) required_environments: SupportedEnvironments,
     pub(crate) minimum_libc_version: Option<MinimumLibcVersion>,
@@ -3577,14 +3577,16 @@ impl PipCompileSettings {
                 .clone()
                 .unwrap_or_default()
                 .into_iter()
-                .map(|requirement| {
-                    let (requirement, hashes) = requirement.into_parts();
-                    NameRequirementSpecification {
-                        requirement: Requirement::from(
-                            requirement.with_origin(RequirementOrigin::Workspace),
-                        ),
-                        hashes,
-                    }
+                .map(|entry| {
+                    entry.map(|requirement| {
+                        let (requirement, hashes) = requirement.into_parts();
+                        NameRequirementSpecification {
+                            requirement: Requirement::from(
+                                requirement.with_origin(RequirementOrigin::Workspace),
+                            ),
+                            hashes,
+                        }
+                    })
                 })
                 .collect()
         } else {
@@ -3813,7 +3815,7 @@ pub(crate) struct PipInstallSettings {
     pub(crate) constraints_from_workspace: Vec<Constraint<Requirement>>,
     pub(crate) overrides_from_workspace: Vec<Override<Requirement>>,
     pub(crate) excludes_from_workspace: Vec<ExcludeDependency>,
-    pub(crate) build_constraints_from_workspace: Vec<NameRequirementSpecification>,
+    pub(crate) build_constraints_from_workspace: Vec<Constraint<NameRequirementSpecification>>,
     pub(crate) modifications: Modifications,
     pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
@@ -3907,14 +3909,16 @@ impl PipInstallSettings {
                 .clone()
                 .unwrap_or_default()
                 .into_iter()
-                .map(|requirement| {
-                    let (requirement, hashes) = requirement.into_parts();
-                    NameRequirementSpecification {
-                        requirement: Requirement::from(
-                            requirement.with_origin(RequirementOrigin::Workspace),
-                        ),
-                        hashes,
-                    }
+                .map(|entry| {
+                    entry.map(|requirement| {
+                        let (requirement, hashes) = requirement.into_parts();
+                        NameRequirementSpecification {
+                            requirement: Requirement::from(
+                                requirement.with_origin(RequirementOrigin::Workspace),
+                            ),
+                            hashes,
+                        }
+                    })
                 })
                 .collect()
         } else {
@@ -4313,7 +4317,7 @@ pub(crate) struct BuildSettings {
     pub(crate) force_pep517: bool,
     pub(crate) clear: bool,
     pub(crate) build_constraints: Vec<RequirementsInput>,
-    pub(crate) build_constraints_from_workspace: Vec<NameRequirementSpecification>,
+    pub(crate) build_constraints_from_workspace: Vec<Constraint<NameRequirementSpecification>>,
     pub(crate) hash_checking: Option<HashCheckingMode>,
     pub(crate) python: Option<String>,
     pub(crate) install_mirrors: PythonInstallMirrors,
@@ -4366,14 +4370,16 @@ impl BuildSettings {
                 .clone()
                 .unwrap_or_default()
                 .into_iter()
-                .map(|requirement| {
-                    let (requirement, hashes) = requirement.into_parts();
-                    NameRequirementSpecification {
-                        requirement: Requirement::from(
-                            requirement.with_origin(RequirementOrigin::Workspace),
-                        ),
-                        hashes,
-                    }
+                .map(|entry| {
+                    entry.map(|requirement| {
+                        let (requirement, hashes) = requirement.into_parts();
+                        NameRequirementSpecification {
+                            requirement: Requirement::from(
+                                requirement.with_origin(RequirementOrigin::Workspace),
+                            ),
+                            hashes,
+                        }
+                    })
                 })
                 .collect()
         } else {

@@ -14,7 +14,7 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    BuildIsolation, BuildOptions, Concurrency, Constraint, Constraints, ExcludeDependency,
+    BuildConstraints, BuildIsolation, BuildOptions, Concurrency, Constraint, ExcludeDependency,
     ExtrasSpecification, HashCheckingMode, IndexStrategy, NoBinary, NoBuild, NoSources, Override,
     PipCompileFormat, Reinstall, Upgrade,
 };
@@ -74,7 +74,7 @@ pub(crate) async fn pip_compile(
     constraints_from_workspace: Vec<Constraint<Requirement>>,
     overrides_from_workspace: Vec<Override<Requirement>>,
     excludes_from_workspace: Vec<ExcludeDependency>,
-    build_constraints_from_workspace: Vec<NameRequirementSpecification>,
+    build_constraints_from_workspace: Vec<Constraint<NameRequirementSpecification>>,
     environments: SupportedEnvironments,
     required_environments: SupportedEnvironments,
     minimum_libc_version: Option<MinimumLibcVersion>,
@@ -258,10 +258,11 @@ pub(crate) async fn pip_compile(
         .collect();
 
     // Read build constraints.
-    let build_constraints = Constraints::from_specifications(
+    let build_constraints = BuildConstraints::from_entries(
         operations::read_constraints(build_constraints, &client_builder)
             .await?
             .into_iter()
+            .map(Constraint::Requirement)
             .chain(build_constraints_from_workspace),
     );
 
@@ -504,7 +505,7 @@ pub(crate) async fn pip_compile(
 
     // Verify hashes on pinned build constraints, if any.
     let build_hashes = HashStrategy::from_constraints(
-        &build_constraints,
+        build_constraints.global(),
         Some(&interpreter.to_resolver_marker_environment()),
         HashCheckingMode::Verify,
     )?;

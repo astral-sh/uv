@@ -28,7 +28,7 @@ pub struct Tool {
     /// The excludes requested by the user during installation.
     excludes: Vec<ExcludeDependency>,
     /// The build constraints requested by the user during installation.
-    build_constraints: Vec<NameRequirementSpecification>,
+    build_constraints: Vec<Constraint<NameRequirementSpecification>>,
     /// The Python requested by the user during installation.
     python: Option<PythonRequest>,
     /// A mapping of entry point names to their metadata.
@@ -49,7 +49,7 @@ struct ToolWire {
     #[serde(default)]
     excludes: Vec<ExcludeDependency>,
     #[serde(default)]
-    build_constraint_dependencies: Vec<NameRequirementSpecification>,
+    build_constraint_dependencies: Vec<Constraint<NameRequirementSpecification>>,
     python: Option<PythonRequest>,
     entrypoints: Vec<ToolEntrypoint>,
     #[serde(default)]
@@ -177,7 +177,7 @@ impl Tool {
         constraints: Vec<Constraint<Requirement>>,
         overrides: Vec<Requirement>,
         excludes: Vec<ExcludeDependency>,
-        build_constraints: Vec<NameRequirementSpecification>,
+        build_constraints: Vec<Constraint<NameRequirementSpecification>>,
         python: Option<PythonRequest>,
         entrypoints: impl IntoIterator<Item = ToolEntrypoint>,
         options: ToolOptions,
@@ -372,7 +372,7 @@ impl Tool {
         &self.excludes
     }
 
-    pub fn build_constraints(&self) -> &[NameRequirementSpecification] {
+    pub fn build_constraints(&self) -> &[Constraint<NameRequirementSpecification>] {
         &self.build_constraints
     }
 

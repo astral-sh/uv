@@ -1380,7 +1380,7 @@ fn invalid_pyproject_toml() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     error: Failed to build `[TEMP_DIR]/child`
-      cause: Invalid metadata format in: child/pyproject.toml
+      cause: `pyproject.toml` does not match the required schema. When the `[project]` table is present, `project.name` must be present and non-empty.
       cause: TOML parse error at line 2, column 8
                |
              2 | name = 1

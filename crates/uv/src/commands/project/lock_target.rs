@@ -10,7 +10,8 @@ use tracing::info_span;
 use uv_auth::CredentialsCache;
 use uv_cache::Cache;
 use uv_configuration::{
-    Constraint, Constraints, DependencyGroupsWithDefaults, ExcludeDependency, NoSources, Upgrade,
+    BuildConstraints, Constraint, DependencyGroupsWithDefaults, ExcludeDependency, NoSources,
+    Upgrade,
 };
 use uv_distribution::LoweredRequirement;
 use uv_distribution_types::{
@@ -111,7 +112,7 @@ impl<'lock> LockTarget<'lock> {
     }
 
     /// Returns the set of build constraints for the [`LockTarget`].
-    fn build_constraints(self) -> Vec<BuildConstraintDependency> {
+    fn build_constraints(self) -> Vec<Constraint<BuildConstraintDependency>> {
         match self {
             Self::Workspace(workspace) => workspace.build_constraints(),
             Self::Script(script) => script
@@ -416,28 +417,45 @@ impl<'lock> LockTarget<'lock> {
         cache: &Cache,
         workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
-    ) -> Result<Constraints, uv_distribution::MetadataError> {
+    ) -> Result<BuildConstraints, uv_distribution::MetadataError> {
         let mut constraints = Vec::new();
-        for constraint in self.build_constraints() {
-            let (requirement, hashes) = constraint.into_parts();
-            constraints.extend(
-                self.lower(
-                    vec![requirement],
-                    locations,
-                    sources,
-                    cache,
-                    workspace_cache,
-                    credentials_cache,
-                )
-                .await?
-                .into_iter()
-                .map(|requirement| NameRequirementSpecification {
-                    requirement,
-                    hashes: hashes.clone(),
-                }),
-            );
+        for entry in self.build_constraints() {
+            let (scope, requirements) = match entry {
+                Constraint::Requirement(requirement) => (None, vec![requirement]),
+                Constraint::Package(package) => {
+                    (Some(package.package), package.dependencies.into_vec())
+                }
+            };
+            let mut lowered = Vec::new();
+            for constraint in requirements {
+                let (requirement, hashes) = constraint.into_parts();
+                lowered.extend(
+                    self.lower(
+                        vec![requirement],
+                        locations,
+                        sources,
+                        cache,
+                        workspace_cache,
+                        credentials_cache,
+                    )
+                    .await?
+                    .into_iter()
+                    .map(|requirement| NameRequirementSpecification {
+                        requirement,
+                        hashes: hashes.clone(),
+                    }),
+                );
+            }
+            if let Some(package) = scope {
+                constraints.push(Constraint::Package(uv_configuration::PackageConstraint {
+                    package,
+                    dependencies: lowered.into_boxed_slice(),
+                }));
+            } else {
+                constraints.extend(lowered.into_iter().map(Constraint::Requirement));
+            }
         }
-        Ok(Constraints::from_specifications(constraints))
+        Ok(BuildConstraints::from_entries(constraints))
     }
 
     /// Lower the requirements for the [`LockTarget`], relative to the target root.

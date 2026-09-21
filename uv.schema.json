@@ -44,10 +44,10 @@
       ]
     },
     "build-constraint-dependencies": {
-      "description": "Constraints to apply when solving build dependencies.\n\nBuild constraints are used to restrict the versions of build dependencies that are selected\nwhen building a package during resolution or installation.\n\nIncluding a package as a constraint will _not_ trigger installation of the package during\na build; instead, the package must be requested elsewhere in the project's build dependency\ngraph.\n\n!!! note\n    In `uv lock`, `uv sync`, and `uv run`, uv will only read `build-constraint-dependencies` from\n    the `pyproject.toml` at the workspace root, and will ignore any declarations in other\n    workspace members or `uv.toml` files.\n\nHashes can be included to verify downloaded build dependency archives. To provide hashes,\nuse a table with `requirement` and `hashes`. uv records these hashes in `uv.lock`.",
+      "description": "Constraints to apply when solving build dependencies.\n\nBuild constraints are used to restrict the versions of build dependencies that are selected\nwhen building a package during resolution or installation.\n\nIncluding a package as a constraint will _not_ trigger installation of the package during\na build; instead, the package must be requested elsewhere in the project's build dependency\ngraph.\n\nA table with `package` and `dependencies` selects the package being built. Its constraints\napply throughout that package's build environment, including transitive build dependencies\nand requirements returned by build backend hooks. The selector accepts a `name` and an\noptional exact `version`; version-specific scopes do not apply until that version is known.\nGlobal and all matching scoped constraints are combined.\n\n!!! note\n    In `uv lock`, `uv sync`, and `uv run`, uv will only read `build-constraint-dependencies` from\n    the `pyproject.toml` at the workspace root, and will ignore any declarations in other\n    workspace members or `uv.toml` files.\n\nHashes can be included to verify downloaded build dependency archives. To provide hashes,\nuse a table with `requirement` and `hashes`. uv records these hashes in `uv.lock`.",
       "type": ["array", "null"],
       "items": {
-        "$ref": "#/definitions/BuildConstraintDependency"
+        "$ref": "#/definitions/Constraint2"
       }
     },
     "cache-dir": {
@@ -907,6 +907,17 @@
         }
       ]
     },
+    "Constraint2": {
+      "description": "A constraint, either global or scoped to a specific package version.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/PackageConstraint2"
+        },
+        {
+          "$ref": "#/definitions/BuildConstraintDependency"
+        }
+      ]
+    },
     "DefaultGroups": {
       "description": "Either the literal \"all\" or a list of groups",
       "oneOf": [
@@ -1309,13 +1320,30 @@
       }
     },
     "PackageConstraint": {
-      "description": "A constraint that applies to the dependencies of a specific package version.",
+      "description": "Constraints associated with a specific package and optional version.",
       "type": "object",
       "properties": {
         "dependencies": {
           "type": "array",
           "items": {
             "$ref": "#/definitions/Requirement"
+          }
+        },
+        "package": {
+          "$ref": "#/definitions/PackageConstraintTarget"
+        }
+      },
+      "additionalProperties": false,
+      "required": ["package", "dependencies"]
+    },
+    "PackageConstraint2": {
+      "description": "Constraints associated with a specific package and optional version.",
+      "type": "object",
+      "properties": {
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/BuildConstraintDependency"
           }
         },
         "package": {

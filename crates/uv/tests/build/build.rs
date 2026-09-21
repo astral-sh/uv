@@ -1196,6 +1196,27 @@ fn build_dependency_check_constraints_and_extra_build_dependencies() -> Result<(
     error: Failed to build `[TEMP_DIR]/project`
       cause: Build requirement is not satisfied: `idna>=3.6`
     ");
+    let pyproject = fs_err::read_to_string(project.child("pyproject.toml"))?;
+    project.child("pyproject.toml").write_str(&format!(
+        "{pyproject}\n{}",
+        indoc! {r#"
+            [tool.uv]
+            build-constraint-dependencies = [
+                { package = { name = "project", version = "0.1.0" }, dependencies = ["idna>=3.6"] },
+                { package = { name = "other" }, dependencies = ["idna==0"] },
+            ]
+        "#},
+    ))?;
+    uv_snapshot!(context.filters(), context.build().args([
+        "--preview-features", "build-dependency-check", "--no-build-isolation",
+    ]).arg("--offline").current_dir(&project), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Building source distribution...
+    error: Failed to build `[TEMP_DIR]/project`
+      cause: Build requirement is not satisfied: `idna>=3.6`
+    ");
+    project.child("pyproject.toml").write_str(&pyproject)?;
     project.child("pyproject.toml").write_str(&format!(
         "{}\n{}",
         fs_err::read_to_string(project.child("pyproject.toml"))?,
@@ -3826,5 +3847,214 @@ fn build_workspace_constraint_hashes() -> Result<()> {
         .temp_dir
         .child("backend-executed")
         .assert(predicate::path::exists());
+    Ok(())
+}
+
+/// Write a backend that verifies its build environment before and after dynamic requirements.
+fn write_scoped_constraint_project(
+    project: &assert_fs::fixture::ChildPath,
+    name: &str,
+    build_requirement: &str,
+    checked_package: &str,
+    expected_version: &str,
+) -> Result<()> {
+    project.child("pyproject.toml").write_str(&formatdoc! {r#"
+        [project]
+        name = "{name}"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        [build-system]
+        requires = ["{build_requirement}"]
+        build-backend = "backend"
+        backend-path = ["."]
+    "#})?;
+    project.child("backend.py").write_str(&indoc! {r#"
+        import importlib.metadata
+        from pathlib import Path
+        from zipfile import ZipFile
+
+        def check():
+            assert importlib.metadata.version("CHECKED") == "EXPECTED"
+
+        def get_requires_for_build_wheel(config_settings):
+            check()
+            return ["tomli>=1"]
+
+        def build_wheel(wheel_directory, config_settings, metadata_directory):
+            check()
+            filename = "NAME-0.1.0-py3-none-any.whl"
+            with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+                wheel.writestr("NAME-0.1.0.dist-info/METADATA", "Metadata-Version: 2.3\nName: NAME\nVersion: 0.1.0\n")
+                wheel.writestr("NAME-0.1.0.dist-info/WHEEL", "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n")
+                wheel.writestr("NAME-0.1.0.dist-info/RECORD", "")
+            return filename
+    "#}.replace("CHECKED", checked_package).replace("EXPECTED", expected_version).replace("NAME", name))?;
+    Ok(())
+}
+
+/// A build scope applies to transitive requirements throughout just that package's environment.
+#[test]
+fn scoped_build_constraints_transitive() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["foo", "bar"]
+        [tool.uv]
+        build-constraint-dependencies = [
+            "packaging>=23",
+            { package = { name = "foo", version = "0.1.0" }, dependencies = ["packaging==23.2"] },
+            { package = { name = "bar" }, dependencies = ["packaging==24.0"] },
+            { package = { name = "foo", version = "9.0.0" }, dependencies = ["packaging==0"] },
+            { package = { name = "absent" }, dependencies = ["hatchling==0"] },
+        ]
+    "#,
+    )?;
+    write_scoped_constraint_project(
+        &context.temp_dir.child("foo"),
+        "foo",
+        "hatchling==1.22.4",
+        "packaging",
+        "23.2",
+    )?;
+    write_scoped_constraint_project(
+        &context.temp_dir.child("bar"),
+        "bar",
+        "hatchling==1.22.4",
+        "packaging",
+        "24.0",
+    )?;
+    uv_snapshot!(context.filters(), context.build().arg("--wheel").arg("--package").arg("foo"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building wheel...
+    Successfully built dist/foo-0.1.0-py3-none-any.whl
+    ");
+    uv_snapshot!(context.filters(), context.build().arg("--wheel").arg("--package").arg("bar"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building wheel...
+    Successfully built dist/bar-0.1.0-py3-none-any.whl
+    ");
+    Ok(())
+}
+
+/// Cached default-backend resolutions cannot cross package scopes.
+#[test]
+fn scoped_build_constraints_default_backend_cache() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["foo", "bar"]
+        [tool.uv]
+        build-constraint-dependencies = [
+            { package = { name = "foo" }, dependencies = ["setuptools==68.2.2"] },
+            { package = { name = "bar" }, dependencies = ["setuptools==69.2.0"] },
+        ]
+    "#,
+    )?;
+    write_scoped_constraint_project(
+        &context.temp_dir.child("foo"),
+        "foo",
+        "setuptools>=40.8.0",
+        "setuptools",
+        "68.2.2",
+    )?;
+    write_scoped_constraint_project(
+        &context.temp_dir.child("bar"),
+        "bar",
+        "setuptools>=40.8.0",
+        "setuptools",
+        "69.2.0",
+    )?;
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--no-editable").env(EnvVars::UV_CONCURRENT_BUILDS, "1"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + bar==0.1.0 (from file://[TEMP_DIR]/bar)
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+    ");
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--no-editable").arg("--frozen").arg("--reinstall"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     ~ bar==0.1.0 (from file://[TEMP_DIR]/bar)
+     ~ foo==0.1.0 (from file://[TEMP_DIR]/foo)
+    ");
+    context.temp_dir.child("pyproject.toml").write_str(
+        &context
+            .read("pyproject.toml")
+            .replace("setuptools==68.2.2", "setuptools==68.2.1"),
+    )?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    Ok(())
+}
+
+/// Archive hashes in a build scope are checked only in the selected build environment.
+#[test]
+fn scoped_build_constraints_hashes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("pyproject.toml").write_str(r#"
+        [tool.uv.workspace]
+        members = ["foo", "bar"]
+        [tool.uv]
+        build-constraint-dependencies = [
+            { package = { name = "foo" }, dependencies = [
+                { requirement = "packaging==23.2", hashes = ["sha256:0000000000000000000000000000000000000000000000000000000000000000"] },
+            ] },
+        ]
+    "#)?;
+    write_scoped_constraint_project(
+        &context.temp_dir.child("foo"),
+        "foo",
+        "packaging==23.2",
+        "packaging",
+        "23.2",
+    )?;
+    write_scoped_constraint_project(
+        &context.temp_dir.child("bar"),
+        "bar",
+        "packaging==24.0",
+        "packaging",
+        "24.0",
+    )?;
+    uv_snapshot!(context.filters(), context.build().arg("--wheel").arg("--package").arg("foo").arg("--verify-hashes"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Building wheel...
+    error: Failed to build `[TEMP_DIR]/foo`
+      cause: Failed to install requirements from `build-system.requires`
+      cause: Failed to download `packaging==23.2`
+      cause: Hash mismatch for `packaging==23.2`
+
+             Expected:
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+             Computed:
+               sha256:8c491190033a9af7e1d931d0b5dacc2ef47509b34dd0de67ed209b5203fc88c7
+    ");
+    uv_snapshot!(context.filters(), context.build().arg("--wheel").arg("--package").arg("bar").arg("--verify-hashes"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building wheel...
+    Successfully built dist/bar-0.1.0-py3-none-any.whl
+    ");
     Ok(())
 }

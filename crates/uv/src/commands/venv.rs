@@ -11,8 +11,8 @@ use tracing::warn;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    ActiveEnvironment, BuildOptions, Concurrency, Constraints, DependencyGroups, DryRun,
-    IndexStrategy, KeyringProviderType, NoBinary, NoBuild, NoSources,
+    ActiveEnvironment, BuildOptions, Concurrency, DependencyGroups, DryRun, IndexStrategy,
+    KeyringProviderType, NoBinary, NoBuild, NoSources,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{
@@ -306,7 +306,7 @@ pub(crate) async fn venv(
         let state = SharedState::default();
 
         // For seed packages, assume a bunch of default settings are sufficient.
-        let build_constraints = Constraints::default();
+        let build_constraints = uv_configuration::BuildConstraints::default();
         let build_hasher = HashStrategy::default();
         let config_settings = ConfigSettings::default();
         let config_settings_package = PackageConfigSettings::default();
@@ -364,7 +364,7 @@ pub(crate) async fn venv(
         // Since the virtual environment is empty, and the set of requirements is trivial (no
         // constraints, no editables, etc.), we can use the build dispatch APIs directly.
         let requirements = build_dispatch
-            .resolve(&requirements, &build_stack)
+            .resolve(&requirements, None, None, &build_stack)
             .await
             .map_err(|err| VenvError::Seed(err.into()))?;
         let installed = build_dispatch

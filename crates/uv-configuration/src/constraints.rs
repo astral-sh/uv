@@ -7,7 +7,7 @@ use uv_distribution_types::{NameRequirementSpecification, Requirement, Requireme
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 
-/// A constraint that applies to the dependencies of a specific package version.
+/// Constraints associated with a specific package and optional version.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(
@@ -123,7 +123,7 @@ impl<T> From<T> for Constraint<T> {
 
 impl PackageConstraintTarget {
     /// Whether this selector applies to the given package version.
-    fn matches(&self, name: &PackageName, version: Option<&Version>) -> bool {
+    pub(crate) fn matches(&self, name: &PackageName, version: Option<&Version>) -> bool {
         self.name == *name
             && self
                 .version

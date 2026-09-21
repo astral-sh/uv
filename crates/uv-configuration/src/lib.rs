@@ -1,6 +1,7 @@
 pub use active_environment::*;
 pub use annotation_style::*;
 pub use authentication::*;
+pub use build_constraints::*;
 pub use build_options::*;
 pub use concurrency::*;
 pub use constraints::*;
@@ -34,6 +35,7 @@ pub use vcs::*;
 mod active_environment;
 mod annotation_style;
 mod authentication;
+mod build_constraints;
 mod build_options;
 mod concurrency;
 mod constraints;

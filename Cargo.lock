@@ -6430,6 +6430,8 @@ dependencies = [
  "uv-git",
  "uv-install-wheel",
  "uv-installer",
+ "uv-normalize",
+ "uv-pep440",
  "uv-platform-tags",
  "uv-preview",
  "uv-pypi-types",

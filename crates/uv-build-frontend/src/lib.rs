@@ -217,11 +217,14 @@ impl Pep517Backend {
     }
 }
 
+/// Shared default-backend resolutions, separated when package-scoped build settings apply.
+type DefaultResolutions = FxHashMap<Option<(PackageName, Option<Version>)>, ResolvedRequirements>;
+
 /// Uses an [`Arc`] internally, clone freely.
 #[derive(Debug, Clone)]
 pub struct SourceBuildContext {
     /// An in-memory resolution of the default backend's requirements for PEP 517 builds.
-    default_resolution: Arc<Mutex<Option<ResolvedRequirements>>>,
+    default_resolution: Arc<Mutex<DefaultResolutions>>,
     /// A shared semaphore to limit the number of concurrent builds.
     concurrent_build_slots: Arc<Semaphore>,
 }
@@ -403,6 +406,8 @@ impl SourceBuild {
                 source_build_context.clone(),
                 &pep517_backend,
                 &extra_build_dependencies,
+                package_name.as_ref(),
+                package_version.as_ref(),
                 build_stack,
             )
             .await?;
@@ -491,7 +496,12 @@ impl SourceBuild {
                     .chain(extra_requires)
                     .collect();
                 let resolution = build_context
-                    .resolve(&requirements, build_stack)
+                    .resolve(
+                        &requirements,
+                        package_name.as_ref(),
+                        package_version.as_ref(),
+                        build_stack,
+                    )
                     .await
                     .map_err(|err| {
                         Error::RequirementsResolve(
@@ -531,6 +541,16 @@ impl SourceBuild {
             modified_path,
             runner,
         })
+    }
+
+    /// Return the package name discovered from the project or source distribution.
+    pub fn package_name(&self) -> Option<&PackageName> {
+        self.package_name.as_ref()
+    }
+
+    /// Return the package version when it is known before invoking the backend.
+    pub fn package_version(&self) -> Option<&Version> {
+        self.package_version.as_ref()
     }
 
     /// Return the caller-provided environment when build isolation is disabled for this package.
@@ -614,6 +634,8 @@ impl SourceBuild {
         source_build_context: SourceBuildContext,
         pep517_backend: &Pep517Backend,
         extra_build_dependencies: &[Requirement],
+        package_name: Option<&PackageName>,
+        package_version: Option<&Version>,
         build_stack: &BuildStack,
     ) -> Result<ResolvedRequirements, Error> {
         Ok(
@@ -621,16 +643,29 @@ impl SourceBuild {
                 && extra_build_dependencies.is_empty()
             {
                 let mut resolution = source_build_context.default_resolution.lock().await;
-                if let Some(resolved_requirements) = &*resolution {
+                let key = if build_context
+                    .build_constraints()
+                    .has_scope(package_name, package_version)
+                {
+                    package_name.map(|name| (name.clone(), package_version.cloned()))
+                } else {
+                    None
+                };
+                if let Some(resolved_requirements) = resolution.get(&key) {
                     resolved_requirements.clone()
                 } else {
                     let resolved_requirements = build_context
-                        .resolve(&DEFAULT_BACKEND.requirements, build_stack)
+                        .resolve(
+                            &DEFAULT_BACKEND.requirements,
+                            package_name,
+                            package_version,
+                            build_stack,
+                        )
                         .await
                         .map_err(|err| {
                             Error::RequirementsResolve("`setup.py` build", err.into())
                         })?;
-                    *resolution = Some(resolved_requirements.clone());
+                    resolution.insert(key, resolved_requirements.clone());
                     resolved_requirements
                 }
             } else {
@@ -650,7 +685,7 @@ impl SourceBuild {
                     )
                 };
                 build_context
-                    .resolve(&requirements, build_stack)
+                    .resolve(&requirements, package_name, package_version, build_stack)
                     .await
                     .map_err(|err| Error::RequirementsResolve(dependency_sources, err.into()))?
             },

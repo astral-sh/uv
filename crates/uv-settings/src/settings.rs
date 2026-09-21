@@ -157,7 +157,7 @@ pub struct Options {
     pub constraint_dependencies: Option<Vec<Constraint<Requirement<VerbatimParsedUrl>>>>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
-    pub build_constraint_dependencies: Option<Vec<BuildConstraintDependency>>,
+    pub build_constraint_dependencies: Option<Vec<Constraint<BuildConstraintDependency>>>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub environments: Option<SupportedEnvironments>,
@@ -2638,7 +2638,7 @@ struct OptionsWire {
     override_dependencies: Option<Vec<OverrideDependency>>,
     exclude_dependencies: Option<Vec<ExcludeDependency>>,
     constraint_dependencies: Option<Vec<Constraint<Requirement<VerbatimParsedUrl>>>>,
-    build_constraint_dependencies: Option<Vec<BuildConstraintDependency>>,
+    build_constraint_dependencies: Option<Vec<Constraint<BuildConstraintDependency>>>,
     environments: Option<SupportedEnvironments>,
     required_environments: Option<SupportedEnvironments>,
     minimum_libc_version: Option<MinimumLibcVersion>,

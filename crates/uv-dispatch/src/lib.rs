@@ -18,7 +18,8 @@ use uv_build_frontend::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_configuration::{
-    BuildKind, BuildOptions, Constraints, IndexStrategy, NoSources, Overrides, Reinstall,
+    BuildConstraints, BuildKind, BuildOptions, Constraints, HashCheckingMode, IndexStrategy,
+    NoSources, Overrides, Reinstall,
 };
 use uv_configuration::{BuildOutput, Concurrency, Excludes};
 use uv_distribution::DistributionDatabase;
@@ -30,6 +31,8 @@ use uv_distribution_types::{
 };
 use uv_git::GitResolver;
 use uv_installer::{InstallationStrategy, Installer, Plan, Planner, Preparer, SitePackages};
+use uv_normalize::PackageName;
+use uv_pep440::Version;
 use uv_preview::Preview;
 use uv_pypi_types::Conflicts;
 use uv_python::{Interpreter, PythonEnvironment};
@@ -40,7 +43,7 @@ use uv_resolver::{
 };
 use uv_types::{
     AnyErrorBuild, BuildArena, BuildContext, BuildIsolation, BuildStack, EmptyInstalledPackages,
-    HashStrategy, InFlight, ResolvedRequirements, SourceTreeEditablePolicy,
+    HashStrategy, HashVerification, InFlight, ResolvedRequirements, SourceTreeEditablePolicy,
 };
 use uv_workspace::WorkspaceCache;
 
@@ -125,7 +128,7 @@ impl IsBuildBackendError for BuildDispatchError {
 pub struct BuildDispatch<'a> {
     client: &'a RegistryClient,
     cache: &'a Cache,
-    constraints: &'a Constraints,
+    constraints: &'a BuildConstraints,
     interpreter: &'a Interpreter,
     index_locations: &'a IndexLocations,
     index_strategy: IndexStrategy,
@@ -154,7 +157,7 @@ impl<'a> BuildDispatch<'a> {
     pub fn new(
         client: &'a RegistryClient,
         cache: &'a Cache,
-        constraints: &'a Constraints,
+        constraints: &'a BuildConstraints,
         interpreter: &'a Interpreter,
         index_locations: &'a IndexLocations,
         flat_index: &'a FlatIndex,
@@ -300,6 +303,10 @@ impl BuildContext for BuildDispatch<'_> {
         &self.workspace_cache
     }
 
+    fn build_constraints(&self) -> &BuildConstraints {
+        self.constraints
+    }
+
     fn extra_build_requires(&self) -> &ExtraBuildRequires {
         self.extra_build_requires
     }
@@ -311,12 +318,16 @@ impl BuildContext for BuildDispatch<'_> {
     async fn resolve<'data>(
         &'data self,
         requirements: &'data [Requirement],
+        package_name: Option<&'data PackageName>,
+        package_version: Option<&'data Version>,
         build_stack: &'data BuildStack,
     ) -> Result<ResolvedRequirements, BuildDispatchError> {
         let python_requirement = PythonRequirement::from_interpreter(self.interpreter);
         let marker_env = self.interpreter.to_resolver_marker_environment();
         let resolver_env = ResolverEnvironment::specific(marker_env);
         let tags = self.interpreter.tags()?;
+
+        let constraints = self.constraints.for_package(package_name, package_version);
 
         // Walk any URL requirements transitively so their sub-URLs (for example, a workspace
         // member that depends on another workspace member) are known before the resolver runs
@@ -328,11 +339,39 @@ impl BuildContext for BuildDispatch<'_> {
             .clone()
             .augment_with_requirements(requirements.iter())
             .map_err(uv_requirements::Error::from)?;
+        let hash_mode = match self.hasher.verification() {
+            HashVerification::None => None,
+            HashVerification::IfPresent(_) => Some(HashCheckingMode::Verify),
+            HashVerification::Required(_) => Some(HashCheckingMode::Require),
+        };
+        let hasher = if let Some(mode) = hash_mode
+            && self.constraints.has_scope(package_name, package_version)
+        {
+            // Workspace constraints without hashes restrict versions even under --require-hashes.
+            // Preserve the caller's policy while adding hashes from the selected build scope.
+            let hash_constraints = Constraints::from_specifications(
+                constraints
+                    .specifications()
+                    .filter(|entry| !mode.is_require() || !entry.hashes.is_empty())
+                    .cloned(),
+            );
+            let scoped_hashes = HashStrategy::from_constraints(
+                &hash_constraints,
+                Some(&self.interpreter.to_resolver_marker_environment()),
+                mode,
+            )
+            .map_err(uv_requirements::Error::from)?;
+            hasher
+                .with_constraint_hashes(&scoped_hashes)
+                .map_err(uv_requirements::Error::from)?
+        } else {
+            hasher
+        };
         let overrides = Overrides::default();
         let excludes = Excludes::default();
         let (lookaheads, hasher) = LookaheadResolver::new(
             requirements,
-            self.constraints,
+            &constraints,
             &overrides,
             &excludes,
             self.dependency_metadata,
@@ -349,7 +388,7 @@ impl BuildContext for BuildDispatch<'_> {
         .await?;
 
         let manifest = Manifest::simple(requirements.to_vec())
-            .with_constraints(self.constraints.clone())
+            .with_constraints(constraints.into_owned())
             .with_lookaheads(lookaheads);
 
         let resolver = Resolver::new(
@@ -623,7 +662,14 @@ impl BuildContext for BuildDispatch<'_> {
             &source_tree,
             uv_version::version(),
             &self.interpreter.to_resolver_marker_environment(),
-            self.constraints.requirements().cloned().map(Into::into),
+            |name, version| {
+                self.constraints
+                    .for_package(name, version)
+                    .requirements()
+                    .cloned()
+                    .map(Into::into)
+                    .collect()
+            },
         ) {
             trace!("Requirements for direct build not matched because {reason}");
             return Ok(None);

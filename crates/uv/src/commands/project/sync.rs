@@ -14,8 +14,8 @@ use uv_cache::Cache;
 use uv_cli::SyncFormat;
 use uv_client::{BaseClientBuilder, CachedClient, RegistryClientBuilder};
 use uv_configuration::{
-    ActiveEnvironment, Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults,
-    DryRun, EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, HashCheckingMode,
+    ActiveEnvironment, Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DryRun,
+    EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, HashCheckingMode,
     InstallOptions, TargetTriple, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
@@ -270,11 +270,11 @@ pub(crate) async fn sync(
                         .and_then(|uv| uv.build_constraint_dependencies.as_ref())
                 })
                 .map(|constraints| {
-                    Constraints::from_specifications(
+                    uv_configuration::BuildConstraints::from_entries(
                         constraints
                             .iter()
                             .cloned()
-                            .map(NameRequirementSpecification::from),
+                            .map(|entry| entry.map(NameRequirementSpecification::from)),
                     )
                 });
 
@@ -861,7 +861,7 @@ pub(crate) async fn do_sync<'a>(
     let build_constraints = target.build_constraints();
 
     let build_hasher = HashStrategy::from_constraints(
-        &build_constraints,
+        build_constraints.global(),
         Some(&venv.interpreter().to_resolver_marker_environment()),
         uv_configuration::HashCheckingMode::Verify,
     )?;

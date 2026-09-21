@@ -898,7 +898,7 @@ impl Workspace {
     }
 
     /// Returns the set of build constraints for the workspace.
-    pub fn build_constraints(&self) -> Vec<BuildConstraintDependency> {
+    pub fn build_constraints(&self) -> Vec<Constraint<BuildConstraintDependency>> {
         let Some(build_constraints) = self
             .pyproject_toml
             .tool

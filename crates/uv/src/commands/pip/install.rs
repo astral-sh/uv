@@ -11,7 +11,7 @@ use uv_errors::{Hinted, Hints};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    BuildIsolation, BuildOptions, Concurrency, Constraint, Constraints, DryRun, EditableMode,
+    BuildConstraints, BuildIsolation, BuildOptions, Concurrency, Constraint, DryRun, EditableMode,
     ExcludeDependency, ExtrasSpecification, HashCheckingMode, IndexStrategy, NoSources, Override,
     Reinstall, Upgrade,
 };
@@ -85,7 +85,7 @@ pub(crate) async fn pip_install(
     constraints_from_workspace: Vec<Constraint<Requirement>>,
     overrides_from_workspace: Vec<Override<Requirement>>,
     excludes_from_workspace: Vec<ExcludeDependency>,
-    build_constraints_from_workspace: Vec<NameRequirementSpecification>,
+    build_constraints_from_workspace: Vec<Constraint<NameRequirementSpecification>>,
     editable: Option<EditableMode>,
     extras: &ExtrasSpecification,
     groups: &GroupsSpecification,
@@ -197,10 +197,11 @@ pub(crate) async fn pip_install(
         .collect();
 
     // Read build constraints.
-    let build_constraints = Constraints::from_specifications(
+    let build_constraints = BuildConstraints::from_entries(
         operations::read_constraints(build_constraints, &client_builder)
             .await?
             .into_iter()
+            .map(Constraint::Requirement)
             .chain(build_constraints_from_workspace.iter().cloned()),
     );
 
@@ -468,7 +469,7 @@ pub(crate) async fn pip_install(
     // Verify supplied build hashes unless hash verification was explicitly disabled.
     let build_hasher = if hash_checking.is_some() {
         HashStrategy::from_constraints(
-            &build_constraints,
+            build_constraints.global(),
             Some(&marker_env),
             HashCheckingMode::Verify,
         )?

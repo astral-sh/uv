@@ -12,8 +12,8 @@ use tracing::debug;
 use uv_cache::{Cache, Refresh};
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    ActiveEnvironment, Concurrency, Constraint, Constraints, DependencyGroupsWithDefaults, DryRun,
-    ExcludeDependency, ExtrasSpecification, Override, PackageConstraint, PackageOverride,
+    ActiveEnvironment, BuildConstraints, Concurrency, Constraint, DependencyGroupsWithDefaults,
+    DryRun, ExcludeDependency, ExtrasSpecification, Override, PackageConstraint, PackageOverride,
     Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
@@ -854,7 +854,9 @@ async fn do_lock(
     let (locked_hasher, locked_build_hasher) = if let Some(existing_lock) = existing_lock.as_ref() {
         let locked_hasher = existing_lock.hash_strategy(target.install_path())?;
         let build_hasher = HashStrategy::from_constraints(
-            &existing_lock.build_constraints(target.install_path()),
+            existing_lock
+                .build_constraints(target.install_path())
+                .global(),
             Some(&interpreter.to_resolver_marker_environment()),
             uv_configuration::HashCheckingMode::Verify,
         )?;
@@ -876,7 +878,7 @@ async fn do_lock(
         .with_verification(resolution_hasher.verification().clone());
 
     let build_hasher = HashStrategy::from_constraints(
-        &build_constraints,
+        build_constraints.global(),
         Some(&interpreter.to_resolver_marker_environment()),
         uv_configuration::HashCheckingMode::Verify,
     )?;
@@ -1148,7 +1150,7 @@ async fn do_lock(
                 constraints,
                 overrides,
                 excludes.clone(),
-                build_constraints.specifications().cloned(),
+                build_constraints.entries().cloned(),
                 dependency_groups,
                 dependency_metadata.values().cloned(),
             )
@@ -1214,7 +1216,7 @@ impl ValidatedLock {
         constraints: &[Constraint<Requirement>],
         overrides: &[Override<Requirement>],
         excludes: &[ExcludeDependency],
-        build_constraints: &Constraints,
+        build_constraints: &BuildConstraints,
         conflicts: &Conflicts,
         environments: Option<&SupportedEnvironments>,
         required_environments: Option<&SupportedEnvironments>,

@@ -16,6 +16,7 @@ use uv_distribution_types::{
 };
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
+use uv_pep440::Version;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_workspace::WorkspaceCache;
 
@@ -139,6 +140,9 @@ pub trait BuildContext {
     /// Workspace discovery caching.
     fn workspace_cache(&self) -> &WorkspaceCache;
 
+    /// Return build constraints, including selectors for individual build environments.
+    fn build_constraints(&self) -> &uv_configuration::BuildConstraints;
+
     /// Get the extra build requirements.
     fn extra_build_requires(&self) -> &ExtraBuildRequires;
 
@@ -149,6 +153,8 @@ pub trait BuildContext {
     fn resolve<'a>(
         &'a self,
         requirements: &'a [Requirement],
+        package_name: Option<&'a PackageName>,
+        package_version: Option<&'a Version>,
         build_stack: &'a BuildStack,
     ) -> impl Future<Output = Result<ResolvedRequirements, impl IsBuildBackendError>> + 'a;
 

@@ -624,6 +624,12 @@ pub struct ToolUv {
     /// a build; instead, the package must be requested elsewhere in the project's build dependency
     /// graph.
     ///
+    /// A table with `package` and `dependencies` selects the package being built. Its constraints
+    /// apply throughout that package's build environment, including transitive build dependencies
+    /// and requirements returned by build backend hooks. The selector accepts a `name` and an
+    /// optional exact `version`; version-specific scopes do not apply until that version is known.
+    /// Global and all matching scoped constraints are combined.
+    ///
     /// !!! note
     ///     In `uv lock`, `uv sync`, and `uv run`, uv will only read `build-constraint-dependencies` from
     ///     the `pyproject.toml` at the workspace root, and will ignore any declarations in other
@@ -637,10 +643,13 @@ pub struct ToolUv {
         example = r#"
             # Ensure that the setuptools v60.0.0 is used whenever a package has a build dependency
             # on setuptools.
-            build-constraint-dependencies = ["setuptools==60.0.0"]
+            build-constraint-dependencies = [
+                "setuptools>=60",
+                { package = { name = "foo", version = "1.0.0" }, dependencies = ["setuptools<70"] },
+            ]
         "#
     )]
-    pub(crate) build_constraint_dependencies: Option<Vec<BuildConstraintDependency>>,
+    pub(crate) build_constraint_dependencies: Option<Vec<Constraint<BuildConstraintDependency>>>,
 
     /// A list of supported environments against which to resolve dependencies.
     ///
