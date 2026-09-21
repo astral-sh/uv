@@ -391,7 +391,11 @@ def wait_for_index(
     upload. We need to specifically run this through uv since to query the same cache
     (invalidation) as the registry client in skip existing in uv publish will later,
     just `get_filenames` fails non-deterministically.
+
+    Require consecutive successful checks since index responses can briefly disagree
+    after an upload.
     """
+    consecutive_successes = 0
     for _ in range(50):
         result = run(
             [
@@ -410,36 +414,42 @@ def wait_for_index(
                 "-",
             ],
             text=True,
-            input=f"{plan.configuration.project_name}",
+            input=f"{plan.configuration.project_name}=={version}",
             stdout=PIPE,
             env=plan.full_env(),
             check=False,
         )
         # codeberg sometimes times out
         if result.returncode != 0:
+            consecutive_successes = 0
             print(
                 f"uv pip compile not updated, missing 2 files for {version}, "
                 + f"sleeping for 2s: `{plan.configuration.index_url}`:\n",
                 file=sys.stderr,
             )
-            sleep(2)
-            continue
-
-        if (
+        elif (
             f"{plan.configuration.project_name}=={version}" in result.stdout
             and result.stdout.count("--hash") == 2
         ):
-            break
-
-        print(
-            f"uv pip compile not updated, missing 2 files for {version}, "
-            + f"sleeping for 2s: `{plan.configuration.index_url}`:\n"
-            + "```\n"
-            + result.stdout.replace("\\\n    ", "")
-            + "```",
-            file=sys.stderr,
-        )
+            consecutive_successes += 1
+            if consecutive_successes == 3:
+                return
+        else:
+            consecutive_successes = 0
+            print(
+                f"uv pip compile not updated, missing 2 files for {version}, "
+                + f"sleeping for 2s: `{plan.configuration.index_url}`:\n"
+                + "```\n"
+                + result.stdout.replace("\\\n    ", "")
+                + "```",
+                file=sys.stderr,
+            )
         sleep(2)
+
+    raise RuntimeError(
+        f"Index did not consistently expose both files for "
+        f"{plan.configuration.project_name}=={version}"
+    )
 
 
 def get_fresh_version(plan: Plan) -> Version:
@@ -587,7 +597,6 @@ def test_reupload_with_check_url(
         f"\n=== 3. Publishing {plan.configuration.project_name} {version} again with {mode} ===",
         file=sys.stderr,
     )
-    wait_for_index(plan, version)
     # Test twine-style and index-style uploads for different packages.
     if index := plan.configuration.index:
         args = [
@@ -607,25 +616,37 @@ def test_reupload_with_check_url(
             plan.configuration.index_url,
             *plan.extra_args,
         ]
-    output = run(
-        args,
-        cwd=project_dir,
-        env=plan.full_env(),
-        text=True,
-        check=True,
-        stderr=PIPE,
-    ).stderr
+    for attempt in range(5):
+        wait_for_index(plan, version)
+        output = run(
+            args,
+            cwd=project_dir,
+            env=plan.full_env(),
+            text=True,
+            check=True,
+            stderr=PIPE,
+        ).stderr
 
-    if output.count("Uploading") != 0 or output.count("already exists") != len(
-        expected_filenames
-    ):
-        raise RuntimeError(
-            f"Re-upload with check URL failed for {plan.target} "
-            f"({plan.configuration.publish_url}): "
-            f"{output.count('Uploading')} != 0, "
-            f"{output.count('already exists')} != {len(expected_filenames)}\n"
-            f"---\n{output}\n---"
-        )
+        if output.count("Uploading") == 0 and output.count("already exists") == len(
+            expected_filenames
+        ):
+            return
+
+        if attempt < 4:
+            print(
+                f"Index returned inconsistent files for "
+                f"{plan.configuration.project_name}=={version}; "
+                f"retrying check URL upload ({attempt + 1}/4)",
+                file=sys.stderr,
+            )
+
+    raise RuntimeError(
+        f"Re-upload with check URL failed for {plan.target} "
+        f"({plan.configuration.publish_url}): "
+        f"{output.count('Uploading')} != 0, "
+        f"{output.count('already exists')} != {len(expected_filenames)}\n"
+        f"---\n{output}\n---"
+    )
 
 
 def test_reupload_modified_files(
@@ -660,7 +681,6 @@ def test_reupload_modified_files(
         f"again with skip existing (error test) ===",
         file=sys.stderr,
     )
-    wait_for_index(plan, version)
     args = [
         plan.uv,
         "publish",
@@ -670,25 +690,37 @@ def test_reupload_modified_files(
         plan.configuration.index_url,
         *plan.extra_args,
     ]
-    result = run(
-        args,
-        cwd=modified_project_dir,
-        env=plan.full_env(),
-        text=True,
-        stderr=PIPE,
-        check=False,
-    )
-
-    if (
-        result.returncode == 0
-        or "Local file and index file do not match for" not in result.stderr
-    ):
-        raise RuntimeError(
-            f"Re-upload with mismatching files should not have been started "
-            f"for {plan.target} ({plan.configuration.publish_url}): "
-            f"Exit code {result.returncode}\n"
-            f"---\n{result.stderr}\n---"
+    for attempt in range(5):
+        wait_for_index(plan, version)
+        result = run(
+            args,
+            cwd=modified_project_dir,
+            env=plan.full_env(),
+            text=True,
+            stderr=PIPE,
+            check=False,
         )
+
+        if (
+            result.returncode != 0
+            and "Local file and index file do not match for" in result.stderr
+        ):
+            return
+
+        if attempt < 4:
+            print(
+                f"Index returned inconsistent files for "
+                f"{plan.configuration.project_name}=={version}; "
+                f"retrying modified file check ({attempt + 1}/4)",
+                file=sys.stderr,
+            )
+
+    raise RuntimeError(
+        f"Re-upload with mismatching files should not have been started "
+        f"for {plan.target} ({plan.configuration.publish_url}): "
+        f"Exit code {result.returncode}\n"
+        f"---\n{result.stderr}\n---"
+    )
 
 
 def test_publish_project(plan: Plan, client: httpx.Client):
