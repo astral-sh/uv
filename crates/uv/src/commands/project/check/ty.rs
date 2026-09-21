@@ -8,9 +8,11 @@ use tracing::debug;
 
 use uv_bin_install::{BinVersion, Binary, ResolvedVersion, bin_install, find_matching_version};
 use uv_cache::Cache;
+use uv_cli::ColorChoice;
 use uv_client::BaseClientBuilder;
 use uv_fs::Simplified;
 use uv_pep440::Version;
+use uv_shell::shlex_posix;
 
 use crate::child::run_to_completion;
 use crate::commands::ExitStatus;
@@ -30,8 +32,10 @@ pub(super) async fn run(
     venv_path: Option<&Path>,
     exclude_newer: Option<jiff::Timestamp>,
     show_version: bool,
+    show_command: bool,
     client_builder: &BaseClientBuilder<'_>,
     cache: &Cache,
+    color: ColorChoice,
     printer: Printer,
 ) -> Result<ExitStatus> {
     let (ty_path, ty_version) = if let Some(ty_path) = ty_path {
@@ -141,6 +145,10 @@ pub(super) async fn run(
     let mut command = Command::new(&ty_path);
     command.current_dir(target_dir);
     command.arg("check");
+    command.arg("--color").arg(color.as_str());
+    if printer.suppresses_progress() {
+        command.arg("--no-progress");
+    }
     if fix {
         command.arg("--fix");
     }
@@ -207,6 +215,15 @@ pub(super) async fn run(
 
     if let Some(venv_path) = venv_path {
         command.env("VIRTUAL_ENV", venv_path);
+    }
+
+    if show_command {
+        let mut stderr = printer.stderr_important();
+        write!(stderr, "Running `ty")?;
+        for argument in command.as_std().get_args() {
+            write!(stderr, " {}", shlex_posix(argument))?;
+        }
+        writeln!(stderr, "`")?;
     }
 
     let handle = command.spawn().context("Failed to spawn `ty check`")?;

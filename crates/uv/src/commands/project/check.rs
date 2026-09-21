@@ -5,6 +5,7 @@ use anyhow::Result;
 use tracing::debug;
 
 use uv_cache::Cache;
+use uv_cli::ColorChoice;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
     Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
@@ -60,6 +61,7 @@ pub(crate) async fn check(
     settings: ResolverInstallerSettings,
     ty_version: Option<String>,
     show_version: bool,
+    show_command: bool,
     script: Option<Pep723Script>,
     client_builder: BaseClientBuilder<'_>,
     python_preference: PythonPreference,
@@ -68,6 +70,7 @@ pub(crate) async fn check(
     concurrency: Concurrency,
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
+    color: ColorChoice,
     printer: Printer,
     preview: Preview,
     no_project: bool,
@@ -747,8 +750,10 @@ pub(crate) async fn check(
         venv_path.as_deref(),
         exclude_newer,
         show_version,
+        show_command,
         &client_builder,
         cache,
+        color,
         printer,
     )
     .await

@@ -411,6 +411,16 @@ pub enum ColorChoice {
 }
 
 impl ColorChoice {
+    /// Return the command-line representation of this color choice.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Always => "always",
+            Self::Never => "never",
+        }
+    }
+
     /// Combine self (higher priority) with an [`anstream::ColorChoice`] (lower priority).
     ///
     /// This method allows prioritizing the user choice, while using the inferred choice for a
@@ -5042,6 +5052,10 @@ pub struct CheckArgs {
     /// Display the version of ty that will be used for type checking.
     #[arg(long, hide = true)]
     pub show_version: bool,
+
+    /// Display the ty command that will be used for type checking.
+    #[arg(long, hide = true)]
+    pub show_command: bool,
 
     /// Avoid discovering a project or workspace.
     ///
