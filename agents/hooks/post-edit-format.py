@@ -1,6 +1,8 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = []
+# [tool.uv]
+# exclude-newer = "P7D"
 # ///
 
 """Post-edit hook to auto-format files after agent edits."""

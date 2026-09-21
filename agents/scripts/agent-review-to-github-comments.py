@@ -3,6 +3,8 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = []
+# [tool.uv]
+# exclude-newer = "P7D"
 # ///
 
 """Convert a structured agent review into GitHub pull request review comment payloads."""

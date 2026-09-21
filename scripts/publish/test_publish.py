@@ -6,6 +6,8 @@
 #     "pypi-attestations==0.0.28",
 #     "sigstore==4.1.0",
 # ]
+# [tool.uv]
+# exclude-newer = "P7D"
 # ///
 
 """Test `uv publish`.
@@ -74,6 +76,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from shutil import rmtree
 from subprocess import PIPE, check_call, run
+from tempfile import gettempdir
 from time import sleep
 
 import httpx
@@ -400,6 +403,9 @@ def wait_for_index(
             input=f"{plan.configuration.project_name}=={version}",
             stdout=PIPE,
             env=plan.full_env(),
+            # The version was just published, so run outside the repository to avoid
+            # applying its exclude-newer setting.
+            cwd=gettempdir(),
             check=False,
         )
         # codeberg sometimes times out

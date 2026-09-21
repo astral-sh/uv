@@ -712,9 +712,14 @@ jobs:
 
       - name: "Create Pyodide virtual environment"
         run: |
-          ./uv venv -p $PYODIDE_PYTHON venv-pyodide
-          source ./venv-pyodide/bin/activate
-          ./uv pip install --extra-index-url=$PYODIDE_INDEX --no-build numpy
+          # The bundled Pyodide index does not include upload dates, so run outside the
+          # repository to avoid applying its exclude-newer setting.
+          PYODIDE_VENV="$RUNNER_TEMP/venv-pyodide"
+          ./uv venv -p "$PYODIDE_PYTHON" "$PYODIDE_VENV"
+          source "$PYODIDE_VENV/bin/activate"
+          ./uv --directory "$RUNNER_TEMP" pip install \
+            --extra-index-url="$PYODIDE_INDEX" \
+            --no-build numpy
           python -c 'import numpy'
 
       - name: "Install Pyodide with uv python"

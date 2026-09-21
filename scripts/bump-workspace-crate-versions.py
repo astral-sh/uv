@@ -8,6 +8,8 @@
 # /// script
 # requires-python = ">=3.13"
 # dependencies = []
+# [tool.uv]
+# exclude-newer = "P7D"
 # ///
 
 
