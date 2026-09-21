@@ -1283,20 +1283,16 @@ fn build_dependency_check_preview_and_skip_dependency_check() -> Result<()> {
     Building wheel...
     Successfully built dist/project-0.1.0-py3-none-any.whl
     ");
-    // Both spellings bypass static and dynamic checks even when the preview is enabled.
-    insta::allow_duplicates! {
-    for flag in ["--skip-dependency-check", "-x"] {
-        uv_snapshot!(context.filters(), context.build().args([
-            "--preview-features", "build-dependency-check", "--no-build-isolation",
-        ]).args(["--wheel", "--offline", flag])
-            .current_dir(&project), @"
-        exit_code: 0 (success)
-        ----- stderr -----
-        Building wheel...
-        Successfully built dist/project-0.1.0-py3-none-any.whl
-        ");
-    }
-    }
+    // Skip static and dynamic checks even when the preview is enabled.
+    uv_snapshot!(context.filters(), context.build().args([
+        "--preview-features", "build-dependency-check", "--no-build-isolation",
+    ]).args(["--wheel", "--offline", "--skip-dependency-check"])
+        .current_dir(&project), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building wheel...
+    Successfully built dist/project-0.1.0-py3-none-any.whl
+    ");
     Ok(())
 }
 

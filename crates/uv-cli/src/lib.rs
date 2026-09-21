@@ -2999,7 +2999,7 @@ pub struct BuildArgs {
     /// Only affects builds with the `build-dependency-check` preview feature enabled. By
     /// default, that feature checks declared, backend-reported, and transitive build requirements
     /// in the selected environment before building. Isolated builds install their requirements.
-    #[arg(long, short = 'x', hide = true)]
+    #[arg(long, hide = true)]
     pub skip_dependency_check: bool,
 
     /// The directory from which distributions should be built, or a source
