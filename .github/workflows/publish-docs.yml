@@ -92,7 +92,7 @@ jobs:
 
       - name: "Get docs token"
         id: token
-        uses: open-security-tools/ost-simple-sts@bda64bffc5722085512dc618ab85f588b6c49b96 # v0.0.4
+        uses: open-security-tools/ost-simple-sts@88f85462c7e9c9e2fb2745bd5ce4ee163aec0420 # v0.0.5
         with:
           exchange-url: ${{ secrets.RELEASES_STS_API_URL }}/exchange
           audience: ${{ secrets.RELEASES_STS_API_URL }}
