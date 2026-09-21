@@ -123,7 +123,7 @@ impl<T> From<T> for Constraint<T> {
 
 impl PackageConstraintTarget {
     /// Whether this selector applies to the given package version.
-    pub(crate) fn matches(&self, name: &PackageName, version: Option<&Version>) -> bool {
+    fn matches(&self, name: &PackageName, version: Option<&Version>) -> bool {
         self.name == *name
             && self
                 .version
