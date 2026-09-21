@@ -38,10 +38,6 @@ pub enum Error {
     RequirementsResolve(&'static str, #[source] AnyErrorBuild),
     #[error("Failed to install requirements from {0}")]
     RequirementsInstall(&'static str, #[source] AnyErrorBuild),
-    #[error("Failed to check build requirements")]
-    RequirementsCheck(#[source] AnyErrorBuild),
-    #[error("Build requirement is not satisfied: `{0}`")]
-    UnsatisfiedBuildRequirement(String),
     #[error("Failed to create temporary virtualenv")]
     Virtualenv(#[from] uv_virtualenv::Error),
     // Build backend errors
@@ -75,11 +71,10 @@ impl IsBuildBackendError for Error {
             | Self::BuildScriptPath(_)
             | Self::CyclicBuildDependency(_)
             | Self::UnmatchedRuntime(..)
-            | Self::UnsatisfiedBuildRequirement(_)
             | Self::Lowering(_) => true,
-            Self::RequirementsResolve(_, error)
-            | Self::RequirementsInstall(_, error)
-            | Self::RequirementsCheck(error) => error.is_user_failure(),
+            Self::RequirementsResolve(_, error) | Self::RequirementsInstall(_, error) => {
+                error.is_user_failure()
+            }
             Self::Io(_) | Self::Virtualenv(_) => false,
         }
     }
@@ -95,8 +90,6 @@ impl IsBuildBackendError for Error {
             | Self::BackendPathOutsideSourceTree(_)
             | Self::RequirementsResolve(_, _)
             | Self::RequirementsInstall(_, _)
-            | Self::RequirementsCheck(_)
-            | Self::UnsatisfiedBuildRequirement(_)
             | Self::Virtualenv(_)
             | Self::CyclicBuildDependency(_)
             | Self::UnmatchedRuntime(_, _) => false,

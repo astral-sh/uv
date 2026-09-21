@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::iter::Flatten;
+use std::iter::{Flatten, once};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -465,12 +465,12 @@ impl SitePackages {
     }
 
     /// Like [`SitePackages::satisfies_spec`], but with resolved names for all requirements.
-    pub fn satisfies_requirements<'a>(
+    pub fn satisfies_requirements<'a, 'b>(
         &self,
-        requirements: impl ExactSizeIterator<Item = &'a Requirement>,
-        constraints: impl Iterator<Item = &'a Requirement>,
-        overrides: &'a Overrides,
-        excludes: &'a Excludes,
+        requirements: impl Iterator<Item = &'a Requirement>,
+        constraints: impl Iterator<Item = &'b Requirement>,
+        overrides: &Overrides,
+        excludes: &Excludes,
         dependency_metadata: &DependencyMetadata,
         dependency_mode: DependencyMode,
         installation: InstallationStrategy,
@@ -490,12 +490,13 @@ impl SitePackages {
                     .push(constraint);
                 constraints
             });
-        let mut stack = Vec::with_capacity(requirements.len());
-        let mut seen = FxHashSet::with_capacity_and_hasher(requirements.len(), FxBuildHasher);
+        let mut stack = Vec::with_capacity(requirements.size_hint().0);
+        let mut seen =
+            FxHashSet::with_capacity_and_hasher(requirements.size_hint().0, FxBuildHasher);
 
         // Add the direct requirements to the queue.
-        for requirement in overrides
-            .apply(requirements)
+        for requirement in requirements
+            .flat_map(|requirement| overrides.apply(once(requirement)))
             .filter(|requirement| !excludes.contains(&requirement.name))
         {
             if requirement.evaluate_markers(Some(markers), &[]) {

@@ -2994,7 +2994,7 @@ pub struct PipDebugArgs {
 
 #[derive(Args)]
 pub struct BuildArgs {
-    /// Skip checking build dependencies when building without isolation.
+    /// Skip checking if build dependencies are satisfied when building without isolation.
     ///
     /// Only affects builds with the `build-dependency-check` preview feature enabled. By
     /// default, that feature checks declared, backend-reported, and transitive build requirements
