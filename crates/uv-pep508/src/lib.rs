@@ -88,6 +88,10 @@ pub enum Pep508ErrorSource<T: Pep508Url = VerbatimUrl> {
 impl<T: Pep508Url> Display for Pep508Error<T> {
     /// Pretty formatting with underline.
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if self.input.is_empty() {
+            return Display::fmt(&self.message, f);
+        }
+
         // We can use char indices here since it's a Vec<char>
         let start_offset = self.input[..self.start]
             .chars()
@@ -1109,8 +1113,6 @@ mod tests {
             parse_pep508_err(""),
             @"
         Empty field is not allowed for PEP508
-
-        ^
         "
         );
     }

@@ -516,7 +516,8 @@ fn run_pep723_script_empty_dependency() -> Result<()> {
        "#
     })?;
 
-    // The final caret is orphaned because the invalid requirement is empty; see astral-sh/uv#21089.
+    // The invalid requirement is empty, so the PEP 508 error should not include an orphaned caret;
+    // see astral-sh/uv#21089.
     uv_snapshot!(context.filters(), context.run().arg("--script").arg("script.py"), @r#"
     exit_code: 2 (failure)
     ----- stderr -----
@@ -525,8 +526,6 @@ fn run_pep723_script_empty_dependency() -> Result<()> {
     2 | dependencies = [""]
       |                 ^^
     Empty field is not allowed for PEP508
-
-    ^
     "#);
 
     Ok(())
