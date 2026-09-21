@@ -37,6 +37,100 @@ use uv_test::{diff_snapshot, uv_snapshot};
 #[cfg(feature = "test-universal")]
 use uv_test::{download_to_disk, venv_bin_path};
 
+/// Repeated conflicts with an earlier direct dependency's upper bound do not change its priority.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_keeps_earlier_direct_dependency_with_upper_bound() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "earlier-direct-dependency-upper-bound"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.earlier.versions]
+        "1.0.0" = { requires = ["joint>=2", "unused"] }
+        "2.0.0" = { requires = ["joint<2"] }
+
+        [packages.later.versions]
+        "1.0.0" = { requires = ["joint<2"] }
+        "2.0.0" = { requires = ["joint>=2"] }
+        "2.0.1" = { requires = ["joint>=2"] }
+        "2.0.2" = { requires = ["joint>=2"] }
+        "2.0.3" = { requires = ["joint>=2"] }
+        "2.0.4" = { requires = ["joint>=2"] }
+        "2.0.5" = { requires = ["joint>=2"] }
+
+        [packages.joint.versions]
+        "1.0.0" = {}
+        "2.0.0" = {}
+
+        [packages.unused.versions]
+        "1.0.0" = {}
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["earlier", "joint", "later"]
+        "#})?;
+
+    let output = context
+        .lock()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .env(EnvVars::RUST_LOG, "uv_resolver::resolver=debug")
+        .assert()
+        .success();
+    let stderr = String::from_utf8_lossy(&output.get_output().stderr);
+    let selected = stderr
+        .lines()
+        .filter_map(|line| {
+            line.split_once("Selecting: ")
+                .and_then(|(_, selection)| selection.split_once(' '))
+                .map(|(package, _)| package)
+        })
+        .collect::<Vec<_>>();
+    // Promoting `later` would backtrack `joint` and retry a version of `later` already rejected.
+    assert_snapshot!(selected.join("\n"), @"
+    earlier==2.0.0
+    joint==1.0.0
+    later==2.0.5
+    later==2.0.4
+    later==2.0.3
+    later==2.0.2
+    later==2.0.1
+    later==2.0.0
+    later==1.0.0
+    ");
+
+    let lock = context.read("uv.lock");
+    let packages = lock
+        .lines()
+        .filter(|line| line.starts_with("name = ") || line.starts_with("version = \""))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert_snapshot!(packages, @r#"
+    name = "earlier"
+    version = "2.0.0"
+    name = "joint"
+    version = "1.0.0"
+    name = "later"
+    version = "1.0.0"
+    name = "project"
+    version = "0.1.0"
+    "#);
+
+    Ok(())
+}
+
 /// Lock validation warnings should explain why a local dependency's metadata could not be read.
 #[cfg(feature = "test-universal")]
 #[test]
