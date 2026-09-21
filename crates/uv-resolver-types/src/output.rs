@@ -204,8 +204,8 @@ impl ResolverOutput {
         marker_env: &MarkerEnvironment,
     ) -> Result<MarkerTree, Box<ParsedUrlError>> {
         use uv_pep508::{
-            CanonicalMarkerValueString, CanonicalMarkerValueVersion, MarkerExpression,
-            MarkerOperator, MarkerTree,
+            CanonicalMarkerListPair, CanonicalMarkerValueString, CanonicalMarkerValueVersion,
+            ContainerOperator, MarkerExpression, MarkerOperator, MarkerTree,
         };
 
         /// A subset of the possible marker values.
@@ -217,6 +217,7 @@ impl ResolverOutput {
         enum MarkerParam {
             Version(CanonicalMarkerValueVersion),
             String(CanonicalMarkerValueString),
+            SysAbiFeature(String),
         }
 
         /// Add all marker parameters from the given tree to the given set.
@@ -265,6 +266,9 @@ impl ResolverOutput {
                     }
                 }
                 MarkerTreeKind::List(marker) => {
+                    if let CanonicalMarkerListPair::SysAbiFeature(feature) = marker.pair() {
+                        set.insert(MarkerParam::SysAbiFeature(feature.clone()));
+                    }
                     for (_, tree) in marker.children() {
                         add_marker_params_from_tree(tree, set);
                     }
@@ -306,6 +310,21 @@ impl ResolverOutput {
         let mut conjunction = MarkerTree::TRUE;
         for marker_param in seen_marker_values {
             let expr = match marker_param {
+                MarkerParam::SysAbiFeature(feature) => {
+                    let operator = if marker_env
+                        .sys_abi_features()
+                        .iter()
+                        .any(|candidate| candidate.as_str() == feature)
+                    {
+                        ContainerOperator::In
+                    } else {
+                        ContainerOperator::NotIn
+                    };
+                    MarkerExpression::List {
+                        pair: CanonicalMarkerListPair::SysAbiFeature(feature),
+                        operator,
+                    }
+                }
                 MarkerParam::Version(value_version) => {
                     let from_env = marker_env.get_version(value_version);
                     MarkerExpression::Version {

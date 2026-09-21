@@ -68,7 +68,7 @@ impl CanonicalMarkerValueString {
     /// For example, `sys_platform == 'win32'` and `platform_system == 'Darwin'` are known to
     /// never be true at the same time.
     pub(crate) fn is_conflicting(self) -> bool {
-        self <= Self::PlatformSystem
+        self <= Self::PlatformPythonImplementation
     }
 }
 
@@ -162,15 +162,22 @@ impl Display for CanonicalMarkerValueExtra {
 
 /// A key-value pair for `<value> in <key>` or `<value> not in <key>`, where the key is a list.
 ///
-/// Used for PEP 751 markers.
+/// Used for set-valued environment markers.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum CanonicalMarkerListPair {
     /// A valid [`ExtraName`].
     Extras(ExtraName),
     /// A valid [`GroupName`].
     DependencyGroup(GroupName),
+    /// A PEP 780 ABI feature. Feature names are case-sensitive and are not normalized.
+    SysAbiFeature(String),
     /// For leniency, preserve invalid values.
-    Arbitrary { key: MarkerValueList, value: String },
+    Arbitrary {
+        /// The list-valued marker.
+        key: MarkerValueList,
+        /// The invalid value retained for diagnostics.
+        value: String,
+    },
 }
 
 impl CanonicalMarkerListPair {
@@ -179,6 +186,7 @@ impl CanonicalMarkerListPair {
         match self {
             Self::Extras(_) => MarkerValueList::Extras,
             Self::DependencyGroup(_) => MarkerValueList::DependencyGroups,
+            Self::SysAbiFeature(_) => MarkerValueList::SysAbiFeatures,
             Self::Arbitrary { key, .. } => *key,
         }
     }
@@ -188,6 +196,7 @@ impl CanonicalMarkerListPair {
         match self {
             Self::Extras(extra) => extra.to_string(),
             Self::DependencyGroup(group) => group.to_string(),
+            Self::SysAbiFeature(feature) => feature.clone(),
             Self::Arbitrary { value, .. } => value.clone(),
         }
     }

@@ -393,6 +393,8 @@ pub enum PreviewFeature {
     BatchExport,
     /// Allows setting minimum libc versions for universal resolutions.
     MinimumLibcVersion,
+    /// Allows [PEP 780](https://peps.python.org/pep-0780/) ABI feature environment markers.
+    SysAbiFeatures,
 }
 
 impl Display for PreviewFeature {
