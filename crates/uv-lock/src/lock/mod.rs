@@ -3568,12 +3568,20 @@ impl Lock {
                                 source,
                             });
                         }
-                        if lock.revision > REVISION.max(METADATA_FREE_REVISION) {
-                            return Err(LockParseError::UnparsableRevision {
-                                supported: REVISION.max(METADATA_FREE_REVISION),
-                                revision: lock.revision,
-                                source,
-                            });
+                        if lock.revision > REVISION {
+                            let supported =
+                                if uv_preview::is_enabled(PreviewFeature::LockWithoutMetadata) {
+                                    REVISION.max(METADATA_FREE_REVISION)
+                                } else {
+                                    REVISION
+                                };
+                            if lock.revision > supported {
+                                return Err(LockParseError::UnparsableRevision {
+                                    supported,
+                                    revision: lock.revision,
+                                    source,
+                                });
+                            }
                         }
                     }
                     return Err(LockParseError::Toml(source));

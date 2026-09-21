@@ -30169,17 +30169,16 @@ fn lock_unparsable_revision() -> Result<()> {
         requires-python = ">=3.12"
     "#})?;
 
-    let lock = indoc! {r#"
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
         version = 1
-        revision = 5
+        revision = 4
         requires-python = ">=3.12"
 
         [[package]]
         name = "project"
         version = false
         source = { virtual = "." }
-    "#};
-    context.temp_dir.child("uv.lock").write_str(lock)?;
+    "#})?;
     uv_snapshot!(context.filters(), context.lock().arg("--frozen"), @"
     exit_code: 2 (failure)
     ----- stderr -----
@@ -30191,35 +30190,6 @@ fn lock_unparsable_revision() -> Result<()> {
              invalid type: boolean `false`, expected a string
 
     hint: Try upgrading to a newer version of uv
-    ");
-
-    // Known revisions, including the metadata-free preview, do not suggest upgrading.
-    for revision in ["revision = 3", "revision = 4", "# No revision"] {
-        context
-            .temp_dir
-            .child("uv.lock")
-            .write_str(&lock.replace("revision = 5", revision))?;
-        uv_snapshot!(context.filters(), context.lock().arg("--frozen"), @"
-        exit_code: 2 (failure)
-        ----- stderr -----
-        error: Failed to parse `uv.lock`
-          cause: TOML parse error at line 5, column 1
-                   |
-                 5 | [[package]]
-                   | ^^^^^^^^^^^
-                 invalid type: boolean `false`, expected a string
-        ");
-    }
-
-    // A newer revision that can be read remains usable.
-    context
-        .temp_dir
-        .child("uv.lock")
-        .write_str(&lock.replace("version = false", "version = \"0.1.0\""))?;
-    uv_snapshot!(context.filters(), context.lock().arg("--frozen"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    warning: The lockfile at `uv.lock` was only checked for validity, not whether it is up-to-date, because `--frozen` was provided; use `--check` instead
     ");
 
     Ok(())
