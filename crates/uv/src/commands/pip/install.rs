@@ -381,7 +381,7 @@ pub(crate) async fn pip_install(
                     )?;
                 }
 
-                write_install_report(&Changelog::default(), output_format, printer)?;
+                write_install_report(&Changelog::default(), dry_run, output_format, printer)?;
                 return Ok(ExitStatus::Success);
             }
             SatisfiesResult::Unsatisfied(requirement) => {
@@ -683,13 +683,14 @@ pub(crate) async fn pip_install(
         )?;
     }
 
-    write_install_report(&changelog, output_format, printer)?;
+    write_install_report(&changelog, dry_run, output_format, printer)?;
     Ok(ExitStatus::Success)
 }
 
-/// Write the planned package changes as JSON when requested.
+/// Write the package changes as JSON when requested.
 fn write_install_report(
     changelog: &Changelog,
+    dry_run: DryRun,
     output_format: PipInstallFormat,
     printer: Printer,
 ) -> anyhow::Result<()> {
@@ -699,7 +700,7 @@ fn write_install_report(
             let report = InstallReport {
                 schema: SchemaReport::default(),
                 changes: PackageChangesReport::from_changelog(changelog),
-                dry_run: true,
+                dry_run: dry_run.enabled(),
             };
             writeln!(
                 printer.stdout_important(),
@@ -711,7 +712,7 @@ fn write_install_report(
     Ok(())
 }
 
-/// A report of the changes planned by `uv pip install --dry-run`.
+/// A report of the changes made or planned by `uv pip install`.
 #[derive(Debug, Serialize)]
 struct InstallReport {
     schema: SchemaReport,
