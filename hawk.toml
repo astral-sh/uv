@@ -30,6 +30,14 @@ package = "uv-redacted"
 
 [[override]]
 lint = "hawk::unnecessary_public"
+crate = "uv_preview"
+item = "require"
+kind = "function"
+level = "expect"
+reason = "public entry point for parsers to register preview requirements during configuration discovery"
+
+[[override]]
+lint = "hawk::unnecessary_public"
 crate = "uv_client"
 item = "base_client::BaseClientBuilder::<'a>::custom_client"
 kind = "inherent_method"
