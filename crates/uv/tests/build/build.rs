@@ -32,12 +32,7 @@ fn zip_file_names(path: &Path) -> Result<Vec<String>> {
 
 #[test]
 fn build_basic() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([(r"\\\.", "")])
-        .collect::<Vec<_>>();
+    let context = uv_test::test_context!("3.12").with_filter((r"\\\.", ""));
 
     let project = context.temp_dir.child("project");
 
@@ -64,7 +59,7 @@ fn build_basic() -> Result<()> {
     project.child("README").touch()?;
 
     // Build the specified path.
-    uv_snapshot!(&filters, context.build().arg("project"), @"
+    uv_snapshot!(context.filters(), context.build().arg("project"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Building source distribution...
@@ -85,7 +80,7 @@ fn build_basic() -> Result<()> {
     fs_err::remove_dir_all(project.child("dist"))?;
 
     // Build the current working directory.
-    uv_snapshot!(&filters, context.build().current_dir(project.path()), @"
+    uv_snapshot!(context.filters(), context.build().current_dir(project.path()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Building source distribution...
@@ -106,7 +101,7 @@ fn build_basic() -> Result<()> {
     fs_err::remove_dir_all(project.child("dist"))?;
 
     // Error if there's nothing to build.
-    uv_snapshot!(&filters, context.build(), @"
+    uv_snapshot!(context.filters(), context.build(), @"
     exit_code: 2 (failure)
     ----- stderr -----
     Building source distribution...
@@ -115,7 +110,7 @@ fn build_basic() -> Result<()> {
     ");
 
     // Build to a specified path.
-    uv_snapshot!(&filters, context.build().arg("--out-dir").arg("out").current_dir(project.path()), @"
+    uv_snapshot!(context.filters(), context.build().arg("--out-dir").arg("out").current_dir(project.path()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Building source distribution...
@@ -333,12 +328,7 @@ fn build_backend_path_symlink_outside_source_tree() -> Result<()> {
 
 #[test]
 fn build_sdist() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([(r"\\\.", "")])
-        .collect::<Vec<_>>();
+    let context = uv_test::test_context!("3.12").with_filter((r"\\\.", ""));
 
     let project = context.temp_dir.child("project");
 
@@ -365,7 +355,7 @@ fn build_sdist() -> Result<()> {
     project.child("README").touch()?;
 
     // Build the specified path.
-    uv_snapshot!(&filters, context.build().arg("--sdist").current_dir(&project), @"
+    uv_snapshot!(context.filters(), context.build().arg("--sdist").current_dir(&project), @"
     exit_code: 0 (success)
     ----- stderr -----
     Building source distribution...
@@ -386,12 +376,7 @@ fn build_sdist() -> Result<()> {
 
 #[test]
 fn build_wheel() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([(r"\\\.", "")])
-        .collect::<Vec<_>>();
+    let context = uv_test::test_context!("3.12").with_filter((r"\\\.", ""));
 
     let project = context.temp_dir.child("project");
 
@@ -418,7 +403,7 @@ fn build_wheel() -> Result<()> {
     project.child("README").touch()?;
 
     // Build the specified path.
-    uv_snapshot!(&filters, context.build().arg("--wheel").current_dir(&project), @"
+    uv_snapshot!(context.filters(), context.build().arg("--wheel").current_dir(&project), @"
     exit_code: 0 (success)
     ----- stderr -----
     Building wheel...
@@ -439,12 +424,7 @@ fn build_wheel() -> Result<()> {
 
 #[test]
 fn build_sdist_wheel() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([(r"\\\.", "")])
-        .collect::<Vec<_>>();
+    let context = uv_test::test_context!("3.12").with_filter((r"\\\.", ""));
 
     let project = context.temp_dir.child("project");
 
@@ -471,7 +451,7 @@ fn build_sdist_wheel() -> Result<()> {
     project.child("README").touch()?;
 
     // Build the specified path.
-    uv_snapshot!(&filters, context.build().arg("--sdist").arg("--wheel").current_dir(&project), @"
+    uv_snapshot!(context.filters(), context.build().arg("--sdist").arg("--wheel").current_dir(&project), @"
     exit_code: 0 (success)
     ----- stderr -----
     Building source distribution...
@@ -494,12 +474,7 @@ fn build_sdist_wheel() -> Result<()> {
 
 #[test]
 fn build_wheel_from_sdist() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([(r"\\\.", "")])
-        .collect::<Vec<_>>();
+    let context = uv_test::test_context!("3.12").with_filter((r"\\\.", ""));
 
     let project = context.temp_dir.child("project");
 
@@ -526,7 +501,7 @@ fn build_wheel_from_sdist() -> Result<()> {
     project.child("README").touch()?;
 
     // Build the sdist.
-    uv_snapshot!(&filters, context.build().arg("--sdist").current_dir(&project), @"
+    uv_snapshot!(context.filters(), context.build().arg("--sdist").current_dir(&project), @"
     exit_code: 0 (success)
     ----- stderr -----
     Building source distribution...
@@ -543,7 +518,7 @@ fn build_wheel_from_sdist() -> Result<()> {
         .assert(predicate::path::missing());
 
     // Error if `--wheel` is not specified.
-    uv_snapshot!(&filters, context.build().arg("./dist/project-0.1.0.tar.gz").current_dir(&project), @"
+    uv_snapshot!(context.filters(), context.build().arg("./dist/project-0.1.0.tar.gz").current_dir(&project), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to build `[TEMP_DIR]/project/dist/project-0.1.0.tar.gz`
@@ -551,7 +526,7 @@ fn build_wheel_from_sdist() -> Result<()> {
     ");
 
     // Error if `--sdist` is specified.
-    uv_snapshot!(&filters, context.build().arg("./dist/project-0.1.0.tar.gz").arg("--sdist").current_dir(&project), @"
+    uv_snapshot!(context.filters(), context.build().arg("./dist/project-0.1.0.tar.gz").arg("--sdist").current_dir(&project), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to build `[TEMP_DIR]/project/dist/project-0.1.0.tar.gz`
@@ -559,7 +534,7 @@ fn build_wheel_from_sdist() -> Result<()> {
     ");
 
     // Build the wheel from the sdist.
-    uv_snapshot!(&filters, context.build().arg("./dist/project-0.1.0.tar.gz").arg("--wheel").current_dir(&project), @"
+    uv_snapshot!(context.filters(), context.build().arg("./dist/project-0.1.0.tar.gz").arg("--wheel").current_dir(&project), @"
     exit_code: 0 (success)
     ----- stderr -----
     Building wheel from source distribution...
@@ -576,7 +551,7 @@ fn build_wheel_from_sdist() -> Result<()> {
         .assert(predicate::path::is_file());
 
     // Passing a wheel is an error.
-    uv_snapshot!(&filters, context.build().arg("./dist/project-0.1.0-py3-none-any.whl").arg("--wheel").current_dir(&project), @"
+    uv_snapshot!(context.filters(), context.build().arg("./dist/project-0.1.0-py3-none-any.whl").arg("--wheel").current_dir(&project), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to build `[TEMP_DIR]/project/dist/project-0.1.0-py3-none-any.whl`
@@ -588,12 +563,7 @@ fn build_wheel_from_sdist() -> Result<()> {
 
 #[test]
 fn build_fail() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([(r"\\\.", "")])
-        .collect::<Vec<_>>();
+    let context = uv_test::test_context!("3.12").with_filter((r"\\\.", ""));
 
     let project = context.temp_dir.child("project");
 
@@ -633,7 +603,7 @@ fn build_fail() -> Result<()> {
     )?;
 
     // Build the specified path.
-    uv_snapshot!(&filters, context.build().arg("project"), @r#"
+    uv_snapshot!(context.filters(), context.build().arg("project"), @r#"
     exit_code: 2 (failure)
     ----- stderr -----
     Building source distribution...
@@ -661,16 +631,10 @@ fn build_fail() -> Result<()> {
 
 #[test]
 fn build_workspace() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([
-            (r"\\\.", ""),
-            (r"\[project\]", "[PKG]"),
-            (r"\[member\]", "[PKG]"),
-        ])
-        .collect::<Vec<_>>();
+    let context = uv_test::test_context!("3.12")
+        .with_filter((r"\\\.", ""))
+        .with_filter((r"\[project\]", "[PKG]"))
+        .with_filter((r"\[member\]", "[PKG]"));
 
     let project = context.temp_dir.child("project");
 
@@ -744,7 +708,7 @@ fn build_workspace() -> Result<()> {
     r#virtual.child("README").touch()?;
 
     // Build the member.
-    uv_snapshot!(&filters, context.build().arg("--package").arg("member").current_dir(&project), @"
+    uv_snapshot!(context.filters(), context.build().arg("--package").arg("member").current_dir(&project), @"
     exit_code: 0 (success)
     ----- stderr -----
     Building source distribution...
@@ -763,7 +727,7 @@ fn build_workspace() -> Result<()> {
         .assert(predicate::path::is_file());
 
     // Build all packages.
-    uv_snapshot!(&filters, context.build().arg("--all").arg("--no-build-logs").current_dir(&project), @"
+    uv_snapshot!(context.filters(), context.build().arg("--all").arg("--no-build-logs").current_dir(&project), @"
     exit_code: 0 (success)
     ----- stderr -----
     [PKG] Building source distribution...
@@ -794,7 +758,7 @@ fn build_workspace() -> Result<()> {
         .assert(predicate::path::is_file());
 
     // If a source is provided, discover the workspace from the source.
-    uv_snapshot!(&filters, context.build().arg("./project").arg("--package").arg("member"), @"
+    uv_snapshot!(context.filters(), context.build().arg("./project").arg("--package").arg("member"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Building source distribution...
@@ -804,7 +768,7 @@ fn build_workspace() -> Result<()> {
     ");
 
     // If a source is provided, discover the workspace from the source.
-    uv_snapshot!(&filters, context.build().arg("./project").arg("--all").arg("--no-build-logs"), @"
+    uv_snapshot!(context.filters(), context.build().arg("./project").arg("--all").arg("--no-build-logs"), @"
     exit_code: 0 (success)
     ----- stderr -----
     [PKG] Building source distribution...
@@ -818,7 +782,7 @@ fn build_workspace() -> Result<()> {
     ");
 
     // Fail when `--package` is provided without a workspace.
-    uv_snapshot!(&filters, context.build().arg("--package").arg("member"), @"
+    uv_snapshot!(context.filters(), context.build().arg("--package").arg("member"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: `--package` was provided, but no workspace was found
@@ -826,7 +790,7 @@ fn build_workspace() -> Result<()> {
     ");
 
     // Fail when `--all` is provided without a workspace.
-    uv_snapshot!(&filters, context.build().arg("--all"), @"
+    uv_snapshot!(context.filters(), context.build().arg("--all"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: `--all-packages` was provided, but no workspace was found
@@ -834,7 +798,7 @@ fn build_workspace() -> Result<()> {
     ");
 
     // Fail when `--package` is a non-existent member without a workspace.
-    uv_snapshot!(&filters, context.build().arg("--package").arg("fail").current_dir(&project), @"
+    uv_snapshot!(context.filters(), context.build().arg("--package").arg("fail").current_dir(&project), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Package `fail` not found in workspace
@@ -845,16 +809,10 @@ fn build_workspace() -> Result<()> {
 
 #[test]
 fn build_all_with_failure() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([
-            (r"\\\.", ""),
-            (r"\[project\]", "[PKG]"),
-            (r"\[member-\w+\]", "[PKG]"),
-        ])
-        .collect::<Vec<_>>();
+    let context = uv_test::test_context!("3.12")
+        .with_filter((r"\\\.", ""))
+        .with_filter((r"\[project\]", "[PKG]"))
+        .with_filter((r"\[member-\w+\]", "[PKG]"));
 
     let project = context.temp_dir.child("project");
 
@@ -946,7 +904,7 @@ fn build_all_with_failure() -> Result<()> {
     )?;
 
     // Build all the packages
-    uv_snapshot!(&filters, context.build().arg("--all").arg("--no-build-logs").current_dir(&project), @"
+    uv_snapshot!(context.filters(), context.build().arg("--all").arg("--no-build-logs").current_dir(&project), @"
     exit_code: 2 (failure)
     ----- stderr -----
     [PKG] Building source distribution...
@@ -989,12 +947,7 @@ fn build_all_with_failure() -> Result<()> {
 
 #[test]
 fn build_constraints() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([(r"\\\.", "")])
-        .collect::<Vec<_>>();
+    let context = uv_test::test_context!("3.12").with_filter((r"\\\.", ""));
 
     let project = context.temp_dir.child("project");
 
@@ -1023,7 +976,7 @@ fn build_constraints() -> Result<()> {
         .touch()?;
     project.child("README").touch()?;
 
-    uv_snapshot!(&filters, context.build().arg("--build-constraint").arg("constraints.txt").current_dir(&project), @"
+    uv_snapshot!(context.filters(), context.build().arg("--build-constraint").arg("constraints.txt").current_dir(&project), @"
     exit_code: 2 (failure)
     ----- stderr -----
     Building source distribution...
@@ -1051,12 +1004,9 @@ fn build_constraints() -> Result<()> {
 /// workspace root.
 #[test]
 fn build_all_respects_workspace_build_constraint_dependencies() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([(r"\\\.", ""), (r"\[member\]", "[PKG]")])
-        .collect::<Vec<_>>();
+    let context = uv_test::test_context!("3.12")
+        .with_filter((r"\\\.", ""))
+        .with_filter((r"\[member\]", "[PKG]"));
 
     let project = context.temp_dir.child("project");
 
@@ -1114,7 +1064,7 @@ fn build_all_respects_workspace_build_constraint_dependencies() -> Result<()> {
 
     let stderr = apply_filters(
         String::from_utf8_lossy(&output.stderr).into_owned(),
-        &filters,
+        context.filters(),
     );
 
     assert!(
@@ -1151,12 +1101,9 @@ fn build_all_respects_workspace_build_constraint_dependencies() -> Result<()> {
 /// `build-constraint-dependencies` are not applied here.
 #[test]
 fn build_source_path_ignores_workspace_build_constraint_dependencies() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([(r"\\\.", ""), (r"\[member\]", "[PKG]")])
-        .collect::<Vec<_>>();
+    let context = uv_test::test_context!("3.12")
+        .with_filter((r"\\\.", ""))
+        .with_filter((r"\[member\]", "[PKG]"));
 
     let project = context.temp_dir.child("project");
 
@@ -1205,7 +1152,7 @@ fn build_source_path_ignores_workspace_build_constraint_dependencies() -> Result
         .touch()?;
     member.child("README").touch()?;
 
-    uv_snapshot!(&filters, context.build().arg("./project").arg("--all").arg("--no-build-logs"), @"
+    uv_snapshot!(context.filters(), context.build().arg("./project").arg("--all").arg("--no-build-logs"), @"
     exit_code: 0 (success)
     ----- stderr -----
     [PKG] Building source distribution...
@@ -1231,17 +1178,11 @@ fn build_source_path_ignores_workspace_build_constraint_dependencies() -> Result
 /// <https://github.com/astral-sh/uv/issues/19074>.
 #[test]
 fn build_workspace_transitive_build_dependency() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([
-            (r"\\\.", ""),
-            (r"\[my-util\]", "[PKG]"),
-            (r"\[my-backend\]", "[PKG]"),
-            (r"\[my-tool\]", "[PKG]"),
-        ])
-        .collect::<Vec<_>>();
+    let context = uv_test::test_context!("3.12")
+        .with_filter((r"\\\.", ""))
+        .with_filter((r"\[my-util\]", "[PKG]"))
+        .with_filter((r"\[my-backend\]", "[PKG]"))
+        .with_filter((r"\[my-tool\]", "[PKG]"));
 
     let project = context.temp_dir.child("project");
 
@@ -1333,7 +1274,7 @@ fn build_workspace_transitive_build_dependency() -> Result<()> {
     my_tool.child("README.md").touch()?;
 
     uv_snapshot!(
-        &filters,
+        &context.filters(),
         context
             .build()
             .arg("--wheel")
@@ -1358,12 +1299,7 @@ fn build_workspace_transitive_build_dependency() -> Result<()> {
 
 #[test]
 fn build_sha() -> Result<()> {
-    let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION);
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([(r"\\\.", "")])
-        .collect::<Vec<_>>();
+    let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION).with_filter((r"\\\.", ""));
 
     let project = context.temp_dir.child("project");
 
@@ -1417,7 +1353,7 @@ fn build_sha() -> Result<()> {
             # via hatchling
     "})?;
 
-    uv_snapshot!(&filters, context.build().arg("--build-constraint").arg("constraints.txt").current_dir(&project), @"
+    uv_snapshot!(context.filters(), context.build().arg("--build-constraint").arg("constraints.txt").current_dir(&project), @"
     exit_code: 2 (failure)
     ----- stderr -----
     Building source distribution...
@@ -1446,7 +1382,7 @@ fn build_sha() -> Result<()> {
     fs_err::remove_dir_all(project.child("dist"))?;
 
     // Reject a missing hash with `--requires-hashes`.
-    uv_snapshot!(&filters, context.build().arg("--build-constraint").arg("constraints.txt").arg("--require-hashes").current_dir(&project), @"
+    uv_snapshot!(context.filters(), context.build().arg("--build-constraint").arg("constraints.txt").arg("--require-hashes").current_dir(&project), @"
     exit_code: 2 (failure)
     ----- stderr -----
     Building source distribution...
@@ -1478,7 +1414,7 @@ fn build_sha() -> Result<()> {
     let constraints = project.child("constraints.txt");
     constraints.write_str("hatchling==1.22.4")?;
 
-    uv_snapshot!(&filters, context.build().arg("--build-constraint").arg("constraints.txt").arg("--require-hashes").current_dir(&project), @"
+    uv_snapshot!(context.filters(), context.build().arg("--build-constraint").arg("constraints.txt").arg("--require-hashes").current_dir(&project), @"
     exit_code: 2 (failure)
     ----- stderr -----
     Building source distribution...
@@ -1527,7 +1463,7 @@ fn build_sha() -> Result<()> {
             # via hatchling
     "})?;
 
-    uv_snapshot!(&filters, context.build().arg("--build-constraint").arg("constraints.txt").current_dir(&project), @"
+    uv_snapshot!(context.filters(), context.build().arg("--build-constraint").arg("constraints.txt").current_dir(&project), @"
     exit_code: 0 (success)
     ----- stderr -----
     Building source distribution...
@@ -1550,12 +1486,7 @@ fn build_sha() -> Result<()> {
 
 #[tokio::test]
 async fn build_transitive_url_build_requirement_hashes() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([(r"\\\.", "")])
-        .collect::<Vec<_>>();
+    let context = uv_test::test_context!("3.12").with_filter((r"\\\.", ""));
 
     let ok_wheel = current_dir()?.join("../../test/links/ok-1.0.0-py3-none-any.whl");
     let validation_wheel =
@@ -1628,7 +1559,7 @@ async fn build_transitive_url_build_requirement_hashes() -> Result<()> {
             return wheel_name
     "#})?;
     uv_snapshot!(
-        &filters,
+        &context.filters(),
         context
             .build()
             .arg("--wheel")
@@ -1769,12 +1700,7 @@ fn build_hide_build_output_env_var() -> Result<()> {
 /// Test that `UV_HIDE_BUILD_OUTPUT` hides build output even on failure.
 #[test]
 fn build_hide_build_output_on_failure() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([(r"\\\.", "")])
-        .collect::<Vec<_>>();
+    let context = uv_test::test_context!("3.12").with_filter((r"\\\.", ""));
 
     let project = context.temp_dir.child("project");
 
@@ -1802,7 +1728,7 @@ fn build_hide_build_output_on_failure() -> Result<()> {
         "#})?;
 
     // With `UV_HIDE_BUILD_OUTPUT`, the output is hidden even on failure.
-    uv_snapshot!(&filters, context.build().arg("project").env(EnvVars::UV_HIDE_BUILD_OUTPUT, "1").env("FOO", "bar"), @"
+    uv_snapshot!(context.filters(), context.build().arg("project").env(EnvVars::UV_HIDE_BUILD_OUTPUT, "1").env("FOO", "bar"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     Building source distribution...
@@ -1818,12 +1744,7 @@ fn build_hide_build_output_on_failure() -> Result<()> {
 
 #[test]
 fn build_tool_uv_sources() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([(r"\\\.", "")])
-        .collect::<Vec<_>>();
+    let context = uv_test::test_context!("3.12").with_filter((r"\\\.", ""));
 
     let build = context.temp_dir.child("backend");
     build.child("pyproject.toml").write_str(
@@ -1887,7 +1808,7 @@ fn build_tool_uv_sources() -> Result<()> {
         .touch()?;
     project.child("README").touch()?;
 
-    uv_snapshot!(filters, context.build().current_dir(project.path()), @"
+    uv_snapshot!(context.filters(), context.build().current_dir(project.path()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Building source distribution...
@@ -2000,16 +1921,10 @@ fn build_git_boundary_in_dist_build() -> Result<()> {
 
 #[test]
 fn build_non_package() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([
-            (r"\\\.", ""),
-            (r"\[project\]", "[PKG]"),
-            (r"\[member\]", "[PKG]"),
-        ])
-        .collect::<Vec<_>>();
+    let context = uv_test::test_context!("3.12")
+        .with_filter((r"\\\.", ""))
+        .with_filter((r"\[project\]", "[PKG]"))
+        .with_filter((r"\[member\]", "[PKG]"));
 
     let project = context.temp_dir.child("project");
 
@@ -2047,7 +1962,7 @@ fn build_non_package() -> Result<()> {
     member.child("README").touch()?;
 
     // Build the member.
-    uv_snapshot!(&filters, context.build().arg("--package").arg("member").current_dir(&project), @r#"
+    uv_snapshot!(context.filters(), context.build().arg("--package").arg("member").current_dir(&project), @r#"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Package `member` is missing a `build-system`. For example, to build with `uv_build`, add the following to `packages/member/pyproject.toml`:
@@ -2068,7 +1983,7 @@ fn build_non_package() -> Result<()> {
         .assert(predicate::path::missing());
 
     // Build all packages.
-    uv_snapshot!(&filters, context.build().arg("--all").arg("--no-build-logs").current_dir(&project), @r#"
+    uv_snapshot!(context.filters(), context.build().arg("--all").arg("--no-build-logs").current_dir(&project), @r#"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Workspace does not contain any buildable packages. For example, to build `member` with `uv_build`, add a `build-system` to `packages/member/pyproject.toml`:
@@ -2480,12 +2395,14 @@ fn build_list_files() -> Result<()> {
 /// Test `--list` option errors.
 #[test]
 fn build_list_files_errors() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12")
+        // In CI, we run with link mode settings.
+        .with_filter(("--link-mode <LINK_MODE> ", ""))
+        // Normalize Windows workspace paths.
+        .with_filter(("/crates/uv/../../", "/"));
 
     let built_by_uv = current_dir()?.join("../../test/packages/built-by-uv");
 
-    let context = context.with_filter(("--link-mode <LINK_MODE> ", ""));
-    // In CI, we run with link mode settings.
     uv_snapshot!(context.filters(), context.build()
         .arg(&built_by_uv)
         .arg("--out-dir")
@@ -2503,8 +2420,6 @@ fn build_list_files_errors() -> Result<()> {
 
     // Not a uv build backend package, we can't list it.
     let anyio_local = current_dir()?.join("../../test/packages/anyio_local");
-    // Windows normalization
-    let context = context.with_filter(("/crates/uv/../../", "/"));
     uv_snapshot!(context.filters(), context.build()
         .arg(&anyio_local)
         .arg("--out-dir")
@@ -2713,12 +2628,7 @@ fn build_pyproject_toml_not_a_project() -> Result<()> {
 
 #[test]
 fn build_with_nonnormalized_name() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([(r"\\\.", "")])
-        .collect::<Vec<_>>();
+    let context = uv_test::test_context!("3.12").with_filter((r"\\\.", ""));
 
     let project = context.temp_dir.child("project");
 
@@ -2745,7 +2655,7 @@ fn build_with_nonnormalized_name() -> Result<()> {
     project.child("README").touch()?;
 
     // Build the specified path.
-    uv_snapshot!(&filters, context.build().arg("--no-build-logs").current_dir(&project), @"
+    uv_snapshot!(context.filters(), context.build().arg("--no-build-logs").current_dir(&project), @"
     exit_code: 0 (success)
     ----- stderr -----
     Building source distribution...
