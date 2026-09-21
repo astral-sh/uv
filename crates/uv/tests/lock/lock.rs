@@ -30145,7 +30145,7 @@ fn lock_unsupported_version() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock().arg("--frozen"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse `uv.lock`, which uses the schema version 2, while this version of uv only supports version 1
+    error: Failed to parse `uv.lock`, which uses a version 2 schema, while this version of uv only supports version 1
       cause: Dependency `iniconfig` has missing `source` field but has more than one matching package
 
     hint: Try upgrading to a newer version of uv
