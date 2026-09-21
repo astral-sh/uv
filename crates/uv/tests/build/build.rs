@@ -646,7 +646,7 @@ fn build_fail() -> Result<()> {
     IndentationError: unexpected indent
     error: Failed to build `[TEMP_DIR]/project`
       cause: The build backend returned an error
-      cause: Call to `setuptools.build_meta.build_sdist` failed (exit status: 1)
+      cause: Call to `setuptools.build_meta.get_requires_for_build_sdist` failed (exit status: 1)
 
     hint: Build failures usually indicate a problem with the package or the build environment
     "#);
@@ -941,7 +941,7 @@ fn build_all_with_failure() -> Result<()> {
     Successfully built dist/member_a-0.1.0-py3-none-any.whl
     error: Failed to build `member-b @ [TEMP_DIR]/project/packages/member_b`
       cause: The build backend returned an error
-      cause: Call to `setuptools.build_meta.build_sdist` failed (exit status: 1)
+      cause: Call to `setuptools.build_meta.get_requires_for_build_sdist` failed (exit status: 1)
 
     hint: Build failures usually indicate a problem with the package or the build environment
     Successfully built dist/project-0.1.0.tar.gz
@@ -1769,7 +1769,7 @@ fn build_hide_build_output_on_failure() -> Result<()> {
     Building source distribution...
     error: Failed to build `[TEMP_DIR]/project`
       cause: The build backend returned an error
-      cause: Call to `setuptools.build_meta.build_sdist` failed (exit status: 1)
+      cause: Call to `setuptools.build_meta.get_requires_for_build_sdist` failed (exit status: 1)
 
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
