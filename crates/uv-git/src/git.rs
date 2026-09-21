@@ -536,6 +536,9 @@ impl GitCheckout {
     ///
     /// The marker sits beside the checkout with an [`.ok` extension], so tracked files cannot
     /// collide with it. It is removed before cloning and created only after preparation succeeds.
+    /// For example, there may be the `checkouts/<repository-key>/0123456789abcdef/` contents
+    /// directory containing `checkouts/<repository-key>/0123456789abcdef/pyproject.toml`, and the
+    /// `checkouts/<repository-key>/0123456789abcdef.ok` marker file besides it.
     ///
     /// [`.ok` extension]: CHECKOUT_READY_EXTENSION
     /// `git reset --hard [<commit>]` can break relative submodule URLs, so we update submodules
