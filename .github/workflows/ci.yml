@@ -5,21 +5,35 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      benchmark-only:
+        description: "Run one CPU-simulation sample"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref_name }}-${{ github.event.pull_request.number || github.sha }}-${{ github.sha }}
+  group: ${{ github.workflow }}-${{ github.run_id }}
   cancel-in-progress: true
 
 env:
   UV_LOCKED: 1
 
 jobs:
+  benchmark-sample:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.benchmark-only }}
+    uses: $/.github/workflows/bench.yml
+    with:
+      save-rust-cache: "false"
+    permissions:
+      contents: read
+      id-token: write
+
   plan:
     # CI on main is redundant in the security repository.
-    if: ${{ github.repository != 'astral-sh/uv-security' || github.ref != 'refs/heads/main' }}
+    if: ${{ !inputs.benchmark-only && (github.repository != 'astral-sh/uv-security' || github.ref != 'refs/heads/main') }}
     uses: $/.github/workflows/plan.yml
 
   check-fmt:
