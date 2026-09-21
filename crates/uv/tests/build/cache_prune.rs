@@ -22,13 +22,7 @@ fn prune_no_op() -> Result<()> {
         .assert()
         .success();
 
-    let filters: Vec<_> = context
-        .filters()
-        .into_iter()
-        .chain(std::iter::once((r"Removed \d+ files", "Removed [N] files")))
-        .collect();
-
-    uv_snapshot!(&filters, context.prune().arg("--verbose"), @"
+    uv_snapshot!(context.filters(), context.prune().arg("--verbose"), @"
     exit_code: 0 (success)
     ----- stderr -----
     DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
@@ -99,13 +93,7 @@ fn prune_stale_directory() -> Result<()> {
     let simple = context.cache_dir.child("simple-v4");
     simple.create_dir_all()?;
 
-    let filters: Vec<_> = context
-        .filters()
-        .into_iter()
-        .chain(std::iter::once((r"Removed \d+ files", "Removed [N] files")))
-        .collect();
-
-    uv_snapshot!(&filters, context.prune().arg("--verbose"), @"
+    uv_snapshot!(context.filters(), context.prune().arg("--verbose"), @"
     exit_code: 0 (success)
     ----- stderr -----
     DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
@@ -145,17 +133,16 @@ fn prune_python_downloads() -> Result<()> {
 fn prune_cached_env() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
-        .with_filtered_sizes_and_units();
+        .with_filtered_sizes_and_units()
+        // The cache entry does not have a stable key, so we filter it out.
+        .with_filter((
+            r"\[CACHE_DIR\](\\|\/)(.*?)(\\|\/).*",
+            "[CACHE_DIR]/$2/[ENTRY]",
+        ));
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    let filters: Vec<_> = context
-        .filters()
-        .into_iter()
-        .chain(std::iter::once((r"Removed \d+ files", "Removed [N] files")))
-        .collect();
-
-    uv_snapshot!(&filters, context.tool_run()
+    uv_snapshot!(context.filters(), context.tool_run()
         .arg("pytest@8.0.0")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
@@ -174,19 +161,7 @@ fn prune_cached_env() {
      + pytest==8.0.0
     ");
 
-    let filters: Vec<_> = context
-        .filters()
-        .into_iter()
-        .chain([
-            // The cache entry does not have a stable key, so we filter it out
-            (
-                r"\[CACHE_DIR\](\\|\/)(.*?)(\\|\/).*",
-                "[CACHE_DIR]/$2/[ENTRY]",
-            ),
-        ])
-        .collect();
-
-    uv_snapshot!(filters, context.prune().arg("--verbose"), @"
+    uv_snapshot!(context.filters(), context.prune().arg("--verbose"), @"
     exit_code: 0 (success)
     ----- stderr -----
     DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
@@ -311,6 +286,7 @@ fn prune_ci_empty_cache() -> Result<()> {
 fn prune_unzipped() -> Result<()> {
     let context = uv_test::test_context!("3.12")
         .with_exclude_newer("2025-01-01T00:00Z")
+        .with_filtered_file_counts()
         .with_filtered_sizes_and_units();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -319,12 +295,8 @@ fn prune_unzipped() -> Result<()> {
         iniconfig
     " })?;
 
-    let filters: Vec<_> = std::iter::once((r"Removed \d+ files", "Removed [N] files"))
-        .chain(context.filters())
-        .collect();
-
     // Install a requirement, to populate the cache.
-    uv_snapshot!(&filters, context.pip_install().arg("-r").arg("requirements.txt").arg("--reinstall"), @"
+    uv_snapshot!(context.filters(), context.pip_install().arg("-r").arg("requirements.txt").arg("--reinstall"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -334,7 +306,7 @@ fn prune_unzipped() -> Result<()> {
      + source-distribution==0.0.1
     ");
 
-    uv_snapshot!(&filters, context.prune().arg("--ci"), @"
+    uv_snapshot!(context.filters(), context.prune().arg("--ci"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Pruning cache at: [CACHE_DIR]/
@@ -348,7 +320,7 @@ fn prune_unzipped() -> Result<()> {
     requirements_txt.write_str(indoc! { r"
         source-distribution==0.0.1
     " })?;
-    uv_snapshot!(&filters, context.pip_install().arg("-r").arg("requirements.txt").arg("--offline"), @"
+    uv_snapshot!(context.filters(), context.pip_install().arg("-r").arg("requirements.txt").arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -361,7 +333,7 @@ fn prune_unzipped() -> Result<()> {
     requirements_txt.write_str(indoc! { r"
         iniconfig
     " })?;
-    uv_snapshot!(&filters, context.pip_install().arg("-r").arg("requirements.txt").arg("--offline"), @"
+    uv_snapshot!(context.filters(), context.pip_install().arg("-r").arg("requirements.txt").arg("--offline"), @"
     exit_code: 1 (failure)
     ----- stderr -----
       × No solution found when resolving dependencies:
@@ -376,7 +348,14 @@ fn prune_unzipped() -> Result<()> {
 /// `cache prune` should remove any stale source distribution revisions.
 #[test]
 fn prune_stale_revision() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filtered_sizes_and_units();
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_file_counts()
+        .with_filtered_sizes_and_units()
+        // The cache entry does not have a stable key, so we filter it out.
+        .with_filter((
+            r"\[CACHE_DIR\](\\|\/)(.*?)(\\|\/).*",
+            "[CACHE_DIR]/$2/[ENTRY]",
+        ));
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -401,14 +380,8 @@ fn prune_stale_revision() -> Result<()> {
         .touch()?;
     context.temp_dir.child("README").touch()?;
 
-    let filters: Vec<_> = context
-        .filters()
-        .into_iter()
-        .chain(std::iter::once((r"Removed \d+ files", "Removed [N] files")))
-        .collect();
-
     // Install the same package twice, with `--reinstall`.
-    uv_snapshot!(&filters, context
+    uv_snapshot!(context.filters(), context
         .pip_install()
         .arg(".")
         .arg("--reinstall"), @"
@@ -420,7 +393,7 @@ fn prune_stale_revision() -> Result<()> {
      + project==0.1.0 (from file://[TEMP_DIR]/)
     ");
 
-    uv_snapshot!(&filters, context
+    uv_snapshot!(context.filters(), context
         .pip_install()
         .arg(".")
         .arg("--reinstall"), @"
@@ -433,19 +406,8 @@ fn prune_stale_revision() -> Result<()> {
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
     ");
 
-    let filters: Vec<_> = filters
-        .into_iter()
-        .chain([
-            // The cache entry does not have a stable key, so we filter it out
-            (
-                r"\[CACHE_DIR\](\\|\/)(.*?)(\\|\/).*",
-                "[CACHE_DIR]/$2/[ENTRY]",
-            ),
-        ])
-        .collect();
-
     // Pruning should remove the unused revision.
-    uv_snapshot!(&filters, context.prune().arg("--verbose"), @"
+    uv_snapshot!(context.filters(), context.prune().arg("--verbose"), @"
     exit_code: 0 (success)
     ----- stderr -----
     DEBUG Found workspace root: `[TEMP_DIR]/`
@@ -460,7 +422,7 @@ fn prune_stale_revision() -> Result<()> {
     ");
 
     // Uninstall and reinstall the package. We should use the cached version.
-    uv_snapshot!(&filters, context
+    uv_snapshot!(context.filters(), context
         .pip_uninstall()
         .arg("."), @"
     exit_code: 0 (success)
@@ -469,7 +431,7 @@ fn prune_stale_revision() -> Result<()> {
      - project==0.1.0 (from file://[TEMP_DIR]/)
     ");
 
-    uv_snapshot!(&filters, context
+    uv_snapshot!(context.filters(), context
         .pip_install()
         .arg("."), @"
     exit_code: 0 (success)

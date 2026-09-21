@@ -15,7 +15,9 @@ use uv_test::uv_snapshot;
 /// `cache clean` should remove all packages.
 #[test]
 fn clean_all() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filtered_sizes_and_units();
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_file_counts()
+        .with_filtered_sizes_and_units();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("typing-extensions\niniconfig")?;
@@ -27,7 +29,7 @@ fn clean_all() -> Result<()> {
         .assert()
         .success();
 
-    uv_snapshot!(context.with_filtered_counts().filters(), context.clean().arg("--verbose"), @"
+    uv_snapshot!(context.filters(), context.clean().arg("--verbose"), @"
     exit_code: 0 (success)
     ----- stderr -----
     DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
@@ -210,7 +212,9 @@ fn clean_all_compressed_file() -> Result<()> {
 /// `cache clear` should behave as an alias of `cache clean`.
 #[test]
 fn clear_all_alias() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filtered_sizes_and_units();
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_file_counts()
+        .with_filtered_sizes_and_units();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("typing-extensions\niniconfig")?;
@@ -225,7 +229,7 @@ fn clear_all_alias() -> Result<()> {
     let mut command = context.command();
     command.arg("cache").arg("clear").arg("--verbose");
 
-    uv_snapshot!(context.with_filtered_counts().filters(), command, @"
+    uv_snapshot!(context.filters(), command, @"
     exit_code: 0 (success)
     ----- stderr -----
     DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
@@ -291,7 +295,14 @@ async fn clean_force() -> Result<()> {
 /// `cache clean iniconfig` should remove a single package (`iniconfig`).
 #[test]
 fn clean_package_pypi() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filtered_sizes_and_units();
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_file_counts()
+        .with_filtered_sizes_and_units()
+        // The cache entry does not have a stable key, so we filter it out.
+        .with_filter((
+            r"\[CACHE_DIR\](\\|\/)(.+)(\\|\/).*",
+            "[CACHE_DIR]/$2/[ENTRY]",
+        ));
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("anyio\niniconfig")?;
@@ -314,21 +325,7 @@ fn clean_package_pypi() -> Result<()> {
         "Expected the `.rkyv` file to exist for `iniconfig`"
     );
 
-    let filters: Vec<_> = context
-        .filters()
-        .into_iter()
-        .chain([
-            // The cache entry does not have a stable key, so we filter it out.
-            (
-                r"\[CACHE_DIR\](\\|\/)(.+)(\\|\/).*",
-                "[CACHE_DIR]/$2/[ENTRY]",
-            ),
-            // The file count varies by operating system, so we filter it out.
-            ("Removed \\d+ files?", "Removed [N] files"),
-        ])
-        .collect();
-
-    uv_snapshot!(&filters, context.clean().arg("--verbose").arg("iniconfig"), @"
+    uv_snapshot!(context.filters(), context.clean().arg("--verbose").arg("iniconfig"), @"
     exit_code: 0 (success)
     ----- stderr -----
     DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
@@ -344,7 +341,7 @@ fn clean_package_pypi() -> Result<()> {
     );
 
     // Running `uv cache prune` should have no effect.
-    uv_snapshot!(&filters, context.prune().arg("--verbose"), @"
+    uv_snapshot!(context.filters(), context.prune().arg("--verbose"), @"
     exit_code: 0 (success)
     ----- stderr -----
     DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
@@ -359,7 +356,14 @@ fn clean_package_pypi() -> Result<()> {
 /// `cache clean iniconfig` should remove a single package (`iniconfig`).
 #[test]
 fn clean_package_index() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_filtered_sizes_and_units();
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_file_counts()
+        .with_filtered_sizes_and_units()
+        // The cache entry does not have a stable key, so we filter it out.
+        .with_filter((
+            r"\[CACHE_DIR\](\\|\/)(.+)(\\|\/).*",
+            "[CACHE_DIR]/$2/[ENTRY]",
+        ));
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("anyio\niniconfig")?;
@@ -385,21 +389,7 @@ fn clean_package_index() -> Result<()> {
         "Expected the `.rkyv` file to exist for `iniconfig`"
     );
 
-    let filters: Vec<_> = context
-        .filters()
-        .into_iter()
-        .chain([
-            // The cache entry does not have a stable key, so we filter it out.
-            (
-                r"\[CACHE_DIR\](\\|\/)(.+)(\\|\/).*",
-                "[CACHE_DIR]/$2/[ENTRY]",
-            ),
-            // The file count varies by operating system, so we filter it out.
-            ("Removed \\d+ files?", "Removed [N] files"),
-        ])
-        .collect();
-
-    uv_snapshot!(&filters, context.clean().arg("--verbose").arg("iniconfig"), @"
+    uv_snapshot!(context.filters(), context.clean().arg("--verbose").arg("iniconfig"), @"
     exit_code: 0 (success)
     ----- stderr -----
     DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
