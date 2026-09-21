@@ -95,6 +95,32 @@ fn clean_all_hardlinked_file() -> Result<()> {
     Ok(())
 }
 
+/// `cache clean` should fall back to logical space on unsupported filesystems.
+#[cfg(unix)]
+#[test]
+fn clean_all_physical_space_unsupported_fs() -> Result<()> {
+    let Some(context) = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_cache_on_alt_fs()?
+    else {
+        return Ok(());
+    };
+
+    context
+        .cache_dir
+        .child("cached.bin")
+        .write_binary(&vec![42; 1024 * 1024])?;
+
+    uv_snapshot!(context.filters(), context.clean().arg("--preview-features").arg("cache-physical-space"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Clearing cache at: [ALT_FS]/[CACHE_DIR]/
+    Removed [N] files (1.0MiB)
+    ");
+
+    Ok(())
+}
+
 /// `cache clean` should report physical space for copy-on-write clones in preview mode.
 #[cfg(unix)]
 #[test]
