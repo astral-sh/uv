@@ -8738,7 +8738,7 @@ fn fail_to_add_revert_project() -> Result<()> {
     error: Failed to add dependencies
       cause: Failed to build `child @ file://[TEMP_DIR]/child`
       cause: The build backend returned an error
-      cause: Call to `setuptools.build_meta.build_wheel` failed (exit status: 1)
+      cause: Call to `setuptools.build_meta.get_requires_for_build_wheel` failed (exit status: 1)
 
              [stderr]
              Traceback (most recent call last):
@@ -8838,7 +8838,7 @@ fn fail_to_edit_revert_project() -> Result<()> {
     error: Failed to add dependencies
       cause: Failed to build `child @ file://[TEMP_DIR]/child`
       cause: The build backend returned an error
-      cause: Call to `setuptools.build_meta.build_wheel` failed (exit status: 1)
+      cause: Call to `setuptools.build_meta.get_requires_for_build_wheel` failed (exit status: 1)
 
              [stderr]
              Traceback (most recent call last):
@@ -8949,7 +8949,7 @@ fn fail_to_add_revert_workspace_root() -> Result<()> {
     error: Failed to add dependencies
       cause: Failed to build `broken @ file://[TEMP_DIR]/broken`
       cause: The build backend returned an error
-      cause: Call to `setuptools.build_meta.build_editable` failed (exit status: 1)
+      cause: Call to `setuptools.build_meta.get_requires_for_build_editable` failed (exit status: 1)
 
              [stderr]
              Traceback (most recent call last):
@@ -9065,7 +9065,7 @@ fn fail_to_add_revert_workspace_member() -> Result<()> {
     error: Failed to add dependencies
       cause: Failed to build `broken @ file://[TEMP_DIR]/broken`
       cause: The build backend returned an error
-      cause: Call to `setuptools.build_meta.build_editable` failed (exit status: 1)
+      cause: Call to `setuptools.build_meta.get_requires_for_build_editable` failed (exit status: 1)
 
              [stderr]
              Traceback (most recent call last):

@@ -2354,7 +2354,7 @@ fn sync_extra_build_dependencies() -> Result<()> {
     Resolved [N] packages in [TIME]
     error: Failed to build `child @ file://[TEMP_DIR]/child`
       cause: The build backend returned an error
-      cause: Call to `build_backend.build_wheel` failed (exit status: 1)
+      cause: Call to `build_backend.get_requires_for_build_wheel` failed (exit status: 1)
 
              [stderr]
              Missing `anyio` module
@@ -2421,7 +2421,7 @@ fn sync_extra_build_dependencies() -> Result<()> {
     Resolved [N] packages in [TIME]
     error: Failed to build `child @ file://[TEMP_DIR]/child`
       cause: The build backend returned an error
-      cause: Call to `build_backend.build_wheel` failed (exit status: 1)
+      cause: Call to `build_backend.get_requires_for_build_wheel` failed (exit status: 1)
 
              [stderr]
              Missing `anyio` module
@@ -2487,7 +2487,7 @@ fn sync_extra_build_dependencies() -> Result<()> {
     Resolved [N] packages in [TIME]
     error: Failed to build `bad-child @ file://[TEMP_DIR]/bad_child`
       cause: The build backend returned an error
-      cause: Call to `build_backend.build_wheel` failed (exit status: 1)
+      cause: Call to `build_backend.get_requires_for_build_wheel` failed (exit status: 1)
 
              [stderr]
              Found `anyio` module
@@ -2576,7 +2576,7 @@ fn sync_extra_build_dependencies_setuptools_legacy() -> Result<()> {
     ----- stderr -----
     error: Failed to build `child @ file://[TEMP_DIR]/child`
       cause: The build backend returned an error
-      cause: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
+      cause: Call to `setuptools.build_meta:__legacy__.get_requires_for_build_wheel` failed (exit status: 1)
 
              [stderr]
              Missing `anyio` module
@@ -2675,7 +2675,7 @@ fn sync_extra_build_dependencies_setuptools() -> Result<()> {
     Resolved [N] packages in [TIME]
     error: Failed to build `child @ file://[TEMP_DIR]/child`
       cause: The build backend returned an error
-      cause: Call to `setuptools.build_meta.build_wheel` failed (exit status: 1)
+      cause: Call to `setuptools.build_meta.get_requires_for_build_wheel` failed (exit status: 1)
 
              [stderr]
              Missing `anyio` module
@@ -2856,7 +2856,7 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
     Resolved [N] packages in [TIME]
     error: Failed to build `child @ file://[TEMP_DIR]/child`
       cause: The build backend returned an error
-      cause: Call to `build_backend.build_wheel` failed (exit status: 1)
+      cause: Call to `build_backend.get_requires_for_build_wheel` failed (exit status: 1)
 
              [stderr]
              Expected `anyio` version 3.0 but got 4.3.0
@@ -2905,7 +2905,7 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
     Resolved [N] packages in [TIME]
     error: Failed to build `child @ file://[TEMP_DIR]/child`
       cause: The build backend returned an error
-      cause: Call to `build_backend.build_wheel` failed (exit status: 1)
+      cause: Call to `build_backend.get_requires_for_build_wheel` failed (exit status: 1)
 
              [stderr]
              Expected `anyio` version 4.3 but got 3.5.0
@@ -2996,7 +2996,7 @@ fn sync_extra_build_dependencies_sources_from_child() -> Result<()> {
     Resolved [N] packages in [TIME]
     error: Failed to build `child @ file://[TEMP_DIR]/child`
       cause: The build backend returned an error
-      cause: Call to `build_backend.build_wheel` failed (exit status: 1)
+      cause: Call to `build_backend.get_requires_for_build_wheel` failed (exit status: 1)
 
              [stderr]
              Found system anyio instead of local anyio
@@ -3060,7 +3060,7 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
     Resolved [N] packages in [TIME]
     error: Failed to build `child @ file://[TEMP_DIR]/child`
       cause: The build backend returned an error
-      cause: Call to `build_backend.build_wheel` failed (exit status: 1)
+      cause: Call to `build_backend.get_requires_for_build_wheel` failed (exit status: 1)
 
              [stderr]
              Traceback (most recent call last):
@@ -3121,7 +3121,7 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
     Resolved [N] packages in [TIME]
     error: Failed to build `child @ file://[TEMP_DIR]/child`
       cause: The build backend returned an error
-      cause: Call to `build_backend.build_wheel` failed (exit status: 1)
+      cause: Call to `build_backend.get_requires_for_build_wheel` failed (exit status: 1)
 
              [stderr]
              Traceback (most recent call last):
@@ -6229,7 +6229,7 @@ fn sync_extra_build_dependencies_script() -> Result<()> {
     Resolved [N] packages in [TIME]
     error: Failed to build `child @ file://[TEMP_DIR]/child`
       cause: The build backend returned an error
-      cause: Call to `build_backend.build_wheel` failed (exit status: 1)
+      cause: Call to `build_backend.get_requires_for_build_wheel` failed (exit status: 1)
 
              [stderr]
              Missing `anyio` module
@@ -10100,7 +10100,7 @@ fn sync_derivation_chain() -> Result<()> {
     Resolved 2 packages in [TIME]
     error: Failed to build `wsgiref==0.1.2`
       cause: The build backend returned an error
-      cause: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
+      cause: Call to `setuptools.build_meta:__legacy__.get_requires_for_build_wheel` failed (exit status: 1)
 
              [stderr]
              Traceback (most recent call last):
@@ -10155,7 +10155,7 @@ fn sync_derivation_chain_extra() -> Result<()> {
     Resolved 2 packages in [TIME]
     error: Failed to build `wsgiref==0.1.2`
       cause: The build backend returned an error
-      cause: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
+      cause: Call to `setuptools.build_meta:__legacy__.get_requires_for_build_wheel` failed (exit status: 1)
 
              [stderr]
              Traceback (most recent call last):
@@ -10212,7 +10212,7 @@ fn sync_derivation_chain_group() -> Result<()> {
     Resolved 2 packages in [TIME]
     error: Failed to build `wsgiref==0.1.2`
       cause: The build backend returned an error
-      cause: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
+      cause: Call to `setuptools.build_meta:__legacy__.get_requires_for_build_wheel` failed (exit status: 1)
 
              [stderr]
              Traceback (most recent call last):
@@ -14307,7 +14307,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     Resolved [N] packages in [TIME]
     error: Failed to build `child @ file://[TEMP_DIR]/child`
       cause: The build backend returned an error
-      cause: Call to `build_backend.build_wheel` failed (exit status: 1)
+      cause: Call to `build_backend.get_requires_for_build_wheel` failed (exit status: 1)
 
              [stderr]
              Expected `a` version 0.1 but got 0.3.0
@@ -14366,7 +14366,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     Resolved [N] packages in [TIME]
     error: Failed to build `child @ file://[TEMP_DIR]/child`
       cause: The build backend returned an error
-      cause: Call to `build_backend.build_wheel` failed (exit status: 1)
+      cause: Call to `build_backend.get_requires_for_build_wheel` failed (exit status: 1)
 
              [stderr]
              Expected `a` version 0.2 but got 0.1.0
@@ -14516,7 +14516,7 @@ fn sync_extra_build_variables() -> Result<()> {
     Resolved [N] packages in [TIME]
     error: Failed to build `parent @ file://[TEMP_DIR]/`
       cause: The build backend returned an error
-      cause: Call to `build_backend.build_editable` failed (exit status: 1)
+      cause: Call to `build_backend.get_requires_for_build_editable` failed (exit status: 1)
 
              [stderr]
              Expected `anyio` version 3.0 but got 4.3.0
@@ -14546,7 +14546,7 @@ fn sync_extra_build_variables() -> Result<()> {
     Resolved [N] packages in [TIME]
     error: Failed to build `parent @ file://[TEMP_DIR]/`
       cause: The build backend returned an error
-      cause: Call to `build_backend.build_editable` failed (exit status: 1)
+      cause: Call to `build_backend.get_requires_for_build_editable` failed (exit status: 1)
 
              [stderr]
              Expected `anyio` version 3.0 but got 4.3.0

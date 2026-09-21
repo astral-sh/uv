@@ -1083,7 +1083,7 @@ async fn create_pep517_build_environment(
     if !output.status.success() {
         return Err(Error::from_command_output(
             format!(
-                "Call to `{}.build_{}` failed",
+                "Call to `{}.get_requires_for_build_{}` failed",
                 pep517_backend.backend, build_kind
             ),
             &output,
