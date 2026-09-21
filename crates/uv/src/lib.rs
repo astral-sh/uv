@@ -2918,6 +2918,7 @@ async fn run_project(
                 args.lock_check,
                 args.frozen,
                 args.no_sync,
+                args.no_install_project,
                 args.isolated,
                 args.all_packages,
                 args.package,
