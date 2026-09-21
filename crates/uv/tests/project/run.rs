@@ -503,6 +503,35 @@ fn run_pep723_script() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn run_pep723_script_empty_dependency() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let test_script = context.temp_dir.child("script.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [""]
+        # ///
+       "#
+    })?;
+
+    // The final caret is orphaned because the invalid requirement is empty; see astral-sh/uv#21089.
+    uv_snapshot!(context.filters(), context.run().arg("--script").arg("script.py"), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: TOML parse error at line 2, column 17
+      |
+    2 | dependencies = [""]
+      |                 ^^
+    Empty field is not allowed for PEP508
+
+    ^
+    "#);
+
+    Ok(())
+}
+
 /// A PEP 723 script with a long file name should still succeed at creating a script environment on
 /// Windows.
 #[test]
