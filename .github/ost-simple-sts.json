@@ -58,14 +58,6 @@
     {
       "caller": "uv",
       "environment": "automations",
-      "caller_workflow": "update-issue-context.yml",
-      "on": ["issue_comment"],
-      "permissions": { "contents": "write" },
-      "target": "uv-dev"
-    },
-    {
-      "caller": "uv",
-      "environment": "automations",
       "caller_workflow": "issue-triage.yml",
       "reusable_workflow": "reproduce-bug.yml",
       "on": ["issues", "workflow_dispatch"],
