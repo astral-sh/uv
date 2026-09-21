@@ -1079,7 +1079,7 @@ impl EnvVars {
 
     /// Overrides the executable Python uses to determine its environment.
     #[attr_hidden]
-    #[attr_added_in("next release")]
+    #[attr_added_in("0.12.4")]
     pub const PYTHONEXECUTABLE: &'static str = "PYTHONEXECUTABLE";
 
     /// Used to correctly detect virtual environments when using trampolines.
