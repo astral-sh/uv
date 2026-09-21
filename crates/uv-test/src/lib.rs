@@ -99,8 +99,6 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"--cache-dir [^\s]+", "--cache-dir [CACHE_DIR]"),
     // Operation times
     (r"(\s|\()(\d+m )?(\d+\.)?\d+(ms|s)", "$1[TIME]"),
-    // File sizes
-    (r"(\s|\()(\d+\.)?\d+([KM]i)?B", "$1[SIZE]"),
     // Timestamps
     (r"tv_sec: \d+", "tv_sec: [TIME]"),
     (r"tv_nsec: \d+", "tv_nsec: [TIME]"),
@@ -225,16 +223,36 @@ impl TestContext {
         self
     }
 
-    /// Add extra filtering for cache size output
+    /// Filter file sizes while retaining their units so human-readable output remains distinguishable.
+    #[must_use]
+    pub fn with_filtered_sizes(mut self) -> Self {
+        self.filters.push((
+            r"(\s|\()(\d+\.)?\d+(([KMGT]i)?B)".to_string(),
+            "$1[SIZE]$3".to_string(),
+        ));
+        self
+    }
+
+    /// Filter file sizes and units when the units vary across environments.
+    #[must_use]
+    pub fn with_filtered_sizes_and_units(mut self) -> Self {
+        self.filters.push((
+            r"(\s|\()(\d+\.)?\d+([KMGT]i)?B".to_string(),
+            "$1[SIZE]".to_string(),
+        ));
+        self
+    }
+
+    /// Filter cache size output while retaining human-readable units.
     #[must_use]
     pub fn with_filtered_cache_size(mut self) -> Self {
         // Filter raw byte counts (numbers on their own line)
         self.filters
             .push((r"(?m)^\d+\n".to_string(), "[SIZE]\n".to_string()));
-        // Filter human-readable sizes (e.g., "384.2 KiB")
+        // Filter human-readable sizes (e.g., "384.2 KiB") while retaining their units.
         self.filters.push((
-            r"(?m)^\d+(\.\d+)? [KMGT]i?B\n".to_string(),
-            "[SIZE]\n".to_string(),
+            r"(?m)^\d+(\.\d+)?( ?[KMGT]i?B)\n".to_string(),
+            "[SIZE]$2\n".to_string(),
         ));
         self
     }
@@ -773,11 +791,9 @@ impl TestContext {
         self.cache_dir = ChildPath::new(tmp.path()).child("cache");
         fs_err::create_dir_all(&self.cache_dir)?;
         let replacement = format!("[{name}]/[CACHE_DIR]/");
-        self.filters.extend(
-            Self::path_patterns(&self.cache_dir)
-                .into_iter()
-                .map(|pattern| (pattern, replacement.clone())),
-        );
+        for pattern in Self::path_patterns(&self.cache_dir) {
+            self.filters.insert(0, (pattern, replacement.clone()));
+        }
         self._extra_tempdirs.push(tmp);
         Ok(self)
     }

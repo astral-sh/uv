@@ -40,7 +40,7 @@ fn basic_package_wheel() -> PathBuf {
 
 #[test]
 fn username_password_no_longer_supported() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_sizes();
 
     uv_snapshot!(context.filters(), context.publish()
         .arg("-u")
@@ -53,8 +53,8 @@ fn username_password_no_longer_supported() {
     exit_code: 2 (failure)
     ----- stderr -----
     Publishing 1 file to https://test.pypi.org/legacy/
-    Hashing ok-1.0.0-py3-none-any.whl ([SIZE])
-    Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
+    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/
       Caused by: Server returned status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
     "
@@ -63,7 +63,7 @@ fn username_password_no_longer_supported() {
 
 #[test]
 fn invalid_token() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_sizes();
 
     uv_snapshot!(context.filters(), context.publish()
         .arg("-u")
@@ -76,8 +76,8 @@ fn invalid_token() {
     exit_code: 2 (failure)
     ----- stderr -----
     Publishing 1 file to https://test.pypi.org/legacy/
-    Hashing ok-1.0.0-py3-none-any.whl ([SIZE])
-    Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
+    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/
       Caused by: Server returned status code 403 Forbidden. Server says: 403 Invalid or non-existent authentication information. See https://test.pypi.org/help/#invalid-auth for more information.
     "
@@ -137,7 +137,7 @@ fn missing_trusted_publishing_permission() {
 /// trusted publishing configuration?
 #[test]
 fn no_credentials() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_sizes();
 
     uv_snapshot!(context.filters(), context.publish()
         .arg("--publish-url")
@@ -153,8 +153,8 @@ fn no_credentials() {
       Caused by: Failed to obtain OIDC token: is the `id-token: write` permission missing?
       Caused by: GitHub Actions detection error
       Caused by: insufficient permissions: missing ACTIONS_ID_TOKEN_REQUEST_URL
-    Hashing ok-1.0.0-py3-none-any.whl ([SIZE])
-    Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
+    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/
       Caused by: Failed to send POST request
       Caused by: Missing credentials for https://test.pypi.org/legacy/
@@ -211,7 +211,7 @@ fn dubious_filenames() {
 
 #[tokio::test]
 async fn publish_wheels_before_sdist_in_filename_order() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_sizes();
     let server = MockServer::start().await;
     let app_wheel = basic_app_wheel();
     let sdist = basic_package_sdist();
@@ -238,12 +238,12 @@ async fn publish_wheels_before_sdist_in_filename_order() {
     exit_code: 0 (success)
     ----- stderr -----
     Publishing 3 files to http://[LOCALHOST]/upload
-    Hashing basic_app-0.1.0-py3-none-any.whl ([SIZE])
-    Uploading basic_app-0.1.0-py3-none-any.whl ([SIZE])
-    Hashing basic_package-0.1.0-py3-none-any.whl ([SIZE])
-    Uploading basic_package-0.1.0-py3-none-any.whl ([SIZE])
-    Hashing basic_package-0.1.0.tar.gz ([SIZE])
-    Uploading basic_package-0.1.0.tar.gz ([SIZE])
+    Hashing basic_app-0.1.0-py3-none-any.whl ([SIZE]KiB)
+    Uploading basic_app-0.1.0-py3-none-any.whl ([SIZE]KiB)
+    Hashing basic_package-0.1.0-py3-none-any.whl ([SIZE]KiB)
+    Uploading basic_package-0.1.0-py3-none-any.whl ([SIZE]KiB)
+    Hashing basic_package-0.1.0.tar.gz ([SIZE]B)
+    Uploading basic_package-0.1.0.tar.gz ([SIZE]B)
     "
     );
 }
@@ -251,7 +251,7 @@ async fn publish_wheels_before_sdist_in_filename_order() {
 /// Check that we (don't) use the keyring and warn for missing keyring behaviors correctly.
 #[test]
 fn check_keyring_behaviours() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_sizes();
 
     // Install our keyring plugin
     context
@@ -283,8 +283,8 @@ fn check_keyring_behaviours() {
     exit_code: 2 (failure)
     ----- stderr -----
     Publishing 1 file to https://test.pypi.org/legacy/?ok
-    Hashing ok-1.0.0-py3-none-any.whl ([SIZE])
-    Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
+    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/?ok
       Caused by: Server returned status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
     "
@@ -306,8 +306,8 @@ fn check_keyring_behaviours() {
     ----- stderr -----
     Publishing 1 file to https://test.pypi.org/legacy/?ok
     warning: Using `--keyring-provider` with a password or token and no check URL has no effect
-    Hashing ok-1.0.0-py3-none-any.whl ([SIZE])
-    Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
+    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/?ok
       Caused by: Server returned status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
     "
@@ -332,8 +332,8 @@ fn check_keyring_behaviours() {
     Keyring request for dummy@https://test.pypi.org/legacy/?ok
     Keyring request for dummy@test.pypi.org
     warning: Keyring has no password for URL `https://test.pypi.org/legacy/?ok` and username `dummy`
-    Hashing ok-1.0.0-py3-none-any.whl ([SIZE])
-    Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
+    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     Keyring request for dummy@https://test.pypi.org/legacy/?ok
     Keyring request for dummy@test.pypi.org
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/?ok
@@ -357,8 +357,8 @@ fn check_keyring_behaviours() {
     ----- stderr -----
     Publishing 1 file to https://test.pypi.org/legacy/?ok
     Keyring request for dummy@https://test.pypi.org/legacy/?ok
-    Hashing ok-1.0.0-py3-none-any.whl ([SIZE])
-    Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
+    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/?ok
       Caused by: Server returned status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
     "
@@ -431,7 +431,7 @@ fn invalid_index() {
 /// <https://github.com/astral-sh/uv/issues/11836#issuecomment-3022735011>
 #[tokio::test]
 async fn read_index_credential_env_vars_for_check_url() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_sizes();
 
     let server = MockServer::start().await;
 
@@ -501,8 +501,8 @@ async fn read_index_credential_env_vars_for_check_url() {
     exit_code: 2 (failure)
     ----- stderr -----
     Publishing 1 file to http://[LOCALHOST]/upload
-    Hashing astral_test_private-0.1.0-py3-none-any.whl ([SIZE])
-    Uploading astral_test_private-0.1.0-py3-none-any.whl ([SIZE])
+    Hashing astral_test_private-0.1.0-py3-none-any.whl ([SIZE]KiB)
+    Uploading astral_test_private-0.1.0-py3-none-any.whl ([SIZE]KiB)
     error: Failed to publish `dist/astral_test_private-0.1.0-py3-none-any.whl` to http://[LOCALHOST]/upload
       Caused by: Failed to send POST request
       Caused by: Missing credentials for http://[LOCALHOST]/upload
@@ -528,7 +528,7 @@ async fn read_index_credential_env_vars_for_check_url() {
 
 #[tokio::test]
 async fn check_url_missing_package_ignores_content_type() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_sizes();
 
     let server = MockServer::start().await;
 
@@ -560,15 +560,15 @@ async fn check_url_missing_package_ignores_content_type() {
     exit_code: 0 (success)
     ----- stderr -----
     Publishing 1 file to http://[LOCALHOST]/upload
-    Hashing ok-1.0.0-py3-none-any.whl ([SIZE])
-    Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
+    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     "
     );
 }
 
 #[tokio::test]
 async fn check_url_missing_package_follows_redirect() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_sizes();
 
     let gitlab_server = MockServer::start().await;
     let pypi_server = MockServer::start().await;
@@ -611,8 +611,8 @@ async fn check_url_missing_package_follows_redirect() {
     exit_code: 0 (success)
     ----- stderr -----
     Publishing 1 file to http://[LOCALHOST]/upload
-    Hashing ok-1.0.0-py3-none-any.whl ([SIZE])
-    Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
+    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     "
     );
 }
@@ -620,7 +620,7 @@ async fn check_url_missing_package_follows_redirect() {
 /// Native GitLab CI trusted publishing using `PYPI_ID_TOKEN`
 #[tokio::test]
 async fn gitlab_trusted_publishing_pypi_id_token() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_sizes();
 
     let server = MockServer::start().await;
 
@@ -661,8 +661,8 @@ async fn gitlab_trusted_publishing_pypi_id_token() {
     exit_code: 0 (success)
     ----- stderr -----
     Publishing 1 file to http://[LOCALHOST]/upload
-    Hashing ok-1.0.0-py3-none-any.whl ([SIZE])
-    Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
+    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     "
     );
 }
@@ -670,7 +670,7 @@ async fn gitlab_trusted_publishing_pypi_id_token() {
 /// Native GitLab CI trusted publishing using `TESTPYPI_ID_TOKEN`
 #[tokio::test]
 async fn gitlab_trusted_publishing_testpypi_id_token() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_sizes();
 
     let server = MockServer::start().await;
 
@@ -713,15 +713,15 @@ async fn gitlab_trusted_publishing_testpypi_id_token() {
     exit_code: 0 (success)
     ----- stderr -----
     Publishing 1 file to http://[LOCALHOST]/upload
-    Hashing ok-1.0.0-py3-none-any.whl ([SIZE])
-    Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
+    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     "
     );
 }
 
 #[tokio::test]
 async fn direct_publish_redacts_presigned_upload_url() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_sizes();
     let server = MockServer::start().await;
 
     let upload_url = format!(
@@ -762,9 +762,9 @@ async fn direct_publish_redacts_presigned_upload_url() {
     exit_code: 0 (success)
     ----- stderr -----
     Publishing 1 file to http://[LOCALHOST]/upload
-    Hashing ok-1.0.0-py3-none-any.whl ([SIZE])
+    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
     DEBUG Hashing [WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl
-    Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     DEBUG Reserving upload slot at http://[LOCALHOST]/upload/reserve
     DEBUG Using HTTP Basic authentication
     DEBUG Got pre-signed URL for upload: http://[LOCALHOST]/s3/ok-1.0.0-py3-none-any.whl?X-Amz-Credential=****&X-Amz-Signature=****&X-Amz-Security-Token=****
@@ -780,7 +780,7 @@ async fn direct_publish_redacts_presigned_upload_url() {
 /// PyPI returns `application/json` errors with a `code` field.
 #[tokio::test]
 async fn upload_error_pypi_json() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_sizes();
     let server = MockServer::start().await;
 
     Mock::given(method("POST"))
@@ -803,8 +803,8 @@ async fn upload_error_pypi_json() {
     exit_code: 2 (failure)
     ----- stderr -----
     Publishing 1 file to http://[LOCALHOST]/upload
-    Hashing ok-1.0.0-py3-none-any.whl ([SIZE])
-    Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
+    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to http://[LOCALHOST]/upload
       Caused by: Server returned status code 400 Bad Request. Server says: 400 Use 'source' as Python version for an sdist.
     "
@@ -814,7 +814,7 @@ async fn upload_error_pypi_json() {
 /// pyx returns `application/problem+json` errors with RFC 9457 Problem Details.
 #[tokio::test]
 async fn upload_error_problem_details() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_sizes();
     let server = MockServer::start().await;
 
     Mock::given(method("POST"))
@@ -837,8 +837,8 @@ async fn upload_error_problem_details() {
     exit_code: 2 (failure)
     ----- stderr -----
     Publishing 1 file to http://[LOCALHOST]/upload
-    Hashing ok-1.0.0-py3-none-any.whl ([SIZE])
-    Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
+    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to http://[LOCALHOST]/upload
       Caused by: Server returned status code 400 Bad Request. Server message: Bad Request, Missing required field `name`
     "
@@ -849,7 +849,7 @@ async fn upload_error_problem_details() {
 /// stopping at the first failure.
 #[test]
 fn dry_run_reports_all_errors() {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filtered_sizes();
 
     // Create two fake wheel files that will fail metadata reading.
     let wheel_a = context.temp_dir.child("a-1.0.0-py3-none-any.whl");
@@ -868,12 +868,12 @@ fn dry_run_reports_all_errors() {
     exit_code: 1 (failure)
     ----- stderr -----
     Checking 2 files against https://test.pypi.org/legacy/
-    Checking a-1.0.0-py3-none-any.whl ([SIZE])
+    Checking a-1.0.0-py3-none-any.whl ([SIZE]B)
     error: Failed to publish: `a-1.0.0-py3-none-any.whl`
       Caused by: Failed to read metadata
       Caused by: Failed to read from zip file
       Caused by: unable to locate the end of central directory record
-    Checking b-1.0.0-py3-none-any.whl ([SIZE])
+    Checking b-1.0.0-py3-none-any.whl ([SIZE]B)
     error: Failed to publish: `b-1.0.0-py3-none-any.whl`
       Caused by: Failed to read metadata
       Caused by: Failed to read from zip file
