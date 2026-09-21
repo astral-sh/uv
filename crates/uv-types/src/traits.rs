@@ -141,7 +141,7 @@ pub trait BuildContext {
     fn workspace_cache(&self) -> &WorkspaceCache;
 
     /// Return build constraints, including selectors for individual build environments.
-    fn build_constraints(&self) -> &uv_configuration::BuildConstraints;
+    fn build_constraints(&self) -> &uv_configuration::BuildRequirements;
 
     /// Get the extra build requirements.
     fn extra_build_requires(&self) -> &ExtraBuildRequires;

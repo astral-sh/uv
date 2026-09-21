@@ -14,7 +14,7 @@ use tracing::{debug, warn};
 use uv_cache::{Cache, Refresh};
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    BuildConstraints, BuildOptions, Concurrency, Constraint, DependencyGroupsWithDefaults,
+    BuildOptions, BuildRequirements, Concurrency, Constraint, DependencyGroupsWithDefaults,
     ExcludeDependency, ExtrasSpecification, GitLfsSetting, HashCheckingMode, InstallOptions,
     Override, TargetTriple,
 };
@@ -404,7 +404,7 @@ impl ToolLock {
         constraints: &[Constraint<Requirement>],
         overrides: &[Requirement],
         excludes: &[ExcludeDependency],
-        build_constraints: &BuildConstraints,
+        build_constraints: &BuildRequirements,
         refresh: &Refresh,
         interpreter: &Interpreter,
         settings: &ResolverSettings,

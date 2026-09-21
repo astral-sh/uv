@@ -14,7 +14,7 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    BuildConstraints, BuildIsolation, BuildOptions, Concurrency, Constraint, ExcludeDependency,
+    BuildIsolation, BuildOptions, BuildRequirements, Concurrency, Constraint, ExcludeDependency,
     ExtrasSpecification, HashCheckingMode, IndexStrategy, NoBinary, NoBuild, NoSources, Override,
     PipCompileFormat, Reinstall, Upgrade,
 };
@@ -74,7 +74,7 @@ pub(crate) async fn pip_compile(
     constraints_from_workspace: Vec<Constraint<Requirement>>,
     overrides_from_workspace: Vec<Override<Requirement>>,
     excludes_from_workspace: Vec<ExcludeDependency>,
-    build_constraints_from_workspace: Vec<Constraint<NameRequirementSpecification>>,
+    build_requirements_from_workspace: BuildRequirements,
     environments: SupportedEnvironments,
     required_environments: SupportedEnvironments,
     minimum_libc_version: Option<MinimumLibcVersion>,
@@ -258,13 +258,8 @@ pub(crate) async fn pip_compile(
         .collect();
 
     // Read build constraints.
-    let build_constraints = BuildConstraints::from_entries(
-        operations::read_constraints(build_constraints, &client_builder)
-            .await?
-            .into_iter()
-            .map(Constraint::Requirement)
-            .chain(build_constraints_from_workspace),
-    );
+    let build_constraints = build_requirements_from_workspace
+        .with_constraints(operations::read_constraints(build_constraints, &client_builder).await?);
 
     // If all the metadata could be statically resolved, validate that every extra was used. If we
     // need to resolve metadata via PEP 517, we don't know which extras are used until much later.

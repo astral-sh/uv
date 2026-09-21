@@ -400,7 +400,7 @@ impl<'lock> InstallTarget<'lock> {
         }
     }
 
-    pub(crate) fn build_constraints(&self) -> uv_configuration::BuildConstraints {
+    pub(crate) fn build_constraints(&self) -> uv_configuration::BuildRequirements {
         self.lock().build_constraints(self.install_path())
     }
 

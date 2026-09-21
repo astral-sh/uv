@@ -41,6 +41,18 @@ pub struct PackageOverrideTarget {
     version: Option<Version>,
 }
 
+impl PackageOverrideTarget {
+    /// Whether this selector applies to a build with the given identity.
+    pub(crate) fn matches(&self, name: &PackageName, version: Option<&Version>) -> bool {
+        &self.name == name && (self.version.is_none() || self.version.as_ref() == version)
+    }
+
+    /// Return the exact version selected by this scope, if any.
+    pub(crate) fn version(&self) -> Option<&Version> {
+        self.version.as_ref()
+    }
+}
+
 /// An override, either global or scoped to a specific package version.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema), schemars(untagged))]
@@ -77,6 +89,43 @@ where
                     })
             })
             .deserialize(deserializer)
+    }
+}
+
+impl<T> Override<T> {
+    /// Transform each requirement while retaining its package selector.
+    pub fn map<U>(self, mut f: impl FnMut(T) -> U) -> Override<U> {
+        match self {
+            Self::Requirement(requirement) => Override::Requirement(f(requirement)),
+            Self::Package(package) => Override::Package(PackageOverride {
+                package: package.package,
+                dependencies: package.dependencies.into_vec().into_iter().map(f).collect(),
+            }),
+        }
+    }
+
+    /// Transform each requirement, propagating errors without changing the selector.
+    pub fn try_map<U, E>(self, mut f: impl FnMut(T) -> Result<U, E>) -> Result<Override<U>, E> {
+        Ok(match self {
+            Self::Requirement(requirement) => Override::Requirement(f(requirement)?),
+            Self::Package(package) => Override::Package(PackageOverride {
+                package: package.package,
+                dependencies: package
+                    .dependencies
+                    .into_vec()
+                    .into_iter()
+                    .map(f)
+                    .collect::<Result<_, _>>()?,
+            }),
+        })
+    }
+
+    /// Return a requirement only if its declaration is global.
+    pub(crate) fn as_requirement(&self) -> Option<&T> {
+        match self {
+            Self::Requirement(requirement) => Some(requirement),
+            Self::Package(_) => None,
+        }
     }
 }
 

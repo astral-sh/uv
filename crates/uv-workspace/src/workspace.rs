@@ -911,6 +911,20 @@ impl Workspace {
         build_constraints.clone()
     }
 
+    /// Return the build overrides declared by the workspace root.
+    pub fn build_overrides(&self) -> Vec<OverrideDependency> {
+        let Some(build_overrides) = self
+            .pyproject_toml
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.build_override_dependencies.as_ref())
+        else {
+            return vec![];
+        };
+        build_overrides.clone()
+    }
+
     /// The path to the workspace root, the directory containing the top level `pyproject.toml` with
     /// the `uv.tool.workspace`, or the `pyproject.toml` in an implicit single workspace project.
     pub fn install_path(&self) -> &PathBuf {

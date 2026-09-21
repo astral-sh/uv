@@ -10,7 +10,7 @@ use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    BuildConstraints, Concurrency, Constraint, Constraints, DependencyMode, DryRun, Excludes,
+    BuildRequirements, Concurrency, Constraint, Constraints, DependencyMode, DryRun, Excludes,
     GitLfsSetting, HashCheckingMode, Overrides, Reinstall, TargetTriple, Upgrade,
 };
 use uv_distribution::LoweredExtraBuildDependencies;
@@ -158,7 +158,7 @@ pub(crate) async fn install(
             .map(Constraint::Requirement)
             .collect::<Vec<_>>();
     let build_constraints =
-        BuildConstraints::from_entries(receipt_build_constraints.iter().cloned());
+        BuildRequirements::from_entries(receipt_build_constraints.iter().cloned());
 
     // If the user passed, e.g., `ruff@latest`, refresh the cache.
     let refresh = if request.is_latest() {

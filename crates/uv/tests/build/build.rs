@@ -3941,69 +3941,78 @@ fn scoped_build_constraints_transitive() -> Result<()> {
 
 /// Cached default-backend resolutions cannot cross package scopes.
 #[test]
-fn scoped_build_constraints_default_backend_cache() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    context.temp_dir.child("pyproject.toml").write_str(
-        r#"
-        [tool.uv.workspace]
-        members = ["foo", "bar"]
-        [tool.uv]
-        build-constraint-dependencies = [
-            { package = { name = "foo" }, dependencies = ["setuptools==68.2.2"] },
-            { package = { name = "bar" }, dependencies = ["setuptools==69.2.0"] },
-        ]
-    "#,
-    )?;
-    write_scoped_constraint_project(
-        &context.temp_dir.child("foo"),
-        "foo",
-        "setuptools>=40.8.0",
-        "setuptools",
-        "68.2.2",
-    )?;
-    write_scoped_constraint_project(
-        &context.temp_dir.child("bar"),
-        "bar",
-        "setuptools>=40.8.0",
-        "setuptools",
-        "69.2.0",
-    )?;
-    uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--no-editable").env(EnvVars::UV_CONCURRENT_BUILDS, "1"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + bar==0.1.0 (from file://[TEMP_DIR]/bar)
-     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
-    ");
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 2 packages in [TIME]
-    ");
-    uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--no-editable").arg("--frozen").arg("--reinstall"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Prepared 2 packages in [TIME]
-    Uninstalled 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     ~ bar==0.1.0 (from file://[TEMP_DIR]/bar)
-     ~ foo==0.1.0 (from file://[TEMP_DIR]/foo)
-    ");
-    context.temp_dir.child("pyproject.toml").write_str(
-        &context
-            .read("pyproject.toml")
-            .replace("setuptools==68.2.2", "setuptools==68.2.1"),
-    )?;
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
-    exit_code: 1 (failure)
-    ----- stderr -----
-    Resolved 2 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+fn scoped_build_dependencies_default_backend_cache() -> Result<()> {
+    insta::allow_duplicates! {
+        for setting in [
+            "build-constraint-dependencies",
+            "build-override-dependencies",
+        ] {
+            let context = uv_test::test_context!("3.12");
+            context.temp_dir.child("pyproject.toml").write_str(
+                &r#"
+            [tool.uv.workspace]
+            members = ["foo", "bar"]
+            [tool.uv]
+            build-constraint-dependencies = [
+                { package = { name = "foo" }, dependencies = ["setuptools==68.2.2"] },
+                { package = { name = "bar" }, dependencies = ["setuptools==69.2.0"] },
+            ]
+        "#
+                .replace("build-constraint-dependencies", setting),
+            )?;
+            write_scoped_constraint_project(
+                &context.temp_dir.child("foo"),
+                "foo",
+                "setuptools>=40.8.0",
+                "setuptools",
+                "68.2.2",
+            )?;
+            write_scoped_constraint_project(
+                &context.temp_dir.child("bar"),
+                "bar",
+                "setuptools>=40.8.0",
+                "setuptools",
+                "69.2.0",
+            )?;
+            uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--no-editable").env(EnvVars::UV_CONCURRENT_BUILDS, "1"), @"
+        exit_code: 0 (success)
+        ----- stderr -----
+        Resolved 2 packages in [TIME]
+        Prepared 2 packages in [TIME]
+        Installed 2 packages in [TIME]
+         + bar==0.1.0 (from file://[TEMP_DIR]/bar)
+         + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+        ");
+            uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+        exit_code: 0 (success)
+        ----- stderr -----
+        Resolved 2 packages in [TIME]
+        ");
+            uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--no-editable").arg("--frozen").arg("--reinstall"), @"
+        exit_code: 0 (success)
+        ----- stderr -----
+        Prepared 2 packages in [TIME]
+        Uninstalled 2 packages in [TIME]
+        Installed 2 packages in [TIME]
+         ~ bar==0.1.0 (from file://[TEMP_DIR]/bar)
+         ~ foo==0.1.0 (from file://[TEMP_DIR]/foo)
+        ");
+            context.temp_dir.child("pyproject.toml").write_str(
+                &context
+                    .read("pyproject.toml")
+                    .replace("setuptools==68.2.2", "setuptools==68.2.1"),
+            )?;
+            uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+        exit_code: 1 (failure)
+        ----- stderr -----
+        Resolved 2 packages in [TIME]
+        error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
 
-    hint: To update the lockfile, run `uv lock`.
-    ");
+        hint: To update the lockfile, run `uv lock`.
+        ");
+        }
+        Ok::<(), anyhow::Error>(())
+    }?;
     Ok(())
 }
 
@@ -4055,6 +4064,216 @@ fn scoped_build_constraints_hashes() -> Result<()> {
     ----- stderr -----
     Building wheel...
     Successfully built dist/bar-0.1.0-py3-none-any.whl
+    ");
+    Ok(())
+}
+
+/// Build overrides replace direct, transitive, and hook requirements only in the selected build.
+#[test]
+fn scoped_build_overrides() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["foo", "bar"]
+        [tool.uv]
+        build-override-dependencies = [
+            "packaging==24.0",
+            "tomli==1.2.3",
+            { package = { name = "foo" }, dependencies = ["packaging==23.2"] },
+            { package = { name = "foo", version = "0.1.0" }, dependencies = ["packaging==21.3"] },
+            { package = { name = "absent" }, dependencies = ["packaging==0"] },
+        ]
+    "#})?;
+    write_scoped_constraint_project(
+        &context.temp_dir.child("foo"),
+        "foo",
+        "hatchling==1.22.4",
+        "packaging",
+        "21.3",
+    )?;
+    write_scoped_constraint_project(
+        &context.temp_dir.child("bar"),
+        "bar",
+        "hatchling==1.22.4",
+        "packaging",
+        "24.0",
+    )?;
+    for name in ["foo", "bar"] {
+        let backend = context.temp_dir.child(name).child("backend.py");
+        backend.write_str(
+            &fs_err::read_to_string(&backend)?
+                .replace("tomli>=1", "tomli>=2")
+                .replace(
+                    "    filename =",
+                    "    assert importlib.metadata.version('tomli') == '1.2.3'\n    filename =",
+                ),
+        )?;
+    }
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--no-editable"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + bar==0.1.0 (from file://[TEMP_DIR]/bar)
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+    ");
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--no-editable").arg("--frozen").arg("--reinstall"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     ~ bar==0.1.0 (from file://[TEMP_DIR]/bar)
+     ~ foo==0.1.0 (from file://[TEMP_DIR]/foo)
+    ");
+    context.temp_dir.child("pyproject.toml").write_str(
+        &context
+            .read("pyproject.toml")
+            .replace("packaging==21.3", "packaging==22.0"),
+    )?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    Ok(())
+}
+
+/// The declared requirement can be overridden during a nonisolated dependency check.
+#[test]
+fn scoped_build_overrides_preflight() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    write_scoped_constraint_project(
+        &context.temp_dir.child("foo"),
+        "foo",
+        "idna>=3.6",
+        "idna",
+        "3.3",
+    )?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["foo"]
+        [tool.uv]
+        build-override-dependencies = [
+            { package = { name = "foo" }, dependencies = ["idna==3.3"] },
+        ]
+    "#})?;
+    uv_snapshot!(context.filters(), context.pip_install().arg("idna==3.3").arg("tomli==1.2.3"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + idna==3.3
+     + tomli==1.2.3
+    ");
+    uv_snapshot!(context.filters(), context.build().args(["--wheel", "--package", "foo", "--preview-features", "build-dependency-check", "--no-build-isolation", "--offline"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building wheel...
+    Successfully built dist/foo-0.1.0-py3-none-any.whl
+    ");
+    Ok(())
+}
+
+/// Backend overrides force the PEP 517 path for both build and install commands.
+#[test]
+fn scoped_build_overrides_bundled_backend() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        [build-system]
+        requires = ["uv_build>=0.11,<10000"]
+        build-backend = "uv_build"
+        [tool.uv]
+        build-override-dependencies = [
+            { package = { name = "project" }, dependencies = ["uv_build==0.8.15"] },
+        ]
+    "#})?;
+    context.temp_dir.child("src/project/__init__.py").touch()?;
+    uv_snapshot!(context.filters(), context.build().arg("--wheel").arg("--list"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to build `[TEMP_DIR]/`
+      cause: Can only use `--list` with a compatible uv build backend, but `.` is not compatible because `uv_build` has a build dependency override
+    ");
+    uv_snapshot!(context.filters(), context.build().arg("--wheel").arg("--no-index"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Building wheel...
+    error: Failed to build `[TEMP_DIR]/`
+      cause: Failed to resolve requirements from `build-system.requires`
+      cause: No solution found when resolving: `uv-build>=0.11, <10000`
+      cause: Because uv-build was not found in the provided package locations and you require uv-build==0.8.15, we can conclude that your requirements are unsatisfiable.
+
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+    ");
+    uv_snapshot!(context.filters(), context.pip_install().arg(".").arg("--no-index"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Failed to resolve requirements from `build-system.requires`
+      cause: No solution found when resolving: `uv-build>=0.11, <10000`
+      cause: Because uv-build was not found in the provided package locations and you require uv-build==0.8.15, we can conclude that your requirements are unsatisfiable.
+
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+    ");
+    Ok(())
+}
+
+/// Source overrides are lowered and retained through frozen lockfile installations.
+#[test]
+fn scoped_build_overrides_sources() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    write_scoped_constraint_project(
+        &context.temp_dir.child("foo"),
+        "foo",
+        "idna>=3.6",
+        "idna",
+        "3.3",
+    )?;
+    context.temp_dir.child("pyproject.toml").write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["foo"]
+        [tool.uv]
+        build-override-dependencies = [
+            { package = { name = "foo" }, dependencies = ["idna==3.3"] },
+        ]
+        [tool.uv.sources]
+        idna = { url = "https://files.pythonhosted.org/packages/04/a2/d918dcd22354d8958fe113e1a3630137e0fc8b44859ade3063982eacd2a4/idna-3.3-py3-none-any.whl" }
+    "#})?;
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--no-editable"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+    ");
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--no-editable").arg("--frozen").arg("--reinstall"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ foo==0.1.0 (from file://[TEMP_DIR]/foo)
     ");
     Ok(())
 }

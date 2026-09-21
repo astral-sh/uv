@@ -11,12 +11,12 @@ use thiserror::Error;
 use tracing::{debug, instrument};
 
 use uv_auth::CredentialsCache;
-use uv_build_backend::check_direct_build;
+use uv_build_backend::{DirectBuildIncompatibility, check_direct_build};
 use uv_build_frontend::SourceBuild;
 use uv_cache::{Cache, CacheBucket};
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    BuildConstraints, BuildIsolation, BuildKind, BuildOptions, BuildOutput, Concurrency,
+    BuildIsolation, BuildKind, BuildOptions, BuildOutput, BuildRequirements, Concurrency,
     Constraint, Constraints, DependencyGroupsWithDefaults, DependencyMode, Excludes,
     HashCheckingMode, IndexStrategy, KeyringProviderType, NoSources, Overrides,
 };
@@ -26,8 +26,8 @@ use uv_distribution_filename::{
     DistFilename, SourceDistExtension, SourceDistFilename, WheelFilename,
 };
 use uv_distribution_types::{
-    ConfigSettings, DependencyMetadata, ExtraBuildVariables, IndexLocations,
-    NameRequirementSpecification, PackageConfigSettings, Requirement, SourceDist,
+    ConfigSettings, DependencyMetadata, ExtraBuildVariables, IndexLocations, PackageConfigSettings,
+    Requirement, SourceDist,
 };
 use uv_errors::{ErrorOptions, Hinted, Hints, write_error_chain_with_options};
 use uv_fs::{Simplified, normalize_path, relative_to};
@@ -211,7 +211,7 @@ pub(crate) async fn build_frontend(
     force_pep517: bool,
     clear: bool,
     build_constraints: Vec<RequirementsSource>,
-    build_constraints_from_workspace: Vec<Constraint<NameRequirementSpecification>>,
+    build_requirements_from_workspace: BuildRequirements,
     hash_checking: Option<HashCheckingMode>,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
@@ -241,7 +241,7 @@ pub(crate) async fn build_frontend(
         force_pep517,
         clear,
         &build_constraints,
-        &build_constraints_from_workspace,
+        &build_requirements_from_workspace,
         hash_checking,
         python.as_deref(),
         install_mirrors,
@@ -291,7 +291,7 @@ async fn build_impl(
     force_pep517: bool,
     clear: bool,
     build_constraints: &[RequirementsSource],
-    build_constraints_from_workspace: &[Constraint<NameRequirementSpecification>],
+    build_requirements_from_workspace: &BuildRequirements,
     hash_checking: Option<HashCheckingMode>,
     python_request: Option<&str>,
     install_mirrors: PythonInstallMirrors,
@@ -494,7 +494,7 @@ async fn build_impl(
             force_pep517,
             clear,
             build_constraints,
-            build_constraints_from_workspace,
+            build_requirements_from_workspace,
             build_isolation,
             extra_build_dependencies,
             extra_build_variables,
@@ -571,7 +571,7 @@ async fn build_package(
     force_pep517: bool,
     clear: bool,
     build_constraints: &[RequirementsSource],
-    build_constraints_from_workspace: &[Constraint<NameRequirementSpecification>],
+    build_requirements_from_workspace: &BuildRequirements,
     build_isolation: &BuildIsolation,
     extra_build_dependencies: &ExtraBuildDependencies,
     extra_build_variables: &ExtraBuildVariables,
@@ -650,21 +650,17 @@ async fn build_package(
     // Read build constraints.
     let command_line_constraints =
         operations::read_constraints(build_constraints, &client_builder).await?;
-    let build_constraints = BuildConstraints::from_entries(
-        command_line_constraints
-            .iter()
-            .cloned()
-            .map(Constraint::Requirement)
-            .chain(build_constraints_from_workspace.iter().cloned()),
-    );
+    let build_constraints = build_requirements_from_workspace
+        .clone()
+        .with_constraints(command_line_constraints.iter().cloned());
 
     let hasher = if let Some(hash_checking) = hash_checking {
         // Under `--require-hashes`, include all command-line constraints, but only workspace
         // constraints with supplied hashes. Other workspace constraints still restrict builds.
         let hash_constraints = Constraints::from_specifications(
             command_line_constraints.iter().cloned().chain(
-                build_constraints_from_workspace
-                    .iter()
+                build_requirements_from_workspace
+                    .entries()
                     .filter_map(Constraint::as_requirement)
                     .filter(|entry| !hash_checking.is_require() || !entry.hashes.is_empty())
                     .cloned(),
@@ -767,12 +763,19 @@ async fn build_package(
             uv_version::version(),
             &interpreter.to_resolver_marker_environment(),
             |name, version| {
-                build_constraints
+                if build_constraints
+                    .overrides_for_package(name, version)
+                    .global_requirements()
+                    .any(|requirement| requirement.name.as_str() == "uv-build")
+                {
+                    return Err(DirectBuildIncompatibility::BuildOverride);
+                }
+                Ok(build_constraints
                     .for_package(name, version)
                     .requirements()
                     .cloned()
                     .map(Into::into)
-                    .collect()
+                    .collect())
             },
         ) {
             return Err(Error::ListNonUv {
@@ -790,12 +793,19 @@ async fn build_package(
             uv_version::version(),
             &interpreter.to_resolver_marker_environment(),
             |name, version| {
-                build_constraints
+                if build_constraints
+                    .overrides_for_package(name, version)
+                    .global_requirements()
+                    .any(|requirement| requirement.name.as_str() == "uv-build")
+                {
+                    return Err(DirectBuildIncompatibility::BuildOverride);
+                }
+                Ok(build_constraints
                     .for_package(name, version)
                     .requirements()
                     .cloned()
                     .map(Into::into)
-                    .collect()
+                    .collect())
             },
         ) {
             Ok(()) => BuildAction::DirectBuild,
@@ -1037,7 +1047,7 @@ async fn build_package(
 /// Validate dependencies in the caller-provided environment for `uv build`.
 struct BuildDependencyCheck<'a> {
     build_dispatch: &'a BuildDispatch<'a>,
-    constraints: &'a BuildConstraints,
+    constraints: &'a BuildRequirements,
     credentials_cache: &'a CredentialsCache,
 }
 
@@ -1058,9 +1068,13 @@ impl BuildDependencyCheck<'_> {
         let constraints = self
             .constraints
             .for_package(builder.package_name(), builder.package_version());
+        let overrides = self
+            .constraints
+            .overrides_for_package(builder.package_name(), builder.package_version());
         self.check_requirements(
             builder.build_requirements(),
             &constraints,
+            &overrides,
             &site_packages,
             environment,
         )?;
@@ -1075,6 +1089,7 @@ impl BuildDependencyCheck<'_> {
         self.check_requirements(
             requirements.iter(),
             &constraints,
+            &overrides,
             &site_packages,
             environment,
         )
@@ -1085,6 +1100,7 @@ impl BuildDependencyCheck<'_> {
         &self,
         requirements: impl Iterator<Item = &'a Requirement>,
         constraints: &Constraints,
+        overrides: &Overrides,
         site_packages: &SitePackages,
         environment: &PythonEnvironment,
     ) -> Result<(), Error> {
@@ -1097,7 +1113,7 @@ impl BuildDependencyCheck<'_> {
             .satisfies_requirements(
                 requirements,
                 constraints,
-                &Overrides::default(),
+                overrides,
                 &Excludes::default(),
                 self.build_dispatch.dependency_metadata(),
                 DependencyMode::Transitive,

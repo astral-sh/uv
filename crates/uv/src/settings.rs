@@ -35,12 +35,12 @@ use uv_cli::{
 use uv_client::{Certificates, Connectivity, MetadataRangeRequest};
 use uv_configuration::RequirementsInput;
 use uv_configuration::{
-    ActiveEnvironment, BuildIsolation, BuildOptions, Concurrency, Constraint, DependencyGroups,
-    DevMode, DryRun, EditableMode, EnvFile, ExcludeDependency, ExportFormat, ExtrasSpecification,
-    GitLfsSetting, HashCheckingMode, IndexStrategy, InstallOptions, KeyringProviderType, NoBinary,
-    NoBuild, NoSources, Override, PackageOverride, PipCompileFormat, ProjectBuildBackend, ProxyUrl,
-    Reinstall, RequiredVersion, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
-    VersionControlSystem,
+    ActiveEnvironment, BuildIsolation, BuildOptions, BuildRequirements, Concurrency, Constraint,
+    DependencyGroups, DevMode, DryRun, EditableMode, EnvFile, ExcludeDependency, ExportFormat,
+    ExtrasSpecification, GitLfsSetting, HashCheckingMode, IndexStrategy, InstallOptions,
+    KeyringProviderType, NoBinary, NoBuild, NoSources, Override, PackageOverride, PipCompileFormat,
+    ProjectBuildBackend, ProxyUrl, Reinstall, RequiredVersion, TargetTriple, TrustedHost,
+    TrustedPublishing, Upgrade, VersionControlSystem,
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, IndexUrl,
@@ -3463,6 +3463,40 @@ fn workspace_overrides(filesystem: Option<&FilesystemOptions>) -> Vec<Override<R
     overrides
 }
 
+/// Lower filesystem build policies while retaining package scopes and constraint hashes.
+fn workspace_build_requirements(filesystem: Option<&FilesystemOptions>) -> BuildRequirements {
+    BuildRequirements::from_entries(
+        filesystem
+            .and_then(|configuration| configuration.build_constraint_dependencies.as_ref())
+            .into_iter()
+            .flatten()
+            .cloned()
+            .map(|entry| {
+                entry.map(|constraint| {
+                    let (requirement, hashes) = constraint.into_parts();
+                    NameRequirementSpecification {
+                        requirement: Requirement::from(
+                            requirement.with_origin(RequirementOrigin::Workspace),
+                        ),
+                        hashes,
+                    }
+                })
+            }),
+    )
+    .with_overrides(
+        filesystem
+            .and_then(|configuration| configuration.build_override_dependencies.as_ref())
+            .into_iter()
+            .flatten()
+            .cloned()
+            .map(|entry| {
+                entry.map(|requirement| {
+                    Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
+                })
+            }),
+    )
+}
+
 /// The resolved settings to use for a `pip compile` invocation.
 #[derive(Debug, Clone)]
 pub(crate) struct PipCompileSettings {
@@ -3475,7 +3509,7 @@ pub(crate) struct PipCompileSettings {
     pub(crate) constraints_from_workspace: Vec<Constraint<Requirement>>,
     pub(crate) overrides_from_workspace: Vec<Override<Requirement>>,
     pub(crate) excludes_from_workspace: Vec<ExcludeDependency>,
-    pub(crate) build_constraints_from_workspace: Vec<Constraint<NameRequirementSpecification>>,
+    pub(crate) build_requirements_from_workspace: BuildRequirements,
     pub(crate) environments: SupportedEnvironments,
     pub(crate) required_environments: SupportedEnvironments,
     pub(crate) minimum_libc_version: Option<MinimumLibcVersion>,
@@ -3571,27 +3605,7 @@ impl PipCompileSettings {
             Vec::new()
         };
 
-        let build_constraints_from_workspace = if let Some(configuration) = &filesystem {
-            configuration
-                .build_constraint_dependencies
-                .clone()
-                .unwrap_or_default()
-                .into_iter()
-                .map(|entry| {
-                    entry.map(|requirement| {
-                        let (requirement, hashes) = requirement.into_parts();
-                        NameRequirementSpecification {
-                            requirement: Requirement::from(
-                                requirement.with_origin(RequirementOrigin::Workspace),
-                            ),
-                            hashes,
-                        }
-                    })
-                })
-                .collect()
-        } else {
-            Vec::new()
-        };
+        let build_requirements_from_workspace = workspace_build_requirements(filesystem.as_ref());
 
         let environments = if let Some(configuration) = &filesystem {
             configuration.environments.clone().unwrap_or_default()
@@ -3634,7 +3648,7 @@ impl PipCompileSettings {
             constraints_from_workspace,
             overrides_from_workspace,
             excludes_from_workspace,
-            build_constraints_from_workspace,
+            build_requirements_from_workspace,
             environments,
             required_environments,
             minimum_libc_version,
@@ -3815,7 +3829,7 @@ pub(crate) struct PipInstallSettings {
     pub(crate) constraints_from_workspace: Vec<Constraint<Requirement>>,
     pub(crate) overrides_from_workspace: Vec<Override<Requirement>>,
     pub(crate) excludes_from_workspace: Vec<ExcludeDependency>,
-    pub(crate) build_constraints_from_workspace: Vec<Constraint<NameRequirementSpecification>>,
+    pub(crate) build_requirements_from_workspace: BuildRequirements,
     pub(crate) modifications: Modifications,
     pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
@@ -3903,27 +3917,7 @@ impl PipInstallSettings {
             Vec::new()
         };
 
-        let build_constraints_from_workspace = if let Some(configuration) = &filesystem {
-            configuration
-                .build_constraint_dependencies
-                .clone()
-                .unwrap_or_default()
-                .into_iter()
-                .map(|entry| {
-                    entry.map(|requirement| {
-                        let (requirement, hashes) = requirement.into_parts();
-                        NameRequirementSpecification {
-                            requirement: Requirement::from(
-                                requirement.with_origin(RequirementOrigin::Workspace),
-                            ),
-                            hashes,
-                        }
-                    })
-                })
-                .collect()
-        } else {
-            Vec::new()
-        };
+        let build_requirements_from_workspace = workspace_build_requirements(filesystem.as_ref());
 
         Ok(Self {
             package,
@@ -3953,7 +3947,7 @@ impl PipInstallSettings {
             constraints_from_workspace,
             overrides_from_workspace,
             excludes_from_workspace,
-            build_constraints_from_workspace,
+            build_requirements_from_workspace,
             modifications: if flag(exact, inexact, "inexact")?.unwrap_or(false) {
                 Modifications::Exact
             } else {
@@ -4317,7 +4311,7 @@ pub(crate) struct BuildSettings {
     pub(crate) force_pep517: bool,
     pub(crate) clear: bool,
     pub(crate) build_constraints: Vec<RequirementsInput>,
-    pub(crate) build_constraints_from_workspace: Vec<Constraint<NameRequirementSpecification>>,
+    pub(crate) build_requirements_from_workspace: BuildRequirements,
     pub(crate) hash_checking: Option<HashCheckingMode>,
     pub(crate) python: Option<String>,
     pub(crate) install_mirrors: PythonInstallMirrors,
@@ -4364,27 +4358,7 @@ impl BuildSettings {
             Some(fs) => fs.install_mirrors.clone(),
             None => PythonInstallMirrors::default(),
         };
-        let build_constraints_from_workspace = if let Some(configuration) = &filesystem {
-            configuration
-                .build_constraint_dependencies
-                .clone()
-                .unwrap_or_default()
-                .into_iter()
-                .map(|entry| {
-                    entry.map(|requirement| {
-                        let (requirement, hashes) = requirement.into_parts();
-                        NameRequirementSpecification {
-                            requirement: Requirement::from(
-                                requirement.with_origin(RequirementOrigin::Workspace),
-                            ),
-                            hashes,
-                        }
-                    })
-                })
-                .collect()
-        } else {
-            Vec::new()
-        };
+        let build_requirements_from_workspace = workspace_build_requirements(filesystem.as_ref());
 
         Ok(Self {
             skip_dependency_check,
@@ -4404,7 +4378,7 @@ impl BuildSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
-            build_constraints_from_workspace,
+            build_requirements_from_workspace,
             hash_checking: HashCheckingMode::from_args(
                 flag(require_hashes, no_require_hashes, "require-hashes")?,
                 flag(verify_hashes, no_verify_hashes, "verify-hashes")?,

@@ -25,7 +25,7 @@ use uv_configuration::{
     ExtrasSpecification, InstallOptions, RequirementsInput, TargetTriple,
 };
 use uv_distribution::LoweredExtraBuildDependencies;
-use uv_distribution_types::NameRequirementSpecification;
+use uv_distribution_types::{NameRequirementSpecification, Requirement};
 use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified, create_symlink};
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
@@ -177,7 +177,7 @@ pub(crate) async fn run(
 
     // The lockfile used for the base environment.
     let mut base_lock: Option<(Lock, PathBuf)> = None;
-    let mut unlocked_build_constraints = uv_configuration::BuildConstraints::default();
+    let mut unlocked_build_constraints = uv_configuration::BuildRequirements::default();
 
     // Determine whether the command to execute is a PEP 723 script.
     let temp_dir;
@@ -362,17 +362,21 @@ pub(crate) async fn run(
                 .metadata()
                 .tool
                 .as_ref()
-                .and_then(|tool| {
-                    tool.uv
-                        .as_ref()
-                        .and_then(|uv| uv.build_constraint_dependencies.as_ref())
-                })
-                .map(|constraints| {
-                    uv_configuration::BuildConstraints::from_entries(
-                        constraints
+                .and_then(|tool| tool.uv.as_ref())
+                .map(|uv| {
+                    uv_configuration::BuildRequirements::from_entries(
+                        uv.build_constraint_dependencies
                             .iter()
+                            .flatten()
                             .cloned()
                             .map(|entry| entry.map(NameRequirementSpecification::from)),
+                    )
+                    .with_overrides(
+                        uv.build_override_dependencies
+                            .iter()
+                            .flatten()
+                            .cloned()
+                            .map(|entry| entry.map(Requirement::from)),
                     )
                 })
                 .unwrap_or_default();

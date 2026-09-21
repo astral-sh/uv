@@ -11,7 +11,7 @@ use uv_errors::{Hinted, Hints};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    BuildConstraints, BuildIsolation, BuildOptions, Concurrency, Constraint, DryRun, EditableMode,
+    BuildIsolation, BuildOptions, BuildRequirements, Concurrency, Constraint, DryRun, EditableMode,
     ExcludeDependency, ExtrasSpecification, HashCheckingMode, IndexStrategy, NoSources, Override,
     Reinstall, Upgrade,
 };
@@ -85,7 +85,7 @@ pub(crate) async fn pip_install(
     constraints_from_workspace: Vec<Constraint<Requirement>>,
     overrides_from_workspace: Vec<Override<Requirement>>,
     excludes_from_workspace: Vec<ExcludeDependency>,
-    build_constraints_from_workspace: Vec<Constraint<NameRequirementSpecification>>,
+    build_requirements_from_workspace: BuildRequirements,
     editable: Option<EditableMode>,
     extras: &ExtrasSpecification,
     groups: &GroupsSpecification,
@@ -197,13 +197,8 @@ pub(crate) async fn pip_install(
         .collect();
 
     // Read build constraints.
-    let build_constraints = BuildConstraints::from_entries(
-        operations::read_constraints(build_constraints, &client_builder)
-            .await?
-            .into_iter()
-            .map(Constraint::Requirement)
-            .chain(build_constraints_from_workspace.iter().cloned()),
-    );
+    let build_constraints = build_requirements_from_workspace
+        .with_constraints(operations::read_constraints(build_constraints, &client_builder).await?);
 
     // Detect the current Python interpreter.
     let environment = if target.is_some() || prefix.is_some() {

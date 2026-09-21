@@ -13,13 +13,13 @@ use rustc_hash::FxHashMap;
 use thiserror::Error;
 use tracing::{debug, instrument, trace};
 
-use uv_build_backend::check_direct_build;
+use uv_build_backend::{DirectBuildIncompatibility, check_direct_build};
 use uv_build_frontend::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_configuration::{
-    BuildConstraints, BuildKind, BuildOptions, Constraints, HashCheckingMode, IndexStrategy,
-    NoSources, Overrides, Reinstall,
+    BuildKind, BuildOptions, BuildRequirements, Constraints, HashCheckingMode, IndexStrategy,
+    NoSources, Reinstall,
 };
 use uv_configuration::{BuildOutput, Concurrency, Excludes};
 use uv_distribution::DistributionDatabase;
@@ -128,7 +128,7 @@ impl IsBuildBackendError for BuildDispatchError {
 pub struct BuildDispatch<'a> {
     client: &'a RegistryClient,
     cache: &'a Cache,
-    constraints: &'a BuildConstraints,
+    constraints: &'a BuildRequirements,
     interpreter: &'a Interpreter,
     index_locations: &'a IndexLocations,
     index_strategy: IndexStrategy,
@@ -157,7 +157,7 @@ impl<'a> BuildDispatch<'a> {
     pub fn new(
         client: &'a RegistryClient,
         cache: &'a Cache,
-        constraints: &'a BuildConstraints,
+        constraints: &'a BuildRequirements,
         interpreter: &'a Interpreter,
         index_locations: &'a IndexLocations,
         flat_index: &'a FlatIndex,
@@ -303,7 +303,7 @@ impl BuildContext for BuildDispatch<'_> {
         &self.workspace_cache
     }
 
-    fn build_constraints(&self) -> &BuildConstraints {
+    fn build_constraints(&self) -> &BuildRequirements {
         self.constraints
     }
 
@@ -328,6 +328,9 @@ impl BuildContext for BuildDispatch<'_> {
         let tags = self.interpreter.tags()?;
 
         let constraints = self.constraints.for_package(package_name, package_version);
+        let overrides = self
+            .constraints
+            .overrides_for_package(package_name, package_version);
 
         // Walk any URL requirements transitively so their sub-URLs (for example, a workspace
         // member that depends on another workspace member) are known before the resolver runs
@@ -337,7 +340,7 @@ impl BuildContext for BuildDispatch<'_> {
         let hasher = self
             .hasher
             .clone()
-            .augment_with_requirements(requirements.iter())
+            .augment_with_requirements(requirements.iter().chain(overrides.global_requirements()))
             .map_err(uv_requirements::Error::from)?;
         let hash_mode = match self.hasher.verification() {
             HashVerification::None => None,
@@ -367,7 +370,6 @@ impl BuildContext for BuildDispatch<'_> {
         } else {
             hasher
         };
-        let overrides = Overrides::default();
         let excludes = Excludes::default();
         let (lookaheads, hasher) = LookaheadResolver::new(
             requirements,
@@ -389,6 +391,7 @@ impl BuildContext for BuildDispatch<'_> {
 
         let manifest = Manifest::simple(requirements.to_vec())
             .with_constraints(constraints.into_owned())
+            .with_overrides(overrides)
             .with_lookaheads(lookaheads);
 
         let resolver = Resolver::new(
@@ -663,12 +666,21 @@ impl BuildContext for BuildDispatch<'_> {
             uv_version::version(),
             &self.interpreter.to_resolver_marker_environment(),
             |name, version| {
-                self.constraints
+                if self
+                    .constraints
+                    .overrides_for_package(name, version)
+                    .global_requirements()
+                    .any(|requirement| requirement.name.as_str() == "uv-build")
+                {
+                    return Err(DirectBuildIncompatibility::BuildOverride);
+                }
+                Ok(self
+                    .constraints
                     .for_package(name, version)
                     .requirements()
                     .cloned()
                     .map(Into::into)
-                    .collect()
+                    .collect())
             },
         ) {
             trace!("Requirements for direct build not matched because {reason}");

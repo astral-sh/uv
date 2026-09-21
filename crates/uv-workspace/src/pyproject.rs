@@ -651,6 +651,32 @@ pub struct ToolUv {
     )]
     pub(crate) build_constraint_dependencies: Option<Vec<Constraint<BuildConstraintDependency>>>,
 
+    /// Overrides to apply when solving build dependencies.
+    ///
+    /// An override replaces a build requirement's version or source, even if the replacement
+    /// conflicts with the original requirement. It does not install an otherwise unused dependency.
+    ///
+    /// A table with `package` and `dependencies` selects the package being built. Its overrides
+    /// apply throughout that package's build environment, including transitive dependencies and
+    /// requirements returned by backend hooks. The selector accepts a `name` and optional exact
+    /// `version`; version-specific scopes only apply when that version is known.
+    ///
+    /// An exact-version scope replaces the name-only scope. The selected scope replaces global
+    /// overrides for the dependency names it contains; other global overrides still apply.
+    ///
+    /// In project commands, only declarations at the workspace root are used.
+    #[option(
+        default = "[]",
+        value_type = "list[str | dict]",
+        example = r#"
+            build-override-dependencies = [
+                "setuptools==70.0.0",
+                { package = { name = "foo" }, dependencies = ["setuptools==68.2.2"] },
+            ]
+        "#
+    )]
+    pub(crate) build_override_dependencies: Option<Vec<OverrideDependency>>,
+
     /// A list of supported environments against which to resolve dependencies.
     ///
     /// By default, uv will resolve for all possible environments during a `uv lock` operation.

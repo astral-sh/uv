@@ -99,6 +99,13 @@ impl Manifest {
         self
     }
 
+    /// Set overrides for every requirement in the resolution.
+    #[must_use]
+    pub fn with_overrides(mut self, overrides: Overrides) -> Self {
+        self.overrides = overrides;
+        self
+    }
+
     #[must_use]
     pub fn with_lookaheads(mut self, mut lookaheads: Vec<RequestedRequirements>) -> Self {
         // Package metadata defaults to forced-relative paths. Restore the user's path preference for

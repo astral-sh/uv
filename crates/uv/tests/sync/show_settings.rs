@@ -94,7 +94,15 @@ fn pip_compile_baseline() {
         constraints_from_workspace: [],
         overrides_from_workspace: [],
         excludes_from_workspace: [],
-        build_constraints_from_workspace: [],
+        build_requirements_from_workspace: BuildRequirements {
+            entries: [],
+            global: Constraints {
+                specifications: [],
+                requirements: {},
+                scoped: {},
+            },
+            overrides: [],
+        },
         environments: SupportedEnvironments(
             [],
         ),
@@ -474,7 +482,15 @@ fn pip_install_baseline() {
         constraints_from_workspace: [],
         overrides_from_workspace: [],
         excludes_from_workspace: [],
-        build_constraints_from_workspace: [],
+        build_requirements_from_workspace: BuildRequirements {
+            entries: [],
+            global: Constraints {
+                specifications: [],
+                requirements: {},
+                scoped: {},
+            },
+            overrides: [],
+        },
         modifications: Sufficient,
         refresh: None(
             Timestamp(

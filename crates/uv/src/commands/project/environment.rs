@@ -15,7 +15,7 @@ use uv_cache::{Cache, CacheBucket};
 use uv_cache_info::CacheInfo;
 use uv_cache_key::{cache_digest, hash_digest};
 use uv_client::BaseClientBuilder;
-use uv_configuration::{BuildConstraints, Concurrency, HashCheckingMode, TargetTriple};
+use uv_configuration::{BuildRequirements, Concurrency, HashCheckingMode, TargetTriple};
 use uv_distribution_types::{
     BuiltDist, Dist, Identifier, Node, Resolution, ResolvedDist, SourceDist,
 };
@@ -136,7 +136,7 @@ impl CachedEnvironment {
     /// Get or create an [`CachedEnvironment`] based on a given set of requirements.
     pub(crate) async fn from_spec(
         spec: EnvironmentSpecification<'_>,
-        build_constraints: BuildConstraints,
+        build_constraints: BuildRequirements,
         interpreter: &Interpreter,
         python_platform: Option<&TargetTriple>,
         settings: &ResolverInstallerSettings,
@@ -204,7 +204,7 @@ impl CachedEnvironment {
     /// its markers and tags from the same interpreter.
     pub(crate) async fn from_locked_resolution(
         resolution: &Resolution,
-        build_constraints: BuildConstraints,
+        build_constraints: BuildRequirements,
         interpreter: &Interpreter,
         settings: &ResolverInstallerSettings,
         malware_settings: &MalwareCheckSettings,
@@ -252,7 +252,7 @@ impl CachedEnvironment {
     async fn from_resolution(
         resolution: &Resolution,
         hash_strategy: HashStrategy,
-        build_constraints: BuildConstraints,
+        build_constraints: BuildRequirements,
         interpreter: &Interpreter,
         settings: &ResolverInstallerSettings,
         client_builder: &BaseClientBuilder<'_>,

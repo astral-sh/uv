@@ -12,7 +12,7 @@ use tracing::debug;
 use uv_cache::{Cache, Refresh};
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    ActiveEnvironment, BuildConstraints, Concurrency, Constraint, DependencyGroupsWithDefaults,
+    ActiveEnvironment, BuildRequirements, Concurrency, Constraint, DependencyGroupsWithDefaults,
     DryRun, ExcludeDependency, ExtrasSpecification, Override, PackageConstraint, PackageOverride,
     Reinstall, Upgrade,
 };
@@ -1154,6 +1154,7 @@ async fn do_lock(
                 dependency_groups,
                 dependency_metadata.values().cloned(),
             )
+            .with_build_overrides(build_constraints.override_entries().cloned())
             .relative_to(target.install_path())?;
 
             let previous = existing_lock.map(ValidatedLock::into_lock);
@@ -1216,7 +1217,7 @@ impl ValidatedLock {
         constraints: &[Constraint<Requirement>],
         overrides: &[Override<Requirement>],
         excludes: &[ExcludeDependency],
-        build_constraints: &BuildConstraints,
+        build_constraints: &BuildRequirements,
         conflicts: &Conflicts,
         environments: Option<&SupportedEnvironments>,
         required_environments: Option<&SupportedEnvironments>,
@@ -1557,6 +1558,13 @@ impl ValidatedLock {
             SatisfiesResult::MismatchedBuildConstraints(expected, actual) => {
                 debug!(
                     "Resolving despite existing lockfile due to mismatched build constraints:\n  Requested: {:?}\n  Existing: {:?}",
+                    expected, actual
+                );
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MismatchedBuildOverrides(expected, actual) => {
+                debug!(
+                    "Resolving despite existing lockfile due to mismatched build overrides:\n  Requested: {:?}\n  Existing: {:?}",
                     expected, actual
                 );
                 Ok(Self::Preferable(lock))

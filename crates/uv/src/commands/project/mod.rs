@@ -14,7 +14,7 @@ use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::{cache_digest, cache_name};
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    ActiveEnvironment, BuildConstraints, Concurrency, Constraint, DependencyGroupsWithDefaults,
+    ActiveEnvironment, BuildRequirements, Concurrency, Constraint, DependencyGroupsWithDefaults,
     DryRun, ExtrasSpecification, GitLfsSetting, HashCheckingMode, Override, PackageConstraint,
     PackageOverride, Reinstall, TargetTriple, Upgrade,
 };
@@ -2286,7 +2286,7 @@ pub(crate) async fn resolve_names(
     requirements: Vec<UnresolvedRequirementSpecification>,
     interpreter: &Interpreter,
     settings: &ResolverInstallerSettings,
-    build_constraints: &BuildConstraints,
+    build_constraints: &BuildRequirements,
     client_builder: &BaseClientBuilder<'_>,
     state: &SharedState,
     concurrency: &Concurrency,
@@ -2497,7 +2497,7 @@ pub(crate) async fn resolve_environment(
     interpreter: &Interpreter,
     python_platform: Option<&TargetTriple>,
     source_tree_editable_policy: SourceTreeEditablePolicy,
-    build_constraints: BuildConstraints,
+    build_constraints: BuildRequirements,
     settings: &ResolverSettings,
     client_builder: &BaseClientBuilder<'_>,
     state: &PlatformState,
@@ -2737,7 +2737,7 @@ pub(crate) async fn sync_environment(
     resolution: &Resolution,
     hasher: HashStrategy,
     modifications: Modifications,
-    build_constraints: BuildConstraints,
+    build_constraints: BuildRequirements,
     settings: InstallerSettingsRef<'_>,
     client_builder: &BaseClientBuilder<'_>,
     state: &PlatformState,
@@ -2891,7 +2891,7 @@ pub(crate) async fn update_environment(
     modifications: Modifications,
     python_platform: Option<&TargetTriple>,
     source_tree_editable_policy: SourceTreeEditablePolicy,
-    build_constraints: BuildConstraints,
+    build_constraints: BuildRequirements,
     extra_build_requires: ExtraBuildRequires,
     settings: &ResolverInstallerSettings,
     client_builder: &BaseClientBuilder<'_>,

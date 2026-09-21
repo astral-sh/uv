@@ -8,7 +8,7 @@ use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    BuildConstraints, BuildIsolation, BuildOptions, Concurrency, Constraint, DryRun,
+    BuildIsolation, BuildOptions, BuildRequirements, Concurrency, Constraint, DryRun,
     ExtrasSpecification, HashCheckingMode, IndexStrategy, NoSources, Reinstall, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
@@ -151,7 +151,7 @@ pub(crate) async fn pip_sync(
     }
 
     // Read build constraints.
-    let build_constraints = BuildConstraints::from_specifications(
+    let build_constraints = BuildRequirements::from_specifications(
         operations::read_constraints(build_constraints, &client_builder).await?,
     );
 

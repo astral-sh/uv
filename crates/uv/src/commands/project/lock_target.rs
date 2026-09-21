@@ -10,8 +10,8 @@ use tracing::info_span;
 use uv_auth::CredentialsCache;
 use uv_cache::Cache;
 use uv_configuration::{
-    BuildConstraints, Constraint, DependencyGroupsWithDefaults, ExcludeDependency, NoSources,
-    Upgrade,
+    BuildRequirements, Constraint, DependencyGroupsWithDefaults, ExcludeDependency, NoSources,
+    Override, PackageOverride, Upgrade,
 };
 use uv_distribution::LoweredRequirement;
 use uv_distribution_types::{
@@ -121,6 +121,23 @@ impl<'lock> LockTarget<'lock> {
                 .as_ref()
                 .and_then(|tool| tool.uv.as_ref())
                 .and_then(|uv| uv.build_constraint_dependencies.as_ref())
+                .into_iter()
+                .flatten()
+                .cloned()
+                .collect(),
+        }
+    }
+
+    /// Return the overrides selected for individual build environments.
+    fn build_overrides(self) -> Vec<OverrideDependency> {
+        match self {
+            Self::Workspace(workspace) => workspace.build_overrides(),
+            Self::Script(script) => script
+                .metadata
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.build_override_dependencies.as_ref())
                 .into_iter()
                 .flatten()
                 .cloned()
@@ -417,7 +434,7 @@ impl<'lock> LockTarget<'lock> {
         cache: &Cache,
         workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
-    ) -> Result<BuildConstraints, uv_distribution::MetadataError> {
+    ) -> Result<BuildRequirements, uv_distribution::MetadataError> {
         let mut constraints = Vec::new();
         for entry in self.build_constraints() {
             let (scope, requirements) = match entry {
@@ -455,7 +472,39 @@ impl<'lock> LockTarget<'lock> {
                 constraints.extend(lowered.into_iter().map(Constraint::Requirement));
             }
         }
-        Ok(BuildConstraints::from_entries(constraints))
+        let mut overrides = Vec::new();
+        for entry in self.build_overrides() {
+            match entry {
+                Override::Requirement(requirement) => overrides.extend(
+                    self.lower(
+                        vec![requirement],
+                        locations,
+                        sources,
+                        cache,
+                        workspace_cache,
+                        credentials_cache,
+                    )
+                    .await?
+                    .into_iter()
+                    .map(Override::Requirement),
+                ),
+                Override::Package(package) => overrides.push(Override::Package(PackageOverride {
+                    package: package.package,
+                    dependencies: self
+                        .lower(
+                            package.dependencies.into_vec(),
+                            locations,
+                            sources,
+                            cache,
+                            workspace_cache,
+                            credentials_cache,
+                        )
+                        .await?
+                        .into_boxed_slice(),
+                })),
+            }
+        }
+        Ok(BuildRequirements::from_entries(constraints).with_overrides(overrides))
     }
 
     /// Lower the requirements for the [`LockTarget`], relative to the target root.

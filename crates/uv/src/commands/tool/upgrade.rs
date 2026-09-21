@@ -10,7 +10,7 @@ use uv_cache::Cache;
 use uv_cache_key::CanonicalUrl;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    BuildConstraints, Concurrency, Constraint, DryRun, HashCheckingMode, TargetTriple,
+    BuildRequirements, Concurrency, Constraint, DryRun, HashCheckingMode, TargetTriple,
 };
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{ExtraBuildRequires, Index, Name, Requirement, RequirementSource};
@@ -365,7 +365,7 @@ async fn upgrade_tool(
         &build_constraints,
         &settings.resolver.dependency_metadata,
     );
-    let build_constraints = BuildConstraints::from_entries(build_constraints);
+    let build_constraints = BuildRequirements::from_entries(build_constraints);
 
     // Resolve the requirements.
     let spec = RequirementsSpecification::from_excludes(

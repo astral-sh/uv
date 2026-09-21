@@ -22,7 +22,7 @@ use url::Url;
 
 use uv_cache_key::RepositoryUrl;
 use uv_configuration::{
-    BuildConstraints, BuildOptions, Constraint, Constraints, DependencyGroupsWithDefaults,
+    BuildOptions, BuildRequirements, Constraint, Constraints, DependencyGroupsWithDefaults,
     ExcludeDependency, ExcludeNewer, ExcludeNewerPackage, Excludes,
     ExtrasSpecificationWithDefaults, ForkStrategy, InstallTarget, Override, Overrides,
     PackageOverride, Prerelease, PrereleaseMode, PrereleasePackage, ResolutionMode,
@@ -3236,10 +3236,17 @@ impl Lock {
     }
 
     /// Returns the build constraints that were used to generate this lock.
-    pub fn build_constraints(&self, root: &Path) -> BuildConstraints {
-        BuildConstraints::from_entries(
+    pub fn build_constraints(&self, root: &Path) -> BuildRequirements {
+        BuildRequirements::from_entries(
             self.manifest
                 .build_constraints
+                .iter()
+                .cloned()
+                .map(|entry| entry.map(|requirement| requirement.into_absolute(root))),
+        )
+        .with_overrides(
+            self.manifest
+                .build_overrides
                 .iter()
                 .cloned()
                 .map(|entry| entry.map(|requirement| requirement.into_absolute(root))),
@@ -4004,7 +4011,7 @@ impl Lock {
         constraints: &[Constraint<Requirement>],
         overrides: &[Override<Requirement>],
         excludes: &[ExcludeDependency],
-        build_constraints: &BuildConstraints,
+        build_constraints: &BuildRequirements,
         dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
         dependency_metadata: &DependencyMetadata,
         indexes: Option<&IndexLocations>,
@@ -4202,6 +4209,30 @@ impl Lock {
                 return Ok(SatisfiesResult::MismatchedBuildConstraints(
                     expected, actual,
                 ));
+            }
+        }
+
+        // Build overrides are part of the lockfile's build environment policy.
+        {
+            let normalize = |entry: Override<Requirement>| {
+                entry.try_map(|requirement| {
+                    normalize_requirement(requirement, root, &self.requires_python)
+                })
+            };
+            let expected = build_constraints
+                .override_entries()
+                .cloned()
+                .map(normalize)
+                .collect::<Result<BTreeSet<_>, _>>()?;
+            let actual = self
+                .manifest
+                .build_overrides
+                .iter()
+                .cloned()
+                .map(normalize)
+                .collect::<Result<BTreeSet<_>, _>>()?;
+            if expected != actual {
+                return Ok(SatisfiesResult::MismatchedBuildOverrides(expected, actual));
             }
         }
 
@@ -5907,6 +5938,11 @@ pub enum SatisfiesResult<'lock> {
     ),
     /// The lockfile uses a different set of excludes.
     MismatchedExcludes(BTreeSet<ExcludeDependency>, BTreeSet<ExcludeDependency>),
+    /// The lockfile uses different overrides for build environments.
+    MismatchedBuildOverrides(
+        BTreeSet<Override<Requirement>>,
+        BTreeSet<Override<Requirement>>,
+    ),
     /// The lockfile uses a different set of build constraints.
     MismatchedBuildConstraints(
         BTreeSet<Constraint<NameRequirementSpecification>>,
@@ -6085,6 +6121,9 @@ pub struct ResolverManifest {
     /// The build constraints provided to the resolver.
     #[serde(default)]
     build_constraints: BTreeSet<Constraint<NameRequirementSpecification>>,
+    /// Overrides for isolated build environments.
+    #[serde(default)]
+    build_overrides: BTreeSet<Override<Requirement>>,
     /// The static metadata provided to the resolver.
     #[serde(default)]
     dependency_metadata: BTreeSet<StaticMetadata>,
@@ -6110,12 +6149,23 @@ impl ResolverManifest {
             overrides: overrides.into_iter().collect(),
             excludes: excludes.into_iter().collect(),
             build_constraints: build_constraints.into_iter().collect(),
+            build_overrides: BTreeSet::new(),
             dependency_groups: dependency_groups
                 .into_iter()
                 .map(|(group, requirements)| (group, requirements.into_iter().collect()))
                 .collect(),
             dependency_metadata: dependency_metadata.into_iter().collect(),
         }
+    }
+
+    /// Record the build overrides used during resolution and installation.
+    #[must_use]
+    pub fn with_build_overrides(
+        mut self,
+        overrides: impl IntoIterator<Item = Override<Requirement>>,
+    ) -> Self {
+        self.build_overrides = overrides.into_iter().collect();
+        self
     }
 
     /// Convert the manifest to a relative form using the given workspace.
@@ -6152,6 +6202,11 @@ impl ResolverManifest {
                 })
                 .collect::<Result<BTreeSet<_>, io::Error>>()?,
             excludes: self.excludes,
+            build_overrides: self
+                .build_overrides
+                .into_iter()
+                .map(|entry| entry.try_map(|requirement| requirement.relative_to(root)))
+                .collect::<Result<_, _>>()?,
             build_constraints: self
                 .build_constraints
                 .into_iter()

@@ -306,7 +306,7 @@ pub(crate) async fn venv(
         let state = SharedState::default();
 
         // For seed packages, assume a bunch of default settings are sufficient.
-        let build_constraints = uv_configuration::BuildConstraints::default();
+        let build_constraints = uv_configuration::BuildRequirements::default();
         let build_hasher = HashStrategy::default();
         let config_settings = ConfigSettings::default();
         let config_settings_package = PackageConfigSettings::default();

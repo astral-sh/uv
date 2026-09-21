@@ -21,7 +21,8 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    Dist, IndexUrl, Name, NameRequirementSpecification, Resolution, ResolvedDist, SourceDist,
+    Dist, IndexUrl, Name, NameRequirementSpecification, Requirement, Resolution, ResolvedDist,
+    SourceDist,
 };
 use uv_fs::{PortablePathBuf, Simplified};
 use uv_installer::{InstallationStrategy, SitePackages};
@@ -264,17 +265,21 @@ pub(crate) async fn sync(
                 .metadata
                 .tool
                 .as_ref()
-                .and_then(|tool| {
-                    tool.uv
-                        .as_ref()
-                        .and_then(|uv| uv.build_constraint_dependencies.as_ref())
-                })
-                .map(|constraints| {
-                    uv_configuration::BuildConstraints::from_entries(
-                        constraints
+                .and_then(|tool| tool.uv.as_ref())
+                .map(|uv| {
+                    uv_configuration::BuildRequirements::from_entries(
+                        uv.build_constraint_dependencies
                             .iter()
+                            .flatten()
                             .cloned()
                             .map(|entry| entry.map(NameRequirementSpecification::from)),
+                    )
+                    .with_overrides(
+                        uv.build_override_dependencies
+                            .iter()
+                            .flatten()
+                            .cloned()
+                            .map(|entry| entry.map(Requirement::from)),
                     )
                 });
 
