@@ -128,11 +128,7 @@ jobs:
           retention-days: 30
 
   benchmarks-simulated:
-    name: "simulated sample ${{ matrix.sample }}"
-    strategy:
-      fail-fast: false
-      matrix:
-        sample: [1, 2, 3, 4, 5]
+    name: "simulated"
     runs-on: depot-ubuntu-24.04-4
     # Only uv measures main; uv-dev reuses the resulting profiles.
     if: ${{ github.repository == 'astral-sh/uv' || (github.repository == 'astral-sh/uv-dev' && github.ref != 'refs/heads/main') }}
@@ -194,7 +190,7 @@ jobs:
         if: ${{ steps.profiles.outcome == 'success' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: codspeed-profiles-simulation-${{ matrix.sample }}
+          name: codspeed-profiles-simulation
           path: |
             ${{ runner.temp }}/codspeed-simulation/metadata.json
             ${{ runner.temp }}/codspeed-simulation/profile.tar
