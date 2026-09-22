@@ -107,11 +107,12 @@ impl GlobalSettings {
             NetworkSettings::resolve(args, workspace, environment, custom_certificate_file)?;
         let python_preference = resolve_python_preference(args, workspace, environment)?;
         let color = resolve_color(args);
+        let (quiet, verbose) = resolve_quiet_verbose(args.quiet, args.verbose, environment)?;
         Ok(Self {
             required_version: workspace
                 .and_then(|workspace| workspace.globals.required_version.clone()),
-            quiet: args.quiet,
-            verbose: args.verbose,
+            quiet,
+            verbose,
             color,
             network_settings,
             concurrency: Concurrency::new(
@@ -164,6 +165,47 @@ impl GlobalSettings {
             .is_enabled(),
         })
     }
+}
+
+/// Resolve quiet/verbose levels from CLI counts and environment variables.
+///
+/// CLI flags win over environment variables. `UV_QUIET=2` is equivalent to `-qq`,
+/// and `UV_VERBOSE=3` to `-vvv`. Quiet and verbose conflict (same as the CLI flags).
+fn resolve_quiet_verbose(
+    cli_quiet: u8,
+    cli_verbose: u8,
+    environment: &EnvironmentOptions,
+) -> anyhow::Result<(u8, u8)> {
+    let env_quiet = environment.quiet.unwrap_or(0);
+    let env_verbose = environment.verbose.unwrap_or(0);
+
+    // CLI counts win when non-zero; otherwise fall back to the environment.
+    let quiet = if cli_quiet > 0 {
+        cli_quiet
+    } else if cli_verbose > 0 {
+        // An explicit CLI verbose flag suppresses env quiet.
+        0
+    } else {
+        env_quiet
+    };
+    let verbose = if cli_verbose > 0 {
+        cli_verbose
+    } else if cli_quiet > 0 {
+        // An explicit CLI quiet flag suppresses env verbose.
+        0
+    } else {
+        env_verbose
+    };
+
+    if quiet > 0 && verbose > 0 {
+        bail!(
+            "Cannot specify both `{}` and `{}`",
+            EnvVars::UV_QUIET,
+            EnvVars::UV_VERBOSE
+        );
+    }
+
+    Ok((quiet, verbose))
 }
 
 /// Resolve the color choice from CLI arguments and environment variables.
@@ -5506,6 +5548,37 @@ mod tests {
 
         assert!(!settings.settings.upgrade.is_all());
         assert_eq!(settings.settings.upgrade.packages(), Some(&expected));
+        Ok(())
+    }
+
+    #[test]
+    fn quiet_verbose_env_and_cli_precedence() -> anyhow::Result<()> {
+        let mut environment = EnvironmentOptions::new()?;
+
+        // Env alone.
+        environment.quiet = Some(2);
+        environment.verbose = None;
+        assert_eq!(resolve_quiet_verbose(0, 0, &environment)?, (2, 0));
+
+        environment.quiet = None;
+        environment.verbose = Some(3);
+        assert_eq!(resolve_quiet_verbose(0, 0, &environment)?, (0, 3));
+
+        // CLI wins over env.
+        environment.quiet = Some(2);
+        environment.verbose = None;
+        assert_eq!(resolve_quiet_verbose(1, 0, &environment)?, (1, 0));
+        assert_eq!(resolve_quiet_verbose(0, 2, &environment)?, (0, 2));
+
+        // CLI verbose suppresses env quiet.
+        environment.quiet = Some(1);
+        assert_eq!(resolve_quiet_verbose(0, 1, &environment)?, (0, 1));
+
+        // Both env vars conflict.
+        environment.quiet = Some(1);
+        environment.verbose = Some(1);
+        assert!(resolve_quiet_verbose(0, 0, &environment).is_err());
+
         Ok(())
     }
 }

@@ -247,7 +247,7 @@ pub struct GlobalArgs {
     /// Use quiet output.
     ///
     /// Repeating this option, e.g., `-qq`, will enable a silent mode in which
-    /// uv will write no output to stdout.
+    /// uv will write no output to stdout. [env: UV_QUIET=]
     #[arg(global = true, action = clap::ArgAction::Count, long, short, conflicts_with = "verbose")]
     pub quiet: u8,
 
@@ -255,6 +255,7 @@ pub struct GlobalArgs {
     ///
     /// You can configure fine-grained logging using the `RUST_LOG` environment variable.
     /// (<https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives>)
+    /// [env: UV_VERBOSE=]
     #[arg(global = true, action = clap::ArgAction::Count, long, short, conflicts_with = "quiet")]
     pub verbose: u8,
 

@@ -768,6 +768,8 @@ pub struct EnvironmentOptions {
     pub isolated: EnvFlag,
     pub no_progress: EnvFlag,
     pub no_installer_metadata: EnvFlag,
+    pub quiet: Option<u8>,
+    pub verbose: Option<u8>,
     pub dev: EnvFlag,
     pub no_dev: EnvFlag,
     pub show_resolution: EnvFlag,
@@ -906,6 +908,8 @@ impl EnvironmentOptions {
             isolated: EnvFlag::new(EnvVars::UV_ISOLATED)?,
             no_progress: EnvFlag::new(EnvVars::UV_NO_PROGRESS)?,
             no_installer_metadata: EnvFlag::new(EnvVars::UV_NO_INSTALLER_METADATA)?,
+            quiet: parse_verbosity_environment_variable(EnvVars::UV_QUIET)?,
+            verbose: parse_verbosity_environment_variable(EnvVars::UV_VERBOSE)?,
             dev: EnvFlag::new(EnvVars::UV_DEV)?,
             no_dev: EnvFlag::new(EnvVars::UV_NO_DEV)?,
             show_resolution: EnvFlag::new(EnvVars::UV_SHOW_RESOLUTION)?,
@@ -1084,6 +1088,45 @@ where
                 },
             },
         )),
+    }
+}
+
+/// Parse a verbosity level from an environment variable.
+///
+/// Accepts an integer count (`UV_VERBOSE=3` ≡ `-vvv`) or a boolean-ish value
+/// (`UV_QUIET=true` ≡ `-q`).
+fn parse_verbosity_environment_variable(name: &'static str) -> Result<Option<u8>, Error> {
+    let value = match std::env::var(name) {
+        Ok(v) => v,
+        Err(e) => {
+            return match e {
+                std::env::VarError::NotPresent => Ok(None),
+                std::env::VarError::NotUnicode(err) => Err(Error::InvalidEnvironmentVariable(
+                    InvalidEnvironmentVariable {
+                        name: name.to_string(),
+                        value: err.to_string_lossy().to_string(),
+                        err: "expected a valid UTF-8 string".to_string(),
+                    },
+                )),
+            };
+        }
+    };
+    if value.is_empty() {
+        return Ok(None);
+    }
+
+    if let Ok(level) = value.parse::<u8>() {
+        return Ok(Some(level));
+    }
+
+    match parse_boolish_environment_variable(name)? {
+        Some(true) => Ok(Some(1)),
+        Some(false) => Ok(Some(0)),
+        None => Err(Error::InvalidEnvironmentVariable(InvalidEnvironmentVariable {
+            name: name.to_string(),
+            value,
+            err: "expected an integer verbosity level or a boolean".to_string(),
+        })),
     }
 }
 
