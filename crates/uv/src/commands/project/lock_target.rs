@@ -9,21 +9,26 @@ use tracing::info_span;
 
 use uv_auth::CredentialsCache;
 use uv_cache::Cache;
-use uv_configuration::{DependencyGroupsWithDefaults, ExcludeDependency, NoSources, Upgrade};
+use uv_configuration::{
+    Constraints, DependencyGroupsWithDefaults, ExcludeDependency, NoSources, Upgrade,
+};
 use uv_distribution::LoweredRequirement;
-use uv_distribution_types::{Index, IndexLocations, Requirement, RequiresPython};
+use uv_distribution_types::{
+    Index, IndexLocations, MinimumLibcVersion, NameRequirementSpecification, Requirement,
+    RequiresPython,
+};
+use uv_lock::Lock;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep508::RequirementOrigin;
 use uv_pypi_types::{Conflicts, SupportedEnvironments, VerbatimParsedUrl};
-use uv_resolver::Lock;
 use uv_scripts::Pep723Script;
 use uv_workspace::dependency_groups::{
     DependencyGroupError, FlatDependencyGroup, FlatDependencyGroups,
 };
-use uv_workspace::pyproject::OverrideDependency;
+use uv_workspace::pyproject::{BuildConstraintDependency, OverrideDependency};
 use uv_workspace::{Editability, Workspace, WorkspaceCache, WorkspaceMember};
 
-use crate::commands::project::{ProjectError, find_requires_python};
+use crate::commands::project::{MissingLockfileSource, ProjectError, find_requires_python};
 
 /// A target that can be resolved into a lockfile.
 #[derive(Debug, Copy, Clone)]
@@ -106,7 +111,7 @@ impl<'lock> LockTarget<'lock> {
     }
 
     /// Returns the set of build constraints for the [`LockTarget`].
-    pub(crate) fn build_constraints(self) -> Vec<uv_pep508::Requirement<VerbatimParsedUrl>> {
+    fn build_constraints(self) -> Vec<BuildConstraintDependency> {
         match self {
             Self::Workspace(workspace) => workspace.build_constraints(),
             Self::Script(script) => script
@@ -255,6 +260,14 @@ impl<'lock> LockTarget<'lock> {
         }
     }
 
+    /// Returns the supported libc implementations and their minimum versions.
+    pub(crate) fn minimum_libc_version(self) -> Option<MinimumLibcVersion> {
+        match self {
+            Self::Workspace(workspace) => workspace.minimum_libc_version(),
+            Self::Script(_) => None,
+        }
+    }
+
     /// Returns the set of conflicts for the [`LockTarget`].
     pub(crate) fn conflicts(self) -> Result<Conflicts, ProjectError> {
         match self {
@@ -347,6 +360,31 @@ impl<'lock> LockTarget<'lock> {
             .map(|(lock, _contents)| lock))
     }
 
+    /// Read an existing lockfile and validate that it contains the discovered workspace members.
+    pub(crate) async fn read_frozen(
+        self,
+        source: MissingLockfileSource,
+    ) -> Result<Lock, ProjectError> {
+        let lock_filename = self.lock_filename();
+        let existing = self
+            .read()
+            .await?
+            .ok_or(ProjectError::MissingLockfile(source, lock_filename))?;
+
+        // Check if the discovered workspace members match the locked workspace members.
+        if let Self::Workspace(workspace) = self {
+            for package_name in workspace.packages().keys() {
+                existing
+                    .find_by_name(package_name)
+                    .map_err(|_| ProjectError::LockWorkspaceMismatch(package_name.clone(), source))?
+                    .ok_or_else(|| {
+                        ProjectError::LockWorkspaceMismatch(package_name.clone(), source)
+                    })?;
+            }
+        }
+        Ok(existing)
+    }
+
     /// Read the lockfile and return the exact contents that were parsed.
     ///
     /// Returns `Ok(None)` if the lockfile does not exist.
@@ -363,20 +401,43 @@ impl<'lock> LockTarget<'lock> {
         }
     }
 
-    /// Read the lockfile from the workspace as bytes.
-    pub(crate) async fn read_bytes(self) -> Result<Option<Vec<u8>>, std::io::Error> {
-        match fs_err::tokio::read(self.lock_path()).await {
-            Ok(encoded) => Ok(Some(encoded)),
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
-            Err(err) => Err(err),
-        }
-    }
-
     /// Write the lockfile to disk.
     pub(crate) async fn commit(self, lock: &Lock) -> Result<(), ProjectError> {
         let encoded = lock.to_toml()?;
         fs_err::tokio::write(self.lock_path(), encoded).await?;
         Ok(())
+    }
+
+    /// Lower build constraints without losing hashes when a source expands into multiple requirements.
+    pub(crate) async fn lower_build_constraints(
+        self,
+        locations: &IndexLocations,
+        sources: &NoSources,
+        cache: &Cache,
+        workspace_cache: &WorkspaceCache,
+        credentials_cache: &CredentialsCache,
+    ) -> Result<Constraints, uv_distribution::MetadataError> {
+        let mut constraints = Vec::new();
+        for constraint in self.build_constraints() {
+            let (requirement, hashes) = constraint.into_parts();
+            constraints.extend(
+                self.lower(
+                    vec![requirement],
+                    locations,
+                    sources,
+                    cache,
+                    workspace_cache,
+                    credentials_cache,
+                )
+                .await?
+                .into_iter()
+                .map(|requirement| NameRequirementSpecification {
+                    requirement,
+                    hashes: hashes.clone(),
+                }),
+            );
+        }
+        Ok(Constraints::from_specifications(constraints))
     }
 
     /// Lower the requirements for the [`LockTarget`], relative to the target root.

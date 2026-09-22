@@ -40,7 +40,7 @@ use uv_distribution_filename::{DistFilename, SourceDistExtension, SourceDistFile
 use uv_distribution_types::{IndexCapabilities, IndexUrl};
 use uv_extract::hash::Hasher;
 use uv_fs::{ProgressReader, Simplified};
-use uv_metadata::read_metadata_async_seek;
+use uv_metadata::read_archive_metadata;
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{HashAlgorithm, HashDigest, Metadata23, MetadataError};
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
@@ -397,9 +397,9 @@ impl PublishSendError {
     ///
     /// ```text
     /// error: Failed to publish `dist/astral_test_1-0.1.0-py3-none-any.whl` to `https://test.pypi.org/legacy/`
-    ///   Caused by: Incorrect credentials (status code 403 Forbidden): 403 Username/Password
-    ///     authentication is no longer supported. Migrate to API Tokens or Trusted Publishers
-    ///     instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
+    ///   └── Incorrect credentials (status code 403 Forbidden): 403 Username/Password
+    ///       authentication is no longer supported. Migrate to API Tokens or Trusted Publishers
+    ///       instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
     /// ```
     fn extract_error_message(body: String, content_type: Option<&str>) -> String {
         if content_type == Some("application/json") {
@@ -897,28 +897,28 @@ impl<'a> PublishSession<'a> {
         if let Some(remote_hash) = archived_file.hashes().first() {
             // We accept the risk for TOCTOU errors here, since we already read the file once before the
             // streaming upload to compute the hash for the form metadata.
-            let local_hash = &hash_file(
+            let [local_hash] = hash_file(
                 file,
                 filename,
-                vec![Hasher::from(remote_hash.algorithm)],
+                [Hasher::from(remote_hash.algorithm())],
                 reporter,
             )
             .await
             .map_err(|err| {
                 PublishError::PublishPrepare(file.clone(), Box::new(PublishPrepareError::Io(err)))
-            })?[0];
-            if local_hash.digest == remote_hash.digest {
+            })?;
+            if &local_hash == remote_hash {
                 debug!(
                     "Found {filename} in the registry with matching hash {}",
-                    remote_hash.digest
+                    remote_hash.digest()
                 );
                 Ok(true)
             } else {
                 Err(PublishError::HashMismatch {
                     filename: Box::new(filename.clone()),
-                    hash_algorithm: remote_hash.algorithm,
-                    local: local_hash.digest.to_string(),
-                    remote: remote_hash.digest.to_string(),
+                    hash_algorithm: remote_hash.algorithm(),
+                    local: local_hash.digest().to_string(),
+                    remote: remote_hash.digest().to_string(),
                 })
             }
         } else {
@@ -948,12 +948,12 @@ impl<'a> PublishSession<'a> {
 }
 
 /// Calculate the requested hashes of a file.
-async fn hash_file(
+async fn hash_file<const COUNT: usize>(
     path: impl AsRef<Path>,
     filename: &DistFilename,
-    hashers: Vec<Hasher>,
+    hashers: [Hasher; COUNT],
     reporter: Arc<impl Reporter>,
-) -> Result<Vec<HashDigest>, io::Error> {
+) -> Result<[HashDigest; COUNT], io::Error> {
     let path = path.as_ref().to_path_buf();
     debug!("Hashing {}", path.user_display());
     let filename = filename.clone();
@@ -981,10 +981,7 @@ async fn hash_file(
         reporter.on_hash_complete(index);
         result?;
 
-        Ok(hashers
-            .into_iter()
-            .map(HashDigest::from)
-            .collect::<Vec<_>>())
+        Ok(hashers.map(HashDigest::from))
     })
     .await?
 }
@@ -1099,8 +1096,15 @@ async fn metadata(file: &Path, filename: &DistFilename) -> Result<Metadata23, Pu
             source_dist_pkg_info(file).await?
         }
         DistFilename::WheelFilename(wheel) => {
-            let reader = BufReader::new(File::open(&file).await?);
-            read_metadata_async_seek(wheel, reader).await?
+            let file = file.to_path_buf();
+            let wheel = wheel.clone();
+            return tokio::task::spawn_blocking(move || {
+                let reader = io::BufReader::new(fs_err::File::open(file)?);
+                let contents = read_archive_metadata(&wheel, reader)?;
+                Ok(Metadata23::parse(&contents)?)
+            })
+            .await
+            .map_err(io::Error::from)?;
         }
     };
     Ok(Metadata23::parse(&contents)?)
@@ -1118,34 +1122,24 @@ impl FormMetadata {
         filename: &DistFilename,
         reporter: Arc<impl Reporter>,
     ) -> Result<Self, PublishPrepareError> {
-        let hashes = hash_file(
+        let [sha256_hash, blake2b_hash] = hash_file(
             file,
             filename,
-            vec![
+            [
                 Hasher::from(HashAlgorithm::Sha256),
-                Hasher::from(HashAlgorithm::Blake2b),
+                Hasher::from(HashAlgorithm::Blake2b256),
             ],
             reporter,
         )
         .await?;
-
-        let sha256_hash = hashes
-            .iter()
-            .find(|hash| hash.algorithm == HashAlgorithm::Sha256)
-            .unwrap();
-
-        let blake2b_hash = hashes
-            .iter()
-            .find(|hash| hash.algorithm == HashAlgorithm::Blake2b)
-            .unwrap();
 
         let metadata = metadata(file, filename).await?;
 
         Ok(Self::from_metadata(
             metadata,
             filename,
-            sha256_hash,
-            blake2b_hash,
+            &sha256_hash,
+            &blake2b_hash,
         ))
     }
 
@@ -1190,8 +1184,8 @@ impl FormMetadata {
 
         let mut form_metadata = vec![
             (":action", "file_upload".to_string()),
-            ("sha256_digest", sha256_hash.digest.to_string()),
-            ("blake2_256_digest", blake2b_hash.digest.to_string()),
+            ("sha256_digest", sha256_hash.digest().to_string()),
+            ("blake2_256_digest", blake2b_hash.digest().to_string()),
             ("protocol_version", "1".to_string()),
             ("metadata_version", metadata_version),
             // Twine transforms the name with `re.sub("[^A-Za-z0-9.]+", "-", name)`
@@ -1864,8 +1858,14 @@ mod tests {
     #[test]
     fn form_metadata_import_names() {
         let filename = DistFilename::try_from_normalized_filename("pkg-1.0.0.tar.gz").unwrap();
-        let sha256_hash: HashDigest = "sha256:0123".parse().unwrap();
-        let blake2b_hash: HashDigest = "blake2b:4567".parse().unwrap();
+        let sha256_hash: HashDigest =
+            "sha256:0123012301230123012301230123012301230123012301230123012301230123"
+                .parse()
+                .unwrap();
+        let blake2b_hash: HashDigest =
+            "blake2b:4567456745674567456745674567456745674567456745674567456745674567"
+                .parse()
+                .unwrap();
         let metadata = Metadata23 {
             metadata_version: "2.5".to_string(),
             name: "pkg".to_string(),
@@ -1885,8 +1885,8 @@ mod tests {
 
         assert_snapshot!(formatted_metadata, @r###"
         :action: file_upload
-        sha256_digest: 0123
-        blake2_256_digest: 4567
+        sha256_digest: 0123012301230123012301230123012301230123012301230123012301230123
+        blake2_256_digest: 4567456745674567456745674567456745674567456745674567456745674567
         protocol_version: 1
         metadata_version: 2.5
         name: pkg
@@ -2246,7 +2246,7 @@ mod tests {
         let mut capture = String::new();
         write_error_chain_with_options(
             &err,
-            Hints::none(),
+            &Hints::none(),
             ErrorOptions::default().with_stream(&mut capture),
         )
         .unwrap();
@@ -2258,7 +2258,7 @@ mod tests {
             &capture,
             @"
         error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to [SERVER]/final
-          Caused by: Too many redirects, only 10 redirects are allowed
+          cause: Too many redirects, only 10 redirects are allowed
         "
         );
     }
@@ -2280,7 +2280,7 @@ mod tests {
         let mut capture = String::new();
         write_error_chain_with_options(
             &err,
-            Hints::none(),
+            &Hints::none(),
             ErrorOptions::default().with_stream(&mut capture),
         )
         .unwrap();
@@ -2292,7 +2292,7 @@ mod tests {
             &capture,
             @"
         error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to https://different.auth.tld/final/
-          Caused by: Redirected URL is not in the same realm. Redirected to: https://different.auth.tld/final/
+          cause: Redirected URL is not in the same realm. Redirected to: https://different.auth.tld/final/
         "
         );
     }
@@ -2319,7 +2319,7 @@ mod tests {
         let mut capture = String::new();
         write_error_chain_with_options(
             &err,
-            Hints::none(),
+            &Hints::none(),
             ErrorOptions::default().with_stream(&mut capture),
         )
         .unwrap();
@@ -2331,7 +2331,7 @@ mod tests {
             &capture,
             @"
         error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to [SERVER]/final
-          Caused by: Server returned status code 400 Bad Request. Server says: 400 Error: Use 'source' as Python version for an sdist.
+          cause: Server returned status code 400 Bad Request. Server says: 400 Error: Use 'source' as Python version for an sdist.
         "
         );
     }
@@ -2361,7 +2361,7 @@ mod tests {
         let mut capture = String::new();
         write_error_chain_with_options(
             &err,
-            Hints::none(),
+            &Hints::none(),
             ErrorOptions::default().with_stream(&mut capture),
         )
         .unwrap();
@@ -2373,7 +2373,7 @@ mod tests {
             &capture,
             @"
         error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to [SERVER]/final
-          Caused by: Server returned status code 400 Bad Request. Server message: Bad Request, Missing required field `name`
+          cause: Server returned status code 400 Bad Request. Server message: Bad Request, Missing required field `name`
         "
         );
     }

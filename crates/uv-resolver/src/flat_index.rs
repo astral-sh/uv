@@ -1,15 +1,18 @@
 use std::collections::BTreeMap;
-use std::collections::btree_map::Entry;
 
 use rustc_hash::FxHashMap;
 use tracing::instrument;
 
-use uv_client::{FlatIndexEntries, FlatIndexEntry};
+use uv_cache::Cache;
+use uv_client::{
+    FlatIndexClient, FlatIndexEntries, FlatIndexEntry, FlatIndexError, RegistryClient,
+};
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    File, HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
-    RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility, WheelCompatibility,
+    File, HashComparison, IncompatibleSource, IncompatibleWheel, Index, IndexLocations, IndexUrl,
+    MinimumLibcVersion, PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist,
+    SourceDistCompatibility, WheelCompatibility,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -28,9 +31,22 @@ pub struct FlatIndex {
 }
 
 impl FlatIndex {
+    /// Load the `--find-links` entries from the configured indexes.
+    pub async fn load(
+        client: &RegistryClient,
+        cache: &Cache,
+        index_locations: &IndexLocations,
+    ) -> Result<Self, FlatIndexError> {
+        let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
+        let entries = client
+            .fetch_all(index_locations.flat_indexes().map(Index::url))
+            .await?;
+        Ok(Self::from_entries(entries))
+    }
+
     /// Collect all files from a `--find-links` target into a [`FlatIndex`].
     #[instrument(skip_all)]
-    pub fn from_entries(entries: FlatIndexEntries) -> Self {
+    fn from_entries(entries: FlatIndexEntries) -> Self {
         let mut index = FxHashMap::<PackageName, Vec<FlatIndexEntry>>::default();
         let (entries, offline) = entries.into_parts();
 
@@ -69,11 +85,20 @@ impl FlatDistributions {
         tags: Option<&Tags>,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
+        minimum_libc_version: Option<MinimumLibcVersion>,
     ) -> Self {
         let mut distributions = Self::default();
         for entry in entries {
             let (filename, file, index) = entry.into_parts();
-            distributions.add_file(file, filename, tags, hasher, build_options, index);
+            distributions.add_file(
+                file,
+                filename,
+                tags,
+                hasher,
+                build_options,
+                index,
+                minimum_libc_version,
+            );
         }
         distributions
     }
@@ -92,6 +117,7 @@ impl FlatDistributions {
         hasher: &HashStrategy,
         build_options: &BuildOptions,
         index: IndexUrl,
+        minimum_libc_version: Option<MinimumLibcVersion>,
     ) {
         // No `requires-python` here: for source distributions, we don't have that information;
         // for wheels, we read it lazily only when selected.
@@ -112,14 +138,12 @@ impl FlatDistributions {
                     index,
                     size_is_authoritative: false,
                 };
-                match self.0.entry(version) {
-                    Entry::Occupied(mut entry) => {
-                        entry.get_mut().insert_built(dist, vec![], compatibility);
-                    }
-                    Entry::Vacant(entry) => {
-                        entry.insert(PrioritizedDist::from_built(dist, vec![], compatibility));
-                    }
-                }
+                self.0.entry(version).or_default().insert_built(
+                    dist,
+                    vec![],
+                    compatibility,
+                    minimum_libc_version,
+                );
             }
             DistFilename::SourceDistFilename(filename) => {
                 let compatibility = Self::source_dist_compatibility(
@@ -137,14 +161,11 @@ impl FlatDistributions {
                     wheels: vec![],
                     size_is_authoritative: false,
                 };
-                match self.0.entry(filename.version) {
-                    Entry::Occupied(mut entry) => {
-                        entry.get_mut().insert_source(dist, vec![], compatibility);
-                    }
-                    Entry::Vacant(entry) => {
-                        entry.insert(PrioritizedDist::from_source(dist, vec![], compatibility));
-                    }
-                }
+                self.0.entry(filename.version).or_default().insert_source(
+                    dist,
+                    vec![],
+                    compatibility,
+                );
             }
         }
     }

@@ -17,7 +17,6 @@ use std::io::Read;
 use encoding_rs_io::DecodeReaderBytes;
 #[cfg(target_os = "linux")]
 use rustix::fs::{AtFlags, CWD as RUSTIX_CWD, StatxFlags, statx};
-use tempfile::NamedTempFile;
 use tracing::{debug, warn};
 #[cfg(windows)]
 use windows::Win32::Foundation::HANDLE;
@@ -25,6 +24,7 @@ use windows::Win32::Foundation::HANDLE;
 use windows::Win32::Storage::FileSystem::{BY_HANDLE_FILE_INFORMATION, GetFileInformationByHandle};
 
 pub use crate::locked_file::*;
+pub use crate::named_temp_file::{NamedTempFile, PersistError, tempfile_in};
 pub use crate::path::*;
 pub use crate::read::ValidatedReader;
 pub use crate::space::{PhysicalSpaceError, physical_space, supports_fine_grained_accounting};
@@ -34,6 +34,7 @@ pub mod cachedir;
 mod hardlink_macos;
 pub mod link;
 mod locked_file;
+mod named_temp_file;
 mod path;
 mod read;
 mod space;
@@ -169,25 +170,30 @@ pub fn is_same_file_allow_missing(left: &Path, right: &Path) -> Option<bool> {
 ///
 /// This should generally only be used when one specifically wants to support reading UTF-16
 /// transparently.
-///
-/// If the file path is `-`, then contents are read from stdin instead.
 #[cfg(feature = "tokio")]
 pub async fn read_to_string_transcode(path: impl AsRef<Path>) -> std::io::Result<String> {
     let path = path.as_ref();
-    let raw = if path == Path::new("-") {
-        let mut buf = Vec::with_capacity(1024);
-        std::io::stdin().read_to_end(&mut buf)?;
-        buf
-    } else {
-        fs_err::tokio::read(path).await?
-    };
+    let raw = fs_err::tokio::read(path).await?;
+    transcode_to_string(&raw, &format!("file {}", path.display()))
+}
+
+/// Reads data from stdin and requires that it be valid UTF-8 or UTF-16.
+///
+/// This uses BOM sniffing to determine if the data should be transcoded from UTF-16 to Rust's
+/// `String` type (which uses UTF-8).
+#[cfg(feature = "tokio")]
+pub fn read_stdin_to_string_transcode() -> std::io::Result<String> {
+    let mut raw = Vec::with_capacity(1024);
+    std::io::stdin().read_to_end(&mut raw)?;
+    transcode_to_string(&raw, "stdin")
+}
+
+#[cfg(feature = "tokio")]
+fn transcode_to_string(raw: &[u8], source: &str) -> std::io::Result<String> {
     let mut buf = String::with_capacity(1024);
-    DecodeReaderBytes::new(&*raw)
+    DecodeReaderBytes::new(raw)
         .read_to_string(&mut buf)
-        .map_err(|err| {
-            let path = path.display();
-            std::io::Error::other(format!("failed to decode file {path}: {err}"))
-        })?;
+        .map_err(|err| std::io::Error::other(format!("failed to decode {source}: {err}")))?;
     Ok(buf)
 }
 
@@ -470,24 +476,6 @@ pub fn symlink_or_copy_file(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std
     }
 
     Ok(())
-}
-
-/// Return a [`NamedTempFile`] in the specified directory.
-///
-/// Sets the permissions of the temporary file to `0o666`, to match the non-temporary file default.
-/// ([`NamedTempfile`] defaults to `0o600`.)
-#[cfg(unix)]
-pub fn tempfile_in(path: &Path) -> std::io::Result<NamedTempFile> {
-    use std::os::unix::fs::PermissionsExt;
-    tempfile::Builder::new()
-        .permissions(std::fs::Permissions::from_mode(0o666))
-        .tempfile_in(path)
-}
-
-/// Return a [`NamedTempFile`] in the specified directory.
-#[cfg(not(unix))]
-pub fn tempfile_in(path: &Path) -> std::io::Result<NamedTempFile> {
-    tempfile::Builder::new().tempfile_in(path)
 }
 
 /// Write `data` to `path` atomically using a temporary file and atomic rename.

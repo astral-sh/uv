@@ -258,8 +258,7 @@ impl Deref for IndexUrl {
 ///
 /// This type merges the legacy `--index-url`, `--extra-index-url`, and `--find-links` options,
 /// along with the uv-specific `--index` and `--default-index`.
-#[derive(Default, Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct IndexLocations {
     indexes: Vec<Index>,
     flat_index: Vec<Index>,

@@ -14,37 +14,97 @@ use line_wrap::{get_wrap_width, wrap_text};
 /// Implement this on error types that want to surface contextual suggestions
 /// (e.g., "try `--prerelease=allow`") to the diagnostics layer. Hints are
 /// rendered after the error output, each prefixed with `hint:`.
-pub trait Hint {
+pub trait Hinted {
     /// Return any hints associated with this error.
     fn hints(&self) -> Hints<'_> {
         Hints::none()
     }
 }
 
+/// The display order of a user-facing hint.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum HintOrdering {
+    /// Advice that should be shown before other hints.
+    First,
+    /// Advice with no preferred placement.
+    #[default]
+    Any,
+    /// General advice that should follow more specific hints.
+    Last,
+}
+
+/// A user-facing hint and its preferred display order.
+pub struct Hint<'a> {
+    message: Cow<'a, str>,
+    ordering: HintOrdering,
+}
+
+impl<'a> Hint<'a> {
+    /// Create a hint with no preferred placement.
+    pub fn new(message: impl Into<Cow<'a, str>>) -> Self {
+        Self {
+            message: message.into(),
+            ordering: HintOrdering::default(),
+        }
+    }
+
+    /// Set the preferred display order of this hint.
+    #[must_use]
+    pub fn with_ordering(mut self, ordering: HintOrdering) -> Self {
+        self.ordering = ordering;
+        self
+    }
+
+    /// Convert a borrowed hint to owned, extending its lifetime to `'static`.
+    fn into_owned(self) -> Hint<'static> {
+        Hint {
+            message: Cow::Owned(self.message.into_owned()),
+            ordering: self.ordering,
+        }
+    }
+}
+
+impl<'a> From<&'a str> for Hint<'a> {
+    fn from(message: &'a str) -> Self {
+        Self::new(message)
+    }
+}
+
+impl From<String> for Hint<'_> {
+    fn from(message: String) -> Self {
+        Self::new(message)
+    }
+}
+
 /// A collection of user-facing hint messages.
 ///
 /// Each hint is rendered on its own line, prefixed with the styled `hint:` label.
-pub struct Hints<'a>(Vec<Cow<'a, str>>);
+/// Hints are grouped by [`HintOrdering`], retaining insertion order within each group.
+pub struct Hints<'a>(Vec<Hint<'a>>);
 
-impl Hints<'_> {
+impl<'a> Hints<'a> {
     /// No hints.
     pub fn none() -> Self {
         Self(Vec::new())
     }
 
-    /// Add a single owned hint.
-    pub fn push(&mut self, hint: String) {
-        self.0.push(Cow::Owned(hint));
+    /// Add a single hint.
+    pub fn push(&mut self, hint: impl Into<Hint<'a>>) {
+        self.0.push(hint.into());
+    }
+
+    /// Set the display order of every hint in this collection.
+    #[must_use]
+    pub fn with_ordering(mut self, ordering: HintOrdering) -> Self {
+        for hint in &mut self.0 {
+            hint.ordering = ordering;
+        }
+        self
     }
 
     /// Convert all borrowed hints to owned, extending the lifetime to `'static`.
     pub fn into_owned(self) -> Hints<'static> {
-        Hints(
-            self.0
-                .into_iter()
-                .map(|cow| Cow::Owned(cow.into_owned()))
-                .collect(),
-        )
+        Hints(self.0.into_iter().map(Hint::into_owned).collect())
     }
 
     /// Whether the collection is empty.
@@ -52,17 +112,72 @@ impl Hints<'_> {
         self.0.is_empty()
     }
 
+    /// Iterate over hint messages in display order.
+    pub fn iter(&self) -> HintsIter<'_, 'a> {
+        HintsIter {
+            hints: &self.0,
+            current: self.0.iter(),
+            ordering: HintOrdering::First,
+            remaining: [HintOrdering::Any, HintOrdering::Last].into_iter(),
+        }
+    }
+
     /// Extend with another set of hints, converting borrowed hints to owned.
-    pub fn extend<T>(&mut self, other: impl IntoIterator<Item = T>)
-    where
-        T: Into<String>,
-    {
-        for hint in other {
-            let hint = Cow::Owned(hint.into());
-            if !self.0.iter().any(|existing| existing == &hint) {
-                self.0.push(hint);
+    ///
+    /// Duplicate messages retain their first insertion position and earliest ordering.
+    pub fn extend(&mut self, other: Hints<'_>) {
+        for hint in other.0 {
+            if let Some(existing) = self
+                .0
+                .iter_mut()
+                .find(|existing| existing.message == hint.message)
+            {
+                existing.ordering = existing.ordering.min(hint.ordering);
+            } else {
+                self.0.push(hint.into_owned());
             }
         }
+    }
+}
+
+/// A borrowed iterator over hint messages in display order.
+pub struct HintsIter<'h, 'a> {
+    hints: &'h [Hint<'a>],
+    current: std::slice::Iter<'h, Hint<'a>>,
+    ordering: HintOrdering,
+    remaining: std::array::IntoIter<HintOrdering, 2>,
+}
+
+impl<'h> Iterator for HintsIter<'h, '_> {
+    type Item = &'h str;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if let Some(hint) = self.current.find(|hint| hint.ordering == self.ordering) {
+                return Some(hint.message.as_ref());
+            }
+            self.ordering = self.remaining.next()?;
+            self.current = self.hints.iter();
+        }
+    }
+}
+
+impl<'h, 'a> IntoIterator for &'h Hints<'a> {
+    type Item = &'h str;
+    type IntoIter = HintsIter<'h, 'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+impl<'a> IntoIterator for Hints<'a> {
+    type Item = Cow<'a, str>;
+    type IntoIter = std::iter::Map<std::vec::IntoIter<Hint<'a>>, fn(Hint<'a>) -> Cow<'a, str>>;
+
+    fn into_iter(mut self) -> Self::IntoIter {
+        self.0.sort_by_key(|hint| hint.ordering);
+        self.0.into_iter().map(|hint| hint.message)
     }
 }
 
@@ -95,37 +210,34 @@ impl<E: fmt::Display> fmt::Display for ErrorWithHints<'_, E> {
 
 impl<'a> From<&'a str> for Hints<'a> {
     fn from(hint: &'a str) -> Self {
-        Self(vec![Cow::Borrowed(hint)])
+        Self::from(Hint::from(hint))
     }
 }
 
 impl From<String> for Hints<'_> {
     fn from(hint: String) -> Self {
-        Self(vec![Cow::Owned(hint)])
+        Self::from(Hint::from(hint))
     }
 }
 
-impl FromIterator<String> for Hints<'_> {
-    fn from_iter<I: IntoIterator<Item = String>>(iter: I) -> Self {
-        Self(iter.into_iter().map(Cow::Owned).collect())
+impl<'a> From<Hint<'a>> for Hints<'a> {
+    fn from(hint: Hint<'a>) -> Self {
+        Self(vec![hint])
+    }
+}
+
+impl<'a, T: Into<Hint<'a>>> FromIterator<T> for Hints<'a> {
+    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
+        Self(iter.into_iter().map(Into::into).collect())
     }
 }
 
 impl fmt::Display for Hints<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for hint in &self.0 {
+        for hint in self {
             write!(f, "\n{HintPrefix} {hint}")?;
         }
         Ok(())
-    }
-}
-
-impl<'a> IntoIterator for Hints<'a> {
-    type Item = Cow<'a, str>;
-    type IntoIter = std::vec::IntoIter<Cow<'a, str>>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.0.into_iter()
     }
 }
 
@@ -208,7 +320,7 @@ impl<'a, C, W> ErrorOptions<'a, C, W> {
 
 /// Format an error chain and explicitly supplied hints to standard error using the default level
 /// and color.
-pub fn write_error_chain(err: &dyn Error, hints: Hints<'_>) -> fmt::Result {
+pub fn write_error_chain(err: &dyn Error, hints: &Hints<'_>) -> fmt::Result {
     write_error_chain_with_options(err, hints, ErrorOptions::default())
 }
 
@@ -236,7 +348,7 @@ impl fmt::Display for DebugErrorChain<'_> {
 /// Each hint is rendered on its own line, prefixed with the styled `hint:` label.
 pub fn write_error_chain_with_options<C: DynColor + Copy, W: fmt::Write>(
     err: &dyn Error,
-    hints: Hints<'_>,
+    hints: &Hints<'_>,
     options: ErrorOptions<'_, C, W>,
 ) -> fmt::Result {
     let ErrorOptions {
@@ -260,27 +372,24 @@ pub fn write_error_chain_with_options<C: DynColor + Copy, W: fmt::Write>(
 
     for source in iter::successors(err.source(), |&err| err.source()) {
         let msg = source.to_string();
-        let padding = "  ";
-        let cause = "Caused by";
-        let child_padding = " ".repeat(padding.len() + cause.len() + 2);
-        let authored_line_padding = "    ";
-
-        let wrapped = wrap_text(&msg, width, "", &child_padding, authored_line_padding);
+        // Reserve the display width of the prefix before wrapping the message. Authored lines
+        // retain their own indentation beneath it.
+        let wrapped = wrap_text(&msg, width.map(|width| width.saturating_sub(9)), "", "", "");
 
         let mut lines = wrapped.lines();
         if let Some(first) = lines.next() {
             writeln!(
                 &mut stream,
-                "{}{}: {}",
-                padding,
-                cause.color(color).bold(),
+                "  {}{} {}",
+                "cause".color(color).bold(),
+                ":".bold(),
                 first.trim()
             )?;
             for line in lines {
                 if line.trim().is_empty() {
                     writeln!(&mut stream)?;
                 } else {
-                    writeln!(&mut stream, "{line}")?;
+                    writeln!(&mut stream, "         {line}")?;
                 }
             }
         }
@@ -297,11 +406,11 @@ pub fn write_error_chain_with_options<C: DynColor + Copy, W: fmt::Write>(
 mod tests {
     use anyhow::anyhow;
     use indoc::indoc;
-    use insta::assert_snapshot;
+    use insta::{assert_debug_snapshot, assert_snapshot};
     use owo_colors::AnsiColors;
 
     use super::{
-        ErrorOptions, ErrorWithHints, HintPrefix, Hints, debug_error_chain,
+        ErrorOptions, ErrorWithHints, Hint, HintOrdering, Hints, debug_error_chain,
         write_error_chain_with_options,
     };
 
@@ -311,23 +420,103 @@ mod tests {
         hints.extend(Hints::from("same"));
         hints.extend(Hints::from("other"));
 
-        let hints = hints
-            .into_iter()
-            .map(std::borrow::Cow::into_owned)
-            .collect::<Vec<_>>();
-        assert_eq!(hints, vec!["same".to_string(), "other".to_string()]);
+        let hints = hints.iter().collect::<Vec<_>>();
+        assert_debug_snapshot!(hints, @r#"
+        [
+            "same",
+            "other",
+        ]
+        "#);
+    }
+
+    #[test]
+    fn hint_ordering_retains_insertion_order() {
+        let mut hints = Hints::from("any 1");
+        hints.push(Hint::new("last 1").with_ordering(HintOrdering::Last));
+        hints.push(Hint::new("first 1").with_ordering(HintOrdering::First));
+        hints.push("any 2".to_string());
+        hints.extend(Hints::from("last 2").with_ordering(HintOrdering::Last));
+        hints.extend(Hints::from("first 2").with_ordering(HintOrdering::First));
+
+        assert_snapshot!(anstream::adapter::strip_str(&hints.to_string()), @"
+        hint: first 1
+        hint: first 2
+        hint: any 1
+        hint: any 2
+        hint: last 1
+        hint: last 2
+        ");
+        assert_debug_snapshot!((&hints).into_iter().collect::<Vec<_>>(), @r#"
+        [
+            "first 1",
+            "first 2",
+            "any 1",
+            "any 2",
+            "last 1",
+            "last 2",
+        ]
+        "#);
+        assert_debug_snapshot!(hints.into_iter().collect::<Vec<_>>(), @r#"
+        [
+            "first 1",
+            "first 2",
+            "any 1",
+            "any 2",
+            "last 1",
+            "last 2",
+        ]
+        "#);
+    }
+
+    #[test]
+    fn changing_ordering_retains_insertion_order() {
+        let hints = [
+            Hint::new("last").with_ordering(HintOrdering::Last),
+            Hint::new("first").with_ordering(HintOrdering::First),
+            Hint::new("any"),
+        ]
+        .into_iter()
+        .collect::<Hints<'_>>()
+        .with_ordering(HintOrdering::Any);
+
+        assert_debug_snapshot!(hints.iter().collect::<Vec<_>>(), @r#"
+        [
+            "last",
+            "first",
+            "any",
+        ]
+        "#);
+    }
+
+    #[test]
+    fn duplicate_hints_retain_the_earliest_ordering() {
+        let message = String::from("shared");
+        let mut hints = Hints::from(message.as_str())
+            .with_ordering(HintOrdering::Last)
+            .into_owned();
+        drop(message);
+
+        hints.extend(Hints::from("first").with_ordering(HintOrdering::First));
+        hints.extend(Hints::from("shared").with_ordering(HintOrdering::First));
+        hints.extend(Hints::from("shared").with_ordering(HintOrdering::Last));
+        hints.extend(Hints::from("any"));
+
+        assert_snapshot!(anstream::adapter::strip_str(&hints.to_string()), @"
+        hint: shared
+        hint: first
+        hint: any
+        ");
     }
 
     #[test]
     fn error_with_hints_separates_hints_from_error() {
-        assert_eq!(
-            ErrorWithHints::new("error", Hints::from("fix it")).to_string(),
-            format!("error\n\n{HintPrefix} fix it")
-        );
-        assert_eq!(
-            ErrorWithHints::new("error", Hints::none()).to_string(),
-            "error"
-        );
+        let output = ErrorWithHints::new("error", Hints::from("fix it")).to_string();
+        assert_snapshot!(anstream::adapter::strip_str(&output), @"
+        error
+
+        hint: fix it
+        ");
+        assert_snapshot!(ErrorWithHints::new("error", Hints::none()), @"error");
     }
 
     #[test]
@@ -349,7 +538,7 @@ mod tests {
         let mut output = String::new();
         write_error_chain_with_options(
             &error,
-            Hints::none(),
+            &Hints::none(),
             ErrorOptions::default()
                 .with_width_override(80)
                 .with_stream(&mut output),
@@ -357,11 +546,11 @@ mod tests {
         .unwrap();
         let output = anstream::adapter::strip_str(&output);
 
-        assert_snapshot!(output, @r"
+        assert_snapshot!(output, @"
         error: No solution found when resolving dependencies
-          Caused by: Because fiasobfhuasbf was not found in the package registry and you require
-                     fiasobfhuasbf, we can conclude that your requirements are
-                     unsatisfiable.
+          cause: Because fiasobfhuasbf was not found in the package registry and you
+                 require fiasobfhuasbf, we can conclude that your requirements are
+                 unsatisfiable.
         ");
     }
 
@@ -382,16 +571,16 @@ mod tests {
         let mut output = String::new();
         write_error_chain_with_options(
             &error,
-            Hints::none(),
+            &Hints::none(),
             ErrorOptions::default().with_stream(&mut output),
         )
         .unwrap();
-        assert_snapshot!(format!("{output:?}"), @r#""\u{1b}[1m\u{1b}[31merror\u{1b}[39m\u{1b}[0m\u{1b}[1m:\u{1b}[0m Failed to write file\n  \u{1b}[1m\u{1b}[31mCaused by\u{1b}[39m\u{1b}[0m: Permission denied\n""#);
+        assert_snapshot!(format!("{output:?}"), @r#""\u{1b}[1m\u{1b}[31merror\u{1b}[39m\u{1b}[0m\u{1b}[1m:\u{1b}[0m Failed to write file\n  \u{1b}[1m\u{1b}[31mcause\u{1b}[39m\u{1b}[0m\u{1b}[1m:\u{1b}[0m Permission denied\n""#);
         let output = anstream::adapter::strip_str(&output);
 
-        assert_snapshot!(output, @r"
+        assert_snapshot!(output, @"
         error: Failed to write file
-          Caused by: Permission denied
+          cause: Permission denied
         ");
     }
 
@@ -426,7 +615,7 @@ mod tests {
         let mut output = String::new();
         write_error_chain_with_options(
             error.as_ref(),
-            Hints::none(),
+            &Hints::none(),
             ErrorOptions::default()
                 .with_level("warning")
                 .with_color(AnsiColors::Yellow)
@@ -451,7 +640,7 @@ mod tests {
         let mut output = String::new();
         write_error_chain_with_options(
             &error,
-            Hints::none(),
+            &Hints::none(),
             ErrorOptions::default()
                 .with_width_override(50)
                 .with_stream(&mut output),
@@ -476,7 +665,7 @@ mod tests {
         let mut output = String::new();
         write_error_chain_with_options(
             &error,
-            Hints::none(),
+            &Hints::none(),
             ErrorOptions::default()
                 .with_width_override(40)
                 .with_stream(&mut output),
@@ -516,17 +705,41 @@ mod tests {
         let mut output = String::new();
         write_error_chain_with_options(
             &error,
-            Hints::none(),
+            &Hints::none(),
             ErrorOptions::default()
-                .with_width_override(60)
+                .with_width_override(40)
                 .with_stream(&mut output),
         )
         .unwrap();
         let output = anstream::adapter::strip_str(&output);
-        assert_snapshot!(output, @r"
-        error: Unable to resolve package dependencies
-          Caused by: Failed to fetch package metadata from registry
-          Caused by: Network connection timeout after multiple retry attempts
+        assert_snapshot!(output, @"
+        error: Unable to resolve package
+               dependencies
+          cause: Failed to fetch package
+                 metadata from registry
+          cause: Network connection timeout
+                 after multiple retry attempts
+        ");
+    }
+
+    #[test]
+    fn format_cause_with_narrow_width() {
+        let error = anyhow!("one two").context("root");
+        let mut output = String::new();
+        write_error_chain_with_options(
+            error.as_ref(),
+            &Hints::none(),
+            ErrorOptions::default()
+                .with_width_override(4)
+                .with_stream(&mut output),
+        )
+        .unwrap();
+        let output = anstream::adapter::strip_str(&output);
+
+        assert_snapshot!(output, @"
+        error: root
+          cause: one
+                 two
         ");
     }
 
@@ -542,7 +755,7 @@ mod tests {
         let mut output = String::new();
         write_error_chain_with_options(
             &error,
-            Hints::none(),
+            &Hints::none(),
             ErrorOptions::default()
                 .with_width_override(50)
                 .with_stream(&mut output),
@@ -569,7 +782,7 @@ mod tests {
         let mut output = String::new();
         write_error_chain_with_options(
             &error,
-            Hints::none(),
+            &Hints::none(),
             ErrorOptions::default()
                 .with_width_override(50)
                 .with_stream(&mut output),
@@ -596,15 +809,15 @@ mod tests {
         let mut rendered = String::new();
         write_error_chain_with_options(
             err.as_ref(),
-            hints,
+            &hints,
             ErrorOptions::default().with_stream(&mut rendered),
         )
         .unwrap();
         let rendered = anstream::adapter::strip_str(&rendered);
 
-        assert_snapshot!(rendered, @r"
+        assert_snapshot!(rendered, @"
         error: Failed to fetch package
-          Caused by: Permission denied
+          cause: Permission denied
 
         hint: Try running with `--verbose` for more information.
 
@@ -625,19 +838,19 @@ mod tests {
         let mut rendered = String::new();
         write_error_chain_with_options(
             err.as_ref(),
-            Hints::none(),
+            &Hints::none(),
             ErrorOptions::default().with_stream(&mut rendered),
         )
         .unwrap();
         let rendered = anstream::adapter::strip_str(&rendered);
 
-        assert_snapshot!(rendered, @r"
+        assert_snapshot!(rendered, @"
         error: Failed to download Python 3.12
-          Caused by: Failed to fetch https://example.com/upload/python3.13.tar.zst
-            Server says: This endpoint only support POST requests.
+          cause: Failed to fetch https://example.com/upload/python3.13.tar.zst
+                 Server says: This endpoint only support POST requests.
 
-            For downloads, please refer to https://example.com/download/python3.13.tar.zst
-          Caused by: Caused By: HTTP Error 400
+                 For downloads, please refer to https://example.com/download/python3.13.tar.zst
+          cause: Caused By: HTTP Error 400
         ");
     }
 }

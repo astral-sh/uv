@@ -325,7 +325,7 @@ pub enum PreviewFeature {
     IndexHashAlgorithm,
     /// Rejects non-canonical lockfile formatting when using `--locked` or `--check`.
     LockfileFormatCheck,
-    /// Omit `package.metadata` from `uv.lock`.
+    /// Omit `package.metadata` from `uv.lock`, except for remote URL dependencies.
     LockWithoutMetadata,
     /// Uses the new `tar-codec` encoding/decoding backend, instead of `astral-tokio-tar`.
     TarCodec,
@@ -338,6 +338,12 @@ pub enum PreviewFeature {
     /// Exclude `exclude-newer-package` entries from the lockfile when not included in the
     /// project's resolved dependencies.
     MissingExcludeNewerPackageLock,
+    /// Allows using `uv export --batch`.
+    BatchExport,
+    /// Allows setting minimum libc versions for universal resolutions.
+    MinimumLibcVersion,
+    /// Checks build dependencies before nonisolated builds with `uv build`.
+    BuildDependencyCheck,
 }
 
 impl Display for PreviewFeature {

@@ -1,14 +1,63 @@
+#[cfg(unix)]
+use std::fs::Permissions;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
+#[cfg(unix)]
+use indoc::indoc;
 use insta::assert_snapshot;
 use uv_platform::{Arch, Os};
 use uv_python::{PYTHON_VERSION_FILENAME, PYTHON_VERSIONS_FILENAME};
 use uv_static::EnvVars;
 use uv_test::uv_snapshot;
 use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
+
+/// Repeated pins should warn once while retaining the failed interpreter's status and stderr.
+#[cfg(unix)]
+#[test]
+fn python_pin_warning_chain() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+        "#})?;
+    let python = context.temp_dir.child("broken-python");
+    python.write_str(indoc! {r"
+        #!/bin/sh
+        printf 'interpreter query failed\n' >&2
+        exit 42
+    "})?;
+    fs_err::set_permissions(&python, Permissions::from_mode(0o755))?;
+    context
+        .temp_dir
+        .child(PYTHON_VERSION_FILENAME)
+        .write_str(&format!("{0}\n{0}\n", python.path().display()))?;
+
+    uv_snapshot!(context.filters(), context.python_pin(), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/broken-python
+    [TEMP_DIR]/broken-python
+
+    ----- stderr -----
+    warning: Failed to resolve pinned Python version `[TEMP_DIR]/broken-python`
+      cause: Failed to inspect Python interpreter from provided path at `broken-python`
+      cause: Querying Python at `[TEMP_DIR]/broken-python` failed with exit status exit status: 42
+
+             [stderr]
+             interpreter query failed
+    ");
+    Ok(())
+}
 
 #[test]
 fn python_pin() {
@@ -513,7 +562,8 @@ fn warning_pinned_python_version_not_installed() -> Result<()> {
         3.12
 
         ----- stderr -----
-        warning: Failed to resolve pinned Python version `3.12`: No interpreter found for Python 3.12 in managed installations, search path, or registry
+        warning: Failed to resolve pinned Python version `3.12`
+          cause: No interpreter found for Python 3.12 in managed installations, search path, or registry
         "###);
     } else {
         uv_snapshot!(context.filters(), context.python_pin(), @"
@@ -522,7 +572,8 @@ fn warning_pinned_python_version_not_installed() -> Result<()> {
         3.12
 
         ----- stderr -----
-        warning: Failed to resolve pinned Python version `3.12`: No interpreter found for Python 3.12 in managed installations or search path
+        warning: Failed to resolve pinned Python version `3.12`
+          cause: No interpreter found for Python 3.12 in managed installations or search path
         ");
     }
 

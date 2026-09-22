@@ -34,8 +34,9 @@ use uv_preview::Preview;
 use uv_redacted::DisplaySafeUrl;
 use uv_redacted::DisplaySafeUrlError;
 use uv_static::EnvVars;
+use uv_threads::min_stack_size;
 use uv_version::version;
-use uv_warnings::warn_user_once;
+use uv_warnings::warn_user_once_with_chain;
 
 use crate::linehaul::LineHaul;
 use crate::middleware::{AzureStorageMiddleware, OfflineMiddleware};
@@ -71,6 +72,16 @@ pub enum ClientBuildError {
     Credentials(#[from] CredentialsFromUrlError),
     #[error(transparent)]
     IndexCredentials(#[from] IndexCredentialsError),
+}
+
+impl ClientBuildError {
+    /// Return whether this is an expected user-facing failure.
+    pub fn is_user_failure(&self) -> bool {
+        match self {
+            Self::Credentials(_) | Self::IndexCredentials(_) => true,
+            Self::Reqwest(_) => false,
+        }
+    }
 }
 
 /// Selectively skip parts or the entire auth middleware.
@@ -145,7 +156,7 @@ impl CacheReadRuntime {
         self.runtime.get_or_init(|| {
             tokio::runtime::Builder::new_current_thread()
                 .thread_name("uv-cache-read")
-                .thread_stack_size(uv_configuration::min_stack_size())
+                .thread_stack_size(min_stack_size())
                 .max_blocking_threads(self.workers)
                 .build()
                 .expect("Failed building the cache-read Runtime")
@@ -625,7 +636,11 @@ impl<'a> BaseClientBuilder<'a> {
             match read_identity(&ssl_client_cert) {
                 Ok(identity) => client_builder.identity(identity),
                 Err(err) => {
-                    warn_user_once!("Ignoring invalid `SSL_CLIENT_CERT`: {err}");
+                    warn_user_once_with_chain!(
+                        anyhow::Error::from(err)
+                            .context("Ignoring invalid `SSL_CLIENT_CERT`")
+                            .as_ref()
+                    );
                     client_builder
                 }
             }
@@ -646,13 +661,15 @@ impl<'a> BaseClientBuilder<'a> {
 
         if let Some(http_proxy) = &self.http_proxy {
             let proxy = http_proxy
-                .as_proxy(ProxyUrlKind::Http)
+                .as_proxy(ProxyUrlKind::Http)?
                 .no_proxy(no_proxy.clone());
             client_builder = client_builder.proxy(proxy);
         }
 
         if let Some(https_proxy) = &self.https_proxy {
-            let proxy = https_proxy.as_proxy(ProxyUrlKind::Https).no_proxy(no_proxy);
+            let proxy = https_proxy
+                .as_proxy(ProxyUrlKind::Https)?
+                .no_proxy(no_proxy);
             client_builder = client_builder.proxy(proxy);
         }
 

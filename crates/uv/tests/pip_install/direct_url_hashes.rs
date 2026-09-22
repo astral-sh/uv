@@ -89,8 +89,15 @@ impl DirectUrlHashTestContext {
 
         let name = "metadata-parent".parse()?;
         let version = "1.0.0".parse()?;
-        let (wheel_filename, authentic_wheel) =
-            generate_wheel(&name, &version, &[], &BTreeMap::new(), None, "py3-none-any");
+        let (wheel_filename, authentic_wheel) = generate_wheel(
+            &name,
+            &version,
+            &[],
+            &BTreeMap::new(),
+            None,
+            "py3-none-any",
+            &[],
+        );
         let (_, forged_wheel) = generate_wheel(
             &name,
             &version,
@@ -98,6 +105,7 @@ impl DirectUrlHashTestContext {
             &BTreeMap::new(),
             None,
             "py3-none-any",
+            &[],
         );
         let wheel_hash = hex::encode(Sha256::digest(&authentic_wheel));
         let server = MockServer::start().await;
@@ -176,8 +184,8 @@ async fn require_hashes_rejects_direct_url_hash_discovered_in_wheel_metadata() -
         .arg("--require-hashes"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to build `ok @ file://[TEMP_DIR]/ok-1.0.0.tar.gz#sha256=[SOURCE_HASH]`
-      ╰─▶ Hash-checking is enabled, but no hashes were provided or computed for: `ok @ file://[TEMP_DIR]/ok-1.0.0.tar.gz#sha256=[SOURCE_HASH]`
+    error: Failed to build `ok @ file://[TEMP_DIR]/ok-1.0.0.tar.gz#sha256=[SOURCE_HASH]`
+      cause: Hash-checking is enabled, but no hashes were provided or computed for: `ok @ file://[TEMP_DIR]/ok-1.0.0.tar.gz#sha256=[SOURCE_HASH]`
     ");
 
     context.assert_backend_did_not_run();

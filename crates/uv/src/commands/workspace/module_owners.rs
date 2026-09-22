@@ -10,11 +10,11 @@ use uv_configuration::{
 use uv_distribution_types::{Dist, Name, ResolvedDist};
 use uv_fs::PortablePathBuf;
 use uv_installer::SitePackages;
+use uv_lock::{Installable, Metadata};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
 use uv_pypi_types::ModuleName;
 use uv_python::PythonEnvironment;
-use uv_resolver::{Installable, Metadata};
 use uv_settings::MalwareCheckSettings;
 use uv_workspace::WorkspaceCache;
 

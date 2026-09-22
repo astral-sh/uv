@@ -13,6 +13,7 @@ use uv_configuration::{
 };
 use uv_distribution::{ArchiveMetadata, Metadata};
 use uv_distribution_types::{Identifier, RequiresPython};
+use uv_lock::implicit_constraints_marker;
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{MarkerTree, Pep508ErrorSource, Requirement, VerbatimUrl, VersionOrUrl};
@@ -20,7 +21,7 @@ use uv_preview::Preview;
 use uv_pypi_types::{PyProjectToml, ResolutionMetadata, SupportedEnvironments, VerbatimParsedUrl};
 use uv_python::{ConfigDiscovery, Interpreter, PythonDownloads, PythonPreference};
 use uv_redacted::DisplaySafeUrl;
-use uv_resolver::{MetadataResponse, implicit_constraints_marker};
+use uv_resolver::MetadataResponse;
 use uv_settings::PythonInstallMirrors;
 use uv_workspace::pyproject::{DependencyType, Source};
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
@@ -32,9 +33,9 @@ use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::project::lock::{LockEvent, LockMode, LockOperation, LockResult};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    ProjectEnvironmentPolicy, ProjectError, ProjectInterpreter, UniversalState, WorkspacePython,
+    ProjectEnvironmentPolicy, ProjectInterpreter, UniversalState, WorkspacePython,
 };
-use crate::commands::{ExitStatus, diagnostics};
+use crate::commands::{ExitStatus, UvError};
 use crate::printer::Printer;
 use crate::settings::ResolverSettings;
 
@@ -417,12 +418,7 @@ pub(crate) async fn upgrade(
     .await
     {
         Ok(result) => result,
-        Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::default()
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-        }
-        Err(err) => return Err(err.into()),
+        Err(err) => return Err(UvError::from(err).into()),
     };
 
     let lock = result.lock();

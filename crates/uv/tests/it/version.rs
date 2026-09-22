@@ -1,3 +1,9 @@
+#[cfg(unix)]
+use std::fs::Permissions;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+use std::path::Path;
+
 use anyhow::{Ok, Result};
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
@@ -1700,14 +1706,10 @@ requires-python = ">=3.12"
 
     uv_snapshot!(context.filters(), context.version()
         .arg("--bump").arg("major")
-        .arg("--bump").arg("alpha"), @"
-    exit_code: 0 (success)
-    ----- stdout -----
-    myproject 2.3.4 => 3.0.0a1
-
+        .arg("--bump").arg("minor"), @"
+    exit_code: 2 (failure)
     ----- stderr -----
-    Resolved 1 package in [TIME]
-    Checked in [TIME]
+    error: Only one release version component can be provided to `--bump`, got: major, minor
     ");
     Ok(())
 }
@@ -2155,20 +2157,20 @@ fn version_get_fallback_unmanaged_short() -> Result<()> {
     Ok(())
 }
 
-/// In tarball builds of uv, git version info is missing (distros do this)
+/// Whether this build should include Git metadata in its version output.
 fn git_version_info_expected() -> bool {
-    // This is setup to aggressively panic to make sure this is working at all
-    // If you're a packager of uv and this does indeed blow up for you, we will
-    // gladly change these expects into "just return false" or something.
-    let manifest_dir = std::env::var(uv_static::EnvVars::CARGO_MANIFEST_DIR)
-        .expect("CARGO_MANIFEST_DIR not defined");
-    let git_dir = std::path::Path::new(&manifest_dir)
+    if env!("PROFILE") != "release" && option_env!("UV_INTERNAL__BUILD_GIT_INFO") != Some("1") {
+        return false;
+    }
+
+    let manifest_dir =
+        std::env::var(EnvVars::CARGO_MANIFEST_DIR).expect("CARGO_MANIFEST_DIR not defined");
+    let workspace_root = Path::new(&manifest_dir)
         .parent()
         .expect("parent of manifest dir missing")
         .parent()
-        .expect("grandparent of manifest dir missing")
-        .join(".git");
-    git_dir.exists()
+        .expect("grandparent of manifest dir missing");
+    workspace_root.join(".git").exists() && !workspace_root.join(".jj").exists()
 }
 
 // Should error if this pyproject.toml isn't usable for whatever reason
@@ -2490,8 +2492,8 @@ fn version_get_frozen_workspace_without_python() -> Result<()> {
     let context = uv_test::test_context!("3.12")
         .with_cache_dir("cache-file")
         .with_filter((
-            r"Caused by: failed to create directory `[^`]+`: .*",
-            "Caused by: failed to create directory `[CACHE_DIR]`: [ERROR]",
+            r"cause: failed to create directory `[^`]+`: .*",
+            "cause: failed to create directory `[CACHE_DIR]`: [ERROR]",
         ));
 
     context
@@ -2555,7 +2557,156 @@ fn version_get_frozen_workspace_without_python() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to initialize cache at `cache-file`
-      Caused by: failed to create directory `[CACHE_DIR]`: [ERROR]
+      cause: failed to create directory `[CACHE_DIR]`: [ERROR]
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn version_bump_locked_preserves_pyproject() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "myproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--bump").arg("minor")
+        .arg("--locked"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    // A failed version change should leave the project and lockfile consistent.
+    assert_snapshot!(context.read("pyproject.toml"), @r#"
+    [project]
+    name = "myproject"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    "#);
+    assert_snapshot!(context.read("uv.lock"), @r#"
+    version = 1
+    revision = 3
+    requires-python = ">=3.12"
+
+    [options]
+    exclude-newer = "2024-03-25T00:00:00Z"
+
+    [[package]]
+    name = "myproject"
+    version = "0.1.0"
+    source = { virtual = "." }
+    "#);
+
+    Ok(())
+}
+
+#[test]
+#[cfg(unix)]
+fn version_bump_locked_readonly_workspace() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let workspace = context.temp_dir.child("pyproject.toml");
+    workspace.write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["member"]
+    "#})?;
+    context
+        .temp_dir
+        .child("member/pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "myproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    let lock = context.read("uv.lock");
+
+    // Updating a member does not require writing to the workspace's metadata.
+    fs_err::set_permissions(&workspace, Permissions::from_mode(0o444))?;
+
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--package").arg("myproject")
+        .arg("--bump").arg("minor")
+        .arg("--locked")
+        .arg("--no-sync"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    assert_snapshot!(context.read("member/pyproject.toml"), @r#"
+    [project]
+    name = "myproject"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    "#);
+    assert_eq!(context.read("uv.lock"), lock);
+
+    Ok(())
+}
+
+#[test]
+#[cfg(unix)]
+fn version_bump_frozen_unreadable_lockfile() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "myproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+        "#})?;
+    let lock = context.temp_dir.child("uv.lock");
+    lock.write_str("unreadable lockfile\n")?;
+    fs_err::set_permissions(&lock, Permissions::from_mode(0o000))?;
+
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--bump").arg("minor")
+        .arg("--frozen"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    myproject 0.1.0 => 0.2.0
+    ");
+
+    assert_snapshot!(context.read("pyproject.toml"), @r#"
+    [project]
+    name = "myproject"
+    version = "0.2.0"
+    requires-python = ">=3.12"
+    "#);
+    fs_err::set_permissions(&lock, Permissions::from_mode(0o644))?;
+    assert_snapshot!(context.read("uv.lock"), @"
+    unreadable lockfile
     ");
 
     Ok(())

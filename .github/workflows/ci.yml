@@ -18,9 +18,12 @@ env:
 
 jobs:
   plan:
+    # CI on main is redundant in the security repository.
+    if: ${{ github.repository != 'astral-sh/uv-security' || github.ref != 'refs/heads/main' }}
     uses: $/.github/workflows/plan.yml
 
   check-fmt:
+    needs: plan
     uses: $/.github/workflows/check-fmt.yml
 
   review:
@@ -64,6 +67,15 @@ jobs:
     needs: plan
     if: ${{ needs.plan.outputs.run-checks == 'true' }}
     uses: $/.github/workflows/check-release.yml
+
+  check-crates-policies:
+    needs: plan
+    if: ${{ needs.plan.outputs.check-crates-policies == 'true' }}
+    uses: $/.github/workflows/check-crates-policies.yml
+    secrets: inherit
+    permissions:
+      contents: read
+      id-token: write
 
   check-lock:
     needs: plan
@@ -160,7 +172,7 @@ jobs:
   publish-docker:
     needs: build-docker
     if: ${{ needs.build-docker.outputs.publish-dev == 'true' }}
-    uses: ./.github/workflows/publish-docker.yml
+    uses: $/.github/workflows/publish-docker.yml
     with:
       manifest: ${{ needs.build-docker.outputs.manifest }}
       push-dev: true
@@ -179,6 +191,7 @@ jobs:
     with:
       save-rust-cache: ${{ needs.plan.outputs.save-rust-cache }}
     permissions:
+      contents: read
       id-token: write
 
   # This job cannot be moved into a reusable workflow because it includes coverage for uploading
@@ -291,22 +304,37 @@ jobs:
 
   required-checks-passed:
     name: "all required jobs passed"
-    if: always()
+    if: ${{ always() && github.ref != 'refs/heads/main' }}
     needs:
+      - plan
       - check-fmt
       - check-lint
       - check-docs
+      - check-crates-policies
       - check-generated-files
       - test
+      - test-system
       - build-dev-binaries
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
     steps:
       - name: "Check required jobs passed"
         run: |
-          failing=$(echo "$NEEDS_JSON" | jq -r 'to_entries[] | select(.value.result != "success" and .value.result != "skipped") | "\(.key): \(.value.result)"')
+          failing=$(
+            echo "$NEEDS_JSON" | jq -r --argjson conditional_jobs "$CONDITIONAL_JOBS" '
+              to_entries[]
+              | select($conditional_jobs[.key] != false)
+              | select(.value.result != "success" and .value.result != "skipped")
+              | "\(.key): \(.value.result)"
+            '
+          )
           if [ -n "$failing" ]; then
             echo "$failing"
             exit 1
           fi
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
+          # Jobs not listed here are always required.
+          CONDITIONAL_JOBS: >-
+            {
+              "test-system": ${{ contains(github.event.pull_request.labels.*.name, 'test:system') }}
+            }

@@ -393,8 +393,8 @@ async fn audit_malformed_vulnerability_record() {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: OSV returned a malformed vulnerability record for `PYSEC-2023-0001`
-      Caused by: error decoding response body for url (http://[LOCALHOST]/v1/vulns/PYSEC-2023-0001)
-      Caused by: expected value at line 1 column 56
+      cause: error decoding response body for url (http://[LOCALHOST]/v1/vulns/PYSEC-2023-0001)
+      cause: expected value at line 1 column 56
     ");
 }
 
@@ -1906,7 +1906,7 @@ async fn audit_script_frozen_missing_lockfile() {
         .arg("script.py")
         .arg("--service-url")
         .arg(server.uri()), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
     error: Unable to find lockfile at `script.py.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
     ");

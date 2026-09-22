@@ -30,12 +30,12 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectError,
-    ProjectInterpreter, ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
-    default_dependency_groups, validate_project_requires_python,
+    LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectInterpreter,
+    ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
+    validate_project_requires_python,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{ExitStatus, diagnostics, project};
+use crate::commands::{ExitStatus, UvError, project};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
@@ -282,7 +282,7 @@ pub(crate) async fn check(
     };
 
     let groups = if let Some(project) = &project {
-        groups.with_defaults(default_dependency_groups(project.pyproject_toml())?)
+        groups.with_defaults(project.default_groups()?)
     } else {
         DependencyGroupsWithDefaults::none()
     };
@@ -368,7 +368,7 @@ pub(crate) async fn check(
 
     // Select an environment and, if we found a project, sync it before running checks.
     let mut locked_ty_path = None;
-    let venv_path = if let Some(script) = &script {
+    let venv = if let Some(script) = &script {
         let extras = extras.with_defaults(DefaultExtras::default());
         let venv = if let Some(venv) = isolated_venv {
             venv
@@ -429,12 +429,7 @@ pub(crate) async fn check(
         .await
         {
             Ok(result) => result,
-            Err(ProjectError::Operation(err)) => {
-                return diagnostics::OperationDiagnostic::default()
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-            }
-            Err(err) => return Err(err.into()),
+            Err(err) => return Err(UvError::from(err).into()),
         };
 
         let marker_environment = venv.interpreter().to_resolver_marker_environment();
@@ -486,12 +481,7 @@ pub(crate) async fn check(
         .await
         {
             Ok(_) => {}
-            Err(ProjectError::Operation(err)) => {
-                return diagnostics::OperationDiagnostic::default()
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-            }
-            Err(err) => return Err(err.into()),
+            Err(err) => return Err(UvError::from(err).into()),
         }
 
         if no_sync {
@@ -500,7 +490,7 @@ pub(crate) async fn check(
             );
         }
 
-        Some(venv.root().to_owned())
+        Some(venv)
     } else if let Some(project) = &project {
         let extras = extras.with_defaults(DefaultExtras::default());
         let mut malware_context = project::sync::MalwareCheckContext::from(&malware_settings);
@@ -604,12 +594,7 @@ pub(crate) async fn check(
         .await
         {
             Ok(result) => result,
-            Err(ProjectError::Operation(err)) => {
-                return diagnostics::OperationDiagnostic::default()
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-            }
-            Err(err) => return Err(err.into()),
+            Err(err) => return Err(UvError::from(err).into()),
         };
 
         let target = project::sync::identify_project_installation_target(
@@ -672,12 +657,7 @@ pub(crate) async fn check(
                 .await
                 {
                     Ok(environment) => environment,
-                    Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::default()
-                            .report(err)
-                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-                    }
-                    Err(err) => return Err(err.into()),
+                    Err(err) => return Err(UvError::from(err).into()),
                 };
                 malware_context.record_resolution(&resolution);
                 PythonEnvironment::from(environment)
@@ -724,18 +704,42 @@ pub(crate) async fn check(
             .await
             {
                 Ok(_) => {}
-                Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::default()
-                        .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-                }
-                Err(err) => return Err(err.into()),
+                Err(err) => return Err(UvError::from(err).into()),
             }
         }
 
-        Some(venv.root().to_owned())
+        Some(venv)
     } else {
-        isolated_venv.map(|venv| venv.root().to_owned())
+        isolated_venv
+    };
+
+    // Forward the user's explicit Python request so ty can apply its own version selection rules.
+    let python_version = if let Some(python) = python {
+        let request = PythonRequest::parse(&python);
+        if let Some(venv) = venv.as_ref()
+            && request.satisfied(venv.interpreter(), cache)
+        {
+            Some(venv.interpreter().python_minor_version())
+        } else {
+            // Without syncing, the environment may not satisfy the explicit request.
+            let reporter = PythonDownloadReporter::single(printer);
+            let installation = PythonInstallation::find_or_download(
+                Some(&request),
+                EnvironmentPreference::Any,
+                python_preference,
+                python_downloads,
+                &client_builder,
+                cache,
+                Some(&reporter),
+                install_mirrors.python_install_mirror.as_deref(),
+                install_mirrors.pypy_install_mirror.as_deref(),
+                install_mirrors.python_downloads_json_url.as_deref(),
+            )
+            .await?;
+            Some(installation.interpreter().python_minor_version())
+        }
+    } else {
+        None
     };
 
     let exclude_newer = settings
@@ -751,10 +755,13 @@ pub(crate) async fn check(
         project
             .as_ref()
             .map(|project| project.workspace().install_path().as_path()),
+        lock_check,
+        frozen,
         &check_targets,
         &excluded_targets,
         explicit_targets,
-        venv_path.as_deref(),
+        venv.as_ref().map(PythonEnvironment::root),
+        python_version.as_ref(),
         exclude_newer,
         show_version,
         show_command,

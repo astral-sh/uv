@@ -25205,10 +25205,10 @@
     "minor": 14,
     "patch": 2,
     "prerelease": "",
-    "url": "https://github.com/pyodide/pyodide/releases/download/314.0.6/xbuildenv-314.0.6.tar.gz",
+    "url": "https://github.com/pyodide/pyodide/releases/download/314.0.7/xbuildenv-314.0.7.tar.gz",
     "sha256": null,
     "variant": null,
-    "build": "314.0.6"
+    "build": "314.0.7"
   },
   "cpython-3.14.2-linux-aarch64-gnu": {
     "name": "cpython",
@@ -57964,10 +57964,10 @@
     "minor": 13,
     "patch": 2,
     "prerelease": "",
-    "url": "https://github.com/pyodide/pyodide/releases/download/0.29.4/xbuildenv-0.29.4.tar.gz",
+    "url": "https://github.com/pyodide/pyodide/releases/download/0.29.5/xbuildenv-0.29.5.tar.gz",
     "sha256": null,
     "variant": null,
-    "build": "0.29.4"
+    "build": "0.29.5"
   },
   "cpython-3.13.2-linux-aarch64-gnu": {
     "name": "cpython",
@@ -65631,10 +65631,10 @@
     "minor": 12,
     "patch": 7,
     "prerelease": "",
-    "url": "https://github.com/pyodide/pyodide/releases/download/0.27.7/xbuildenv-0.27.7.tar.gz",
+    "url": "https://github.com/pyodide/pyodide/releases/download/0.27.8/xbuildenv-0.27.8.tar.gz",
     "sha256": null,
     "variant": null,
-    "build": "0.27.7"
+    "build": "0.27.8"
   },
   "cpython-3.12.7-linux-aarch64-gnu": {
     "name": "cpython",

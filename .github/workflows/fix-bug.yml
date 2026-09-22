@@ -78,14 +78,14 @@ jobs:
 
       - name: "Load issue context"
         id: issue-context
-        uses: ./.github/actions/load-issue-context
+        uses: $/.github/actions/load-issue-context
         with:
           issue-number: ${{ inputs.issue-number }}
           path: ${{ runner.temp }}/issue-context
 
       - name: "Load reproduction Codex thread"
         id: reproduction-thread
-        uses: ./.github/actions/load-codex-thread
+        uses: $/.github/actions/load-codex-thread
         with:
           repository: ${{ github.repository }}
           run-id: ${{ github.run_id }}
@@ -93,9 +93,29 @@ jobs:
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/codex-home/sessions
 
-      - name: "Install uv"
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - name: "Check uv runner support"
+        if: ${{ !((runner.os == 'Linux' && runner.arch == 'X64') || (runner.os == 'macOS' && runner.arch == 'ARM64')) }}
+        shell: bash
+        run: |
+          echo "Unsupported uv runner: $RUNNER_OS/$RUNNER_ARCH" >&2
+          exit 1
+
+      - name: "Install uv on Linux x64"
+        if: ${{ runner.os == 'Linux' && runner.arch == 'X64' }}
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
+          version: "0.12.13"
+          checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
+          enable-cache: false
+
+      - name: "Install uv on macOS ARM64"
+        if: ${{ runner.os == 'macOS' && runner.arch == 'ARM64' }}
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
+          version: "0.12.13"
+          checksum: "7e6ddb9316acc00f2296c82ff4d99977870ee34b2f0ddcae9444d714db9364ed"
           enable-cache: false
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2

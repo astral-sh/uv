@@ -15,6 +15,8 @@ use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use serde_json::json;
 use std::path::Path;
+#[cfg(unix)]
+use std::{fs::Permissions, os::unix::fs::PermissionsExt};
 use url::Url;
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
@@ -4201,22 +4203,15 @@ fn add_preserves_indentation_in_pyproject_toml() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["anyio==3.7.0"]
+        dependencies = [
+          "anyio==3.7.0",
+        ]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("requests==2.31.0"), @"
+    uv_snapshot!(context.filters(), context.add().arg("requests==2.31.0").arg("--no-sync"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    Prepared 7 packages in [TIME]
-    Installed 7 packages in [TIME]
-     + anyio==3.7.0
-     + certifi==2024.2.2
-     + charset-normalizer==3.3.2
-     + idna==3.6
-     + requests==2.31.0
-     + sniffio==1.3.1
-     + urllib3==2.2.1
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -4231,8 +4226,8 @@ fn add_preserves_indentation_in_pyproject_toml() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
-            "anyio==3.7.0",
-            "requests==2.31.0",
+          "anyio==3.7.0",
+          "requests==2.31.0",
         ]
         "#
         );
@@ -4253,19 +4248,10 @@ fn add_puts_default_indentation_in_pyproject_toml_if_not_observed() -> Result<()
         dependencies = ["anyio==3.7.0"]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("requests==2.31.0"), @"
+    uv_snapshot!(context.filters(), context.add().arg("requests==2.31.0").arg("--no-sync"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    Prepared 7 packages in [TIME]
-    Installed 7 packages in [TIME]
-     + anyio==3.7.0
-     + certifi==2024.2.2
-     + charset-normalizer==3.3.2
-     + idna==3.6
-     + requests==2.31.0
-     + sniffio==1.3.1
-     + urllib3==2.2.1
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -4571,8 +4557,9 @@ fn add_error() -> Result<()> {
     uv_snapshot!(context.filters(), context.add().arg("xyz"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because there are no versions of xyz and your project depends on xyz, we can conclude that your project's requirements are unsatisfiable.
+    error: Failed to add dependencies
+      cause: No solution found when resolving dependencies
+      cause: Because there are no versions of xyz and your project depends on xyz, we can conclude that your project's requirements are unsatisfiable.
 
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     ");
@@ -4604,10 +4591,12 @@ fn add_standard_library_error() -> Result<()> {
     uv_snapshot!(context.filters(), context.add().arg("pickle"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because pickle was not found in the package registry and your project depends on pickle, we can conclude that your project's requirements are unsatisfiable.
+    error: Failed to add dependencies
+      cause: No solution found when resolving dependencies
+      cause: Because pickle was not found in the package registry and your project depends on pickle, we can conclude that your project's requirements are unsatisfiable.
 
     hint: The module `pickle` is included in the Python standard library and usually should not be added as a dependency
+
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     ");
 
@@ -4631,8 +4620,9 @@ fn add_standard_library_unrelated_resolution_error() -> Result<()> {
     uv_snapshot!(context.filters(), context.add().arg("typing").arg("xyz"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because there are no versions of xyz and your project depends on xyz, we can conclude that your project's requirements are unsatisfiable.
+    error: Failed to add dependencies
+      cause: No solution found when resolving dependencies
+      cause: Because there are no versions of xyz and your project depends on xyz, we can conclude that your project's requirements are unsatisfiable.
 
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     ");
@@ -8484,6 +8474,227 @@ fn remove_include_default_groups() -> Result<()> {
     Ok(())
 }
 
+/// A failed removal must not leave the manifest inconsistent with its lockfile.
+#[test]
+fn remove_locked_reverts_project() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+    "#})?;
+    context.lock().assert().success();
+    let pyproject = context.read("pyproject.toml");
+    let lock = context.read("uv.lock");
+
+    uv_snapshot!(context.filters(), context.remove().arg("iniconfig").arg("--locked").arg("--no-sync"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    assert_eq!(context.read("pyproject.toml"), pyproject);
+    assert_eq!(context.read("uv.lock"), lock);
+    Ok(())
+}
+
+/// An unchanged, read-only workspace manifest must not prevent restoring the member.
+#[test]
+#[cfg(unix)]
+fn add_locked_readonly_workspace() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let workspace = context.temp_dir.child("pyproject.toml");
+    workspace.write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["member"]
+    "#})?;
+    context
+        .temp_dir
+        .child("member/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+    context.lock().assert().success();
+    let member = context.read("member/pyproject.toml");
+    let lock = context.read("uv.lock");
+    fs_err::set_permissions(&workspace, Permissions::from_mode(0o444))?;
+
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--package").arg("member").arg("--locked").arg("--no-sync"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    assert_eq!(context.read("member/pyproject.toml"), member);
+    assert_eq!(context.read("uv.lock"), lock);
+    Ok(())
+}
+
+/// Frozen edits must not read the lockfile.
+#[test]
+#[cfg(unix)]
+fn add_remove_frozen_unreadable_lockfile() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+    let lock = context.temp_dir.child("uv.lock");
+    lock.write_str("unreadable lockfile\n")?;
+    fs_err::set_permissions(&lock, Permissions::from_mode(0o000))?;
+
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--frozen"), @"
+    exit_code: 0 (success)
+    ");
+    assert_snapshot!(context.read("pyproject.toml"), @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "iniconfig",
+    ]
+    "#);
+    uv_snapshot!(context.filters(), context.remove().arg("iniconfig").arg("--frozen"), @"
+    exit_code: 0 (success)
+    ");
+    assert_snapshot!(context.read("pyproject.toml"), @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = []
+    "#);
+    fs_err::set_permissions(&lock, Permissions::from_mode(0o644))?;
+    assert_snapshot!(context.read("uv.lock"), @"
+    unreadable lockfile
+    ");
+    Ok(())
+}
+
+/// Restore both files when syncing fails after resolution has written a lockfile.
+#[test]
+fn remove_version_build_failure_reverts_project() -> Result<()> {
+    for args in [
+        &["remove", "iniconfig"][..],
+        &["version", "--bump", "minor"][..],
+    ] {
+        for locked in [false, true] {
+            let context = uv_test::test_context!("3.12");
+            context
+                .temp_dir
+                .child("pyproject.toml")
+                .write_str(indoc! {r#"
+                [project]
+                name = "project"
+                version = "0.1.0"
+                requires-python = ">=3.12"
+                dependencies = ["iniconfig"]
+
+                [build-system]
+                requires = []
+                build-backend = "backend"
+                backend-path = ["."]
+            "#})?;
+            context.temp_dir.child("backend.py").write_str(indoc! {r#"
+                from pathlib import Path
+
+                def build_editable(*args, **kwargs):
+                    Path(__file__).with_name("built").touch()
+                    raise RuntimeError("build failed")
+            "#})?;
+            if locked {
+                context.lock().assert().success();
+            }
+            let pyproject = context.read("pyproject.toml");
+            let lock = locked.then(|| context.read("uv.lock"));
+
+            context.command().args(args).assert().code(1);
+            assert!(context.temp_dir.join("built").exists(), "{args:?}");
+            assert_eq!(context.read("pyproject.toml"), pyproject, "{args:?}");
+            assert_eq!(
+                fs_err::read_to_string(context.temp_dir.join("uv.lock")).ok(),
+                lock,
+                "{args:?}"
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Interrupt during a build, after the manifest and lockfile have both been written.
+#[test]
+#[cfg(unix)]
+fn edit_interrupt_reverts_project() -> Result<()> {
+    for args in [
+        &["add", "iniconfig", "--dev"][..],
+        &["remove", "iniconfig"][..],
+        &["version", "--bump", "minor"][..],
+    ] {
+        for locked in [false, true] {
+            let context = uv_test::test_context!("3.12");
+            context
+                .temp_dir
+                .child("pyproject.toml")
+                .write_str(indoc! {r#"
+                [project]
+                name = "project"
+                version = "0.1.0"
+                requires-python = ">=3.12"
+                dependencies = ["iniconfig"]
+
+                [build-system]
+                requires = []
+                build-backend = "backend"
+                backend-path = ["."]
+            "#})?;
+            context.temp_dir.child("backend.py").write_str(indoc! {r#"
+                import os
+                import signal
+                import time
+
+                def build_editable(*args, **kwargs):
+                    os.kill(os.getppid(), signal.SIGINT)
+                    time.sleep(1)
+                    raise RuntimeError("build interrupted")
+            "#})?;
+            if locked {
+                context.lock().assert().success();
+            }
+            let pyproject = context.read("pyproject.toml");
+            let lock = locked.then(|| context.read("uv.lock"));
+
+            context.command().args(args).assert().code(130);
+            assert_eq!(context.read("pyproject.toml"), pyproject, "{args:?}");
+            assert_eq!(
+                fs_err::read_to_string(context.temp_dir.join("uv.lock")).ok(),
+                lock,
+                "{args:?}"
+            );
+        }
+    }
+    Ok(())
+}
+
 /// Revert changes to the `pyproject.toml` and `uv.lock` when the `add` operation fails.
 #[test]
 fn fail_to_add_revert_project() -> Result<()> {
@@ -8524,26 +8735,28 @@ fn fail_to_add_revert_project() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 3 packages in [TIME]
-      × Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta.build_wheel` failed (exit status: 1)
+    error: Failed to add dependencies
+      cause: Failed to build `child @ file://[TEMP_DIR]/child`
+      cause: The build backend returned an error
+      cause: Call to `setuptools.build_meta.get_requires_for_build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 14, in <module>
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
-              return self._get_build_requires(config_settings, requirements=['wheel'])
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
-              self.run_setup()
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
-              exec(code, locals())
-            File "<string>", line 1, in <module>
-          ZeroDivisionError: division by zero
-
+             [stderr]
+             Traceback (most recent call last):
+               File "<string>", line 14, in <module>
+               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
+                 return self._get_build_requires(config_settings, requirements=['wheel'])
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
+                 self.run_setup()
+               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
+                 exec(code, locals())
+               File "<string>", line 1, in <module>
+             ZeroDivisionError: division by zero
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
+
     hint: Build failures usually indicate a problem with the package or the build environment
+
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     "#);
 
@@ -8622,26 +8835,28 @@ fn fail_to_edit_revert_project() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 3 packages in [TIME]
-      × Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta.build_wheel` failed (exit status: 1)
+    error: Failed to add dependencies
+      cause: Failed to build `child @ file://[TEMP_DIR]/child`
+      cause: The build backend returned an error
+      cause: Call to `setuptools.build_meta.get_requires_for_build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 14, in <module>
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
-              return self._get_build_requires(config_settings, requirements=['wheel'])
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
-              self.run_setup()
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
-              exec(code, locals())
-            File "<string>", line 1, in <module>
-          ZeroDivisionError: division by zero
-
+             [stderr]
+             Traceback (most recent call last):
+               File "<string>", line 14, in <module>
+               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
+                 return self._get_build_requires(config_settings, requirements=['wheel'])
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
+                 self.run_setup()
+               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
+                 exec(code, locals())
+               File "<string>", line 1, in <module>
+             ZeroDivisionError: division by zero
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
+
     hint: Build failures usually indicate a problem with the package or the build environment
+
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     "#);
 
@@ -8731,29 +8946,31 @@ fn fail_to_add_revert_workspace_root() -> Result<()> {
     ----- stderr -----
     Added `broken` to workspace members
     Resolved 3 packages in [TIME]
-      × Failed to build `broken @ file://[TEMP_DIR]/broken`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta.build_editable` failed (exit status: 1)
+    error: Failed to add dependencies
+      cause: Failed to build `broken @ file://[TEMP_DIR]/broken`
+      cause: The build backend returned an error
+      cause: Call to `setuptools.build_meta.get_requires_for_build_editable` failed (exit status: 1)
 
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 14, in <module>
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 448, in get_requires_for_build_editable
-              return self.get_requires_for_build_wheel(config_settings)
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
-              return self._get_build_requires(config_settings, requirements=['wheel'])
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
-              self.run_setup()
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
-              exec(code, locals())
-            File "<string>", line 1, in <module>
-          ZeroDivisionError: division by zero
-
+             [stderr]
+             Traceback (most recent call last):
+               File "<string>", line 14, in <module>
+               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 448, in get_requires_for_build_editable
+                 return self.get_requires_for_build_wheel(config_settings)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
+                 return self._get_build_requires(config_settings, requirements=['wheel'])
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
+                 self.run_setup()
+               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
+                 exec(code, locals())
+               File "<string>", line 1, in <module>
+             ZeroDivisionError: division by zero
 
     hint: `broken` was included because `parent` (v0.1.0) depends on `broken`
+
     hint: Build failures usually indicate a problem with the package or the build environment
+
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     "#);
 
@@ -8845,29 +9062,31 @@ fn fail_to_add_revert_workspace_member() -> Result<()> {
     ----- stderr -----
     Added `broken` to workspace members
     Resolved 4 packages in [TIME]
-      × Failed to build `broken @ file://[TEMP_DIR]/broken`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta.build_editable` failed (exit status: 1)
+    error: Failed to add dependencies
+      cause: Failed to build `broken @ file://[TEMP_DIR]/broken`
+      cause: The build backend returned an error
+      cause: Call to `setuptools.build_meta.get_requires_for_build_editable` failed (exit status: 1)
 
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 14, in <module>
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 448, in get_requires_for_build_editable
-              return self.get_requires_for_build_wheel(config_settings)
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
-              return self._get_build_requires(config_settings, requirements=['wheel'])
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
-              self.run_setup()
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
-              exec(code, locals())
-            File "<string>", line 1, in <module>
-          ZeroDivisionError: division by zero
-
+             [stderr]
+             Traceback (most recent call last):
+               File "<string>", line 14, in <module>
+               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 448, in get_requires_for_build_editable
+                 return self.get_requires_for_build_wheel(config_settings)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
+                 return self._get_build_requires(config_settings, requirements=['wheel'])
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
+                 self.run_setup()
+               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
+                 exec(code, locals())
+               File "<string>", line 1, in <module>
+             ZeroDivisionError: division by zero
 
     hint: `broken` was included because `child` (v0.1.0) depends on `broken`
+
     hint: Build failures usually indicate a problem with the package or the build environment
+
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     "#);
 
@@ -9541,10 +9760,12 @@ fn add_shadowed_name() -> Result<()> {
     uv_snapshot!(context.filters(), context.add().arg("dagster-webserver==1.6.13"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because dagster-webserver>=1.6.13 depends on your project and your project depends on dagster-webserver==1.6.13, we can conclude that your project's requirements are unsatisfiable.
+    error: Failed to add dependencies
+      cause: No solution found when resolving dependencies
+      cause: Because dagster-webserver>=1.6.13 depends on your project and your project depends on dagster-webserver==1.6.13, we can conclude that your project's requirements are unsatisfiable.
 
     hint: The package `dagster-webserver` depends on the package `dagster` but the name is shadowed by your project. Consider changing the name of the project.
+
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     ");
 
@@ -9552,11 +9773,13 @@ fn add_shadowed_name() -> Result<()> {
     uv_snapshot!(context.filters(), context.add().arg("dagster-webserver>=1.6.11,<1.7.0"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because dagster-webserver==1.6.11 depends on your project and dagster-webserver==1.6.12 depends on your project, we can conclude that dagster-webserver>=1.6.11,<=1.6.12 depends on your project.
-          And because dagster-webserver>=1.6.13 depends on your project and your project depends on dagster-webserver>=1.6.11, we can conclude that your project's requirements are unsatisfiable.
+    error: Failed to add dependencies
+      cause: No solution found when resolving dependencies
+      cause: Because dagster-webserver==1.6.11 depends on your project and dagster-webserver==1.6.12 depends on your project, we can conclude that dagster-webserver>=1.6.11,<=1.6.12 depends on your project.
+             And because dagster-webserver>=1.6.13 depends on your project and your project depends on dagster-webserver>=1.6.11, we can conclude that your project's requirements are unsatisfiable.
 
     hint: The package `dagster-webserver` depends on the package `dagster` but the name is shadowed by your project. Consider changing the name of the project.
+
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     ");
 
@@ -9646,10 +9869,12 @@ fn add_warn_index_url() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     warning: Indexes specified via `--extra-index-url` will not be persisted to the `pyproject.toml` file; use `--index` instead.
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only idna==2.7 is available and your project depends on idna>=3.6, we can conclude that your project's requirements are unsatisfiable.
+    error: Failed to add dependencies
+      cause: No solution found when resolving dependencies
+      cause: Because only idna==2.7 is available and your project depends on idna>=3.6, we can conclude that your project's requirements are unsatisfiable.
 
     hint: `idna` was found on https://test.pypi.org/simple, but not at the requested version (idna>=3.6). A compatible version may be available on a subsequent index (e.g., https://pypi.org/simple). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `--index-strategy unsafe-best-match` to consider all versions from all indexes, regardless of the order in which they were defined.
+
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     ");
 
@@ -13132,12 +13357,14 @@ fn add_with_build_constraints() -> Result<()> {
     uv_snapshot!(context.filters(), context.add().arg("requests==1.2"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `requests==1.2.0`
-      ├─▶ Failed to resolve requirements from `setup.py` build
-      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
-      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
+    error: Failed to add dependencies
+      cause: Failed to download and build `requests==1.2.0`
+      cause: Failed to resolve requirements from `setup.py` build
+      cause: No solution found when resolving: `setuptools>=40.8.0`
+      cause: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
 
     hint: `requests` (v1.2.0) was included because `project` (v0.1.0) depends on `requests==1.2`
+
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     ");
 
@@ -13176,9 +13403,9 @@ fn add_unsupported_git_scheme() {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `git+fantasy://ferris/dreams/of/urls@7701ffcbae245819b828dc5f885a5201158897ef`
-      Caused by: Unsupported Git URL scheme `fantasy:` in `fantasy://ferris/dreams/of/urls` (expected one of `https:`, `ssh:`, or `file:`)
-        git+fantasy://ferris/dreams/of/urls@7701ffcbae245819b828dc5f885a5201158897ef
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      cause: Unsupported Git URL scheme `fantasy:` in `fantasy://ferris/dreams/of/urls` (expected one of `https:`, `ssh:`, or `file:`)
+             git+fantasy://ferris/dreams/of/urls@7701ffcbae245819b828dc5f885a5201158897ef
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     ");
 }
 
@@ -13287,10 +13514,12 @@ async fn add_full_url_in_keyring() -> Result<()> {
     Keyring request for public@http://[LOCALHOST]/basic-auth/simple
     Keyring request for public@[LOCALHOST]
     Keyring request for public@http://[LOCALHOST]
-      × No solution found when resolving dependencies:
-      ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
+    error: Failed to add dependencies
+      cause: No solution found when resolving dependencies
+      cause: Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
     hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
+
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     "
     );
@@ -13322,10 +13551,12 @@ async fn add_stop_index_search_early_on_auth_failure() -> Result<()> {
     uv_snapshot!(context.filters(), context.add().arg("anyio"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
+    error: Failed to add dependencies
+      cause: No solution found when resolving dependencies
+      cause: Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
     hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
+
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     "
     );
@@ -13404,10 +13635,12 @@ async fn add_empty_ignore_error_codes() -> Result<()> {
     uv_snapshot!(context.filters(), context.add().arg("anyio"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
+    error: Failed to add dependencies
+      cause: No solution found when resolving dependencies
+      cause: Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
     hint: An index (http://[LOCALHOST]/) returned a 403 Forbidden error. Check that the index URL is correct and the credentials are valid.
+
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     "
     );
@@ -13480,9 +13713,9 @@ async fn lock_forbidden_index_with_available_package() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because idna was not found in the package registry and all versions of anyio depend on idna>=2.8, we can conclude that all versions of anyio cannot be used.
-          And because your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because idna was not found in the package registry and all versions of anyio depend on idna>=2.8, we can conclude that all versions of anyio cannot be used.
+             And because your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
     hint: An index (http://[LOCALHOST]/) returned a 403 Forbidden error, but uv received a successful response from another request to the index. If the failing package is not present on this index, consider adding `ignore-error-codes = [403]` to the index's `[[tool.uv.index]]` entry to continue searching across indexes.
     ");
@@ -13515,8 +13748,9 @@ fn add_missing_package_on_pytorch() -> Result<()> {
     uv_snapshot!(context.add().arg("fakepkg"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because fakepkg was not found in the package registry and your project depends on fakepkg, we can conclude that your project's requirements are unsatisfiable.
+    error: Failed to add dependencies
+      cause: No solution found when resolving dependencies
+      cause: Because fakepkg was not found in the package registry and your project depends on fakepkg, we can conclude that your project's requirements are unsatisfiable.
 
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     "
@@ -13552,8 +13786,8 @@ async fn add_unexpected_error_code() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Request failed after 1 retry in [TIME]
-      Caused by: Failed to fetch: `http://[LOCALHOST]/anyio/`
-      Caused by: HTTP status server error (503 Service Unavailable) for url (http://[LOCALHOST]/anyio/)
+      cause: Failed to fetch: `http://[LOCALHOST]/anyio/`
+      cause: HTTP status server error (503 Service Unavailable) for url (http://[LOCALHOST]/anyio/)
     "
     );
     Ok(())
@@ -13593,11 +13827,11 @@ async fn add_invalid_ignore_error_code() -> Result<()> {
       1234 is not a valid HTTP status code
 
     error: Failed to parse: `pyproject.toml`
-      Caused by: TOML parse error at line 9, column 22
-          |
-        9 | ignore-error-codes = [401, 403, 1234]
-          |                      ^^^^^^^^^^^^^^^^
-        1234 is not a valid HTTP status code
+      cause: TOML parse error at line 9, column 22
+               |
+             9 | ignore-error-codes = [401, 403, 1234]
+               |                      ^^^^^^^^^^^^^^^^
+             1234 is not a valid HTTP status code
     "
     );
 
@@ -13624,13 +13858,13 @@ fn add_invalid_requires_python() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
-      Caused by: TOML parse error at line 4, column 19
-          |
-        4 | requires-python = "3.12"
-          |                   ^^^^^^
-        Failed to parse version: Unexpected end of version specifier, expected operator. Did you mean `==3.12`?:
-        3.12
-        ^^^^
+      cause: TOML parse error at line 4, column 19
+               |
+             4 | requires-python = "3.12"
+               |                   ^^^^^^
+             Failed to parse version: Unexpected end of version specifier, expected operator. Did you mean `==3.12`?:
+             3.12
+             ^^^^
     "#);
 
     Ok(())
@@ -13704,7 +13938,7 @@ fn add_auth_policy_always_without_credentials() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to fetch: `https://pypi.org/simple/anyio/`
-      Caused by: Missing credentials for https://pypi.org/simple/anyio/
+      cause: Missing credentials for https://pypi.org/simple/anyio/
     "
     );
 
@@ -13712,7 +13946,7 @@ fn add_auth_policy_always_without_credentials() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to fetch: `https://pypi.org/simple/black/`
-      Caused by: Missing credentials for https://pypi.org/simple/black/
+      cause: Missing credentials for https://pypi.org/simple/black/
     "
     );
     Ok(())
@@ -13744,7 +13978,7 @@ fn add_auth_policy_always_with_username_no_password() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to fetch: `https://pypi.org/simple/anyio/`
-      Caused by: Incomplete credentials for https://pypi.org/simple/anyio/
+      cause: Incomplete credentials for https://pypi.org/simple/anyio/
     "
     );
     Ok(())
@@ -13779,7 +14013,7 @@ async fn add_auth_policy_never_with_url_credentials() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to fetch: `http://[LOCALHOST]/basic-auth/files/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl`
-      Caused by: HTTP status client error (401 Unauthorized) for url (http://[LOCALHOST]/basic-auth/files/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl)
+      cause: HTTP status client error (401 Unauthorized) for url (http://[LOCALHOST]/basic-auth/files/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl)
     "
     );
 
@@ -13815,11 +14049,13 @@ async fn add_auth_policy_never_with_url_credentials_ignored() -> Result<()> {
     uv_snapshot!(context.filters(), context.add().arg("anyio"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because anyio==4.3.0 could not be fetched from the network (`401 Unauthorized`) and only anyio==4.3.0 is available, we can conclude that all versions of anyio cannot be used.
-          And because your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
+    error: Failed to add dependencies
+      cause: No solution found when resolving dependencies
+      cause: Because anyio==4.3.0 could not be fetched from the network (`401 Unauthorized`) and only anyio==4.3.0 is available, we can conclude that all versions of anyio cannot be used.
+             And because your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
     hint: Metadata for `anyio` (v4.3.0) could not be fetched; the server returned: `401 Unauthorized`
+
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     "
     );
@@ -13857,10 +14093,12 @@ async fn add_auth_policy_never_with_env_var_credentials() -> Result<()> {
         .env(EnvVars::UV_INDEX_MY_INDEX_PASSWORD, "heron"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
+    error: Failed to add dependencies
+      cause: No solution found when resolving dependencies
+      cause: Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
     hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
+
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     "
     );
@@ -13942,10 +14180,12 @@ async fn add_redirect_cross_origin() -> Result<()> {
     uv_snapshot!(context.filters(), context.add().arg("--default-index").arg(redirect_url.as_str()).arg("anyio"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
+    error: Failed to add dependencies
+      cause: No solution found when resolving dependencies
+      cause: Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
     hint: An index URL (http://[LOCALHOST]/) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
+
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     "
     );
@@ -14057,10 +14297,12 @@ async fn add_redirect_with_keyring_cross_origin() -> Result<()> {
     Keyring request for public@http://[LOCALHOST]/
     Keyring request for public@[LOCALHOST]
     Keyring request for public@http://[LOCALHOST]
-      × No solution found when resolving dependencies:
-      ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
+    error: Failed to add dependencies
+      cause: No solution found when resolving dependencies
+      cause: Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
     hint: An index URL (http://[LOCALHOST]/) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
+
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     "
     );

@@ -68,7 +68,7 @@ pub enum BuildDispatchError {
     Lookahead(#[from] uv_requirements::Error),
 }
 
-impl uv_errors::Hint for BuildDispatchError {
+impl uv_errors::Hinted for BuildDispatchError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::BuildFrontend(err) => err.hints(),
@@ -92,6 +92,20 @@ impl uv_errors::Hint for BuildDispatchError {
 }
 
 impl IsBuildBackendError for BuildDispatchError {
+    fn is_user_failure(&self) -> bool {
+        match self {
+            Self::BuildFrontend(error) => error.is_user_failure(),
+            Self::Resolve(error) => error.is_user_failure(),
+            Self::Prepare(error) => error.is_user_failure(),
+            Self::Lookahead(error) => error.is_user_failure(),
+            Self::Anyhow(error) => error
+                .chain()
+                .find_map(|cause| cause.downcast_ref::<uv_resolver::ResolveError>())
+                .is_some_and(uv_resolver::ResolveError::is_user_failure),
+            Self::Tags(_) | Self::Join(_) => false,
+        }
+    }
+
     fn is_build_backend_error(&self) -> bool {
         match self {
             Self::Tags(_)
@@ -605,7 +619,12 @@ impl BuildContext for BuildDispatch<'_> {
         // Only perform the direct build if the backend is uv in a compatible version.
         let source_tree_str = source_tree.display().to_string();
         let identifier = version_id.unwrap_or_else(|| &source_tree_str);
-        if let Err(reason) = check_direct_build(&source_tree, uv_version::version()) {
+        if let Err(reason) = check_direct_build(
+            &source_tree,
+            uv_version::version(),
+            &self.interpreter.to_resolver_marker_environment(),
+            self.constraints.requirements().cloned().map(Into::into),
+        ) {
             trace!("Requirements for direct build not matched because {reason}");
             return Ok(None);
         }
@@ -693,6 +712,12 @@ impl SharedState {
     /// Return the [`InMemoryIndex`] used by the [`SharedState`].
     pub fn index(&self) -> &InMemoryIndex {
         &self.index
+    }
+
+    /// Return mutable access to the index owner. Removing cached entries additionally requires
+    /// exclusive access to the index's shared storage.
+    pub fn index_mut(&mut self) -> &mut InMemoryIndex {
+        &mut self.index
     }
 
     /// Return the [`InFlight`] used by the [`SharedState`].

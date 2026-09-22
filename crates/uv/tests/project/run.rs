@@ -433,8 +433,8 @@ fn run_pep723_script() -> Result<()> {
     uv_snapshot!(context.filters(), context.run().arg("--group").arg("foo").arg("main.py"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving script dependencies:
-      ╰─▶ Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving script dependencies
+      cause: Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
     ");
 
     // If the script can't be resolved, we should reference the script.
@@ -452,8 +452,8 @@ fn run_pep723_script() -> Result<()> {
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("main.py"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving script dependencies:
-      ╰─▶ Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving script dependencies
+      cause: Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
     ");
 
     // If the script contains an unclosed PEP 723 tag, we should error.
@@ -1053,10 +1053,10 @@ fn run_pep723_script_build_constraints() -> Result<()> {
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `requests==1.2.0`
-      ├─▶ Failed to resolve requirements from `setup.py` build
-      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
-      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
+    error: Failed to download and build `requests==1.2.0`
+      cause: Failed to resolve requirements from `setup.py` build
+      cause: No solution found when resolving: `setuptools>=40.8.0`
+      cause: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Compatible build constraints.
@@ -1197,7 +1197,7 @@ fn run_pep723_script_lock() -> Result<()> {
 
     // Re-running the script with `--locked` should error.
     uv_snapshot!(context.filters(), context.run().arg("--locked").arg("main.py"), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
@@ -1492,8 +1492,8 @@ fn run_with() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Checked 2 packages in [TIME]
-      × No solution found when resolving `--with` dependencies:
-      ╰─▶ Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving `--with` dependencies
+      cause: Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
     ");
 
     Ok(())
@@ -1982,10 +1982,10 @@ fn run_with_build_constraints() -> Result<()> {
      + idna==3.6
      + sniffio==1.3.1
      + typing-extensions==4.10.0
-      × Failed to download and build `requests==1.2.0`
-      ├─▶ Failed to resolve requirements from `setup.py` build
-      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
-      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
+    error: Failed to download and build `requests==1.2.0`
+      cause: Failed to resolve requirements from `setup.py` build
+      cause: No solution found when resolving: `setuptools>=40.8.0`
+      cause: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Change the build constraint to be compatible with `requests==1.2`.
@@ -2286,8 +2286,8 @@ fn run_with_editable() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Checked 3 packages in [TIME]
-      × Failed to resolve `--with` requirement
-      ╰─▶ Distribution not found at: file://[TEMP_DIR]/foo
+    error: Failed to resolve `--with` requirement
+      cause: Distribution not found at: file://[TEMP_DIR]/foo
     ");
 
     Ok(())
@@ -2542,7 +2542,7 @@ fn run_locked() -> Result<()> {
 
     // Running with `--locked` should error, if no lockfile is present.
     uv_snapshot!(context.filters(), context.run().arg("--locked").arg("--").arg("python").arg("--version"), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`, but `--locked` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
     ");
@@ -2626,7 +2626,7 @@ fn run_locked() -> Result<()> {
 
     // Running with `--locked` should error.
     uv_snapshot!(context.filters(), context.run().arg("--locked").arg("--").arg("python").arg("--version"), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
@@ -2701,7 +2701,7 @@ fn run_frozen() -> Result<()> {
 
     // Running with `--frozen` should error, if no lockfile is present.
     uv_snapshot!(context.filters(), context.run().arg("--frozen").arg("--").arg("python").arg("--version"), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
     ");
@@ -3285,7 +3285,7 @@ fn run_from_directory() -> Result<()> {
     Installed 1 package in [TIME]
      + foo==1.0.0 (from file://[TEMP_DIR]/project)
     error: Failed to spawn: `./project/main.py`
-      Caused by: [OS ERROR 2]
+      cause: [OS ERROR 2]
     ");
 
     // Even if we write a `.python-version` file in the current directory, we should prefer the
@@ -4080,11 +4080,11 @@ fn run_invalid_project_table() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
-      Caused by: TOML parse error at line 1, column 2
-          |
-        1 | [project.urls]
-          |  ^^^^^^^
-        `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set
+      cause: TOML parse error at line 1, column 2
+               |
+             1 | [project.urls]
+               |  ^^^^^^^
+             `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set
     ");
 
     Ok(())
@@ -4123,7 +4123,7 @@ fn run_script_without_build_system() -> Result<()> {
     Resolved 1 package in [TIME]
     Checked in [TIME]
     error: Failed to spawn: `entry`
-      Caused by: No such file or directory (os error 2)
+      cause: No such file or directory (os error 2)
     ");
 
     Ok(())
@@ -4781,8 +4781,8 @@ fn run_remote_pep723_script_with_nonexistent_ssl_cert_file() {
     ----- stderr -----
     warning: Invalid `SSL_CERT_FILE`. Path does not exist: [TEMP_DIR]/missing.pem. No default certificates will be trusted.
     error: error sending request for url (https://raw.githubusercontent.com/astral-sh/uv/df45b9ac2584824309ff29a6a09421055ad730f6/scripts/uv-run-remote-script-test.py)
-      Caused by: client error (Connect)
-      Caused by: invalid peer certificate: UnknownIssuer
+      cause: client error (Connect)
+      cause: invalid peer certificate: UnknownIssuer
     ");
 }
 
@@ -4809,8 +4809,8 @@ fn run_remote_requirements_offline_redacts_credentials() -> Result<()> {
 #[test]
 fn run_remote_pep723_requirements_fetch_error_does_not_leak_credentials() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filter((
-        r"(?m)^  Caused by: .*(Connection refused|No connection could be made).*$",
-        "  Caused by: [CONNECTION_REFUSED]",
+        r"(?m)^  cause: .*(Connection refused|No connection could be made).*$",
+        "  cause: [CONNECTION_REFUSED]",
     ));
 
     let script = context.temp_dir.child("main.py");
@@ -4829,10 +4829,10 @@ fn run_remote_pep723_requirements_fetch_error_does_not_leak_credentials() -> Res
     exit_code: 2 (failure)
     ----- stderr -----
     error: Request failed after 3 retries
-      Caused by: error sending request for url (http://[LOCALHOST]/requirements.py)
-      Caused by: client error (Connect)
-      Caused by: tcp connect error
-      Caused by: [CONNECTION_REFUSED]
+      cause: error sending request for url (http://[LOCALHOST]/requirements.py)
+      cause: client error (Connect)
+      cause: tcp connect error
+      cause: [CONNECTION_REFUSED]
     ");
 
     Ok(())

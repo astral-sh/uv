@@ -139,6 +139,16 @@ cargo run -- venv
 cargo run -- pip install requests
 ```
 
+Development builds omit Git metadata from the version string so commits do not trigger
+recompilation. To include the commit hash and date, set `UV_INTERNAL__BUILD_GIT_INFO=1` when
+building:
+
+```shell
+UV_INTERNAL__BUILD_GIT_INFO=1 cargo run -- --version
+```
+
+Release builds, including profiles that inherit from `release`, include Git metadata by default.
+
 ## Formatting
 
 ```shell
@@ -188,18 +198,16 @@ uv run --only-group=check cargo-shear
 
 ### Compiling for Windows from Unix
 
-To run clippy for a Windows target from Linux or macOS, you can use
-[cargo-xwin](https://github.com/rust-cross/cargo-xwin):
+To run clippy for a Windows target from Linux or macOS, you can use `cargo-xwin`. We provide a build
+of `cargo-xwin` as part of our development toolchain, but you'll need to install one or more Windows
+targets:
 
 ```shell
-# Install cargo-xwin
-cargo install --locked cargo-xwin@0.21.4
-
 # Add the Windows target
 rustup target add x86_64-pc-windows-msvc
 
 # Run clippy for Windows
-cargo xwin clippy --workspace --all-targets --all-features --locked -- -D warnings
+uv run --only-dev cargo xwin clippy --workspace --all-targets --all-features --locked -- -D warnings
 ```
 
 ## Crate structure

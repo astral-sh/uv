@@ -26,7 +26,7 @@ use uv_python::PythonEnvironment;
 use uv_redacted::DisplaySafeUrl;
 use uv_types::HashStrategy;
 
-use crate::satisfies::RequirementSatisfaction;
+use crate::satisfies::{BuildSettings, RequirementSatisfaction};
 use crate::{InstallationStrategy, SitePackages};
 
 /// A wheel dependency is incompatible with the current platform.
@@ -221,7 +221,7 @@ impl fmt::Display for IncompatibleWheelError {
 
 impl std::error::Error for IncompatibleWheelError {}
 
-impl uv_errors::Hint for IncompatibleWheelError {
+impl uv_errors::Hinted for IncompatibleWheelError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         if let Some(hint) = &self.compatibility_hint {
             uv_errors::Hints::from(hint.to_string())
@@ -334,10 +334,12 @@ impl<'a> Planner<'a> {
                             dist.version(),
                             installation,
                             tags,
-                            config_settings,
-                            config_settings_package,
-                            extra_build_requires,
-                            extra_build_variables,
+                            Some(BuildSettings {
+                                config_settings,
+                                config_settings_package,
+                                extra_build_requires,
+                                extra_build_variables,
+                            }),
                         ) {
                             RequirementSatisfaction::Mismatch => {
                                 debug!(
@@ -439,7 +441,11 @@ impl<'a> Planner<'a> {
                             let cache_info = pointer.to_cache_info();
                             let build_info = pointer.to_build_info();
                             let archive = pointer.into_archive();
-                            if archive.satisfies(hasher.archive_policy(dist.as_ref())) {
+                            if archive.satisfies(hasher.archive_policy(dist.as_ref()))
+                                && wheel
+                                    .size
+                                    .is_none_or(|expected| archive.size == Some(expected))
+                            {
                                 let cached_dist = CachedDirectUrlDist {
                                     filename: wheel.filename.clone(),
                                     url: VerbatimParsedUrl {
@@ -457,7 +463,7 @@ impl<'a> Planner<'a> {
                                 continue;
                             }
                             debug!(
-                                "Cached URL wheel requirement does not match expected hash policy for: {wheel}"
+                                "Cached URL wheel requirement does not match expected hashes or size for: {wheel}"
                             );
                         }
                         Ok(None) => {}

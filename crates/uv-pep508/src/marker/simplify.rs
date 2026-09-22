@@ -91,6 +91,26 @@ fn collect_dnf(
                 }
             }
         }
+        MarkerTreeKind::VersionString(marker) => {
+            for (tree, range) in collect_edges(marker.edges()) {
+                for (lower, upper) in range.iter() {
+                    let current = path.len();
+                    let lower = lower.map(|version| ArcStr::from(version.to_string()));
+                    let upper = upper.map(|version| ArcStr::from(version.to_string()));
+                    for (operator, value) in
+                        MarkerOperator::from_bounds((lower.as_ref(), upper.as_ref()))
+                    {
+                        path.push(MarkerExpression::String {
+                            key: marker.key().into(),
+                            operator,
+                            value,
+                        });
+                    }
+                    collect_dnf(tree, dnf, path);
+                    path.truncate(current);
+                }
+            }
+        }
         MarkerTreeKind::String(marker) => {
             for (tree, range) in collect_edges(marker.children()) {
                 // Detect whether the range for this edge can be simplified as an inequality.

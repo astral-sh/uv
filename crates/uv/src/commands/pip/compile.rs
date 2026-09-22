@@ -12,22 +12,24 @@ use rustc_hash::FxHashSet;
 use tracing::debug;
 
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, Constraints, ExcludeDependency, ExtrasSpecification,
-    IndexStrategy, NoBinary, NoBuild, NoSources, Override, PipCompileFormat, Reinstall, Upgrade,
+    HashCheckingMode, IndexStrategy, NoBinary, NoBuild, NoSources, Override, PipCompileFormat,
+    Reinstall, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, HashCollection, Index, IndexLocations,
-    IndexUrl, NameRequirementSpecification, Origin, PackageConfigSettings, Requirement,
-    RequiresPython, Verbatim,
+    IndexUrl, MinimumLibcVersion, NameRequirementSpecification, Origin, PackageConfigSettings,
+    Requirement, RequiresPython, Verbatim,
 };
 use uv_fs::{CWD, Simplified};
 use uv_git::ResolvedRepositoryReference;
 use uv_install_wheel::LinkMode;
+use uv_lock::PylockToml;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_preview::{Preview, PreviewFeature};
@@ -37,26 +39,28 @@ use uv_python::{
     PythonPreference, PythonRequest, PythonVersion, VersionRequest,
 };
 use uv_requirements::{
-    GroupsSpecification, LockedRequirements, RequirementsSource, RequirementsSpecification,
-    is_pylock_toml, read_pylock_toml_requirements, read_requirements_txt,
+    GroupsSpecification, RequirementsSource, RequirementsSpecification, is_pylock_toml,
 };
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, FlatIndex, ForkStrategy,
-    InMemoryIndex, OptionsBuilder, Prerelease, PylockToml, PythonRequirement, ResolutionMode,
+    InMemoryIndex, OptionsBuilder, Prerelease, PythonRequirement, ResolutionMode,
     ResolverEnvironment,
 };
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_torch::{AmdGpuArchitecture, TorchMode, TorchStrategy};
 use uv_types::{EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy};
-use uv_warnings::warn_user;
+use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 
+use crate::commands::locked_requirements::{
+    LockedRequirements, read_pylock_toml_requirements, read_requirements_txt,
+};
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::{operations, resolution_markers, resolution_tags};
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{ExitStatus, OutputWriter, diagnostics};
+use crate::commands::{ExitStatus, OutputWriter, UvError};
 use crate::printer::Printer;
 
 /// Resolve a set of requirements into a set of pinned versions.
@@ -70,9 +74,10 @@ pub(crate) async fn pip_compile(
     constraints_from_workspace: Vec<Requirement>,
     overrides_from_workspace: Vec<Override<Requirement>>,
     excludes_from_workspace: Vec<ExcludeDependency>,
-    build_constraints_from_workspace: Vec<Requirement>,
+    build_constraints_from_workspace: Vec<NameRequirementSpecification>,
     environments: SupportedEnvironments,
     required_environments: SupportedEnvironments,
+    minimum_libc_version: Option<MinimumLibcVersion>,
     extras: ExtrasSpecification,
     groups: GroupsSpecification,
     output_file: Option<&Path>,
@@ -208,6 +213,7 @@ pub(crate) async fn pip_compile(
         mut override_dependencies,
         excludes,
         pylock,
+        pylock_groups: _,
         source_trees,
         groups,
         extras: used_extras,
@@ -253,16 +259,12 @@ pub(crate) async fn pip_compile(
         .collect();
 
     // Read build constraints.
-    let build_constraints: Vec<NameRequirementSpecification> =
+    let build_constraints = Constraints::from_specifications(
         operations::read_constraints(build_constraints, &client_builder)
             .await?
             .into_iter()
-            .chain(
-                build_constraints_from_workspace
-                    .into_iter()
-                    .map(NameRequirementSpecification::from),
-            )
-            .collect();
+            .chain(build_constraints_from_workspace),
+    );
 
     // If all the metadata could be statically resolved, validate that every extra was used. If we
     // need to resolve metadata via PEP 517, we don't know which extras are used until much later.
@@ -356,10 +358,9 @@ pub(crate) async fn pip_compile(
     // Create the shared state.
     let state = SharedState::default();
 
-    // If we're resolving against a different Python version, use a separate index. Source
-    // distributions will be built against the installed version, and so the index may contain
-    // different package priorities than in the top-level resolution.
-    let top_level_index = if python_version.is_some() {
+    // Universal or cross-version resolution ranks artifacts differently from build dependencies,
+    // which use the installed interpreter. Keep their policy-dependent version maps separate.
+    let top_level_index = if universal || python_version.is_some() {
         InMemoryIndex::default()
     } else {
         state.index().clone()
@@ -487,13 +488,7 @@ pub(crate) async fn pip_compile(
     let build_options = build_options.combine(no_binary, no_build);
 
     // Resolve the flat indexes from `--find-links`.
-    let flat_index = {
-        let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), &cache);
-        let entries = client
-            .fetch_all(index_locations.flat_indexes().map(Index::url))
-            .await?;
-        FlatIndex::from_entries(entries)
-    };
+    let flat_index = FlatIndex::load(&client, &cache, &index_locations).await?;
 
     // Determine whether to enable build isolation.
     let environment;
@@ -509,14 +504,12 @@ pub(crate) async fn pip_compile(
         }
     };
 
-    // Don't enforce hashes in `pip compile`.
-    let build_hashes = HashStrategy::default();
-    let build_constraints = Constraints::from_requirements(
-        build_constraints
-            .iter()
-            .map(|constraint| constraint.requirement.clone()),
-    );
-
+    // Verify hashes on pinned build constraints, if any.
+    let build_hashes = HashStrategy::from_constraints(
+        &build_constraints,
+        Some(&interpreter.to_resolver_marker_environment()),
+        HashCheckingMode::Verify,
+    )?;
     // Lower the extra build dependencies, if any.
     let extra_build_requires =
         LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
@@ -549,6 +542,16 @@ pub(crate) async fn pip_compile(
         preview,
     );
 
+    if universal
+        && minimum_libc_version.is_some()
+        && !preview.is_enabled(PreviewFeature::MinimumLibcVersion)
+    {
+        warn_user_once!(
+            "Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeature::MinimumLibcVersion
+        );
+    }
+
     let options = OptionsBuilder::new()
         .resolution_mode(resolution_mode)
         .prerelease(prerelease)
@@ -559,6 +562,11 @@ pub(crate) async fn pip_compile(
         .torch_backend(torch_backend)
         .build_options(build_options.clone())
         .artifact_environments(artifact_environments)
+        .minimum_libc_version(if universal {
+            minimum_libc_version
+        } else {
+            None
+        })
         .build();
 
     // Resolve the requirements.
@@ -596,9 +604,7 @@ pub(crate) async fn pip_compile(
     {
         Ok((resolution, _)) => resolution,
         Err(err) => {
-            return diagnostics::OperationDiagnostic::default()
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return Err(UvError::from(err).into());
         }
     };
 
@@ -634,7 +640,8 @@ pub(crate) async fn pip_compile(
         PipCompileFormat::RequirementsTxt => {
             if include_marker_expression {
                 if let Some(marker_env) = resolver_env.marker_environment() {
-                    let relevant_markers = resolution.marker_tree(&top_level_index, marker_env)?;
+                    let relevant_markers =
+                        resolution.marker_tree(top_level_index.distributions(), marker_env)?;
                     if let Some(relevant_markers) = relevant_markers.contents() {
                         writeln!(
                             writer,

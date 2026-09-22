@@ -15,7 +15,7 @@ use uv_python::{
     PythonPreference, PythonRequest, PythonVersionFile, VersionFileDiscoveryOptions,
 };
 use uv_settings::PythonInstallMirrors;
-use uv_warnings::warn_user_once;
+use uv_warnings::{warn_user_once, warn_user_once_with_chain};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
 use crate::commands::{
@@ -307,9 +307,13 @@ fn warn_if_existing_pin_incompatible_with_project(
             }
         }
         Err(err) => {
-            warn_user_once!(
-                "Failed to resolve pinned Python version `{}`: {err}",
-                pin.to_canonical_string(),
+            warn_user_once_with_chain!(
+                anyhow::Error::from(err)
+                    .context(format!(
+                        "Failed to resolve pinned Python version `{}`",
+                        pin.to_canonical_string(),
+                    ))
+                    .as_ref()
             );
         }
     }

@@ -22,13 +22,14 @@ use uv_cli::{ExternalCommand, GlobalArgs};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
     ActiveEnvironment, Concurrency, Constraints, DependencyGroups, DryRun, EditableMode, EnvFile,
-    ExtrasSpecification, InstallOptions, TargetTriple,
+    ExtrasSpecification, InstallOptions, RequirementsInput, TargetTriple,
 };
 use uv_distribution::LoweredExtraBuildDependencies;
-use uv_distribution_types::Requirement;
+use uv_distribution_types::NameRequirementSpecification;
 use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified, create_symlink};
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
+use uv_lock::{Installable, Lock};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
 use uv_python::{
@@ -38,7 +39,7 @@ use uv_python::{
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
-use uv_resolver::{DependencyMode, Installable, Lock, Preference};
+use uv_resolver::{DependencyMode, Preference};
 use uv_scripts::{Pep723Error, Pep723Item, Pep723Metadata, Pep723Script};
 use uv_settings::{
     EnvironmentOptions, FilesystemOptions, MalwareCheckSettings, PythonInstallMirrors,
@@ -73,11 +74,11 @@ use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     EnvironmentSpecification, LinkErrorReporting, PreferenceLocation, ProjectEnvironment,
     ProjectError, ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
-    default_dependency_groups, script_extra_build_requires, script_specification,
-    update_environment, validate_project_requires_python,
+    script_extra_build_requires, script_specification, update_environment,
+    validate_project_requires_python,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{ExitStatus, diagnostics, project, read_env_files};
+use crate::commands::{ExitStatus, UvError, project, read_env_files};
 use crate::printer::Printer;
 use crate::settings::{
     FrozenSource, GlobalSettings, LockCheck, LockedSource, ResolverInstallerSettings,
@@ -149,7 +150,7 @@ pub(crate) async fn run(
             RequirementsSource::SetupCfg(_) => {
                 bail!("Adding requirements from a `setup.cfg` is not supported in `uv run`");
             }
-            RequirementsSource::Extensionless(path) if path == Path::new("-") => {
+            RequirementsSource::Extensionless(RequirementsInput::Stdin) => {
                 requirements_from_stdin = true;
             }
             _ => {}
@@ -176,6 +177,7 @@ pub(crate) async fn run(
 
     // The lockfile used for the base environment.
     let mut base_lock: Option<(Lock, PathBuf)> = None;
+    let mut unlocked_build_constraints = Constraints::default();
 
     // Determine whether the command to execute is a PEP 723 script.
     let temp_dir;
@@ -265,12 +267,9 @@ pub(crate) async fn run(
             {
                 Ok(result) => result.into_lock(),
                 Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::default()
-                        .with_context("script")
-                        .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    return Err(UvError::from(err.with_resolution_context("script")).into());
                 }
-                Err(err) => return Err(err.into()),
+                Err(err) => return Err(UvError::from(err).into()),
             };
 
             // Sync the environment.
@@ -311,12 +310,9 @@ pub(crate) async fn run(
             {
                 Ok(_) => {}
                 Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::default()
-                        .with_context("script")
-                        .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    return Err(UvError::from(err.with_resolution_context("script")).into());
                 }
-                Err(err) => return Err(err.into()),
+                Err(err) => return Err(UvError::from(err).into()),
             }
 
             // Respect any locked preferences when resolving `--with` dependencies downstream.
@@ -361,6 +357,26 @@ pub(crate) async fn run(
                 }
             }
 
+            // Preserve constraints for `--with` even when the script omits `dependencies`.
+            unlocked_build_constraints = script
+                .metadata()
+                .tool
+                .as_ref()
+                .and_then(|tool| {
+                    tool.uv
+                        .as_ref()
+                        .and_then(|uv| uv.build_constraint_dependencies.as_ref())
+                })
+                .map(|constraints| {
+                    Constraints::from_specifications(
+                        constraints
+                            .iter()
+                            .cloned()
+                            .map(NameRequirementSpecification::from),
+                    )
+                })
+                .unwrap_or_default();
+
             // Install the script requirements, if necessary. Otherwise, use an isolated environment.
             if let Some(spec) = script_specification(
                 (&script).into(),
@@ -397,23 +413,6 @@ pub(crate) async fn run(
                 .await?
                 .into_environment()?;
 
-                let build_constraints = script
-                    .metadata()
-                    .tool
-                    .as_ref()
-                    .and_then(|tool| {
-                        tool.uv
-                            .as_ref()
-                            .and_then(|uv| uv.build_constraint_dependencies.as_ref())
-                    })
-                    .map(|constraints| {
-                        Constraints::from_requirements(
-                            constraints
-                                .iter()
-                                .map(|constraint| Requirement::from(constraint.clone())),
-                        )
-                    });
-
                 let _lock = environment
                     .lock()
                     .await
@@ -428,7 +427,7 @@ pub(crate) async fn run(
                     modifications,
                     python_platform.as_ref(),
                     SourceTreeEditablePolicy::Project,
-                    build_constraints.unwrap_or_default(),
+                    unlocked_build_constraints.clone(),
                     script_extra_build_requires,
                     &settings,
                     &client_builder,
@@ -455,12 +454,9 @@ pub(crate) async fn run(
                 {
                     Ok(update) => Some(update.into_environment().into_interpreter()),
                     Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::default()
-                            .with_context("script")
-                            .report(err)
-                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                        return Err(UvError::from(err.with_resolution_context("script")).into());
                     }
-                    Err(err) => return Err(err.into()),
+                    Err(err) => return Err(UvError::from(err).into()),
                 }
             } else {
                 // Create a virtual environment.
@@ -502,6 +498,7 @@ pub(crate) async fn run(
     };
 
     // Discover and sync the base environment.
+    let is_script = script_interpreter.is_some();
     let temp_dir;
     let base_interpreter = if let Some(script_interpreter) = script_interpreter {
         // If we found a PEP 723 script and the user provided a project-only setting, warn.
@@ -637,7 +634,7 @@ pub(crate) async fn run(
                 );
             }
             // Determine the groups and extras to include.
-            let default_groups = default_dependency_groups(project.pyproject_toml())?;
+            let default_groups = project.default_groups()?;
             let default_extras = DefaultExtras::default();
             let groups = groups.with_defaults(default_groups);
             let extras = extras.with_defaults(default_extras);
@@ -737,6 +734,19 @@ pub(crate) async fn run(
                         .flatten()
                         .map(|lock| (lock, project.workspace().install_path().to_owned()));
                 }
+                // `--with` may still build an overlay under `--no-sync`. Unless explicitly frozen,
+                // use the current project build constraints, not those recorded in `uv.lock`.
+                if frozen.is_none() && !requirements.is_empty() {
+                    unlocked_build_constraints = LockTarget::from(project.workspace())
+                        .lower_build_constraints(
+                            &settings.resolver.index_locations,
+                            &settings.resolver.sources,
+                            &cache,
+                            workspace_cache,
+                            client_builder.credentials_cache(),
+                        )
+                        .await?;
+                }
             } else {
                 let _lock = venv
                     .lock()
@@ -779,12 +789,7 @@ pub(crate) async fn run(
                 .await
                 {
                     Ok(result) => result,
-                    Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::default()
-                            .report(err)
-                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-                    }
-                    Err(err) => return Err(err.into()),
+                    Err(err) => return Err(UvError::from(err).into()),
                 };
 
                 // Identify the installation target.
@@ -866,12 +871,7 @@ pub(crate) async fn run(
                 .await
                 {
                     Ok(_) => {}
-                    Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::default()
-                            .report(err)
-                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-                    }
-                    Err(err) => return Err(err.into()),
+                    Err(err) => return Err(UvError::from(err).into()),
                 }
 
                 base_lock = Some((
@@ -969,10 +969,18 @@ pub(crate) async fn run(
         Some(spec) => {
             debug!("Syncing `--with` requirements to cached environment");
 
-            // Read the build constraints from the lock file.
-            let build_constraints = base_lock
-                .as_ref()
-                .map(|(lock, path)| lock.build_constraints(path));
+            // Project `--no-sync` skips updating the base environment, but `--with` may still build
+            // packages in a separate environment. In these cases, unless frozen, use current project
+            // constraints; any existing lockfile supplies only version preferences. Frozen runs and
+            // scripts use the recorded constraints when using a lockfile.
+            let build_constraints = if no_sync && frozen.is_none() && !is_script {
+                unlocked_build_constraints
+            } else {
+                base_lock
+                    .as_ref()
+                    .map(|(lock, path)| lock.build_constraints(path))
+                    .unwrap_or(unlocked_build_constraints)
+            };
 
             // Read the preferences.
             let spec = EnvironmentSpecification::from(spec).with_preferences(
@@ -992,7 +1000,7 @@ pub(crate) async fn run(
 
             let result = CachedEnvironment::from_spec(
                 spec,
-                build_constraints.unwrap_or_default(),
+                build_constraints,
                 &base_interpreter,
                 python_platform.as_ref(),
                 &settings,
@@ -1020,12 +1028,9 @@ pub(crate) async fn run(
             let environment = match result {
                 Ok(resolution) => resolution,
                 Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::default()
-                        .with_context("`--with`")
-                        .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    return Err(UvError::from(err.with_resolution_context("`--with`")).into());
                 }
-                Err(err) => return Err(err.into()),
+                Err(err) => return Err(UvError::from(err).into()),
             };
 
             Some(PythonEnvironment::from(environment))
@@ -1337,6 +1342,7 @@ fn can_skip_ephemeral(
             ResolverSettings {
                 config_setting,
                 config_settings_package,
+                dependency_metadata,
                 extra_build_dependencies,
                 extra_build_variables,
                 ..
@@ -1367,6 +1373,7 @@ fn can_skip_ephemeral(
         &spec.overrides,
         &spec.override_dependencies,
         &spec.excludes,
+        dependency_metadata,
         DependencyMode::Transitive,
         InstallationStrategy::Permissive,
         &markers,
@@ -2166,7 +2173,7 @@ pub(crate) struct RecursionLimitError {
     max: u32,
 }
 
-impl uv_errors::Hint for RecursionLimitError {
+impl uv_errors::Hinted for RecursionLimitError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         uv_errors::Hints::from(format!(
             "If you are running a script with `{}` in the shebang, you may need to include the `{}` flag",

@@ -306,6 +306,7 @@ fn validate_uv_toml(path: &Path, options: &Options) -> Result<(), Error> {
         build_constraint_dependencies: _,
         environments,
         required_environments,
+        minimum_libc_version,
         conflicts,
         workspace,
         sources,
@@ -368,6 +369,12 @@ fn validate_uv_toml(path: &Path, options: &Options) -> Result<(), Error> {
         return Err(Error::PyprojectOnlyField(
             path.to_path_buf(),
             "required-environments",
+        ));
+    }
+    if minimum_libc_version.is_some() {
+        return Err(Error::PyprojectOnlyField(
+            path.to_path_buf(),
+            "minimum-libc-version",
         ));
     }
     Ok(())
@@ -456,6 +463,7 @@ fn warn_uv_toml_masked_fields(options: &Options) {
         build_constraint_dependencies,
         environments: _,
         required_environments: _,
+        minimum_libc_version: _,
         conflicts: _,
         workspace: _,
         sources: _,
@@ -805,6 +813,17 @@ impl EnvironmentOptions {
         )?)
         .map(Duration::from_secs);
 
+        // Ignore the deprecated `UV_NATIVE_TLS` variable when its replacement is set.
+        let system_certs = EnvFlag::new(EnvVars::UV_SYSTEM_CERTS)?;
+        let native_tls = if system_certs.value.is_some() {
+            EnvFlag {
+                value: None,
+                env_var: EnvVars::UV_NATIVE_TLS,
+            }
+        } else {
+            EnvFlag::new(EnvVars::UV_NATIVE_TLS)?
+        };
+
         Ok(Self {
             ruff_path: parse_path_environment_variable(EnvVars::RUFF),
             ty_path: parse_path_environment_variable(EnvVars::TY),
@@ -886,8 +905,8 @@ impl EnvironmentOptions {
             no_sync: EnvFlag::new(EnvVars::UV_NO_SYNC)?,
             managed_python: EnvFlag::new(EnvVars::UV_MANAGED_PYTHON)?,
             no_managed_python: EnvFlag::new(EnvVars::UV_NO_MANAGED_PYTHON)?,
-            native_tls: EnvFlag::new(EnvVars::UV_NATIVE_TLS)?,
-            system_certs: EnvFlag::new(EnvVars::UV_SYSTEM_CERTS)?,
+            native_tls,
+            system_certs,
             preview: EnvFlag::new(EnvVars::UV_PREVIEW)?,
             isolated: EnvFlag::new(EnvVars::UV_ISOLATED)?,
             no_progress: EnvFlag::new(EnvVars::UV_NO_PROGRESS)?,

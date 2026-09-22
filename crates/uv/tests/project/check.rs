@@ -63,6 +63,107 @@ fn check_project() -> Result<()> {
     Ok(())
 }
 
+/// Forward explicit Python requests to ty without overriding its inference by default.
+#[test]
+fn check_python_version() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+    "#})?;
+    context
+        .temp_dir
+        .child(".python-version")
+        .write_str("3.12\n")?;
+    context.temp_dir.child("main.py").write_str(indoc! {r"
+        import sys
+        from typing import reveal_type
+
+        reveal_type(sys.version_info[1])
+    "})?;
+
+    let check = || {
+        let mut command = context.check();
+        command
+            .arg("--preview-features")
+            .arg("check-command")
+            .arg("--ty-version")
+            .arg("0.0.17")
+            .arg("--show-command")
+            .env("TY_OUTPUT_FORMAT", "concise")
+            .env_remove(EnvVars::RUST_LOG);
+        command
+    };
+
+    uv_snapshot!(context.filters(), check(), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    main.py:4:13: info[revealed-type] Revealed type: `Literal[11]`
+    Found 1 diagnostic
+
+    ----- stderr -----
+    Running `ty check --color auto -- ''`
+    ");
+
+    uv_snapshot!(context.filters(), check().arg("--python").arg("cpython@3.12"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    main.py:4:13: info[revealed-type] Revealed type: `Literal[12]`
+    Found 1 diagnostic
+
+    ----- stderr -----
+    Running `ty check --color auto --python-version 3.12 -- ''`
+    ");
+
+    uv_snapshot!(context.filters(), check().env(EnvVars::UV_PYTHON, context.interpreter()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    main.py:4:13: info[revealed-type] Revealed type: `Literal[12]`
+    Found 1 diagnostic
+
+    ----- stderr -----
+    Running `ty check --color auto --python-version 3.12 -- ''`
+    ");
+
+    uv_snapshot!(context.filters(), check().arg("--no-project").arg("--python").arg("3.12"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    main.py:4:13: info[revealed-type] Revealed type: `Literal[12]`
+    Found 1 diagnostic
+
+    ----- stderr -----
+    Running `ty check --color auto --python-version 3.12`
+    ");
+
+    context.temp_dir.child("script.py").write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+        import sys
+        from typing import reveal_type
+
+        reveal_type(sys.version_info[1])
+    "#})?;
+
+    uv_snapshot!(context.filters(), check().arg("--script").arg("script.py").arg("--python").arg("3.12"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    script.py:8:13: info[revealed-type] Revealed type: `Literal[12]`
+    Found 1 diagnostic
+
+    ----- stderr -----
+    Running `ty check --color auto --python-version 3.12 -- script.py`
+    ");
+
+    Ok(())
+}
+
 /// Forward uv's terminal settings to the ty subprocess, including quiet-mode progress suppression.
 #[test]
 fn check_propagates_terminal_settings() -> Result<()> {
@@ -1284,7 +1385,10 @@ fn check_no_sync_uses_compatible_lock_interpreter() -> Result<()> {
         dependencies = []
     "#})?;
     context.temp_dir.child("main.py").write_str(indoc! {r"
-        x: int = 1
+        import sys
+        from typing import reveal_type
+
+        reveal_type(sys.version_info[1])
     "})?;
     context
         .venv()
@@ -1301,20 +1405,52 @@ fn check_no_sync_uses_compatible_lock_interpreter() -> Result<()> {
             .arg("--python")
             .arg("3.11")
             .arg("--ty-version")
-            .arg("0.0.17"),
+            .arg("0.0.17")
+            .arg("--show-command")
+            .env("TY_OUTPUT_FORMAT", "concise")
+            .env_remove(EnvVars::RUST_LOG),
         @"
     exit_code: 0 (success)
     ----- stdout -----
-    All checks passed!
+    main.py:4:13: info[revealed-type] Revealed type: `Literal[11]`
+    Found 1 diagnostic
 
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     warning: Using incompatible environment (`.venv`) due to `--no-sync` (The project environment's Python version does not satisfy the request: `Python 3.11`)
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Running `ty check --color auto --python-version 3.11 -- ''`
     "
     );
 
     assert!(context.temp_dir.child("uv.lock").exists());
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--no-sync")
+            .arg("--frozen")
+            .arg("--python")
+            .arg("3.11")
+            .arg("--ty-version")
+            .arg("0.0.17")
+            .arg("--show-command")
+            .env("TY_OUTPUT_FORMAT", "concise")
+            .env_remove(EnvVars::RUST_LOG),
+        @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    main.py:4:13: info[revealed-type] Revealed type: `Literal[11]`
+    Found 1 diagnostic
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    warning: Using incompatible environment (`.venv`) due to `--no-sync` (The project environment's Python version does not satisfy the request: `Python 3.11`)
+    Running `ty check --color auto --python-version 3.11 -- ''`
+    "
+    );
+
     context
         .assert_command("import sys; assert sys.version_info[:2] == (3, 12)")
         .success();
@@ -1457,7 +1593,7 @@ fn check_no_sync_locked_rejects_stale_lock_without_update() -> Result<()> {
             .arg("--index")
             .arg(server.index_url()),
         @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
@@ -1491,7 +1627,7 @@ fn check_no_sync_locked_requires_existing_lock() -> Result<()> {
         context.filters(),
         context.check().arg("--no-sync").arg("--locked"),
         @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     error: Unable to find lockfile at `uv.lock`, but `--locked` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
@@ -1524,12 +1660,13 @@ fn check_no_sync_frozen_uses_existing_lock_without_update() -> Result<()> {
         .success();
     let stale_lock = context.read("uv.lock");
 
+    // Metadata queries must use the frozen lock even if the current requirements cannot resolve.
     pyproject_toml.write_str(indoc! {r#"
         [project]
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["a==2.0.0"]
+        dependencies = ["a==999.0.0"]
     "#})?;
     context.temp_dir.child("main.py").write_str(indoc! {r"
         x: int = 1
@@ -1537,18 +1674,15 @@ fn check_no_sync_frozen_uses_existing_lock_without_update() -> Result<()> {
 
     uv_snapshot!(
         context.filters(),
-        context
-            .check()
+        workspace_check(&context)
             .arg("--no-sync")
             .arg("--frozen")
-            .arg("--index")
-            .arg(server.index_url())
-            .arg("--ty-version")
-            .arg("0.0.17"),
+            .env(EnvVars::UV_INDEX, server.index_url()),
         @"
-    exit_code: 0 (success)
+    exit_code: 1 (failure)
     ----- stdout -----
-    All checks passed!
+    pyproject.toml: warning[uv-metadata] Failed to load uv dependency metadata: uv metadata has no module ownership or editable source paths
+    Found 1 diagnostic
 
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
@@ -1580,7 +1714,7 @@ fn check_no_sync_frozen_requires_existing_lock() -> Result<()> {
         context.filters(),
         context.check().arg("--no-sync").arg("--frozen"),
         @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
@@ -1613,18 +1747,15 @@ fn check_no_sync_isolated_does_not_write_lock_or_sync() -> Result<()> {
 
     uv_snapshot!(
         context.filters(),
-        context
-            .check()
+        workspace_check(&context)
             .arg("--no-sync")
             .arg("--isolated")
-            .arg("--index")
-            .arg(server.index_url())
-            .arg("--ty-version")
-            .arg("0.0.17"),
+            .env(EnvVars::UV_INDEX, server.index_url()),
         @"
-    exit_code: 0 (success)
+    exit_code: 1 (failure)
     ----- stdout -----
-    All checks passed!
+    pyproject.toml: warning[uv-metadata] Failed to load uv dependency metadata: uv metadata has no module ownership or editable source paths
+    Found 1 diagnostic
 
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
@@ -1782,14 +1913,14 @@ fn check_locked_tool_rejects_invalid_hash() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
-      × Failed to download `ty==0.0.17`
-      ╰─▶ Hash mismatch for `ty==0.0.17`
+    error: Failed to download `ty==0.0.17`
+      cause: Hash mismatch for `ty==0.0.17`
 
-          Expected:
-            sha256:[HASH]
+             Expected:
+               sha256:[HASH]
 
-          Computed:
-            sha256:[HASH]
+             Computed:
+               sha256:[HASH]
     "
     );
 
@@ -2170,7 +2301,7 @@ fn check_script() -> Result<()> {
         value: int = "wrong"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.check().arg("--script").arg(script.path()).arg("--no-sync"), @"
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--script").arg(script.path()).arg("--no-sync"), @"
     exit_code: 0 (success)
     ----- stdout -----
     All checks passed!
@@ -2630,11 +2761,11 @@ fn check_no_sync_errors_on_invalid_lockfile() -> Result<()> {
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     error: Failed to parse `uv.lock`
-      Caused by: TOML parse error at line 1, column 8
-          |
-        1 | invalid
-          |        ^
-        key with no value, expected `=`
+      cause: TOML parse error at line 1, column 8
+               |
+             1 | invalid
+               |        ^
+             key with no value, expected `=`
     "
     );
 
@@ -2674,11 +2805,11 @@ fn check_script_no_sync_errors_on_invalid_lockfile() -> Result<()> {
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     error: Failed to parse `uv.lock`
-      Caused by: TOML parse error at line 1, column 8
-          |
-        1 | invalid
-          |        ^
-        key with no value, expected `=`
+      cause: TOML parse error at line 1, column 8
+               |
+             1 | invalid
+               |        ^
+             key with no value, expected `=`
     "
     );
 
@@ -2715,7 +2846,7 @@ fn check_ty_version_no_match() {
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     error: Failed to find ty version matching: >=999.0.0
-      Caused by: No version of ty found matching `>=999.0.0` for platform `[PLATFORM]`
+      cause: No version of ty found matching `>=999.0.0` for platform `[PLATFORM]`
     "
     );
 }
@@ -2763,7 +2894,7 @@ fn check_missing_pyproject_toml() -> Result<()> {
         x: int = 1
     "})?;
 
-    uv_snapshot!(context.filters(), context.check(), @"
+    uv_snapshot!(context.filters(), workspace_check(&context), @"
     exit_code: 0 (success)
     ----- stdout -----
     All checks passed!
@@ -2773,7 +2904,7 @@ fn check_missing_pyproject_toml() -> Result<()> {
     ");
 
     // Project-only settings are ignored without a discovered project.
-    uv_snapshot!(context.filters(), context.check().arg("--group").arg("dev").arg("--frozen").arg("--no-sync"), @"
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--group").arg("dev").arg("--frozen").arg("--no-sync"), @"
     exit_code: 0 (success)
     ----- stdout -----
     All checks passed!
@@ -2788,6 +2919,39 @@ fn check_missing_pyproject_toml() -> Result<()> {
     Ok(())
 }
 
+/// ty-pre-commit invokes `uv check` for users who may use another package manager or installer,
+/// so checking must also work when the project is not managed by uv.
+/// See <https://github.com/astral-sh/ty-pre-commit/issues/30>.
+#[test]
+fn check_unmanaged_project() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+
+        [tool.uv]
+        managed = false
+    "#})?;
+    let main_py = context.temp_dir.child("main.py");
+    main_py.write_str(indoc! {r"
+        x: int = 1
+    "})?;
+
+    uv_snapshot!(context.filters(), workspace_check(&context), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn check_no_project() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[]).with_filtered_python_sources();
@@ -2797,7 +2961,7 @@ fn check_no_project() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        requires-python = ">=4.0"
+        requires-python = ">=3.12"
         dependencies = []
     "#})?;
 
@@ -2806,15 +2970,17 @@ fn check_no_project() -> Result<()> {
         x: int = 1
     "})?;
 
-    uv_snapshot!(context.filters(), context.check(), @"
+    uv_snapshot!(context.filters(), workspace_check(&context), @"
     exit_code: 2 (failure)
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
-    error: No interpreter found for Python >=4.0 in [PYTHON SOURCES]
+    error: No interpreter found for Python >=3.12 in [PYTHON SOURCES]
+
+    hint: A managed Python download is available for Python >=3.12, but Python downloads are set to 'never'
     ");
 
     // The unavailable project environment is not initialized when project discovery is disabled.
-    uv_snapshot!(context.filters(), context.check().arg("--no-project"), @"
+    uv_snapshot!(context.filters(), workspace_check(&context).arg("--no-project"), @"
     exit_code: 0 (success)
     ----- stdout -----
     All checks passed!
@@ -2826,8 +2992,7 @@ fn check_no_project() -> Result<()> {
     // Project-only settings are ignored when project discovery is disabled.
     uv_snapshot!(
         context.filters(),
-        context
-            .check()
+        workspace_check(&context)
             .arg("--no-project")
             .arg("--extra")
             .arg("foo")
@@ -3189,11 +3354,9 @@ fn check_isolated() -> Result<()> {
 
     uv_snapshot!(
         context.filters(),
-        context
-            .check()
+        workspace_check(&context)
             .arg("--isolated")
-            .arg("--index")
-            .arg(server.index_url()),
+            .env(EnvVars::UV_INDEX, server.index_url()),
         @"
     exit_code: 0 (success)
     ----- stdout -----
@@ -3229,11 +3392,13 @@ fn check_isolated() -> Result<()> {
         import b
     "})?;
 
-    context
-        .check()
+    workspace_check(&context)
         .arg("--isolated")
-        .arg("--index")
-        .arg(server.index_url())
+        .arg("--no-frozen")
+        .arg("--no-locked")
+        .env(EnvVars::UV_FROZEN, "1")
+        .env(EnvVars::UV_LOCKED, "1")
+        .env(EnvVars::UV_INDEX, server.index_url())
         .assert()
         .success();
     assert_eq!(existing_lock, context.read("uv.lock"));

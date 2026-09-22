@@ -93,3 +93,30 @@ pub enum Error {
     #[error(transparent)]
     Copy(#[from] uv_fs::link::LinkError),
 }
+
+impl Error {
+    /// Return whether this is an expected user-facing failure.
+    pub fn is_user_failure(&self) -> bool {
+        match self {
+            Self::InvalidWheel(_)
+            | Self::RecordFile { .. }
+            | Self::RecordCsv(_)
+            | Self::NonUtf8WheelPath(..)
+            | Self::UnsupportedWindowsArch(_)
+            | Self::DirectUrlJson(_)
+            | Self::MissingRecord(_)
+            | Self::MissingTopLevel(_)
+            | Self::InvalidVersion(_)
+            | Self::MismatchedName(..)
+            | Self::MismatchedVersion(..)
+            | Self::InvalidEggLink(_)
+            | Self::ReservedScriptName { .. } => true,
+            Self::Io(_)
+            | Self::WalkDir(_)
+            | Self::BrokenVenv(_)
+            | Self::NotWindows
+            | Self::LauncherError(_)
+            | Self::Copy(_) => false,
+        }
+    }
+}

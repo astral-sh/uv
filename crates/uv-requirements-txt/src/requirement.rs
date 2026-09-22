@@ -1,7 +1,7 @@
 use std::fmt::Display;
 use std::path::Path;
 
-use uv_errors::{Hint, Hints};
+use uv_errors::{Hinted, Hints};
 use uv_pep508::{
     Pep508Error, Pep508ErrorSource, RequirementOrigin, TracingReporter, UnnamedRequirement,
     VersionOrUrl,
@@ -17,7 +17,7 @@ pub enum MakeEditableError {
     Url(#[from] uv_pypi_types::MakeEditableError),
 }
 
-impl Hint for MakeEditableError {
+impl Hinted for MakeEditableError {
     fn hints(&self) -> Hints<'_> {
         Hints::from("Editable requirements must refer to a local directory")
     }

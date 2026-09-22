@@ -119,10 +119,10 @@ fn python_list_warns_on_noncritical_explicit_path_errors() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     warning: Failed to inspect Python interpreter from provided path at `python`
-      Caused by: Querying Python at `[TEMP_DIR]/python` failed with exit status exit status: 1
+      cause: Querying Python at `[TEMP_DIR]/python` failed with exit status exit status: 1
 
-        [stderr]
-        error: intentionally broken python executable
+             [stderr]
+             error: intentionally broken python executable
     ");
 
     let environment = context.temp_dir.join("environment");
@@ -137,10 +137,10 @@ fn python_list_warns_on_noncritical_explicit_path_errors() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     warning: Failed to inspect Python interpreter from provided path at `environment`
-      Caused by: Querying Python at `[TEMP_DIR]/environment/bin/python` failed with exit status exit status: 1
+      cause: Querying Python at `[TEMP_DIR]/environment/bin/python` failed with exit status exit status: 1
 
-        [stderr]
-        error: intentionally broken python executable
+             [stderr]
+             error: intentionally broken python executable
     ");
 
     Ok(())
@@ -184,8 +184,8 @@ fn python_list_warns_on_non_native_search_path_interpreters() -> Result<()> {
 
     ----- stderr -----
     warning: Failed to inspect Python interpreter from first executable in the search path at `foreign-bin/python`
-     Caused by: Failed to query Python interpreter at `[TEMP_DIR]/foreign-bin/python`
-     Caused by: Bad CPU type in executable (os error 86)
+     cause: Failed to query Python interpreter at `[TEMP_DIR]/foreign-bin/python`
+     cause: Bad CPU type in executable (os error 86)
     ");
 
     uv_snapshot!(context.filters(), context.python_list()
@@ -201,8 +201,8 @@ fn python_list_warns_on_non_native_search_path_interpreters() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     warning: Failed to inspect Python interpreter from provided path at `foreign-bin/python`
-     Caused by: Failed to query Python interpreter at `[TEMP_DIR]/foreign-bin/python`
-     Caused by: Bad CPU type in executable (os error 86)
+     cause: Failed to query Python interpreter at `[TEMP_DIR]/foreign-bin/python`
+     cause: Bad CPU type in executable (os error 86)
     ");
 
     uv_snapshot!(context.filters(), context.python_find()
@@ -210,8 +210,8 @@ fn python_list_warns_on_non_native_search_path_interpreters() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to inspect Python interpreter from first executable in the search path at `foreign-bin/python`
-     Caused by: Failed to query Python interpreter at `[TEMP_DIR]/foreign-bin/python`
-     Caused by: Bad CPU type in executable (os error 86)
+     cause: Failed to query Python interpreter at `[TEMP_DIR]/foreign-bin/python`
+     cause: Bad CPU type in executable (os error 86)
     ");
 
     uv_snapshot!(context.filters(), context.python_find()
@@ -219,8 +219,8 @@ fn python_list_warns_on_non_native_search_path_interpreters() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to inspect Python interpreter from provided path at `foreign-bin/python`
-     Caused by: Failed to query Python interpreter at `[TEMP_DIR]/foreign-bin/python`
-     Caused by: Bad CPU type in executable (os error 86)
+     cause: Failed to query Python interpreter at `[TEMP_DIR]/foreign-bin/python`
+     cause: Bad CPU type in executable (os error 86)
     ");
 
     Ok(())
@@ -580,7 +580,7 @@ async fn python_list_remote_python_downloads_json_url() -> Result<()> {
             "patch": 0,
             "prerelease": "",
             "url": "https://custom.com/cpython-3.14.0-darwin-aarch64-none.tar.gz",
-            "sha256": "c3223d5924a0ed0ef5958a750377c362d0957587f896c0f6c635ae4b39e0f337",
+            "sha256": "C3223D5924A0ED0EF5958A750377C362D0957587F896C0F6C635AE4B39E0F337",
             "variant": null,
             "build": "20251028"
         },
@@ -615,6 +615,18 @@ async fn python_list_remote_python_downloads_json_url() -> Result<()> {
         .mount(&server)
         .await;
 
+    Mock::given(method("GET"))
+        .and(path("/invalid-hash"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            remote_json.replace(
+                "C3223D5924A0ED0EF5958A750377C362D0957587F896C0F6C635AE4B39E0F337",
+                "short",
+            ),
+            "application/json",
+        ))
+        .mount(&server)
+        .await;
+
     // Test showing all interpreters from the remote JSON URL
     uv_snapshot!(context
         .python_list()
@@ -638,8 +650,8 @@ async fn python_list_remote_python_downloads_json_url() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Error while fetching remote python downloads json from 'http://[LOCALHOST]/404'
-      Caused by: Failed to fetch: `http://[LOCALHOST]/404`
-      Caused by: HTTP status client error (404 Not Found) for url (http://[LOCALHOST]/404)
+      cause: Failed to fetch: `http://[LOCALHOST]/404`
+      cause: HTTP status client error (404 Not Found) for url (http://[LOCALHOST]/404)
     ");
 
     // test invalid json
@@ -650,7 +662,18 @@ async fn python_list_remote_python_downloads_json_url() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Unable to parse the JSON Python download list at http://[LOCALHOST]/invalid
-      Caused by: EOF while parsing an object at line 1 column 1
+      cause: EOF while parsing an object at line 1 column 1
+    ");
+
+    // Test a syntactically valid JSON document containing an invalid SHA-256 digest.
+    uv_snapshot!(context.filters(), context
+        .python_list()
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS)
+        .arg("--python-downloads-json-url").arg(format!("{}/invalid-hash", server.uri())), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Unable to parse the JSON Python download list at http://[LOCALHOST]/invalid-hash
+      cause: Invalid hash digest length (expected 64 hexadecimal characters, found 5) at line 16 column 29
     ");
 
     Ok(())

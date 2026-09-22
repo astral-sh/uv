@@ -226,6 +226,11 @@ impl Overrides {
             .flat_map(|scoped| scoped.overrides.values().flatten())
     }
 
+    /// Return whether any overrides are scoped to the given package.
+    pub fn has_scoped_package(&self, package: &PackageName) -> bool {
+        self.scoped.contains_key(package)
+    }
+
     /// Return whether a package has overrides for an exact version.
     pub(crate) fn has_exact_scope(&self, package: &PackageName, version: &Version) -> bool {
         self.scoped.get(package).is_some_and(|entries| {

@@ -5,9 +5,9 @@ use anyhow::{Context, Result};
 use uv_cache::{Cache, Refresh};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{ActiveEnvironment, Concurrency, DependencyGroupsWithDefaults, DryRun};
+use uv_lock::Metadata;
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{ConfigDiscovery, PythonDownloads, PythonPreference, PythonRequest};
-use uv_resolver::Metadata;
 use uv_scripts::Pep723Script;
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_warnings::warn_user;
@@ -22,7 +22,7 @@ use crate::commands::project::{
     LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectError,
     ProjectInterpreter, ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
 };
-use crate::commands::{ExitStatus, UvError, diagnostics};
+use crate::commands::{ExitStatus, UvError};
 use crate::printer::{Printer, Stdout};
 use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
 
@@ -33,7 +33,6 @@ pub(crate) async fn metadata(
     project_dir: &Path,
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,
-    dry_run: DryRun,
     refresh: Refresh,
     sync: Option<Modifications>,
     active: ActiveEnvironment,
@@ -130,7 +129,7 @@ pub(crate) async fn metadata(
 
         if let LockCheck::Enabled(lock_check) = lock_check {
             LockMode::Locked(&interpreter, lock_check)
-        } else if dry_run.enabled()
+        } else if sync.is_none()
             || (matches!(target, LockTarget::Script(_)) && !target.lock_path().is_file())
         {
             LockMode::DryRun(&interpreter)
@@ -253,10 +252,7 @@ pub(crate) async fn metadata(
             print_metadata(&export, printer)
         }
         Err(err @ ProjectError::LockMismatch(..)) => Err(UvError::user(err).into()),
-        Err(ProjectError::Operation(err)) => diagnostics::OperationDiagnostic::default()
-            .report(err)
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into())),
-        Err(err) => Err(err.into()),
+        Err(err) => Err(UvError::from(err).into()),
     }
 }
 

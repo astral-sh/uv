@@ -11,7 +11,7 @@ use uv_cache::Cache;
 use uv_distribution_filename::DistExtension;
 use uv_distribution_types::{
     Index, IndexCredentialsError, IndexLocations, IndexMetadata, IndexName, Origin, Requirement,
-    RequirementSource,
+    RequirementScope, RequirementSource,
 };
 use uv_fs::{Simplified, normalize_absolute_path, normalize_path};
 use uv_git_types::{GitLfs, GitReference, GitUrl, GitUrlParseError};
@@ -309,6 +309,7 @@ impl LoweredRequirement {
                         groups: Box::new([]),
                         marker,
                         source,
+                        scope: RequirementScope::Global,
                         origin: requirement.origin.clone(),
                     }))
                 }
@@ -489,6 +490,7 @@ impl LoweredRequirement {
                         groups: Box::new([]),
                         marker,
                         source,
+                        scope: RequirementScope::Global,
                         origin: requirement.origin.clone(),
                     }))
                 }
@@ -539,6 +541,7 @@ impl LoweredRequirement {
             } else {
                 git_directory_source_from_path(&install_path, git_member)?
             },
+            scope: RequirementScope::Global,
             origin: requirement.origin,
         }))
     }
@@ -619,7 +622,7 @@ pub enum LoweringError {
     RelativeTo(io::Error),
 }
 
-impl uv_errors::Hint for LoweringError {
+impl uv_errors::Hinted for LoweringError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::MissingIndex {

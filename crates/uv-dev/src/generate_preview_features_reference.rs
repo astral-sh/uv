@@ -112,6 +112,8 @@ mod tests {
         - `audit-command`: Allows using `uv audit` and `uv tool audit`.
         - `auth-helper`: Allows using `uv auth helper` as a credential helper for external tools.
         - `azure-endpoint`: Allows signing requests to Azure Blob Storage endpoints with Azure credentials.
+        - `batch-export`: Allows using `uv export --batch`.
+        - `build-dependency-check`: Checks build dependencies before nonisolated builds with `uv build`.
         - `cache-physical-space`: Reports the physical disk space reclaimed by cache cleanup, accounting for hardlinks and copy-on-write clones.
         - `cache-size`: Allows using `uv cache size`.
         - `centralized-project-envs`: Stores [project virtual environments](./projects/layout.md#centralized-project-environments)
@@ -128,11 +130,12 @@ mod tests {
         - `index-hash-algorithm`: Allows requiring a hash algorithm for configured package indexes.
         - `init-project-flag`: Rejects the deprecated `--project` option in `uv init`.
         - `json-output`: Allows `--output-format json` for various uv commands.
-        - `lock-without-metadata`: Omit `package.metadata` from `uv.lock`.
+        - `lock-without-metadata`: Omit `package.metadata` from `uv.lock`, except for remote URL dependencies.
         - `lockfile-format-check`: Rejects non-canonical lockfile formatting when using `--locked` or `--check`.
         - `malware-check`: Allows `uv sync` and other commands to check for malware using [OSV](https://osv.dev) before
           installing packages.
         - `metadata-json`: Includes JSON metadata files in built wheels.
+        - `minimum-libc-version`: Allows setting minimum libc versions for universal resolutions.
         - `missing-exclude-newer-package-lock`: Exclude `exclude-newer-package` entries from the lockfile when not included in the
           project's resolved dependencies.
         - `native-auth`: Enables storage of credentials in a [system-native location](../concepts/authentication/http.md#the-uv-credentials-store).

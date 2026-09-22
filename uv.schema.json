@@ -44,10 +44,10 @@
       ]
     },
     "build-constraint-dependencies": {
-      "description": "PEP 508-style requirements, e.g., `ruff==0.5.0`, or `ruff @ https://...`.",
+      "description": "Constraints to apply when solving build dependencies.\n\nBuild constraints are used to restrict the versions of build dependencies that are selected\nwhen building a package during resolution or installation.\n\nIncluding a package as a constraint will _not_ trigger installation of the package during\na build; instead, the package must be requested elsewhere in the project's build dependency\ngraph.\n\n!!! note\n    In `uv lock`, `uv sync`, and `uv run`, uv will only read `build-constraint-dependencies` from\n    the `pyproject.toml` at the workspace root, and will ignore any declarations in other\n    workspace members or `uv.toml` files.\n\nHashes can be included to verify downloaded build dependency archives. To provide hashes,\nuse a table with `requirement` and `hashes`. uv records these hashes in `uv.lock`.",
       "type": ["array", "null"],
       "items": {
-        "type": "string"
+        "$ref": "#/definitions/BuildConstraintDependency"
       }
     },
     "cache-dir": {
@@ -330,6 +330,17 @@
     "managed": {
       "description": "Whether the project is managed by uv. If `false`, uv will ignore the project when\n`uv run` is invoked.",
       "type": ["boolean", "null"]
+    },
+    "minimum-libc-version": {
+      "description": "The minimum libc versions to support when resolving for Linux.\n\nDuring universal resolution, wheels must support the configured libc versions to satisfy\n`required-environments`. For example, `{ glibc = \"2.31\" }` accepts `manylinux_2_17` wheels\nas coverage, but not `manylinux_2_34` wheels. Both are retained in the lockfile so installation\ncan select the best wheel for the current machine. An omitted libc is not required.\n\nUse `required-environments` to specify the Linux architectures to support. Each configured\nlibc version needs compatible wheels for those environments. Generic Linux wheels do not\nconstrain libc and can satisfy either implementation. Packages with a usable source\ndistribution can still be selected.\n\nThis setting is respected by `uv lock` and `uv pip compile --universal`.\n\nThis option is in preview and may change in any future release. Use\n`--preview-features minimum-libc-version` or configure\n`preview-features = [\"minimum-libc-version\"]` to disable the warning.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/MinimumLibcVersion"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "native-tls": {
       "description": "Whether to load TLS certificates from the platform's native certificate store.\n\nBy default, uv uses bundled Mozilla root certificates. When enabled, this loads\ncertificates from the platform's native certificate store instead.\n\n(Deprecated: use `system-certs` instead.)",
@@ -774,6 +785,35 @@
         }
       }
     },
+    "BuildConstraintDependency": {
+      "description": "A build constraint, optionally accompanied by archive hashes.",
+      "anyOf": [
+        {
+          "description": "A PEP 508 requirement without additional hashes.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Requirement"
+            }
+          ]
+        },
+        {
+          "description": "A PEP 508 requirement and its archive hashes.",
+          "type": "object",
+          "properties": {
+            "hashes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "requirement": {
+              "$ref": "#/definitions/Requirement"
+            }
+          },
+          "required": ["requirement", "hashes"]
+        }
+      ]
+    },
     "CacheKey": {
       "anyOf": [
         {
@@ -1209,6 +1249,19 @@
     "MarkerTree": {
       "description": "A PEP 508-compliant marker expression, e.g., `sys_platform == 'Darwin'`",
       "type": "string"
+    },
+    "MinimumLibcVersion": {
+      "description": "The oldest required release of each Linux libc.",
+      "type": "object",
+      "properties": {
+        "glibc": {
+          "type": ["string", "null"]
+        },
+        "musl": {
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": false
     },
     "ModuleName": {
       "description": "Whether to include a single module or multiple modules.",
@@ -1829,7 +1882,10 @@
             "index-by-name",
             "artifact-hash-filtering",
             "content-addressed-cache",
-            "missing-exclude-newer-package-lock"
+            "missing-exclude-newer-package-lock",
+            "batch-export",
+            "minimum-libc-version",
+            "build-dependency-check"
           ]
         },
         {

@@ -1,5 +1,6 @@
 use std::fmt::Write;
 use std::str::FromStr;
+use uv_distribution_types::RequirementScope;
 
 use anyhow::{Result, bail};
 use owo_colors::OwoColorize;
@@ -17,7 +18,7 @@ use uv_distribution_types::{
     ExtraBuildRequires, IndexCapabilities, NameRequirementSpecification, Requirement,
     RequirementSource, UnresolvedRequirementSpecification,
 };
-use uv_installer::{InstallationStrategy, Planner, SatisfiesResult, SitePackages};
+use uv_installer::{BuildSettings, InstallationStrategy, Planner, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
@@ -30,7 +31,7 @@ use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_tool::{InstalledTools, Tool};
 use uv_types::{HashStrategy, SourceTreeEditablePolicy};
-use uv_warnings::{warn_user, warn_user_once};
+use uv_warnings::{warn_user, warn_user_once, warn_user_with_chain};
 use uv_workspace::WorkspaceCache;
 
 use crate::commands::ExitStatus;
@@ -49,7 +50,7 @@ use crate::commands::tool::common::{
     tool_environment_spec,
 };
 use crate::commands::tool::{Target, ToolRequest};
-use crate::commands::{diagnostics, reporters::PythonDownloadReporter};
+use crate::commands::{UvError, reporters::PythonDownloadReporter};
 use crate::printer::Printer;
 use crate::settings::{ResolverInstallerSettings, ResolverSettings};
 
@@ -150,6 +151,11 @@ pub(crate) async fn install(
     .await?
     .into_interpreter();
 
+    let receipt_build_constraints =
+        operations::read_constraints(build_constraints, &client_builder).await?;
+    let build_constraints =
+        Constraints::from_specifications(receipt_build_constraints.iter().cloned());
+
     // If the user passed, e.g., `ruff@latest`, refresh the cache.
     let refresh = if request.is_latest() {
         refresh.combine(Refresh::All(Timestamp::now()))
@@ -187,6 +193,7 @@ pub(crate) async fn install(
                 requirements,
                 &interpreter,
                 &settings,
+                &build_constraints,
                 &client_builder,
                 &state,
                 &concurrency,
@@ -234,6 +241,7 @@ pub(crate) async fn install(
                     index: None,
                     conflict: None,
                 },
+                scope: RequirementScope::Global,
                 origin: None,
             }
         }
@@ -256,6 +264,7 @@ pub(crate) async fn install(
                     index: None,
                     conflict: None,
                 },
+                scope: RequirementScope::Global,
                 origin: None,
             }
         }
@@ -322,6 +331,7 @@ pub(crate) async fn install(
                     index: None,
                     conflict: None,
                 },
+                scope: RequirementScope::Global,
                 origin: None,
             })
         } else {
@@ -376,6 +386,7 @@ pub(crate) async fn install(
                 spec.requirements.clone(),
                 &interpreter,
                 &settings,
+                &build_constraints,
                 &client_builder,
                 &state,
                 &concurrency,
@@ -432,6 +443,7 @@ pub(crate) async fn install(
         spec.overrides,
         &interpreter,
         &settings,
+        &build_constraints,
         &client_builder,
         &state,
         &concurrency,
@@ -445,14 +457,6 @@ pub(crate) async fn install(
 
     // Resolve the excludes.
     let receipt_excludes = spec.excludes.clone();
-
-    // Resolve the build constraints.
-    let receipt_build_constraints =
-        operations::read_constraints(build_constraints, &client_builder)
-            .await?
-            .into_iter()
-            .map(|constraint| constraint.requirement)
-            .collect::<Vec<_>>();
 
     // Convert to tool options.
     let options = ToolOptions::from(options);
@@ -532,7 +536,7 @@ pub(crate) async fn install(
                 &receipt_constraints,
                 &receipt_overrides,
                 &receipt_excludes,
-                &receipt_build_constraints,
+                &build_constraints,
                 &refresh,
                 validation_interpreter,
                 &settings.resolver,
@@ -551,7 +555,11 @@ pub(crate) async fn install(
                     return Err(ProjectError::Lock(err).into());
                 }
                 Err(err) => {
-                    warn_user!("Failed to validate existing tool lock: {err}");
+                    warn_user_with_chain!(
+                        anyhow::Error::from(err)
+                            .context("Failed to validate existing tool lock")
+                            .as_ref()
+                    );
                     None
                 }
             }
@@ -580,6 +588,7 @@ pub(crate) async fn install(
                         ResolverSettings {
                             config_setting,
                             config_settings_package,
+                            dependency_metadata,
                             extra_build_dependencies,
                             extra_build_variables,
                             ..
@@ -617,14 +626,17 @@ pub(crate) async fn install(
                         receipt_constraints.iter().chain(latest.iter()),
                         &Overrides::from_requirements(receipt_overrides.clone()),
                         &Excludes::from_entries(receipt_excludes.iter().cloned()),
+                        dependency_metadata,
                         DependencyMode::Transitive,
                         InstallationStrategy::Permissive,
                         &markers,
                         &tags,
-                        config_setting,
-                        config_settings_package,
-                        &extra_build_requires,
-                        extra_build_variables,
+                        Some(BuildSettings {
+                            config_settings: config_setting,
+                            config_settings_package,
+                            extra_build_requires: &extra_build_requires,
+                            extra_build_variables,
+                        }),
                     ),
                     Ok(SatisfiesResult::Fresh { .. })
                 );
@@ -713,7 +725,7 @@ pub(crate) async fn install(
                     environment.interpreter(),
                     python_platform.as_ref(),
                     SourceTreeEditablePolicy::Tool,
-                    Constraints::from_requirements(receipt_build_constraints.iter().cloned()),
+                    build_constraints.clone(),
                     &settings.resolver,
                     &client_builder,
                     &state,
@@ -727,12 +739,7 @@ pub(crate) async fn install(
                 .await
                 {
                     Ok(resolution) => resolution,
-                    Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::default()
-                            .report(err)
-                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-                    }
-                    Err(err) => return Err(err.into()),
+                    Err(err) => return Err(UvError::from(err).into()),
                 };
                 let tool_lock = ToolLock::from_resolution(
                     &tool_dir,
@@ -824,7 +831,7 @@ pub(crate) async fn install(
                     &resolution,
                     hash_strategy,
                     Modifications::Exact,
-                    Constraints::from_requirements(receipt_build_constraints.iter().cloned()),
+                    build_constraints.clone(),
                     (&settings).into(),
                     &client_builder,
                     &state,
@@ -845,7 +852,7 @@ pub(crate) async fn install(
                 Modifications::Exact,
                 python_platform.as_ref(),
                 SourceTreeEditablePolicy::Tool,
-                Constraints::from_requirements(receipt_build_constraints.iter().cloned()),
+                build_constraints.clone(),
                 ExtraBuildRequires::default(),
                 &settings,
                 &client_builder,
@@ -863,12 +870,7 @@ pub(crate) async fn install(
             .await
             {
                 Ok(update) => update,
-                Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::default()
-                        .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-                }
-                Err(err) => return Err(err.into()),
+                Err(err) => return Err(UvError::from(err).into()),
             };
             (update.environment, None)
         };
@@ -917,7 +919,7 @@ pub(crate) async fn install(
                 &interpreter,
                 python_platform.as_ref(),
                 SourceTreeEditablePolicy::Tool,
-                Constraints::from_requirements(receipt_build_constraints.iter().cloned()),
+                build_constraints.clone(),
                 &settings.resolver,
                 &client_builder,
                 &state,
@@ -955,9 +957,7 @@ pub(crate) async fn install(
                         .await
                         .ok()
                         .flatten() else {
-                            return diagnostics::OperationDiagnostic::default()
-                                .report(err)
-                                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                            return Err(UvError::from(err).into());
                         };
 
                         debug!(
@@ -972,9 +972,7 @@ pub(crate) async fn install(
                             &interpreter,
                             python_platform.as_ref(),
                             SourceTreeEditablePolicy::Tool,
-                            Constraints::from_requirements(
-                                receipt_build_constraints.iter().cloned(),
-                            ),
+                            build_constraints.clone(),
                             &settings.resolver,
                             &client_builder,
                             &state,
@@ -988,12 +986,7 @@ pub(crate) async fn install(
                         .await
                         {
                             Ok(resolution) => (resolution, interpreter),
-                            Err(ProjectError::Operation(err)) => {
-                                return diagnostics::OperationDiagnostic::default()
-                                    .report(err)
-                                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-                            }
-                            Err(err) => return Err(err.into()),
+                            Err(err) => return Err(UvError::from(err).into()),
                         }
                     }
                     err => return Err(err.into()),
@@ -1037,7 +1030,7 @@ pub(crate) async fn install(
             &resolution,
             hash_strategy,
             Modifications::Exact,
-            Constraints::from_requirements(receipt_build_constraints.iter().cloned()),
+            build_constraints.clone(),
             (&settings).into(),
             &client_builder,
             &state,
@@ -1055,12 +1048,7 @@ pub(crate) async fn install(
             let _ = installed_tools.remove_environment(package_name);
         }) {
             Ok(environment) => (environment, tool_lock),
-            Err(ProjectError::Operation(err)) => {
-                return diagnostics::OperationDiagnostic::default()
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-            }
-            Err(err) => return Err(err.into()),
+            Err(err) => return Err(UvError::from(err).into()),
         }
     };
 

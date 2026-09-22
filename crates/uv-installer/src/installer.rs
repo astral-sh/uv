@@ -7,11 +7,11 @@ use tokio::sync::oneshot;
 use tracing::{instrument, warn};
 
 use uv_cache::Cache;
-use uv_configuration::initialize_rayon_once;
 use uv_distribution_types::CachedDist;
 use uv_install_wheel::{Layout, LinkMode};
 use uv_preview::Preview;
 use uv_python::PythonEnvironment;
+use uv_threads::initialize_rayon_once;
 
 pub struct Installer<'a> {
     venv: &'a PythonEnvironment,

@@ -12,6 +12,7 @@ const SENSITIVE_QUERY_PARAMETERS: &[&str] = &[
     "X-Amz-Credential",
     "X-Amz-Security-Token",
     "X-Amz-Signature",
+    "sig",
 ];
 
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
@@ -388,6 +389,8 @@ fn display_with_redacted_credentials(
 
 #[cfg(test)]
 mod tests {
+    use insta::assert_debug_snapshot;
+
     use super::*;
 
     #[test]
@@ -604,6 +607,22 @@ mod tests {
         assert!(debug.contains(r#"query: Some("X-Amz-Credential=****&X-Amz-Signature=****")"#));
         assert!(!debug.contains("credential"));
         assert!(!debug.contains("signature"));
+    }
+
+    #[test]
+    fn redact_azure_sas_query_signature() {
+        let urls = [
+            "https://account.blob.core.windows.net/container/dist.whl?sv=2024-11-04&sr=b&sig=signature&sp=r",
+            "https://account.blob.core.windows.net/container/dist.whl?SIG=signature&safe=value",
+        ]
+        .map(|url| DisplaySafeUrl::parse(url).unwrap().to_string());
+
+        assert_debug_snapshot!(urls, @r#"
+        [
+            "https://account.blob.core.windows.net/container/dist.whl?sv=2024-11-04&sr=b&sig=****&sp=r",
+            "https://account.blob.core.windows.net/container/dist.whl?SIG=****&safe=value",
+        ]
+        "#);
     }
 
     #[test]

@@ -10,8 +10,8 @@ for more information.
 This crate is the entry point to the uv command-line interface. The Rust API exposed here is not
 considered public interface.
 
-This is version 0.12.13. The source can be found
-[here](https://github.com/astral-sh/uv/blob/0.12.13/crates/uv).
+This is version 0.12.17. The source can be found
+[here](https://github.com/astral-sh/uv/blob/0.12.17/crates/uv).
 
 The following uv workspace members are also available:
 
@@ -44,6 +44,7 @@ The following uv workspace members are also available:
 - [uv-install-wheel](https://crates.io/crates/uv-install-wheel)
 - [uv-installer](https://crates.io/crates/uv-installer)
 - [uv-keyring](https://crates.io/crates/uv-keyring)
+- [uv-lock](https://crates.io/crates/uv-lock)
 - [uv-logging](https://crates.io/crates/uv-logging)
 - [uv-macros](https://crates.io/crates/uv-macros)
 - [uv-metadata](https://crates.io/crates/uv-metadata)
@@ -64,6 +65,7 @@ The following uv workspace members are also available:
 - [uv-requirements](https://crates.io/crates/uv-requirements)
 - [uv-requirements-txt](https://crates.io/crates/uv-requirements-txt)
 - [uv-resolver](https://crates.io/crates/uv-resolver)
+- [uv-resolver-types](https://crates.io/crates/uv-resolver-types)
 - [uv-scripts](https://crates.io/crates/uv-scripts)
 - [uv-settings](https://crates.io/crates/uv-settings)
 - [uv-shell](https://crates.io/crates/uv-shell)
@@ -71,6 +73,7 @@ The following uv workspace members are also available:
 - [uv-state](https://crates.io/crates/uv-state)
 - [uv-static](https://crates.io/crates/uv-static)
 - [uv-test](https://crates.io/crates/uv-test)
+- [uv-threads](https://crates.io/crates/uv-threads)
 - [uv-toml](https://crates.io/crates/uv-toml)
 - [uv-tool](https://crates.io/crates/uv-tool)
 - [uv-torch](https://crates.io/crates/uv-torch)

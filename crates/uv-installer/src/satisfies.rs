@@ -21,6 +21,15 @@ use uv_pypi_types::{DirInfo, DirectUrl, VcsInfo, VcsKind};
 
 use crate::InstallationStrategy;
 
+/// Expected build settings when deciding whether to reuse an installed distribution.
+#[derive(Debug, Clone, Copy)]
+pub struct BuildSettings<'a> {
+    pub config_settings: &'a ConfigSettings,
+    pub config_settings_package: &'a PackageConfigSettings,
+    pub extra_build_requires: &'a ExtraBuildRequires,
+    pub extra_build_variables: &'a ExtraBuildVariables,
+}
+
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum RequirementSatisfaction {
     Mismatch,
@@ -40,10 +49,7 @@ impl RequirementSatisfaction {
         version: Option<&Version>,
         installation: InstallationStrategy,
         tags: &Tags,
-        config_settings: &ConfigSettings,
-        config_settings_package: &PackageConfigSettings,
-        extra_build_requires: &ExtraBuildRequires,
-        extra_build_variables: &ExtraBuildVariables,
+        build_settings: Option<BuildSettings<'_>>,
     ) -> Self {
         trace!(
             "Comparing installed with source: {:?} {:?}",
@@ -51,18 +57,25 @@ impl RequirementSatisfaction {
         );
 
         // If the distribution was built with other settings, it is out of date.
-        if distribution.build_info().is_some_and(|dist_build_info| {
-            let config_settings =
-                config_settings_for(name, config_settings, config_settings_package);
-            let extra_build_requires = extra_build_requires_for(name, extra_build_requires);
-            let extra_build_variables = extra_build_variables_for(name, extra_build_variables);
-            let build_info = BuildInfo::from_settings(
-                config_settings.into_owned(),
-                extra_build_requires.to_vec(),
-                extra_build_variables.cloned(),
-            );
-            dist_build_info != &build_info
-        }) {
+        if let Some(build_settings) = build_settings
+            && distribution.build_info().is_some_and(|dist_build_info| {
+                let config_settings = config_settings_for(
+                    name,
+                    build_settings.config_settings,
+                    build_settings.config_settings_package,
+                );
+                let extra_build_requires =
+                    extra_build_requires_for(name, build_settings.extra_build_requires);
+                let extra_build_variables =
+                    extra_build_variables_for(name, build_settings.extra_build_variables);
+                let build_info = BuildInfo::from_settings(
+                    config_settings.into_owned(),
+                    extra_build_requires.to_vec(),
+                    extra_build_variables.cloned(),
+                );
+                dist_build_info != &build_info
+            })
+        {
             debug!("Build info mismatch for {name}: {distribution}");
             return Self::OutOfDate;
         }

@@ -3,6 +3,112 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.12.17
+
+Released on 2026-09-18.
+
+### Enhancements
+
+- Reject unsupported Git archive paths in lockfiles with a clear error instead of panicking during frozen exports ([#21780](https://github.com/astral-sh/uv/pull/21780))
+
+### Preview features
+
+- Set minimum glibc and musl versions that universal resolutions must support with `minimum-libc-version` ([#21651](https://github.com/astral-sh/uv/pull/21651))
+- Reject `pylock.toml` files whose wheel filenames do not match their declared package names or versions ([#20746](https://github.com/astral-sh/uv/pull/20746))
+- Keep `uv workspace metadata` read-only unless `--sync` is provided ([#21821](https://github.com/astral-sh/uv/pull/21821))
+- Apply `uv check` lock modes when retrieving workspace metadata ([#21821](https://github.com/astral-sh/uv/pull/21821))
+
+### Performance
+
+- Speed up builds with many exclusion patterns by avoiding quadratic deduplication ([#21650](https://github.com/astral-sh/uv/pull/21650))
+- Reduce resolver allocations when deduplicating package and distribution requests ([#21810](https://github.com/astral-sh/uv/pull/21810))
+
+### Bug fixes
+
+- Prevent `required-environments` from selecting package versions whose wheels require a newer macOS version than the configured Darwin baseline ([#21825](https://github.com/astral-sh/uv/pull/21825))
+
+### Documentation
+
+- Clarify the 0.12.14 and 0.12.15 release notes ([#21817](https://github.com/astral-sh/uv/pull/21817))
+
+## 0.12.16
+
+Released on 2026-09-17.
+
+### Python
+
+- Add Pyodide 314.0.7, 0.29.5, and 0.27.8 ([#21741](https://github.com/astral-sh/uv/pull/21741))
+
+### Enhancements
+
+- Verify downloaded wheels and source distributions against hashes supplied by package indexes ([#21562](https://github.com/astral-sh/uv/pull/21562))
+- Allow `build-constraint-dependencies` entries to include hashes for verifying downloaded build dependencies ([#21467](https://github.com/astral-sh/uv/pull/21467))
+- Honor Darwin `platform_release` markers in `required-environments` using macOS wheel deployment targets ([#21766](https://github.com/astral-sh/uv/pull/21766))
+- Reject unsupported Git URL schemes while parsing lockfiles instead of panicking during frozen exports ([#21779](https://github.com/astral-sh/uv/pull/21779))
+
+### Preview features
+
+- Support `lock-without-metadata` across all dependency types while retaining `package.metadata` for remote URL dependencies to enable offline validation ([#21163](https://github.com/astral-sh/uv/pull/21163))
+- Honor configured and command-line index settings, including credentials, in `uv upgrade` ([#21776](https://github.com/astral-sh/uv/pull/21776))
+- Allow `uv check` to run in projects that are not managed by uv and outside workspaces ([#21777](https://github.com/astral-sh/uv/pull/21777))
+- Respect `--python` and `UV_PYTHON` when selecting the Python version for `uv check` ([#21744](https://github.com/astral-sh/uv/pull/21744))
+
+### Bug fixes
+
+- Redact Azure shared access signatures from displayed and logged URLs ([#21755](https://github.com/astral-sh/uv/pull/21755))
+- Check archive sizes from `pylock.toml` before reusing cached distributions ([#21609](https://github.com/astral-sh/uv/pull/21609))
+- Keep user-authored local dependency paths relative in lockfiles when backend metadata reports absolute paths ([#20631](https://github.com/astral-sh/uv/pull/20631))
+- Use the bundled `uv_build` backend only when its version matches active version pins ([#21742](https://github.com/astral-sh/uv/pull/21742))
+- Handle malformed index URLs without panicking when credentials are configured ([#21784](https://github.com/astral-sh/uv/pull/21784))
+- Report a configuration error instead of panicking for proxy URLs without a host ([#21781](https://github.com/astral-sh/uv/pull/21781))
+- Return a credential-redacted error instead of panicking when a URL cannot be converted to a path ([#21783](https://github.com/astral-sh/uv/pull/21783))
+
+## 0.12.15
+
+Released on 2026-09-15.
+
+### Performance
+
+- Speed up cold-cache resolution and HTTP cache revalidation by batching cache writes ([#21675](https://github.com/astral-sh/uv/pull/21675))
+
+### Bug fixes
+
+- Fix regressions in `0.12.14` when installing to symlinked destinations or using `uv pip install --target .` ([#21699](https://github.com/astral-sh/uv/pull/21699))
+
+## 0.12.14
+
+Released on 2026-09-15.
+
+### Enhancements
+
+- Resume interrupted downloads with HTTP Range requests when supported ([#21570](https://github.com/astral-sh/uv/pull/21570))
+- Use a consistent format for error rendering ([#17110](https://github.com/astral-sh/uv/pull/17110))
+- Render error and warning causes with compact `cause:` labels ([#21599](https://github.com/astral-sh/uv/pull/21599), [#21603](https://github.com/astral-sh/uv/pull/21603))
+- Show underlying causes and hints in user warnings ([#21565](https://github.com/astral-sh/uv/pull/21565))
+- Show resolver hints for failed `uv tool upgrade` operations ([#21566](https://github.com/astral-sh/uv/pull/21566))
+
+### Preview features
+
+- Export multiple dependency selections from a shared lockfile in one `uv export --batch` invocation with the `batch-export` preview feature ([#21618](https://github.com/astral-sh/uv/pull/21618))
+
+### Performance
+
+- Speed up dependency resolution from local wheelhouses by reading wheel metadata in a single blocking task ([#21619](https://github.com/astral-sh/uv/pull/21619))
+- Speed up cold resolution against large package indexes by parsing Simple API responses in bounded background workers ([#21593](https://github.com/astral-sh/uv/pull/21593))
+- Speed up warm-cache resolution by decoding fresh HTTP cache entries in the cache-read task ([#21621](https://github.com/astral-sh/uv/pull/21621))
+
+### Bug fixes
+
+- Select releases that satisfy `required-environments` within each resolver fork instead of combining incompatible wheel coverage across forks ([#21672](https://github.com/astral-sh/uv/pull/21672))
+- Install packages with paths longer than `MAX_PATH` on Windows systems without long-path support enabled ([#21625](https://github.com/astral-sh/uv/pull/21625))
+- Prevent `uv python install` from overwriting valid unmanaged Python symlinks with relative targets on Unix ([#21639](https://github.com/astral-sh/uv/pull/21639))
+- Redact credentials and signatures from missing-path-segment URL errors ([#21616](https://github.com/astral-sh/uv/pull/21616))
+- Avoid exceeding the configured retry budget when cached HTTP responses fail revalidation ([#21640](https://github.com/astral-sh/uv/pull/21640))
+- Prefer `bin/python` over `bin/python3` when discovering interpreters in Unix environments ([#21559](https://github.com/astral-sh/uv/pull/21559))
+- Classify package-operation exit codes by their underlying cause: return `1` for expected failures and `2` for recognized operational and internal failures ([#17110](https://github.com/astral-sh/uv/pull/17110))
+- Suppress managed-Python fallback warnings under `--quiet` ([#21565](https://github.com/astral-sh/uv/pull/21565))
+- Keep failed `uv tool upgrade` errors visible with `-q` while suppressing them with `-qq` ([#21566](https://github.com/astral-sh/uv/pull/21566))
+
 ## 0.12.13
 
 Released on 2026-09-10.

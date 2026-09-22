@@ -33,6 +33,8 @@ jobs:
           printf 'REVIEW_CONFIG=%s\n' "$REVIEW_CONFIG" >> "$GITHUB_ENV"
           mkdir -p "$REVIEW_CONFIG"
           cp -R agents/. "$REVIEW_CONFIG/"
+          mkdir -p "$REVIEW_CONFIG/toolchain"
+          cp pyproject.toml uv.lock "$REVIEW_CONFIG/toolchain/"
           git checkout --detach "$HEAD_SHA"
 
       - name: "Checkout Codex Security plugin"
@@ -46,10 +48,11 @@ jobs:
             plugins/codex-security
           persist-credentials: false
 
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
-          version: "0.12.10"
-          checksum: "173d95a0c32d18c896c46ba6fafbf3cf9c14ab74b033f81b76c883ef492a976b"
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
+          version: "0.12.13"
+          checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
 
       - name: "Install Codex Security plugin"
         run: '"$REVIEW_CONFIG/scripts/install-codex-security.sh" "$REVIEW_CONFIG/codex"'
@@ -112,9 +115,9 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@6c6fd71fe4fb72c3697d269963d0e15df8adedad # v2.85.10
-        with:
-          tool: cargo-nextest
+        run: |
+          uv sync --project "$REVIEW_CONFIG/toolchain" --only-dev
+          echo "$REVIEW_CONFIG/toolchain/.venv/bin" >> "$GITHUB_PATH"
 
       # codex-action configures these only on GitHub-hosted runners.
       - name: "Enable Linux user namespaces for bubblewrap"
@@ -139,6 +142,7 @@ jobs:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           codex-version: "0.153.4"
           codex-home: "${{ env.REVIEW_CONFIG }}/codex"
+          model: gpt-5.6-sol
           effort: xhigh
           permission-profile: "pull-request-review"
           safety-strategy: drop-sudo
@@ -196,10 +200,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
-          version: "0.12.10"
-          checksum: "173d95a0c32d18c896c46ba6fafbf3cf9c14ab74b033f81b76c883ef492a976b"
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
+          version: "0.12.13"
+          checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
 
       - name: "Prepare review findings"
         id: comments

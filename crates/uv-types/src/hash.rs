@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use rustc_hash::FxHashMap;
 
-use uv_configuration::HashCheckingMode;
+use uv_configuration::{Constraints, HashCheckingMode};
 use uv_distribution_types::{
     ArchiveHashPolicy, DistributionMetadata, HashCollection, HashValidation, MetadataHashPolicy,
     Name, Requirement, RequirementSource, Resolution, UnresolvedRequirement, VersionId,
@@ -61,6 +61,63 @@ impl HashStrategy {
     pub fn with_verification(mut self, verification: HashVerification) -> Self {
         self.verification = verification;
         self
+    }
+
+    /// Apply constraint hashes using the same rules as [`Self::from_requirements`].
+    ///
+    /// Preserve hash collection and require hashes if either strategy requires them. Constraints
+    /// for identities absent from this strategy remain available for newly resolved dependencies.
+    pub fn with_constraint_hashes(mut self, constraints: &Self) -> Result<Self, HashStrategyError> {
+        let (requirement_hashes, mode) = match &self.verification {
+            HashVerification::None => {
+                self.verification = constraints.verification.clone();
+                return Ok(self);
+            }
+            HashVerification::IfPresent(hashes) => {
+                let mode = match &constraints.verification {
+                    HashVerification::Required(_) => HashCheckingMode::Require,
+                    HashVerification::None | HashVerification::IfPresent(_) => {
+                        HashCheckingMode::Verify
+                    }
+                };
+                (hashes, mode)
+            }
+            HashVerification::Required(hashes) => (hashes, HashCheckingMode::Require),
+        };
+
+        let mut constraints = constraints.clone();
+        let constraint_hashes = match &mut constraints.verification {
+            HashVerification::None => return Ok(self),
+            HashVerification::IfPresent(hashes) | HashVerification::Required(hashes) => {
+                Arc::make_mut(hashes)
+            }
+        };
+        if mode.is_require() {
+            constraint_hashes.retain(|_, digests| {
+                digests.retain(|digest| digest.algorithm() != HashAlgorithm::Md5);
+                !digests.is_empty()
+            });
+        }
+        let mut hashes = constraint_hashes.clone();
+        for (id, digests) in requirement_hashes.iter() {
+            let mut digests = digests.clone();
+            if mode.is_require() {
+                digests.retain(|digest| digest.algorithm() != HashAlgorithm::Md5);
+            }
+            let digests = if let Some(constraint) = constraints.hashes_for_id(id) {
+                combine_constraint_hashes(id, digests, constraint, id, mode)?
+            } else {
+                digests
+            };
+            if !digests.is_empty() {
+                hashes.insert(id.clone(), digests);
+            }
+        }
+        self.verification = match mode {
+            HashCheckingMode::Verify => HashVerification::IfPresent(Arc::new(hashes)),
+            HashCheckingMode::Require => HashVerification::Required(Arc::new(hashes)),
+        };
+        Ok(self)
     }
 
     /// Return the hash collection policy.
@@ -131,21 +188,10 @@ impl HashStrategy {
     /// Construct an identity only when verification requires a lookup.
     fn validation_for_id(&self, id: impl FnOnce() -> VersionId) -> HashValidation<'_> {
         match &self.verification {
-            HashVerification::IfPresent(hashes) => {
+            HashVerification::IfPresent(_) => {
                 let id = id();
-                if let Some(hashes) = hashes.get(&id) {
+                if let Some(hashes) = self.hashes_for_id(&id) {
                     return hash_validation(&id, hashes);
-                }
-                // `==1.0.0` can also select `1.0.0+local`. If the local version has no hash
-                // of its own, check it against the hash for `1.0.0`.
-                if let VersionId::NameVersion(name, version) = &id
-                    && version.is_local()
-                    && let Some(hashes) = hashes.get(&VersionId::from_registry(
-                        name.clone(),
-                        version.clone().without_local(),
-                    ))
-                {
-                    return HashValidation::Any(hashes);
                 }
             }
             HashVerification::Required(hashes) => {
@@ -158,6 +204,31 @@ impl HashStrategy {
             HashVerification::None => {}
         }
         HashValidation::None
+    }
+
+    /// Look up supplied hashes, including public-version pins in verification mode.
+    fn hashes_for_id(&self, id: &VersionId) -> Option<&[HashDigest]> {
+        match &self.verification {
+            HashVerification::None => None,
+            HashVerification::IfPresent(hashes) => hashes
+                .get(id)
+                .or_else(|| {
+                    // `==1.0.0` can also select `1.0.0+local`. If the local version has no hash
+                    // of its own, check it against the hash for `1.0.0`.
+                    if let VersionId::NameVersion(name, version) = id
+                        && version.is_local()
+                    {
+                        hashes.get(&VersionId::from_registry(
+                            name.clone(),
+                            version.clone().without_local(),
+                        ))
+                    } else {
+                        None
+                    }
+                })
+                .map(Vec::as_slice),
+            HashVerification::Required(hashes) => hashes.get(id).map(Vec::as_slice),
+        }
     }
 
     /// Returns `true` if the given registry-based package is allowed.
@@ -212,7 +283,13 @@ impl HashStrategy {
         self.augment_with_requirements(requirements)
     }
 
-    /// Read the required hashes from a set of [`UnresolvedRequirement`] entries.
+    /// Collect hashes from [`UnresolvedRequirement`] entries and constraints.
+    ///
+    /// For duplicate registry pins and local files, the last nonempty constraint hash list wins.
+    /// Remote archive URLs combine hashes across algorithms and reject conflicting digests for
+    /// the same algorithm. Registry pins accept any allowed digest; direct URLs must match all
+    /// supplied digests. When requirements and constraints both supply hashes, only their shared
+    /// hashes are allowed, except for remote archive URLs, whose hashes are combined instead.
     ///
     /// When the environment is not given, this treats all marker expressions
     /// that reference the environment as true. In other words, it does
@@ -251,7 +328,8 @@ impl HashStrategy {
                 .iter()
                 .map(|digest| HashDigest::from_str(digest))
                 .collect::<Result<Vec<_>, _>>()?;
-            if let Some(fragment_hashes) = requirement.hashes().map(HashDigests::from) {
+            if let Some(fragment_hashes) = requirement.hashes()? {
+                let fragment_hashes = HashDigests::from(fragment_hashes);
                 merge_digests(&mut digests, fragment_hashes.iter(), requirement)?;
             }
 
@@ -302,7 +380,8 @@ impl HashStrategy {
                 .iter()
                 .map(|digest| HashDigest::from_str(digest))
                 .collect::<Result<Vec<_>, _>>()?;
-            if let Some(fragment_hashes) = requirement.hashes().map(HashDigests::from) {
+            if let Some(fragment_hashes) = requirement.hashes()? {
+                let fragment_hashes = HashDigests::from(fragment_hashes);
                 merge_digests(&mut digests, fragment_hashes.iter(), requirement)?;
             }
 
@@ -315,27 +394,7 @@ impl HashStrategy {
             }
 
             let digests = if let Some(constraint) = constraint_hashes.remove(&id) {
-                if digests.is_empty() {
-                    // If there are _only_ hashes on the constraints, use them.
-                    constraint
-                } else if matches!(id, VersionId::ArchiveUrl { .. }) {
-                    let mut merged = digests;
-                    merge_digests(&mut merged, &constraint, requirement)?;
-                    merged
-                } else {
-                    // If there are constraint and requirement hashes, take the intersection.
-                    let intersection: Vec<_> = digests
-                        .into_iter()
-                        .filter(|digest| constraint.contains(digest))
-                        .collect();
-                    if intersection.is_empty() {
-                        return Err(HashStrategyError::NoIntersection(
-                            requirement.to_string(),
-                            mode,
-                        ));
-                    }
-                    intersection
-                }
+                combine_constraint_hashes(&id, digests, &constraint, requirement, mode)?
             } else {
                 digests
             };
@@ -371,6 +430,23 @@ impl HashStrategy {
             HashCheckingMode::Verify => Ok(Self::verify(Arc::new(hashes))),
             HashCheckingMode::Require => Ok(Self::require(Arc::new(hashes))),
         }
+    }
+
+    /// Collect hashes from [`Constraints`] using the same handling as regular constraints in
+    /// [`Self::from_requirements`], preserving declaration order.
+    pub fn from_constraints(
+        constraints: &Constraints,
+        marker_env: Option<&ResolverMarkerEnvironment>,
+        mode: HashCheckingMode,
+    ) -> Result<Self, HashStrategyError> {
+        Self::from_requirements(
+            std::iter::empty(),
+            constraints
+                .specifications()
+                .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
+            marker_env,
+            mode,
+        )
     }
 
     /// Read the required hashes from a [`Resolution`].
@@ -415,7 +491,7 @@ impl HashStrategy {
         let mut hashes = None;
 
         for requirement in requirements {
-            let Some((id, digests)) = Self::requirement_hashes(requirement) else {
+            let Some((id, digests)) = Self::requirement_hashes(requirement)? else {
                 continue;
             };
             let current = hashes.as_ref().unwrap_or(existing);
@@ -436,14 +512,21 @@ impl HashStrategy {
     }
 
     /// Extract the archive URL hash target and digests for a requirement, if any.
-    fn requirement_hashes(requirement: &Requirement) -> Option<(VersionId, Vec<HashDigest>)> {
-        let mut digests = HashDigests::from(requirement.hashes()?).to_vec();
+    fn requirement_hashes(
+        requirement: &Requirement,
+    ) -> Result<Option<(VersionId, Vec<HashDigest>)>, HashStrategyError> {
+        let Some(hashes) = requirement.hashes()? else {
+            return Ok(None);
+        };
+        let mut digests = HashDigests::from(hashes).to_vec();
         if digests.is_empty() {
-            return None;
+            return Ok(None);
         }
         digests.sort_unstable();
-        let id = Self::pin(requirement)?;
-        Some((id, digests))
+        let Some(id) = Self::pin(requirement) else {
+            return Ok(None);
+        };
+        Ok(Some((id, digests)))
     }
 
     /// Pin a [`Requirement`] to a [`VersionId`], if possible.
@@ -502,6 +585,40 @@ fn hash_validation<'a>(id: &VersionId, digests: &'a [HashDigest]) -> HashValidat
     }
 }
 
+/// Combine hashes for a requirement and an applicable constraint.
+fn combine_constraint_hashes(
+    id: &VersionId,
+    mut digests: Vec<HashDigest>,
+    constraint: &[HashDigest],
+    requirement: impl Display,
+    mode: HashCheckingMode,
+) -> Result<Vec<HashDigest>, HashStrategyError> {
+    if digests.is_empty() {
+        // If there are _only_ hashes on the constraints, use them.
+        return Ok(constraint.to_vec());
+    }
+    match id {
+        VersionId::ArchiveUrl { .. } => {
+            merge_digests(&mut digests, constraint, requirement)?;
+        }
+        VersionId::NameVersion(..)
+        | VersionId::Git { .. }
+        | VersionId::Path(..)
+        | VersionId::Directory(..)
+        | VersionId::Unknown(..) => {
+            // If there are constraint and requirement hashes, take the intersection.
+            digests.retain(|digest| constraint.contains(digest));
+            if digests.is_empty() {
+                return Err(HashStrategyError::NoIntersection(
+                    requirement.to_string(),
+                    mode,
+                ));
+            }
+        }
+    }
+    Ok(digests)
+}
+
 /// Merge repeated hashes for a requirement or constraint into the hash map.
 fn merge_hashes(
     hashes: &mut FxHashMap<VersionId, Vec<HashDigest>>,
@@ -541,7 +658,7 @@ fn merge_digests<'a>(
     for digest in incoming {
         match existing
             .iter()
-            .find(|candidate| candidate.algorithm == digest.algorithm)
+            .find(|candidate| candidate.algorithm() == digest.algorithm())
         {
             Some(candidate) if candidate == digest => {}
             Some(conflict) => {
@@ -583,6 +700,7 @@ pub enum HashStrategyError {
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
     use std::slice;
     use std::str::FromStr;
     use std::sync::Arc;
@@ -592,7 +710,7 @@ mod tests {
     use uv_distribution_filename::DistExtension;
     use uv_distribution_types::{
         ArchiveHashPolicy, HashCollection, HashValidation, MetadataHashPolicy, Requirement,
-        RequirementSource, UnresolvedRequirement, VersionId,
+        RequirementScope, RequirementSource, UnresolvedRequirement, VersionId,
     };
     use uv_normalize::PackageName;
     use uv_pep440::Version;
@@ -615,6 +733,7 @@ mod tests {
                 ext: DistExtension::Wheel,
                 url: url.parse().unwrap(),
             },
+            scope: RequirementScope::Global,
             origin: None,
         }
     }
@@ -622,7 +741,7 @@ mod tests {
     #[test]
     fn from_requirements_merges_direct_url_hashes_across_fragments() {
         let first = UnresolvedRequirement::Named(requirement(
-            "https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl#sha256=cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+            "https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl#sha256=CFDB2B588B9FC25EDE96D8DB56ED50848B0B649DCA3DD1DF0B11F683BB9E0B5F",
         ));
         let second = UnresolvedRequirement::Named(requirement(
             "https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl#sha512=f30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2",
@@ -754,6 +873,95 @@ mod tests {
         );
         assert!(!strategy.allows_url(&url));
         assert!(!strategy.allows_package(&name, &version));
+
+        let digest = HashDigest::from_str(
+            "sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+        )?;
+        let constraints = HashStrategy::verify(Arc::new(FxHashMap::from_iter([
+            (VersionId::from_url(&url), vec![digest.clone()]),
+            (
+                VersionId::from_registry(name.clone(), version.clone()),
+                vec![HashDigest::from_str(
+                    "md5:420d85e19168705cdf0223621b18831a",
+                )?],
+            ),
+        ])));
+        for strategy in [
+            strategy.clone().with_constraint_hashes(&constraints)?,
+            constraints.with_constraint_hashes(&strategy)?,
+        ] {
+            assert_eq!(
+                strategy.archive_policy_for_url(&url),
+                ArchiveHashPolicy::All(slice::from_ref(&digest))
+            );
+            assert_eq!(
+                strategy.archive_policy_for_package(&name, &version),
+                ArchiveHashPolicy::Any(&[])
+            );
+            assert!(!strategy.allows_package(&name, &version));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn constraint_hashes_combine_with_locked_hashes() -> Result<(), Box<dyn std::error::Error>> {
+        let name: PackageName = "anyio".parse()?;
+        let version: Version = "4.0.0".parse()?;
+        let local_version: Version = "4.0.0+local".parse()?;
+        let digest = HashDigest::from_str(
+            "sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+        )?;
+        let other = HashDigest::from_str(
+            "sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a",
+        )?;
+        let sha512 = HashDigest::from_str(
+            "sha512:f30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2",
+        )?;
+        let registry = VersionId::from_registry(name.clone(), version);
+        let local_registry = VersionId::from_registry(name, local_version);
+        let archive = VersionId::from_url(&"https://example.com/anyio-4.0.0.tar.gz".parse()?);
+        let path = VersionId::from_path(Path::new("anyio-4.0.0.tar.gz"));
+        for (id, constraint_id, constraint, expected) in [
+            (
+                registry.clone(),
+                registry,
+                digest.clone(),
+                vec![digest.clone()],
+            ),
+            (
+                local_registry,
+                VersionId::from_registry("anyio".parse()?, "4.0.0".parse()?),
+                digest.clone(),
+                vec![digest.clone()],
+            ),
+            (path.clone(), path, digest.clone(), vec![digest.clone()]),
+            (
+                archive.clone(),
+                archive,
+                sha512.clone(),
+                vec![digest.clone(), sha512],
+            ),
+        ] {
+            let locked = HashStrategy::collect(HashCollection::All).with_verification(
+                HashVerification::IfPresent(Arc::new(FxHashMap::from_iter([(
+                    id.clone(),
+                    vec![digest.clone()],
+                )]))),
+            );
+            let constraints = HashStrategy::verify(Arc::new(FxHashMap::from_iter([(
+                constraint_id.clone(),
+                vec![constraint],
+            )])));
+            let combined = locked.clone().with_constraint_hashes(&constraints)?;
+            assert_eq!(combined.collection(), HashCollection::All);
+            assert_eq!(combined.hashes_for_id(&id), Some(expected.as_slice()));
+
+            let conflicting = HashStrategy::verify(Arc::new(FxHashMap::from_iter([(
+                constraint_id,
+                vec![other.clone()],
+            )])));
+            assert!(locked.with_constraint_hashes(&conflicting).is_err());
+        }
         Ok(())
     }
 }

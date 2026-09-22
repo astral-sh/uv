@@ -235,6 +235,92 @@ fn workspace_metadata_ignores_unusable_environment() -> Result<()> {
 }
 
 #[test]
+fn workspace_metadata_lockfile() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.workspace_metadata().arg("-qq"), @"
+    exit_code: 0 (success)
+    ");
+    assert!(!context.temp_dir.child("uv.lock").exists());
+
+    uv_snapshot!(context.filters(), context.workspace_metadata().arg("--frozen"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
+    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    ");
+    uv_snapshot!(context.filters(), context.workspace_metadata().arg("--locked"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
+    error: Unable to find lockfile at `uv.lock`, but `--locked` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    ");
+
+    context
+        .workspace_metadata()
+        .arg("--sync")
+        .assert()
+        .success();
+    let lockfile = context.read("uv.lock");
+
+    pyproject_toml.write_str(&context.read("pyproject.toml").replace("0.1.0", "0.2.0"))?;
+    let assert = context.workspace_metadata().assert().success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    let member_id = metadata["members"][0]["id"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("missing workspace member ID"))?;
+    insta::assert_json_snapshot!(metadata["resolution"][member_id]["version"], @r#""0.2.0""#);
+    assert_eq!(lockfile, context.read("uv.lock"));
+
+    // Synchronization must respect an explicit request not to update the lockfile.
+    uv_snapshot!(context.filters(), context.workspace_metadata().arg("--sync").arg("--locked"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    assert_eq!(lockfile, context.read("uv.lock"));
+
+    let assert = context
+        .workspace_metadata()
+        .arg("--sync")
+        .arg("--frozen")
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    let member_id = metadata["members"][0]["id"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("missing workspace member ID"))?;
+    insta::assert_json_snapshot!(metadata["resolution"][member_id]["version"], @r#""0.1.0""#);
+    assert_eq!(lockfile, context.read("uv.lock"));
+
+    context
+        .workspace_metadata()
+        .arg("--sync")
+        .assert()
+        .success();
+    assert_ne!(lockfile, context.read("uv.lock"));
+    context
+        .workspace_metadata()
+        .arg("--locked")
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+#[test]
 #[cfg(feature = "test-pypi")]
 fn workspace_metadata_script() -> Result<()> {
     let context = uv_test::test_context!("3.12")
@@ -707,7 +793,7 @@ dependencies = [
         insta::assert_json_snapshot!(parent_node["dependencies"], @r#"
         [
           {
-            "id": "metadata-child==0.1.0@path+[TEMP_DIR]/metadata_child-0.1.0-py3-none-any.whl",
+            "id": "metadata-child==0.1.0@path+[TEMP_DIR]/project/../metadata_child-0.1.0-py3-none-any.whl",
             "marker": "sys_platform == 'linux'"
           }
         ]
@@ -1408,8 +1494,8 @@ dependencies = [
     ----- stderr -----
     warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
     error: Failed to collect module owners
-      Caused by: Failed to determine installation plan
-      Caused by: Distribution not found at: file://[TEMP_DIR]/gpu_a-0.1.0-py3-none-any.whl
+      cause: Failed to determine installation plan
+      cause: Distribution not found at: file://[TEMP_DIR]/gpu_a-0.1.0-py3-none-any.whl
     "#);
 
     Ok(())

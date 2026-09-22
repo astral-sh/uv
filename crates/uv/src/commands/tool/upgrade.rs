@@ -12,7 +12,6 @@ use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, Constraints, DryRun, HashCheckingMode, TargetTriple};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{ExtraBuildRequires, Index, Name, Requirement, RequirementSource};
-use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
 use uv_fs::{CWD, Simplified};
 use uv_installer::{InstallationStrategy, Planner, SitePackages};
 use uv_normalize::PackageName;
@@ -179,11 +178,9 @@ pub(crate) async fn upgrade(
             .sorted_unstable_by(|(name_a, _), (name_b, _)| name_a.cmp(name_b))
         {
             trace!("Error trace: {err:?}");
-            write_error_chain_with_options(
-                err.context(format!("Failed to upgrade {}", name.green()))
-                    .as_ref(),
-                Hints::none(),
-                ErrorOptions::default().with_stream(printer.stderr()),
+            crate::commands::diagnostics::write_error_chain(
+                &err.context(format!("Failed to upgrade {}", name.green())),
+                printer,
             )?;
         }
         return Ok(ExitStatus::Failure);
@@ -349,9 +346,7 @@ async fn upgrade_tool(
     let options = args.clone().combine(receipt.combine(filesystem.clone()));
     let settings = ResolverInstallerSettings::from(options.clone());
 
-    let build_constraint_requirements = existing_tool_receipt.build_constraints().to_vec();
-    let build_constraints =
-        Constraints::from_requirements(build_constraint_requirements.iter().cloned());
+    let build_constraints = existing_tool_receipt.build_constraints().to_vec();
     let manifest_constraints = existing_tool_receipt
         .constraints()
         .iter()
@@ -365,9 +360,10 @@ async fn upgrade_tool(
         &manifest_constraints,
         &manifest_overrides,
         &manifest_excludes,
-        &build_constraint_requirements,
+        &build_constraints,
         &settings.resolver.dependency_metadata,
     );
+    let build_constraints = Constraints::from_specifications(build_constraints);
 
     // Resolve the requirements.
     let spec = RequirementsSpecification::from_excludes(

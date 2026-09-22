@@ -1,10 +1,13 @@
+use std::collections::BTreeMap;
+
 use anyhow::{Result, anyhow};
 use assert_cmd::prelude::*;
 use assert_fs::{fixture::ChildPath, prelude::*};
 use indoc::{formatdoc, indoc};
-use insta::assert_snapshot;
+use insta::{allow_duplicates, assert_snapshot};
 use predicates::prelude::predicate;
 use serde_json::json;
+use sha2::{Digest, Sha256};
 #[cfg(feature = "test-git")]
 use std::process::Command;
 use tempfile::tempdir_in;
@@ -14,7 +17,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use uv_fs::Simplified;
 use uv_static::EnvVars;
-use uv_test::packse::PackseServer;
+use uv_test::packse::{PackseServer, generate_wheel, generate_wheel_with_files};
 
 use uv_test::{TestContext, download_to_disk, uv_snapshot, venv_bin_path};
 
@@ -433,7 +436,7 @@ fn locked() -> Result<()> {
 
     // Running with `--locked` should error, if no lockfile is present.
     uv_snapshot!(context.filters(), context.sync().arg("--locked"), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`, but `--locked` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
     ");
@@ -503,7 +506,7 @@ fn frozen() -> Result<()> {
 
     // Running with `--frozen` should error, if no lockfile is present.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
     ");
@@ -1027,7 +1030,7 @@ fn sync_json_check_outdated_environment() -> Result<()> {
     Would download 1 package
     Would install 1 package
      + iniconfig==2.0.0
-    The environment is outdated; run `uv sync` to update the environment
+    error: The environment is outdated; run `uv sync` to update the environment
     "#);
 
     Ok(())
@@ -1221,10 +1224,10 @@ fn group_requires_python_useful_defaults() -> Result<()> {
     ----- stderr -----
     Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
     Creating virtual environment at: .venv
-      × No solution found when resolving dependencies for split (markers: python_full_version == '3.8.*'):
-      ╰─▶ Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
-          And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
-          And because pharaohs-tomp:dev depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:dev, we can conclude that your project's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies for split (markers: python_full_version == '3.8.*')
+      cause: Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
+             And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
+             And because pharaohs-tomp:dev depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:dev, we can conclude that your project's requirements are unsatisfiable.
 
     hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
     ");
@@ -1233,10 +1236,10 @@ fn group_requires_python_useful_defaults() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync(), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies for split (markers: python_full_version == '3.8.*'):
-      ╰─▶ Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
-          And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
-          And because pharaohs-tomp:dev depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:dev, we can conclude that your project's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies for split (markers: python_full_version == '3.8.*')
+      cause: Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
+             And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
+             And because pharaohs-tomp:dev depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:dev, we can conclude that your project's requirements are unsatisfiable.
 
     hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
     ");
@@ -1353,10 +1356,10 @@ fn group_requires_python_useful_non_defaults() -> Result<()> {
     ----- stderr -----
     Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
     Creating virtual environment at: .venv
-      × No solution found when resolving dependencies for split (markers: python_full_version == '3.8.*'):
-      ╰─▶ Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
-          And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
-          And because pharaohs-tomp:mygroup depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:mygroup, we can conclude that your project's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies for split (markers: python_full_version == '3.8.*')
+      cause: Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
+             And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
+             And because pharaohs-tomp:mygroup depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:mygroup, we can conclude that your project's requirements are unsatisfiable.
 
     hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
     ");
@@ -1366,10 +1369,10 @@ fn group_requires_python_useful_non_defaults() -> Result<()> {
         .arg("--group").arg("mygroup"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies for split (markers: python_full_version == '3.8.*'):
-      ╰─▶ Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
-          And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
-          And because pharaohs-tomp:mygroup depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:mygroup, we can conclude that your project's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies for split (markers: python_full_version == '3.8.*')
+      cause: Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
+             And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
+             And because pharaohs-tomp:mygroup depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:mygroup, we can conclude that your project's requirements are unsatisfiable.
 
     hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
     ");
@@ -1475,7 +1478,7 @@ fn check() -> Result<()> {
     Would download 1 package
     Would install 1 package
      + iniconfig==2.0.0
-    The environment is outdated; run `uv sync` to update the environment
+    error: The environment is outdated; run `uv sync` to update the environment
     ");
 
     // Sync the environment.
@@ -1997,16 +2000,17 @@ fn sync_build_isolation_package() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
-      × Failed to build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `hatchling.build.build_wheel` failed (exit status: 1)
+    error: Failed to build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
+      cause: The build backend returned an error
+      cause: Call to `hatchling.build.build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 8, in <module>
-          ModuleNotFoundError: No module named 'hatchling'
+             [stderr]
+             Traceback (most recent call last):
+               File "<string>", line 8, in <module>
+             ModuleNotFoundError: No module named 'hatchling'
 
     hint: `source-distribution` was included because `project` (v0.1.0) depends on `source-distribution`
+
     hint: This error likely indicates that `source-distribution` depends on `hatchling`, but doesn't declare it as a build dependency. If `source-distribution` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
     [tool.uv.extra-build-dependencies]
@@ -2076,16 +2080,17 @@ fn sync_build_isolation_package_order() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
-      × Failed to build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `hatchling.build.build_wheel` failed (exit status: 1)
+    error: Failed to build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
+      cause: The build backend returned an error
+      cause: Call to `hatchling.build.build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 8, in <module>
-          ModuleNotFoundError: No module named 'hatchling'
+             [stderr]
+             Traceback (most recent call last):
+               File "<string>", line 8, in <module>
+             ModuleNotFoundError: No module named 'hatchling'
 
     hint: `source-distribution` was included because `project` (v0.1.0) depends on `source-distribution`
+
     hint: This error likely indicates that `source-distribution` depends on `hatchling`, but doesn't declare it as a build dependency. If `source-distribution` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
     [tool.uv.extra-build-dependencies]
@@ -2240,16 +2245,17 @@ fn sync_build_isolation_extra() -> Result<()> {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-      × Failed to build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `hatchling.build.build_wheel` failed (exit status: 1)
+    error: Failed to build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
+      cause: The build backend returned an error
+      cause: Call to `hatchling.build.build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 8, in <module>
-          ModuleNotFoundError: No module named 'hatchling'
+             [stderr]
+             Traceback (most recent call last):
+               File "<string>", line 8, in <module>
+             ModuleNotFoundError: No module named 'hatchling'
 
     hint: `source-distribution` was included because `project[compile]` (v0.1.0) depends on `source-distribution`
+
     hint: This error likely indicates that `source-distribution` depends on `hatchling`, but doesn't declare it as a build dependency. If `source-distribution` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
     [tool.uv.extra-build-dependencies]
@@ -2370,15 +2376,15 @@ fn sync_extra_build_dependencies() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved [N] packages in [TIME]
-      × Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+    error: Failed to build `child @ file://[TEMP_DIR]/child`
+      cause: The build backend returned an error
+      cause: Call to `build_backend.get_requires_for_build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Missing `anyio` module
-
+             [stderr]
+             Missing `anyio` module
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
+
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
@@ -2437,15 +2443,15 @@ fn sync_extra_build_dependencies() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved [N] packages in [TIME]
-      × Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+    error: Failed to build `child @ file://[TEMP_DIR]/child`
+      cause: The build backend returned an error
+      cause: Call to `build_backend.get_requires_for_build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Missing `anyio` module
-
+             [stderr]
+             Missing `anyio` module
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
+
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
@@ -2503,15 +2509,15 @@ fn sync_extra_build_dependencies() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved [N] packages in [TIME]
-      × Failed to build `bad-child @ file://[TEMP_DIR]/bad_child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+    error: Failed to build `bad-child @ file://[TEMP_DIR]/bad_child`
+      cause: The build backend returned an error
+      cause: Call to `build_backend.get_requires_for_build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Found `anyio` module
-
+             [stderr]
+             Found `anyio` module
 
     hint: `bad-child` was included because `parent` (v0.1.0) depends on `bad-child`
+
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
@@ -2592,13 +2598,12 @@ fn sync_extra_build_dependencies_setuptools_legacy() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync(), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
+    error: Failed to build `child @ file://[TEMP_DIR]/child`
+      cause: The build backend returned an error
+      cause: Call to `setuptools.build_meta:__legacy__.get_requires_for_build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Missing `anyio` module
-
+             [stderr]
+             Missing `anyio` module
 
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
@@ -2692,15 +2697,15 @@ fn sync_extra_build_dependencies_setuptools() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved [N] packages in [TIME]
-      × Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta.build_wheel` failed (exit status: 1)
+    error: Failed to build `child @ file://[TEMP_DIR]/child`
+      cause: The build backend returned an error
+      cause: Call to `setuptools.build_meta.get_requires_for_build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Missing `anyio` module
-
+             [stderr]
+             Missing `anyio` module
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
+
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
@@ -2873,15 +2878,15 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved [N] packages in [TIME]
-      × Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+    error: Failed to build `child @ file://[TEMP_DIR]/child`
+      cause: The build backend returned an error
+      cause: Call to `build_backend.get_requires_for_build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Expected `anyio` version 3.0 but got 4.3.0
-
+             [stderr]
+             Expected `anyio` version 3.0 but got 4.3.0
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
+
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
@@ -2922,15 +2927,15 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved [N] packages in [TIME]
-      × Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+    error: Failed to build `child @ file://[TEMP_DIR]/child`
+      cause: The build backend returned an error
+      cause: Call to `build_backend.get_requires_for_build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Expected `anyio` version 4.3 but got 3.5.0
-
+             [stderr]
+             Expected `anyio` version 4.3 but got 3.5.0
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
+
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
@@ -3013,15 +3018,15 @@ fn sync_extra_build_dependencies_sources_from_child() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved [N] packages in [TIME]
-      × Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+    error: Failed to build `child @ file://[TEMP_DIR]/child`
+      cause: The build backend returned an error
+      cause: Call to `build_backend.get_requires_for_build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Found system anyio instead of local anyio
-
+             [stderr]
+             Found system anyio instead of local anyio
 
     hint: `child` was included because `project` (v0.1.0) depends on `child`
+
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
@@ -3077,18 +3082,19 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved [N] packages in [TIME]
-      × Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+    error: Failed to build `child @ file://[TEMP_DIR]/child`
+      cause: The build backend returned an error
+      cause: Call to `build_backend.get_requires_for_build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 8, in <module>
-            File "[TEMP_DIR]/child/build_backend.py", line 4, in <module>
-              import a
-          ModuleNotFoundError: No module named 'a'
+             [stderr]
+             Traceback (most recent call last):
+               File "<string>", line 8, in <module>
+               File "[TEMP_DIR]/child/build_backend.py", line 4, in <module>
+                 import a
+             ModuleNotFoundError: No module named 'a'
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
+
     hint: This error likely indicates that `child@0.1.0` depends on `a`, but doesn't declare it as a build dependency. If `child` is a first-party package, consider adding `a` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
     [tool.uv.extra-build-dependencies]
@@ -3137,18 +3143,19 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved [N] packages in [TIME]
-      × Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+    error: Failed to build `child @ file://[TEMP_DIR]/child`
+      cause: The build backend returned an error
+      cause: Call to `build_backend.get_requires_for_build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 8, in <module>
-            File "[TEMP_DIR]/child/build_backend.py", line 5, in <module>
-              import sklearn
-          ModuleNotFoundError: No module named 'sklearn'
+             [stderr]
+             Traceback (most recent call last):
+               File "<string>", line 8, in <module>
+               File "[TEMP_DIR]/child/build_backend.py", line 5, in <module>
+                 import sklearn
+             ModuleNotFoundError: No module named 'sklearn'
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
+
     hint: This error likely indicates that `child@0.1.0` depends on `scikit-learn`, but doesn't declare it as a build dependency. If `child` is a first-party package, consider adding `scikit-learn` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
     [tool.uv.extra-build-dependencies]
@@ -4565,11 +4572,11 @@ fn sync_default_groups_gibberish() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
-      Caused by: TOML parse error at line 14, column 26
-           |
-        14 |         default-groups = "gibberish"
-           |                          ^^^^^^^^^^^
-        default-groups must be "all" or a ["list", "of", "groups"]
+      cause: TOML parse error at line 14, column 26
+                |
+             14 |         default-groups = "gibberish"
+                |                          ^^^^^^^^^^^
+             default-groups must be "all" or a ["list", "of", "groups"]
     "#);
 
     Ok(())
@@ -6244,13 +6251,12 @@ fn sync_extra_build_dependencies_script() -> Result<()> {
     ----- stderr -----
     Creating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
     Resolved [N] packages in [TIME]
-      × Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+    error: Failed to build `child @ file://[TEMP_DIR]/child`
+      cause: The build backend returned an error
+      cause: Call to `build_backend.get_requires_for_build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Missing `anyio` module
-
+             [stderr]
+             Missing `anyio` module
 
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
@@ -6549,7 +6555,7 @@ fn virtual_no_build_dynamic_no_cache() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to generate package metadata for `project==0.1.0 @ virtual+.`
-      Caused by: Building source distributions for `project` is disabled
+      cause: Building source distributions for `project` is disabled
     ");
 
     Ok(())
@@ -7083,9 +7089,7 @@ fn sync_active_project_environment() -> Result<()> {
 #[test]
 #[cfg(feature = "test-python-managed")]
 fn sync_active_project_environment_with_relative_managed_python_dir() -> Result<()> {
-    let context = uv_test::test_context_with_versions!(&[])
-        .with_python_download_cache()
-        .with_empty_python_install_mirror();
+    let context = uv_test::test_context_with_versions!(&[]).with_empty_python_install_mirror();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -9179,7 +9183,7 @@ fn sync_invalid_environment() -> Result<()> {
         uv_snapshot!(context.filters(), context.sync(), @"
         exit_code: 0 (success)
         ----- stderr -----
-        warning: Ignoring existing virtual environment linked to non-existent Python interpreter: .venv/[BIN]/[PYTHON] -> python
+        warning: Ignoring existing virtual environment linked to non-existent Python interpreter: .venv/[BIN]/[PYTHON] -> does-not-exist
         Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
         Removed virtual environment at: .venv
         Creating virtual environment at: .venv
@@ -10118,30 +10122,30 @@ fn sync_derivation_chain() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
-      × Failed to build `wsgiref==0.1.2`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
+    error: Failed to build `wsgiref==0.1.2`
+      cause: The build backend returned an error
+      cause: Call to `setuptools.build_meta:__legacy__.get_requires_for_build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 14, in <module>
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
-              return self._get_build_requires(config_settings, requirements=['wheel'])
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
-              self.run_setup()
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
-              super().run_setup(setup_script=setup_script)
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
-              exec(code, locals())
-            File "<string>", line 5, in <module>
-            File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
-              print "Setuptools version",version,"or greater has been installed."
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
-
+             [stderr]
+             Traceback (most recent call last):
+               File "<string>", line 14, in <module>
+               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
+                 return self._get_build_requires(config_settings, requirements=['wheel'])
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
+                 self.run_setup()
+               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
+                 super().run_setup(setup_script=setup_script)
+               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
+                 exec(code, locals())
+               File "<string>", line 5, in <module>
+               File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
+                 print "Setuptools version",version,"or greater has been installed."
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+             SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
     hint: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `wsgiref`
+
     hint: Build failures usually indicate a problem with the package or the build environment
     "#);
 
@@ -10173,30 +10177,30 @@ fn sync_derivation_chain_extra() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
-      × Failed to build `wsgiref==0.1.2`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
+    error: Failed to build `wsgiref==0.1.2`
+      cause: The build backend returned an error
+      cause: Call to `setuptools.build_meta:__legacy__.get_requires_for_build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 14, in <module>
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
-              return self._get_build_requires(config_settings, requirements=['wheel'])
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
-              self.run_setup()
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
-              super().run_setup(setup_script=setup_script)
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
-              exec(code, locals())
-            File "<string>", line 5, in <module>
-            File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
-              print "Setuptools version",version,"or greater has been installed."
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
-
+             [stderr]
+             Traceback (most recent call last):
+               File "<string>", line 14, in <module>
+               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
+                 return self._get_build_requires(config_settings, requirements=['wheel'])
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
+                 self.run_setup()
+               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
+                 super().run_setup(setup_script=setup_script)
+               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
+                 exec(code, locals())
+               File "<string>", line 5, in <module>
+               File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
+                 print "Setuptools version",version,"or greater has been installed."
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+             SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
     hint: `wsgiref` (v0.1.2) was included because `project[wsgi]` (v0.1.0) depends on `wsgiref`
+
     hint: Build failures usually indicate a problem with the package or the build environment
     "#);
 
@@ -10230,30 +10234,30 @@ fn sync_derivation_chain_group() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
-      × Failed to build `wsgiref==0.1.2`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
+    error: Failed to build `wsgiref==0.1.2`
+      cause: The build backend returned an error
+      cause: Call to `setuptools.build_meta:__legacy__.get_requires_for_build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 14, in <module>
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
-              return self._get_build_requires(config_settings, requirements=['wheel'])
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
-              self.run_setup()
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
-              super().run_setup(setup_script=setup_script)
-            File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
-              exec(code, locals())
-            File "<string>", line 5, in <module>
-            File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
-              print "Setuptools version",version,"or greater has been installed."
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
-
+             [stderr]
+             Traceback (most recent call last):
+               File "<string>", line 14, in <module>
+               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
+                 return self._get_build_requires(config_settings, requirements=['wheel'])
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
+                 self.run_setup()
+               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
+                 super().run_setup(setup_script=setup_script)
+               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
+                 exec(code, locals())
+               File "<string>", line 5, in <module>
+               File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
+                 print "Setuptools version",version,"or greater has been installed."
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+             SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
     hint: `wsgiref` (v0.1.2) was included because `project:wsgi` (v0.1.0) depends on `wsgiref`
+
     hint: Build failures usually indicate a problem with the package or the build environment
     "#);
 
@@ -10794,9 +10798,9 @@ fn sync_git_path_archive_missing_lfs() -> Result<()> {
         @r###"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download `iniconfig @ git+https://github.com/astral-sh/archive-in-git-test@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0-py3-none-any.whl&lfs=true`
-      ├─▶ The wheel `git+https://github.com/astral-sh/archive-in-git-test@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0-py3-none-any.whl&lfs=true` is missing Git LFS artifacts.
-      ╰─▶ Git LFS extension not found. Ensure that Git LFS is installed and available.
+    error: Failed to download `iniconfig @ git+https://github.com/astral-sh/archive-in-git-test@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0-py3-none-any.whl&lfs=true`
+      cause: The wheel `git+https://github.com/astral-sh/archive-in-git-test@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0-py3-none-any.whl&lfs=true` is missing Git LFS artifacts.
+      cause: Git LFS extension not found. Ensure that Git LFS is installed and available.
 
     hint: `iniconfig` (v2.0.0) was included because `foo` (v0.1.0) depends on `iniconfig`
     "###
@@ -10805,8 +10809,7 @@ fn sync_git_path_archive_missing_lfs() -> Result<()> {
     Ok(())
 }
 
-/// The project itself is marked as an editable dependency, but under the wrong name. The project
-/// is a package.
+/// A project without a build system is marked as its own editable dependency under the wrong name.
 #[test]
 fn mismatched_name_self_editable() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -10829,8 +10832,47 @@ fn mismatched_name_self_editable() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
-      × Failed to build `foo @ file://[TEMP_DIR]/`
-      ╰─▶ Package metadata name `project` does not match given name `foo`
+    error: Failed to build `foo @ file://[TEMP_DIR]/`
+      cause: Package metadata name `project` does not match given name `foo`
+
+    hint: `foo` was included because `project` (v0.1.0) depends on `foo`
+    ");
+
+    Ok(())
+}
+
+/// A packaged project is marked as its own editable dependency under the wrong name.
+#[test]
+fn mismatched_name_self_editable_package() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["foo"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+
+        [tool.uv.sources]
+        foo = { path = ".", editable = true }
+    "#})?;
+    let project = context.temp_dir.child("src").child("project");
+    project.create_dir_all()?;
+    project.child("__init__.py").touch()?;
+
+    uv_snapshot!(context.filters(), context.sync(), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: Failed to build `foo @ file://[TEMP_DIR]/`
+      cause: Package metadata name `project` does not match given name `foo`
 
     hint: `foo` was included because `project` (v0.1.0) depends on `foo`
     ");
@@ -10877,8 +10919,8 @@ fn mismatched_name_cached_wheel() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync(), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `foo @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
-      ╰─▶ Package metadata name `iniconfig` does not match given name `foo`
+    error: Failed to download and build `foo @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
+      cause: Package metadata name `iniconfig` does not match given name `foo`
     ");
 
     Ok(())
@@ -11408,13 +11450,13 @@ fn url_hash_mismatch() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to generate package metadata for `iniconfig==2.0.0 @ direct+https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
-      Caused by: Hash mismatch for `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
+      cause: Hash mismatch for `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
 
-        Expected:
-          sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b4
+             Expected:
+               sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b4
 
-        Computed:
-          sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3
+             Computed:
+               sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3
     ");
 
     Ok(())
@@ -11476,13 +11518,13 @@ fn path_hash_mismatch() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to generate package metadata for `iniconfig==2.0.0 @ path+iniconfig-2.0.0.tar.gz`
-      Caused by: Hash mismatch for `iniconfig @ file://[TEMP_DIR]/iniconfig-2.0.0.tar.gz`
+      cause: Hash mismatch for `iniconfig @ file://[TEMP_DIR]/iniconfig-2.0.0.tar.gz`
 
-        Expected:
-          sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b4
+             Expected:
+               sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b4
 
-        Computed:
-          sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3
+             Computed:
+               sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3
     ");
 
     Ok(())
@@ -12172,10 +12214,10 @@ fn sync_script_with_incompatible_build_constraints() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Creating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
-      × Failed to download and build `requests==1.2.0`
-      ├─▶ Failed to resolve requirements from `setup.py` build
-      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
-      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
+    error: Failed to download and build `requests==1.2.0`
+      cause: Failed to resolve requirements from `setup.py` build
+      cause: No solution found when resolving: `setuptools>=40.8.0`
+      cause: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
     ");
 
     Ok(())
@@ -12204,9 +12246,9 @@ fn unsupported_git_scheme() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-      × Failed to build `foo @ file://[TEMP_DIR]/`
-      ├─▶ Failed to parse entry: `foo`
-      ╰─▶ Unsupported Git URL scheme `c:` in `c:/home/ferris/projects/foo` (expected one of `https:`, `ssh:`, or `file:`)
+    error: Failed to build `foo @ file://[TEMP_DIR]/`
+      cause: Failed to parse entry: `foo`
+      cause: Unsupported Git URL scheme `c:` in `c:/home/ferris/projects/foo` (expected one of `https:`, `ssh:`, or `file:`)
     ");
     Ok(())
 }
@@ -12574,35 +12616,35 @@ fn transitive_group_conflicts_cycle() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Project `example` has malformed dependency groups
-      Caused by: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
+      cause: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Project `example` has malformed dependency groups
-      Caused by: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
+      cause: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev").arg("--group").arg("test"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Project `example` has malformed dependency groups
-      Caused by: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
+      cause: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("test").arg("--group").arg("magic"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Project `example` has malformed dependency groups
-      Caused by: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
+      cause: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev").arg("--group").arg("magic"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Project `example` has malformed dependency groups
-      Caused by: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
+      cause: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
     ");
 
     Ok(())
@@ -12724,7 +12766,7 @@ fn locked_version_coherence() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse `uv.lock`
-      Caused by: The entry for package `iniconfig` (1.0.0) has wheel `iniconfig-2.0.0-py3-none-any.whl` with inconsistent version (2.0.0), which indicates a malformed wheel. If this is intentional, set `UV_SKIP_WHEEL_FILENAME_CHECK=1`.
+      cause: The entry for package `iniconfig` (1.0.0) has wheel `iniconfig-2.0.0-py3-none-any.whl` with inconsistent version (2.0.0), which indicates a malformed wheel. If this is intentional, set `UV_SKIP_WHEEL_FILENAME_CHECK=1`.
     ");
 
     // Without `--locked`, we could fail or recreate the lockfile, currently, we fail.
@@ -12732,7 +12774,7 @@ fn locked_version_coherence() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse `uv.lock`
-      Caused by: The entry for package `iniconfig` (1.0.0) has wheel `iniconfig-2.0.0-py3-none-any.whl` with inconsistent version (2.0.0), which indicates a malformed wheel. If this is intentional, set `UV_SKIP_WHEEL_FILENAME_CHECK=1`.
+      cause: The entry for package `iniconfig` (1.0.0) has wheel `iniconfig-2.0.0-py3-none-any.whl` with inconsistent version (2.0.0), which indicates a malformed wheel. If this is intentional, set `UV_SKIP_WHEEL_FILENAME_CHECK=1`.
     ");
 
     Ok(())
@@ -14275,15 +14317,15 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved [N] packages in [TIME]
-      × Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+    error: Failed to build `child @ file://[TEMP_DIR]/child`
+      cause: The build backend returned an error
+      cause: Call to `build_backend.get_requires_for_build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Expected `a` version 0.1 but got 0.3.0
-
+             [stderr]
+             Expected `a` version 0.1 but got 0.3.0
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
+
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
@@ -14334,15 +14376,15 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved [N] packages in [TIME]
-      × Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+    error: Failed to build `child @ file://[TEMP_DIR]/child`
+      cause: The build backend returned an error
+      cause: Call to `build_backend.get_requires_for_build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Expected `a` version 0.2 but got 0.1.0
-
+             [stderr]
+             Expected `a` version 0.2 but got 0.1.0
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
+
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
@@ -14393,10 +14435,10 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved [N] packages in [TIME]
-      × Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ Failed to resolve requirements from `build-system.requires` and `extra-build-dependencies`
-      ├─▶ No solution found when resolving: `hatchling`, `a<0.3, >0.15`, `a==0.1.0 (index: http://[LOCALHOST]/simple/)`
-      ╰─▶ you require a<0.3 and a>0.15, which are incompatible
+    error: Failed to build `child @ file://[TEMP_DIR]/child`
+      cause: Failed to resolve requirements from `build-system.requires` and `extra-build-dependencies`
+      cause: No solution found when resolving: `hatchling`, `a<0.3, >0.15`, `a==0.1.0 (index: http://[LOCALHOST]/simple/)`
+      cause: you require a<0.3 and a>0.15, which are incompatible
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
     ");
@@ -14484,13 +14526,12 @@ fn sync_extra_build_variables() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved [N] packages in [TIME]
-      × Failed to build `parent @ file://[TEMP_DIR]/`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_editable` failed (exit status: 1)
+    error: Failed to build `parent @ file://[TEMP_DIR]/`
+      cause: The build backend returned an error
+      cause: Call to `build_backend.get_requires_for_build_editable` failed (exit status: 1)
 
-          [stderr]
-          Expected `anyio` version 3.0 but got 4.3.0
-
+             [stderr]
+             Expected `anyio` version 3.0 but got 4.3.0
 
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
@@ -14515,13 +14556,12 @@ fn sync_extra_build_variables() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved [N] packages in [TIME]
-      × Failed to build `parent @ file://[TEMP_DIR]/`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_editable` failed (exit status: 1)
+    error: Failed to build `parent @ file://[TEMP_DIR]/`
+      cause: The build backend returned an error
+      cause: Call to `build_backend.get_requires_for_build_editable` failed (exit status: 1)
 
-          [stderr]
-          Expected `anyio` version 3.0 but got 4.3.0
-
+             [stderr]
+             Expected `anyio` version 3.0 but got 4.3.0
 
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
@@ -14575,8 +14615,8 @@ fn reject_unmatched_runtime() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to download and build `source-distribution==0.0.3`
-      ╰─▶ Extra build requirement `iniconfig` was declared with `match-runtime = true`, but `source-distribution` does not declare static metadata, making runtime-matching impossible
+    error: Failed to download and build `source-distribution==0.0.3`
+      cause: Extra build requirement `iniconfig` was declared with `match-runtime = true`, but `source-distribution` does not declare static metadata, making runtime-matching impossible
 
     hint: `source-distribution` (v0.0.3) was included because `foo` (v0.1.0) depends on `source-distribution`
     ");
@@ -15313,9 +15353,9 @@ async fn sync_non_pep625_sdist() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync().env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because basic-package==0.1.0 has a non-PEP 625-compliant source distribution filename and only basic-package==0.1.0 is available, we can conclude that all versions of basic-package cannot be used.
-          And because your project depends on basic-package, we can conclude that your project's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies
+      cause: Because basic-package==0.1.0 has a non-PEP 625-compliant source distribution filename and only basic-package==0.1.0 is available, we can conclude that all versions of basic-package cannot be used.
+             And because your project depends on basic-package, we can conclude that your project's requirements are unsatisfiable.
 
     hint: `basic-package` was found on http://[LOCALHOST]/simple, but not at the requested version (basic-package==0.1.0). A compatible version may be available on a subsequent index (e.g., https://pypi.org/simple). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `--index-strategy unsafe-best-match` to consider all versions from all indexes, regardless of the order in which they were defined.
     ");
@@ -16147,11 +16187,11 @@ fn sync_fails_ambiguous_url() -> Result<()> {
       ambiguous user/pass authority in URL (not percent-encoded?): https:***@domain/a/b/c
 
     error: Failed to parse: `pyproject.toml`
-      Caused by: TOML parse error at line 10, column 15
-           |
-        10 |         url = "https://user/name:password@domain/a/b/c"
-           |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        ambiguous user/pass authority in URL (not percent-encoded?): https:***@domain/a/b/c
+      cause: TOML parse error at line 10, column 15
+                |
+             10 |         url = "https://user/name:password@domain/a/b/c"
+                |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+             ambiguous user/pass authority in URL (not percent-encoded?): https:***@domain/a/b/c
     "#);
 
     Ok(())
@@ -16579,7 +16619,7 @@ async fn sync_malware_check_network_error() {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: Malware check failed due to an error from OSV
-      Caused by: HTTP status server error (500 Internal Server Error) for url (http://[LOCALHOST]/v1/querybatch)
+      cause: HTTP status server error (500 Internal Server Error) for url (http://[LOCALHOST]/v1/querybatch)
     ");
 }
 
@@ -16722,5 +16762,515 @@ fn sync_frozen_workspace_member_git_credentials() -> Result<()> {
      + uv-private-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
     ");
 
+    Ok(())
+}
+
+/// A project with an in-tree backend and locally generated build dependencies.
+fn build_hash_project() -> Result<(TestContext, String)> {
+    let context = uv_test::test_context!("3.12");
+    let mut build_hash = String::new();
+    for (name, version) in [("build-dependency", "1.0.0"), ("project", "0.1.0")] {
+        let (filename, wheel) = generate_wheel(
+            &name.parse()?,
+            &version.parse()?,
+            &[],
+            &BTreeMap::new(),
+            None,
+            "py3-none-any",
+            &[],
+        );
+        if name == "build-dependency" {
+            build_hash = hex::encode(Sha256::digest(&wheel));
+        }
+        context
+            .temp_dir
+            .child("wheels")
+            .child(filename)
+            .write_binary(&wheel)?;
+    }
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["build-dependency==1.0.0"]
+        build-backend = "backend"
+        backend-path = ["."]
+
+        [tool.uv]
+        no-index = true
+        find-links = ["wheels"]
+    "#})?;
+    context.temp_dir.child("backend.py").write_str(indoc! {r#"
+        import shutil
+        from pathlib import Path
+
+        import build_dependency
+        Path(__file__).with_name('backend-executed').touch()
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            wheel = Path(__file__).parent / "wheels" / "project-0.1.0-py3-none-any.whl"
+            shutil.copyfile(wheel, Path(wheel_directory) / wheel.name)
+            return wheel.name
+    "#})?;
+    let context = context.with_filter((build_hash.clone(), "[BUILD_HASH]"));
+    Ok((context, build_hash))
+}
+
+/// A project with an in-tree backend in a subdirectory for `--with` tests.
+fn build_hash_project_in_subdirectory() -> Result<(TestContext, String)> {
+    let (context, hash) = build_hash_project()?;
+    let package = context.temp_dir.child("package");
+    package.create_dir_all()?;
+    for entry in ["pyproject.toml", "backend.py", "wheels"] {
+        fs_err::rename(context.temp_dir.child(entry), package.child(entry))?;
+    }
+    Ok((context, hash))
+}
+
+#[test]
+fn project_build_hashes_lock_and_sync() -> Result<()> {
+    let (context, hash) = build_hash_project()?;
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    let content = context.read("pyproject.toml");
+    // Unknown table fields are ignored without discarding the supplied hashes.
+    pyproject.write_str(&formatdoc! {r#"
+        {content}
+        build-constraint-dependencies = [
+            {{ requirement = "build-dependency==1.0.0", hashes = ["sha256:{hash}"], future-field = true }},
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    let lock = context.read("uv.lock");
+    insta::with_settings!({filters => context.filters()}, {
+        assert_snapshot!(lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        build-constraints = [{ name = "build-dependency", specifier = "==1.0.0", hashes = ["sha256:[BUILD_HASH]"] }]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        "#);
+    });
+
+    // `--frozen` uses the build dependency hashes recorded in the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-editable"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+
+    // Changing only a hash makes `--locked` reject the existing lockfile.
+    pyproject.write_str(
+        &context
+            .read("pyproject.toml")
+            .replace(&hash, &"0".repeat(64)),
+    )?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    Ok(())
+}
+
+#[test]
+fn project_build_hashes_incorrect() -> Result<()> {
+    let (context, _) = build_hash_project()?;
+    let pyproject = context.read("pyproject.toml");
+    let hash = "0".repeat(64);
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        {pyproject}
+        build-constraint-dependencies = [
+            {{ requirement = "build-dependency==1.0.0", hashes = ["sha256:{hash}"] }},
+        ]
+    "#})?;
+    // Supplied hashes are checked during installation.
+    uv_snapshot!(context.filters(), context.sync().arg("--no-editable"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Failed to install requirements from `build-system.requires`
+      cause: Failed to download `build-dependency==1.0.0`
+      cause: Hash mismatch for `build-dependency==1.0.0`
+
+             Expected:
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+             Computed:
+               sha256:[BUILD_HASH]
+    ");
+    Ok(())
+}
+
+#[test]
+fn project_build_hashes_unpinned() -> Result<()> {
+    let (context, _) = build_hash_project()?;
+    let pyproject = context.read("pyproject.toml");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        {pyproject}
+        build-constraint-dependencies = [
+            {{ requirement = "build-dependency>=1", hashes = ["sha256:{}"] }},
+        ]
+    "#, "0".repeat(64)})?;
+    // Verify mode applies the version constraint but ignores a hash without an exact pin.
+    uv_snapshot!(context.filters(), context.sync().arg("--no-editable"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+    Ok(())
+}
+
+#[test]
+fn project_build_hashes_pip() -> Result<()> {
+    // `pip install` and `pip sync` construct separate build hash strategies.
+    for command_name in ["install", "sync"] {
+        let (context, hash) = build_hash_project()?;
+        context
+            .temp_dir
+            .child("requirements.txt")
+            .write_str("project @ ./\n")?;
+        let constraints = context.temp_dir.child("build-constraints.txt");
+        constraints.write_str(&format!(
+            "build-dependency==1.0.0 --hash=sha256:{}\n",
+            "0".repeat(64)
+        ))?;
+        let command = || {
+            let mut command = if command_name == "install" {
+                let mut command = context.pip_install();
+                command.arg("--requirement");
+                command
+            } else {
+                context.pip_sync()
+            };
+            command.arg("requirements.txt").args([
+                "--no-index",
+                "--find-links",
+                "wheels",
+                "--no-cache",
+            ]);
+            command
+        };
+
+        // Provided build hashes are checked independently of runtime hash checking.
+        allow_duplicates! {
+            uv_snapshot!(context.filters(), command()
+                .arg("--build-constraint")
+                .arg(constraints.path()), @"
+            exit_code: 1 (failure)
+            ----- stderr -----
+            Resolved 1 package in [TIME]
+            error: Failed to build `project @ file://[TEMP_DIR]/`
+              cause: Failed to install requirements from `build-system.requires`
+              cause: Failed to download `build-dependency==1.0.0`
+              cause: Hash mismatch for `build-dependency==1.0.0`
+
+                     Expected:
+                       sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+                     Computed:
+                       sha256:[BUILD_HASH]
+            ");
+        }
+        context
+            .temp_dir
+            .child("backend-executed")
+            .assert(predicate::path::missing());
+
+        constraints.write_str(&format!("build-dependency==1.0.0 --hash=sha256:{hash}\n"))?;
+        allow_duplicates! {
+            uv_snapshot!(context.filters(), command()
+                .arg("--build-constraint")
+                .arg(constraints.path()), @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Resolved 1 package in [TIME]
+            Prepared 1 package in [TIME]
+            Installed 1 package in [TIME]
+             + project==0.1.0 (from file://[TEMP_DIR]/)
+            ");
+        }
+        context
+            .temp_dir
+            .child("backend-executed")
+            .assert(predicate::path::exists());
+        fs_err::remove_file(context.temp_dir.child("backend-executed"))?;
+        constraints.write_str(&format!(
+            "build-dependency==1.0.0 --hash=sha256:{}\n",
+            "0".repeat(64)
+        ))?;
+        // The explicit opt-out permits the mismatched hash while still building the package.
+        allow_duplicates! {
+            uv_snapshot!(context.filters(), command()
+                .arg("--build-constraint")
+                .arg(constraints.path())
+                .args(["--no-verify-hashes", "--reinstall"]), @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Resolved 1 package in [TIME]
+            Prepared 1 package in [TIME]
+            Uninstalled 1 package in [TIME]
+            Installed 1 package in [TIME]
+             ~ project==0.1.0 (from file://[TEMP_DIR]/)
+            ");
+        }
+        context
+            .temp_dir
+            .child("backend-executed")
+            .assert(predicate::path::exists());
+    }
+    Ok(())
+}
+
+#[test]
+fn project_build_hashes_script_run_with() -> Result<()> {
+    let (context, hash) = build_hash_project()?;
+    let script = context.temp_dir.child("script.py");
+    let metadata = formatdoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # [tool.uv]
+        # no-index = true
+        # find-links = ["wheels"]
+        # build-constraint-dependencies = [
+        #     {{ requirement = "build-dependency==1.0.0", hashes = ["sha256:{hash}"] }},
+        # ]
+        # ///
+        import project
+    "#};
+    script.write_str(&metadata.replace(&hash, &"0".repeat(64)))?;
+
+    // Script build constraints also apply to packages passed with `--with`, even if the script
+    // has no dependencies.
+    uv_snapshot!(context.filters(), context.run().arg("--no-cache").args(["--with", ".", "script.py"]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Failed to install requirements from `build-system.requires`
+      cause: Failed to download `build-dependency==1.0.0`
+      cause: Hash mismatch for `build-dependency==1.0.0`
+
+             Expected:
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+             Computed:
+               sha256:[BUILD_HASH]
+    ");
+    context
+        .temp_dir
+        .child("backend-executed")
+        .assert(predicate::path::missing());
+
+    script.write_str(&metadata)?;
+    uv_snapshot!(context.filters(), context.run().arg("--no-cache").args(["--with", ".", "script.py"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+    context
+        .temp_dir
+        .child("backend-executed")
+        .assert(predicate::path::exists());
+    Ok(())
+}
+
+#[test]
+fn project_build_hashes_run_with_stale_lock() -> Result<()> {
+    let (context, hash) = build_hash_project_in_subdirectory()?;
+    let package = context.temp_dir.child("package");
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        no-index = true
+        find-links = ["package/wheels"]
+        build-constraint-dependencies = [
+            {{ requirement = "build-dependency==1.0.0", hashes = ["sha256:{hash}"] }},
+        ]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    pyproject.write_str(
+        &context
+            .read("pyproject.toml")
+            .replace(&hash, &"0".repeat(64)),
+    )?;
+    uv_snapshot!(context.filters(), context.run()
+        .args(["--no-sync", "--no-cache", "--with", "./package", "python", "-c", "import project"]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to build `project @ file://[TEMP_DIR]/package`
+      cause: Failed to install requirements from `build-system.requires`
+      cause: Failed to download `build-dependency==1.0.0`
+      cause: Hash mismatch for `build-dependency==1.0.0`
+
+             Expected:
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+             Computed:
+               sha256:[BUILD_HASH]
+    ");
+    package
+        .child("backend-executed")
+        .assert(predicate::path::missing());
+
+    // `--frozen` explicitly uses the hashes in the lockfile.
+    uv_snapshot!(context.filters(), context.run()
+        .args(["--frozen", "--no-sync", "--no-cache", "--with", "./package", "python", "-c", "import project"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/package)
+    ");
+    package
+        .child("backend-executed")
+        .assert(predicate::path::exists());
+    Ok(())
+}
+
+#[test]
+fn project_build_hashes_locked_script_run_with_no_sync() -> Result<()> {
+    let (context, hash) = build_hash_project_in_subdirectory()?;
+    let package = context.temp_dir.child("package");
+    package.child("pyproject.toml").write_str(
+        &context
+            .read("package/pyproject.toml")
+            .replace("build-dependency==1.0.0", "build-dependency>=1"),
+    )?;
+    let script = context.temp_dir.child("script.py");
+    script.write_str(&formatdoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # [tool.uv]
+        # no-index = true
+        # find-links = ["package/wheels"]
+        # build-constraint-dependencies = [
+        #     {{ requirement = "build-dependency==1.0.0", hashes = ["sha256:{hash}"] }},
+        # ]
+        # ///
+        import project
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().args(["--script", "script.py"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved in [TIME]
+    ");
+    insta::with_settings!({filters => context.filters()}, {
+        assert_snapshot!(context.read("script.py.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        build-constraints = [{ name = "build-dependency", specifier = "==1.0.0", hashes = ["sha256:[BUILD_HASH]"] }]
+        "#);
+    });
+
+    let (filename, changed_wheel) = generate_wheel_with_files(
+        &"build-dependency".parse()?,
+        &"1.0.0".parse()?,
+        &[],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+        &[("build_dependency/changed.py", "changed = True\n")],
+    );
+    package
+        .child("wheels")
+        .child(filename)
+        .write_binary(&changed_wheel)?;
+    let changed_hash = hex::encode(Sha256::digest(&changed_wheel));
+    let (filename, newer_wheel) = generate_wheel(
+        &"build-dependency".parse()?,
+        &"2.0.0".parse()?,
+        &[],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+        &[],
+    );
+    package
+        .child("wheels")
+        .child(filename)
+        .write_binary(&newer_wheel)?;
+    let context = context.with_filter((changed_hash, "[CHANGED_BUILD_HASH]"));
+
+    // `--no-sync` is a no-op for scripts; the overlay must still use the locked version and hash.
+    uv_snapshot!(context.filters(), context.run().args([
+        "--no-sync", "--no-cache", "--with", "./package", "script.py",
+    ]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved in [TIME]
+    Checked in [TIME]
+    warning: `--no-sync` is a no-op for Python scripts with inline metadata, which always run in isolation
+    Resolved 1 package in [TIME]
+    error: Failed to build `project @ file://[TEMP_DIR]/package`
+      cause: Failed to install requirements from `build-system.requires`
+      cause: Failed to download `build-dependency==1.0.0`
+      cause: Hash mismatch for `build-dependency==1.0.0`
+
+             Expected:
+               sha256:[BUILD_HASH]
+
+             Computed:
+               sha256:[CHANGED_BUILD_HASH]
+    ");
+    package
+        .child("backend-executed")
+        .assert(predicate::path::missing());
     Ok(())
 }

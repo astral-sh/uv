@@ -24,11 +24,11 @@
   },
   "rules": [
     {
-      "caller": "uv",
-      "environment": "release",
-      "caller_workflow": "release.yml",
-      "on": ["workflow_dispatch"],
-      "permissions": { "contents": "write", "workflows": "write" },
+      "caller": "uv-dev",
+      "environment": "automations",
+      "caller_workflow": "import-codspeed-profiles.yml",
+      "on": ["push", "workflow_dispatch"],
+      "permissions": { "actions": "read" },
       "target": "uv"
     },
     {
@@ -138,6 +138,16 @@
       "caller_ref": "refs/pull/*/merge",
       "caller_workflow": "ci.yml",
       "reusable_workflow": "pull-request-security-review.yml",
+      "on": ["pull_request"],
+      "permissions": { "pull_requests": "write" },
+      "target": "uv"
+    },
+    {
+      "caller": "uv",
+      "environment": "automations",
+      "caller_ref": "refs/pull/*/merge",
+      "caller_workflow": "ci.yml",
+      "reusable_workflow": "check-crates-policies.yml",
       "on": ["pull_request"],
       "permissions": { "pull_requests": "write" },
       "target": "uv"
