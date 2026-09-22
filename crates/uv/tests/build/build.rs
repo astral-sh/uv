@@ -2645,7 +2645,6 @@ fn build_fast_path_verbose() -> Result<()> {
         .arg("project")
         .arg("--sdist")
         .arg("--verbose")
-        .env_remove(EnvVars::RUST_LOG)
         .output()?;
 
     let stderr = apply_filters(
@@ -3075,8 +3074,6 @@ fn build_list_files() -> Result<()> {
 #[test]
 fn build_list_files_errors() -> Result<()> {
     let context = uv_test::test_context!("3.12")
-        // In CI, we run with link mode settings.
-        .with_filter(("--link-mode <LINK_MODE> ", ""))
         // Normalize Windows workspace paths.
         .with_filter(("/crates/uv/../../", "/"));
 

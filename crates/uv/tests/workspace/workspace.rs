@@ -369,14 +369,8 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
         &work_dir,
     )?;
 
-    let mut filters = context.filters();
-    filters.push((
-        r"Using Python 3.12.\[X\] interpreter at: .*",
-        "Using Python 3.12.[X] interpreter at: [PYTHON]",
-    ));
-
     // Run from the `bird-feeder` member.
-    uv_snapshot!(filters, context
+    uv_snapshot!(context.filters(), context
         .run()
         .arg("--package")
         .arg("bird-feeder")
@@ -474,13 +468,7 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
 
     copy_dir_ignore(workspaces_dir().join("albatross-root-workspace"), &work_dir)?;
 
-    let mut filters = context.filters();
-    filters.push((
-        r"Using Python 3.12.\[X\] interpreter at: .*",
-        "Using Python 3.12.[X] interpreter at: [PYTHON]",
-    ));
-
-    uv_snapshot!(filters, context
+    uv_snapshot!(context.filters(), context
         .run()
         .arg("--package")
         .arg("bird-feeder")
@@ -535,12 +523,6 @@ fn test_uv_run_isolate() -> Result<()> {
 
     copy_dir_ignore(workspaces_dir().join("albatross-root-workspace"), &work_dir)?;
 
-    let mut filters = context.filters();
-    filters.push((
-        r"Using Python 3.12.\[X\] interpreter at: .*",
-        "Using Python 3.12.[X] interpreter at: [PYTHON]",
-    ));
-
     // Install the root package.
     uv_snapshot!(context.filters(), context
         .run()
@@ -570,7 +552,7 @@ fn test_uv_run_isolate() -> Result<()> {
     // Run in `bird-feeder`. We shouldn't be able to import `albatross`, but we _can_ due to our
     // virtual environment semantics. Specifically, we only make the changes necessary to run a
     // given command, so we don't remove `albatross` from the environment.
-    uv_snapshot!(filters, context
+    uv_snapshot!(context.filters(), context
         .run()
         .arg("--package")
         .arg("bird-feeder")
@@ -591,7 +573,7 @@ fn test_uv_run_isolate() -> Result<()> {
     // available.
     // TODO(charlie): This should show the resolution output, but `--isolated` is coupled to
     // `--no-project` right now.
-    uv_snapshot!(filters, context
+    uv_snapshot!(context.filters(), context
         .run()
         .arg("--isolated")
         .arg("--package")
