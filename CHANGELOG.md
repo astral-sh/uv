@@ -3,6 +3,34 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.12.18
+
+Released on 2026-09-22.
+
+### Enhancements
+
+- Add `--output-format json` to `uv pip install` and `uv pip sync`, including for `--dry-run` and `--check` ([#21893](https://github.com/astral-sh/uv/pull/21893))
+- Add `--check` to `uv pip install` and `uv pip sync` to report planned changes without modifying the environment ([#21844](https://github.com/astral-sh/uv/pull/21844))
+- Identify failures from `get_requires_for_build_*` hooks correctly in build errors ([#21881](https://github.com/astral-sh/uv/pull/21881))
+
+### Preview features
+
+- Validate build requirements for `uv build --no-build-isolation` with `--preview-features build-dependency-check`; use `--skip-dependency-check` to opt out ([#21880](https://github.com/astral-sh/uv/pull/21880))
+
+### Performance
+
+- Speed up `uv_build` editable wheel creation by omitting compression from temporary wheels ([#21918](https://github.com/astral-sh/uv/pull/21918))
+
+### Bug fixes
+
+- Select package versions with wheels compatible with each Python resolution fork, correctly interpreting generic and stable-ABI wheel tags ([#21835](https://github.com/astral-sh/uv/pull/21835), [#21836](https://github.com/astral-sh/uv/pull/21836))
+- Restore project, script, and lock files when `uv add`, `uv remove`, or `uv version` fails or is interrupted ([#21860](https://github.com/astral-sh/uv/pull/21860), [#21856](https://github.com/astral-sh/uv/pull/21856))
+- Use configured `dependency-metadata` when checking whether installed requirements are satisfied ([#21843](https://github.com/astral-sh/uv/pull/21843))
+- Reject archive entries that normalize to absolute Windows paths ([#21923](https://github.com/astral-sh/uv/pull/21923))
+- Recognize distribution filenames and archive extensions when URL fragments contain `?` ([#21920](https://github.com/astral-sh/uv/pull/21920))
+- Generate correctly lowercased platform tags for BSD and Haiku releases ([#21853](https://github.com/astral-sh/uv/pull/21853))
+- Avoid rebuilding a Windows relative path into an absolute form ([#21923](https://github.com/astral-sh/uv/pull/21923))
+
 ## 0.12.17
 
 Released on 2026-09-18.
