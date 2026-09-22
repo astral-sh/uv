@@ -526,8 +526,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         .partial_solution
                         .term_intersection_for_package(next_id)
                         .and_then(|term| match term {
-                            Term::Positive(range) => Some(range),
-                            Term::Negative(_) => None,
+                            Term {
+                                negative: false,
+                                set: range,
+                            } => Some(range),
+                            Term {
+                                negative: true,
+                                set: _,
+                            } => None,
                         })
                         .expect("a package was chosen but we don't have a positive term");
 

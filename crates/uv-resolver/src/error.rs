@@ -572,15 +572,8 @@ impl NoSolutionError {
                 metadata.terms = metadata
                     .terms
                     .into_iter()
-                    .map(|(package, term)| {
-                        let term = match term {
-                            Term::Positive(versions) => {
-                                Term::Positive(versions.without_local_version_sentinels())
-                            }
-                            Term::Negative(versions) => {
-                                Term::Negative(versions.without_local_version_sentinels())
-                            }
-                        };
+                    .map(|(package, mut term)| {
+                        term.set = term.set.without_local_version_sentinels();
                         (package, term)
                     })
                     .collect();
@@ -707,10 +700,16 @@ impl NoSolutionError {
                     .into_iter()
                     .map(|(package, term)| {
                         let term = match term {
-                            Term::Positive(versions) => Term::Positive(narrow_conclusion(
+                            Term {
+                                negative: false,
+                                set: versions,
+                            } => Term::positive(narrow_conclusion(
                                 &package, versions, &cause1, &cause2,
                             )),
-                            term @ Term::Negative(_) => term,
+                            term @ Term {
+                                negative: true,
+                                set: _,
+                            } => term,
                         };
                         (package, term)
                     })
@@ -992,10 +991,16 @@ fn display_tree_inner(
                 let prefix = "  ".repeat(depth);
                 for (package, term) in terms {
                     match term {
-                        Term::Positive(versions) => {
+                        Term {
+                            negative: false,
+                            set: versions,
+                        } => {
                             lines.push(format!("{prefix}term {package}{versions}"));
                         }
-                        Term::Negative(versions) => {
+                        Term {
+                            negative: true,
+                            set: versions,
+                        } => {
                             lines.push(format!("{prefix}term not {package}{versions}"));
                         }
                     }
@@ -1034,7 +1039,13 @@ fn restate_available_versions(
             let carry = |cause: ErrorTree| {
                 let carried = ruled_out_versions(&package, &cause).union(&unlisted);
                 DerivationTree::Derived(Derived {
-                    terms: Map::from_iter([(package.clone(), Term::Positive(carried))]),
+                    terms: Map::from_iter([(
+                        package.clone(),
+                        Term {
+                            negative: false,
+                            set: carried,
+                        },
+                    )]),
                     shared_id: None,
                     cause1: Arc::new(cause),
                     cause2: Arc::new(statement()),
@@ -1051,12 +1062,12 @@ fn restate_available_versions(
                     .terms
                     .get(&package)
                     .cloned()
-                    .unwrap_or_else(|| Term::Positive(unlisted.clone()));
+                    .unwrap_or_else(|| Term::positive(unlisted.clone()));
                 let mut inner = metadata;
                 let shared_id = inner.shared_id.take();
                 inner.terms = Map::from_iter([(
                     package.clone(),
-                    Term::Positive(
+                    Term::positive(
                         reported_versions(&package, &cause1)
                             .union(&reported_versions(&package, &cause2)),
                     ),
@@ -1154,7 +1165,14 @@ fn starts_lower(first: &Range<Version>, second: &Range<Version>) -> bool {
 /// The package a derivation concludes about, when it concludes about one alone.
 fn concluded_package(terms: &ErrorTerms) -> Option<(&PubGrubPackage, &Range<Version>)> {
     let mut terms = terms.iter();
-    let (package, Term::Positive(versions)) = terms.next()? else {
+    let (
+        package,
+        Term {
+            negative: false,
+            set: versions,
+        },
+    ) = terms.next()?
+    else {
         return None;
     };
     terms.next().is_none().then_some((package, versions))
@@ -1179,7 +1197,10 @@ fn cause_packages(cause: &ErrorTree) -> Vec<&PubGrubPackage> {
 fn required_versions(package: &PubGrubPackage, cause: &ErrorTree) -> Range<Version> {
     match cause {
         DerivationTree::Derived(derived) => match derived.terms.get(package) {
-            Some(Term::Negative(versions)) => versions.clone(),
+            Some(Term {
+                negative: true,
+                set: versions,
+            }) => versions.clone(),
             _ => Range::empty(),
         },
         DerivationTree::External(External::FromDependencyOf(_, _, required, versions))
@@ -1211,7 +1232,10 @@ fn ruled_out_versions(package: &PubGrubPackage, cause: &ErrorTree) -> Range<Vers
 fn reported_versions(package: &PubGrubPackage, cause: &ErrorTree) -> Range<Version> {
     match cause {
         DerivationTree::Derived(derived) => match derived.terms.get(package) {
-            Some(Term::Positive(versions)) => versions.clone(),
+            Some(Term {
+                negative: false,
+                set: versions,
+            }) => versions.clone(),
             _ => Range::empty(),
         },
         DerivationTree::External(
@@ -1234,7 +1258,11 @@ fn can_drop_no_versions(
     } else {
         parent_terms.get(package)
     };
-    let Some(Term::Positive(term)) = package_terms else {
+    let Some(Term {
+        negative: false,
+        set: term,
+    }) = package_terms
+    else {
         return false;
     };
     let versions = versions.complement();
@@ -1312,7 +1340,10 @@ fn collapse_redundant_no_versions_tree(tree: ErrorTree) -> (ErrorTree, bool) {
                 DerivationTree::External(External::NoVersions(other_package, other_versions)),
             ) = (&cause1, &cause2)
                 && package == other_package
-                && let Some(Term::Positive(term)) = metadata.terms.get(package)
+                && let Some(Term {
+                    negative: false,
+                    set: term,
+                }) = metadata.terms.get(package)
                 && versions.subset_of(term)
                 && other_versions.subset_of(term)
             {
@@ -1522,7 +1553,11 @@ fn merge_unavailable_versions(
     };
 
     let mut terms = derived.terms.clone();
-    if let Some(Term::Positive(range)) = terms.get_mut(package) {
+    if let Some(Term {
+        negative: false,
+        set: range,
+    }) = terms.get_mut(package)
+    {
         *range = merged_versions;
     }
     Some(DerivationTree::Derived(Derived {
@@ -1558,7 +1593,14 @@ fn merge_unavailable_siblings(derived: &ErrorDerived) -> Option<ErrorTree> {
 
     // Only rewrite a derivation that concludes about this package alone.
     let mut terms = derived.terms.iter();
-    let Some((term_package, Term::Positive(term_versions))) = terms.next() else {
+    let Some((
+        term_package,
+        Term {
+            negative: false,
+            set: term_versions,
+        },
+    )) = terms.next()
+    else {
         return None;
     };
     if terms.next().is_some() || term_package != package {
@@ -1579,7 +1621,7 @@ fn merge_unavailable_siblings(derived: &ErrorDerived) -> Option<ErrorTree> {
     Some(DerivationTree::Derived(Derived {
         terms: Map::from_iter([(
             package.clone(),
-            Term::Positive(term_versions.union(&versions)),
+            Term::positive(term_versions.union(&versions)),
         )]),
         shared_id: derived.shared_id,
         cause1: derived.cause1.clone(),
@@ -1865,29 +1907,16 @@ fn simplify_derivation_tree_ranges(
             metadata.terms = metadata
                 .terms
                 .into_iter()
-                .map(|(package, term)| {
-                    let term = match term {
-                        Term::Positive(versions) => Term::Positive(
-                            simplify_range(
-                                &versions,
-                                &package,
-                                included_versions,
-                                candidate_selector,
-                                resolver_environment,
-                            )
-                            .unwrap_or(versions),
-                        ),
-                        Term::Negative(versions) => Term::Negative(
-                            simplify_range(
-                                &versions,
-                                &package,
-                                included_versions,
-                                candidate_selector,
-                                resolver_environment,
-                            )
-                            .unwrap_or(versions),
-                        ),
-                    };
+                .map(|(package, mut term)| {
+                    if let Some(versions) = simplify_range(
+                        &term.set,
+                        &package,
+                        included_versions,
+                        candidate_selector,
+                        resolver_environment,
+                    ) {
+                        term.set = versions;
+                    }
                     (package, term)
                 })
                 .collect();
@@ -2095,7 +2124,7 @@ mod tests {
         let known_versions = known_versions("numpy", &["2.0"]);
         let concluded = |cause: ErrorTree| {
             let tree = ErrorTree::Derived(Derived {
-                terms: pubgrub::Map::from_iter([(package.clone(), Term::Positive(Range::full()))]),
+                terms: pubgrub::Map::from_iter([(package.clone(), Term::positive(Range::full()))]),
                 shared_id: None,
                 cause1: Arc::new(cause),
                 cause2: Arc::new(ErrorTree::External(External::NotRoot(
@@ -2114,7 +2143,7 @@ mod tests {
         // The cause reports the version, so the conclusion stops there too.
         assert_eq!(
             concluded(unavailable(&package, Range::full())),
-            Some(Term::Positive(Range::singleton(version("2.0"))))
+            Some(Term::positive(Range::singleton(version("2.0"))))
         );
 
         // A cause that reports every version of the package leaves the conclusion as it is.
@@ -2123,7 +2152,7 @@ mod tests {
                 package.clone(),
                 Range::full(),
             ))),
-            Some(Term::Positive(Range::full()))
+            Some(Term::positive(Range::full()))
         );
     }
 
@@ -2138,7 +2167,7 @@ mod tests {
         );
         let terms = pubgrub::Map::from_iter([(
             package.clone(),
-            Term::Positive(Range::from_range_bounds(version("2.0")..=version("3.0"))),
+            Term::positive(Range::from_range_bounds(version("2.0")..=version("3.0"))),
         )]);
         let tree = ErrorTree::Derived(Derived {
             terms,
@@ -2161,8 +2190,8 @@ mod tests {
         let cause1 = unavailable(&package, Range::singleton(version("1.0")));
         let cause2 = unavailable(&package, Range::singleton(version("3.0")));
         let terms = pubgrub::Map::from_iter([
-            (package.clone(), Term::Positive(Range::full())),
-            (pubgrub_package("scipy"), Term::Positive(Range::full())),
+            (package.clone(), Term::positive(Range::full())),
+            (pubgrub_package("scipy"), Term::positive(Range::full())),
         ]);
         let tree = ErrorTree::Derived(Derived {
             terms,
