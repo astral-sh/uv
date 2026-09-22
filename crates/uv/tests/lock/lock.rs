@@ -31139,7 +31139,7 @@ fn lock_unparsable_revision() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock().arg("--frozen"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse `uv.lock`
+    error: Failed to parse `uv.lock`, which uses a revision 6 schema, while this version of uv only supports up to revision 5
       cause: TOML parse error at line 5, column 1
                |
              5 | [[package]]
