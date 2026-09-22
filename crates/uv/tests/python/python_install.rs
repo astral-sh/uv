@@ -4069,9 +4069,6 @@ fn python_install_compile_bytecode_multiple() {
 #[test]
 fn python_install_compile_bytecode_pyodide() {
     let context = uv_test::test_context_with_versions!(&[])
-        .with_filtered_python_keys()
-        .with_filtered_exe_suffix()
-        .with_filtered_compiled_file_count()
         .with_managed_python_dirs()
         .with_empty_python_install_mirror();
 

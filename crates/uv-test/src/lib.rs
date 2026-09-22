@@ -117,8 +117,6 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
         r"(?ms)^([ \t]*custom_certificates: )(?:None|Some\(\n.*?^[ \t]*\),\n[ \t]*\)),",
         "${1}[CERTIFICATES],",
     ),
-    // Filter SSL certificate loading debug messages (environment-dependent)
-    (r"DEBUG Loaded \d+ certificate\(s\) from [^\n]+\n", ""),
 ];
 
 /// Create a context for tests which simplifies shared behavior across tests.
@@ -1015,10 +1013,7 @@ impl TestContext {
                 .map(|pattern| (pattern, "[UV]".to_string())),
         );
 
-        // Exclude `link-mode` on Windows since we set it in the remote test suite
         if cfg!(windows) {
-            filters.push((" --link-mode <LINK_MODE>".to_string(), String::new()));
-            filters.push((r#"link-mode = "copy"\n"#.to_string(), String::new()));
             // Unix uses "exit status", Windows uses "exit code"
             filters.push((r"exit code: ".to_string(), "exit status: ".to_string()));
         }

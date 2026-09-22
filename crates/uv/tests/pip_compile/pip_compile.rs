@@ -1981,7 +1981,6 @@ fn compile_python_37() -> Result<()> {
             "warning: The requested Python version 3.7 is not available; .* will be used to build dependencies instead.\n",
             "",
         ),
-        (r"warning: uv is only compatible with Python 3\.8\+, found Python 3\.7.*\n", "")
     ]
         .into_iter()
         .chain(context.filters())
@@ -15795,9 +15794,6 @@ matplotlib
         // In any case, we filter `tzdata` out of the snapshot entirely
         // on all platforms for this reason.
         (r"( ?[-+~] ?)?tzdata==\d+(\.\d+)+(\s+[-+~]?\s+# via .*)?\n", ""),
-        // And because tzdata is omitted on Windows, the number of deps
-        // is different too. So filter that out too.
-        (r"Resolved 19 packages", "Resolved [NUM] packages"),
     ]
         .into_iter()
         .chain(context.filters())

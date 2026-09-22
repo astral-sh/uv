@@ -17,13 +17,6 @@ fn assert_project_unchanged(context: &TestContext, expected: &str) -> Result<()>
     Ok(())
 }
 
-/// Return snapshot filters for metadata fetched from a [`PackseServer`].
-fn packse_filters(context: &TestContext) -> Vec<(&str, &str)> {
-    let mut filters = context.filters();
-    filters.push((r"(?m)^WARN Range requests not supported[^\n]*\n", ""));
-    filters
-}
-
 /// Write a project where `foo==1` resolves two versions of `bar` in platform forks.
 fn write_fork_upgrade_project(
     context: &TestContext,
@@ -197,7 +190,7 @@ fn upgrade_ignores_disjoint_fork_version_for_selected_requirement() -> Result<()
         write_fork_upgrade_project(&context, &server, "bar==2 ; sys_platform != 'linux'")?;
 
     uv_snapshot!(
-        packse_filters(&context),
+        context.filters(),
         context
             .upgrade()
             .arg("bar")
@@ -221,7 +214,7 @@ fn upgrade_preserves_constraint_that_admits_multiple_fork_versions() -> Result<(
     let pyproject_toml = write_fork_upgrade_project(&context, &server, "bar>=1")?;
 
     uv_snapshot!(
-        packse_filters(&context),
+        context.filters(),
         context
             .upgrade()
             .arg("bar")
@@ -355,7 +348,7 @@ fn upgrade_rejects_conflicting_extra_declarations() -> Result<()> {
     fs_err::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(
-        packse_filters(&context),
+        context.filters(),
         context
             .upgrade()
             .arg("bar")
@@ -378,7 +371,7 @@ fn upgrade_expands_constraint_for_multiple_fork_versions() -> Result<()> {
     let pyproject_toml = write_fork_upgrade_project(&context, &server, "bar<2")?;
 
     uv_snapshot!(
-        packse_filters(&context),
+        context.filters(),
         context
             .upgrade()
             .arg("bar")
@@ -433,7 +426,7 @@ fn upgrade_expands_compatible_constraint_for_multiple_fork_versions() -> Result<
     fs_err::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(
-        packse_filters(&context),
+        context.filters(),
         context
             .upgrade()
             .arg("a")
@@ -704,7 +697,7 @@ fn upgrade_updates_multiple_marked_production_dependencies() -> Result<()> {
     fs_err::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(
-        packse_filters(&context),
+        context.filters(),
         context
             .upgrade()
             .arg("bar")
@@ -721,7 +714,7 @@ fn upgrade_updates_multiple_marked_production_dependencies() -> Result<()> {
     );
 
     let updated_pyproject_toml = fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?;
-    insta::with_settings!({ filters => packse_filters(&context) }, {
+    insta::with_settings!({ filters => context.filters() }, {
         insta::assert_snapshot!(
             updated_pyproject_toml,
             @r#"
@@ -781,7 +774,7 @@ fn upgrade_updates_multiple_named_packages_together() -> Result<()> {
     fs_err::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(
-        packse_filters(&context),
+        context.filters(),
         context
             .upgrade()
             .arg("foo")
@@ -800,7 +793,7 @@ fn upgrade_updates_multiple_named_packages_together() -> Result<()> {
     );
 
     let updated_pyproject_toml = fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?;
-    insta::with_settings!({ filters => packse_filters(&context) }, {
+    insta::with_settings!({ filters => context.filters() }, {
         insta::assert_snapshot!(
             updated_pyproject_toml,
             @r#"
@@ -852,7 +845,7 @@ fn upgrade_without_package_selects_all_production_dependencies() -> Result<()> {
     fs_err::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(
-        packse_filters(&context),
+        context.filters(),
         context.upgrade().env_remove(EnvVars::UV_EXCLUDE_NEWER),
         @"
     exit_code: 0 (success)
@@ -867,7 +860,7 @@ fn upgrade_without_package_selects_all_production_dependencies() -> Result<()> {
     );
 
     let updated_pyproject_toml = fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?;
-    insta::with_settings!({ filters => packse_filters(&context) }, {
+    insta::with_settings!({ filters => context.filters() }, {
         insta::assert_snapshot!(
             updated_pyproject_toml,
             @r#"
@@ -1054,7 +1047,7 @@ fn upgrade_exclude_leaves_dependency_as_hard_constraint() -> Result<()> {
     fs_err::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(
-        packse_filters(&context),
+        context.filters(),
         context
             .upgrade()
             .arg("--exclude")
@@ -1070,7 +1063,7 @@ fn upgrade_exclude_leaves_dependency_as_hard_constraint() -> Result<()> {
     );
 
     let updated_pyproject_toml = fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?;
-    insta::with_settings!({ filters => packse_filters(&context) }, {
+    insta::with_settings!({ filters => context.filters() }, {
         insta::assert_snapshot!(
             updated_pyproject_toml,
             @r#"
@@ -1138,7 +1131,7 @@ fn upgrade_updates_safe_declarations_and_warns_for_blocked_declarations() -> Res
     fs_err::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(
-        packse_filters(&context),
+        context.filters(),
         context
             .upgrade()
             .arg("bar")
@@ -1156,7 +1149,7 @@ fn upgrade_updates_safe_declarations_and_warns_for_blocked_declarations() -> Res
     );
 
     let updated_pyproject_toml = fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?;
-    insta::with_settings!({ filters => packse_filters(&context) }, {
+    insta::with_settings!({ filters => context.filters() }, {
         insta::assert_snapshot!(
             updated_pyproject_toml,
             @r#"
@@ -1230,7 +1223,7 @@ fn upgrade_updates_requirement_constrained_by_conflicting_groups() -> Result<()>
     fs_err::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(
-        packse_filters(&context),
+        context.filters(),
         context
             .upgrade()
             .arg("baz")
@@ -1282,7 +1275,7 @@ fn upgrade_succeeds_when_all_selected_declarations_are_blocked() -> Result<()> {
     fs_err::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(
-        packse_filters(&context),
+        context.filters(),
         context
             .upgrade()
             .arg("bar")
@@ -1331,7 +1324,7 @@ fn upgrade_rejects_mixed_updates_after_unrepresentable_blocker() -> Result<()> {
     fs_err::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(
-        packse_filters(&context),
+        context.filters(),
         context
             .upgrade()
             .arg("bar")
@@ -1380,7 +1373,8 @@ fn upgrade_preserves_hard_constraint_no_solution_failure() -> Result<()> {
         .write_str(&pyproject_toml)?;
     fs_err::remove_dir_all(&context.venv)?;
 
-    let filters: Vec<_> = packse_filters(&context)
+    let filters: Vec<_> = context
+        .filters()
         .into_iter()
         .chain([(
             // This hint is only shown when the current platform doesn't match the target.
@@ -1454,7 +1448,7 @@ fn upgrade_ignores_unrelated_path_package_when_attributing_versions() -> Result<
     fs_err::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(
-        packse_filters(&context),
+        context.filters(),
         context
             .upgrade()
             .arg("bar")
@@ -1470,7 +1464,7 @@ fn upgrade_ignores_unrelated_path_package_when_attributing_versions() -> Result<
     );
 
     let updated_pyproject_toml = fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?;
-    insta::with_settings!({ filters => packse_filters(&context) }, {
+    insta::with_settings!({ filters => context.filters() }, {
         insta::assert_snapshot!(
             updated_pyproject_toml,
             @r#"
@@ -1851,7 +1845,7 @@ fn upgrade_ignores_inapplicable_non_registry_source_without_requires_python() ->
     fs_err::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(
-        packse_filters(&context),
+        context.filters(),
         context
             .upgrade()
             .arg("baz")
@@ -1910,7 +1904,7 @@ fn upgrade_skips_excluded_declarations_and_updates_applicable_requirement() -> R
     fs_err::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(
-        packse_filters(&context),
+        context.filters(),
         context
             .upgrade()
             .arg("bar")

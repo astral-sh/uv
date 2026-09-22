@@ -1573,15 +1573,7 @@ fn install_git_source_dist_cached() -> Result<()> {
     // Clear the cache, then re-run the installation in a new virtual environment.
     context.reset_venv();
 
-    let filters = if cfg!(windows) {
-        [("Removed 2 files", "Removed 3 files")]
-            .into_iter()
-            .chain(context.filters())
-            .collect()
-    } else {
-        context.filters()
-    };
-    uv_snapshot!(filters, context.clean()
+    uv_snapshot!(context.filters(), context.clean()
         .arg("werkzeug"), @"
     exit_code: 0 (success)
     ----- stderr -----

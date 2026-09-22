@@ -2967,7 +2967,6 @@ async fn lock_sdist_url_cache_heal_hash_mismatch() -> Result<()> {
     // Installation must repair the source tree before it can build a wheel. The cached revision's
     // hashes still apply, even though this command does not use the lockfile.
     uv_snapshot!(context.filters(), context.pip_install().arg(&archive_url)
-        .env_remove(EnvVars::RUST_LOG)
         .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
     exit_code: 2 (failure)
     ----- stderr -----

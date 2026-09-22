@@ -1686,13 +1686,7 @@ fn workspace_metadata_virtual_workspace() -> Result<()> {
         &workspace,
     )?;
 
-    let mut filters = context.filters();
-    filters.push((
-        r"(?m)^WARN Ignoring non-directory workspace member: `[^\n]+`\n",
-        "",
-    ));
-
-    uv_snapshot!(filters, context.workspace_metadata().current_dir(&workspace), @r#"
+    uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&workspace), @r#"
     exit_code: 0 (success)
     ----- stdout -----
     {
