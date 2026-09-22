@@ -12,6 +12,3 @@ mod lock;
 
 #[cfg(all(feature = "test-python", feature = "test-universal"))]
 mod minimum_libc;
-
-#[cfg(all(feature = "test-python", feature = "test-universal"))]
-mod resolution_inputs;
