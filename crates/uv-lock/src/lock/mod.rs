@@ -2818,7 +2818,7 @@ impl Lock {
     /// Restrict package cutoffs to consulted runtime inputs, or locked packages in older locks.
     pub fn filter_exclude_newer(&self, exclude_newer: ExcludeNewer) -> ExcludeNewer {
         if let Some(inputs) = &self.manifest.resolution_inputs {
-            exclude_newer.filter_packages(inputs.requirements.iter())
+            exclude_newer.filter_packages(inputs.exclude_newer.iter())
         } else {
             exclude_newer.filter_packages(self.packages.iter().map(Package::name))
         }

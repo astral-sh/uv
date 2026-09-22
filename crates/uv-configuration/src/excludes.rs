@@ -69,7 +69,7 @@ impl<'de> serde::Deserialize<'de> for ExcludeDependency {
 /// A set of packages to exclude from resolution.
 #[derive(Debug, Default, Clone)]
 pub struct Excludes {
-    recorder: ResolutionRecorder,
+    recorder: Option<ResolutionRecorder>,
     global: FxHashSet<PackageName>,
     scoped: FxHashMap<PackageName, Vec<ScopedExclusions>>,
 }
@@ -83,7 +83,7 @@ struct ScopedExclusions {
 impl Excludes {
     /// Record configuration consultations in the given runtime resolution.
     #[must_use]
-    pub fn with_recorder(mut self, recorder: ResolutionRecorder) -> Self {
+    pub fn with_recorder(mut self, recorder: Option<ResolutionRecorder>) -> Self {
         self.recorder = recorder;
         self
     }
@@ -117,7 +117,9 @@ impl Excludes {
 
     /// Check if a package is excluded.
     pub fn contains(&self, name: &PackageName) -> bool {
-        self.recorder.requirement(name);
+        if let Some(recorder) = &self.recorder {
+            recorder.exclusion(name);
+        }
         self.global.contains(name)
     }
 
@@ -178,11 +180,11 @@ impl Excludes {
         package: Option<(&PackageName, &Version)>,
         dependency: &PackageName,
     ) -> bool {
-        if let Some((name, _)) = package {
-            self.recorder.package(name);
-        }
         self.contains(dependency)
             || package.is_some_and(|(package, version)| {
+                if let Some(recorder) = &self.recorder {
+                    recorder.scoped_exclusion(package);
+                }
                 self.scoped.get(package).is_some_and(|entries| {
                     entries
                         .iter()

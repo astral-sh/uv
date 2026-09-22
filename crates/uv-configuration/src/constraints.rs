@@ -12,7 +12,7 @@ use uv_pep508::MarkerTree;
 /// A set of constraints for a set of requirements.
 #[derive(Debug, Default, Clone)]
 pub struct Constraints {
-    recorder: ResolutionRecorder,
+    recorder: Option<ResolutionRecorder>,
     /// Original declarations, including hashes, for hash verification.
     specifications: Vec<NameRequirementSpecification>,
     /// Constraints grouped by package name.
@@ -22,7 +22,7 @@ pub struct Constraints {
 impl Constraints {
     /// Record configuration consultations in the given runtime resolution.
     #[must_use]
-    pub fn with_recorder(mut self, recorder: ResolutionRecorder) -> Self {
+    pub fn with_recorder(mut self, recorder: Option<ResolutionRecorder>) -> Self {
         self.recorder = recorder;
         self
     }
@@ -57,7 +57,7 @@ impl Constraints {
                 });
         }
         Self {
-            recorder: ResolutionRecorder::default(),
+            recorder: None,
             specifications,
             requirements: constraints,
         }
@@ -75,7 +75,9 @@ impl Constraints {
 
     /// Get the constraints for a package.
     pub fn get(&self, name: &PackageName) -> Option<&Vec<Requirement>> {
-        self.recorder.requirement(name);
+        if let Some(recorder) = &self.recorder {
+            recorder.constraint(name);
+        }
         self.requirements.get(name)
     }
 

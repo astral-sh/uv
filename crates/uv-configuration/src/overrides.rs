@@ -90,7 +90,7 @@ where
 /// A set of overrides for a set of requirements.
 #[derive(Debug, Default, Clone)]
 pub struct Overrides {
-    recorder: ResolutionRecorder,
+    recorder: Option<ResolutionRecorder>,
     global: FxHashMap<PackageName, Vec<Requirement>>,
     scoped: FxHashMap<PackageName, Vec<ScopedOverrides>>,
 }
@@ -123,7 +123,7 @@ pub enum ScopedOverrideSourceError {
 impl Overrides {
     /// Record configuration consultations in the given runtime resolution.
     #[must_use]
-    pub fn with_recorder(mut self, recorder: ResolutionRecorder) -> Self {
+    pub fn with_recorder(mut self, recorder: Option<ResolutionRecorder>) -> Self {
         self.recorder = recorder;
         self
     }
@@ -139,7 +139,7 @@ impl Overrides {
                 .push(requirement);
         }
         Self {
-            recorder: ResolutionRecorder::default(),
+            recorder: None,
             global,
             scoped: FxHashMap::default(),
         }
@@ -209,7 +209,7 @@ impl Overrides {
         Ok(Self {
             global,
             scoped,
-            recorder: ResolutionRecorder::default(),
+            recorder: None,
         })
     }
 
@@ -262,12 +262,17 @@ impl Overrides {
 
     /// Get the overrides for a package.
     fn get(&self, name: &PackageName) -> Option<&Vec<Requirement>> {
+        if let Some(recorder) = &self.recorder {
+            recorder.override_dependency(name);
+        }
         self.global.get(name)
     }
 
     /// Get the overrides for a specific package version.
     fn scoped_for(&self, package: &PackageName, version: &Version) -> Option<&ScopedOverrides> {
-        self.recorder.package(package);
+        if let Some(recorder) = &self.recorder {
+            recorder.scoped_override(package);
+        }
         self.scoped.get(package).and_then(|entries| {
             entries
                 .iter()
@@ -345,7 +350,7 @@ impl Overrides {
             );
         }
 
-        if self.global.is_empty() && !self.recorder.is_enabled() {
+        if self.global.is_empty() && self.recorder.is_none() {
             // Fast path: There are no overrides.
             return Either::Right(Either::Left(requirements.into_iter().map(Cow::Borrowed)));
         }
@@ -360,7 +365,6 @@ impl Overrides {
         requirement: &'a Requirement,
         scoped: Option<&'a ScopedOverrides>,
     ) -> impl Iterator<Item = Cow<'a, Requirement>> {
-        self.recorder.requirement(&requirement.name);
         let overrides = scoped
             .and_then(|scoped| scoped.overrides.get(&requirement.name))
             .or_else(|| self.get(&requirement.name));

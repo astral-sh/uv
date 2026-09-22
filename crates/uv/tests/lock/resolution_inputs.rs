@@ -1,7 +1,8 @@
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use assert_fs::prelude::*;
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
+use url::Url;
 use uv_test::packse::{PackseServer, scenario::Scenario};
 use uv_test::uv_snapshot;
 
@@ -15,7 +16,7 @@ fn prune_unused_inputs() -> Result<()> {
         name = "project"
         version = "1.0"
         requires-python = ">=3.12"
-        dependencies = ["excluded", "overridden"]
+        dependencies = ["excluded", "overridden", "shadowed"]
 
         [tool.uv]
         preview-features = ["resolution-inputs"]
@@ -25,6 +26,8 @@ fn prune_unused_inputs() -> Result<()> {
         ]
         override-dependencies = [
             "overridden; python_version < '0'",
+            "shadowed==1",
+            { package = { name = "project" }, dependencies = ["shadowed; python_version < '0'"] },
             "unused==1",
             { package = { name = "absent" }, dependencies = ["unused==2"] },
         ]
@@ -32,8 +35,13 @@ fn prune_unused_inputs() -> Result<()> {
             "excluded", "unused",
             { package = { name = "absent" }, dependencies = ["unused"] },
         ]
-        exclude-newer-package = { unused = "2020-01-01T00:00:00Z" }
         dependency-metadata = [{ name = "unused", version = "1" }]
+
+        [tool.uv.exclude-newer-package]
+        unused = "2020-01-01T00:00:00Z"
+        excluded = "2020-01-01T00:00:00Z"
+        overridden = "2020-01-01T00:00:00Z"
+        shadowed = "2020-01-01T00:00:00Z"
     "#};
     pyproject.write_str(project)?;
     uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
@@ -51,16 +59,33 @@ fn prune_unused_inputs() -> Result<()> {
         exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
-        overrides = [{ name = "overridden", marker = "python_full_version < '0'" }]
+        overrides = [
+            { package = { name = "project" }, dependencies = [{ name = "shadowed", marker = "python_full_version < '0'" }] },
+            { name = "overridden", marker = "python_full_version < '0'" },
+        ]
         excludes = ["excluded"]
 
         [manifest.resolution-inputs]
-        requirements = [
+        constraints = [
+            "excluded",
+            "overridden",
+            "project",
+            "shadowed",
+        ]
+        overrides = [
             "excluded",
             "overridden",
             "project",
         ]
-        packages = ["project"]
+        exclusions = [
+            "excluded",
+            "overridden",
+            "project",
+            "shadowed",
+        ]
+        scoped-constraints = ["project"]
+        scoped-overrides = ["project"]
+        scoped-exclusions = ["project"]
         dependency-metadata = [{ name = "project" }]
 
         [[package]]
@@ -72,15 +97,18 @@ fn prune_unused_inputs() -> Result<()> {
         requires-dist = [
             { name = "excluded" },
             { name = "overridden" },
+            { name = "shadowed" },
         ]
         "#);
     });
 
-    // Changing or adding unrelated entries does not invalidate the recorded consultations.
+    // Unrelated entries, shadowed global overrides, and unconsulted cutoffs can change independently.
     pyproject.write_str(
         &project
             .replace("unused", "other")
-            .replace("absent", "other-parent"),
+            .replace("absent", "other-parent")
+            .replace("shadowed==1", "shadowed==2")
+            .replace("2020-01-01", "2021-01-01"),
     )?;
     uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache").arg("--no-preview"), @"
     exit_code: 0 (success)
@@ -97,6 +125,78 @@ fn prune_unused_inputs() -> Result<()> {
       cause: Because excluded was not found in the cache and your project depends on excluded, we can conclude that your project's requirements are unsatisfiable.
 
     hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
+    ");
+    Ok(())
+}
+
+/// Global URL overrides can affect source selection even when a scoped override supplies the requirement.
+#[test]
+fn source_policy() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "1.0"
+    "#})?;
+    let other = context.temp_dir.child("other");
+    other.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "2.0"
+    "#})?;
+    let child_url = Url::from_file_path(child.path())
+        .map_err(|()| anyhow!("child path is not a valid file URL"))?;
+    let other_url = Url::from_file_path(other.path())
+        .map_err(|()| anyhow!("other path is not a valid file URL"))?;
+    let project = formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        preview-features = ["resolution-inputs"]
+        override-dependencies = [
+            "child @ {child_url}",
+            {{ package = {{ name = "project" }}, dependencies = ["child>=1"] }},
+        ]
+        exclude-newer-package = {{ child = "2020-01-01T00:00:00Z" }}
+    "#};
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(&project)?;
+    uv_snapshot!(context.filters(), context.tree().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    project v1.0
+    └── child v1.0
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // A local source does not consult the package's registry upload cutoff.
+    pyproject.write_str(&project.replace("2020-01-01", "2021-01-01"))?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    pyproject.write_str(&project.replace(child_url.as_str(), other_url.as_str()))?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
     Ok(())
 }
@@ -146,14 +246,27 @@ fn newly_matching_inputs() -> Result<()> {
         [manifest]
 
         [manifest.resolution-inputs]
-        requirements = [
+        constraints = [
             "child",
             "project",
         ]
-        packages = [
+        overrides = [
             "child",
             "project",
         ]
+        exclusions = [
+            "child",
+            "project",
+        ]
+        scoped-constraints = [
+            "child",
+            "project",
+        ]
+        scoped-overrides = [
+            "child",
+            "project",
+        ]
+        scoped-exclusions = ["project"]
         dependency-metadata = [
             { name = "child" },
             { name = "project" },
@@ -183,7 +296,7 @@ fn newly_matching_inputs() -> Result<()> {
         "override-dependencies = [\"child==1.0\"]",
         "constraint-dependencies = [{ package = { name = \"child\" }, dependencies = [] }]",
         "override-dependencies = [{ package = { name = \"child\" }, dependencies = [] }]",
-        "exclude-dependencies = [{ package = { name = \"child\" }, dependencies = [] }]",
+        "exclude-dependencies = [{ package = { name = \"project\" }, dependencies = [] }]",
         "dependency-metadata = [{ name = \"child\", version = \"1.0\" }]",
     ] {
         pyproject.write_str(&project.replace("[tool.uv]\n", &format!("[tool.uv]\n{setting}\n")))?;
@@ -198,6 +311,17 @@ fn newly_matching_inputs() -> Result<()> {
             ");
         }
     }
+
+    // Looking up overrides for a dependency-free parent does not consult its exclusions.
+    pyproject.write_str(&project.replace(
+        "[tool.uv]\n",
+        "[tool.uv]\nexclude-dependencies = [{ package = { name = \"child\" }, dependencies = [] }]\n",
+    ))?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
 
     // A new exclusion removes a previously resolved package.
     pyproject.write_str(&project.replace(
@@ -225,7 +349,7 @@ fn empty_scopes() -> Result<()> {
         name = "project"
         version = "1.0"
         requires-python = ">=3.12"
-        dependencies = []
+        dependencies = ["missing; python_version < '0'"]
 
         [tool.uv]
         preview-features = ["resolution-inputs"]
@@ -264,14 +388,30 @@ fn empty_scopes() -> Result<()> {
         ]
 
         [manifest.resolution-inputs]
-        requirements = ["project"]
-        packages = ["project"]
+        constraints = [
+            "missing",
+            "project",
+        ]
+        overrides = [
+            "missing",
+            "project",
+        ]
+        exclusions = [
+            "missing",
+            "project",
+        ]
+        scoped-constraints = ["project"]
+        scoped-overrides = ["project"]
+        scoped-exclusions = ["project"]
         dependency-metadata = [{ name = "project" }]
 
         [[package]]
         name = "project"
         version = "1.0"
         source = { virtual = "." }
+
+        [package.metadata]
+        requires-dist = [{ name = "missing", marker = "python_full_version < '0'" }]
         "#);
     });
     uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
@@ -395,14 +535,27 @@ fn ignores_build_dependencies() -> Result<()> {
         [manifest]
 
         [manifest.resolution-inputs]
-        requirements = [
+        constraints = [
             "child",
             "project",
         ]
-        packages = [
+        overrides = [
             "child",
             "project",
         ]
+        exclusions = [
+            "child",
+            "project",
+        ]
+        scoped-constraints = [
+            "child",
+            "project",
+        ]
+        scoped-overrides = [
+            "child",
+            "project",
+        ]
+        scoped-exclusions = ["project"]
         dependency-metadata = [
             { name = "child" },
             { name = "project" },
@@ -486,8 +639,11 @@ fn metadata_precedence() -> Result<()> {
         [manifest]
 
         [manifest.resolution-inputs]
-        requirements = ["project"]
-        packages = ["project"]
+        constraints = ["project"]
+        overrides = ["project"]
+        exclusions = ["project"]
+        scoped-constraints = ["project"]
+        scoped-overrides = ["project"]
         dependency-metadata = [{ name = "project" }]
 
         [[package]]
@@ -533,14 +689,26 @@ fn metadata_precedence() -> Result<()> {
         [manifest]
 
         [manifest.resolution-inputs]
-        requirements = [
+        constraints = [
             "anyio",
             "project",
         ]
-        packages = [
+        overrides = [
             "anyio",
             "project",
         ]
+        exclusions = [
+            "anyio",
+            "project",
+        ]
+        scoped-constraints = ["project"]
+        scoped-overrides = [
+            "anyio",
+            "project",
+        ]
+        scoped-exclusions = ["project"]
+        candidate-policy = ["anyio"]
+        exclude-newer = ["anyio"]
         dependency-metadata = [
             { name = "anyio", version = "3.7.0" },
             { name = "project" },
@@ -816,16 +984,47 @@ fn backtracking() -> Result<()> {
         excludes = [{ package = { name = "discarded" }, dependencies = ["unrelated"] }]
 
         [manifest.resolution-inputs]
-        requirements = [
+        constraints = [
             "a",
             "discarded",
             "leaf",
             "project",
         ]
-        packages = [
+        overrides = [
+            "a",
+            "discarded",
+            "leaf",
+            "project",
+        ]
+        exclusions = [
+            "a",
+            "discarded",
+            "leaf",
+            "project",
+        ]
+        scoped-constraints = [
             "a",
             "discarded",
             "project",
+        ]
+        scoped-overrides = [
+            "a",
+            "discarded",
+            "project",
+        ]
+        scoped-exclusions = [
+            "a",
+            "discarded",
+            "project",
+        ]
+        candidate-policy = [
+            "a",
+            "discarded",
+        ]
+        exclude-newer = [
+            "a",
+            "discarded",
+            "leaf",
         ]
         dependency-metadata = [
             { name = "a", version = "1.0.0" },
@@ -967,14 +1166,27 @@ fn metadata_unknown_version() -> Result<()> {
         [manifest]
 
         [manifest.resolution-inputs]
-        requirements = [
+        constraints = [
             "child",
             "project",
         ]
-        packages = [
+        overrides = [
             "child",
             "project",
         ]
+        exclusions = [
+            "child",
+            "project",
+        ]
+        scoped-constraints = [
+            "child",
+            "project",
+        ]
+        scoped-overrides = [
+            "child",
+            "project",
+        ]
+        scoped-exclusions = ["project"]
         dependency-metadata = [
             { name = "child" },
             { name = "project" },
@@ -1079,14 +1291,26 @@ fn metadata_forks() -> Result<()> {
         [manifest]
 
         [manifest.resolution-inputs]
-        requirements = [
+        constraints = [
             "anyio",
             "project",
         ]
-        packages = [
+        overrides = [
             "anyio",
             "project",
         ]
+        exclusions = [
+            "anyio",
+            "project",
+        ]
+        scoped-constraints = ["project"]
+        scoped-overrides = [
+            "anyio",
+            "project",
+        ]
+        scoped-exclusions = ["project"]
+        candidate-policy = ["anyio"]
+        exclude-newer = ["anyio"]
         dependency-metadata = [
             { name = "anyio", version = "3.6.0" },
             { name = "anyio", version = "3.7.0" },

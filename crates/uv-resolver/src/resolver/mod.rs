@@ -118,7 +118,7 @@ pub struct Resolver<Provider: ResolverProvider, InstalledPackages: InstalledPack
 /// State that is shared between the prefetcher and the PubGrub solver during
 /// resolution, across all forks.
 struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
-    recorder: ResolutionRecorder,
+    recorder: Option<ResolutionRecorder>,
     project: Option<PackageName>,
     requirements: Vec<Requirement>,
     constraints: Constraints,

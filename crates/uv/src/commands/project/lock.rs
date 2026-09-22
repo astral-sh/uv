@@ -997,9 +997,9 @@ async fn do_lock(
         // to a fresh resolve.
         _ => {
             let recorder = if preview.is_enabled(PreviewFeature::ResolutionInputs) {
-                ResolutionRecorder::enabled()
+                Some(ResolutionRecorder::default())
             } else {
-                ResolutionRecorder::default()
+                None
             };
             let database = DistributionDatabase::new(
                 &client,
@@ -1128,7 +1128,7 @@ async fn do_lock(
                 dependency_groups,
                 dependency_metadata.values().cloned(),
             )
-            .prune_unused(recorder.snapshot())
+            .prune_unused(recorder.as_ref().map(ResolutionRecorder::snapshot))
             .relative_to(target.install_path())?;
 
             let previous = existing_lock.map(ValidatedLock::into_lock);

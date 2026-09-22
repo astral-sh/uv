@@ -1,5 +1,5 @@
 use std::collections::BTreeSet;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use serde::{Deserialize, Serialize};
 use uv_normalize::PackageName;
@@ -12,12 +12,31 @@ use uv_pep440::Version;
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct ResolutionLookups {
-    /// Dependency names whose constraints, overrides, exclusions, or candidate policy were consulted.
+    /// Dependency names whose global constraints were consulted.
     #[serde(default)]
-    pub requirements: BTreeSet<PackageName>,
-    /// Parent packages whose dependency scopes were consulted.
+    pub constraints: BTreeSet<PackageName>,
+    /// Dependency names whose global overrides were consulted.
     #[serde(default)]
-    pub packages: BTreeSet<PackageName>,
+    pub overrides: BTreeSet<PackageName>,
+    /// Dependency names whose global exclusions were consulted.
+    #[serde(default)]
+    pub exclusions: BTreeSet<PackageName>,
+    /// Parent packages whose constraint scopes were consulted.
+    #[serde(default)]
+    pub scoped_constraints: BTreeSet<PackageName>,
+    /// Parent packages whose override scopes were consulted.
+    #[serde(default)]
+    pub scoped_overrides: BTreeSet<PackageName>,
+    /// Parent packages whose exclusion scopes were consulted.
+    #[serde(default)]
+    pub scoped_exclusions: BTreeSet<PackageName>,
+    /// Names whose candidate policy was consulted. Constraints, overrides, and exclusions can
+    /// contribute to this policy even when their package scopes are not selected.
+    #[serde(default)]
+    pub candidate_policy: BTreeSet<PackageName>,
+    /// Names whose package version lists were requested, consulting package-specific upload cutoffs.
+    #[serde(default)]
+    pub exclude_newer: BTreeSet<PackageName>,
     /// Static metadata queries, including their version context.
     #[serde(default)]
     pub dependency_metadata: BTreeSet<DependencyMetadataQuery>,
@@ -32,67 +51,79 @@ pub struct DependencyMetadataQuery {
     pub version: Option<Version>,
 }
 
-/// A shared recorder for a single runtime resolution. Disabled recorders do no work.
+/// A shared recorder for a single runtime resolution.
 ///
-/// Build resolutions use their own, disabled recorder, even when fetching runtime metadata invokes
-/// a build backend. Clones share consultations across resolver forks and concurrent metadata requests.
+/// Build resolutions have no recorder, even when fetching runtime metadata invokes a build backend.
+/// Clones share consultations across resolver forks and concurrent metadata requests.
 #[derive(Debug, Default, Clone)]
-pub struct ResolutionRecorder(Option<Arc<Mutex<ResolutionLookups>>>);
+pub struct ResolutionRecorder(Arc<Mutex<ResolutionLookups>>);
 
 impl ResolutionRecorder {
-    /// Enable recording for a new resolution.
-    pub fn enabled() -> Self {
-        Self(Some(Arc::default()))
+    /// Record a global constraint lookup, including misses.
+    pub fn constraint(&self, name: &PackageName) {
+        self.lookups().constraints.insert(name.clone());
     }
 
-    /// Return whether recording is enabled.
-    pub fn is_enabled(&self) -> bool {
-        self.0.is_some()
+    /// Record a global override lookup, including misses.
+    pub fn override_dependency(&self, name: &PackageName) {
+        self.lookups().overrides.insert(name.clone());
     }
 
-    /// Record a requirement lookup before applying configuration or filtering its markers.
-    pub fn requirement(&self, name: &PackageName) {
-        if let Some(lookups) = &self.0 {
-            lookups
-                .lock()
-                .expect("resolution lookups lock poisoned")
-                .requirements
-                .insert(name.clone());
-        }
+    /// Record a global exclusion lookup, including misses.
+    pub fn exclusion(&self, name: &PackageName) {
+        self.lookups().exclusions.insert(name.clone());
     }
 
-    /// Record a package scope lookup, even when the package has no dependencies or matching scope.
-    pub fn package(&self, name: &PackageName) {
-        if let Some(lookups) = &self.0 {
-            lookups
-                .lock()
-                .expect("resolution lookups lock poisoned")
-                .packages
-                .insert(name.clone());
-        }
+    /// Record a lookup of constraints scoped to a parent package.
+    pub fn scoped_constraint(&self, package: &PackageName) {
+        self.lookups().scoped_constraints.insert(package.clone());
+    }
+
+    /// Record a lookup of overrides scoped to a parent package.
+    pub fn scoped_override(&self, package: &PackageName) {
+        self.lookups().scoped_overrides.insert(package.clone());
+    }
+
+    /// Record a lookup of exclusions scoped to a parent package.
+    pub fn scoped_exclusion(&self, package: &PackageName) {
+        self.lookups().scoped_exclusions.insert(package.clone());
+    }
+
+    /// Record a consultation of manifest-wide prerelease or yanked-version policy.
+    pub fn candidate_policy(&self, name: &PackageName) {
+        self.lookups().candidate_policy.insert(name.clone());
+    }
+
+    /// Record the global settings that determine allowed URLs and explicit indexes.
+    pub fn source_policy(&self, name: &PackageName) {
+        let mut lookups = self.lookups();
+        lookups.constraints.insert(name.clone());
+        lookups.overrides.insert(name.clone());
+        lookups.exclusions.insert(name.clone());
+    }
+
+    /// Record a package version request before checking the version cache.
+    pub fn exclude_newer(&self, name: &PackageName) {
+        self.lookups().exclude_newer.insert(name.clone());
     }
 
     /// Record a static metadata lookup before checking for a matching declaration.
     pub fn dependency_metadata(&self, name: &PackageName, version: Option<&Version>) {
-        if let Some(lookups) = &self.0 {
-            lookups
-                .lock()
-                .expect("resolution lookups lock poisoned")
-                .dependency_metadata
-                .insert(DependencyMetadataQuery {
-                    name: name.clone(),
-                    version: version.cloned(),
-                });
-        }
+        self.lookups()
+            .dependency_metadata
+            .insert(DependencyMetadataQuery {
+                name: name.clone(),
+                version: version.cloned(),
+            });
     }
 
     /// Snapshot the consultations once runtime resolution has completed.
-    pub fn snapshot(&self) -> Option<ResolutionLookups> {
-        self.0.as_ref().map(|lookups| {
-            lookups
-                .lock()
-                .expect("resolution lookups lock poisoned")
-                .clone()
-        })
+    pub fn snapshot(&self) -> ResolutionLookups {
+        self.lookups().clone()
+    }
+
+    /// Acquire the shared lookup sets.
+    fn lookups(&self) -> MutexGuard<'_, ResolutionLookups> {
+        self.0.lock().expect("resolution lookups lock poisoned")
     }
 }

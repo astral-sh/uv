@@ -4,7 +4,7 @@ use same_file::is_same_file;
 use tracing::debug;
 
 use uv_cache_key::CanonicalUrl;
-use uv_distribution_types::RequirementSource;
+use uv_distribution_types::{RequirementSource, ResolutionRecorder};
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
 use uv_pep508::VerbatimUrl;
@@ -24,6 +24,7 @@ use crate::{DependencyMode, Manifest, ResolveError, ResolverEnvironment};
 /// [`crate::fork_urls::ForkUrls`].
 #[derive(Debug, Default)]
 pub(crate) struct Urls {
+    recorder: Option<ResolutionRecorder>,
     /// URL requirements in overrides. An override URL replaces all requirements and constraints
     /// URLs. There can be multiple URLs for the same package as long as they are in different
     /// forks.
@@ -118,7 +119,11 @@ impl Urls {
             overrides.add(requirement.as_ref(), url);
         }
 
-        Self { overrides, regular }
+        Self {
+            recorder: manifest.recorder.clone(),
+            overrides,
+            regular,
+        }
     }
 
     /// Return an iterator over the allowed URLs for the given package.
@@ -135,6 +140,9 @@ impl Urls {
         url: Option<&'a VerbatimParsedUrl>,
         git: &'a GitResolver,
     ) -> Result<impl Iterator<Item = &'a VerbatimParsedUrl>, ResolveError> {
+        if let Some(recorder) = &self.recorder {
+            recorder.source_policy(name);
+        }
         if self.overrides.contains_key(name) {
             Ok(Either::Left(Either::Left(
                 self.overrides.get(name, env).into_iter(),
@@ -150,6 +158,9 @@ impl Urls {
 
     /// Return `true` if the package has any URL (from overrides or regular requirements).
     pub(crate) fn any_url(&self, name: &PackageName) -> bool {
+        if let Some(recorder) = &self.recorder {
+            recorder.source_policy(name);
+        }
         self.overrides.contains_key(name) || self.get_regular(name).is_some()
     }
 

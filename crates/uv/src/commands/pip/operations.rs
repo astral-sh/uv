@@ -129,7 +129,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     build_dispatch: &BuildDispatch<'_>,
     concurrency: &Concurrency,
     options: Options,
-    recorder: ResolutionRecorder,
+    recorder: Option<ResolutionRecorder>,
     logger: Box<dyn ResolveLogger>,
     printer: Printer,
 ) -> Result<(ResolverOutput, HashStrategy), Error> {

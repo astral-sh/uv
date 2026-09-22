@@ -41,7 +41,8 @@ impl ResolverManifest {
 /// Select configuration relevant to recorded runtime lookups when writing or validating a lock.
 pub(super) struct ManifestFilter<'a> {
     lookups: Option<&'a ResolutionLookups>,
-    packages: BTreeSet<PackageName>,
+    policy_constraints: BTreeSet<PackageName>,
+    policy_overrides: BTreeSet<PackageName>,
     selected_metadata: BTreeSet<(&'a PackageName, &'a Option<Version>)>,
     unversioned_metadata: BTreeSet<&'a PackageName>,
 }
@@ -56,7 +57,8 @@ impl<'a> ManifestFilter<'a> {
     ) -> Self {
         let mut filter = Self {
             lookups,
-            packages: BTreeSet::new(),
+            policy_constraints: BTreeSet::new(),
+            policy_overrides: BTreeSet::new(),
             selected_metadata: BTreeSet::new(),
             unversioned_metadata: BTreeSet::new(),
         };
@@ -67,15 +69,16 @@ impl<'a> ManifestFilter<'a> {
         // Scoped constraints and overrides also affect global candidate selection. Retain all
         // scopes (including empty ones) for a parent with a declaration for a consulted name.
         // Its exclusions can suppress those contributions, even if the parent never resolves.
-        filter.packages.clone_from(&lookups.packages);
         for entry in constraints {
             if let Constraint::Package(scope) = entry
                 && scope
                     .dependencies
                     .iter()
-                    .any(|requirement| lookups.requirements.contains(&requirement.name))
+                    .any(|requirement| lookups.candidate_policy.contains(&requirement.name))
             {
-                filter.packages.insert(scope.package.name().clone());
+                filter
+                    .policy_constraints
+                    .insert(scope.package.name().clone());
             }
         }
         for entry in overrides {
@@ -83,9 +86,9 @@ impl<'a> ManifestFilter<'a> {
                 && scope
                     .dependencies
                     .iter()
-                    .any(|requirement| lookups.requirements.contains(&requirement.name))
+                    .any(|requirement| lookups.candidate_policy.contains(&requirement.name))
             {
-                filter.packages.insert(scope.package.name().clone());
+                filter.policy_overrides.insert(scope.package.name().clone());
             }
         }
 
@@ -108,23 +111,39 @@ impl<'a> ManifestFilter<'a> {
     pub(super) fn includes_constraint(&self, entry: &Constraint<Requirement>) -> bool {
         self.lookups.is_none_or(|lookups| match entry {
             Constraint::Requirement(requirement) => {
-                lookups.requirements.contains(&requirement.name)
+                lookups.constraints.contains(&requirement.name)
+                    || lookups.candidate_policy.contains(&requirement.name)
             }
-            Constraint::Package(scope) => self.packages.contains(scope.package.name()),
+            Constraint::Package(scope) => {
+                lookups.scoped_constraints.contains(scope.package.name())
+                    || self.policy_constraints.contains(scope.package.name())
+            }
         })
     }
 
     pub(super) fn includes_override(&self, entry: &Override<Requirement>) -> bool {
         self.lookups.is_none_or(|lookups| match entry {
-            Override::Requirement(requirement) => lookups.requirements.contains(&requirement.name),
-            Override::Package(scope) => self.packages.contains(scope.package.name()),
+            Override::Requirement(requirement) => {
+                lookups.overrides.contains(&requirement.name)
+                    || lookups.candidate_policy.contains(&requirement.name)
+            }
+            Override::Package(scope) => {
+                lookups.scoped_overrides.contains(scope.package.name())
+                    || self.policy_overrides.contains(scope.package.name())
+            }
         })
     }
 
     pub(super) fn includes_exclusion(&self, entry: &ExcludeDependency) -> bool {
         self.lookups.is_none_or(|lookups| match entry {
-            ExcludeDependency::Dependency(name) => lookups.requirements.contains(name),
-            ExcludeDependency::Package(scope) => self.packages.contains(scope.package()),
+            ExcludeDependency::Dependency(name) => {
+                lookups.exclusions.contains(name) || lookups.candidate_policy.contains(name)
+            }
+            ExcludeDependency::Package(scope) => {
+                lookups.scoped_exclusions.contains(scope.package())
+                    || self.policy_constraints.contains(scope.package())
+                    || self.policy_overrides.contains(scope.package())
+            }
         })
     }
 

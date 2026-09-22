@@ -13,7 +13,7 @@ use crate::{DependencyMode, Manifest, ResolverEnvironment};
 #[derive(Debug, Default, Clone)]
 pub struct AllowedYanks {
     versions: Arc<FxHashMap<PackageName, FxHashSet<Version>>>,
-    recorder: ResolutionRecorder,
+    recorder: Option<ResolutionRecorder>,
 }
 
 impl AllowedYanks {
@@ -59,7 +59,9 @@ impl AllowedYanks {
 
     /// Returns `true` if the package-version is allowed, even if it's marked as yanked.
     pub(crate) fn contains(&self, package_name: &PackageName, version: &Version) -> bool {
-        self.recorder.requirement(package_name);
+        if let Some(recorder) = &self.recorder {
+            recorder.candidate_policy(package_name);
+        }
         self.versions
             .get(package_name)
             .is_some_and(|versions| versions.contains(version))

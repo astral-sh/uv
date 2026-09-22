@@ -17,7 +17,7 @@ use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, Name, Origin,
-    PackageConfigSettings, Resolution, ResolutionRecorder,
+    PackageConfigSettings, Resolution,
 };
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
@@ -460,7 +460,7 @@ pub(crate) async fn pip_sync(
             &build_dispatch,
             &concurrency,
             options,
-            ResolutionRecorder::default(),
+            None,
             Box::new(DefaultResolveLogger),
             printer,
         )

@@ -25,7 +25,7 @@ use crate::{Exclusions, Manifest, Options, ResolverEnvironment};
 
 #[derive(Debug, Clone)]
 pub(crate) struct CandidateSelector {
-    recorder: ResolutionRecorder,
+    recorder: Option<ResolutionRecorder>,
     resolution_strategy: ResolutionStrategy,
     prerelease_strategy: PrereleaseStrategy,
     index_strategy: IndexStrategy,
@@ -91,7 +91,9 @@ impl CandidateSelector {
         env: &ResolverEnvironment,
         tags: Option<&'a Tags>,
     ) -> Option<Candidate<'a>> {
-        self.recorder.requirement(package_name);
+        if let Some(recorder) = &self.recorder {
+            recorder.candidate_policy(package_name);
+        }
         let reinstall = exclusions.reinstall(package_name);
         let upgrade = exclusions.upgrade(package_name);
         let prerelease_selection = self.prerelease_strategy.selection(package_name, env);
