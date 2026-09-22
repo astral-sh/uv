@@ -2783,7 +2783,7 @@ fn install_git_checkout_marker_symlink() -> Result<()> {
     let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION)
         .with_filters([(r"@[0-9a-f]{40}".to_string(), "@[COMMIT]".to_string())]);
 
-    let victim = context.cache_dir.child("victim");
+    let victim = context.temp_dir.child("victim");
     victim.write_str("external contents")?;
 
     let repository = context.temp_dir.child("repository");
@@ -2800,9 +2800,7 @@ fn install_git_checkout_marker_symlink() -> Result<()> {
     repository
         .child("src/example/__init__.py")
         .write_str(r#"__version__ = "0.1.0""#)?;
-    // Checkouts live at `git-v0/checkouts/<repository>/<commit>`. A relative symlink
-    // reaches the cache root without including a temporary path in the Git commit.
-    symlink("../../../../victim", repository.child(".ok").path())?;
+    symlink(victim.path(), repository.child(".ok").path())?;
 
     Command::new("git")
         .arg("init")
