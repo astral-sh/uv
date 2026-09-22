@@ -611,11 +611,32 @@ impl GitCheckout {
         // When Git LFS is enabled, the objects must also be fetched and
         // validated successfully as part of the corresponding db.
         if with_lfs.is_none() || lfs_validation == Some(true) {
-            paths::create(ok_file)?;
+            create_checkout_marker(&ok_file)?;
         }
 
         Ok(lfs_validation)
     }
+}
+
+/// Create the checkout-ready marker ([`.ok`]) without following a
+/// repository-controlled symlink.
+///
+/// The repository itself may track `.ok` as a symlink, e.g., pointing at a file
+/// outside the checkout. A plain [`File::create`] would follow that symlink and
+/// truncate its target, so any symlink at the marker path is removed before the
+/// marker is created as a regular file.
+///
+/// [`.ok`]: CHECKOUT_READY_LOCK
+fn create_checkout_marker(ok_file: &Path) -> Result<()> {
+    if fs_err::symlink_metadata(ok_file).is_ok_and(|metadata| metadata.is_symlink()) {
+        debug!(
+            "Removing symlink at checkout marker path: {}",
+            ok_file.simplified_display()
+        );
+        paths::remove_file(ok_file)?;
+    }
+    paths::create(ok_file)?;
+    Ok(())
 }
 
 /// Return command-local Git configuration for initializing direct submodules in a checkout.
@@ -936,6 +957,11 @@ fn redact_git_error(mut error: anyhow::Error, url: &DisplaySafeUrl) -> anyhow::E
 mod tests {
     use super::*;
 
+    #[cfg(unix)]
+    use fs_err::os::unix::fs::symlink;
+
+    use tempfile::tempdir;
+
     #[test]
     fn submodule_update_config_strips_credentials_from_origin_override() {
         let url = DisplaySafeUrl::parse("https://user:password@example.com/org/repo.git").unwrap();
@@ -1012,6 +1038,128 @@ mod tests {
                 )
             );
         }
+
+        Ok(())
+    }
+
+    #[test]
+    fn checkout_marker_creates_regular_file() -> Result<()> {
+        let directory = tempdir()?;
+        let ok_file = directory.path().join(CHECKOUT_READY_LOCK);
+
+        create_checkout_marker(&ok_file)?;
+
+        let metadata = fs_err::symlink_metadata(&ok_file)?;
+        assert!(!metadata.is_symlink());
+        assert!(metadata.is_file());
+
+        // Creating the marker over an existing marker succeeds.
+        create_checkout_marker(&ok_file)?;
+
+        Ok(())
+    }
+
+    /// Creating the checkout-ready marker must not follow a symlink at the
+    /// marker path, which would truncate the symlink target.
+    #[test]
+    #[cfg(unix)]
+    fn checkout_marker_does_not_follow_symlink() -> Result<()> {
+        let directory = tempdir()?;
+
+        // A victim file outside the checkout.
+        let victim = directory.path().join("victim.txt");
+        fs_err::write(&victim, "VICTIM-SENTINEL")?;
+
+        // The marker path is a symlink to the victim file.
+        let ok_file = directory.path().join(CHECKOUT_READY_LOCK);
+        symlink(&victim, &ok_file)?;
+
+        create_checkout_marker(&ok_file)?;
+
+        // The symlink target is untouched...
+        assert_eq!(fs_err::read_to_string(&victim)?, "VICTIM-SENTINEL");
+
+        // ...and the marker is now a regular file.
+        let metadata = fs_err::symlink_metadata(&ok_file)?;
+        assert!(!metadata.is_symlink());
+        assert!(metadata.is_file());
+
+        Ok(())
+    }
+
+    /// Regression test for <https://github.com/astral-sh/uv/issues/21857>:
+    /// resetting a checkout whose repository tracks `.ok` as a symlink must
+    /// not follow the symlink when writing the checkout-ready marker.
+    #[test]
+    #[cfg(unix)]
+    fn reset_does_not_follow_symlink_at_marker_path() -> Result<()> {
+        fn run_git(args: &[&str], cwd: &Path) -> Result<()> {
+            GIT.as_ref()
+                .cloned()?
+                .args(args)
+                .cwd(cwd)
+                .exec_with_output()
+                .map(drop)?;
+            Ok(())
+        }
+
+        let root = tempdir()?;
+
+        // A victim file outside the repository.
+        let victim = root.path().join("victim.txt");
+        fs_err::write(&victim, "VICTIM-SENTINEL")?;
+
+        // A repository that tracks `.ok` as a symlink to the victim file.
+        let source = root.path().join("source");
+        fs_err::create_dir_all(&source)?;
+        run_git(&["init", "-b", "main"], &source)?;
+        symlink(&victim, source.join(CHECKOUT_READY_LOCK))?;
+        fs_err::write(
+            source.join("pyproject.toml"),
+            "[project]\nname = \"example\"\nversion = \"0.1.0\"\n",
+        )?;
+        run_git(&["add", "-A"], &source)?;
+        run_git(
+            &[
+                "-c",
+                "user.name=uv-test",
+                "-c",
+                "user.email=uv-test@example.com",
+                "commit",
+                "-q",
+                "-m",
+                "Initial commit",
+            ],
+            &source,
+        )?;
+
+        // Clone the repository, as `GitCheckout::clone_into` would.
+        let checkout_path = root.path().join("checkout");
+        run_git(
+            &[
+                "clone",
+                "-q",
+                &source.simplified_display().to_string(),
+                &checkout_path.simplified_display().to_string(),
+            ],
+            root.path(),
+        )?;
+        assert!(fs_err::symlink_metadata(checkout_path.join(CHECKOUT_READY_LOCK))?.is_symlink());
+
+        let repository = GitRepository::open(&checkout_path)?;
+        let revision = repository.rev_parse("HEAD")?;
+        let checkout = GitCheckout::new(revision, repository);
+
+        let url = DisplaySafeUrl::parse(&format!("file://{}", source.simplified_display()))?;
+        checkout.reset(None, &url)?;
+
+        // The symlink target is untouched...
+        assert_eq!(fs_err::read_to_string(&victim)?, "VICTIM-SENTINEL");
+
+        // ...and the marker is now a regular file.
+        let metadata = fs_err::symlink_metadata(checkout_path.join(CHECKOUT_READY_LOCK))?;
+        assert!(!metadata.is_symlink());
+        assert!(metadata.is_file());
 
         Ok(())
     }
