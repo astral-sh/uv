@@ -3693,6 +3693,7 @@ pub(crate) struct PipSyncSettings {
     pub(crate) constraints: Vec<RequirementsInput>,
     pub(crate) build_constraints: Vec<RequirementsInput>,
     pub(crate) dry_run: DryRun,
+    pub(crate) output_format: PipInstallFormat,
     pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
 }
@@ -3739,6 +3740,7 @@ impl PipSyncSettings {
             strict,
             no_strict,
             dry_run,
+            output_format,
             torch_backend,
             compat_args: _,
             check,
@@ -3759,6 +3761,7 @@ impl PipSyncSettings {
             } else {
                 DryRun::from_args(dry_run)
             },
+            output_format,
             refresh: Refresh::try_from(refresh)?,
             settings: PipSettings::combine(
                 PipOptions {

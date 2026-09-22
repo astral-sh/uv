@@ -2194,6 +2194,13 @@ pub struct PipSyncArgs {
     #[arg(long, conflicts_with = "dry_run")]
     pub check: bool,
 
+    /// Select the output format.
+    ///
+    /// JSON output is written to stdout; diagnostic messages are written to stderr.
+    /// The JSON schema is experimental and may change without warning.
+    #[arg(long, value_enum, default_value_t = PipInstallFormat::default())]
+    pub output_format: PipInstallFormat,
+
     /// The backend to use when fetching packages in the PyTorch ecosystem (e.g., `cpu`, `cu126`, or `auto`).
     ///
     /// When set, uv will ignore the configured index URLs for packages in the PyTorch ecosystem,

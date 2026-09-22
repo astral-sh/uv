@@ -1,10 +1,8 @@
 use std::collections::BTreeSet;
-use std::fmt::Write;
 use std::path::PathBuf;
 
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use serde::Serialize;
 use thiserror::Error;
 use tracing::{Level, debug, enabled, warn};
 
@@ -49,7 +47,7 @@ use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 
 use crate::commands::editable::apply_editable_mode;
-use crate::commands::install_report::{PackageChangesReport, SchemaReport};
+use crate::commands::install_report::write_install_report;
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
 use crate::commands::pip::operations::{Changelog, Modifications};
 use crate::commands::pip::operations::{report_interpreter, report_target_environment};
@@ -685,37 +683,4 @@ pub(crate) async fn pip_install(
 
     write_install_report(&changelog, dry_run, output_format, printer)?;
     Ok(ExitStatus::Success)
-}
-
-/// Write the package changes as JSON when requested.
-fn write_install_report(
-    changelog: &Changelog,
-    dry_run: DryRun,
-    output_format: PipInstallFormat,
-    printer: Printer,
-) -> anyhow::Result<()> {
-    match output_format {
-        PipInstallFormat::Text => {}
-        PipInstallFormat::Json => {
-            let report = InstallReport {
-                schema: SchemaReport::default(),
-                changes: PackageChangesReport::from_changelog(changelog),
-                dry_run: dry_run.enabled(),
-            };
-            writeln!(
-                printer.stdout_important(),
-                "{}",
-                serde_json::to_string_pretty(&report)?
-            )?;
-        }
-    }
-    Ok(())
-}
-
-/// A report of the changes made or planned by `uv pip install`.
-#[derive(Debug, Serialize)]
-struct InstallReport {
-    schema: SchemaReport,
-    changes: PackageChangesReport,
-    dry_run: bool,
 }
