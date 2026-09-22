@@ -70,6 +70,13 @@ To run a specific test by name:
 cargo nextest run -E 'test(test_name)'
 ```
 
+The test suite ignores inherited `RUST_LOG` settings. To enable logging in test subprocesses, use
+`UV_TEST_RUST_LOG`, for example:
+
+```shell
+UV_TEST_RUST_LOG=uv=debug cargo nextest run -E 'test(test_name)'
+```
+
 To run all tests and accept snapshot changes:
 
 ```shell

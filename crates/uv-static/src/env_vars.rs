@@ -1274,6 +1274,11 @@ impl EnvVars {
     #[attr_added_in("0.1.34")]
     pub const KEYRING_TEST_CREDENTIALS: &'static str = "KEYRING_TEST_CREDENTIALS";
 
+    /// Configure `RUST_LOG` for commands spawned by the test suite.
+    #[attr_hidden]
+    #[attr_added_in("next release")]
+    pub const UV_TEST_RUST_LOG: &'static str = "UV_TEST_RUST_LOG";
+
     /// Used to disable delay for HTTP retries in tests.
     #[attr_added_in("0.7.21")]
     pub const UV_TEST_NO_HTTP_RETRY_DELAY: &'static str = "UV_TEST_NO_HTTP_RETRY_DELAY";
