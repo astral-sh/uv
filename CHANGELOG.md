@@ -3,6 +3,40 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.12.18
+
+Released on 2026-09-22.
+
+### Enhancements
+
+- Add JSON output for `uv pip install` and `uv pip sync` ([#21893](https://github.com/astral-sh/uv/pull/21893))
+- Add `--check` to `uv pip install` and `uv pip sync` ([#21844](https://github.com/astral-sh/uv/pull/21844))
+- Check nonisolated build dependencies in preview ([#21880](https://github.com/astral-sh/uv/pull/21880))
+- Report the correct hook in build requirement errors ([#21881](https://github.com/astral-sh/uv/pull/21881))
+
+### Performance
+
+- Use uncompressed editable wheels ([#21918](https://github.com/astral-sh/uv/pull/21918))
+
+### Bug fixes
+
+- Fix BSD and Haiku platform tag casing ([#21853](https://github.com/astral-sh/uv/pull/21853))
+- Fix fragment boundaries in `UrlString::base_str` ([#21920](https://github.com/astral-sh/uv/pull/21920))
+- Honor dependency metadata when checking installed requirements ([#21843](https://github.com/astral-sh/uv/pull/21843))
+- Use implied markers to validate Python wheel compatibility ([#21836](https://github.com/astral-sh/uv/pull/21836))
+- Validate wheel compatibility against each Python fork ([#21835](https://github.com/astral-sh/uv/pull/21835))
+
+### Other changes
+
+- Avoid rebuilding a path into an absolute form ([#21923](https://github.com/astral-sh/uv/pull/21923))
+- Extract the project edit rollback interface ([#21859](https://github.com/astral-sh/uv/pull/21859))
+- Fix rollback for uv add ([#21860](https://github.com/astral-sh/uv/pull/21860))
+- Gate another test on `test-pypi` ([#21883](https://github.com/astral-sh/uv/pull/21883))
+- Remove Claude settings ([#21885](https://github.com/astral-sh/uv/pull/21885))
+- Restore project files when remove and version fail ([#21856](https://github.com/astral-sh/uv/pull/21856))
+- ci: watch Dockerfile in trampoline repro check ([#21834](https://github.com/astral-sh/uv/pull/21834))
+- fix docs publication to astral-sh/docs ([#21832](https://github.com/astral-sh/uv/pull/21832))
+
 ## 0.12.17
 
 Released on 2026-09-18.

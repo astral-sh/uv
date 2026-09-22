@@ -695,7 +695,7 @@ impl EnvVars {
 
     /// Configure `RUST_LOG` for commands spawned by the test suite.
     #[attr_hidden]
-    #[attr_added_in("next release")]
+    #[attr_added_in("0.12.18")]
     pub const UV_INTERNAL__TEST_RUST_LOG: &'static str = "UV_INTERNAL__TEST_RUST_LOG";
 
     /// Path to a directory on a filesystem that supports copy-on-write, e.g., btrfs or APFS.
@@ -748,19 +748,19 @@ impl EnvVars {
 
     /// Used to disable delay for HTTP retries in tests.
     #[attr_hidden]
-    #[attr_added_in("next release")]
+    #[attr_added_in("0.12.18")]
     pub const UV_INTERNAL__TEST_NO_HTTP_RETRY_DELAY: &'static str =
         "UV_INTERNAL__TEST_NO_HTTP_RETRY_DELAY";
 
     /// Hide progress messages with non-deterministic order in tests.
     #[attr_hidden]
-    #[attr_added_in("next release")]
+    #[attr_added_in("0.12.18")]
     pub const UV_INTERNAL__TEST_NO_CLI_PROGRESS: &'static str = "UV_INTERNAL__TEST_NO_CLI_PROGRESS";
 
     /// Used to mock the current timestamp for relative `--exclude-newer` times in tests.
     /// Should be set to an RFC 3339 timestamp (e.g., `2025-11-21T12:00:00Z`).
     #[attr_hidden]
-    #[attr_added_in("next release")]
+    #[attr_added_in("0.12.18")]
     pub const UV_INTERNAL__TEST_CURRENT_TIMESTAMP: &'static str =
         "UV_INTERNAL__TEST_CURRENT_TIMESTAMP";
 
@@ -774,7 +774,7 @@ impl EnvVars {
     ///
     /// Should be set to an RFC 3339 timestamp (e.g., `2024-03-25T00:00:00Z`).
     #[attr_hidden]
-    #[attr_added_in("next release")]
+    #[attr_added_in("0.12.18")]
     pub const UV_INTERNAL__TEST_AVAILABLE_VERSION_CUTOFF: &'static str =
         "UV_INTERNAL__TEST_AVAILABLE_VERSION_CUTOFF";
 

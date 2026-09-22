@@ -47,7 +47,7 @@ jobs:
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           # Install a specific version of uv.
-          version: "0.12.17"
+          version: "0.12.18"
 ```
 
 ## Setting up Python
