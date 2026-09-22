@@ -29,6 +29,7 @@ Released on 2026-09-22.
 - Reject archive entries that normalize to absolute Windows paths ([#21923](https://github.com/astral-sh/uv/pull/21923))
 - Recognize distribution filenames and archive extensions when URL fragments contain `?` ([#21920](https://github.com/astral-sh/uv/pull/21920))
 - Generate correctly lowercased platform tags for BSD and Haiku releases ([#21853](https://github.com/astral-sh/uv/pull/21853))
+- Avoid rebuilding a Windows relative path into an absolute form ([#21923](https://github.com/astral-sh/uv/pull/21923))
 
 ## 0.12.17
 
