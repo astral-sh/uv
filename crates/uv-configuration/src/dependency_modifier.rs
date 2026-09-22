@@ -259,6 +259,8 @@ struct PackageModifiers {
 }
 
 impl PackageModifiers {
+    /// Select the most specific override and exclusion scopes independently. An exact-version
+    /// scope replaces the versionless scope, including when it is empty.
     fn for_version(&self, version: &Version) -> (Option<&OverrideMap>, Option<&ExclusionSet>) {
         (
             self.override_versions
@@ -270,6 +272,8 @@ impl PackageModifiers {
         )
     }
 
+    /// Return whether a dependency is excluded everywhere its versionless override applies.
+    /// Exact-version exclusions can allow it again, unless an exact-version override shadows it.
     fn is_versionless_override_excluded(&self, dependency: &PackageName) -> bool {
         self.exclusions
             .as_ref()
