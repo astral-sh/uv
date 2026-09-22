@@ -30,4 +30,4 @@
   conversation.
 - PREFER comments that explain the current behavior and rationale. Avoid past-facing wording like
   "preserve the existing behavior"; explain the actual backwards-compatibility constraint instead.
-- For each new or modified test, check if it needs a `#[cfg(feature = "test-...")]` gate
+- ALWAYS check if a new or modified test needs a `#[cfg(feature = "test-...")]` gate
