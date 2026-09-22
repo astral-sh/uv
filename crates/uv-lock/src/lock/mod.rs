@@ -108,7 +108,7 @@ pub enum LockParseError {
 
     /// The lockfile cannot be parsed and uses a newer schema revision.
     #[error(
-        "failed to parse lockfile, which uses a revision {revision} schema, while this version of uv only supports revision {supported}"
+        "failed to parse lockfile, which uses a revision {revision} schema, while this version of uv only supports up to revision {supported}"
     )]
     UnparsableRevision {
         supported: u32,

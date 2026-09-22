@@ -146,7 +146,9 @@ pub(crate) enum ProjectError {
     )]
     UnparsableLockVersion(u32, u32, #[source] toml::de::Error),
 
-    #[error("Failed to parse `uv.lock`")]
+    #[error(
+        "Failed to parse `uv.lock`, which uses a revision {_1} schema, while this version of uv only supports up to revision {_0}"
+    )]
     UnparsableLockRevision(u32, u32, #[source] toml::de::Error),
 
     #[error("Failed to serialize `uv.lock`")]
