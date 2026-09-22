@@ -22,7 +22,7 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_normalize::DefaultGroups;
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
     ConfigDiscovery, EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference,
     PythonRequest,
@@ -43,7 +43,8 @@ use crate::commands::pip::operations::{Changelog, report_interpreter};
 use crate::commands::project::{
     LinkErrorReporting, WorkspacePython, centralized_environment_root,
     centralized_environments_enabled, is_centralized_environment_reference,
-    lock_project_environment, update_project_environment_link, validate_project_requires_python,
+    lock_project_environment, project_environment_upgradeable, update_project_environment_link,
+    validate_project_requires_python,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
@@ -179,9 +180,21 @@ pub(crate) async fn venv(
         python.into_interpreter()
     };
 
-    let upgradeable = python_request
-        .as_ref()
-        .is_none_or(|request| !request.includes_patch());
+    if system_site_packages
+        && relocatable
+        && interpreter.is_managed()
+        && interpreter.implementation_name() == "cpython"
+        && preview.is_enabled(PreviewFeature::PortableEnvs)
+    {
+        warn_user!(
+            "The `portable-envs` preview feature is ignored when using `--system-site-packages`"
+        );
+    }
+
+    let upgradeable = project_environment_upgradeable(
+        python_request.as_ref(),
+        Some(relocatable && !system_site_packages),
+    );
 
     // Determine the default path.
     let path = if let Some(workspace) = centralized_workspace {

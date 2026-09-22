@@ -117,7 +117,18 @@ impl Interpreter {
 
     /// Return a new [`Interpreter`] with the given virtual environment root.
     #[must_use]
-    pub fn with_virtualenv(self, virtualenv: VirtualEnvironment) -> Self {
+    pub fn with_virtualenv(mut self, virtualenv: VirtualEnvironment) -> Self {
+        if virtualenv.portable {
+            self.stdlib = virtualenv
+                .scheme
+                .purelib
+                .parent()
+                .unwrap_or(&virtualenv.root)
+                .to_path_buf();
+            self.sys_base_prefix.clone_from(&virtualenv.root);
+            self.real_executable.clone_from(&virtualenv.executable);
+        }
+
         Self {
             scheme: virtualenv.scheme,
             sys_base_executable: Some(virtualenv.base_executable),
@@ -283,7 +294,7 @@ impl Interpreter {
     /// See: <https://github.com/pypa/pip/blob/0ad4c94be74cc24874c6feb5bb3c2152c398a18e/src/pip/_internal/utils/virtualenv.py#L14>
     pub fn is_virtualenv(&self) -> bool {
         // Maybe this should return `false` if it's a target?
-        self.sys_prefix != self.sys_base_prefix
+        self.sys_prefix != self.sys_base_prefix || uv_fs::is_virtualenv_base(&self.sys_prefix)
     }
 
     /// Returns `true` if the environment is a `--target` environment.
@@ -299,7 +310,7 @@ impl Interpreter {
     /// Returns `true` if this interpreter is managed by uv.
     ///
     /// Returns `false` if we cannot determine the path of the uv managed Python interpreters.
-    pub(crate) fn is_managed(&self) -> bool {
+    pub fn is_managed(&self) -> bool {
         if let Ok(test_managed) =
             std::env::var(uv_static::EnvVars::UV_INTERNAL__TEST_PYTHON_MANAGED)
         {
@@ -328,7 +339,13 @@ impl Interpreter {
         let root = dunce::canonicalize(&root).unwrap_or(root);
 
         let Ok(suffix) = sys_base_prefix.strip_prefix(&root) else {
-            return false;
+            return PyVenvConfiguration::parse(sys_base_prefix.join("pyvenv.cfg")).is_ok_and(
+                |configuration| {
+                    configuration.home.is_none()
+                        && configuration.is_uv()
+                        && configuration.is_relocatable()
+                },
+            );
         };
 
         let Some(first_component) = suffix.components().next() else {
@@ -1370,8 +1387,9 @@ mod tests {
     use uv_cache::{Cache, CacheBucket};
     use uv_cache_info::Timestamp;
     use uv_pep440::Version;
+    use uv_pypi_types::Scheme;
 
-    use crate::Interpreter;
+    use crate::{Interpreter, VirtualEnvironment};
 
     fn mocked_interpreter_response() -> &'static str {
         indoc! {r##"
@@ -1432,6 +1450,55 @@ mod tests {
             "debug_enabled": false
         }
     "##}
+    }
+
+    #[tokio::test]
+    async fn portable_virtualenv_relocates_interpreter_metadata() -> Result<()> {
+        let directory = tempdir()?;
+        let source_executable = directory.path().join("python");
+        let response = mocked_interpreter_response()
+            .replace("{sys_executable}", &source_executable.display().to_string());
+        fs::write(
+            &source_executable,
+            formatdoc! {r"
+                #!/bin/sh
+                echo '{response}'
+            "},
+        )?;
+        fs::set_permissions(
+            &source_executable,
+            std::os::unix::fs::PermissionsExt::from_mode(0o770),
+        )?;
+
+        let cache = Cache::temp()?.init().await?;
+        let root = directory.path().join("portable");
+        let executable = root.join("bin").join("python");
+        let site_packages = root.join("lib").join("python3.12").join("site-packages");
+        // Creation returns an interpreter without querying the copied executable, so its metadata
+        // must already refer to the portable environment instead of the original installation.
+        let portable =
+            Interpreter::query(&source_executable, &cache)?.with_virtualenv(VirtualEnvironment {
+                root: root.clone(),
+                executable: executable.clone(),
+                base_executable: executable.clone(),
+                portable: true,
+                scheme: Scheme {
+                    purelib: site_packages.clone(),
+                    platlib: site_packages,
+                    scripts: root.join("bin"),
+                    data: root.clone(),
+                    include: root.join("include"),
+                },
+            });
+
+        assert_eq!(portable.sys_prefix(), root);
+        assert_eq!(portable.sys_base_prefix(), root);
+        assert_eq!(portable.sys_executable(), executable);
+        assert_eq!(portable.to_base_python()?, executable);
+        assert_eq!(portable.real_executable(), executable);
+        assert_eq!(portable.stdlib(), root.join("lib").join("python3.12"));
+
+        Ok(())
     }
 
     #[tokio::test]
