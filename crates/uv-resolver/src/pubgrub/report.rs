@@ -392,74 +392,34 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                 let root = self.format_root(root).unwrap();
                 format!("{root} are unsatisfiable")
             }
-            [
-                (
-                    package,
-                    Term {
-                        negative: false,
-                        set: range,
-                    },
-                ),
-            ] if matches!(&**(*package), PubGrubPackageInner::Package { .. }) => {
-                if let Some(member) = self.format_workspace_member(package) {
+            [(package, term)] if matches!(&**(*package), PubGrubPackageInner::Package { .. }) => {
+                if term.negative {
+                    format!("{} must be used", self.compatible_range(package, &term.set))
+                } else if let Some(member) = self.format_workspace_member(package) {
                     format!("{member}'s requirements are unsatisfiable")
                 } else {
-                    format!("{} cannot be used", self.compatible_range(package, range))
+                    format!(
+                        "{} cannot be used",
+                        self.compatible_range(package, &term.set)
+                    )
                 }
             }
-            [
-                (
-                    package,
-                    Term {
-                        negative: true,
-                        set: range,
-                    },
-                ),
-            ] if matches!(&**(*package), PubGrubPackageInner::Package { .. }) => {
-                format!("{} must be used", self.compatible_range(package, range))
+            [(p1, t1), (p2, t2)] if !t1.negative && t2.negative => {
+                self.format_external(&External::FromDependencyOf(
+                    (*p1).clone(),
+                    t1.set.clone(),
+                    (*p2).clone(),
+                    t2.set.clone(),
+                ))
             }
-            [
-                (
-                    p1,
-                    Term {
-                        negative: false,
-                        set: r1,
-                    },
-                ),
-                (
-                    p2,
-                    Term {
-                        negative: true,
-                        set: r2,
-                    },
-                ),
-            ] => self.format_external(&External::FromDependencyOf(
-                (*p1).clone(),
-                r1.clone(),
-                (*p2).clone(),
-                r2.clone(),
-            )),
-            [
-                (
-                    p1,
-                    Term {
-                        negative: true,
-                        set: r1,
-                    },
-                ),
-                (
-                    p2,
-                    Term {
-                        negative: false,
-                        set: r2,
-                    },
-                ),
-            ] => self.format_external(&External::FromDependencyOf(
-                (*p2).clone(),
-                r2.clone(),
-                (*p1).clone(),
-                r1.clone(),
-            )),
+            [(p1, t1), (p2, t2)] if t1.negative && !t2.negative => {
+                self.format_external(&External::FromDependencyOf(
+                    (*p2).clone(),
+                    t2.set.clone(),
+                    (*p1).clone(),
+                    t1.set.clone(),
+                ))
+            }
             slice => {
                 let mut result = String::new();
                 let str_terms: Vec<_> = slice
@@ -2453,31 +2413,21 @@ struct PackageTerm<'a> {
 
 impl std::fmt::Display for PackageTerm<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.term {
-            Term {
-                negative: false,
-                set: set,
-            } => {
-                write!(f, "{}", self.formatter.compatible_range(self.package, set))
-            }
-            Term {
-                negative: true,
-                set: set,
-            } => {
-                if let Some(version) = set.as_singleton() {
-                    // Note we do not handle the "root" package here but we should never
-                    // be displaying that the root package is inequal to some version
-                    let package = self.package;
-                    write!(f, "{package}!={version}")
-                } else {
-                    write!(
-                        f,
-                        "{}",
-                        self.formatter
-                            .compatible_range(self.package, &set.complement())
-                    )
-                }
-            }
+        let set = &self.term.set;
+        if !self.term.negative {
+            write!(f, "{}", self.formatter.compatible_range(self.package, set))
+        } else if let Some(version) = set.as_singleton() {
+            // Note we do not handle the "root" package here but we should never
+            // be displaying that the root package is inequal to some version
+            let package = self.package;
+            write!(f, "{package}!={version}")
+        } else {
+            write!(
+                f,
+                "{}",
+                self.formatter
+                    .compatible_range(self.package, &set.complement())
+            )
         }
     }
 }

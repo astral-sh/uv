@@ -698,19 +698,10 @@ impl NoSolutionError {
                 metadata.terms = metadata
                     .terms
                     .into_iter()
-                    .map(|(package, term)| {
-                        let term = match term {
-                            Term {
-                                negative: false,
-                                set: versions,
-                            } => Term::positive(narrow_conclusion(
-                                &package, versions, &cause1, &cause2,
-                            )),
-                            term @ Term {
-                                negative: true,
-                                set: _,
-                            } => term,
-                        };
+                    .map(|(package, mut term)| {
+                        if !term.negative {
+                            term.set = narrow_conclusion(&package, term.set, &cause1, &cause2);
+                        }
                         (package, term)
                     })
                     .collect();
@@ -990,20 +981,8 @@ fn display_tree_inner(
             Frame::Terms(terms, depth) => {
                 let prefix = "  ".repeat(depth);
                 for (package, term) in terms {
-                    match term {
-                        Term {
-                            negative: false,
-                            set: versions,
-                        } => {
-                            lines.push(format!("{prefix}term {package}{versions}"));
-                        }
-                        Term {
-                            negative: true,
-                            set: versions,
-                        } => {
-                            lines.push(format!("{prefix}term not {package}{versions}"));
-                        }
-                    }
+                    let negative = if term.negative { "not " } else { "" };
+                    lines.push(format!("{prefix}term {negative}{package}{}", term.set));
                 }
             }
         }

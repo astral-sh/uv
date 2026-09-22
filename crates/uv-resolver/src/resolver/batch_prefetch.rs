@@ -1,8 +1,9 @@
 use std::cmp::min;
 use std::sync::Arc;
 
-use itertools::Itertools;
 use pubgrub::Term;
+
+use itertools::Itertools;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, trace};
 use uv_resolver_types::PackageNodeKind;
@@ -236,15 +237,10 @@ impl BatchPrefetcherRunner {
                     // prefetching for foo 1.60 and have a dependency for `foo>=1.50`, so we should
                     // only prefetch 1.60 to 1.50, knowing 1.49 will always be rejected.
                     if let Some(unchangeable_constraints) = &unchangeable_constraints {
-                        range = match unchangeable_constraints {
-                            Term {
-                                negative: false,
-                                set: constraints,
-                            } => range.intersection(constraints),
-                            Term {
-                                negative: true,
-                                set: negative_constraints,
-                            } => range.difference(negative_constraints),
+                        range = if unchangeable_constraints.negative {
+                            range.difference(&unchangeable_constraints.set)
+                        } else {
+                            range.intersection(&unchangeable_constraints.set)
                         };
                     }
                     if let Some(candidate) =
