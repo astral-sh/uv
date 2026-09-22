@@ -8,6 +8,28 @@ fn json() {
 
     uv_snapshot!(context.pip_install()
         .arg("iniconfig==2.0.0")
+        .arg("--check")
+        .arg("--output-format=json")
+        .arg("--quiet"), @r#"
+    exit_code: 1 (failure)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "changes": [
+        {
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "action": "installed"
+        }
+      ],
+      "dry_run": true
+    }
+    "#);
+
+    uv_snapshot!(context.pip_install()
+        .arg("iniconfig==2.0.0")
         .arg("--dry-run")
         .arg("--output-format=json")
         .arg("--quiet"), @r#"

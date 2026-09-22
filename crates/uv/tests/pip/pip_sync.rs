@@ -1094,6 +1094,33 @@ fn json() -> Result<()> {
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
+        .arg("--check")
+        .arg("--output-format=json")
+        .arg("--quiet"), @r#"
+    exit_code: 1 (failure)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "changes": [
+        {
+          "name": "idna",
+          "version": "3.6",
+          "action": "uninstalled"
+        },
+        {
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "action": "installed"
+        }
+      ],
+      "dry_run": true
+    }
+    "#);
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
         .arg("--dry-run")
         .arg("--output-format=json"), @r#"
     exit_code: 0 (success)

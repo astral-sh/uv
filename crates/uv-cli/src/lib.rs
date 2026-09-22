@@ -3826,6 +3826,9 @@ pub struct SyncArgs {
     pub extra: Option<Vec<ExtraName>>,
 
     /// Select the output format.
+    ///
+    /// JSON output is written to stdout; diagnostic messages are written to stderr.
+    /// The JSON schema is experimental and may change without warning.
     #[arg(long, value_enum, default_value_t = SyncFormat::default())]
     pub output_format: SyncFormat,
 

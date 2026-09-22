@@ -531,7 +531,8 @@ pub(crate) async fn pip_sync(
     .await
     {
         Ok(changelog) => changelog,
-        Err(operations::Error::OutdatedEnvironment(_)) => {
+        Err(operations::Error::OutdatedEnvironment(changelog)) => {
+            write_install_report(&changelog, dry_run, output_format, printer)?;
             return Ok(ExitStatus::Failure);
         }
         Err(err) => {
