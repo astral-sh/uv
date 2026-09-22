@@ -16,7 +16,10 @@ impl<'a> DistInfoStem<'a> {
     ///
     /// Like `pip`, only require the normalized stem to start with the canonical package name. Some
     /// wheels use names that do not follow the current name and version rules.
-    pub fn new(stem: impl Into<Cow<'a, str>>, package_name: &PackageName) -> Result<Self, Error> {
+    pub(crate) fn new(
+        stem: impl Into<Cow<'a, str>>,
+        package_name: &PackageName,
+    ) -> Result<Self, Error> {
         let stem = stem.into();
         if !normalize(&stem).starts_with(package_name.as_str()) {
             return Err(Error::MissingDistInfoPackageName(
@@ -28,7 +31,8 @@ impl<'a> DistInfoStem<'a> {
     }
 
     /// Return the original directory stem, without the `.dist-info` suffix.
-    pub fn as_str(&self) -> &str {
+    #[cfg(test)]
+    pub(crate) fn as_str(&self) -> &str {
         &self.0
     }
 }
