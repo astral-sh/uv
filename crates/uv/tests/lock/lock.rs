@@ -2658,7 +2658,7 @@ async fn lock_sdist_url_rejected_archive_not_cached() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock()
         .arg("--locked")
         .arg("--refresh")
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
+        .env(EnvVars::UV_INTERNAL__TEST_NO_HTTP_RETRY_DELAY, "true")
         .env("UV_LOCK_TEST_SENTINEL", sentinel.path()), @"
     exit_code: 1 (failure)
     ----- stderr -----
@@ -30488,7 +30488,7 @@ async fn lock_keyring_explicit_always() -> Result<()> {
                 .join("keyring_test_plugin"),
         )
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env_remove(EnvVars::UV_TEST_AVAILABLE_VERSION_CUTOFF)
+        .env_remove(EnvVars::UV_INTERNAL__TEST_AVAILABLE_VERSION_CUTOFF)
         // (from `echo "keyring==v25.6.0" | uv pip compile - --no-annotate --no-header -q`)
         .arg("jaraco-classes==3.4.0")
         .arg("jaraco-context==6.0.1")
@@ -30573,7 +30573,7 @@ async fn lock_keyring_credentials_always_authenticate_fetches_username() -> Resu
         // We need a newer version of keyring that supports `--mode`, so unset the timestamp
         // cutoffs and pin the dependencies.
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env_remove(EnvVars::UV_TEST_AVAILABLE_VERSION_CUTOFF)
+        .env_remove(EnvVars::UV_INTERNAL__TEST_AVAILABLE_VERSION_CUTOFF)
         // (from `echo "keyring==v25.6.0" | uv pip compile - --no-annotate --no-header -q`)
         .arg("jaraco-classes==3.4.0")
         .arg("jaraco-context==6.0.1")

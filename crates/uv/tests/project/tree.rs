@@ -1655,7 +1655,7 @@ fn outdated_exclude_newer_relative() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, "2024-05-01T00:00:00Z")
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, "2024-05-01T00:00:00Z")
         .arg("--exclude-newer")
         .arg("3 weeks"), @"
     exit_code: 0 (success)
@@ -1671,7 +1671,7 @@ fn outdated_exclude_newer_relative() -> Result<()> {
         .arg("--outdated")
         .arg("--universal")
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, "2024-06-01T00:00:00Z")
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, "2024-06-01T00:00:00Z")
         .arg("--exclude-newer")
         .arg("3 weeks"), @"
     exit_code: 0 (success)

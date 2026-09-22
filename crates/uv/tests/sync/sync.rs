@@ -16602,7 +16602,7 @@ async fn sync_malware_check_network_error() {
         .arg("--preview-features").arg("malware-check")
         .env(EnvVars::UV_MALWARE_CHECK, "1")
         .env(EnvVars::UV_MALWARE_CHECK_URL, server.uri())
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
+        .env(EnvVars::UV_INTERNAL__TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]

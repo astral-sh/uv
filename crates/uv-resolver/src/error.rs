@@ -437,7 +437,7 @@ pub struct NoSolutionError {
     /// These version sets are not filtered by `exclude-newer`. See
     /// [`NoSolutionError::included_versions`] instead if filtered versions are needed.
     ///
-    /// These versions are filtered by [`EnvVars::UV_TEST_AVAILABLE_VERSION_CUTOFF`] for
+    /// These versions are filtered by [`EnvVars::UV_INTERNAL__TEST_AVAILABLE_VERSION_CUTOFF`] for
     /// deterministic output in tests.
     available_versions: FxHashMap<PackageName, BTreeSet<Version>>,
     available_indexes: FxHashMap<PackageName, BTreeSet<IndexUrl>>,

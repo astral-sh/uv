@@ -29,7 +29,7 @@ fn lock_exclude_newer_relative() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
         .arg("3 weeks"), @"
     exit_code: 0 (success)
@@ -74,7 +74,7 @@ fn lock_exclude_newer_relative() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, later_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, later_timestamp)
         .arg("--exclude-newer")
         .arg("3 weeks")
         .arg("--locked"), @"
@@ -90,7 +90,7 @@ fn lock_exclude_newer_relative() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
         .arg("2 weeks")
         .arg("--upgrade"), @"
@@ -138,7 +138,7 @@ fn lock_exclude_newer_relative() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
         .arg("2 weeks")
         .arg("--upgrade"), @"
@@ -184,7 +184,7 @@ fn lock_exclude_newer_relative() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
         .arg("2 weeks")
         .arg("--refresh"), @"
@@ -223,7 +223,7 @@ fn lock_exclude_newer_older_vs_newer() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
         .arg("2 weeks"), @"
     exit_code: 0 (success)
@@ -242,7 +242,7 @@ fn lock_exclude_newer_older_vs_newer() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
         .arg("3 weeks"), @"
     exit_code: 0 (success)
@@ -263,7 +263,7 @@ fn lock_exclude_newer_older_vs_newer() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
         .arg("2 weeks"), @"
     exit_code: 0 (success)
@@ -282,7 +282,7 @@ fn lock_exclude_newer_older_vs_newer() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
         .arg("2 weeks")
         .arg("--upgrade"), @"
@@ -325,7 +325,7 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer-package")
         .arg("idna=3 weeks"), @"
     exit_code: 0 (success)
@@ -371,7 +371,7 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, later_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, later_timestamp)
         .arg("--exclude-newer-package")
         .arg("idna=3 weeks")
         .arg("--locked"), @"
@@ -385,7 +385,7 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer-package")
         .arg("idna=2 weeks")
         .arg("--upgrade"), @"
@@ -434,7 +434,7 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer-package")
         .arg("idna=2 weeks")
         .arg("--upgrade"), @"
@@ -506,7 +506,7 @@ fn lock_exclude_newer_relative_pyproject() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp), @"
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -574,7 +574,7 @@ fn lock_exclude_newer_package_relative_pyproject() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp), @"
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -649,7 +649,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
         .arg("3 weeks")
         .arg("--exclude-newer-package")
@@ -713,7 +713,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, later_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, later_timestamp)
         .arg("--exclude-newer")
         .arg("3 weeks")
         .arg("--exclude-newer-package")
@@ -729,7 +729,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
         .arg("2 weeks")
         .arg("--exclude-newer-package")
@@ -746,7 +746,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
         .arg("2 weeks")
         .arg("--exclude-newer-package")
@@ -761,7 +761,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
         .arg("2024-05-20T00:00:00Z")
         .arg("--exclude-newer-package")
@@ -824,7 +824,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
         .arg("3 weeks")
         .arg("--exclude-newer-package")
@@ -1110,7 +1110,7 @@ fn lock_exclude_newer_relative_no_timestamp_in_lockfile() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp), @"
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -1157,7 +1157,7 @@ fn lock_exclude_newer_relative_no_timestamp_in_lockfile() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp), @"
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -1218,7 +1218,7 @@ fn lock_exclude_newer_package_relative_no_timestamp_in_lockfile() -> Result<()> 
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp), @"
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -1268,7 +1268,7 @@ fn lock_exclude_newer_package_relative_no_timestamp_in_lockfile() -> Result<()> 
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp), @"
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse `uv.lock`
@@ -1418,7 +1418,7 @@ fn lock_exclude_newer_package_relative_noop_timestamp() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer-package")
         .arg("idna=3 weeks"), @"
     exit_code: 0 (success)
@@ -1440,7 +1440,7 @@ fn lock_exclude_newer_package_relative_noop_timestamp() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, later_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, later_timestamp)
         .arg("--exclude-newer-package")
         .arg("idna=3 weeks"), @"
     exit_code: 0 (success)

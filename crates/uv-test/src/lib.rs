@@ -1326,15 +1326,18 @@ impl TestContext {
             .env(EnvVars::UV_PYTHON_DOWNLOADS, "never")
             .env(EnvVars::UV_PYTHON_SEARCH_PATH, self.python_path())
             .env(EnvVars::UV_EXCLUDE_NEWER, TEST_TIMESTAMP)
-            .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, TEST_TIMESTAMP)
-            .env(EnvVars::UV_TEST_AVAILABLE_VERSION_CUTOFF, TEST_TIMESTAMP)
+            .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, TEST_TIMESTAMP)
+            .env(
+                EnvVars::UV_INTERNAL__TEST_AVAILABLE_VERSION_CUTOFF,
+                TEST_TIMESTAMP,
+            )
             // Keep Python discovery hermetic and avoid mutating global state, like the Windows
             // registry, unless a test opts in explicitly.
             .env(EnvVars::UV_PYTHON_NO_REGISTRY, "1")
             .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "0")
             // Since downloads, fetches and builds run in parallel, their message output order is
             // non-deterministic, so can't capture them in test output.
-            .env(EnvVars::UV_TEST_NO_CLI_PROGRESS, "1")
+            .env(EnvVars::UV_INTERNAL__TEST_NO_CLI_PROGRESS, "1")
             // I believe the intent of all tests is that they are run outside the
             // context of an existing git repository. And when they aren't, state
             // from the parent git repository can bleed into the behavior of `uv

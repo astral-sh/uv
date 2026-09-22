@@ -19688,7 +19688,7 @@ async fn compile_missing_python_download_error_warning() {
         .arg("--python-version").arg("3.10")
         .env("ALL_PROXY", server.uri())
         .env(EnvVars::UV_HTTP_RETRIES, "0")
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
+        .env(EnvVars::UV_INTERNAL__TEST_NO_HTTP_RETRY_DELAY, "true")
         .arg("requirements.in"), @"
     exit_code: 2 (failure)
     ----- stderr -----
@@ -19711,7 +19711,7 @@ async fn compile_missing_python_download_error_warning() {
         .arg("--python-version").arg("3.10")
         .env("ALL_PROXY", server.uri())
         .env(EnvVars::UV_HTTP_RETRIES, "0")
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
+        .env(EnvVars::UV_INTERNAL__TEST_NO_HTTP_RETRY_DELAY, "true")
         .arg("requirements.in"), @"
     exit_code: 2 (failure)
     ----- stderr -----
@@ -19727,7 +19727,7 @@ async fn compile_missing_python_download_error_warning() {
         .arg("--python-version").arg("3.10.99")
         .env("ALL_PROXY", server.uri())
         .env(EnvVars::UV_HTTP_RETRIES, "0")
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
+        .env(EnvVars::UV_INTERNAL__TEST_NO_HTTP_RETRY_DELAY, "true")
         .arg("requirements.in"), @"
     exit_code: 2 (failure)
     ----- stderr -----
@@ -19749,7 +19749,7 @@ async fn compile_missing_python_download_error_warning() {
         .arg("--python-version").arg("3.10.19")
         .env("ALL_PROXY", server.uri())
         .env(EnvVars::UV_HTTP_RETRIES, "0")
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
+        .env(EnvVars::UV_INTERNAL__TEST_NO_HTTP_RETRY_DELAY, "true")
         .arg("requirements.in"), @"
     exit_code: 2 (failure)
     ----- stderr -----
