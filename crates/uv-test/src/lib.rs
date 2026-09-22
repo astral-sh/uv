@@ -2078,7 +2078,6 @@ impl TestContext {
             // For linux distributions
             EnvVars::PATH,
             // For debugging tests.
-            EnvVars::RUST_LOG,
             EnvVars::RUST_BACKTRACE,
             // Windows System configuration.
             EnvVars::SYSTEMDRIVE,
@@ -2101,6 +2100,10 @@ impl TestContext {
             .filter(|name| !passthrough.contains(name))
         {
             command.env_remove(env_var);
+        }
+
+        if let Some(rust_log) = env::var_os(EnvVars::UV_INTERNAL__TEST_RUST_LOG) {
+            command.env(EnvVars::RUST_LOG, rust_log);
         }
 
         command

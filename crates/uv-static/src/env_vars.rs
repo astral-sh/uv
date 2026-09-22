@@ -693,6 +693,11 @@ impl EnvVars {
     #[attr_added_in("0.3.4")]
     pub const UV_INTERNAL__TEST_DIR: &'static str = "UV_INTERNAL__TEST_DIR";
 
+    /// Configure `RUST_LOG` for commands spawned by the test suite.
+    #[attr_hidden]
+    #[attr_added_in("next release")]
+    pub const UV_INTERNAL__TEST_RUST_LOG: &'static str = "UV_INTERNAL__TEST_RUST_LOG";
+
     /// Path to a directory on a filesystem that supports copy-on-write, e.g., btrfs or APFS.
     ///
     /// When populated, uv will run additional tests that require this functionality.
