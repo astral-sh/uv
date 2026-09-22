@@ -11,8 +11,12 @@ use thiserror::Error;
 use tokio::io::AsyncReadExt;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use uv_distribution_filename::WheelFilename;
-use uv_normalize::{DistInfoName, InvalidNameError};
+use uv_normalize::InvalidNameError;
 use uv_pypi_types::ResolutionMetadata;
+
+pub use dist_info_name::ValidatedDistInfoName;
+
+mod dist_info_name;
 
 /// The caller is responsible for attaching the path or url we failed to read.
 #[derive(Debug, Error)]
@@ -59,32 +63,15 @@ impl From<async_zip::error::ZipError> for Error {
     }
 }
 
-/// Like `pip`, validate that the `.dist-info` directory is prefixed with the canonical package
-/// name.
-fn validate_dist_info_name(dist_info_prefix: &str, filename: &WheelFilename) -> Result<(), Error> {
-    let normalized_prefix = DistInfoName::new(dist_info_prefix);
-    if !normalized_prefix
-        .as_ref()
-        .starts_with(filename.name.as_str())
-    {
-        return Err(Error::MissingDistInfoPackageName(
-            dist_info_prefix.to_string(),
-            filename.name.to_string(),
-        ));
-    }
-
-    Ok(())
-}
-
 /// Find the `.dist-info` directory in a zipped wheel.
 ///
-/// Returns the dist info dir prefix without the `.dist-info` extension.
+/// Returns the validated directory name without the `.dist-info` extension.
 ///
 /// Reference implementation: <https://github.com/pypa/pip/blob/36823099a9cdd83261fdbc8c1d2a24fa2eea72ca/src/pip/_internal/utils/wheel.py#L38>
 pub fn find_archive_dist_info<'a, T: Copy>(
     filename: &WheelFilename,
     files: impl Iterator<Item = (T, &'a str)>,
-) -> Result<(T, &'a str), Error> {
+) -> Result<(T, ValidatedDistInfoName<'a>), Error> {
     let metadatas: Vec<_> = files
         .filter_map(|(payload, path)| {
             let (dist_info_dir, file) = path.split_once('/')?;
@@ -113,27 +100,28 @@ pub fn find_archive_dist_info<'a, T: Copy>(
         }
     };
 
-    validate_dist_info_name(dist_info_prefix, filename)?;
-
-    Ok((payload, dist_info_prefix))
+    Ok((
+        payload,
+        ValidatedDistInfoName::new(dist_info_prefix, &filename.name)?,
+    ))
 }
 
-/// Returns `true` if the file is a `METADATA` file in a `.dist-info` directory that matches the
-/// wheel filename.
-fn is_metadata_entry(path: &str, filename: &WheelFilename) -> Result<bool, Error> {
+/// Return the validated directory name if the path is a `METADATA` entry.
+fn metadata_entry<'a>(
+    path: &'a str,
+    filename: &WheelFilename,
+) -> Result<Option<ValidatedDistInfoName<'a>>, Error> {
     let Some((dist_info_dir, file)) = path.split_once('/') else {
-        return Ok(false);
+        return Ok(None);
     };
     if file != "METADATA" {
-        return Ok(false);
+        return Ok(None);
     }
     let Some(dist_info_prefix) = dist_info_dir.strip_suffix(".dist-info") else {
-        return Ok(false);
+        return Ok(None);
     };
 
-    validate_dist_info_name(dist_info_prefix, filename)?;
-
-    Ok(true)
+    ValidatedDistInfoName::new(dist_info_prefix, &filename.name).map(Some)
 }
 
 /// Given an archive, read the `METADATA` from the `.dist-info` directory.
@@ -169,7 +157,10 @@ pub fn read_archive_metadata(
 /// Find the `.dist-info` directory in an unzipped wheel.
 ///
 /// See: <https://github.com/PyO3/python-pkginfo-rs>
-fn find_flat_dist_info(filename: &WheelFilename, path: impl AsRef<Path>) -> Result<String, Error> {
+fn find_flat_dist_info(
+    filename: &WheelFilename,
+    path: impl AsRef<Path>,
+) -> Result<ValidatedDistInfoName<'static>, Error> {
     // Iterate over `path` to find the `.dist-info` directory. It should be at the top-level.
     let Some(dist_info_prefix) = fs_err::read_dir(path.as_ref())
         .map_err(Error::Io)?
@@ -194,14 +185,12 @@ fn find_flat_dist_info(filename: &WheelFilename, path: impl AsRef<Path>) -> Resu
         return Err(Error::MissingDistInfo);
     };
 
-    validate_dist_info_name(&dist_info_prefix, filename)?;
-
-    Ok(dist_info_prefix)
+    ValidatedDistInfoName::new(dist_info_prefix, &filename.name)
 }
 
 /// Read the wheel `METADATA` metadata from a `.dist-info` directory.
 fn read_dist_info_metadata(
-    dist_info_prefix: &str,
+    dist_info_prefix: &ValidatedDistInfoName<'_>,
     wheel: impl AsRef<Path>,
 ) -> Result<Vec<u8>, Error> {
     let metadata_file = wheel
@@ -223,7 +212,7 @@ pub async fn read_metadata_async_stream<R: futures::AsyncRead + Unpin>(
         // Find the `METADATA` entry.
         let path = entry.reader().entry().filename().as_str()?.to_owned();
 
-        if is_metadata_entry(&path, filename)? {
+        if metadata_entry(&path, filename)?.is_some() {
             let mut reader = entry.reader_mut().compat();
             let mut contents = Vec::new();
             reader.read_to_end(&mut contents).await.map_err(Error::Io)?;
@@ -281,7 +270,7 @@ pub fn read_flat_wheel_metadata(
 
 #[cfg(test)]
 mod test {
-    use super::find_archive_dist_info;
+    use super::{ValidatedDistInfoName, find_archive_dist_info, metadata_entry};
     use std::str::FromStr;
     use uv_distribution_filename::WheelFilename;
 
@@ -301,6 +290,80 @@ mod test {
         let filename = WheelFilename::from_str("Mastodon.py-1.5.1-py2.py3-none-any.whl").unwrap();
         let (_, dist_info_prefix) =
             find_archive_dist_info(&filename, files.into_iter().map(|file| (file, file))).unwrap();
-        assert_eq!(dist_info_prefix, "Mastodon.py-1.5.1");
+        assert_eq!(dist_info_prefix.as_str(), "Mastodon.py-1.5.1");
+    }
+
+    #[test]
+    fn test_dist_info_name_compatibility() {
+        let filename = WheelFilename::from_str("friendly_bard-1.0-py3-none-any.whl")
+            .expect("valid wheel filename");
+        for name in [
+            "friendly-bard-1.0",
+            "FrIeNdLy-._.-bArD-1.0",
+            "friendly_bard-1.0+local",
+            "friendly_bard",
+            "friendly_bard_extra-2.0",
+        ] {
+            let path = format!("{name}.dist-info/METADATA");
+            let ((), archive_name) =
+                find_archive_dist_info(&filename, [((), path.as_str())].into_iter())
+                    .expect("accepted archive directory name");
+            let stream_name = metadata_entry(&path, &filename)
+                .expect("accepted streaming directory name")
+                .expect("metadata entry");
+            let owned_name = ValidatedDistInfoName::new(name.to_owned(), &filename.name)
+                .expect("accepted owned directory name");
+
+            assert_eq!(archive_name.as_str(), name);
+            assert_eq!(stream_name.as_str(), name);
+            assert_eq!(owned_name.as_str(), name);
+        }
+    }
+
+    #[test]
+    fn test_dist_info_name_mismatch() {
+        let filename = WheelFilename::from_str("friendly_bard-1.0-py3-none-any.whl")
+            .expect("valid wheel filename");
+        let name = "other_package-1.0";
+        let path = format!("{name}.dist-info/METADATA");
+        let expected = "The .dist-info directory other_package-1.0 does not start with the normalized package name: friendly-bard";
+
+        assert_eq!(
+            find_archive_dist_info(&filename, [((), path.as_str())].into_iter())
+                .expect_err("mismatched archive directory name")
+                .to_string(),
+            expected
+        );
+        assert_eq!(
+            metadata_entry(&path, &filename)
+                .expect_err("mismatched streaming directory name")
+                .to_string(),
+            expected
+        );
+        assert_eq!(
+            ValidatedDistInfoName::new(name.to_owned(), &filename.name)
+                .expect_err("mismatched owned directory name")
+                .to_string(),
+            expected
+        );
+
+        assert!(
+            metadata_entry("other_package-1.0.dist-info/WHEEL", &filename)
+                .expect("non-metadata entry")
+                .is_none()
+        );
+        assert_eq!(
+            find_archive_dist_info(
+                &filename,
+                [
+                    ((), path.as_str()),
+                    ((), "friendly_bard-1.0.dist-info/METADATA"),
+                ]
+                .into_iter(),
+            )
+            .expect_err("multiple metadata directories")
+            .to_string(),
+            "Multiple .dist-info directories found: other_package-1.0, friendly_bard-1.0"
+        );
     }
 }
