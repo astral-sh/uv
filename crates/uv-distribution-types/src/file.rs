@@ -180,8 +180,7 @@ impl UrlString {
     /// Return the [`UrlString`] with any query parameters and fragments removed.
     pub fn base_str(&self) -> &str {
         self.as_ref()
-            .split_once('?')
-            .or_else(|| self.as_ref().split_once('#'))
+            .split_once(['?', '#'])
             .map(|(path, _)| path)
             .unwrap_or(self.as_ref())
     }
@@ -286,6 +285,12 @@ mod tests {
         assert_eq!(url.base_str(), "https://example.com/path");
 
         let url = UrlString("https://example.com/path#fragment".into());
+        assert_eq!(url.base_str(), "https://example.com/path");
+
+        let url = UrlString("https://example.com/path#fragment?query".into());
+        assert_eq!(url.base_str(), "https://example.com/path");
+
+        let url = UrlString("https://example.com/path#fragment/part?query".into());
         assert_eq!(url.base_str(), "https://example.com/path");
 
         let url = UrlString("https://example.com/path".into());
