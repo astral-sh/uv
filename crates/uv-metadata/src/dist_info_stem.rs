@@ -48,60 +48,31 @@ impl Display for DistInfoStem<'_> {
 ///
 /// Unlike [`PackageName`], this does not restrict the allowed characters.
 fn normalize(stem: &str) -> Cow<'_, str> {
-    if is_normalized(stem) {
+    let mut last_was_separator = false;
+    let normalized = stem.bytes().filter_map(move |byte| {
+        let byte = match byte {
+            b'-' | b'_' | b'.' => b'-',
+            byte => byte.to_ascii_lowercase(),
+        };
+        let is_separator = byte == b'-';
+        let repeated_separator = last_was_separator && is_separator;
+        last_was_separator = is_separator;
+        (!repeated_separator).then_some(byte)
+    });
+
+    if normalized.clone().eq(stem.bytes()) {
         return Cow::Borrowed(stem);
     }
 
-    let mut normalized = String::with_capacity(stem.len());
-    let mut last = None;
-    for char in stem.bytes() {
-        match char {
-            b'A'..=b'Z' => {
-                normalized.push(char.to_ascii_lowercase() as char);
-            }
-            b'-' | b'_' | b'.' => {
-                if matches!(last, Some(b'-' | b'_' | b'.')) {
-                    continue;
-                }
-                normalized.push('-');
-            }
-            _ => {
-                normalized.push(char as char);
-            }
-        }
-        last = Some(char);
-    }
-    Cow::Owned(normalized)
-}
-
-/// Returns `true` if the stem is already normalized.
-fn is_normalized(stem: &str) -> bool {
-    let mut last = None;
-    for char in stem.bytes() {
-        match char {
-            b'A'..=b'Z' => {
-                // Uppercase characters need to be converted to lowercase.
-                return false;
-            }
-            b'_' | b'.' => {
-                // `_` and `.` are normalized to `-`.
-                return false;
-            }
-            b'-' => {
-                if matches!(last, Some(b'-')) {
-                    // Runs of `-` are normalized to a single `-`.
-                    return false;
-                }
-            }
-            _ => {}
-        }
-        last = Some(char);
-    }
-    true
+    let mut output = String::with_capacity(stem.len());
+    output.extend(normalized.map(char::from));
+    Cow::Owned(output)
 }
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
+
     #[test]
     fn normalize() {
         let inputs = [
@@ -116,6 +87,19 @@ mod tests {
         ];
         for input in inputs {
             assert_eq!(super::normalize(input), "friendly-bard");
+        }
+    }
+
+    #[test]
+    fn normalize_borrowed() {
+        for input in ["", "-", "friendly-bard", "friendly+local!", "café"] {
+            assert_eq!(
+                match super::normalize(input) {
+                    Cow::Borrowed(normalized) => Some(normalized),
+                    Cow::Owned(_) => None,
+                },
+                Some(input)
+            );
         }
     }
 }
