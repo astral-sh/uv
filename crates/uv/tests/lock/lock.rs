@@ -43796,7 +43796,7 @@ fn lock_frozen_warning() -> Result<()> {
 #[test]
 fn lock_project_with_scoped_constraints() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let pyproject = r#"
+    context.temp_dir.child("pyproject.toml").write_str(indoc! {r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -43811,11 +43811,7 @@ fn lock_project_with_scoped_constraints() -> Result<()> {
             { package = { name = "anyio", version = "3.6.2" }, dependencies = ["idna==0"] },
             { package = { name = "absent" }, dependencies = ["idna==0"] },
         ]
-    "#;
-    context
-        .temp_dir
-        .child("pyproject.toml")
-        .write_str(pyproject)?;
+    "#})?;
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -43888,11 +43884,23 @@ fn lock_project_with_scoped_constraints() -> Result<()> {
     Resolved 4 packages in [TIME]
     ");
 
-    // Changing the selected version invalidates the lock and deactivates the exact scope.
-    context
-        .temp_dir
-        .child("pyproject.toml")
-        .write_str(&pyproject.replace("version = \"3.7.0\"", "version = \"3.7.1\""))?;
+    // Changing the scope's version invalidates the lock and deactivates the exact scope.
+    context.temp_dir.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv]
+        constraint-dependencies = [
+            "idna!=2.9,<3.4",
+            { package = { name = "anyio" }, dependencies = ["idna>=2.9"] },
+            { package = { name = "anyio", version = "3.7.1" }, dependencies = ["idna<3", "requests==0"] },
+            { package = { name = "anyio", version = "3.6.2" }, dependencies = ["idna==0"] },
+            { package = { name = "absent" }, dependencies = ["idna==0"] },
+        ]
+    "#})?;
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     exit_code: 1 (failure)
     ----- stderr -----
@@ -43908,11 +43916,21 @@ fn lock_project_with_scoped_constraints() -> Result<()> {
     ");
 
     // A constraint cannot replace AnyIO's declared `idna>=2.8` requirement.
-    context.temp_dir.child("pyproject.toml").write_str(
-        &pyproject
-            .replace("idna>=2.9", "idna<2.8")
-            .replace("idna!=2.9,<3.4", "idna<3.4"),
-    )?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv]
+        constraint-dependencies = [
+            { package = { name = "anyio" }, dependencies = ["idna<2.8"] },
+        ]
+    "#})?;
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 1 (failure)
     ----- stderr -----

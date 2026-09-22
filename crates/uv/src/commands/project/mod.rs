@@ -3428,11 +3428,7 @@ pub(crate) async fn script_specification(
         .collect::<Vec<_>>();
 
     let mut specification =
-        RequirementsSpecification::from_excludes(requirements, Vec::new(), Vec::new(), Vec::new());
-    specification.constraints = constraints
-        .into_iter()
-        .map(|entry| entry.map(uv_distribution_types::NameRequirementSpecification::from))
-        .collect();
+        RequirementsSpecification::from_excludes(requirements, constraints, Vec::new(), Vec::new());
     specification.override_dependencies = overrides;
     specification.excludes = excludes;
     Ok(Some(specification))

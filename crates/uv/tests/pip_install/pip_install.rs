@@ -17590,13 +17590,15 @@ fn compile_bytecode_excludes_stdlib() -> Result<()> {
 #[test]
 fn scoped_constraint_revalidates_installed_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let config = r#"
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
         [tool.uv]
         constraint-dependencies = [
             { package = { name = "anyio", version = "3.7.0" }, dependencies = ["idna==3.2"] },
         ]
-    "#;
-    context.temp_dir.child("pyproject.toml").write_str(config)?;
+    "#})?;
     uv_snapshot!(context.filters(), context.pip_install().arg("anyio==3.7.0"), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -17615,7 +17617,12 @@ fn scoped_constraint_revalidates_installed_dependencies() -> Result<()> {
     context
         .temp_dir
         .child("pyproject.toml")
-        .write_str(&config.replace("idna==3.2", "idna==3.1"))?;
+        .write_str(indoc! {r#"
+        [tool.uv]
+        constraint-dependencies = [
+            { package = { name = "anyio", version = "3.7.0" }, dependencies = ["idna==3.1"] },
+        ]
+    "#})?;
     uv_snapshot!(context.filters(), context.pip_install().arg("anyio==3.7.0"), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -17633,13 +17640,15 @@ fn scoped_constraint_revalidates_installed_dependencies() -> Result<()> {
 #[test]
 fn scoped_constraint_revalidates_extra_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let config = r#"
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
         [tool.uv]
         constraint-dependencies = [
             { package = { name = "requests" }, dependencies = ["pysocks==1.7.1"] },
         ]
-    "#;
-    context.temp_dir.child("pyproject.toml").write_str(config)?;
+    "#})?;
     uv_snapshot!(context.filters(), context.pip_install().arg("requests[socks]==2.31.0"), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -17656,7 +17665,12 @@ fn scoped_constraint_revalidates_extra_dependencies() -> Result<()> {
     context
         .temp_dir
         .child("pyproject.toml")
-        .write_str(&config.replace("1.7.1", "1.7.0"))?;
+        .write_str(indoc! {r#"
+        [tool.uv]
+        constraint-dependencies = [
+            { package = { name = "requests" }, dependencies = ["pysocks==1.7.0"] },
+        ]
+    "#})?;
     uv_snapshot!(context.filters(), context.pip_install().arg("requests[socks]==2.31.0"), @"
     exit_code: 0 (success)
     ----- stderr -----
