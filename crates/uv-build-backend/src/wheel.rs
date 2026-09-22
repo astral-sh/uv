@@ -286,7 +286,7 @@ pub fn build_editable(
     }
 
     let temp_file = uv_fs::tempfile_in(wheel_dir)?;
-    let mut wheel_writer = ZipDirectoryWriter::new_wheel(temp_file.as_file());
+    let mut wheel_writer = ZipDirectoryWriter::new_editable(temp_file.as_file());
 
     debug!("Adding pth file to {}", wheel_path.user_display());
     // Check that a module root exists in the directory we're linking from the `.pth` file
@@ -844,7 +844,6 @@ impl<W: Write + Seek + Unpin> ZipDirectoryWriter<SyncWriter<W>> {
     /// A wheel writer with no (stored) compression.
     ///
     /// Since editables are temporary, we save time be skipping compression and decompression.
-    #[expect(dead_code)]
     fn new_editable(writer: W) -> Self {
         Self {
             writer: ZipFileWriter::new(SyncWriter::new(writer)),
