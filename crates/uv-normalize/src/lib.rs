@@ -1,14 +1,12 @@
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
-pub use dist_info_name::DistInfoName;
 pub use extra_name::{DefaultExtras, ExtraName};
 pub use group_name::{DEV_DEPENDENCIES, DefaultGroups, GroupName, PipGroupName};
 pub use package_name::PackageName;
 
 use uv_small_str::SmallString;
 
-mod dist_info_name;
 mod extra_name;
 mod group_name;
 mod package_name;
