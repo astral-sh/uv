@@ -9,33 +9,26 @@ Released on 2026-09-22.
 
 ### Enhancements
 
-- Add JSON output for `uv pip install` and `uv pip sync` ([#21893](https://github.com/astral-sh/uv/pull/21893))
-- Add `--check` to `uv pip install` and `uv pip sync` ([#21844](https://github.com/astral-sh/uv/pull/21844))
-- Check nonisolated build dependencies in preview ([#21880](https://github.com/astral-sh/uv/pull/21880))
-- Report the correct hook in build requirement errors ([#21881](https://github.com/astral-sh/uv/pull/21881))
+- Add `--output-format json` to `uv pip install` and `uv pip sync`, including for `--dry-run` and `--check` ([#21893](https://github.com/astral-sh/uv/pull/21893))
+- Add `--check` to `uv pip install` and `uv pip sync` to report planned changes without modifying the environment ([#21844](https://github.com/astral-sh/uv/pull/21844))
+- Identify failures from `get_requires_for_build_*` hooks correctly in build errors ([#21881](https://github.com/astral-sh/uv/pull/21881))
+
+### Preview features
+
+- Validate build requirements for `uv build --no-build-isolation` with `--preview-features build-dependency-check`; use `--skip-dependency-check` to opt out ([#21880](https://github.com/astral-sh/uv/pull/21880))
 
 ### Performance
 
-- Use uncompressed editable wheels ([#21918](https://github.com/astral-sh/uv/pull/21918))
+- Speed up `uv_build` editable wheel creation by omitting compression from temporary wheels ([#21918](https://github.com/astral-sh/uv/pull/21918))
 
 ### Bug fixes
 
-- Fix BSD and Haiku platform tag casing ([#21853](https://github.com/astral-sh/uv/pull/21853))
-- Fix fragment boundaries in `UrlString::base_str` ([#21920](https://github.com/astral-sh/uv/pull/21920))
-- Honor dependency metadata when checking installed requirements ([#21843](https://github.com/astral-sh/uv/pull/21843))
-- Use implied markers to validate Python wheel compatibility ([#21836](https://github.com/astral-sh/uv/pull/21836))
-- Validate wheel compatibility against each Python fork ([#21835](https://github.com/astral-sh/uv/pull/21835))
-
-### Other changes
-
-- Avoid rebuilding a path into an absolute form ([#21923](https://github.com/astral-sh/uv/pull/21923))
-- Extract the project edit rollback interface ([#21859](https://github.com/astral-sh/uv/pull/21859))
-- Fix rollback for uv add ([#21860](https://github.com/astral-sh/uv/pull/21860))
-- Gate another test on `test-pypi` ([#21883](https://github.com/astral-sh/uv/pull/21883))
-- Remove Claude settings ([#21885](https://github.com/astral-sh/uv/pull/21885))
-- Restore project files when remove and version fail ([#21856](https://github.com/astral-sh/uv/pull/21856))
-- ci: watch Dockerfile in trampoline repro check ([#21834](https://github.com/astral-sh/uv/pull/21834))
-- fix docs publication to astral-sh/docs ([#21832](https://github.com/astral-sh/uv/pull/21832))
+- Select package versions with wheels compatible with each Python resolution fork, correctly interpreting generic and stable-ABI wheel tags ([#21835](https://github.com/astral-sh/uv/pull/21835), [#21836](https://github.com/astral-sh/uv/pull/21836))
+- Restore project, script, and lock files when `uv add`, `uv remove`, or `uv version` fails or is interrupted ([#21860](https://github.com/astral-sh/uv/pull/21860), [#21856](https://github.com/astral-sh/uv/pull/21856))
+- Use configured `dependency-metadata` when checking whether installed requirements are satisfied ([#21843](https://github.com/astral-sh/uv/pull/21843))
+- Reject archive entries that normalize to absolute Windows paths ([#21923](https://github.com/astral-sh/uv/pull/21923))
+- Recognize distribution filenames and archive extensions when URL fragments contain `?` ([#21920](https://github.com/astral-sh/uv/pull/21920))
+- Generate correctly lowercased platform tags for BSD and Haiku releases ([#21853](https://github.com/astral-sh/uv/pull/21853))
 
 ## 0.12.17
 
