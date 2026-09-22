@@ -14,9 +14,9 @@ use uv_distribution_filename::WheelFilename;
 use uv_normalize::InvalidNameError;
 use uv_pypi_types::ResolutionMetadata;
 
-pub use dist_info_name::ValidatedDistInfoName;
+pub use dist_info_stem::DistInfoStem;
 
-mod dist_info_name;
+mod dist_info_stem;
 
 /// The caller is responsible for attaching the path or url we failed to read.
 #[derive(Debug, Error)]
@@ -65,26 +65,26 @@ impl From<async_zip::error::ZipError> for Error {
 
 /// Find the `.dist-info` directory in a zipped wheel.
 ///
-/// Returns the validated directory name without the `.dist-info` extension.
+/// Returns the validated [`DistInfoStem`].
 ///
 /// Reference implementation: <https://github.com/pypa/pip/blob/36823099a9cdd83261fdbc8c1d2a24fa2eea72ca/src/pip/_internal/utils/wheel.py#L38>
 pub fn find_archive_dist_info<'a, T: Copy>(
     filename: &WheelFilename,
     files: impl Iterator<Item = (T, &'a str)>,
-) -> Result<(T, ValidatedDistInfoName<'a>), Error> {
+) -> Result<(T, DistInfoStem<'a>), Error> {
     let metadatas: Vec<_> = files
         .filter_map(|(payload, path)| {
             let (dist_info_dir, file) = path.split_once('/')?;
             if file != "METADATA" {
                 return None;
             }
-            let dist_info_prefix = dist_info_dir.strip_suffix(".dist-info")?;
-            Some((payload, dist_info_prefix))
+            let dist_info_stem = dist_info_dir.strip_suffix(".dist-info")?;
+            Some((payload, dist_info_stem))
         })
         .collect();
 
     // Like `pip`, assert that there is exactly one `.dist-info` directory.
-    let (payload, dist_info_prefix) = match metadatas[..] {
+    let (payload, dist_info_stem) = match metadatas[..] {
         [] => {
             return Err(Error::MissingDistInfo);
         }
@@ -100,28 +100,25 @@ pub fn find_archive_dist_info<'a, T: Copy>(
         }
     };
 
-    Ok((
-        payload,
-        ValidatedDistInfoName::new(dist_info_prefix, &filename.name)?,
-    ))
+    Ok((payload, DistInfoStem::new(dist_info_stem, &filename.name)?))
 }
 
-/// Return the validated directory name if the path is a `METADATA` entry.
+/// Return the validated [`DistInfoStem`] if the path is a `METADATA` entry.
 fn metadata_entry<'a>(
     path: &'a str,
     filename: &WheelFilename,
-) -> Result<Option<ValidatedDistInfoName<'a>>, Error> {
+) -> Result<Option<DistInfoStem<'a>>, Error> {
     let Some((dist_info_dir, file)) = path.split_once('/') else {
         return Ok(None);
     };
     if file != "METADATA" {
         return Ok(None);
     }
-    let Some(dist_info_prefix) = dist_info_dir.strip_suffix(".dist-info") else {
+    let Some(dist_info_stem) = dist_info_dir.strip_suffix(".dist-info") else {
         return Ok(None);
     };
 
-    ValidatedDistInfoName::new(dist_info_prefix, &filename.name).map(Some)
+    DistInfoStem::new(dist_info_stem, &filename.name).map(Some)
 }
 
 /// Given an archive, read the `METADATA` from the `.dist-info` directory.
@@ -133,7 +130,7 @@ pub fn read_archive_metadata(
         let mut zip_reader =
             async_zip::base::read::seek::ZipFileReader::new(AllowStdIo::new(reader)).await?;
 
-        let (metadata_index, _dist_info_prefix) = find_archive_dist_info(
+        let (metadata_index, _dist_info_stem) = find_archive_dist_info(
             filename,
             zip_reader
                 .file()
@@ -160,9 +157,9 @@ pub fn read_archive_metadata(
 fn find_flat_dist_info(
     filename: &WheelFilename,
     path: impl AsRef<Path>,
-) -> Result<ValidatedDistInfoName<'static>, Error> {
+) -> Result<DistInfoStem<'static>, Error> {
     // Iterate over `path` to find the `.dist-info` directory. It should be at the top-level.
-    let Some(dist_info_prefix) = fs_err::read_dir(path.as_ref())
+    let Some(dist_info_stem) = fs_err::read_dir(path.as_ref())
         .map_err(Error::Io)?
         .find_map(|entry| {
             let entry = entry.ok()?;
@@ -175,8 +172,8 @@ fn find_flat_dist_info(
                     return None;
                 }
 
-                let dist_info_prefix = path.file_stem()?.to_str()?;
-                Some(dist_info_prefix.to_string())
+                let dist_info_stem = path.file_stem()?.to_str()?;
+                Some(dist_info_stem.to_string())
             } else {
                 None
             }
@@ -185,17 +182,17 @@ fn find_flat_dist_info(
         return Err(Error::MissingDistInfo);
     };
 
-    ValidatedDistInfoName::new(dist_info_prefix, &filename.name)
+    DistInfoStem::new(dist_info_stem, &filename.name)
 }
 
 /// Read the wheel `METADATA` metadata from a `.dist-info` directory.
 fn read_dist_info_metadata(
-    dist_info_prefix: &ValidatedDistInfoName<'_>,
+    dist_info_stem: &DistInfoStem<'_>,
     wheel: impl AsRef<Path>,
 ) -> Result<Vec<u8>, Error> {
     let metadata_file = wheel
         .as_ref()
-        .join(format!("{dist_info_prefix}.dist-info/METADATA"));
+        .join(format!("{dist_info_stem}.dist-info/METADATA"));
     fs_err::read(metadata_file).map_err(Error::Io)
 }
 
@@ -258,11 +255,11 @@ pub fn read_flat_wheel_metadata(
     filename: &WheelFilename,
     wheel: impl AsRef<Path>,
 ) -> Result<ResolutionMetadata, Error> {
-    let dist_info_prefix = find_flat_dist_info(filename, &wheel)?;
-    let metadata = read_dist_info_metadata(&dist_info_prefix, &wheel)?;
+    let dist_info_stem = find_flat_dist_info(filename, &wheel)?;
+    let metadata = read_dist_info_metadata(&dist_info_stem, &wheel)?;
     ResolutionMetadata::parse_metadata(&metadata).map_err(|err| {
         Error::InvalidMetadata(
-            format!("{dist_info_prefix}.dist-info/METADATA"),
+            format!("{dist_info_stem}.dist-info/METADATA"),
             Box::new(err),
         )
     })
@@ -270,7 +267,7 @@ pub fn read_flat_wheel_metadata(
 
 #[cfg(test)]
 mod test {
-    use super::{ValidatedDistInfoName, find_archive_dist_info, metadata_entry};
+    use super::{DistInfoStem, find_archive_dist_info, metadata_entry};
     use std::str::FromStr;
     use uv_distribution_filename::WheelFilename;
 
@@ -288,13 +285,13 @@ mod test {
             "Mastodon.py-1.5.1.dist-info/RECORD",
         ];
         let filename = WheelFilename::from_str("Mastodon.py-1.5.1-py2.py3-none-any.whl").unwrap();
-        let (_, dist_info_prefix) =
+        let (_, dist_info_stem) =
             find_archive_dist_info(&filename, files.into_iter().map(|file| (file, file))).unwrap();
-        assert_eq!(dist_info_prefix.as_str(), "Mastodon.py-1.5.1");
+        assert_eq!(dist_info_stem.as_str(), "Mastodon.py-1.5.1");
     }
 
     #[test]
-    fn test_dist_info_name_compatibility() {
+    fn test_dist_info_stem_compatibility() {
         let filename = WheelFilename::from_str("friendly_bard-1.0-py3-none-any.whl")
             .expect("valid wheel filename");
         for name in [
@@ -311,7 +308,7 @@ mod test {
             let stream_name = metadata_entry(&path, &filename)
                 .expect("accepted streaming directory name")
                 .expect("metadata entry");
-            let owned_name = ValidatedDistInfoName::new(name.to_owned(), &filename.name)
+            let owned_name = DistInfoStem::new(name.to_owned(), &filename.name)
                 .expect("accepted owned directory name");
 
             assert_eq!(archive_name.as_str(), name);
@@ -321,7 +318,7 @@ mod test {
     }
 
     #[test]
-    fn test_dist_info_name_mismatch() {
+    fn test_dist_info_stem_mismatch() {
         let filename = WheelFilename::from_str("friendly_bard-1.0-py3-none-any.whl")
             .expect("valid wheel filename");
         let name = "other_package-1.0";
@@ -341,7 +338,7 @@ mod test {
             expected
         );
         assert_eq!(
-            ValidatedDistInfoName::new(name.to_owned(), &filename.name)
+            DistInfoStem::new(name.to_owned(), &filename.name)
                 .expect_err("mismatched owned directory name")
                 .to_string(),
             expected

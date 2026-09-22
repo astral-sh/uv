@@ -66,7 +66,7 @@ pub(crate) async fn wheel_metadata_from_remote_zip(
         .await
         .map_err(|err| ErrorKind::Zip(filename.clone(), err))?;
 
-    let ((metadata_idx, metadata_entry), _dist_info_prefix) = find_archive_dist_info(
+    let ((metadata_idx, metadata_entry), _dist_info_stem) = find_archive_dist_info(
         filename,
         reader
             .file()
