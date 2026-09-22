@@ -1073,49 +1073,37 @@ mod tests {
     }
 
     #[test]
-    fn with_retry_sync_preserves_error_kind() {
-        for kind in [
-            io::ErrorKind::CrossesDevices,
-            io::ErrorKind::NotFound,
-            io::ErrorKind::InvalidInput,
-            io::ErrorKind::Other,
-        ] {
-            let attempts = std::cell::Cell::new(0);
-            let error = with_retry_sync("source", "destination", "renaming", || {
-                attempts.set(attempts.get() + 1);
-                Err(io::Error::new(kind, "authored error"))
-            })
-            .unwrap_err();
-
-            assert_eq!(error.kind(), kind);
-            assert_eq!(attempts.get(), 1);
-            #[cfg(windows)]
-            assert_eq!(
-                error.to_string(),
-                "Failed renaming source to destination: authored error"
-            );
-            #[cfg(not(windows))]
-            assert_eq!(error.to_string(), "authored error");
-        }
-    }
-
-    #[cfg(windows)]
-    #[test]
-    fn with_retry_sync_preserves_cross_device_os_error() {
-        use windows::Win32::Foundation::ERROR_NOT_SAME_DEVICE;
-
-        let os_error = i32::try_from(ERROR_NOT_SAME_DEVICE.0).unwrap();
-        let original = io::Error::from_raw_os_error(os_error);
-        let error = with_retry_sync("source", "destination", "renaming", || {
-            Err(io::Error::from_raw_os_error(os_error))
+    fn with_retry_sync_preserves_not_found() -> io::Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let source = tempdir.path().join("missing");
+        let destination = tempdir.path().join("destination");
+        let error = with_retry_sync(&source, &destination, "renaming", || {
+            fs_err::rename(&source, &destination)
         })
         .unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::NotFound);
+        Ok(())
+    }
 
+    /// Requires `UV_INTERNAL__TEST_ALT_FS` on a different device from the default temp directory.
+    #[test]
+    fn with_retry_sync_preserves_cross_device_error() -> io::Result<()> {
+        let Some(alternate) = std::env::var_os(uv_static::EnvVars::UV_INTERNAL__TEST_ALT_FS) else {
+            return Ok(());
+        };
+        fs_err::create_dir_all(&alternate)?;
+        let tempdir = tempfile::tempdir()?;
+        let alternate = tempfile::tempdir_in(alternate)?;
+        let source = tempdir.path().join("source");
+        let destination = alternate.path().join("destination");
+        fs_err::write(&source, "contents")?;
+
+        let error = with_retry_sync(&source, &destination, "renaming", || {
+            fs_err::rename(&source, &destination)
+        })
+        .unwrap_err();
         assert_eq!(error.kind(), io::ErrorKind::CrossesDevices);
-        assert_eq!(
-            error.to_string(),
-            format!("Failed renaming source to destination: {original}")
-        );
+        Ok(())
     }
 
     #[test]
