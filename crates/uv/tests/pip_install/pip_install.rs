@@ -2776,6 +2776,82 @@ fn install_git_workspace_build_requirement() -> Result<()> {
     Ok(())
 }
 
+/// Install a Git package whose checkout marker is a symlink.
+#[test]
+#[cfg(all(unix, feature = "test-git"))]
+fn install_git_checkout_marker_symlink() -> Result<()> {
+    let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION)
+        .with_filters([(r"@[0-9a-f]{40}".to_string(), "@[COMMIT]".to_string())]);
+
+    let victim = context.temp_dir.child("victim");
+    victim.write_str("external contents")?;
+
+    let repository = context.temp_dir.child("repository");
+    repository.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    repository
+        .child("src/example/__init__.py")
+        .write_str(r#"__version__ = "0.1.0""#)?;
+    symlink(victim.path(), repository.child(".ok").path())?;
+
+    Command::new("git")
+        .arg("init")
+        .arg(repository.path())
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args(["add", "."])
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("-C")
+        .arg(repository.path())
+        .args([
+            "-c",
+            "user.name=ferris",
+            "-c",
+            "user.email=ferris@example.com",
+            "commit",
+            "-m",
+            "Initial commit",
+        ])
+        .env("GIT_AUTHOR_DATE", "2000-01-01T00:00:00Z")
+        .env("GIT_COMMITTER_DATE", "2000-01-01T00:00:00Z")
+        .assert()
+        .success();
+
+    let repository_url = Url::from_directory_path(repository.path())
+        .map_err(|()| anyhow!("failed to convert repository path to file URL"))?;
+    let repository_url = repository_url.as_str().trim_end_matches('/');
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg(format!("example @ git+{repository_url}")), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + example==0.1.0 (from git+file://[TEMP_DIR]/repository@[COMMIT])
+    ");
+
+    // A repository-controlled checkout marker must not truncate an external file; see
+    // astral-sh/uv#21857.
+    assert_snapshot!(fs::read_to_string(victim.path())?, @"");
+
+    Ok(())
+}
+
 /// A full commit revision must not resolve to a branch with the same name.
 #[test]
 #[cfg(feature = "test-git")]
