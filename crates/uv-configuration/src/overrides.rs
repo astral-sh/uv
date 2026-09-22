@@ -4,7 +4,7 @@ use either::Either;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use serde::de::IntoDeserializer;
 
-use uv_distribution_types::{Requirement, RequirementSource};
+use uv_distribution_types::{Requirement, RequirementSource, ResolutionUsage};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::MarkerTree;
@@ -39,6 +39,13 @@ pub struct PackageOverrideTarget {
         )
     )]
     version: Option<Version>,
+}
+
+impl PackageOverrideTarget {
+    /// Return the parent package selected by this scope.
+    pub fn name(&self) -> &PackageName {
+        &self.name
+    }
 }
 
 /// An override, either global or scoped to a specific package version.
@@ -83,6 +90,7 @@ where
 /// A set of overrides for a set of requirements.
 #[derive(Debug, Default, Clone)]
 pub struct Overrides {
+    usage: ResolutionUsage,
     global: FxHashMap<PackageName, Vec<Requirement>>,
     scoped: FxHashMap<PackageName, Vec<ScopedOverrides>>,
 }
@@ -113,6 +121,13 @@ pub enum ScopedOverrideSourceError {
 }
 
 impl Overrides {
+    /// Record configuration consultations in the given runtime resolution.
+    #[must_use]
+    pub fn with_usage(mut self, usage: ResolutionUsage) -> Self {
+        self.usage = usage;
+        self
+    }
+
     /// Create a new set of overrides from a set of requirements.
     pub fn from_requirements(requirements: Vec<Requirement>) -> Self {
         let mut global: FxHashMap<PackageName, Vec<Requirement>> =
@@ -124,6 +139,7 @@ impl Overrides {
                 .push(requirement);
         }
         Self {
+            usage: ResolutionUsage::default(),
             global,
             scoped: FxHashMap::default(),
         }
@@ -190,7 +206,11 @@ impl Overrides {
             }
         }
 
-        Ok(Self { global, scoped })
+        Ok(Self {
+            global,
+            scoped,
+            usage: ResolutionUsage::default(),
+        })
     }
 
     /// Return an iterator over all global [`Requirement`]s in the override set.
@@ -247,6 +267,7 @@ impl Overrides {
 
     /// Get the overrides for a specific package version.
     fn scoped_for(&self, package: &PackageName, version: &Version) -> Option<&ScopedOverrides> {
+        self.usage.package(package);
         self.scoped.get(package).and_then(|entries| {
             entries
                 .iter()
@@ -324,7 +345,7 @@ impl Overrides {
             );
         }
 
-        if self.global.is_empty() {
+        if self.global.is_empty() && !self.usage.is_enabled() {
             // Fast path: There are no overrides.
             return Either::Right(Either::Left(requirements.into_iter().map(Cow::Borrowed)));
         }
@@ -339,6 +360,7 @@ impl Overrides {
         requirement: &'a Requirement,
         scoped: Option<&'a ScopedOverrides>,
     ) -> impl Iterator<Item = Cow<'a, Requirement>> {
+        self.usage.requirement(&requirement.name);
         let overrides = scoped
             .and_then(|scoped| scoped.overrides.get(&requirement.name))
             .or_else(|| self.get(&requirement.name));

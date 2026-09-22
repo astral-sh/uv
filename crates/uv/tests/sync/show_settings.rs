@@ -3813,6 +3813,7 @@ fn preview_features() {
     +            ArtifactHashFiltering,
     +            ContentAddressedCache,
     +            MissingExcludeNewerPackageLock,
+    +            ResolutionInputs,
     +            BatchExport,
     +            MinimumLibcVersion,
     +            BuildDependencyCheck,

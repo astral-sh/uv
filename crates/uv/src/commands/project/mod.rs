@@ -22,7 +22,7 @@ use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
 use uv_distribution_types::{
     ExtraBuildRequirement, ExtraBuildRequires, HashCollection, Index, IndexCredentialsError,
-    IndexUrlError, Requirement, RequiresPython, Resolution, UnresolvedRequirement,
+    IndexUrlError, Requirement, RequiresPython, Resolution, ResolutionUsage, UnresolvedRequirement,
     UnresolvedRequirementSpecification,
 };
 use uv_fs::{CWD, LockedFile, LockedFileError, LockedFileMode, Simplified, verbatim_path};
@@ -2724,6 +2724,7 @@ pub(crate) async fn resolve_environment(
         &resolve_dispatch,
         concurrency,
         options,
+        ResolutionUsage::default(),
         logger,
         printer,
     )
@@ -3121,6 +3122,7 @@ pub(crate) async fn update_environment(
         &build_dispatch,
         concurrency,
         options,
+        ResolutionUsage::default(),
         resolve,
         printer,
     )

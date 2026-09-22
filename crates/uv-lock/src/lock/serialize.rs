@@ -224,7 +224,8 @@ fn write_manifest(writer: &mut LockWriter, manifest: &ResolverManifest) -> Resul
         || !manifest.excludes.is_empty()
         || !manifest.build_constraints.is_empty()
         || has_dependency_groups
-        || !manifest.dependency_metadata.is_empty();
+        || !manifest.dependency_metadata.is_empty()
+        || manifest.resolution_inputs.is_some();
     if !has_manifest {
         return Ok(());
     }
@@ -249,6 +250,17 @@ fn write_manifest(writer: &mut LockWriter, manifest: &ResolverManifest) -> Resul
             }
             write_serialized_non_empty_array(writer, group.as_ref(), requirements)?;
         }
+    }
+
+    if let Some(inputs) = &manifest.resolution_inputs {
+        writer.table(&["manifest", "resolution-inputs"])?;
+        write_serialized_non_empty_array(writer, "requirements", &inputs.requirements)?;
+        write_serialized_non_empty_array(writer, "packages", &inputs.packages)?;
+        write_serialized_non_empty_array(
+            writer,
+            "dependency-metadata",
+            &inputs.dependency_metadata,
+        )?;
     }
 
     for metadata in &manifest.dependency_metadata {

@@ -3,13 +3,16 @@ use std::borrow::Cow;
 use either::Either;
 use rustc_hash::FxHashMap;
 
-use uv_distribution_types::{NameRequirementSpecification, Requirement, RequirementSource};
+use uv_distribution_types::{
+    NameRequirementSpecification, Requirement, RequirementSource, ResolutionUsage,
+};
 use uv_normalize::PackageName;
 use uv_pep508::MarkerTree;
 
 /// A set of constraints for a set of requirements.
 #[derive(Debug, Default, Clone)]
 pub struct Constraints {
+    usage: ResolutionUsage,
     /// Original declarations, including hashes, for hash verification.
     specifications: Vec<NameRequirementSpecification>,
     /// Constraints grouped by package name.
@@ -17,6 +20,13 @@ pub struct Constraints {
 }
 
 impl Constraints {
+    /// Record configuration consultations in the given runtime resolution.
+    #[must_use]
+    pub fn with_usage(mut self, usage: ResolutionUsage) -> Self {
+        self.usage = usage;
+        self
+    }
+
     /// Create a new set of constraints from a set of requirements.
     pub fn from_requirements(requirements: impl Iterator<Item = Requirement>) -> Self {
         Self::from_specifications(requirements.map(NameRequirementSpecification::from))
@@ -47,6 +57,7 @@ impl Constraints {
                 });
         }
         Self {
+            usage: ResolutionUsage::default(),
             specifications,
             requirements: constraints,
         }
@@ -64,6 +75,7 @@ impl Constraints {
 
     /// Get the constraints for a package.
     pub fn get(&self, name: &PackageName) -> Option<&Vec<Requirement>> {
+        self.usage.requirement(name);
         self.requirements.get(name)
     }
 

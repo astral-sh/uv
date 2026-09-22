@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use uv_distribution_types::RequirementSource;
+use uv_distribution_types::{RequirementSource, ResolutionUsage};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 
@@ -11,7 +11,10 @@ use crate::{DependencyMode, Manifest, ResolverEnvironment};
 /// A set of package versions that are permitted, even if they're marked as yanked by the
 /// relevant index.
 #[derive(Debug, Default, Clone)]
-pub struct AllowedYanks(Arc<FxHashMap<PackageName, FxHashSet<Version>>>);
+pub struct AllowedYanks {
+    versions: Arc<FxHashMap<PackageName, FxHashSet<Version>>>,
+    usage: ResolutionUsage,
+}
 
 impl AllowedYanks {
     pub fn from_manifest(
@@ -48,12 +51,16 @@ impl AllowedYanks {
                 .extend(preferences.map(|(.., version)| version.clone()));
         }
 
-        Self(Arc::new(allowed_yanks))
+        Self {
+            versions: Arc::new(allowed_yanks),
+            usage: manifest.usage.clone(),
+        }
     }
 
     /// Returns `true` if the package-version is allowed, even if it's marked as yanked.
     pub(crate) fn contains(&self, package_name: &PackageName, version: &Version) -> bool {
-        self.0
+        self.usage.requirement(package_name);
+        self.versions
             .get(package_name)
             .is_some_and(|versions| versions.contains(version))
     }

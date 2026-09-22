@@ -22,6 +22,7 @@ use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, Name,
     NameRequirementSpecification, Origin, PackageConfigSettings, Requirement, Resolution,
+    ResolutionUsage,
 };
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
@@ -577,6 +578,7 @@ pub(crate) async fn pip_install(
             &build_dispatch,
             &concurrency,
             options,
+            ResolutionUsage::default(),
             Box::new(DefaultResolveLogger),
             printer,
         )

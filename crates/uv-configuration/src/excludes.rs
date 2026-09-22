@@ -3,6 +3,7 @@ use std::str::FromStr;
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde::de::Error;
 
+use uv_distribution_types::ResolutionUsage;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 
@@ -33,6 +34,13 @@ pub struct PackageExclusionTarget {
     version: Option<Version>,
 }
 
+impl PackageExclusion {
+    /// Return the parent package selected by this exclusion.
+    pub fn package(&self) -> &PackageName {
+        &self.package.name
+    }
+}
+
 /// An exclusion, either global or scoped to a specific package version.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema), schemars(untagged))]
@@ -61,6 +69,7 @@ impl<'de> serde::Deserialize<'de> for ExcludeDependency {
 /// A set of packages to exclude from resolution.
 #[derive(Debug, Default, Clone)]
 pub struct Excludes {
+    usage: ResolutionUsage,
     global: FxHashSet<PackageName>,
     scoped: FxHashMap<PackageName, Vec<ScopedExclusions>>,
 }
@@ -72,6 +81,13 @@ struct ScopedExclusions {
 }
 
 impl Excludes {
+    /// Record configuration consultations in the given runtime resolution.
+    #[must_use]
+    pub fn with_usage(mut self, usage: ResolutionUsage) -> Self {
+        self.usage = usage;
+        self
+    }
+
     /// Create an indexed set of exclusions.
     pub fn from_entries(entries: impl IntoIterator<Item = ExcludeDependency>) -> Self {
         let mut excludes = Self::default();
@@ -101,6 +117,7 @@ impl Excludes {
 
     /// Check if a package is excluded.
     pub fn contains(&self, name: &PackageName) -> bool {
+        self.usage.requirement(name);
         self.global.contains(name)
     }
 
@@ -161,6 +178,9 @@ impl Excludes {
         package: Option<(&PackageName, &Version)>,
         dependency: &PackageName,
     ) -> bool {
+        if let Some((name, _)) = package {
+            self.usage.package(name);
+        }
         self.contains(dependency)
             || package.is_some_and(|(package, version)| {
                 self.scoped.get(package).is_some_and(|entries| {

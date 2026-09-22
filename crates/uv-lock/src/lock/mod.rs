@@ -40,8 +40,8 @@ use uv_distribution_types::{
     HashValidation, Identifier, IndexLocations, IndexMetadata, IndexUrl, MetadataHashPolicy,
     MinimumLibcVersion, Name, NameRequirementSpecification, PYPI_URL, PathBuiltDist,
     PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource,
-    Requirement, RequirementSource, RequiresPython, ResolvedDist, SimplifiedMarkerTree,
-    StaticMetadata, ToUrlError, UrlString, VersionId,
+    Requirement, RequirementSource, RequiresPython, ResolutionInputs, ResolvedDist,
+    SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString, VersionId,
 };
 use uv_fs::{PortablePath, PortablePathBuf, Simplified, normalize_path, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
@@ -80,6 +80,7 @@ pub use crate::lock::tree::{TreeDisplay, TreeJsonTarget};
 
 mod deserialize;
 pub(crate) mod export;
+mod inputs;
 mod installable;
 mod map;
 mod serialize;
@@ -2809,11 +2810,17 @@ impl Lock {
     /// Omit package-specific settings for packages outside the resolution.
     #[must_use]
     pub fn without_unused_exclude_newer_packages(mut self) -> Self {
-        self.options.exclude_newer = self
-            .options
-            .exclude_newer
-            .filter_packages(self.packages.iter().map(Package::name));
+        self.options.exclude_newer = self.filter_exclude_newer(self.options.exclude_newer.clone());
         self
+    }
+
+    /// Restrict package cutoffs to consulted runtime inputs, or locked packages in older locks.
+    pub fn filter_exclude_newer(&self, exclude_newer: ExcludeNewer) -> ExcludeNewer {
+        if let Some(inputs) = &self.manifest.resolution_inputs {
+            exclude_newer.filter_packages(inputs.requirements.iter())
+        } else {
+            exclude_newer.filter_packages(self.packages.iter().map(Package::name))
+        }
     }
 
     /// Returns `true` if this [`Lock`] includes `provides-extra` metadata.
@@ -4089,9 +4096,22 @@ impl Lock {
             }
         }
 
+        let expected_manifest = ResolverManifest::new(
+            [],
+            [],
+            constraints.iter().cloned(),
+            overrides.iter().cloned(),
+            excludes.iter().cloned(),
+            [],
+            [],
+            dependency_metadata.values().cloned(),
+        )
+        .with_resolution_inputs(self.manifest.resolution_inputs.clone());
+
         // Validate that the lockfile was generated with the same constraints.
         let normalized_constraints = {
-            let expected: BTreeSet<_> = constraints
+            let expected: BTreeSet<_> = expected_manifest
+                .constraints
                 .iter()
                 .cloned()
                 .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
@@ -4130,7 +4150,8 @@ impl Lock {
                     })),
                 }
             };
-            let expected: BTreeSet<_> = overrides
+            let expected: BTreeSet<_> = expected_manifest
+                .overrides
                 .iter()
                 .cloned()
                 .map(normalize)
@@ -4150,7 +4171,7 @@ impl Lock {
 
         // Validate that the lockfile was generated with the same excludes.
         {
-            let expected: BTreeSet<_> = excludes.iter().cloned().collect();
+            let expected = expected_manifest.excludes;
             let actual: BTreeSet<_> = self.manifest.excludes.iter().cloned().collect();
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedExcludes(expected, actual));
@@ -4235,10 +4256,7 @@ impl Lock {
 
         // Validate that the lockfile was generated with the same static metadata.
         {
-            let expected = dependency_metadata
-                .values()
-                .cloned()
-                .collect::<BTreeSet<_>>();
+            let expected = expected_manifest.dependency_metadata;
             let actual = &self.manifest.dependency_metadata;
             if expected != *actual {
                 return Ok(SatisfiesResult::MismatchedStaticMetadata(expected, actual));
@@ -6039,6 +6057,9 @@ impl From<ExcludeNewer> for ExcludeNewerWire {
 #[derive(Clone, Debug, Default, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub struct ResolverManifest {
+    /// Consultations used to project runtime configuration during lock validation.
+    #[serde(default)]
+    resolution_inputs: Option<ResolutionInputs>,
     /// The workspace members included in the lockfile.
     #[serde(default)]
     members: BTreeSet<PackageName>,
@@ -6086,6 +6107,7 @@ impl ResolverManifest {
         dependency_metadata: impl IntoIterator<Item = StaticMetadata>,
     ) -> Self {
         Self {
+            resolution_inputs: None,
             members: members.into_iter().collect(),
             requirements: requirements.into_iter().collect(),
             constraints: constraints.into_iter().collect(),
@@ -6103,6 +6125,7 @@ impl ResolverManifest {
     /// Convert the manifest to a relative form using the given workspace.
     pub fn relative_to(self, root: &Path) -> Result<Self, io::Error> {
         Ok(Self {
+            resolution_inputs: self.resolution_inputs,
             members: self.members,
             requirements: self
                 .requirements

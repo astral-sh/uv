@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use either::Either;
 
 use uv_configuration::{Constraints, Excludes, Overrides};
-use uv_distribution_types::Requirement;
+use uv_distribution_types::{Requirement, ResolutionUsage};
 use uv_normalize::PackageName;
 use uv_types::RequestedRequirements;
 
@@ -14,6 +14,9 @@ use crate::{DependencyMode, Exclusions, ResolverEnvironment};
 /// A manifest of requirements, constraints, and preferences.
 #[derive(Clone, Debug)]
 pub struct Manifest {
+    /// Runtime consultations, recorded after manifest-wide policy initialization.
+    pub(super) usage: ResolutionUsage,
+
     /// The direct requirements for the project.
     pub(super) requirements: Vec<Requirement>,
 
@@ -54,6 +57,16 @@ pub struct Manifest {
 }
 
 impl Manifest {
+    /// Record runtime consultations without recording manifest-wide policy initialization.
+    #[must_use]
+    pub fn with_usage(mut self, usage: ResolutionUsage) -> Self {
+        self.usage = usage;
+        self.constraints = self.constraints.with_usage(ResolutionUsage::default());
+        self.overrides = self.overrides.with_usage(ResolutionUsage::default());
+        self.excludes = self.excludes.with_usage(ResolutionUsage::default());
+        self
+    }
+
     pub fn new(
         requirements: Vec<Requirement>,
         constraints: Constraints,
@@ -66,6 +79,7 @@ impl Manifest {
         lookaheads: Vec<RequestedRequirements>,
     ) -> Self {
         Self {
+            usage: ResolutionUsage::default(),
             requirements,
             constraints,
             overrides,
@@ -81,6 +95,7 @@ impl Manifest {
 
     pub fn simple(requirements: Vec<Requirement>) -> Self {
         Self {
+            usage: ResolutionUsage::default(),
             requirements,
             constraints: Constraints::default(),
             overrides: Overrides::default(),
