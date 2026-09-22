@@ -671,13 +671,13 @@ fn install_script(
 
         #[cfg(not(unix))]
         {
-            // Retry when security software temporarily blocks the file, falling back to copy only
-            // when the rename crosses devices.
+            // Retry when security software temporarily blocks the file.
             match uv_fs::with_retry_sync(&path, &script_absolute, "renaming", || {
                 fs_err::rename(&path, &script_absolute)
             }) {
                 Ok(()) => (),
                 Err(err) if err.kind() == io::ErrorKind::CrossesDevices => {
+                    // Fall back to copy only when the rename crosses devices.
                     debug!("Failed to rename, falling back to copy: {err}");
                     uv_fs::with_retry_sync(&path, &script_absolute, "copying", || {
                         fs_err::copy(&path, &script_absolute)?;
