@@ -1454,7 +1454,8 @@ impl Error {
                 header: NoSolutionHeader::new(source.environment().clone()),
                 source,
             },
-            error @ (Self::Prepare(_)
+            error @ (Self::ScopedOverride(_)
+            | Self::Prepare(_)
             | Self::NoSolution { .. }
             | Self::Resolve(_)
             | Self::Uninstall(_)
@@ -1479,7 +1480,8 @@ impl Error {
             Self::Requirements(source) | Self::RequirementsWithContext { source, .. } => {
                 Self::RequirementsWithContext { context, source }
             }
-            error @ (Self::Prepare(_)
+            error @ (Self::ScopedOverride(_)
+            | Self::Prepare(_)
             | Self::Resolve(_)
             | Self::Uninstall(_)
             | Self::Hash(_)
@@ -1500,7 +1502,11 @@ impl Error {
             Self::Requirements(error) | Self::RequirementsWithContext { source: error, .. } => {
                 error.is_user_failure()
             }
-            Self::Uninstall(_) | Self::Io(_) | Self::Fmt(_) | Self::Anyhow(_) => false,
+            Self::ScopedOverride(_)
+            | Self::Uninstall(_)
+            | Self::Io(_)
+            | Self::Fmt(_)
+            | Self::Anyhow(_) => false,
         }
     }
 }
@@ -1547,7 +1553,8 @@ impl uv_errors::Hinted for Error {
                 }
                 uv_errors::Hints::none()
             }
-            Self::Prepare(_)
+            Self::ScopedOverride(_)
+            | Self::Prepare(_)
             | Self::Uninstall(_)
             | Self::Hash(_)
             | Self::Io(_)

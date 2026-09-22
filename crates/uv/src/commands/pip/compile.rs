@@ -15,8 +15,8 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, Constraints, DependencyModifiers,
-    ExtrasSpecification, HashCheckingMode, IndexStrategy, NoBinary, NoBuild, NoSources, PipCompileFormat, Reinstall,
-    Upgrade,
+    ExtrasSpecification, HashCheckingMode, IndexStrategy, NoBinary, NoBuild, NoSources,
+    PipCompileFormat, Reinstall, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};

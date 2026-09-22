@@ -487,7 +487,9 @@ impl SitePackages {
             FxHashSet::with_capacity_and_hasher(requirements.size_hint().0, FxBuildHasher);
 
         // Add the direct requirements to the queue.
-        for requirement in modifiers.apply(DependencyModifierScope::Global, requirements) {
+        for requirement in requirements.flat_map(|requirement| {
+            modifiers.apply(DependencyModifierScope::Global, once(requirement))
+        }) {
             if requirement.evaluate_markers(Some(markers), &[]) {
                 let requirement = requirement.into_owned();
                 if seen.insert(requirement.clone()) {

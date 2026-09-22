@@ -624,7 +624,7 @@ pub(crate) async fn install(
                         receipt_constraints.iter().chain(latest.iter()),
                         &receipt_modifiers,
                         dependency_metadata,
-        DependencyMode::Transitive,
+                        DependencyMode::Transitive,
                         InstallationStrategy::Permissive,
                         &markers,
                         &tags,

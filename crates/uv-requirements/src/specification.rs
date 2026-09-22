@@ -38,8 +38,7 @@ use url::Url;
 use uv_cache_key::CanonicalUrl;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    ExcludeDependency, DependencyGroups, DependencyModifiers, NoBinary, NoBuild,
-    RequirementsInput,
+    DependencyGroups, DependencyModifiers, ExcludeDependency, NoBinary, NoBuild, RequirementsInput,
 };
 use uv_distribution_types::{Index, Requirement};
 use uv_distribution_types::{

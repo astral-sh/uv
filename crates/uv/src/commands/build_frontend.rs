@@ -17,8 +17,8 @@ use uv_cache::{Cache, CacheBucket};
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     BuildIsolation, BuildKind, BuildOptions, BuildOutput, Concurrency, Constraints,
-    DependencyGroupsWithDefaults, DependencyMode, Excludes, HashCheckingMode, IndexStrategy,
-    KeyringProviderType, NoSources, Overrides,
+    DependencyGroupsWithDefaults, DependencyMode, DependencyModifiers, HashCheckingMode,
+    IndexStrategy, KeyringProviderType, NoSources,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
@@ -1067,8 +1067,7 @@ impl BuildDependencyCheck<'_> {
             .satisfies_requirements(
                 requirements,
                 self.constraints.requirements(),
-                &Overrides::default(),
-                &Excludes::default(),
+                &DependencyModifiers::default(),
                 self.build_dispatch.dependency_metadata(),
                 DependencyMode::Transitive,
                 InstallationStrategy::Permissive,

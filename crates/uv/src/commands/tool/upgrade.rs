@@ -358,7 +358,7 @@ async fn upgrade_tool(
         existing_tool_receipt.requirements(),
         &manifest_constraints,
         modifiers.clone(),
-        &build_constraint_requirements,
+        &build_constraints,
         &settings.resolver.dependency_metadata,
     );
     let build_constraints = Constraints::from_specifications(build_constraints);

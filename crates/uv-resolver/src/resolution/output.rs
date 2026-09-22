@@ -134,7 +134,7 @@ pub(crate) fn from_state(
     graph.retain_nodes(|graph, node| !graph[node].marker().is_false());
 
     if matches!(resolution_strategy, ResolutionStrategy::Lowest) {
-        report_missing_lower_bounds(&graph, &mut diagnostics, &constraints, &overrides);
+        report_missing_lower_bounds(&graph, &mut diagnostics, &constraints, &modifiers);
     }
 
     let output = ResolverOutput {
@@ -144,7 +144,7 @@ pub(crate) fn from_state(
         diagnostics,
         requirements,
         constraints,
-        overrides,
+        modifiers,
         options,
     };
 
