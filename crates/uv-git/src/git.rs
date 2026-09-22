@@ -685,20 +685,14 @@ fn fetch(
     disable_ssl: bool,
     offline: bool,
 ) -> Result<()> {
-    let oid_to_fetch = if let ReferenceOrOid::Oid(rev) = reference {
+    if let ReferenceOrOid::Oid(rev) = reference {
         let local_object = reference.resolve(repo).ok();
         if let Some(local_object) = local_object {
             if rev == local_object {
                 return Ok(());
             }
         }
-
-        // If we know the reference is a full commit hash, we can just return it without
-        // querying GitHub.
-        Some(rev)
-    } else {
-        None
-    };
+    }
 
     // Translate the reference desired here into an actual list of refspecs
     // which need to get fetched. Additionally record if we're fetching tags.
@@ -729,24 +723,12 @@ fn fetch(
             refspec_strategy = RefspecStrategy::First;
         }
 
-        // For ambiguous references, we can fetch the exact commit (if known); otherwise,
-        // we fetch all branches and tags.
-        ReferenceOrOid::Reference(GitReference::BranchOrTagOrCommit(branch_or_tag_or_commit)) => {
-            // The `oid_to_fetch` is the exact commit we want to fetch. But it could be the exact
-            // commit of a branch or tag. We should only fetch it directly if it's the exact commit
-            // of a short commit hash.
-            if let Some(oid_to_fetch) =
-                oid_to_fetch.filter(|oid| is_short_hash_of(branch_or_tag_or_commit, *oid))
-            {
-                refspecs.push(format!("+{oid_to_fetch}:refs/commit/{oid_to_fetch}"));
-            } else {
-                // We don't know what the rev will point to. To handle this
-                // situation we fetch all branches and tags, and then we pray
-                // it's somewhere in there.
-                refspecs.push(String::from("+refs/heads/*:refs/remotes/origin/*"));
-                refspecs.push(String::from("+HEAD:refs/remotes/origin/HEAD"));
-                tags = true;
-            }
+        // Fetch all branches and tags so ambiguous references can resolve to either a named
+        // reference or a short commit hash.
+        ReferenceOrOid::Reference(GitReference::BranchOrTagOrCommit(_)) => {
+            refspecs.push(String::from("+refs/heads/*:refs/remotes/origin/*"));
+            refspecs.push(String::from("+HEAD:refs/remotes/origin/HEAD"));
+            tags = true;
         }
 
         ReferenceOrOid::Reference(GitReference::DefaultBranch) => {
@@ -948,15 +930,6 @@ fn redact_git_error(mut error: anyhow::Error, url: &DisplaySafeUrl) -> anyhow::E
     }
 
     anyhow!("{}", redact(&error.to_string()))
-}
-
-/// Whether `rev` is a shorter hash of `oid`.
-fn is_short_hash_of(rev: &str, oid: GitOid) -> bool {
-    let long_hash = oid.to_string();
-    match long_hash.get(..rev.len()) {
-        Some(truncated_long_hash) => truncated_long_hash.eq_ignore_ascii_case(rev),
-        None => false,
-    }
 }
 
 #[cfg(test)]
