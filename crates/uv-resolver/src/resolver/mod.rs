@@ -25,7 +25,7 @@ use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, Identifier, IncompatibleDist,
     IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations, IndexMetadata,
     IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement,
-    RequiresPython, ResolutionUsage, ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef,
+    RequiresPython, ResolutionRecorder, ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef,
     implied_markers,
 };
 use uv_git::GitResolver;
@@ -118,7 +118,7 @@ pub struct Resolver<Provider: ResolverProvider, InstalledPackages: InstalledPack
 /// State that is shared between the prefetcher and the PubGrub solver during
 /// resolution, across all forks.
 struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
-    usage: ResolutionUsage,
+    recorder: ResolutionRecorder,
     project: Option<PackageName>,
     requirements: Vec<Requirement>,
     constraints: Constraints,
@@ -251,13 +251,15 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             dependency_mode: options.dependency_mode,
             urls: Urls::from_manifest(&manifest, &env, git, options.dependency_mode),
             indexes: Indexes::from_manifest(&manifest, &env, options.dependency_mode),
-            usage: manifest.usage.clone(),
+            recorder: manifest.recorder.clone(),
             project: manifest.project,
             workspace_members: manifest.workspace_members,
             requirements: manifest.requirements,
-            constraints: manifest.constraints.with_usage(manifest.usage.clone()),
-            overrides: manifest.overrides.with_usage(manifest.usage.clone()),
-            excludes: manifest.excludes.with_usage(manifest.usage.clone()),
+            constraints: manifest
+                .constraints
+                .with_recorder(manifest.recorder.clone()),
+            overrides: manifest.overrides.with_recorder(manifest.recorder.clone()),
+            excludes: manifest.excludes.with_recorder(manifest.recorder.clone()),
             preferences: manifest.preferences,
             exclusions: manifest.exclusions,
             hasher: hasher.clone(),
@@ -300,7 +302,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         // Channel size is set large to accommodate batch prefetching.
         let (request_sink, request_stream) = mpsc::channel(300);
         let requests =
-            MetadataRequests::new(state.index.clone(), request_sink, state.usage.clone());
+            MetadataRequests::new(state.index.clone(), request_sink, state.recorder.clone());
 
         // Run the fetcher.
         let requests_fut = state.clone().fetch(provider.clone(), request_stream).fuse();

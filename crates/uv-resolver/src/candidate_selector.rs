@@ -8,7 +8,7 @@ use tracing::{debug, trace};
 
 use uv_configuration::IndexStrategy;
 use uv_distribution_types::{
-    CompatibleDist, IncompatibleDist, IncompatibleSource, IndexUrl, ResolutionUsage,
+    CompatibleDist, IncompatibleDist, IncompatibleSource, IndexUrl, ResolutionRecorder,
 };
 use uv_distribution_types::{DistributionMetadata, IncompatibleWheel, Name, PrioritizedDist};
 use uv_normalize::PackageName;
@@ -25,7 +25,7 @@ use crate::{Exclusions, Manifest, Options, ResolverEnvironment};
 
 #[derive(Debug, Clone)]
 pub(crate) struct CandidateSelector {
-    usage: ResolutionUsage,
+    recorder: ResolutionRecorder,
     resolution_strategy: ResolutionStrategy,
     prerelease_strategy: PrereleaseStrategy,
     index_strategy: IndexStrategy,
@@ -39,7 +39,7 @@ impl CandidateSelector {
         env: &ResolverEnvironment,
     ) -> Self {
         Self {
-            usage: manifest.usage.clone(),
+            recorder: manifest.recorder.clone(),
             resolution_strategy: ResolutionStrategy::from_mode(
                 options.resolution_mode,
                 manifest,
@@ -91,7 +91,7 @@ impl CandidateSelector {
         env: &ResolverEnvironment,
         tags: Option<&'a Tags>,
     ) -> Option<Candidate<'a>> {
-        self.usage.requirement(package_name);
+        self.recorder.requirement(package_name);
         let reinstall = exclusions.reinstall(package_name);
         let upgrade = exclusions.upgrade(package_name);
         let prerelease_selection = self.prerelease_strategy.selection(package_name, env);

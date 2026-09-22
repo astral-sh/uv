@@ -26,7 +26,7 @@ use uv_client::{
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     ArchiveHashPolicy, BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, HashCollection,
-    HashValidation, Hashed, IndexUrl, InstalledDist, MetadataHashPolicy, Name, ResolutionUsage,
+    HashValidation, Hashed, IndexUrl, InstalledDist, MetadataHashPolicy, Name, ResolutionRecorder,
     SourceDist, SourceUrl, parse_url_hashes,
 };
 use uv_extract::dirhash::{DirectoryDigest, HashedFile};
@@ -65,7 +65,7 @@ use crate::{Error, LocalWheel, Reporter, RequiresDist};
 /// operation especially, as well as respecting concurrency limits.
 pub struct DistributionDatabase<'a, Context: BuildContext> {
     build_context: &'a Context,
-    usage: ResolutionUsage,
+    recorder: ResolutionRecorder,
     builder: SourceDistributionBuilder<'a, Context>,
     client: ManagedClient<'a>,
     reporter: Option<Arc<dyn Reporter>>,
@@ -84,7 +84,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let content_addressed_cache = uv_preview::is_enabled(PreviewFeature::ContentAddressedCache)
             && !uv_extract::insecure_no_validate();
         Self {
-            usage: ResolutionUsage::default(),
+            recorder: ResolutionRecorder::default(),
             build_context,
             builder: SourceDistributionBuilder::new(build_context),
             client: ManagedClient::new(client, downloads_semaphore),
@@ -95,14 +95,15 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
     /// Record static metadata consultations for this runtime database.
     #[must_use]
-    pub fn with_usage(mut self, usage: ResolutionUsage) -> Self {
-        self.usage = usage;
+    pub fn with_recorder(mut self, recorder: ResolutionRecorder) -> Self {
+        self.recorder = recorder;
         self
     }
 
     /// Record a metadata consultation before reading an in-memory cache.
     pub fn record_metadata(&self, dist: &Dist) {
-        self.usage.dependency_metadata(dist.name(), dist.version());
+        self.recorder
+            .dependency_metadata(dist.name(), dist.version());
     }
 
     /// Look up user-provided metadata, recording misses as well as matches.
@@ -111,7 +112,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         name: &PackageName,
         version: Option<&Version>,
     ) -> Option<ResolutionMetadata> {
-        self.usage.dependency_metadata(name, version);
+        self.recorder.dependency_metadata(name, version);
         self.build_context.dependency_metadata().get(name, version)
     }
 

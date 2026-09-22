@@ -4,7 +4,7 @@ use either::Either;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use serde::de::IntoDeserializer;
 
-use uv_distribution_types::{Requirement, RequirementSource, ResolutionUsage};
+use uv_distribution_types::{Requirement, RequirementSource, ResolutionRecorder};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::MarkerTree;
@@ -90,7 +90,7 @@ where
 /// A set of overrides for a set of requirements.
 #[derive(Debug, Default, Clone)]
 pub struct Overrides {
-    usage: ResolutionUsage,
+    recorder: ResolutionRecorder,
     global: FxHashMap<PackageName, Vec<Requirement>>,
     scoped: FxHashMap<PackageName, Vec<ScopedOverrides>>,
 }
@@ -123,8 +123,8 @@ pub enum ScopedOverrideSourceError {
 impl Overrides {
     /// Record configuration consultations in the given runtime resolution.
     #[must_use]
-    pub fn with_usage(mut self, usage: ResolutionUsage) -> Self {
-        self.usage = usage;
+    pub fn with_recorder(mut self, recorder: ResolutionRecorder) -> Self {
+        self.recorder = recorder;
         self
     }
 
@@ -139,7 +139,7 @@ impl Overrides {
                 .push(requirement);
         }
         Self {
-            usage: ResolutionUsage::default(),
+            recorder: ResolutionRecorder::default(),
             global,
             scoped: FxHashMap::default(),
         }
@@ -209,7 +209,7 @@ impl Overrides {
         Ok(Self {
             global,
             scoped,
-            usage: ResolutionUsage::default(),
+            recorder: ResolutionRecorder::default(),
         })
     }
 
@@ -267,7 +267,7 @@ impl Overrides {
 
     /// Get the overrides for a specific package version.
     fn scoped_for(&self, package: &PackageName, version: &Version) -> Option<&ScopedOverrides> {
-        self.usage.package(package);
+        self.recorder.package(package);
         self.scoped.get(package).and_then(|entries| {
             entries
                 .iter()
@@ -345,7 +345,7 @@ impl Overrides {
             );
         }
 
-        if self.global.is_empty() && !self.usage.is_enabled() {
+        if self.global.is_empty() && !self.recorder.is_enabled() {
             // Fast path: There are no overrides.
             return Either::Right(Either::Left(requirements.into_iter().map(Cow::Borrowed)));
         }
@@ -360,7 +360,7 @@ impl Overrides {
         requirement: &'a Requirement,
         scoped: Option<&'a ScopedOverrides>,
     ) -> impl Iterator<Item = Cow<'a, Requirement>> {
-        self.usage.requirement(&requirement.name);
+        self.recorder.requirement(&requirement.name);
         let overrides = scoped
             .and_then(|scoped| scoped.overrides.get(&requirement.name))
             .or_else(|| self.get(&requirement.name));

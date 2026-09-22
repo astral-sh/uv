@@ -19,7 +19,7 @@ use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
     DependencyMetadata, HashCollection, IndexLocations, NameRequirementSpecification, Requirement,
-    RequiresPython, ResolutionUsage, UnresolvedRequirementSpecification,
+    RequiresPython, ResolutionRecorder, UnresolvedRequirementSpecification,
 };
 use uv_git::ResolvedRepositoryReference;
 use uv_git_types::GitOid;
@@ -996,17 +996,17 @@ async fn do_lock(
         // The lockfile did not contain enough information to obtain a resolution, fallback
         // to a fresh resolve.
         _ => {
-            let usage = if preview.is_enabled(PreviewFeature::ResolutionInputs) {
-                ResolutionUsage::enabled()
+            let recorder = if preview.is_enabled(PreviewFeature::ResolutionInputs) {
+                ResolutionRecorder::enabled()
             } else {
-                ResolutionUsage::default()
+                ResolutionRecorder::default()
             };
             let database = DistributionDatabase::new(
                 &client,
                 &build_dispatch,
                 concurrency.downloads_semaphore.clone(),
             )
-            .with_usage(usage.clone());
+            .with_recorder(recorder.clone());
 
             // Determine whether we can reuse the existing package versions.
             let versions_lock = existing_lock.as_ref().and_then(|lock| match &lock {
@@ -1106,7 +1106,7 @@ async fn do_lock(
                 &build_dispatch,
                 concurrency,
                 options,
-                usage.clone(),
+                recorder.clone(),
                 Box::new(SummaryResolveLogger),
                 printer,
             )
@@ -1128,7 +1128,7 @@ async fn do_lock(
                 dependency_groups,
                 dependency_metadata.values().cloned(),
             )
-            .with_resolution_inputs(usage.snapshot())
+            .prune_unused(recorder.snapshot())
             .relative_to(target.install_path())?;
 
             let previous = existing_lock.map(ValidatedLock::into_lock);

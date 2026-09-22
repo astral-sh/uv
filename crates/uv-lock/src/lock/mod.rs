@@ -40,7 +40,7 @@ use uv_distribution_types::{
     HashValidation, Identifier, IndexLocations, IndexMetadata, IndexUrl, MetadataHashPolicy,
     MinimumLibcVersion, Name, NameRequirementSpecification, PYPI_URL, PathBuiltDist,
     PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource,
-    Requirement, RequirementSource, RequiresPython, ResolutionInputs, ResolvedDist,
+    Requirement, RequirementSource, RequiresPython, ResolutionLookups, ResolvedDist,
     SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString, VersionId,
 };
 use uv_fs::{PortablePath, PortablePathBuf, Simplified, normalize_path, try_relative_to_if};
@@ -74,6 +74,7 @@ pub use crate::lock::export::RequirementsTxtExport;
 pub use crate::lock::export::{
     Metadata, PylockToml, PylockTomlError, PylockTomlErrorKind, PythonReport, cyclonedx_json,
 };
+use crate::lock::inputs::ManifestFilter;
 pub use crate::lock::installable::{Installable, InstallableRootKind};
 pub use crate::lock::map::PackageMap;
 pub use crate::lock::tree::{TreeDisplay, TreeJsonTarget};
@@ -4096,23 +4097,18 @@ impl Lock {
             }
         }
 
-        let expected_manifest = ResolverManifest::new(
-            [],
-            [],
-            constraints.iter().cloned(),
-            overrides.iter().cloned(),
-            excludes.iter().cloned(),
-            [],
-            [],
-            dependency_metadata.values().cloned(),
-        )
-        .with_resolution_inputs(self.manifest.resolution_inputs.clone());
+        let filter = ManifestFilter::new(
+            self.manifest.resolution_inputs.as_ref(),
+            constraints,
+            overrides,
+            dependency_metadata,
+        );
 
         // Validate that the lockfile was generated with the same constraints.
         let normalized_constraints = {
-            let expected: BTreeSet<_> = expected_manifest
-                .constraints
+            let expected: BTreeSet<_> = constraints
                 .iter()
+                .filter(|entry| filter.includes_constraint(entry))
                 .cloned()
                 .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
                 .collect::<Result<_, _>>()?;
@@ -4150,9 +4146,9 @@ impl Lock {
                     })),
                 }
             };
-            let expected: BTreeSet<_> = expected_manifest
-                .overrides
+            let expected: BTreeSet<_> = overrides
                 .iter()
+                .filter(|entry| filter.includes_override(entry))
                 .cloned()
                 .map(normalize)
                 .collect::<Result<_, _>>()?;
@@ -4171,7 +4167,11 @@ impl Lock {
 
         // Validate that the lockfile was generated with the same excludes.
         {
-            let expected = expected_manifest.excludes;
+            let expected = excludes
+                .iter()
+                .filter(|entry| filter.includes_exclusion(entry))
+                .cloned()
+                .collect();
             let actual: BTreeSet<_> = self.manifest.excludes.iter().cloned().collect();
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedExcludes(expected, actual));
@@ -4256,7 +4256,11 @@ impl Lock {
 
         // Validate that the lockfile was generated with the same static metadata.
         {
-            let expected = expected_manifest.dependency_metadata;
+            let expected = dependency_metadata
+                .values()
+                .filter(|entry| filter.includes_metadata(entry))
+                .cloned()
+                .collect::<BTreeSet<_>>();
             let actual = &self.manifest.dependency_metadata;
             if expected != *actual {
                 return Ok(SatisfiesResult::MismatchedStaticMetadata(expected, actual));
@@ -6059,7 +6063,7 @@ impl From<ExcludeNewer> for ExcludeNewerWire {
 pub struct ResolverManifest {
     /// Consultations used to project runtime configuration during lock validation.
     #[serde(default)]
-    resolution_inputs: Option<ResolutionInputs>,
+    resolution_inputs: Option<ResolutionLookups>,
     /// The workspace members included in the lockfile.
     #[serde(default)]
     members: BTreeSet<PackageName>,

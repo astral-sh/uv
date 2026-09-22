@@ -11,7 +11,7 @@ use uv_pep440::Version;
 /// Complete package scopes are retained, so empty exact scopes continue to shadow fallback scopes.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct ResolutionInputs {
+pub struct ResolutionLookups {
     /// Dependency names whose constraints, overrides, exclusions, or candidate policy were consulted.
     #[serde(default)]
     pub requirements: BTreeSet<PackageName>,
@@ -37,9 +37,9 @@ pub struct DependencyMetadataQuery {
 /// Build resolutions use their own, disabled recorder, even when fetching runtime metadata invokes
 /// a build backend. Clones share consultations across resolver forks and concurrent metadata requests.
 #[derive(Debug, Default, Clone)]
-pub struct ResolutionUsage(Option<Arc<Mutex<ResolutionInputs>>>);
+pub struct ResolutionRecorder(Option<Arc<Mutex<ResolutionLookups>>>);
 
-impl ResolutionUsage {
+impl ResolutionRecorder {
     /// Enable recording for a new resolution.
     pub fn enabled() -> Self {
         Self(Some(Arc::default()))
@@ -52,10 +52,10 @@ impl ResolutionUsage {
 
     /// Record a requirement lookup before applying configuration or filtering its markers.
     pub fn requirement(&self, name: &PackageName) {
-        if let Some(inputs) = &self.0 {
-            inputs
+        if let Some(lookups) = &self.0 {
+            lookups
                 .lock()
-                .expect("resolution inputs lock poisoned")
+                .expect("resolution lookups lock poisoned")
                 .requirements
                 .insert(name.clone());
         }
@@ -63,10 +63,10 @@ impl ResolutionUsage {
 
     /// Record a package scope lookup, even when the package has no dependencies or matching scope.
     pub fn package(&self, name: &PackageName) {
-        if let Some(inputs) = &self.0 {
-            inputs
+        if let Some(lookups) = &self.0 {
+            lookups
                 .lock()
-                .expect("resolution inputs lock poisoned")
+                .expect("resolution lookups lock poisoned")
                 .packages
                 .insert(name.clone());
         }
@@ -74,10 +74,10 @@ impl ResolutionUsage {
 
     /// Record a static metadata lookup before checking for a matching declaration.
     pub fn dependency_metadata(&self, name: &PackageName, version: Option<&Version>) {
-        if let Some(inputs) = &self.0 {
-            inputs
+        if let Some(lookups) = &self.0 {
+            lookups
                 .lock()
-                .expect("resolution inputs lock poisoned")
+                .expect("resolution lookups lock poisoned")
                 .dependency_metadata
                 .insert(DependencyMetadataQuery {
                     name: name.clone(),
@@ -87,11 +87,11 @@ impl ResolutionUsage {
     }
 
     /// Snapshot the consultations once runtime resolution has completed.
-    pub fn snapshot(&self) -> Option<ResolutionInputs> {
-        self.0.as_ref().map(|inputs| {
-            inputs
+    pub fn snapshot(&self) -> Option<ResolutionLookups> {
+        self.0.as_ref().map(|lookups| {
+            lookups
                 .lock()
-                .expect("resolution inputs lock poisoned")
+                .expect("resolution lookups lock poisoned")
                 .clone()
         })
     }

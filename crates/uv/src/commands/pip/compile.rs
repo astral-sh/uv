@@ -24,7 +24,7 @@ use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, HashCollection, Index, IndexLocations,
     MinimumLibcVersion, NameRequirementSpecification, Origin, PackageConfigSettings, Requirement,
-    RequiresPython, ResolutionUsage, Verbatim,
+    RequiresPython, ResolutionRecorder, Verbatim,
 };
 use uv_fs::{CWD, Simplified};
 use uv_git::ResolvedRepositoryReference;
@@ -595,7 +595,7 @@ pub(crate) async fn pip_compile(
         &build_dispatch,
         &concurrency,
         options,
-        ResolutionUsage::default(),
+        ResolutionRecorder::default(),
         Box::new(DefaultResolveLogger),
         printer,
     )

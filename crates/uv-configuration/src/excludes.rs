@@ -3,7 +3,7 @@ use std::str::FromStr;
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde::de::Error;
 
-use uv_distribution_types::ResolutionUsage;
+use uv_distribution_types::ResolutionRecorder;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 
@@ -69,7 +69,7 @@ impl<'de> serde::Deserialize<'de> for ExcludeDependency {
 /// A set of packages to exclude from resolution.
 #[derive(Debug, Default, Clone)]
 pub struct Excludes {
-    usage: ResolutionUsage,
+    recorder: ResolutionRecorder,
     global: FxHashSet<PackageName>,
     scoped: FxHashMap<PackageName, Vec<ScopedExclusions>>,
 }
@@ -83,8 +83,8 @@ struct ScopedExclusions {
 impl Excludes {
     /// Record configuration consultations in the given runtime resolution.
     #[must_use]
-    pub fn with_usage(mut self, usage: ResolutionUsage) -> Self {
-        self.usage = usage;
+    pub fn with_recorder(mut self, recorder: ResolutionRecorder) -> Self {
+        self.recorder = recorder;
         self
     }
 
@@ -117,7 +117,7 @@ impl Excludes {
 
     /// Check if a package is excluded.
     pub fn contains(&self, name: &PackageName) -> bool {
-        self.usage.requirement(name);
+        self.recorder.requirement(name);
         self.global.contains(name)
     }
 
@@ -179,7 +179,7 @@ impl Excludes {
         dependency: &PackageName,
     ) -> bool {
         if let Some((name, _)) = package {
-            self.usage.package(name);
+            self.recorder.package(name);
         }
         self.contains(dependency)
             || package.is_some_and(|(package, version)| {
