@@ -77,6 +77,11 @@ impl<'de> serde::Deserialize<'de> for DependencyModifiers {
 }
 
 impl DependencyModifiers {
+    /// Return whether the collection contains modifiers scoped to this package.
+    pub fn has_scoped_package(&self, package: &PackageName) -> bool {
+        self.index.scoped.contains_key(package)
+    }
+
     /// Return the override entries.
     pub fn override_entries(&self) -> impl Iterator<Item = &Override> {
         self.entries.overrides.iter()

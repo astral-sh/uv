@@ -19,7 +19,7 @@ use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{Level, debug, info, instrument, trace, warn};
 
-use uv_configuration::{Constraints, DependencyModifierScope, DependencyModifiers};
+use uv_configuration::{Constraints, DependencyModifiers};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, Identifier, IncompatibleDist,
@@ -1793,13 +1793,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
     ) -> Result<Dependencies, ResolveError> {
-        let expander = RequirementExpander::new(
-            &self.constraints,
-            &self.overrides,
-            &self.excludes,
-            env,
-            python_requirement,
-        );
+        let expander =
+            RequirementExpander::new(&self.constraints, &self.modifiers, env, python_requirement);
         let dependencies = match &**package {
             PubGrubPackageInner::Root(_) => {
                 let requirements = expander.expand(&self.requirements, RequirementContext::Root);

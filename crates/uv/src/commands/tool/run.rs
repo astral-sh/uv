@@ -1134,7 +1134,7 @@ async fn get_or_create_environment(
                             constraints.iter().chain(latest.iter()),
                             &modifiers,
                             dependency_metadata,
-            DependencyMode::Transitive,
+                            DependencyMode::Transitive,
                             InstallationStrategy::Permissive,
                             &markers,
                             &tags,
