@@ -78,22 +78,26 @@ pub(crate) async fn wheel_metadata_from_remote_zip(
     .map_err(|err| ErrorKind::Metadata(debug_name.to_string(), err))?;
 
     let offset = metadata_entry.header_offset();
-    let size = metadata_entry.compressed_size()
-        + 30 // Header size in bytes
-        + metadata_entry.filename().as_bytes().len() as u64;
 
-    // The zip archive uses as BufReader which reads in chunks of 8192. To ensure we prefetch
-    // enough data we round the size up to the nearest multiple of the buffer size.
+    // The ZIP reader uses a `BufReader`, which reads in chunks of 8192. Round the
+    // prefetch size up to the nearest multiple of the buffer size.
     let buffer_size = 8192;
-    let size = size.div_ceil(buffer_size) * buffer_size;
+    let end = metadata_entry
+        .compressed_size()
+        .checked_add(30) // Header size in bytes
+        .and_then(|size| size.checked_add(metadata_entry.filename().as_bytes().len() as u64))
+        .and_then(|size| size.checked_next_multiple_of(buffer_size))
+        .and_then(|size| offset.checked_add(size));
 
-    // Fetch the bytes from the zip archive that contain the requested file.
-    reader
-        .inner_mut()
-        .get_mut()
-        .get_mut()
-        .prefetch(offset..offset + size)
-        .await;
+    // Prefetching is optional. The ZIP reader validates the entry range when it is opened.
+    if let Some(end) = end {
+        reader
+            .inner_mut()
+            .get_mut()
+            .get_mut()
+            .prefetch(offset..end)
+            .await;
+    }
 
     // Read the contents of the METADATA file
     let mut contents = String::new();
