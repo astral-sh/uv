@@ -309,12 +309,14 @@ fn is_ssh_git_username(url: &Url) -> bool {
         && url.password().is_none()
 }
 
-/// Standalone usernames may be tokens, except for the generic Git username.
+/// Returns the URL's username and password with sensitive values redacted for display.
 fn redacted_credentials(url: &Url) -> (&str, Option<&str>) {
     match (url.username(), url.password()) {
         (username, Some(_)) => (username, Some("****")),
         ("", None) => ("", None),
+        // The generic Git username is not sensitive.
         (username, None) if is_ssh_git_username(url) => (username, None),
+        // Other standalone usernames may be tokens.
         (_, None) => ("****", None),
     }
 }
