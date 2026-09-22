@@ -148,7 +148,7 @@ fn install_wheel_cache_incompatible_with_older_uv() -> Result<()> {
                 .arg("--cache-dir")
                 .arg(context.cache_dir.path())
                 .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-                .env_remove(EnvVars::UV_TEST_AVAILABLE_VERSION_CUTOFF), @"
+                .env_remove(EnvVars::UV_INTERNAL__TEST_AVAILABLE_VERSION_CUTOFF), @"
             exit_code: 0 (success)
             ----- stderr -----
             Resolved 1 package in [TIME]
@@ -3202,7 +3202,7 @@ async fn install_git_public_rate_limited_by_github_rest_api_429_response() {
         .pip_install()
         .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage")
         .env(EnvVars::UV_GITHUB_FAST_PATH_URL, server.uri())
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
+        .env(EnvVars::UV_INTERNAL__TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -3251,7 +3251,7 @@ fn install_git_public_https_exact_commit() {
     uv_snapshot!(context.filters(), context.pip_install()
         // Normally Updating/Updated notifications are suppressed in tests (because their order can
         // be nondeterministic), but here that's exactly what we want to test for.
-        .env_remove(EnvVars::UV_TEST_NO_CLI_PROGRESS)
+        .env_remove(EnvVars::UV_INTERNAL__TEST_NO_CLI_PROGRESS)
         // Whether fetching happens during resolution or later depends on whether the GitHub fast
         // path is taken, which isn't reliable. Disable it, so that we get a stable order of events
         // here.
@@ -3272,7 +3272,7 @@ fn install_git_public_https_exact_commit() {
 
     // Run the exact same command again, with that commit now in cache.
     uv_snapshot!(context.filters(), context.pip_install()
-        .env_remove(EnvVars::UV_TEST_NO_CLI_PROGRESS)
+        .env_remove(EnvVars::UV_INTERNAL__TEST_NO_CLI_PROGRESS)
         .env(EnvVars::UV_NO_GITHUB_FAST_PATH, "true")
         .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389")
         , @"

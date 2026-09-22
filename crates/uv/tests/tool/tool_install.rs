@@ -216,7 +216,10 @@ fn tool_install_relative_exclude_newer_receipt_preserves_span() {
         .arg("--exclude-newer")
         .arg("3 weeks")
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, "2024-05-01T00:00:00Z")
+        .env(
+            EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP,
+            "2024-05-01T00:00:00Z",
+        )
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .assert()
         .success();

@@ -24,8 +24,8 @@ use uv_static::EnvVars;
 
 /// Since downloads, fetches and builds run in parallel, their message output order is
 /// non-deterministic, so can't capture them in test output.
-static HAS_UV_TEST_NO_CLI_PROGRESS: LazyLock<bool> =
-    LazyLock::new(|| env::var(EnvVars::UV_TEST_NO_CLI_PROGRESS).is_ok());
+static HAS_UV_INTERNAL__TEST_NO_CLI_PROGRESS: LazyLock<bool> =
+    LazyLock::new(|| env::var(EnvVars::UV_INTERNAL__TEST_NO_CLI_PROGRESS).is_ok());
 
 #[derive(Debug)]
 struct ProgressReporter {
@@ -176,7 +176,7 @@ impl ProgressReporter {
             "Building".bold().cyan(),
             source.to_color_string()
         );
-        if multi_progress.is_hidden() && !*HAS_UV_TEST_NO_CLI_PROGRESS {
+        if multi_progress.is_hidden() && !*HAS_UV_INTERNAL__TEST_NO_CLI_PROGRESS {
             let _ = writeln!(self.printer.stderr(), "{message}");
         }
         progress.set_message(message);
@@ -206,7 +206,7 @@ impl ProgressReporter {
             "Built".bold().green(),
             source.to_color_string()
         );
-        if multi_progress.is_hidden() && !*HAS_UV_TEST_NO_CLI_PROGRESS {
+        if multi_progress.is_hidden() && !*HAS_UV_INTERNAL__TEST_NO_CLI_PROGRESS {
             let _ = writeln!(self.printer.stderr(), "{message}");
         }
         progress.finish_with_message(message);
@@ -263,7 +263,10 @@ impl ProgressReporter {
             );
             // If the file is larger than 1MB, show a message to indicate that this may take
             // a while keeping the log concise.
-            if multi_progress.is_hidden() && !*HAS_UV_TEST_NO_CLI_PROGRESS && size > 1024 * 1024 {
+            if multi_progress.is_hidden()
+                && !*HAS_UV_INTERNAL__TEST_NO_CLI_PROGRESS
+                && size > 1024 * 1024
+            {
                 let _ = writeln!(
                     self.printer.stderr(),
                     "{} {} {}",
@@ -275,7 +278,7 @@ impl ProgressReporter {
             progress.set_message(name);
         } else {
             progress.set_style(ProgressStyle::with_template("{wide_msg:.dim} ....").unwrap());
-            if multi_progress.is_hidden() && !*HAS_UV_TEST_NO_CLI_PROGRESS {
+            if multi_progress.is_hidden() && !*HAS_UV_INTERNAL__TEST_NO_CLI_PROGRESS {
                 let _ = writeln!(
                     self.printer.stderr(),
                     "{} {}",
@@ -320,7 +323,7 @@ impl ProgressReporter {
         let mut state = state.lock().unwrap();
         if let ProgressBarKind::Numeric { progress, size } = state.bars.remove(&id).unwrap() {
             if multi_progress.is_hidden()
-                && !*HAS_UV_TEST_NO_CLI_PROGRESS
+                && !*HAS_UV_INTERNAL__TEST_NO_CLI_PROGRESS
                 && size.is_none_or(|size| size > 1024 * 1024)
             {
                 let _ = writeln!(
@@ -398,7 +401,7 @@ impl ProgressReporter {
 
         progress.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
         let message = format!("   {} {} ({})", "Updating".bold().cyan(), url, rev.dimmed());
-        if multi_progress.is_hidden() && !*HAS_UV_TEST_NO_CLI_PROGRESS {
+        if multi_progress.is_hidden() && !*HAS_UV_INTERNAL__TEST_NO_CLI_PROGRESS {
             let _ = writeln!(self.printer.stderr(), "{message}");
         }
         progress.set_message(message);
@@ -430,7 +433,7 @@ impl ProgressReporter {
             url,
             rev.dimmed()
         );
-        if multi_progress.is_hidden() && !*HAS_UV_TEST_NO_CLI_PROGRESS {
+        if multi_progress.is_hidden() && !*HAS_UV_INTERNAL__TEST_NO_CLI_PROGRESS {
             let _ = writeln!(self.printer.stderr(), "{message}");
         }
         progress.finish_with_message(message);

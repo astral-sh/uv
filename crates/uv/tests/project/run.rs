@@ -4825,7 +4825,7 @@ fn run_remote_pep723_requirements_fetch_error_does_not_leak_credentials() -> Res
         .arg("--with-requirements")
         .arg(url)
         .arg(script.as_os_str())
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
+        .env(EnvVars::UV_INTERNAL__TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Request failed after 3 retries

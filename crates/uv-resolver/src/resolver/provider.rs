@@ -107,9 +107,11 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
             allowed_yanks,
             hasher,
             exclude_newer,
-            available_version_cutoff: std::env::var(EnvVars::UV_TEST_AVAILABLE_VERSION_CUTOFF)
-                .ok()
-                .and_then(|value| value.parse().ok()),
+            available_version_cutoff: std::env::var(
+                EnvVars::UV_INTERNAL__TEST_AVAILABLE_VERSION_CUTOFF,
+            )
+            .ok()
+            .and_then(|value| value.parse().ok()),
             index_locations,
             build_options,
             capabilities,

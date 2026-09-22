@@ -237,7 +237,9 @@ impl Default for BaseClientBuilder<'_> {
             custom_client: None,
             subcommand: None,
             client_name: None,
-            no_retry_delay: env::var_os(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY).is_some(),
+            // The documented `UV_TEST_NO_HTTP_RETRY_DELAY` name remains supported.
+            no_retry_delay: env::var_os(EnvVars::UV_INTERNAL__TEST_NO_HTTP_RETRY_DELAY).is_some()
+                || env::var_os(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY).is_some(),
             cache_read_runtime: Arc::new(CacheReadRuntime::new(Concurrency::DEFAULT_CACHE_READS)),
         }
     }
