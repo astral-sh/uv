@@ -693,6 +693,11 @@ impl EnvVars {
     #[attr_added_in("0.3.4")]
     pub const UV_INTERNAL__TEST_DIR: &'static str = "UV_INTERNAL__TEST_DIR";
 
+    /// Configure `RUST_LOG` for commands spawned by the test suite.
+    #[attr_hidden]
+    #[attr_added_in("next release")]
+    pub const UV_INTERNAL__TEST_RUST_LOG: &'static str = "UV_INTERNAL__TEST_RUST_LOG";
+
     /// Path to a directory on a filesystem that supports copy-on-write, e.g., btrfs or APFS.
     ///
     /// When populated, uv will run additional tests that require this functionality.
@@ -1273,11 +1278,6 @@ impl EnvVars {
     #[attr_hidden]
     #[attr_added_in("0.1.34")]
     pub const KEYRING_TEST_CREDENTIALS: &'static str = "KEYRING_TEST_CREDENTIALS";
-
-    /// Configure `RUST_LOG` for commands spawned by the test suite.
-    #[attr_hidden]
-    #[attr_added_in("next release")]
-    pub const UV_TEST_RUST_LOG: &'static str = "UV_TEST_RUST_LOG";
 
     /// Used to disable delay for HTTP retries in tests.
     #[attr_added_in("0.7.21")]
