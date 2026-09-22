@@ -193,6 +193,43 @@ fn workspace_metadata_extra_quiet() {
 }
 
 #[test]
+fn workspace_metadata_quiet_from_env() {
+    let context = uv_test::test_context!("3.12");
+    context.init().arg("foo").assert().success();
+
+    let workspace = context.temp_dir.child("foo");
+
+    // `UV_QUIET=2` is equivalent to `-qq`.
+    uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&workspace).env(EnvVars::UV_QUIET, "2"), @r"
+    exit_code: 0 (success)
+    ");
+}
+
+#[test]
+fn workspace_metadata_quiet_cli_overrides_env() {
+    let context = uv_test::test_context!("3.12");
+    context.init().arg("foo").assert().success();
+
+    let workspace = context.temp_dir.child("foo");
+
+    // CLI `-qq` should win over `UV_VERBOSE`.
+    uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&workspace).arg("--quiet").arg("--quiet").env(EnvVars::UV_VERBOSE, "3"), @r"
+    exit_code: 0 (success)
+    ");
+}
+
+#[test]
+fn quiet_verbose_env_conflict() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.version().env(EnvVars::UV_QUIET, "1").env(EnvVars::UV_VERBOSE, "1"), @r"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: `UV_QUIET` and `UV_VERBOSE` are mutually exclusive
+    ");
+}
+
+#[test]
 fn workspace_metadata_ignores_unusable_environment() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     context.init().arg("foo").assert().success();

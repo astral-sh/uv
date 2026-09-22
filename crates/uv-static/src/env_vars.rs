@@ -440,6 +440,16 @@ impl EnvVars {
     #[attr_added_in("0.2.28")]
     pub const UV_NO_PROGRESS: &'static str = "UV_NO_PROGRESS";
 
+    /// Equivalent to the `--quiet` command-line argument. Use `UV_QUIET=1` for `-q`, `UV_QUIET=2`
+    /// for `-qq`, and so on.
+    #[attr_added_in("next release")]
+    pub const UV_QUIET: &'static str = "UV_QUIET";
+
+    /// Equivalent to the `--verbose` command-line argument. Use `UV_VERBOSE=1` for `-v`,
+    /// `UV_VERBOSE=2` for `-vv`, `UV_VERBOSE=3` for `-vvv`, and so on.
+    #[attr_added_in("next release")]
+    pub const UV_VERBOSE: &'static str = "UV_VERBOSE";
+
     /// Specifies the directory where uv stores managed tools.
     #[attr_added_in("0.2.16")]
     pub const UV_TOOL_DIR: &'static str = "UV_TOOL_DIR";

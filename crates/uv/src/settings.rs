@@ -107,11 +107,12 @@ impl GlobalSettings {
             NetworkSettings::resolve(args, workspace, environment, custom_certificate_file)?;
         let python_preference = resolve_python_preference(args, workspace, environment)?;
         let color = resolve_color(args);
+        let (quiet, verbose) = resolve_quiet_verbose(args.quiet, args.verbose, environment)?;
         Ok(Self {
             required_version: workspace
                 .and_then(|workspace| workspace.globals.required_version.clone()),
-            quiet: args.quiet,
-            verbose: args.verbose,
+            quiet,
+            verbose,
             color,
             network_settings,
             concurrency: Concurrency::new(
@@ -163,6 +164,32 @@ impl GlobalSettings {
             )
             .is_enabled(),
         })
+    }
+}
+
+/// Resolve quiet and verbose levels from CLI arguments and environment variables.
+///
+/// Command-line flags take precedence. `UV_QUIET=1` is equivalent to `-q`, and `UV_VERBOSE=3` is
+/// equivalent to `-vvv`.
+pub(crate) fn resolve_quiet_verbose(
+    cli_quiet: u8,
+    cli_verbose: u8,
+    environment: &EnvironmentOptions,
+) -> Result<(u8, u8)> {
+    if cli_quiet > 0 {
+        return Ok((cli_quiet, 0));
+    }
+    if cli_verbose > 0 {
+        return Ok((0, cli_verbose));
+    }
+
+    match (environment.quiet, environment.verbose) {
+        (Some(_), Some(_)) => {
+            bail!("`UV_QUIET` and `UV_VERBOSE` are mutually exclusive")
+        }
+        (Some(quiet), None) => Ok((quiet, 0)),
+        (None, Some(verbose)) => Ok((0, verbose)),
+        (None, None) => Ok((0, 0)),
     }
 }
 

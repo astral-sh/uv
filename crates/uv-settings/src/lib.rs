@@ -767,6 +767,8 @@ pub struct EnvironmentOptions {
     pub preview: EnvFlag,
     pub isolated: EnvFlag,
     pub no_progress: EnvFlag,
+    pub quiet: Option<u8>,
+    pub verbose: Option<u8>,
     pub no_installer_metadata: EnvFlag,
     pub dev: EnvFlag,
     pub no_dev: EnvFlag,
@@ -905,6 +907,14 @@ impl EnvironmentOptions {
             preview: EnvFlag::new(EnvVars::UV_PREVIEW)?,
             isolated: EnvFlag::new(EnvVars::UV_ISOLATED)?,
             no_progress: EnvFlag::new(EnvVars::UV_NO_PROGRESS)?,
+            quiet: parse_integer_environment_variable(
+                EnvVars::UV_QUIET,
+                Some("value should be an integer quiet level (e.g., 1 for `-q`)"),
+            )?,
+            verbose: parse_integer_environment_variable(
+                EnvVars::UV_VERBOSE,
+                Some("value should be an integer verbosity level (e.g., 3 for `-vvv`)"),
+            )?,
             no_installer_metadata: EnvFlag::new(EnvVars::UV_NO_INSTALLER_METADATA)?,
             dev: EnvFlag::new(EnvVars::UV_DEV)?,
             no_dev: EnvFlag::new(EnvVars::UV_NO_DEV)?,
