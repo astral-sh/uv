@@ -561,6 +561,31 @@ fn python_list_managed_symlinks() {
 }
 
 #[tokio::test]
+async fn python_list_only_installed_skips_download_metadata() {
+    let context = uv_test::test_context_with_versions!(&["3.12"])
+        .with_filtered_python_symlinks()
+        .with_filtered_python_keys()
+        .with_collapsed_whitespace();
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw("{", "application/json"))
+        .expect(0)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.python_list()
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS)
+        .arg("--only-installed")
+        .arg("--python-downloads-json-url").arg(server.uri()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    cpython-3.12.[X]-[PLATFORM] [PYTHON-3.12]
+    ");
+}
+
+#[tokio::test]
 async fn python_list_remote_python_downloads_json_url() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[]);
     let server = MockServer::start().await;
