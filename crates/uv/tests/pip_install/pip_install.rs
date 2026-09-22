@@ -2845,7 +2845,7 @@ fn install_git_checkout_marker_symlink() -> Result<()> {
 
     // A repository-controlled checkout marker must not truncate an external file; see
     // astral-sh/uv#21857.
-    assert_snapshot!(fs::read_to_string(victim.path())?, @"");
+    assert_snapshot!(fs::read_to_string(victim.path())?, @"external contents");
 
     Ok(())
 }
