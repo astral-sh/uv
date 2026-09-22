@@ -263,19 +263,7 @@ impl Display for DisplaySafeUrl {
 impl Debug for DisplaySafeUrl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let url = &self.0;
-        // For URLs that use the `git` convention (i.e., `ssh://git@github.com/...`), avoid masking the
-        // username.
-        let (username, password) = if is_ssh_git_username(url) {
-            (url.username(), None)
-        } else if url.username() != "" && url.password().is_some() {
-            (url.username(), Some("****"))
-        } else if url.username() != "" {
-            ("****", None)
-        } else if url.password().is_some() {
-            ("", Some("****"))
-        } else {
-            ("", None)
-        };
+        let (username, password) = redacted_credentials(url);
 
         f.debug_struct("DisplaySafeUrl")
             .field("scheme", &url.scheme())
@@ -321,6 +309,18 @@ fn is_ssh_git_username(url: &Url) -> bool {
         && url.password().is_none()
 }
 
+/// Returns the URL's username and password with sensitive values redacted for display.
+fn redacted_credentials(url: &Url) -> (&str, Option<&str>) {
+    match (url.username(), url.password()) {
+        (username, Some(_)) => (username, Some("****")),
+        ("", None) => ("", None),
+        // The generic Git username is not sensitive.
+        (username, None) if is_ssh_git_username(url) => (username, None),
+        // Other standalone usernames may be tokens.
+        (_, None) => ("****", None),
+    }
+}
+
 fn is_sensitive_query_parameter(key: &str) -> bool {
     SENSITIVE_QUERY_PARAMETERS
         .iter()
@@ -358,15 +358,10 @@ fn display_with_redacted_credentials(
     if url.has_authority() {
         write!(f, "//")?;
 
-        if url.username() != "" && url.password().is_some() {
-            write!(f, "{}", url.username())?;
-            write!(f, ":****@")?;
-        } else if url.username() != "" && is_ssh_git_username(url) {
-            write!(f, "{}@", url.username())?;
-        } else if url.username() != "" {
-            write!(f, "****@")?;
-        } else if url.password().is_some() {
-            write!(f, ":****@")?;
+        match redacted_credentials(url) {
+            ("", None) => {}
+            (username, Some(password)) => write!(f, "{username}:{password}@")?,
+            (username, None) => write!(f, "{username}@")?,
         }
 
         write!(f, "{}", url.host_str().unwrap_or(""))?;
