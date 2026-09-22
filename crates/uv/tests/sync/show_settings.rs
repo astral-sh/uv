@@ -471,6 +471,7 @@ fn pip_install_baseline() {
         excludes: [],
         build_constraints: [],
         dry_run: Disabled,
+        output_format: Text,
         constraints_from_workspace: [],
         overrides_from_workspace: [],
         excludes_from_workspace: [],

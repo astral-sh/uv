@@ -1085,6 +1085,151 @@ fn warn_on_yanked_dry_run() -> Result<()> {
 }
 
 #[test]
+fn json() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("iniconfig==2.0.0")?;
+
+    context.pip_install().arg("idna==3.6").assert().success();
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--check")
+        .arg("--output-format=json")
+        .arg("--quiet"), @r#"
+    exit_code: 1 (failure)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "changes": [
+        {
+          "name": "idna",
+          "version": "3.6",
+          "action": "uninstalled"
+        },
+        {
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "action": "installed"
+        }
+      ],
+      "dry_run": true
+    }
+    "#);
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--dry-run")
+        .arg("--output-format=json"), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "changes": [
+        {
+          "name": "idna",
+          "version": "3.6",
+          "action": "uninstalled"
+        },
+        {
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "action": "installed"
+        }
+      ],
+      "dry_run": true
+    }
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Would download 1 package
+    Would uninstall 1 package
+    Would install 1 package
+     - idna==3.6
+     + iniconfig==2.0.0
+    "#);
+
+    context
+        .pip_freeze()
+        .assert()
+        .success()
+        .stdout("idna==3.6\n");
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--output-format=json")
+        .arg("--quiet"), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "changes": [
+        {
+          "name": "idna",
+          "version": "3.6",
+          "action": "uninstalled"
+        },
+        {
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "action": "installed"
+        }
+      ],
+      "dry_run": false
+    }
+    "#);
+
+    context
+        .pip_freeze()
+        .assert()
+        .success()
+        .stdout("iniconfig==2.0.0\n");
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--output-format=json")
+        .arg("--quiet"), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "changes": [],
+      "dry_run": false
+    }
+    "#);
+
+    requirements_txt.write_str("")?;
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--output-format=json"), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "changes": [],
+      "dry_run": false
+    }
+
+    ----- stderr -----
+    warning: Requirements file `requirements.txt` does not contain any dependencies
+    No requirements found (hint: use `--allow-empty-requirements` to clear the environment)
+    "#);
+
+    Ok(())
+}
+
+#[test]
 fn check_sync() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let requirements_txt = context.temp_dir.child("requirements.txt");
