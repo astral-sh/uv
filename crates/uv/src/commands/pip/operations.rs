@@ -335,14 +335,15 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             .collect(),
     )
     .map_err(anyhow::Error::from)?;
-    let constraints = constraints.with_recorder(recorder.clone());
-    let overrides = overrides.with_recorder(recorder.clone());
-    let excludes = Excludes::from_entries(excludes).with_recorder(recorder.clone());
+    let excludes = Excludes::from_entries(excludes);
     let preferences = Preferences::from_iter(preferences, &resolver_env);
 
     // Determine any lookahead requirements.
     let lookaheads = match options.dependency_mode {
         DependencyMode::Transitive => {
+            let constraints = constraints.clone().with_recorder(recorder.clone());
+            let overrides = overrides.clone().with_recorder(recorder.clone());
+            let excludes = excludes.clone().with_recorder(recorder.clone());
             let (lookaheads, updated_hasher) = LookaheadResolver::new(
                 &requirements,
                 &constraints,

@@ -1128,7 +1128,6 @@ async fn do_lock(
                 dependency_groups,
                 dependency_metadata.values().cloned(),
             )
-            .prune_unused(recorder.as_ref().map(ResolutionRecorder::snapshot))
             .relative_to(target.install_path())?;
 
             let previous = existing_lock.map(ValidatedLock::into_lock);
@@ -1143,9 +1142,9 @@ async fn do_lock(
             .with_conflicts(conflicts)
             .with_required_environments(lock_required_environments.into_markers());
 
-            let lock = if preview.is_enabled(PreviewFeature::MissingExcludeNewerPackageLock)
-                || preview.is_enabled(PreviewFeature::ResolutionInputs)
-            {
+            let lock = if let Some(recorder) = recorder {
+                lock.prune_unused(&recorder.snapshot())
+            } else if preview.is_enabled(PreviewFeature::MissingExcludeNewerPackageLock) {
                 lock.without_unused_exclude_newer_packages()
             } else {
                 lock
@@ -1232,11 +1231,10 @@ impl ValidatedLock {
             );
             return Ok(Self::Unusable(lock));
         }
-        // Recorded consultations include packages considered during backtracking. Older locks
-        // retain the package-graph comparison for package-specific cutoffs.
-        let locked_exclude_newer = lock.filter_exclude_newer(lock.exclude_newer().clone());
+        // Stored cutoffs can belong to packages considered during backtracking. New cutoffs for
+        // packages outside the lock take effect when another change triggers resolution.
         let exclude_newer = lock.filter_exclude_newer(options.exclude_newer.clone());
-        if let Some(change) = locked_exclude_newer.compare(&exclude_newer) {
+        if let Some(change) = lock.exclude_newer().compare(&exclude_newer) {
             // If a relative value is used, we won't invalidate on every tick of the clock unless
             // the span duration changed or some other operation causes a new resolution
             if !change.is_relative_timestamp_change() {

@@ -1,54 +1,33 @@
 use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use serde::{Deserialize, Serialize};
 use uv_normalize::PackageName;
-use uv_pep440::Version;
 
 /// Configuration lookups made by a runtime resolution, including unsuccessful lookups.
 ///
 /// Consultations from discarded candidates and inactive marker branches are retained conservatively.
-/// Complete package scopes are retained, so empty exact scopes continue to shadow fallback scopes.
-#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+/// These lookups are temporary: lockfiles retain matching declarations, not the lookup history.
+#[derive(Debug, Default, Clone)]
 pub struct ResolutionLookups {
     /// Dependency names whose global constraints were consulted.
-    #[serde(default)]
     pub constraints: BTreeSet<PackageName>,
     /// Dependency names whose global overrides were consulted.
-    #[serde(default)]
     pub overrides: BTreeSet<PackageName>,
     /// Dependency names whose global exclusions were consulted.
-    #[serde(default)]
     pub exclusions: BTreeSet<PackageName>,
     /// Parent packages whose constraint scopes were consulted.
-    #[serde(default)]
     pub scoped_constraints: BTreeSet<PackageName>,
     /// Parent packages whose override scopes were consulted.
-    #[serde(default)]
     pub scoped_overrides: BTreeSet<PackageName>,
     /// Parent packages whose exclusion scopes were consulted.
-    #[serde(default)]
     pub scoped_exclusions: BTreeSet<PackageName>,
     /// Names whose candidate policy was consulted. Constraints, overrides, and exclusions can
     /// contribute to this policy even when their package scopes are not selected.
-    #[serde(default)]
     pub candidate_policy: BTreeSet<PackageName>,
     /// Names whose package version lists were requested, consulting package-specific upload cutoffs.
-    #[serde(default)]
     pub exclude_newer: BTreeSet<PackageName>,
-    /// Static metadata queries, including their version context.
-    #[serde(default)]
-    pub dependency_metadata: BTreeSet<DependencyMetadataQuery>,
-}
-
-/// A static metadata lookup. An absent version uses the direct-source lookup semantics.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct DependencyMetadataQuery {
-    pub name: PackageName,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub version: Option<Version>,
+    /// Names whose static metadata was consulted.
+    pub dependency_metadata: BTreeSet<PackageName>,
 }
 
 /// A shared recorder for a single runtime resolution.
@@ -108,13 +87,8 @@ impl ResolutionRecorder {
     }
 
     /// Record a static metadata lookup before checking for a matching declaration.
-    pub fn dependency_metadata(&self, name: &PackageName, version: Option<&Version>) {
-        self.lookups()
-            .dependency_metadata
-            .insert(DependencyMetadataQuery {
-                name: name.clone(),
-                version: version.cloned(),
-            });
+    pub fn dependency_metadata(&self, name: &PackageName) {
+        self.lookups().dependency_metadata.insert(name.clone());
     }
 
     /// Snapshot the consultations once runtime resolution has completed.

@@ -103,7 +103,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     /// Record a metadata consultation before reading an in-memory cache.
     pub fn record_metadata(&self, dist: &Dist) {
         if let Some(recorder) = &self.recorder {
-            recorder.dependency_metadata(dist.name(), dist.version());
+            recorder.dependency_metadata(dist.name());
         }
     }
 
@@ -114,7 +114,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         version: Option<&Version>,
     ) -> Option<ResolutionMetadata> {
         if let Some(recorder) = &self.recorder {
-            recorder.dependency_metadata(name, version);
+            recorder.dependency_metadata(name);
         }
         self.build_context.dependency_metadata().get(name, version)
     }

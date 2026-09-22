@@ -61,9 +61,6 @@ impl Manifest {
     #[must_use]
     pub fn with_recorder(mut self, recorder: Option<ResolutionRecorder>) -> Self {
         self.recorder = recorder;
-        self.constraints = self.constraints.with_recorder(None);
-        self.overrides = self.overrides.with_recorder(None);
-        self.excludes = self.excludes.with_recorder(None);
         self
     }
 

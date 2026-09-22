@@ -1,75 +1,91 @@
 use std::collections::BTreeSet;
 
 use uv_configuration::{Constraint, ExcludeDependency, Override};
-use uv_distribution_types::{DependencyMetadata, Requirement, ResolutionLookups, StaticMetadata};
+use uv_distribution_types::{Requirement, ResolutionLookups, StaticMetadata};
 use uv_normalize::PackageName;
-use uv_pep440::Version;
 
-use super::ResolverManifest;
+use super::{Lock, Package};
 
-impl ResolverManifest {
-    /// Store the runtime lookups and retain the configuration they consulted, including misses.
+impl Lock {
+    /// Retain settings for locked packages and settings consulted during runtime resolution.
     ///
-    /// Apply the same filter used when validating a lock. A newly added declaration that matches a
-    /// recorded lookup therefore invalidates the lock, even if nothing matched before.
-    /// Locks without a recorded trace continue to compare the entire configuration.
+    /// Consulted settings can affect backtracking even when their packages are absent from the
+    /// final graph. Retain complete parent scopes and metadata declarations for each relevant name.
     #[must_use]
-    pub fn prune_unused(mut self, lookups: Option<ResolutionLookups>) -> Self {
-        if lookups.is_some() {
-            let metadata =
-                DependencyMetadata::from_entries(self.dependency_metadata.iter().cloned());
-            let filter = ManifestFilter::new(
-                lookups.as_ref(),
-                &self.constraints,
-                &self.overrides,
-                &metadata,
-            );
-            self.constraints
-                .retain(|entry| filter.includes_constraint(entry));
-            self.overrides
-                .retain(|entry| filter.includes_override(entry));
-            self.excludes
-                .retain(|entry| filter.includes_exclusion(entry));
-            self.dependency_metadata
-                .retain(|entry| filter.includes_metadata(entry));
-        }
-        self.resolution_inputs = lookups;
+    pub fn prune_unused(mut self, lookups: &ResolutionLookups) -> Self {
+        let filter = ManifestFilter::from_resolution(&self, lookups);
+        self.manifest
+            .constraints
+            .retain(|entry| filter.includes_constraint(entry));
+        self.manifest
+            .overrides
+            .retain(|entry| filter.includes_override(entry));
+        self.manifest
+            .excludes
+            .retain(|entry| filter.includes_exclusion(entry));
+        self.manifest
+            .dependency_metadata
+            .retain(|entry| filter.includes_metadata(entry));
+        self.options.exclude_newer = self.options.exclude_newer.filter_packages(
+            self.packages
+                .iter()
+                .map(Package::name)
+                .chain(&lookups.exclude_newer),
+        );
         self
     }
 }
 
-/// Select configuration relevant to recorded runtime lookups when writing or validating a lock.
-pub(super) struct ManifestFilter<'a> {
-    lookups: Option<&'a ResolutionLookups>,
-    policy_constraints: BTreeSet<PackageName>,
-    policy_overrides: BTreeSet<PackageName>,
-    selected_metadata: BTreeSet<(&'a PackageName, &'a Option<Version>)>,
-    unversioned_metadata: BTreeSet<&'a PackageName>,
+/// Names whose settings participate in lockfile retention or validation.
+///
+/// Locked packages always participate. Other names participate separately for each setting, based
+/// on runtime consultations when writing a lock and retained declarations when validating it.
+#[derive(Default)]
+pub(super) struct ManifestFilter {
+    packages: BTreeSet<PackageName>,
+    constraints: BTreeSet<PackageName>,
+    overrides: BTreeSet<PackageName>,
+    exclusions: BTreeSet<PackageName>,
+    scoped_constraints: BTreeSet<PackageName>,
+    scoped_overrides: BTreeSet<PackageName>,
+    scoped_exclusions: BTreeSet<PackageName>,
+    dependency_metadata: BTreeSet<PackageName>,
 }
 
-impl<'a> ManifestFilter<'a> {
-    /// Include all configuration when the lock has no recorded lookups.
-    pub(super) fn new<'b>(
-        lookups: Option<&'a ResolutionLookups>,
-        constraints: impl IntoIterator<Item = &'b Constraint<Requirement>>,
-        overrides: impl IntoIterator<Item = &'b Override<Requirement>>,
-        metadata: &'a DependencyMetadata,
-    ) -> Self {
+impl ManifestFilter {
+    /// Select locked packages and settings consulted during resolution, including backtracking.
+    fn from_resolution(lock: &Lock, lookups: &ResolutionLookups) -> Self {
         let mut filter = Self {
-            lookups,
-            policy_constraints: BTreeSet::new(),
-            policy_overrides: BTreeSet::new(),
-            selected_metadata: BTreeSet::new(),
-            unversioned_metadata: BTreeSet::new(),
-        };
-        let Some(lookups) = lookups else {
-            return filter;
+            packages: lock
+                .packages
+                .iter()
+                .map(|package| package.name().clone())
+                .collect(),
+            constraints: lookups
+                .constraints
+                .union(&lookups.candidate_policy)
+                .cloned()
+                .collect(),
+            overrides: lookups
+                .overrides
+                .union(&lookups.candidate_policy)
+                .cloned()
+                .collect(),
+            exclusions: lookups
+                .exclusions
+                .union(&lookups.candidate_policy)
+                .cloned()
+                .collect(),
+            scoped_constraints: lookups.scoped_constraints.clone(),
+            scoped_overrides: lookups.scoped_overrides.clone(),
+            scoped_exclusions: lookups.scoped_exclusions.clone(),
+            dependency_metadata: lookups.dependency_metadata.clone(),
         };
 
         // Scoped constraints and overrides also affect global candidate selection. Retain all
         // scopes (including empty ones) for a parent with a declaration for a consulted name.
         // Its exclusions can suppress those contributions, even if the parent never resolves.
-        for entry in constraints {
+        for entry in &lock.manifest.constraints {
             if let Constraint::Package(scope) = entry
                 && scope
                     .dependencies
@@ -77,81 +93,122 @@ impl<'a> ManifestFilter<'a> {
                     .any(|requirement| lookups.candidate_policy.contains(&requirement.name))
             {
                 filter
-                    .policy_constraints
+                    .scoped_constraints
+                    .insert(scope.package.name().clone());
+                filter
+                    .scoped_exclusions
                     .insert(scope.package.name().clone());
             }
         }
-        for entry in overrides {
+        for entry in &lock.manifest.overrides {
             if let Override::Package(scope) = entry
                 && scope
                     .dependencies
                     .iter()
                     .any(|requirement| lookups.candidate_policy.contains(&requirement.name))
             {
-                filter.policy_overrides.insert(scope.package.name().clone());
+                filter.scoped_overrides.insert(scope.package.name().clone());
+                filter
+                    .scoped_exclusions
+                    .insert(scope.package.name().clone());
             }
         }
+        filter
+    }
 
-        for query in &lookups.dependency_metadata {
-            if let Some(version) = &query.version {
-                if let Some(entry) = metadata.get_entry(&query.name, Some(version)) {
-                    filter
-                        .selected_metadata
-                        .insert((&entry.name, &entry.version));
+    /// Compare settings for locked packages and previously retained keys.
+    ///
+    /// New settings outside this set take effect when another change triggers resolution. Keeping
+    /// retained keys ensures changes and removals invalidate the lock even for backtracked packages.
+    pub(super) fn from_lock(lock: &Lock) -> Self {
+        let mut filter = Self {
+            packages: lock
+                .packages
+                .iter()
+                .map(|package| package.name().clone())
+                .collect(),
+            dependency_metadata: lock
+                .manifest
+                .dependency_metadata
+                .iter()
+                .map(|entry| entry.name.clone())
+                .collect(),
+            ..Self::default()
+        };
+        for entry in &lock.manifest.constraints {
+            match entry {
+                Constraint::Requirement(requirement) => {
+                    filter.constraints.insert(requirement.name.clone());
                 }
-            } else {
-                // Unknown-version lookups depend on the number of declarations. Retain all entries
-                // for those names, even when the lookup returned no metadata.
-                filter.unversioned_metadata.insert(&query.name);
+                Constraint::Package(scope) => {
+                    filter
+                        .scoped_constraints
+                        .insert(scope.package.name().clone());
+                }
+            }
+        }
+        for entry in &lock.manifest.overrides {
+            match entry {
+                Override::Requirement(requirement) => {
+                    filter.overrides.insert(requirement.name.clone());
+                }
+                Override::Package(scope) => {
+                    filter.scoped_overrides.insert(scope.package.name().clone());
+                }
+            }
+        }
+        for entry in &lock.manifest.excludes {
+            match entry {
+                ExcludeDependency::Dependency(name) => {
+                    filter.exclusions.insert(name.clone());
+                }
+                ExcludeDependency::Package(scope) => {
+                    filter.scoped_exclusions.insert(scope.package().clone());
+                }
             }
         }
         filter
     }
 
     pub(super) fn includes_constraint(&self, entry: &Constraint<Requirement>) -> bool {
-        self.lookups.is_none_or(|lookups| match entry {
+        match entry {
             Constraint::Requirement(requirement) => {
-                lookups.constraints.contains(&requirement.name)
-                    || lookups.candidate_policy.contains(&requirement.name)
+                self.packages.contains(&requirement.name)
+                    || self.constraints.contains(&requirement.name)
             }
             Constraint::Package(scope) => {
-                lookups.scoped_constraints.contains(scope.package.name())
-                    || self.policy_constraints.contains(scope.package.name())
+                self.packages.contains(scope.package.name())
+                    || self.scoped_constraints.contains(scope.package.name())
             }
-        })
+        }
     }
 
     pub(super) fn includes_override(&self, entry: &Override<Requirement>) -> bool {
-        self.lookups.is_none_or(|lookups| match entry {
+        match entry {
             Override::Requirement(requirement) => {
-                lookups.overrides.contains(&requirement.name)
-                    || lookups.candidate_policy.contains(&requirement.name)
+                self.packages.contains(&requirement.name)
+                    || self.overrides.contains(&requirement.name)
             }
             Override::Package(scope) => {
-                lookups.scoped_overrides.contains(scope.package.name())
-                    || self.policy_overrides.contains(scope.package.name())
+                self.packages.contains(scope.package.name())
+                    || self.scoped_overrides.contains(scope.package.name())
             }
-        })
+        }
     }
 
     pub(super) fn includes_exclusion(&self, entry: &ExcludeDependency) -> bool {
-        self.lookups.is_none_or(|lookups| match entry {
+        match entry {
             ExcludeDependency::Dependency(name) => {
-                lookups.exclusions.contains(name) || lookups.candidate_policy.contains(name)
+                self.packages.contains(name) || self.exclusions.contains(name)
             }
             ExcludeDependency::Package(scope) => {
-                lookups.scoped_exclusions.contains(scope.package())
-                    || self.policy_constraints.contains(scope.package())
-                    || self.policy_overrides.contains(scope.package())
+                self.packages.contains(scope.package())
+                    || self.scoped_exclusions.contains(scope.package())
             }
-        })
+        }
     }
 
     pub(super) fn includes_metadata(&self, entry: &StaticMetadata) -> bool {
-        self.lookups.is_none()
-            || self
-                .selected_metadata
-                .contains(&(&entry.name, &entry.version))
-            || self.unversioned_metadata.contains(&entry.name)
+        self.packages.contains(&entry.name) || self.dependency_metadata.contains(&entry.name)
     }
 }

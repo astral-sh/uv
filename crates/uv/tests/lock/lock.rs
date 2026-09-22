@@ -40870,7 +40870,7 @@ fn lock_exclude_newer_package_order() -> Result<()> {
     Ok(())
 }
 
-/// Test that exclude-newer-package settings for packages outside the resolution are ignored.
+/// Test that stored exclude-newer-package settings remain relevant outside the final resolution.
 #[test]
 fn lock_exclude_newer_package_absent() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -40916,27 +40916,34 @@ fn lock_exclude_newer_package_absent() -> Result<()> {
         "#);
     });
 
-    // Changing an irrelevant package-specific setting from `false` to a timestamp does not
-    // invalidate the lock.
+    // A stored cutoff may have affected backtracking, so tightening it invalidates the lock.
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--locked")
         .arg("--exclude-newer-package")
         .arg("idna=2022-04-04T12:00:00Z"), @"
-    exit_code: 0 (success)
+    exit_code: 1 (failure)
     ----- stderr -----
+    Resolving despite existing lockfile due to remove exclude newer exclusion (now `2022-04-04T12:00:00Z`) for package `idna`
     Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
-    // Nor does removing the irrelevant setting.
+    // Removing a stored cutoff also invalidates the lock.
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--locked"), @"
-    exit_code: 0 (success)
+    exit_code: 1 (failure)
     ----- stderr -----
+    Resolving despite existing lockfile due to removal of exclude newer for package `idna`
     Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     // Recreate the lock with a global timestamp and a package-specific exemption.
@@ -41017,6 +41024,18 @@ fn lock_exclude_newer_package_absent_preview() -> Result<()> {
         source = { virtual = "." }
         "#);
     });
+
+    // New cutoffs for packages outside the lock are ignored, even without preview enabled.
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--locked")
+        .arg("--exclude-newer-package")
+        .arg("idna=2022-04-04T12:00:00Z"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
 
     uv_snapshot!(context.filters(), context
         .lock()

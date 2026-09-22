@@ -30,20 +30,6 @@ pub(crate) enum MetadataRequest<'a> {
 }
 
 impl MetadataRequest<'_> {
-    /// The version known before reading metadata, if any.
-    fn version(&self) -> Option<&Version> {
-        match self {
-            Self::Dist(dist) => dist.version(),
-            Self::Resolved(ResolvedDistRef::Installed { dist }) => Some(dist.version()),
-            Self::Resolved(ResolvedDistRef::InstallableRegistrySourceDist { sdist, .. }) => {
-                Some(&sdist.version)
-            }
-            Self::Resolved(ResolvedDistRef::InstallableRegistryBuiltDist { wheel, .. }) => {
-                Some(&wheel.filename.version)
-            }
-        }
-    }
-
     fn id(&self) -> DistributionId {
         match self {
             Self::Dist(dist) => dist.distribution_id(),
@@ -179,7 +165,7 @@ impl MetadataRequests {
         request: MetadataRequest<'_>,
     ) -> Result<(), ResolveError> {
         if let Some(recorder) = &self.recorder {
-            recorder.dependency_metadata(request.name(), request.version());
+            recorder.dependency_metadata(request.name());
         }
         if self.index.distributions().register(request.id()) {
             self.sender.blocking_send(request.into_request())?;
@@ -196,7 +182,7 @@ impl MetadataRequests {
         validate: impl FnOnce(&MetadataRequest<'_>) -> Result<(), ResolveError>,
     ) -> Result<RegisteredMetadata<'_>, ResolveError> {
         if let Some(recorder) = &self.recorder {
-            recorder.dependency_metadata(request.name(), request.version());
+            recorder.dependency_metadata(request.name());
         }
         let entry = match self.index.distributions().register_entry(request.id()) {
             Registration::New(entry) => {
@@ -227,7 +213,7 @@ impl MetadataRequests {
     /// Acquire metadata registered during input preparation or package visitation.
     pub(crate) fn metadata(&self, dist: &Dist) -> Result<RegisteredMetadata<'_>, ResolveError> {
         if let Some(recorder) = &self.recorder {
-            recorder.dependency_metadata(dist.name(), dist.version());
+            recorder.dependency_metadata(dist.name());
         }
         self.index
             .distributions()

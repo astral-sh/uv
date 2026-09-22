@@ -26,24 +26,6 @@ impl DependencyMetadata {
         package: &PackageName,
         version: Option<&Version>,
     ) -> Option<ResolutionMetadata> {
-        let metadata = self.get_entry(package, version)?;
-        Some(ResolutionMetadata {
-            name: metadata.name.clone(),
-            version: version.or(metadata.version.as_ref())?.clone(),
-            requires_dist: metadata.requires_dist.clone(),
-            requires_python: metadata.requires_python.clone(),
-            provides_extra: metadata.provides_extra.clone(),
-            dynamic: false,
-        })
-    }
-
-    /// Retrieve the declaration selected by [`Self::get`], preferring an exact version over a
-    /// versionless fallback. Without a known version, require a single versioned declaration.
-    pub fn get_entry(
-        &self,
-        package: &PackageName,
-        version: Option<&Version>,
-    ) -> Option<&StaticMetadata> {
         let versions = self.0.get(package)?;
 
         if let Some(version) = version {
@@ -62,7 +44,14 @@ impl DependencyMetadata {
                 return None;
             };
 
-            Some(metadata)
+            Some(ResolutionMetadata {
+                name: metadata.name.clone(),
+                version: version.clone(),
+                requires_dist: metadata.requires_dist.clone(),
+                requires_python: metadata.requires_python.clone(),
+                provides_extra: metadata.provides_extra.clone(),
+                dynamic: false,
+            })
         } else {
             // If no version was requested (i.e., it's a direct URL dependency), allow a single
             // versioned match.
@@ -70,13 +59,20 @@ impl DependencyMetadata {
                 warn!("Multiple dependency metadata entries found for `{package}`");
                 return None;
             };
-            let Some(version) = &metadata.version else {
+            let Some(version) = metadata.version.clone() else {
                 warn!("No version found in dependency metadata entry for `{package}`");
                 return None;
             };
             debug!("Found dependency metadata entry for `{package}` (assuming: `{version}`)");
 
-            Some(metadata)
+            Some(ResolutionMetadata {
+                name: metadata.name.clone(),
+                version,
+                requires_dist: metadata.requires_dist.clone(),
+                requires_python: metadata.requires_python.clone(),
+                provides_extra: metadata.provides_extra.clone(),
+                dynamic: false,
+            })
         }
     }
 

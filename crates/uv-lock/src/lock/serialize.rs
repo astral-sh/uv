@@ -224,8 +224,7 @@ fn write_manifest(writer: &mut LockWriter, manifest: &ResolverManifest) -> Resul
         || !manifest.excludes.is_empty()
         || !manifest.build_constraints.is_empty()
         || has_dependency_groups
-        || !manifest.dependency_metadata.is_empty()
-        || manifest.resolution_inputs.is_some();
+        || !manifest.dependency_metadata.is_empty();
     if !has_manifest {
         return Ok(());
     }
@@ -250,23 +249,6 @@ fn write_manifest(writer: &mut LockWriter, manifest: &ResolverManifest) -> Resul
             }
             write_serialized_non_empty_array(writer, group.as_ref(), requirements)?;
         }
-    }
-
-    if let Some(inputs) = &manifest.resolution_inputs {
-        writer.table(&["manifest", "resolution-inputs"])?;
-        write_serialized_non_empty_array(writer, "constraints", &inputs.constraints)?;
-        write_serialized_non_empty_array(writer, "overrides", &inputs.overrides)?;
-        write_serialized_non_empty_array(writer, "exclusions", &inputs.exclusions)?;
-        write_serialized_non_empty_array(writer, "scoped-constraints", &inputs.scoped_constraints)?;
-        write_serialized_non_empty_array(writer, "scoped-overrides", &inputs.scoped_overrides)?;
-        write_serialized_non_empty_array(writer, "scoped-exclusions", &inputs.scoped_exclusions)?;
-        write_serialized_non_empty_array(writer, "candidate-policy", &inputs.candidate_policy)?;
-        write_serialized_non_empty_array(writer, "exclude-newer", &inputs.exclude_newer)?;
-        write_serialized_non_empty_array(
-            writer,
-            "dependency-metadata",
-            &inputs.dependency_metadata,
-        )?;
     }
 
     for metadata in &manifest.dependency_metadata {

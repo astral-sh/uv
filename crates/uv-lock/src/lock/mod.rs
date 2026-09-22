@@ -40,8 +40,8 @@ use uv_distribution_types::{
     HashValidation, Identifier, IndexLocations, IndexMetadata, IndexUrl, MetadataHashPolicy,
     MinimumLibcVersion, Name, NameRequirementSpecification, PYPI_URL, PathBuiltDist,
     PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource,
-    Requirement, RequirementSource, RequiresPython, ResolutionLookups, ResolvedDist,
-    SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString, VersionId,
+    Requirement, RequirementSource, RequiresPython, ResolvedDist, SimplifiedMarkerTree,
+    StaticMetadata, ToUrlError, UrlString, VersionId,
 };
 use uv_fs::{PortablePath, PortablePathBuf, Simplified, normalize_path, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
@@ -2811,17 +2811,21 @@ impl Lock {
     /// Omit package-specific settings for packages outside the resolution.
     #[must_use]
     pub fn without_unused_exclude_newer_packages(mut self) -> Self {
-        self.options.exclude_newer = self.filter_exclude_newer(self.options.exclude_newer.clone());
+        self.options.exclude_newer = self
+            .options
+            .exclude_newer
+            .filter_packages(self.packages.iter().map(Package::name));
         self
     }
 
-    /// Restrict package cutoffs to consulted runtime inputs, or locked packages in older locks.
+    /// Retain cutoffs for locked packages and names whose cutoffs are already stored in the lock.
     pub fn filter_exclude_newer(&self, exclude_newer: ExcludeNewer) -> ExcludeNewer {
-        if let Some(inputs) = &self.manifest.resolution_inputs {
-            exclude_newer.filter_packages(inputs.exclude_newer.iter())
-        } else {
-            exclude_newer.filter_packages(self.packages.iter().map(Package::name))
-        }
+        exclude_newer.filter_packages(
+            self.packages
+                .iter()
+                .map(Package::name)
+                .chain(self.options.exclude_newer.package.keys()),
+        )
     }
 
     /// Returns `true` if this [`Lock`] includes `provides-extra` metadata.
@@ -4097,12 +4101,7 @@ impl Lock {
             }
         }
 
-        let filter = ManifestFilter::new(
-            self.manifest.resolution_inputs.as_ref(),
-            constraints,
-            overrides,
-            dependency_metadata,
-        );
+        let filter = ManifestFilter::from_lock(self);
 
         // Validate that the lockfile was generated with the same constraints.
         let normalized_constraints = {
@@ -6061,9 +6060,6 @@ impl From<ExcludeNewer> for ExcludeNewerWire {
 #[derive(Clone, Debug, Default, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub struct ResolverManifest {
-    /// Consultations used to project runtime configuration during lock validation.
-    #[serde(default)]
-    resolution_inputs: Option<ResolutionLookups>,
     /// The workspace members included in the lockfile.
     #[serde(default)]
     members: BTreeSet<PackageName>,
@@ -6111,7 +6107,6 @@ impl ResolverManifest {
         dependency_metadata: impl IntoIterator<Item = StaticMetadata>,
     ) -> Self {
         Self {
-            resolution_inputs: None,
             members: members.into_iter().collect(),
             requirements: requirements.into_iter().collect(),
             constraints: constraints.into_iter().collect(),
@@ -6129,7 +6124,6 @@ impl ResolverManifest {
     /// Convert the manifest to a relative form using the given workspace.
     pub fn relative_to(self, root: &Path) -> Result<Self, io::Error> {
         Ok(Self {
-            resolution_inputs: self.resolution_inputs,
             members: self.members,
             requirements: self
                 .requirements
