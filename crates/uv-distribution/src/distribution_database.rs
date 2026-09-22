@@ -93,14 +93,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         }
     }
 
-    /// Record static metadata consultations for this runtime database.
+    /// Record which static metadata entries are consulted while resolving runtime dependencies.
     #[must_use]
     pub fn with_recorder(mut self, recorder: Option<ResolutionRecorder>) -> Self {
         self.recorder = recorder;
         self
     }
 
-    /// Record a metadata consultation before reading an in-memory cache.
+    /// Record a metadata lookup before reading an in-memory cache.
     pub fn record_metadata(&self, dist: &Dist) {
         if let Some(recorder) = &self.recorder {
             recorder.dependency_metadata(dist.name());

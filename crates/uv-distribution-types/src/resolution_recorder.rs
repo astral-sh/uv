@@ -4,9 +4,6 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use uv_normalize::PackageName;
 
 /// Configuration lookups made by a runtime resolution, including unsuccessful lookups.
-///
-/// Consultations from discarded candidates and inactive marker branches are retained conservatively.
-/// These lookups are temporary: lockfiles retain matching declarations, not the lookup history.
 #[derive(Debug, Default, Clone)]
 pub struct ResolutionLookups {
     /// Dependency names whose global constraints were consulted.
@@ -30,10 +27,11 @@ pub struct ResolutionLookups {
     pub dependency_metadata: BTreeSet<PackageName>,
 }
 
-/// A shared recorder for a single runtime resolution.
+/// Tracks which settings are consulted while resolving runtime dependencies.
 ///
-/// Build resolutions have no recorder, even when fetching runtime metadata invokes a build backend.
-/// Clones share consultations across resolver forks and concurrent metadata requests.
+/// All copies share the same record, including across resolver branches and parallel metadata
+/// requests. Build dependencies are not tracked, even when a build is needed to get metadata
+/// for a runtime dependency.
 #[derive(Debug, Default, Clone)]
 pub struct ResolutionRecorder(Arc<Mutex<ResolutionLookups>>);
 
@@ -68,7 +66,7 @@ impl ResolutionRecorder {
         self.lookups().scoped_exclusions.insert(package.clone());
     }
 
-    /// Record a consultation of manifest-wide prerelease or yanked-version policy.
+    /// Record a check of the prerelease or yanked-version settings.
     pub fn candidate_policy(&self, name: &PackageName) {
         self.lookups().candidate_policy.insert(name.clone());
     }
@@ -91,7 +89,7 @@ impl ResolutionRecorder {
         self.lookups().dependency_metadata.insert(name.clone());
     }
 
-    /// Snapshot the consultations once runtime resolution has completed.
+    /// Return a copy of the recorded lookups.
     pub fn snapshot(&self) -> ResolutionLookups {
         self.lookups().clone()
     }

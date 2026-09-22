@@ -39,7 +39,7 @@ impl Lock {
 /// Names whose settings participate in lockfile retention or validation.
 ///
 /// Locked packages always participate. Other names participate separately for each setting, based
-/// on runtime consultations when writing a lock and retained declarations when validating it.
+/// on recorded lookups when writing a lock and retained declarations when validating it.
 #[derive(Default)]
 pub(super) struct ManifestFilter {
     packages: BTreeSet<PackageName>,

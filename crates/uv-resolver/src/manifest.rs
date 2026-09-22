@@ -14,7 +14,7 @@ use crate::{DependencyMode, Exclusions, ResolverEnvironment};
 /// A manifest of requirements, constraints, and preferences.
 #[derive(Clone, Debug)]
 pub struct Manifest {
-    /// Runtime consultations, recorded after manifest-wide policy initialization.
+    /// Records which settings are consulted after package selection rules are initialized.
     pub(super) recorder: Option<ResolutionRecorder>,
 
     /// The direct requirements for the project.
@@ -57,7 +57,7 @@ pub struct Manifest {
 }
 
 impl Manifest {
-    /// Record runtime consultations without recording manifest-wide policy initialization.
+    /// Record which settings are consulted during resolution, excluding package selection setup.
     #[must_use]
     pub fn with_recorder(mut self, recorder: Option<ResolutionRecorder>) -> Self {
         self.recorder = recorder;
