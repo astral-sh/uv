@@ -1391,7 +1391,7 @@ pub(crate) enum Error {
     #[error(transparent)]
     ScopedOverride(#[from] uv_configuration::ScopedOverrideSourceError),
 
-    #[error("Failed to prepare distributions")]
+    #[error(transparent)]
     Prepare(#[from] uv_installer::PrepareError),
 
     #[error("{header}")]
