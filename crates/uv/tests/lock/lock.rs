@@ -29506,7 +29506,7 @@ fn lock_dependency_metadata_absent() -> Result<()> {
     Ok(())
 }
 
-/// Preview locks retain metadata only for package names in the resolution.
+/// Preview locks retain the declarations selected for resolved package versions.
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_dependency_metadata_pruned() -> Result<()> {
@@ -29600,13 +29600,6 @@ fn lock_dependency_metadata_pruned() -> Result<()> {
 
         [[manifest.dependency-metadata]]
         name = "anyio"
-
-        [[manifest.dependency-metadata]]
-        name = "anyio"
-        version = "3.6.0"
-
-        [[manifest.dependency-metadata]]
-        name = "anyio"
         version = "3.7.0"
 
         [[package]]
@@ -29631,7 +29624,7 @@ fn lock_dependency_metadata_pruned() -> Result<()> {
         "#);
     });
 
-    // Versioned and versionless metadata for resolved packages remain valid.
+    // A pruned lock remains valid with unused versioned and versionless declarations configured.
     uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -29641,6 +29634,64 @@ fn lock_dependency_metadata_pruned() -> Result<()> {
     // Changing metadata for an unrelated package does not invalidate the lock.
     pyproject_toml.write_str(&project.replace("version = \"3.6\"", "version = \"3.5\""))?;
     uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // Other versions and the shadowed versionless fallback may change independently.
+    pyproject_toml.write_str(&project.replace("version = \"3.6.0\"", "version = \"3.5.0\""))?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    pyproject_toml.write_str(&project.replace(
+        "name = \"anyio\"\n\n",
+        "name = \"anyio\"\nrequires-dist = [\"unused\"]\n\n",
+    ))?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // Removing the exact entry activates the fallback and invalidates the lock.
+    let fallback = project.replace(
+        "[[tool.uv.dependency-metadata]]\nname = \"anyio\"\nversion = \"3.7.0\"\n\n",
+        "",
+    );
+    pyproject_toml.write_str(&fallback)?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // Adding an exact entry that shadows the recorded fallback also invalidates the lock.
+    pyproject_toml.write_str(&project)?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -29660,6 +29711,236 @@ fn lock_dependency_metadata_pruned() -> Result<()> {
     hint: To update the lockfile, run `uv lock`.
     ");
 
+    // Older locks containing every declaration also ignore unused versions and fallbacks.
+    pyproject_toml.write_str(&project)?;
+    fs_err::remove_file(context.temp_dir.child("uv.lock"))?;
+    uv_snapshot!(context.filters(), context.lock().arg("--no-preview"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    pyproject_toml.write_str(
+        &project
+            .replace("version = \"3.6.0\"", "version = \"3.5.0\"")
+            .replace(
+                "name = \"anyio\"\n\n",
+                "name = \"anyio\"\nrequires-dist = [\"unused\"]\n\n",
+            ),
+    )?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Universal locks retain a fallback when another locked version still selects it.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_dependency_metadata_pruned_forks() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "anyio==3.7.0; sys_platform == 'win32'",
+            "anyio==3.6.0; sys_platform != 'win32'",
+        ]
+
+        [tool.uv]
+        preview-features = ["missing-dependency-metadata-lock"]
+
+        [[tool.uv.dependency-metadata]]
+        name = "anyio"
+        version = "3.7.0"
+
+        [[tool.uv.dependency-metadata]]
+        name = "anyio"
+        version = "3.5.0"
+
+        [[tool.uv.dependency-metadata]]
+        name = "anyio"
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform == 'win32'",
+            "sys_platform != 'win32'",
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+
+        [[manifest.dependency-metadata]]
+        name = "anyio"
+
+        [[manifest.dependency-metadata]]
+        name = "anyio"
+        version = "3.7.0"
+
+        [[package]]
+        name = "anyio"
+        version = "3.6.0"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-markers = [
+            "sys_platform != 'win32'",
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/2b/e3/f23b7986619c7de90f63b1ac898074ddd9641e70e1677eec3d9f40969aa3/anyio-3.6.0.tar.gz", hash = "sha256:056bd22787f4bc59cb6d9a6873929618c2233d64903eed64177070fd072bd9ca", size = 140145, upload-time = "2022-05-13T09:54:55.302Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/f4/17/86c924b1371353f785e1515b830e118fcd46880ae8d7a7b11116e5f81d6f/anyio-3.6.0-py3-none-any.whl", hash = "sha256:5bd42d66c9c382e657c9acba60f9459d747c192513e76dcae8b1c611e55174ef", size = 80603, upload-time = "2022-05-13T09:54:53.623Z" },
+        ]
+
+        [[package]]
+        name = "anyio"
+        version = "3.7.0"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-markers = [
+            "sys_platform == 'win32'",
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/c6/b3/fefbf7e78ab3b805dec67d698dc18dd505af7a18a8dd08868c9b4fa736b5/anyio-3.7.0.tar.gz", hash = "sha256:275d9973793619a5374e1c89a4f4ad3f4b0a5510a2b5b939444bee8f4c4d37ce", size = 142737, upload-time = "2023-05-27T11:12:46.688Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/68/fe/7ce1926952c8a403b35029e194555558514b365ad77d75125f521a2bec62/anyio-3.7.0-py3-none-any.whl", hash = "sha256:eddca883c4175f14df8aedce21054bfca3adb70ffe76a9f607aef9d7fa2ea7f0", size = 80873, upload-time = "2023-05-27T11:12:44.474Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "anyio", version = "3.6.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'win32'" },
+            { name = "anyio", version = "3.7.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'win32'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "anyio", marker = "sys_platform != 'win32'", specifier = "==3.6.0" },
+            { name = "anyio", marker = "sys_platform == 'win32'", specifier = "==3.7.0" },
+        ]
+        "#);
+    });
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-preview"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// Direct sources retain all declarations because unknown-version lookup requires a single entry.
+#[test]
+fn lock_dependency_metadata_pruned_direct() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("child/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "1.0"
+    "#})?;
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    let project = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [tool.uv]
+        preview-features = ["missing-dependency-metadata-lock"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+
+        [[tool.uv.dependency-metadata]]
+        name = "child"
+        version = "1.0"
+
+        [[tool.uv.dependency-metadata]]
+        name = "child"
+        version = "2.0"
+
+        [[tool.uv.dependency-metadata]]
+        name = "child"
+    "#};
+    pyproject.write_str(project)?;
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+
+        [[manifest.dependency-metadata]]
+        name = "child"
+
+        [[manifest.dependency-metadata]]
+        name = "child"
+        version = "1.0"
+
+        [[manifest.dependency-metadata]]
+        name = "child"
+        version = "2.0"
+
+        [[package]]
+        name = "child"
+        version = "1.0"
+        source = { directory = "child" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "child" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "child", directory = "child" }]
+        "#);
+    });
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // Complete declarations participate in validation, even for an unmatched version.
+    pyproject.write_str(&project.replace("version = \"2.0\"", "version = \"3.0\""))?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
     Ok(())
 }
 

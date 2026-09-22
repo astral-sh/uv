@@ -2816,14 +2816,43 @@ impl Lock {
         self
     }
 
-    /// Omit dependency metadata for packages outside the resolution.
+    /// Omit dependency metadata not selected by the locked runtime packages.
     #[must_use]
     pub fn without_unused_dependency_metadata(mut self) -> Self {
-        let packages: FxHashSet<_> = self.packages.iter().map(Package::name).collect();
-        self.manifest
-            .dependency_metadata
-            .retain(|metadata| packages.contains(&metadata.name));
+        let metadata = DependencyMetadata::from_entries(std::mem::take(
+            &mut self.manifest.dependency_metadata,
+        ));
+        self.manifest.dependency_metadata = self.relevant_dependency_metadata(&metadata);
         self
+    }
+
+    /// Retain declarations selected by locked registry versions and complete declarations for
+    /// direct sources, whose metadata lookup can occur before their version is known.
+    fn relevant_dependency_metadata(
+        &self,
+        metadata: &DependencyMetadata,
+    ) -> BTreeSet<StaticMetadata> {
+        metadata
+            .values()
+            .filter(|entry| {
+                self.packages_for_name(&entry.name)
+                    .iter()
+                    .any(|package| match &package.id.source {
+                        Source::Registry(_) => metadata
+                            .get_entry(&entry.name, package.id.version.as_ref())
+                            // Retain duplicate declarations for the selected version: their input
+                            // order is not preserved by the lockfile's sorted manifest.
+                            .is_some_and(|selected| selected.version == entry.version),
+                        Source::Git(..)
+                        | Source::Direct(..)
+                        | Source::Path(_)
+                        | Source::Directory(_)
+                        | Source::Editable(_)
+                        | Source::Virtual(_) => true,
+                    })
+            })
+            .cloned()
+            .collect()
     }
 
     /// Returns `true` if this [`Lock`] includes `provides-extra` metadata.
@@ -4243,21 +4272,13 @@ impl Lock {
             }
         }
 
-        // Validate the static metadata for packages in the resolution. If an absent package is
-        // added to the requirements, the requirement checks will invalidate the lockfile instead.
+        // Select declarations independently so adding or removing an exact-version entry that
+        // replaces a versionless fallback still invalidates the lockfile.
         {
-            let expected = dependency_metadata
-                .values()
-                .filter(|metadata| !self.packages_for_name(&metadata.name).is_empty())
-                .cloned()
-                .collect::<BTreeSet<_>>();
-            let actual = self
-                .manifest
-                .dependency_metadata
-                .iter()
-                .filter(|metadata| !self.packages_for_name(&metadata.name).is_empty())
-                .cloned()
-                .collect::<BTreeSet<_>>();
+            let expected = self.relevant_dependency_metadata(dependency_metadata);
+            let actual = self.relevant_dependency_metadata(&DependencyMetadata::from_entries(
+                self.manifest.dependency_metadata.iter().cloned(),
+            ));
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedStaticMetadata(expected, actual));
             }
