@@ -659,7 +659,7 @@ fn add_git_lfs() -> Result<()> {
     "#})?;
 
     // Gather cache locations
-    let git_cache = context.cache_dir.child("git-v0");
+    let git_cache = context.cache_dir.child("git-v1");
     let git_checkouts = git_cache.child("checkouts");
     let git_db = git_cache.child("db");
     let repo_url = RepositoryUrl::parse("https://github.com/astral-sh/test-lfs-repo")?;
@@ -669,8 +669,7 @@ fn add_git_lfs() -> Result<()> {
         .child("lfs");
     let ok_checkout_file = git_checkouts
         .child(cache_digest(&repo_url.with_lfs(Some(true))))
-        .child("261c828")
-        .child(".ok");
+        .child("261c828.ok");
 
     uv_snapshot!(context.filters(), context.add()
         .arg("--no-cache")

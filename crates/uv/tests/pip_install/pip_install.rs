@@ -2845,7 +2845,7 @@ fn install_git_checkout_marker_symlink() -> Result<()> {
 
     // A repository-controlled checkout marker must not truncate an external file; see
     // astral-sh/uv#21857.
-    assert_snapshot!(fs::read_to_string(victim.path())?, @"");
+    assert_snapshot!(fs::read_to_string(victim.path())?, @"external contents");
 
     Ok(())
 }
@@ -3176,7 +3176,7 @@ fn install_git_public_https_missing_branch_or_tag() {
     ----- stderr -----
     error: Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@2.0.0`
       cause: Git operation failed
-      cause: failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
+      cause: failed to clone into: [CACHE_DIR]/git-v1/db/8dab139913c4b566
       cause: failed to fetch branch or tag `2.0.0`
       cause: process didn't exit successfully: `git fetch [...]` (exit code: 128)
              --- stderr
@@ -3308,7 +3308,7 @@ fn install_git_public_https_missing_commit() {
     ----- stderr -----
     error: Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b`
       cause: Git operation failed
-      cause: failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
+      cause: failed to clone into: [CACHE_DIR]/git-v1/db/8dab139913c4b566
       cause: failed to fetch commit `79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b`
       cause: process didn't exit successfully: `git fetch [...]` (exit code: 128)
              --- stderr
@@ -3512,7 +3512,7 @@ fn install_git_private_https_pat_not_authorized() {
     ----- stderr -----
     error: Failed to download and build `uv-private-pypackage @ git+https://git:****@github.com/astral-test/uv-private-pypackage`
       cause: Git operation failed
-      cause: failed to clone into: [CACHE_DIR]/git-v0/db/8401f5508e3e612d
+      cause: failed to clone into: [CACHE_DIR]/git-v1/db/8401f5508e3e612d
       cause: process didn't exit successfully: `git fetch --force --update-head-ok 'https://git:****@github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
              --- stderr
              remote: Invalid username or token. Password authentication is not supported for Git operations.
@@ -3601,7 +3601,7 @@ fn install_git_private_https_interactive() {
     ----- stderr -----
     error: Failed to download and build `uv-private-pypackage @ git+https://github.com/astral-test/uv-private-pypackage`
       cause: Git operation failed
-      cause: failed to clone into: [CACHE_DIR]/git-v0/db/8401f5508e3e612d
+      cause: failed to clone into: [CACHE_DIR]/git-v1/db/8401f5508e3e612d
       cause: process didn't exit successfully: `/usr/bin/git fetch --force --update-head-ok 'https://github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
              --- stderr
              fatal: could not read Username for 'https://github.com': terminal prompts disabled
@@ -5001,7 +5001,7 @@ fn install_git_source_respects_offline_mode() {
     ----- stderr -----
     error: Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage`
       cause: Git operation failed
-      cause: failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
+      cause: failed to clone into: [CACHE_DIR]/git-v1/db/8dab139913c4b566
       cause: Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
     "
     );
