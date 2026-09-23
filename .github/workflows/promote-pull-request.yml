@@ -45,6 +45,7 @@ jobs:
       parent_merge_sha: ${{ steps.plan.outputs.parent_merge_sha }}
       promoter: ${{ steps.plan.outputs.promoter }}
       approval_id: ${{ steps.plan.outputs.approval_id }}
+      approval_event: ${{ steps.plan.outputs.approval_event }}
       rejection_reason: ${{ steps.plan.outputs.rejection_reason }}
       changed_head: ${{ steps.plan.outputs.changed_head }}
     steps:
@@ -62,13 +63,14 @@ jobs:
 
           gh pr view "$PULL_REQUEST_NUMBER" \
             --repo "$GITHUB_REPOSITORY" \
-            --json number,title,body,state,isDraft,baseRefName,headRefName,isCrossRepository \
+            --json number,title,body,state,isDraft,labels,baseRefName,headRefName,isCrossRepository \
             > "$RUNNER_TEMP/pull-request.json"
 
           if ! jq --exit-status \
-            '.state == "OPEN" and (.isDraft | not) and (.isCrossRepository | not)' \
+            --arg label "$PROMOTION_LABEL" \
+            '.state == "OPEN" and ((.isDraft | not) or any(.labels[]; .name == $label)) and (.isCrossRepository | not)' \
             "$RUNNER_TEMP/pull-request.json" > /dev/null; then
-            echo "The source pull request is no longer ready; refusing to promote it." >&2
+            echo "The source pull request is not open and eligible for promotion." >&2
             exit 1
           fi
 
@@ -113,6 +115,7 @@ jobs:
           }
 
           source_pull_request=$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER")
+          # Removing or reapplying `bot:promote` supersedes any earlier label approval.
           approval=$(
             gh api \
               --method GET \
@@ -121,10 +124,10 @@ jobs:
               --slurp |
               jq --compact-output --arg repository "$GITHUB_REPOSITORY" --arg label "$PROMOTION_LABEL" '
                 [.[][]] as $events |
-                ($events | map(select(.event == "ready_for_review")) | last | .id // 0) as $ready_id |
+                ($events | map(select((.event == "labeled" or .event == "unlabeled") and .label.name == $label)) | last | .id // 0) as $label_id |
                 [$events[] | select(.actor.type == "User" and
                   ((.event == "ready_for_review" and $repository == "astral-sh/uv-dev") or
-                   (.event == "labeled" and .label.name == $label and .id > $ready_id)))] | last // null'
+                   (.event == "labeled" and .label.name == $label and .id == $label_id)))] | last // null'
           )
           promoter=$(jq --raw-output '.actor.login // empty' <<< "$approval")
           if [ -z "$promoter" ]; then
@@ -133,6 +136,8 @@ jobs:
           fi
           echo "promoter=$promoter" >> "$GITHUB_OUTPUT"
           echo "approval_id=$(jq --raw-output '.id' <<< "$approval")" >> "$GITHUB_OUTPUT"
+          approval_event=$(jq --raw-output '.event' <<< "$approval")
+          echo "approval_event=$approval_event" >> "$GITHUB_OUTPUT"
 
           if [ "$GITHUB_REPOSITORY" = "astral-sh/uv-security" ]; then
             if ! jq --exit-status --arg label "$PROMOTION_LABEL" \
@@ -148,12 +153,13 @@ jobs:
           fi
 
           if ! jq --exit-status \
+            --arg approval_event "$approval_event" --arg label "$PROMOTION_LABEL" \
             --arg base_ref "$BASE_REF" \
             --arg head_ref "$HEAD_REF" \
             --argjson repository_id "$GITHUB_REPOSITORY_ID" \
-            '.state == "open" and (.draft | not) and .base.ref == $base_ref and .head.ref == $head_ref and .base.repo.id == $repository_id and .head.repo.id == $repository_id' \
+            '.state == "open" and ((.draft | not) or $approval_event == "labeled") and ($approval_event != "labeled" or any(.labels[]; .name == $label)) and .base.ref == $base_ref and .head.ref == $head_ref and .base.repo.id == $repository_id and .head.repo.id == $repository_id' \
             <<< "$source_pull_request" > /dev/null; then
-            reject "The source pull request is no longer ready on the expected branch."
+            reject "The source pull request is no longer eligible for promotion on the expected branch."
           fi
 
           source_head=$(jq --raw-output '.head.sha' <<< "$source_pull_request")
@@ -304,12 +310,13 @@ jobs:
               fi
               current_pull_request=$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER")
               if ! jq --exit-status \
+                --arg approval_event "$approval_event" --arg label "$PROMOTION_LABEL" \
                 --arg base_ref "$BASE_REF" \
                 --arg base_head "$base_head" \
                 --arg head_ref "$HEAD_REF" \
                 --arg head_sha "$source_head" \
                 --argjson repository_id "$GITHUB_REPOSITORY_ID" \
-                '.state == "open" and (.draft | not) and .base.ref == $base_ref and .base.sha == $base_head and .head.ref == $head_ref and .head.sha == $head_sha and .base.repo.id == $repository_id and .head.repo.id == $repository_id' \
+                '.state == "open" and ((.draft | not) or $approval_event == "labeled") and ($approval_event != "labeled" or any(.labels[]; .name == $label)) and .base.ref == $base_ref and .base.sha == $base_head and .head.ref == $head_ref and .head.sha == $head_sha and .base.repo.id == $repository_id and .head.repo.id == $repository_id' \
                 <<< "$current_pull_request" > /dev/null; then
                 reject "The pull request changed before its merged parent could be updated."
               fi
@@ -441,6 +448,7 @@ jobs:
         env:
           ACTION: ${{ needs.prepare.outputs.action }}
           APPROVAL_ID: ${{ needs.prepare.outputs.approval_id }}
+          APPROVAL_EVENT: ${{ needs.prepare.outputs.approval_event }}
           BASE_REF: ${{ needs.prepare.outputs.base_ref }}
           BASE_SHA: ${{ needs.prepare.outputs.base_sha }}
           EXPECTED_HEAD_SHA: ${{ inputs.head_sha }}
@@ -465,17 +473,18 @@ jobs:
             gh api --method GET "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/events" --paginate --slurp |
               jq --raw-output --arg repository "$GITHUB_REPOSITORY" --arg label "$PROMOTION_LABEL" '
                 [.[][]] as $events |
-                ($events | map(select(.event == "ready_for_review")) | last | .id // 0) as $ready_id |
+                ($events | map(select((.event == "labeled" or .event == "unlabeled") and .label.name == $label)) | last | .id // 0) as $label_id |
                 [$events[] | select(.actor.type == "User" and
                   ((.event == "ready_for_review" and $repository == "astral-sh/uv-dev") or
-                   (.event == "labeled" and .label.name == $label and .id > $ready_id))) | .id] | last // empty'
+                   (.event == "labeled" and .label.name == $label and .id == $label_id))) | .id] | last // empty'
           )
           if [ "$current_approval" != "$APPROVAL_ID" ] || ! jq --exit-status \
             --arg action "$ACTION" \
+            --arg approval_event "$APPROVAL_EVENT" --arg label "$PROMOTION_LABEL" \
             --arg source_base_ref "$SOURCE_BASE_REF" --arg source_base_sha "$SOURCE_BASE_SHA" \
             --arg head_ref "$HEAD_REF" --arg head_sha "$EXPECTED_HEAD_SHA" \
             --argjson repository_id "$GITHUB_REPOSITORY_ID" \
-            '.state == "open" and (.draft | not) and .base.ref == $source_base_ref and ($action != "update-parent" or .base.sha == $source_base_sha) and .head.ref == $head_ref and .head.sha == $head_sha and .base.repo.id == $repository_id and .head.repo.id == $repository_id' \
+            '.state == "open" and ((.draft | not) or $approval_event == "labeled") and ($approval_event != "labeled" or any(.labels[]; .name == $label)) and .base.ref == $source_base_ref and ($action != "update-parent" or .base.sha == $source_base_sha) and .head.ref == $head_ref and .head.sha == $head_sha and .base.repo.id == $repository_id and .head.repo.id == $repository_id' \
             <<< "$source_pull_request" > /dev/null; then
             reject "The source pull request or its approval changed before publication."
           fi
@@ -581,15 +590,16 @@ jobs:
                   gh api --method GET "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/events" --paginate --slurp |
                     jq --raw-output --arg repository "$GITHUB_REPOSITORY" --arg label "$PROMOTION_LABEL" '
                       [.[][]] as $events |
-                      ($events | map(select(.event == "ready_for_review")) | last | .id // 0) as $ready_id |
+                      ($events | map(select((.event == "labeled" or .event == "unlabeled") and .label.name == $label)) | last | .id // 0) as $label_id |
                       [$events[] | select(.actor.type == "User" and
                         ((.event == "ready_for_review" and $repository == "astral-sh/uv-dev") or
-                         (.event == "labeled" and .label.name == $label and .id > $ready_id))) | .id] | last // empty'
+                         (.event == "labeled" and .label.name == $label and .id == $label_id))) | .id] | last // empty'
                 )
                 if [ "$current_approval" != "$APPROVAL_ID" ] || ! jq --exit-status \
+                  --arg approval_event "$APPROVAL_EVENT" --arg label "$PROMOTION_LABEL" \
                   --arg base_ref "$SOURCE_BASE_REF" --arg base_head "$SOURCE_BASE_SHA" \
                   --arg head_ref "$HEAD_REF" --argjson repository_id "$GITHUB_REPOSITORY_ID" \
-                  '.state == "open" and (.draft | not) and .base.ref == $base_ref and .base.sha == $base_head and .head.ref == $head_ref and .base.repo.id == $repository_id and .head.repo.id == $repository_id' \
+                  '.state == "open" and ((.draft | not) or $approval_event == "labeled") and ($approval_event != "labeled" or any(.labels[]; .name == $label)) and .base.ref == $base_ref and .base.sha == $base_head and .head.ref == $head_ref and .base.repo.id == $repository_id and .head.repo.id == $repository_id' \
                   <<< "$current_pull_request" > /dev/null; then
                   reject "The private pull request or its approval changed before publication."
                 fi
@@ -662,17 +672,19 @@ jobs:
         id: close
         if: steps.promote.outputs.number != ''
         env:
+          APPROVAL_EVENT: ${{ needs.prepare.outputs.approval_event }}
           EXPECTED_HEAD_SHA: ${{ inputs.head_sha }}
           GH_TOKEN: ${{ steps.token.outputs.token }}
           PROMOTED_HEAD: ${{ steps.verify.outputs.head_sha }}
           PULL_REQUEST_NUMBER: ${{ inputs.pull_request }}
           UPSTREAM_NUMBER: ${{ steps.promote.outputs.number }}
         run: |
-          pull_request=$(gh pr view "$PULL_REQUEST_NUMBER" --repo "$GITHUB_REPOSITORY" --json state,isDraft,headRefOid)
+          pull_request=$(gh pr view "$PULL_REQUEST_NUMBER" --repo "$GITHUB_REPOSITORY" --json state,isDraft,labels,headRefOid)
           if ! jq --exit-status \
-            '.state == "OPEN" and (.isDraft | not)' \
+            --arg approval_event "$APPROVAL_EVENT" --arg label "$PROMOTION_LABEL" \
+            '.state == "OPEN" and ((.isDraft | not) or $approval_event == "labeled") and ($approval_event != "labeled" or any(.labels[]; .name == $label))' \
             <<< "$pull_request" > /dev/null; then
-            echo "The source pull request is no longer ready; refusing to close it." >&2
+            echo "The source pull request is no longer eligible for promotion; refusing to close it." >&2
             exit 1
           fi
 
@@ -740,10 +752,10 @@ jobs:
             gh api --method GET "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/events" --paginate --slurp |
               jq --raw-output --arg repository "$GITHUB_REPOSITORY" --arg label "$PROMOTION_LABEL" '
                 [.[][]] as $events |
-                ($events | map(select(.event == "ready_for_review")) | last | .id // 0) as $ready_id |
+                ($events | map(select((.event == "labeled" or .event == "unlabeled") and .label.name == $label)) | last | .id // 0) as $label_id |
                 [$events[] | select(.actor.type == "User" and
                   ((.event == "ready_for_review" and $repository == "astral-sh/uv-dev") or
-                   (.event == "labeled" and .label.name == $label and .id > $ready_id))) | .id] | last // empty'
+                   (.event == "labeled" and .label.name == $label and .id == $label_id))) | .id] | last // empty'
           )
           pull_request=$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER")
           if [ -z "$APPROVAL_ID" ] || [ "$current_approval" != "$APPROVAL_ID" ] || ! jq --exit-status \

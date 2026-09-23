@@ -75,6 +75,7 @@
         "/label/name": "bot:promote",
         "/sender/type": "User"
       },
+      "allow_draft": true,
       "workflow": "promote-pull-request.yml"
     },
     {
@@ -86,6 +87,7 @@
         "/label/name": "bot:promote",
         "/sender/type": "User"
       },
+      "allow_draft": true,
       "workflow": "promote-pull-request.yml"
     },
     {
