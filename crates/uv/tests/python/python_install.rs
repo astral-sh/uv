@@ -4119,8 +4119,8 @@ fn python_install_compile_bytecode_pypy() {
     uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("pypy-3.11"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Installed Python 3.11.15 in [TIME]
-     + pypy-3.11.15-[PLATFORM] (pypy3.11)
+    Installed Python 3.11.16 in [TIME]
+     + pypy-3.11.16-[PLATFORM] (pypy3.11)
     Bytecode compiled [COUNT] files in [TIME]
     ");
 }
