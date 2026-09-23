@@ -5523,6 +5523,27 @@ fn tool_install_constraints() -> Result<()> {
     Ok(())
 }
 
+/// Overrides can replace a false marker before resolution evaluates it.
+#[test]
+fn tool_install_false_requirement_override() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_tool_dirs();
+    let overrides_txt = context.temp_dir.child("overrides.txt");
+    overrides_txt.write_str("ok==999")?;
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("simple-launcher")
+        .arg("--with").arg("ok; python_version < '0'")
+        .arg("--overrides").arg(overrides_txt.path())
+        .arg("--no-index")
+        .arg("--find-links").arg(context.workspace_root.join("test/links")), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because there is no version of ok==999 and you require ok==999, we can conclude that your requirements are unsatisfiable.
+    ");
+    Ok(())
+}
+
 /// Install a tool with `--overrides`.
 #[test]
 fn tool_install_overrides() -> Result<()> {

@@ -18,6 +18,8 @@ use uv_pep508::MarkerTree;
 use version_ranges::Ranges;
 
 /// Tool requirements, with the target package first and equivalent declarations combined.
+///
+/// False markers remain because overrides can replace them before resolution.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct NormalizedRequirements(RequirementSet);
 
@@ -29,24 +31,9 @@ impl NormalizedRequirements {
 
 impl From<Vec<Requirement>> for NormalizedRequirements {
     /// Normalize requirements while keeping the first input's package first.
-    ///
-    /// Discard always-false markers, retaining the original target if no declarations for its
-    /// package remain. This keeps the tool identifiable in receipts even when its marker is false.
-    fn from(mut requirements: Vec<Requirement>) -> Self {
+    fn from(requirements: Vec<Requirement>) -> Self {
         let target_name = requirements.first().map(|target| target.name.clone());
-        let target = requirements
-            .first()
-            .filter(|target| target.marker.is_false())
-            .cloned();
-        requirements.retain(|requirement| !requirement.marker.is_false());
         let mut normalized = normalize(requirements);
-        if let Some(target) = target
-            && !normalized
-                .iter()
-                .any(|requirement| requirement.name == target.name)
-        {
-            normalized.push(target);
-        }
         // A stable sort moves the target first while retaining the order of other requirements.
         normalized.sort_by_key(|requirement| Some(&requirement.name) != target_name.as_ref());
         Self(RequirementSet(normalized))
@@ -278,7 +265,7 @@ impl RequirementsKey {
 ///
 /// Extras are unioned and version constraints intersected wherever markers overlap.
 /// Standalone pins stay separate because they permit yanked versions.
-/// False declarations remain for overrides; other callers discard them before normalization.
+/// False declarations remain for requirements and overrides; constraints discard them before normalization.
 fn normalize(requirements: Vec<Requirement>) -> Vec<Requirement> {
     let mut sources = BTreeMap::<Requirement, Vec<Requirement>>::new();
     for mut requirement in requirements {
