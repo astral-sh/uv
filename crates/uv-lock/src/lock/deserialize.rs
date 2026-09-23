@@ -904,6 +904,15 @@ dependencies = [
     }
 
     #[test]
+    fn name_only_dependency_matches_table() {
+        let input = CANONICAL_LOCK.replace(r#"{ name = "dependency" }"#, r#""dependency""#);
+        let expected: Lock = toml::from_str(CANONICAL_LOCK).expect("valid TOML lock");
+        let actual = from_str(&input).expect("name-only dependency uses the direct parser");
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
     fn repository_lock_matches_toml() {
         let input = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../uv.lock"));
         let expected: Lock = toml::from_str(input).expect("valid repository lock");
