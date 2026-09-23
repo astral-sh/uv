@@ -1102,7 +1102,7 @@ fn extra_unconditional() -> Result<()> {
     Installed 4 packages in [TIME]
      + anyio==4.1.0
      + idna==3.6
-     + proxy1==0.1.0 (from file://[TEMP_DIR]/proxy1)
+     + proxy1==0.1.0 (from `file://[TEMP_DIR]/proxy1`)
      + sniffio==1.3.1
     ");
 
@@ -1212,7 +1212,7 @@ fn extra_unconditional_non_conflicting() -> Result<()> {
     Installed 4 packages in [TIME]
      + anyio==4.1.0
      + idna==3.6
-     + proxy1==0.1.0 (from file://[TEMP_DIR]/proxy1)
+     + proxy1==0.1.0 (from `file://[TEMP_DIR]/proxy1`)
      + sniffio==1.3.1
     ");
 
@@ -1288,7 +1288,7 @@ fn extra_unconditional_in_optional() -> Result<()> {
     ----- stderr -----
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + proxy1==0.1.0 (from file://[TEMP_DIR]/proxy1)
+     + proxy1==0.1.0 (from `file://[TEMP_DIR]/proxy1`)
      + sortedcontainers==2.3.0
     ");
 
@@ -1816,7 +1816,7 @@ fn extra_depends_on_conflicting_extra_transitive() -> Result<()> {
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + example==0.1.0 (from file://[TEMP_DIR]/)
+     + example==0.1.0 (from `file://[TEMP_DIR]/`)
     ");
 
     // Install with `foo`
@@ -1832,7 +1832,7 @@ fn extra_depends_on_conflicting_extra_transitive() -> Result<()> {
     ----- stderr -----
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + indirection==0.1.0 (from file://[TEMP_DIR]/indirection)
+     + indirection==0.1.0 (from `file://[TEMP_DIR]/indirection`)
      + sortedcontainers==2.4.0
     ");
 
@@ -2892,7 +2892,7 @@ fn group_activates_self_extra_non_project_workspace() -> Result<()> {
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.5
-     + pkg1==0.1.0 (from file://[TEMP_DIR]/pkg1)
+     + pkg1==0.1.0 (from `file://[TEMP_DIR]/pkg1`)
      + sniffio==1.3.1
     ");
 
@@ -5083,7 +5083,7 @@ conflicts = [
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + proxy1==0.1.0 (from file://[TEMP_DIR]/proxy1)
+     + proxy1==0.1.0 (from `file://[TEMP_DIR]/proxy1`)
      + sniffio==1.3.1
     ");
 
@@ -10624,7 +10624,7 @@ fn conflict_item_unknown_field() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @r#"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 10, column 17
                 |
              10 |               { name = "foo", extra = "extra1" },

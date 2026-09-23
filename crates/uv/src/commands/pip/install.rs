@@ -249,13 +249,13 @@ pub(crate) async fn pip_install(
     // Apply any `--target` or `--prefix` directories.
     let environment = if let Some(target) = target {
         debug!(
-            "Using `--target` directory at {}",
+            "Using `--target` directory at `{}`",
             target.root().user_display()
         );
         environment.with_target(target)?
     } else if let Some(prefix) = prefix {
         debug!(
-            "Using `--prefix` directory at {}",
+            "Using `--prefix` directory at `{}`",
             prefix.root().user_display()
         );
         environment.with_prefix(prefix)?
@@ -270,12 +270,12 @@ pub(crate) async fn pip_install(
         } else {
             let managed_message = match externally_managed.into_error() {
                 Some(error) => format!(
-                    "The interpreter at {} is externally managed, and indicates the following:\n\n{}\n",
+                    "The interpreter at `{}` is externally managed, and indicates the following:\n\n{}\n",
                     environment.root().user_display().cyan(),
                     textwrap::indent(&error, "  ").green(),
                 ),
                 None => format!(
-                    "The interpreter at {} is externally managed and cannot be modified.",
+                    "The interpreter at `{}` is externally managed and cannot be modified.",
                     environment.root().user_display().cyan()
                 ),
             };

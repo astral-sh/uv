@@ -35,16 +35,16 @@ pub(crate) fn main(args: &Args) -> anyhow::Result<()> {
                 } else {
                     let comparison = StrComparison::new(&current, &reference_string);
                     bail!(
-                        "{filename} changed, please run `cargo dev generate-env-vars-reference`:\n{comparison}"
+                        "`{filename}` changed, please run `cargo dev generate-env-vars-reference`:\n{comparison}"
                     );
                 }
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                bail!("{filename} not found, please run `cargo dev generate-env-vars-reference`");
+                bail!("`{filename}` not found, please run `cargo dev generate-env-vars-reference`");
             }
             Err(err) => {
                 bail!(
-                    "{filename} changed, please run `cargo dev generate-env-vars-reference`:\n{err}"
+                    "`{filename}` changed, please run `cargo dev generate-env-vars-reference`:\n{err}"
                 );
             }
         },
@@ -63,7 +63,7 @@ pub(crate) fn main(args: &Args) -> anyhow::Result<()> {
             }
             Err(err) => {
                 bail!(
-                    "{filename} changed, please run `cargo dev generate-env-vars-reference`:\n{err}"
+                    "`{filename}` changed, please run `cargo dev generate-env-vars-reference`:\n{err}"
                 );
             }
         },

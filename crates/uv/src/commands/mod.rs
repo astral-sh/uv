@@ -264,7 +264,7 @@ fn read_env_files<'a>(
         let iter = match dotenvy::from_path_iter(env_file_path) {
             Err(dotenvy::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
                 bail!(
-                    "No environment file found at: `{}`",
+                    "No environment file found at: {}",
                     env_file_path.simplified_display()
                 );
             }
@@ -326,7 +326,7 @@ fn read_env_files<'a>(
 
         if parsed {
             debug!(
-                "Read environment file at: `{}`",
+                "Read environment file at: {}",
                 env_file_path.simplified_display()
             );
         }

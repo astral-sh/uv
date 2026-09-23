@@ -69,7 +69,7 @@ fn run_with_python_version() -> Result<()> {
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
-     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/`)
      + idna==3.6
      + sniffio==1.3.1
     ");
@@ -117,7 +117,7 @@ fn run_with_python_version() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.6.0
-     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/`)
      + idna==3.6
      + sniffio==1.3.1
     ");
@@ -191,7 +191,7 @@ fn run_args() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/`)
     ");
 
     // Can use `--` to separate uv arguments from the command arguments.
@@ -254,7 +254,7 @@ fn run_no_args() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/`)
     ");
 
     #[cfg(windows)]
@@ -275,7 +275,7 @@ fn run_no_args() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/`)
     "###);
 
     Ok(())
@@ -354,7 +354,7 @@ fn run_pep723_script() -> Result<()> {
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
-     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/`)
      + idna==3.6
      + sniffio==1.3.1
     Traceback (most recent call last):
@@ -704,7 +704,7 @@ fn run_pythonw_script() -> Result<()> {
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
-     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/`)
      + idna==3.6
      + sniffio==1.3.1
     ");
@@ -769,7 +769,7 @@ fn run_pep723_script_metadata() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
+     + uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979`)
     ");
 
     Ok(())
@@ -1418,7 +1418,7 @@ fn run_with() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/`)
      + sniffio==1.3.0
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
@@ -1554,7 +1554,7 @@ fn run_with_local_wheel_refreshes_rebuilt_wheel() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + foo==0.1.0 (from file://[TEMP_DIR]/foo/dist/foo-0.1.0-py3-none-any.whl)
+     + foo==0.1.0 (from `file://[TEMP_DIR]/foo/dist/foo-0.1.0-py3-none-any.whl`)
     ");
 
     init.write_str(indoc! { r#"
@@ -1595,7 +1595,7 @@ fn run_with_local_wheel_refreshes_rebuilt_wheel() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + foo==0.1.0 (from file://[TEMP_DIR]/foo/dist/foo-0.1.0-py3-none-any.whl)
+     + foo==0.1.0 (from `file://[TEMP_DIR]/foo/dist/foo-0.1.0-py3-none-any.whl`)
     ");
 
     context.prune().assert().success();
@@ -1618,7 +1618,7 @@ fn run_with_local_wheel_refreshes_rebuilt_wheel() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + foo==0.1.0 (from file://[TEMP_DIR]/foo/dist/foo-0.1.0-py3-none-any.whl)
+     + foo==0.1.0 (from `file://[TEMP_DIR]/foo/dist/foo-0.1.0-py3-none-any.whl`)
     ");
 
     Ok(())
@@ -1694,7 +1694,7 @@ fn run_with_pyvenv_cfg_file() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/`)
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -1772,7 +1772,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
-     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/`)
      + idna==3.6
      + sniffio==1.3.1
     Resolved 1 package in [TIME]
@@ -1837,7 +1837,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
-     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/`)
      + idna==3.6
      + sniffio==1.3.1
     ");
@@ -2102,7 +2102,7 @@ fn run_in_workspace() -> Result<()> {
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0 (from `file://[TEMP_DIR]/`)
      + sniffio==1.3.1
     ");
 
@@ -2129,7 +2129,7 @@ fn run_in_workspace() -> Result<()> {
     Resolved 8 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + child1==0.1.0 (from file://[TEMP_DIR]/child1)
+     + child1==0.1.0 (from `file://[TEMP_DIR]/child1`)
      + iniconfig==2.0.0
     ");
 
@@ -2156,7 +2156,7 @@ fn run_in_workspace() -> Result<()> {
     Resolved 8 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + child2==0.1.0 (from file://[TEMP_DIR]/child2)
+     + child2==0.1.0 (from `file://[TEMP_DIR]/child2`)
      + typing-extensions==4.10.0
     ");
 
@@ -2214,13 +2214,13 @@ fn run_with_editable() -> Result<()> {
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
-     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/`)
      + idna==3.6
      + sniffio==1.3.1
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + black==0.1.0 (from file://[TEMP_DIR]/src/black_editable)
+     + black==0.1.0 (from `file://[TEMP_DIR]/src/black_editable`)
     ");
 
     // Requesting an editable requirement should install it in a layer, even if it satisfied
@@ -2232,7 +2232,7 @@ fn run_with_editable() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + anyio==4.3.0+foo (from file://[TEMP_DIR]/src/anyio_local)
+     + anyio==4.3.0+foo (from `file://[TEMP_DIR]/src/anyio_local`)
     ");
 
     // Requesting the project itself should use the base environment.
@@ -2268,8 +2268,8 @@ fn run_with_editable() -> Result<()> {
     Uninstalled 3 packages in [TIME]
     Installed 2 packages in [TIME]
      - anyio==4.3.0
-     + anyio==4.3.0+foo (from file://[TEMP_DIR]/src/anyio_local)
-     ~ foo==1.0.0 (from file://[TEMP_DIR]/)
+     + anyio==4.3.0+foo (from `file://[TEMP_DIR]/src/anyio_local`)
+     ~ foo==1.0.0 (from `file://[TEMP_DIR]/`)
      - idna==3.6
     ");
 
@@ -2668,7 +2668,7 @@ fn run_locked() -> Result<()> {
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0 (from `file://[TEMP_DIR]/`)
     ");
 
     Ok(())
@@ -2734,7 +2734,7 @@ fn run_frozen() -> Result<()> {
     Installed 4 packages in [TIME]
      + anyio==3.7.0
      + idna==3.6
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0 (from `file://[TEMP_DIR]/`)
      + sniffio==1.3.1
     ");
 
@@ -2892,7 +2892,7 @@ fn run_empty_requirements_txt() -> Result<()> {
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
-     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/`)
      + idna==3.6
      + sniffio==1.3.1
     warning: Requirements file `requirements.txt` does not contain any dependencies
@@ -2951,7 +2951,7 @@ fn run_requirements_txt() -> Result<()> {
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
-     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/`)
      + idna==3.6
      + sniffio==1.3.1
     Resolved 1 package in [TIME]
@@ -3089,9 +3089,9 @@ fn run_requirements_txt_arguments() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/`)
      + typing-extensions==4.10.0
-    warning: Ignoring `--index-url` from requirements file: `https://test.pypi.org/simple`. Instead, use the `--index-url` command-line argument, or set `index-url` in a `uv.toml` or `pyproject.toml` file.
+    warning: Ignoring `--index-url` from requirements file: https://test.pypi.org/simple. Instead, use the `--index-url` command-line argument, or set `index-url` in a `uv.toml` or `pyproject.toml` file.
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -3143,7 +3143,7 @@ fn run_editable() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/`)
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -3160,7 +3160,7 @@ fn run_editable() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ foo==1.0.0 (from file://[TEMP_DIR]/)
+     ~ foo==1.0.0 (from `file://[TEMP_DIR]/`)
     ");
 
     Ok(())
@@ -3231,7 +3231,7 @@ fn run_from_directory() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + foo==1.0.0 (from file://[TEMP_DIR]/project)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/project`)
     ");
 
     fs_err::remove_dir_all(context.temp_dir.join("project").join(".venv"))?;
@@ -3243,7 +3243,7 @@ fn run_from_directory() -> Result<()> {
     Creating virtual environment at: [PROJECT_VENV]/
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
-     + foo==1.0.0 (from file://[TEMP_DIR]/project)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/project`)
     ");
 
     // Use `--directory`, which switches to the provided directory entirely.
@@ -3259,7 +3259,7 @@ fn run_from_directory() -> Result<()> {
     Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
-     + foo==1.0.0 (from file://[TEMP_DIR]/project)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/project`)
     ");
 
     fs_err::remove_dir_all(context.temp_dir.join("project").join(".venv"))?;
@@ -3271,7 +3271,7 @@ fn run_from_directory() -> Result<()> {
     Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
-     + foo==1.0.0 (from file://[TEMP_DIR]/project)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/project`)
     ");
 
     fs_err::remove_dir_all(context.temp_dir.join("project").join(".venv"))?;
@@ -3283,7 +3283,7 @@ fn run_from_directory() -> Result<()> {
     Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
-     + foo==1.0.0 (from file://[TEMP_DIR]/project)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/project`)
     error: Failed to spawn: `./project/main.py`
       cause: [OS ERROR 2]
     ");
@@ -3311,7 +3311,7 @@ fn run_from_directory() -> Result<()> {
     Creating virtual environment at: [PROJECT_VENV]/
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
-     + foo==1.0.0 (from file://[TEMP_DIR]/project)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/project`)
     ");
 
     fs_err::remove_dir_all(context.temp_dir.join("project").join(".venv"))?;
@@ -3326,7 +3326,7 @@ fn run_from_directory() -> Result<()> {
     Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
-     + foo==1.0.0 (from file://[TEMP_DIR]/project)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/project`)
     ");
 
     Ok(())
@@ -3425,7 +3425,7 @@ fn run_isolated_python_version() -> Result<()> {
     Installed 6 packages in [TIME]
      + anyio==4.3.0
      + exceptiongroup==1.2.0
-     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/`)
      + idna==3.6
      + sniffio==1.3.1
      + typing-extensions==4.10.0
@@ -3441,7 +3441,7 @@ fn run_isolated_python_version() -> Result<()> {
     Installed 6 packages in [TIME]
      + anyio==4.3.0
      + exceptiongroup==1.2.0
-     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/`)
      + idna==3.6
      + sniffio==1.3.1
      + typing-extensions==4.10.0
@@ -3462,7 +3462,7 @@ fn run_isolated_python_version() -> Result<()> {
     Resolved 6 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
-     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/`)
      + idna==3.6
      + sniffio==1.3.1
     ");
@@ -3509,7 +3509,7 @@ fn run_no_project() -> Result<()> {
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
-     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/`)
      + idna==3.6
      + sniffio==1.3.1
     ");
@@ -3814,7 +3814,7 @@ fn run_isolated_does_not_modify_lock() -> Result<()> {
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
-     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/`)
      + idna==3.6
      + sniffio==1.3.1
     ");
@@ -3835,7 +3835,7 @@ fn run_isolated_does_not_modify_lock() -> Result<()> {
     Resolved 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
-     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/`)
      + idna==3.6
      + sniffio==1.3.1
     ");
@@ -3860,7 +3860,7 @@ fn run_isolated_does_not_modify_lock() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.0.0
-     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/`)
      + idna==3.6
      + sniffio==1.3.1
     ");
@@ -3921,7 +3921,7 @@ fn run_isolated_with_frozen() -> Result<()> {
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.0.0
-     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/`)
      + idna==3.6
      + sniffio==1.3.1
     ");
@@ -3939,7 +3939,7 @@ fn run_isolated_with_frozen() -> Result<()> {
     ----- stderr -----
     Installed 4 packages in [TIME]
      + anyio==3.0.0
-     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/`)
      + idna==3.6
      + sniffio==1.3.1
     ");
@@ -4079,7 +4079,7 @@ fn run_invalid_project_table() -> Result<()> {
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 1, column 2
                |
              1 | [project.urls]
@@ -4166,7 +4166,7 @@ fn run_script_module_conflict() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + foo==0.1.0 (from file://[TEMP_DIR]/)
+     + foo==0.1.0 (from `file://[TEMP_DIR]/`)
     ");
 
     // Creating `__main__` should not change the behavior, the entrypoint should take precedence
@@ -5100,13 +5100,13 @@ fn run_with_not_existing_env_file() -> Result<()> {
     uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env.development").arg("test.py"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: No environment file found at: `.env.development`
+    error: No environment file found at: .env.development
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env.development").arg("--quiet").arg("test.py"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: No environment file found at: `.env.development`
+    error: No environment file found at: .env.development
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env.development").arg("--quiet").arg("--quiet").arg("test.py"), @"
@@ -5918,7 +5918,7 @@ fn run_windows_legacy_scripts() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/`)
     "###);
 
     // Test with explicit .bat extension
@@ -6168,7 +6168,7 @@ fn run_pep723_script_with_constraints_lock() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 2 packages in [TIME]
-     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/`)
      + iniconfig==1.1.1
     ");
 
@@ -6223,7 +6223,7 @@ fn run_pep723_script_with_constraints() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 2 packages in [TIME]
-     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/`)
      + iniconfig==1.1.1
     ");
 
@@ -6490,7 +6490,7 @@ fn run_target_workspace_discovery() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + foo==1.0.0 (from file://[TEMP_DIR]/project)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/project`)
      + iniconfig==2.0.0
     ");
 

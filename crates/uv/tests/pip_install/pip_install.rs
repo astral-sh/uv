@@ -116,7 +116,7 @@ fn install_http_wheel_hashes_trailing_bytes() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl)
+     + ok==1.0.0 (from `http://[LOCALHOST]/ok-1.0.0-py3-none-any.whl`)
     ");
     Ok(())
 }
@@ -155,7 +155,7 @@ fn install_wheel_cache_incompatible_with_older_uv() -> Result<()> {
              + uv==[VERSION]
             Resolved 1 package in [TIME]
             Installed 1 package in [TIME]
-             + large-wheel==1.0.0 (from file://[TEMP_DIR]/large_wheel-1.0.0-py3-none-any.whl)
+             + large-wheel==1.0.0 (from `file://[TEMP_DIR]/large_wheel-1.0.0-py3-none-any.whl`)
             ");
         }
         Ok::<(), anyhow::Error>(())
@@ -175,7 +175,7 @@ fn missing_requirements_txt() {
         .arg("--strict"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: File not found: `requirements.txt`
+    error: File not found: requirements.txt
     "
     );
 
@@ -273,7 +273,7 @@ fn compile_bytecode_for_installed_distributions() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
     Bytecode compiled 16 files in [TIME]
-     + large-wheel==1.0.0 (from file://[TEMP_DIR]/large_wheel-1.0.0-py3-none-any.whl)
+     + large-wheel==1.0.0 (from `file://[TEMP_DIR]/large_wheel-1.0.0-py3-none-any.whl`)
     "
     );
 
@@ -449,7 +449,7 @@ fn missing_pyproject_toml() {
         .arg("pyproject.toml"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: File not found: `pyproject.toml`
+    error: File not found: pyproject.toml
     "
     );
 }
@@ -494,7 +494,7 @@ fn missing_find_links_from_requirements_file() -> Result<()> {
         .arg("--strict"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Invalid URL in `requirements/requirements.txt` at position 0: `./missing`
+    error: Invalid URL in `requirements/requirements.txt` at position 0: ./missing
       cause: relative URL without a base
     "
     );
@@ -520,7 +520,7 @@ fn invalid_pyproject_toml_syntax() -> Result<()> {
         |     ^
       key with no value, expected `=`
 
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: Invalid `pyproject.toml`
       cause: TOML parse error at line 1, column 5
                |
@@ -544,7 +544,7 @@ fn invalid_pyproject_toml_project_schema() -> Result<()> {
         .arg("pyproject.toml"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 1, column 1
                |
              1 | [project]
@@ -745,7 +745,7 @@ fn invalid_uv_toml_option_disallowed_automatic_discovery() -> Result<()> {
         .arg("iniconfig"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `uv.toml`. The `managed` field is not allowed in a `uv.toml` file. `managed` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.
+    error: Failed to parse: uv.toml. The `managed` field is not allowed in a `uv.toml` file. `managed` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.
     "
     );
 
@@ -766,7 +766,7 @@ fn invalid_uv_toml_option_disallowed_command_line() -> Result<()> {
         .arg("foo.toml"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `foo.toml`. The `managed` field is not allowed in a `uv.toml` file. `managed` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.
+    error: Failed to parse: foo.toml. The `managed` field is not allowed in a `uv.toml` file. `managed` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.
     "
     );
 
@@ -1111,7 +1111,7 @@ async fn install_remote_requirements_txt() -> Result<()> {
         .arg("--strict"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Error while accessing remote requirements file: `http://[LOCALHOST]/requirements.txt`
+    error: Error while accessing remote requirements file: http://[LOCALHOST]/requirements.txt
     "
     );
 
@@ -1663,7 +1663,7 @@ fn reinstall_incomplete() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Prepared 1 package in [TIME]
-    warning: Failed to uninstall package at [SITE_PACKAGES]/anyio-3.7.0.dist-info due to missing `RECORD` file. Installation may result in an incomplete environment.
+    warning: Failed to uninstall package at `[SITE_PACKAGES]/anyio-3.7.0.dist-info` due to missing `RECORD` file. Installation may result in an incomplete environment.
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==3.7.0
@@ -1935,7 +1935,7 @@ fn install_editable() {
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + poetry-editable==0.1.0 (from file://[WORKSPACE]/test/packages/poetry_editable)
+     + poetry-editable==0.1.0 (from `file://[WORKSPACE]/test/packages/poetry_editable`)
      + sniffio==1.3.1
     "
     );
@@ -1950,7 +1950,7 @@ fn install_editable() {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ poetry-editable==0.1.0 (from file://[WORKSPACE]/test/packages/poetry_editable)
+     ~ poetry-editable==0.1.0 (from `file://[WORKSPACE]/test/packages/poetry_editable`)
     "
     );
 
@@ -1971,7 +1971,7 @@ fn install_editable() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-     ~ poetry-editable==0.1.0 (from file://[WORKSPACE]/test/packages/poetry_editable)
+     ~ poetry-editable==0.1.0 (from `file://[WORKSPACE]/test/packages/poetry_editable`)
     "
     );
 }
@@ -1990,7 +1990,7 @@ fn install_no_editable() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + executable-file==1.0.0 (from file://[WORKSPACE]/test/packages/executable_file)
+     + executable-file==1.0.0 (from `file://[WORKSPACE]/test/packages/executable_file`)
     "
     );
 
@@ -2016,8 +2016,8 @@ fn install_no_editable_package() {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + black==0.1.0 (from file://[WORKSPACE]/test/packages/black_editable)
-     + executable-file==1.0.0 (from file://[WORKSPACE]/test/packages/executable_file)
+     + black==0.1.0 (from `file://[WORKSPACE]/test/packages/black_editable`)
+     + executable-file==1.0.0 (from `file://[WORKSPACE]/test/packages/executable_file`)
     "
     );
 
@@ -2042,7 +2042,7 @@ fn install_no_editable_requirements_txt() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + executable-file==1.0.0 (from file://[WORKSPACE]/test/packages/executable_file)
+     + executable-file==1.0.0 (from `file://[WORKSPACE]/test/packages/executable_file`)
     "
     );
 
@@ -2066,7 +2066,7 @@ fn install_no_editable_env_var() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + executable-file==1.0.0 (from file://[WORKSPACE]/test/packages/executable_file)
+     + executable-file==1.0.0 (from `file://[WORKSPACE]/test/packages/executable_file`)
     "
     );
 
@@ -2106,7 +2106,7 @@ fn install_editable_and_registry() {
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - black==24.3.0
-     + black==0.1.0 (from file://[WORKSPACE]/test/packages/black_editable)
+     + black==0.1.0 (from `file://[WORKSPACE]/test/packages/black_editable`)
     "
     );
 
@@ -2131,7 +2131,7 @@ fn install_editable_and_registry() {
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     - black==0.1.0 (from file://[WORKSPACE]/test/packages/black_editable)
+     - black==0.1.0 (from `file://[WORKSPACE]/test/packages/black_editable`)
      + black==23.10.0
     "
     );
@@ -2152,7 +2152,7 @@ fn install_editable_no_binary() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + black==0.1.0 (from file://[WORKSPACE]/test/packages/black_editable)
+     + black==0.1.0 (from `file://[WORKSPACE]/test/packages/black_editable`)
     "
     );
 }
@@ -2175,7 +2175,7 @@ fn install_editable_compatible_constraint() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + black==0.1.0 (from file://[WORKSPACE]/test/packages/black_editable)
+     + black==0.1.0 (from `file://[WORKSPACE]/test/packages/black_editable`)
     "
     );
 
@@ -2251,7 +2251,7 @@ fn install_editable_pep_508_requirements_txt() -> Result<()> {
      + aiohttp==3.9.3
      + aiosignal==1.3.1
      + attrs==23.2.0
-     + black==0.1.0 (from file://[WORKSPACE]/test/packages/black_editable)
+     + black==0.1.0 (from `file://[WORKSPACE]/test/packages/black_editable`)
      + frozenlist==1.4.1
      + idna==3.6
      + multidict==6.0.5
@@ -2322,7 +2322,7 @@ fn install_editable_pep_508_cli() {
      + aiohttp==3.9.3
      + aiosignal==1.3.1
      + attrs==23.2.0
-     + black==0.1.0 (from file://[WORKSPACE]/test/packages/black_editable)
+     + black==0.1.0 (from `file://[WORKSPACE]/test/packages/black_editable`)
      + frozenlist==1.4.1
      + idna==3.6
      + multidict==6.0.5
@@ -2347,7 +2347,7 @@ fn install_editable_bare_cli() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + black==0.1.0 (from file://[WORKSPACE]/test/packages/black_editable)
+     + black==0.1.0 (from `file://[WORKSPACE]/test/packages/black_editable`)
     "
     );
 }
@@ -2372,7 +2372,7 @@ fn install_editable_unnamed_no_build() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + example==0.1.0 (from file://[TEMP_DIR]/editable)
+     + example==0.1.0 (from `file://[TEMP_DIR]/editable`)
     "
     );
 
@@ -2398,7 +2398,7 @@ fn install_editable_bare_requirements_txt() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + black==0.1.0 (from file://[WORKSPACE]/test/packages/black_editable)
+     + black==0.1.0 (from `file://[WORKSPACE]/test/packages/black_editable`)
     "
     );
 
@@ -2519,7 +2519,7 @@ fn reinstall_build_system() -> Result<()> {
     Installed 8 packages in [TIME]
      + blinker==1.7.0
      + click==8.1.7
-     + flask==3.0.0 (from https://files.pythonhosted.org/packages/d8/09/c1a7354d3925a3c6c8cfdebf4245bae67d633ffda1ba415add06ffc839c5/flask-3.0.0.tar.gz)
+     + flask==3.0.0 (from `https://files.pythonhosted.org/packages/d8/09/c1a7354d3925a3c6c8cfdebf4245bae67d633ffda1ba415add06ffc839c5/flask-3.0.0.tar.gz`)
      + flit-core==3.9.0
      + itsdangerous==2.1.2
      + jinja2==3.1.3
@@ -2665,7 +2665,7 @@ fn install_git_public_https() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+     + uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389`)
     ");
 
     context.assert_installed("uv_public_pypackage", "0.1.0");
@@ -2766,7 +2766,7 @@ fn install_git_workspace_build_requirement() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + project==0.1.0 (from git+file://[TEMP_DIR]/repository@[COMMIT]#subdirectory=packages/project)
+     + project==0.1.0 (from `git+file://[TEMP_DIR]/repository@[COMMIT]#subdirectory=packages/project`)
     ");
 
     context.assert_installed("project", "0.1.0");
@@ -2840,7 +2840,7 @@ fn install_git_checkout_marker_symlink() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + example==0.1.0 (from git+file://[TEMP_DIR]/repository@[COMMIT])
+     + example==0.1.0 (from `git+file://[TEMP_DIR]/repository@[COMMIT]`)
     ");
 
     // A repository-controlled checkout marker must not truncate an external file; see
@@ -2972,7 +2972,7 @@ fn install_git_full_commit_ignores_same_named_branch() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + example==0.1.0 (from git+file://[TEMP_DIR]/repository@[COMMIT])
+     + example==0.1.0 (from `git+file://[TEMP_DIR]/repository@[COMMIT]`)
     ");
 
     context.assert_installed("example", "0.1.0");
@@ -2987,8 +2987,8 @@ fn install_git_full_commit_ignores_same_named_branch() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - example==0.1.0 (from git+file://[TEMP_DIR]/repository@[COMMIT])
-     + example==9.9.9 (from git+file://[TEMP_DIR]/repository@[COMMIT])
+     - example==0.1.0 (from `git+file://[TEMP_DIR]/repository@[COMMIT]`)
+     + example==9.9.9 (from `git+file://[TEMP_DIR]/repository@[COMMIT]`)
     ");
 
     context.assert_installed("example", "9.9.9");
@@ -3012,7 +3012,7 @@ fn install_implicit_git_public_https() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage.git@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+     + uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage.git@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389`)
     ");
 
     context.assert_installed("uv_public_pypackage", "0.1.0");
@@ -3094,7 +3094,7 @@ fn install_git_percent_encoded_ref() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + example==0.1.0 (from git+file://[TEMP_DIR]/repository@[COMMIT]#subdirectory=packages/example)
+     + example==0.1.0 (from `git+file://[TEMP_DIR]/repository@[COMMIT]#subdirectory=packages/example`)
     ");
 
     context.assert_installed("example", "0.1.0");
@@ -3112,7 +3112,7 @@ fn install_git_unescaped_ref() {
         .arg("example @ git+https://example.com/repository@pkg@1.2.3"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `example @ git+https://example.com/repository@pkg@1.2.3`
+    error: Failed to parse: example @ git+https://example.com/repository@pkg@1.2.3
       cause: Ambiguous Git URL `https://example.com/repository@pkg@1.2.3`: the path contains multiple `@` characters. If the Git revision contains `@`, percent-encode it as `%40`
              example @ git+https://example.com/repository@pkg@1.2.3
                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -3135,7 +3135,7 @@ fn update_ref_git_public_https() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
+     + uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979`)
     ");
 
     context.assert_installed("uv_public_pypackage", "0.1.0");
@@ -3153,8 +3153,8 @@ fn update_ref_git_public_https() {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+     - uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979`)
+     + uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389`)
     ");
 
     context.assert_installed("uv_public_pypackage", "0.1.0");
@@ -3254,7 +3254,7 @@ async fn install_git_public_rate_limited_by_github_rest_api_403_response() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+     + uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389`)
     ");
 }
 
@@ -3282,7 +3282,7 @@ async fn install_git_public_rate_limited_by_github_rest_api_429_response() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+     + uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389`)
     ");
 }
 
@@ -3341,7 +3341,7 @@ fn install_git_public_https_exact_commit() {
           Built uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+     + uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389`)
     ");
 
     // Run the exact same command again, with that commit now in cache.
@@ -3376,7 +3376,7 @@ fn install_git_private_https_pat() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-private-pypackage==0.1.0 (from git+https://****@github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
+     + uv-private-pypackage==0.1.0 (from `git+https://****@github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071`)
     ");
 
     context.assert_installed("uv_private_pypackage", "0.1.0");
@@ -3401,8 +3401,8 @@ fn install_git_private_https_pat_mixed_with_public() {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + uv-private-pypackage==0.1.0 (from git+https://****@github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+     + uv-private-pypackage==0.1.0 (from `git+https://****@github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071`)
+     + uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389`)
     ");
 
     context.assert_installed("uv_private_pypackage", "0.1.0");
@@ -3430,8 +3430,8 @@ fn install_git_private_https_multiple_pat() {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + uv-private-pypackage==0.1.0 (from git+https://****@github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
-     + uv-private-pypackage-2==0.1.0 (from git+https://****@github.com/astral-test/uv-private-pypackage-2@45c0bec7365710f09b1f4dbca61c86dde9537e4e)
+     + uv-private-pypackage==0.1.0 (from `git+https://****@github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071`)
+     + uv-private-pypackage-2==0.1.0 (from `git+https://****@github.com/astral-test/uv-private-pypackage-2@45c0bec7365710f09b1f4dbca61c86dde9537e4e`)
     ");
 
     context.assert_installed("uv_private_pypackage", "0.1.0");
@@ -3465,7 +3465,7 @@ fn install_git_private_https_pat_at_ref() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-private-pypackage==0.1.0 (from git+https://****@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac)
+     + uv-private-pypackage==0.1.0 (from `git+https://****@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac`)
     ");
 
     context.assert_installed("uv_private_pypackage", "0.1.0");
@@ -3487,7 +3487,7 @@ fn install_git_private_https_pat_and_username() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-private-pypackage==0.1.0 (from git+https://astral-test-bot:****@github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
+     + uv-private-pypackage==0.1.0 (from `git+https://astral-test-bot:****@github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071`)
     ");
 
     context.assert_installed("uv_private_pypackage", "0.1.0");
@@ -3541,8 +3541,8 @@ fn install_github_artifact_private_https_pat_mixed_with_public() {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + uv-private-pypackage==0.1.0 (from https://****@raw.githubusercontent.com/astral-test/uv-private-pypackage/main/dist/uv_private_pypackage-0.1.0-py3-none-any.whl)
-     + uv-public-pypackage==0.1.0 (from https://raw.githubusercontent.com/astral-test/uv-public-pypackage/main/dist/uv_public_pypackage-0.1.0-py3-none-any.whl)
+     + uv-private-pypackage==0.1.0 (from `https://****@raw.githubusercontent.com/astral-test/uv-private-pypackage/main/dist/uv_private_pypackage-0.1.0-py3-none-any.whl`)
+     + uv-public-pypackage==0.1.0 (from `https://raw.githubusercontent.com/astral-test/uv-public-pypackage/main/dist/uv_public_pypackage-0.1.0-py3-none-any.whl`)
     ");
 
     context.assert_installed("uv_private_pypackage", "0.1.0");
@@ -3571,8 +3571,8 @@ fn install_github_artifact_private_https_multiple_pat() {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + uv-private-pypackage==0.1.0 (from https://astral-test-bot:****@raw.githubusercontent.com/astral-test/uv-private-pypackage/main/dist/uv_private_pypackage-0.1.0-py3-none-any.whl)
-     + uv-private-pypackage-2==0.1.0 (from https://astral-test-bot:****@raw.githubusercontent.com/astral-test/uv-private-pypackage-2/main/dist/uv_private_pypackage_2-0.1.0-py3-none-any.whl)
+     + uv-private-pypackage==0.1.0 (from `https://astral-test-bot:****@raw.githubusercontent.com/astral-test/uv-private-pypackage/main/dist/uv_private_pypackage-0.1.0-py3-none-any.whl`)
+     + uv-private-pypackage-2==0.1.0 (from `https://astral-test-bot:****@raw.githubusercontent.com/astral-test/uv-private-pypackage-2/main/dist/uv_private_pypackage_2-0.1.0-py3-none-any.whl`)
     ");
 
     context.assert_installed("uv_private_pypackage", "0.1.0");
@@ -4033,7 +4033,7 @@ fn only_binary_editable() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + anyio==4.3.0+foo (from file://[WORKSPACE]/test/packages/anyio_local)
+     + anyio==4.3.0+foo (from `file://[WORKSPACE]/test/packages/anyio_local`)
     "
     );
 }
@@ -4059,8 +4059,8 @@ fn only_binary_dependent_editables() {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + first-local==0.1.0 (from file://[WORKSPACE]/test/packages/dependent_locals/first_local)
-     + second-local==0.1.0 (from file://[WORKSPACE]/test/packages/dependent_locals/second_local)
+     + first-local==0.1.0 (from `file://[WORKSPACE]/test/packages/dependent_locals/first_local`)
+     + second-local==0.1.0 (from `file://[WORKSPACE]/test/packages/dependent_locals/second_local`)
     "
     );
 }
@@ -4087,7 +4087,7 @@ fn only_binary_editable_setup_py() {
      + httpcore==1.0.4
      + httpx==0.27.0
      + idna==3.6
-     + setup-py-editable==0.0.1 (from file://[WORKSPACE]/test/packages/setup_py_editable)
+     + setup-py-editable==0.0.1 (from `file://[WORKSPACE]/test/packages/setup_py_editable`)
      + sniffio==1.3.1
     "
     );
@@ -4311,7 +4311,7 @@ fn install_copy_long_paths() -> Result<()> {
             Resolved 1 package in [TIME]
             Prepared 1 package in [TIME]
             Installed 1 package in [TIME]
-             + long-paths==1.0.0 (from file://[TEMP_DIR]/long_paths-1.0.0-py3-none-any.whl)
+             + long-paths==1.0.0 (from `file://[TEMP_DIR]/long_paths-1.0.0-py3-none-any.whl`)
             ");
             assert_eq!(fs::read_to_string(&destination)?, "data");
         }
@@ -4380,7 +4380,7 @@ fn install_executable_clone() -> anyhow::Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + executable-file==1.0.0 (from file://[WORKSPACE]/test/packages/executable_file)
+     + executable-file==1.0.0 (from `file://[WORKSPACE]/test/packages/executable_file`)
     "
     );
 
@@ -4550,7 +4550,7 @@ fn no_deps_editable() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + black==0.1.0 (from file://[WORKSPACE]/test/packages/black_editable)
+     + black==0.1.0 (from `file://[WORKSPACE]/test/packages/black_editable`)
     "
     );
 
@@ -4589,7 +4589,7 @@ fn install_no_downgrade() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + idna==1000 (from file://[TEMP_DIR]/idna)
+     + idna==1000 (from `file://[TEMP_DIR]/idna`)
     "
     );
 
@@ -4634,7 +4634,7 @@ fn install_no_downgrade() -> Result<()> {
     Uninstalled 3 packages in [TIME]
     Installed 3 packages in [TIME]
      ~ anyio==4.3.0
-     - idna==1000 (from file://[TEMP_DIR]/idna)
+     - idna==1000 (from `file://[TEMP_DIR]/idna`)
      + idna==3.6
      ~ sniffio==1.3.1
     "
@@ -5038,7 +5038,7 @@ fn build_transitive_prerelease() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0 (from `file://[TEMP_DIR]/`)
     "
     );
 
@@ -5521,7 +5521,7 @@ fn install_sdist_resolution_lowest() -> Result<()> {
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
-     + anyio==4.2.0 (from https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz)
+     + anyio==4.2.0 (from `https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz`)
      + idna==3.6
      + sniffio==1.3.1
     "
@@ -5552,7 +5552,7 @@ fn direct_url_zip_file_bunk_permissions() -> Result<()> {
     Prepared 5 packages in [TIME]
     Installed 6 packages in [TIME]
      + distro==1.9.0
-     + opensafely-pipeline==2023.11.6.145820 (from https://github.com/opensafely-core/pipeline/archive/refs/tags/v2023.11.06.145820.zip)
+     + opensafely-pipeline==2023.11.6.145820 (from `https://github.com/opensafely-core/pipeline/archive/refs/tags/v2023.11.06.145820.zip`)
      + pydantic==1.10.14
      + ruyaml==0.91.0
      + setuptools==69.2.0
@@ -5754,7 +5754,7 @@ fn config_settings_path() -> Result<()> {
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
-     + setuptools-editable==0.1.0 (from file://[WORKSPACE]/test/packages/setuptools_editable)
+     + setuptools-editable==0.1.0 (from `file://[WORKSPACE]/test/packages/setuptools_editable`)
     "
     );
 
@@ -5777,7 +5777,7 @@ fn config_settings_path() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ setuptools-editable==0.1.0 (from file://[WORKSPACE]/test/packages/setuptools_editable)
+     ~ setuptools-editable==0.1.0 (from `file://[WORKSPACE]/test/packages/setuptools_editable`)
     "
     );
 
@@ -5909,7 +5909,7 @@ requires-python = ">=3.8"
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.0.0
-     + example==0.0.0 (from file://[TEMP_DIR]/editable)
+     + example==0.0.0 (from `file://[TEMP_DIR]/editable`)
      + idna==3.6
      + sniffio==1.3.1
     "
@@ -5949,7 +5949,7 @@ requires-python = ">=3.8"
     Installed 2 packages in [TIME]
      - anyio==4.0.0
      + anyio==3.7.1
-     ~ example==0.0.0 (from file://[TEMP_DIR]/editable)
+     ~ example==0.0.0 (from `file://[TEMP_DIR]/editable`)
     "
     );
 
@@ -5992,7 +5992,7 @@ dependencies = {file = ["dependencies.txt"]}
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.0.0
-     + example==0.1.0 (from file://[TEMP_DIR]/editable)
+     + example==0.1.0 (from `file://[TEMP_DIR]/editable`)
      + idna==3.6
      + sniffio==1.3.1
     "
@@ -6042,7 +6042,7 @@ requires-python = ">=3.8"
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.0.0
-     + example==0.0.0 (from file://[TEMP_DIR]/editable)
+     + example==0.0.0 (from `file://[TEMP_DIR]/editable`)
      + idna==3.6
      + sniffio==1.3.1
     "
@@ -6082,7 +6082,7 @@ requires-python = ">=3.8"
     Installed 2 packages in [TIME]
      - anyio==4.0.0
      + anyio==3.7.1
-     ~ example==0.0.0 (from file://[TEMP_DIR]/editable)
+     ~ example==0.0.0 (from `file://[TEMP_DIR]/editable`)
     "
     );
 
@@ -6127,7 +6127,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.0.0
-     + example==0.0.0 (from file://[TEMP_DIR]/editable)
+     + example==0.0.0 (from `file://[TEMP_DIR]/editable`)
      + idna==3.6
      + sniffio==1.3.1
     "
@@ -6156,7 +6156,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ example==0.0.0 (from file://[TEMP_DIR]/editable)
+     ~ example==0.0.0 (from `file://[TEMP_DIR]/editable`)
     "
     );
 
@@ -6173,7 +6173,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ example==0.0.0 (from file://[TEMP_DIR]/editable)
+     ~ example==0.0.0 (from `file://[TEMP_DIR]/editable`)
     "
     );
 
@@ -6229,7 +6229,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ example==0.0.0 (from file://[TEMP_DIR]/editable)
+     ~ example==0.0.0 (from `file://[TEMP_DIR]/editable`)
     "
     );
 
@@ -6246,7 +6246,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ example==0.0.0 (from file://[TEMP_DIR]/editable)
+     ~ example==0.0.0 (from `file://[TEMP_DIR]/editable`)
     "
     );
 
@@ -6304,7 +6304,7 @@ fn invalidate_path_on_worktree_packed_commit() -> Result<()> {
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.0.0
-     + example==0.0.0 (from file://[TEMP_DIR]/editable)
+     + example==0.0.0 (from `file://[TEMP_DIR]/editable`)
      + idna==3.6
      + sniffio==1.3.1
     "
@@ -6335,7 +6335,7 @@ fn invalidate_path_on_worktree_packed_commit() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ example==0.0.0 (from file://[TEMP_DIR]/editable)
+     ~ example==0.0.0 (from `file://[TEMP_DIR]/editable`)
     "
     );
 
@@ -6373,7 +6373,7 @@ fn invalidate_path_on_env_var() -> Result<()> {
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.0.0
-     + example==0.0.0 (from file://[TEMP_DIR]/)
+     + example==0.0.0 (from `file://[TEMP_DIR]/`)
      + idna==3.6
      + sniffio==1.3.1
     "
@@ -6401,7 +6401,7 @@ fn invalidate_path_on_env_var() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ example==0.0.0 (from file://[TEMP_DIR]/)
+     ~ example==0.0.0 (from `file://[TEMP_DIR]/`)
     "
     );
 
@@ -6420,7 +6420,7 @@ fn path_name_version_change() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + ok==1.0.0 (from file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl)
+     + ok==1.0.0 (from `file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl`)
     "
     );
 
@@ -6444,7 +6444,7 @@ fn path_name_version_change() {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ ok==1.0.0 (from file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl)
+     ~ ok==1.0.0 (from `file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl`)
     "
     );
 
@@ -6457,8 +6457,8 @@ fn path_name_version_change() {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - ok==1.0.0 (from file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl)
-     + ok==2.0.0 (from file://[WORKSPACE]/test/links/ok-2.0.0-py3-none-any.whl)
+     - ok==1.0.0 (from `file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl`)
+     + ok==2.0.0 (from `file://[WORKSPACE]/test/links/ok-2.0.0-py3-none-any.whl`)
     "
     );
 
@@ -6470,8 +6470,8 @@ fn path_name_version_change() {
     Resolved 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - ok==2.0.0 (from file://[WORKSPACE]/test/links/ok-2.0.0-py3-none-any.whl)
-     + ok==1.0.0 (from file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl)
+     - ok==2.0.0 (from `file://[WORKSPACE]/test/links/ok-2.0.0-py3-none-any.whl`)
+     + ok==1.0.0 (from `file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl`)
     "
     );
 }
@@ -6503,7 +6503,7 @@ fn path_changes_with_same_name() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + ok==1.0.0 (from file://[TEMP_DIR]/one/ok-1.0.0-py3-none-any.whl)
+     + ok==1.0.0 (from `file://[TEMP_DIR]/one/ok-1.0.0-py3-none-any.whl`)
     "
     );
 
@@ -6515,8 +6515,8 @@ fn path_changes_with_same_name() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - ok==1.0.0 (from file://[TEMP_DIR]/one/ok-1.0.0-py3-none-any.whl)
-     + ok==1.0.0 (from file://[TEMP_DIR]/two/ok-1.0.0-py3-none-any.whl)
+     - ok==1.0.0 (from `file://[TEMP_DIR]/one/ok-1.0.0-py3-none-any.whl`)
+     + ok==1.0.0 (from `file://[TEMP_DIR]/two/ok-1.0.0-py3-none-any.whl`)
     "
     );
 
@@ -6553,7 +6553,7 @@ requires-python = ">=3.11,<3.13"
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.0.0
-     + example==0.1.0 (from file://[TEMP_DIR]/editable)
+     + example==0.1.0 (from `file://[TEMP_DIR]/editable`)
      + idna==3.6
      + sniffio==1.3.1
     "
@@ -6635,7 +6635,7 @@ build-backend = "hatchling.build"
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + example==0.0.0 (from file://[TEMP_DIR]/child)
+     + example==0.0.0 (from `file://[TEMP_DIR]/child`)
     "
     );
 
@@ -6721,7 +6721,7 @@ fn no_build_isolation() -> Result<()> {
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
-     + anyio==0.0.0 (from https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz)
+     + anyio==0.0.0 (from `https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`)
      + idna==3.6
      + sniffio==1.3.1
     "
@@ -6785,7 +6785,7 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
-     + anyio==0.0.0 (from https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz)
+     + anyio==0.0.0 (from `https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`)
      + idna==3.6
      + sniffio==1.3.1
     "
@@ -6963,7 +6963,7 @@ fn dry_run_install_url_dependency() -> std::result::Result<(), Box<dyn std::erro
     Resolved 3 packages in [TIME]
     Would download 3 packages
     Would install 3 packages
-     + anyio @ https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz
+     + anyio @ `https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz`
      + idna==3.6
      + sniffio==1.3.1
     "
@@ -6988,7 +6988,7 @@ fn dry_run_uninstall_url_dependency() -> std::result::Result<(), Box<dyn std::er
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
-     + anyio==4.2.0 (from https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz)
+     + anyio==4.2.0 (from `https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz`)
      + idna==3.6
      + sniffio==1.3.1
     "
@@ -7009,7 +7009,7 @@ fn dry_run_uninstall_url_dependency() -> std::result::Result<(), Box<dyn std::er
     Would download 1 package
     Would uninstall 1 package
     Would install 1 package
-     - anyio==4.2.0 (from https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz)
+     - anyio==4.2.0 (from `https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz`)
      + anyio==4.3.0
     "
     );
@@ -7571,7 +7571,7 @@ fn deptry_gitignore() {
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + cffi==1.16.0
-     + deptry-reproducer==0.1.0 (from file://[WORKSPACE]/test/packages/deptry_reproducer/deptry_reproducer-0.1.0.tar.gz)
+     + deptry-reproducer==0.1.0 (from `file://[WORKSPACE]/test/packages/deptry_reproducer/deptry_reproducer-0.1.0.tar.gz`)
      + pycparser==2.21
     "
     );
@@ -7682,7 +7682,7 @@ fn already_installed_dependent_editable() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + first-local==0.1.0 (from file://[WORKSPACE]/test/packages/dependent_locals/first_local)
+     + first-local==0.1.0 (from `file://[WORKSPACE]/test/packages/dependent_locals/first_local`)
     "
     );
 
@@ -7700,7 +7700,7 @@ fn already_installed_dependent_editable() {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + second-local==0.1.0 (from file://[WORKSPACE]/test/packages/dependent_locals/second_local)
+     + second-local==0.1.0 (from `file://[WORKSPACE]/test/packages/dependent_locals/second_local`)
     "
     );
 
@@ -7715,7 +7715,7 @@ fn already_installed_dependent_editable() {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ first-local==0.1.0 (from file://[WORKSPACE]/test/packages/dependent_locals/first_local)
+     ~ first-local==0.1.0 (from `file://[WORKSPACE]/test/packages/dependent_locals/first_local`)
     "
     );
 
@@ -7751,7 +7751,7 @@ fn already_installed_dependent_editable() {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ first-local==0.1.0 (from file://[WORKSPACE]/test/packages/dependent_locals/first_local)
+     ~ first-local==0.1.0 (from `file://[WORKSPACE]/test/packages/dependent_locals/first_local`)
     "
     );
 }
@@ -7773,7 +7773,7 @@ fn already_installed_local_path_dependent() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + first-local==0.1.0 (from file://[WORKSPACE]/test/packages/dependent_locals/first_local)
+     + first-local==0.1.0 (from `file://[WORKSPACE]/test/packages/dependent_locals/first_local`)
     "
     );
 
@@ -7790,7 +7790,7 @@ fn already_installed_local_path_dependent() {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + second-local==0.1.0 (from file://[WORKSPACE]/test/packages/dependent_locals/second_local)
+     + second-local==0.1.0 (from `file://[WORKSPACE]/test/packages/dependent_locals/second_local`)
     "
     );
 
@@ -7804,7 +7804,7 @@ fn already_installed_local_path_dependent() {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ first-local==0.1.0 (from file://[WORKSPACE]/test/packages/dependent_locals/first_local)
+     ~ first-local==0.1.0 (from `file://[WORKSPACE]/test/packages/dependent_locals/first_local`)
     "
     );
 
@@ -7818,7 +7818,7 @@ fn already_installed_local_path_dependent() {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ first-local==0.1.0 (from file://[WORKSPACE]/test/packages/dependent_locals/first_local)
+     ~ first-local==0.1.0 (from `file://[WORKSPACE]/test/packages/dependent_locals/first_local`)
     "
     );
 
@@ -7853,8 +7853,8 @@ fn already_installed_local_path_dependent() {
     Prepared 2 packages in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     ~ first-local==0.1.0 (from file://[WORKSPACE]/test/packages/dependent_locals/first_local)
-     ~ second-local==0.1.0 (from file://[WORKSPACE]/test/packages/dependent_locals/second_local)
+     ~ first-local==0.1.0 (from `file://[WORKSPACE]/test/packages/dependent_locals/first_local`)
+     ~ second-local==0.1.0 (from `file://[WORKSPACE]/test/packages/dependent_locals/second_local`)
     "
     );
 
@@ -7874,7 +7874,7 @@ fn already_installed_local_path_dependent() {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ second-local==0.1.0 (from file://[WORKSPACE]/test/packages/dependent_locals/second_local)
+     ~ second-local==0.1.0 (from `file://[WORKSPACE]/test/packages/dependent_locals/second_local`)
     "
     );
 
@@ -7896,8 +7896,8 @@ fn already_installed_local_path_dependent() {
     Prepared 2 packages in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     ~ first-local==0.1.0 (from file://[WORKSPACE]/test/packages/dependent_locals/first_local)
-     ~ second-local==0.1.0 (from file://[WORKSPACE]/test/packages/dependent_locals/second_local)
+     ~ first-local==0.1.0 (from `file://[WORKSPACE]/test/packages/dependent_locals/first_local`)
+     ~ second-local==0.1.0 (from `file://[WORKSPACE]/test/packages/dependent_locals/second_local`)
     "
     );
 }
@@ -7916,7 +7916,7 @@ fn already_installed_local_version_of_remote_package() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + anyio==4.3.0+foo (from file://[WORKSPACE]/test/packages/anyio_local)
+     + anyio==4.3.0+foo (from `file://[WORKSPACE]/test/packages/anyio_local`)
     "
     );
 
@@ -7969,7 +7969,7 @@ fn already_installed_local_version_of_remote_package() {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ anyio==4.3.0+foo (from file://[WORKSPACE]/test/packages/anyio_local)
+     ~ anyio==4.3.0+foo (from `file://[WORKSPACE]/test/packages/anyio_local`)
     "
     );
 
@@ -7984,7 +7984,7 @@ fn already_installed_local_version_of_remote_package() {
     Prepared 3 packages in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 3 packages in [TIME]
-     - anyio==4.3.0+foo (from file://[WORKSPACE]/test/packages/anyio_local)
+     - anyio==4.3.0+foo (from `file://[WORKSPACE]/test/packages/anyio_local`)
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
@@ -8001,7 +8001,7 @@ fn already_installed_local_version_of_remote_package() {
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==4.3.0
-     + anyio==4.3.0+foo (from file://[WORKSPACE]/test/packages/anyio_local)
+     + anyio==4.3.0+foo (from `file://[WORKSPACE]/test/packages/anyio_local`)
     "
     );
 
@@ -8116,7 +8116,7 @@ fn already_installed_remote_url() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+     + uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389`)
     ");
 
     context.assert_installed("uv_public_pypackage", "0.1.0");
@@ -8187,7 +8187,7 @@ fn already_installed_remote_url() {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+     ~ uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389`)
     ");
 
     // Request installation again with a different version
@@ -8462,7 +8462,7 @@ fn find_links_relative_to_working_directory() -> Result<()> {
         .arg("requirements/requirements.txt"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Invalid URL in `requirements/requirements.txt` at position 11: `./links`
+    error: Invalid URL in `requirements/requirements.txt` at position 11: ./links
       cause: relative URL without a base
     "
     );
@@ -9086,7 +9086,7 @@ fn require_hashes_unnamed() -> Result<()> {
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
-     + anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
+     + anyio==4.0.0 (from `https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`)
      + idna==3.6
      + sniffio==1.3.1
     "
@@ -9128,7 +9128,7 @@ fn require_hashes_unnamed_repeated() -> Result<()> {
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
-     + anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
+     + anyio==4.0.0 (from `https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`)
      + idna==3.6
      + sniffio==1.3.1
     "
@@ -9707,7 +9707,7 @@ fn verify_hashes_editable() -> Result<()> {
      + aiohttp==3.9.3
      + aiosignal==1.3.1
      + attrs==23.2.0
-     + black==0.1.0 (from file://[WORKSPACE]/test/packages/black_editable)
+     + black==0.1.0 (from `file://[WORKSPACE]/test/packages/black_editable`)
      + frozenlist==1.4.1
      + idna==3.6
      + multidict==6.0.5
@@ -9905,14 +9905,14 @@ fn tool_uv_sources() -> Result<()> {
     Prepared 9 packages in [TIME]
     Installed 9 packages in [TIME]
      + anyio==4.3.0
-     + charset-normalizer==3.4.1 (from git+https://github.com/jawah/charset_normalizer@ffdf7f5f08beb0ceb92dc0637e97382ba27cecfa)
+     + charset-normalizer==3.4.1 (from `git+https://github.com/jawah/charset_normalizer@ffdf7f5f08beb0ceb92dc0637e97382ba27cecfa`)
      + colorama==0.4.6
      + idna==3.6
-     + packaging==24.1.dev0 (from git+https://github.com/pypa/packaging@32deafe8668a2130a3366b98154914d188f3718e)
-     + poetry-editable==0.1.0 (from file://[TEMP_DIR]/poetry_editable)
+     + packaging==24.1.dev0 (from `git+https://github.com/pypa/packaging@32deafe8668a2130a3366b98154914d188f3718e`)
+     + poetry-editable==0.1.0 (from `file://[TEMP_DIR]/poetry_editable`)
      + sniffio==1.3.1
-     + tqdm==4.66.0 (from https://files.pythonhosted.org/packages/a5/d6/502a859bac4ad5e274255576cd3e15ca273cdb91731bc39fb840dd422ee9/tqdm-4.66.0-py3-none-any.whl)
-     + urllib3==2.2.1 (from https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.whl)
+     + tqdm==4.66.0 (from `https://files.pythonhosted.org/packages/a5/d6/502a859bac4ad5e274255576cd3e15ca273cdb91731bc39fb840dd422ee9/tqdm-4.66.0-py3-none-any.whl`)
+     + urllib3==2.2.1 (from `https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.whl`)
     "
     );
 
@@ -9956,7 +9956,7 @@ fn tool_uv_sources_is_in_preview() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
+     + iniconfig==2.0.0 (from `https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`)
     "
     );
 
@@ -9991,8 +9991,8 @@ fn recursive_extra_transitive_url() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
-     + project==0.0.0 (from file://[TEMP_DIR]/)
+     + iniconfig==2.0.0 (from `https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`)
+     + project==0.0.0 (from `file://[TEMP_DIR]/`)
     ");
 
     Ok(())
@@ -10012,7 +10012,7 @@ fn prefer_editable() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + black==0.1.0 (from file://[WORKSPACE]/test/packages/black_editable)
+     + black==0.1.0 (from `file://[WORKSPACE]/test/packages/black_editable`)
     "
     );
 
@@ -10038,7 +10038,7 @@ fn prefer_editable() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + black==0.1.0 (from file://[WORKSPACE]/test/packages/black_editable)
+     + black==0.1.0 (from `file://[WORKSPACE]/test/packages/black_editable`)
     "
     );
 
@@ -10298,7 +10298,7 @@ fn unmanaged() -> Result<()> {
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.7.0
-     + example==0.0.0 (from file://[TEMP_DIR]/)
+     + example==0.0.0 (from `file://[TEMP_DIR]/`)
      + idna==3.6
      + sniffio==1.3.1
     "
@@ -10808,8 +10808,8 @@ fn install_build_isolation_package() -> Result<()> {
     Installed 1 package in [TIME]
     Prepared 1 package without build isolation in [TIME]
     Installed 1 package in [TIME]
-     + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz)
-     + project==0.1.0 (from file://[TEMP_DIR]/project)
+     + iniconfig==2.0.0 (from `https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`)
+     + project==0.1.0 (from `file://[TEMP_DIR]/project`)
     ");
 
     Ok(())
@@ -10825,7 +10825,7 @@ fn invalid_extension() {
         , @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.baz`
+    error: Failed to parse: ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.baz
       cause: Expected direct URL (`https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.baz`) to end in a supported file extension: `.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`
              ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.baz
                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -10842,7 +10842,7 @@ fn no_extension() {
         , @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6`
+    error: Failed to parse: ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6
       cause: Expected direct URL (`https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6`) to end in a supported file extension: `.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`
              ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6
                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -10917,7 +10917,7 @@ fn stale_egg_info() -> Result<()> {
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
-     + project==0.0.0 (from file://[TEMP_DIR]/)
+     + project==0.0.0 (from `file://[TEMP_DIR]/`)
     "
     );
 
@@ -10947,7 +10947,7 @@ fn stale_egg_info() -> Result<()> {
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     ~ project==0.0.0 (from file://[TEMP_DIR]/)
+     ~ project==0.0.0 (from `file://[TEMP_DIR]/`)
      + sniffio==1.3.1
     "
     );
@@ -11036,7 +11036,7 @@ fn missing_top_level() {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    warning: Failed to uninstall package at [SITE_PACKAGES]/suds_community.egg-info due to missing `top_level.txt` file. Installation may result in an incomplete environment.
+    warning: Failed to uninstall package at `[SITE_PACKAGES]/suds_community.egg-info` due to missing `top_level.txt` file. Installation may result in an incomplete environment.
     Uninstalled 2 packages in [TIME]
     Installed 1 package in [TIME]
      ~ suds-community==0.8.5
@@ -11246,7 +11246,7 @@ fn missing_git_prefix() -> Result<()> {
         .arg("workspace-in-root-test @ https://github.com/astral-sh/workspace-in-root-test"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `workspace-in-root-test @ https://github.com/astral-sh/workspace-in-root-test`
+    error: Failed to parse: workspace-in-root-test @ https://github.com/astral-sh/workspace-in-root-test
       cause: Direct URL (`https://github.com/astral-sh/workspace-in-root-test`) references a Git repository, but is missing the `git+` prefix (e.g., `git+https://github.com/astral-sh/workspace-in-root-test`)
              workspace-in-root-test @ https://github.com/astral-sh/workspace-in-root-test
                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -11453,7 +11453,7 @@ fn static_metadata_source_tree() -> Result<()> {
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==3.7.0
-     + example==0.0.0 (from file://[TEMP_DIR]/)
+     + example==0.0.0 (from `file://[TEMP_DIR]/`)
      + typing-extensions==4.10.0
     "
     );
@@ -11575,9 +11575,9 @@ fn direct_url_hash_source_tree_dependency_multiple_hash_algorithms() -> Result<(
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
-     + anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl#sha512=f30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2)
+     + anyio==4.0.0 (from `https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl#sha512=f30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2`)
      + idna==3.6
-     + pylock==0.1.0 (from file://[TEMP_DIR]/)
+     + pylock==0.1.0 (from `file://[TEMP_DIR]/`)
      + sniffio==1.3.1
     "
     );
@@ -11627,7 +11627,7 @@ fn static_metadata_already_installed() -> Result<()> {
     Resolved 3 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + example==0.0.0 (from file://[TEMP_DIR]/)
+     + example==0.0.0 (from `file://[TEMP_DIR]/`)
     "
     );
 
@@ -11694,7 +11694,7 @@ fn direct_url_json_git_preserves_repository_url() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage.git@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+     + uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage.git@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389`)
     "
     );
 
@@ -11729,7 +11729,7 @@ fn direct_url_json_git_tag() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
+     + uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979`)
     "
     );
 
@@ -11763,7 +11763,7 @@ fn direct_url_json_direct_url() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + source-distribution==0.0.3 (from https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz)
+     + source-distribution==0.0.3 (from `https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz`)
     "
     );
 
@@ -12131,7 +12131,7 @@ fn other_sources_group() -> Result<()> {
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
-     + myproject==0.1.0 (from file://[TEMP_DIR]/)
+     + myproject==0.1.0 (from `file://[TEMP_DIR]/`)
      + sortedcontainers==2.4.0
      + typing-extensions==4.10.0
     ");
@@ -12149,7 +12149,7 @@ fn other_sources_group() -> Result<()> {
     Installed 5 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + poetry-editable==0.1.0 (from file://[WORKSPACE]/test/packages/poetry_editable)
+     + poetry-editable==0.1.0 (from `file://[WORKSPACE]/test/packages/poetry_editable`)
      + sniffio==1.3.1
      + sortedcontainers==2.4.0
     ");
@@ -12609,8 +12609,8 @@ fn no_sources_workspace_discovery() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + anyio==2.0.0 (from file://[TEMP_DIR]/anyio)
-     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + anyio==2.0.0 (from `file://[TEMP_DIR]/anyio`)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/`)
     "
     );
 
@@ -12624,9 +12624,9 @@ fn no_sources_workspace_discovery() -> Result<()> {
     Prepared 4 packages in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 4 packages in [TIME]
-     - anyio==2.0.0 (from file://[TEMP_DIR]/anyio)
+     - anyio==2.0.0 (from `file://[TEMP_DIR]/anyio`)
      + anyio==4.3.0
-     ~ foo==1.0.0 (from file://[TEMP_DIR]/)
+     ~ foo==1.0.0 (from `file://[TEMP_DIR]/`)
      + idna==3.6
      + sniffio==1.3.1
     "
@@ -12643,8 +12643,8 @@ fn no_sources_workspace_discovery() -> Result<()> {
     Uninstalled 2 packages in [TIME]
     Installed 2 packages in [TIME]
      - anyio==4.3.0
-     + anyio==2.0.0 (from file://[TEMP_DIR]/anyio)
-     ~ foo==1.0.0 (from file://[TEMP_DIR]/)
+     + anyio==2.0.0 (from `file://[TEMP_DIR]/anyio`)
+     ~ foo==1.0.0 (from `file://[TEMP_DIR]/`)
     "
     );
 
@@ -12659,9 +12659,9 @@ fn no_sources_workspace_discovery() -> Result<()> {
     Prepared 2 packages in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     - anyio==2.0.0 (from file://[TEMP_DIR]/anyio)
+     - anyio==2.0.0 (from `file://[TEMP_DIR]/anyio`)
      + anyio==4.3.0
-     ~ foo==1.0.0 (from file://[TEMP_DIR]/)
+     ~ foo==1.0.0 (from `file://[TEMP_DIR]/`)
     "
     );
 
@@ -12677,8 +12677,8 @@ fn no_sources_workspace_discovery() -> Result<()> {
     Uninstalled 2 packages in [TIME]
     Installed 2 packages in [TIME]
      - anyio==4.3.0
-     + anyio==2.0.0 (from file://[TEMP_DIR]/anyio)
-     ~ foo==1.0.0 (from file://[TEMP_DIR]/)
+     + anyio==2.0.0 (from `file://[TEMP_DIR]/anyio`)
+     ~ foo==1.0.0 (from `file://[TEMP_DIR]/`)
     "
     );
 
@@ -12694,9 +12694,9 @@ fn no_sources_workspace_discovery() -> Result<()> {
     Prepared 2 packages in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     - anyio==2.0.0 (from file://[TEMP_DIR]/anyio)
+     - anyio==2.0.0 (from `file://[TEMP_DIR]/anyio`)
      + anyio==4.3.0
-     ~ foo==1.0.0 (from file://[TEMP_DIR]/)
+     ~ foo==1.0.0 (from `file://[TEMP_DIR]/`)
     "
     );
 
@@ -12743,8 +12743,8 @@ fn pip_install_no_sources_package() -> Result<()> {
     Installed 5 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + iniconfig==2.0.0 (from git+https://github.com/pytest-dev/iniconfig@93f5930e668c0d1ddf4597e38dd0dea4e2665e7a)
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + iniconfig==2.0.0 (from `git+https://github.com/pytest-dev/iniconfig@93f5930e668c0d1ddf4597e38dd0dea4e2665e7a`)
+     + project==0.1.0 (from `file://[TEMP_DIR]/`)
      + sniffio==1.3.1
     ");
 
@@ -12772,7 +12772,7 @@ fn install_git_with_git_envs_set() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+     + uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389`)
     ");
 
     context.assert_installed("uv_public_pypackage", "0.1.0");
@@ -12785,7 +12785,7 @@ fn unsupported_git_scheme() {
         .arg("git+fantasy://foo"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `git+fantasy://foo`
+    error: Failed to parse: git+fantasy://foo
       cause: Unsupported Git URL scheme `fantasy:` in `fantasy://foo` (expected one of `https:`, `ssh:`, or `file:`)
              git+fantasy://foo
              ^^^^^^^^^^^^^^^^^
@@ -12952,7 +12952,7 @@ def main():
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + mylib==0.1.0 (from git+file://[TEMP_DIR]/mylib@COMMIT_HASH)
+     + mylib==0.1.0 (from `git+file://[TEMP_DIR]/mylib@COMMIT_HASH`)
     ");
 
     Ok(())
@@ -12972,7 +12972,7 @@ fn install_git_submodule_remote() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-submodule-pypackage.git@d2c44b87eef25896dd30a6e55d4689b918180c7b)
+     + uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-submodule-pypackage.git@d2c44b87eef25896dd30a6e55d4689b918180c7b`)
     ");
 }
 
@@ -12992,7 +12992,7 @@ fn install_git_submodule_remote_relative() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-submodule-pypackage.git@377720a1a7f48279bbfc17988454132f13644e84)
+     + uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-submodule-pypackage.git@377720a1a7f48279bbfc17988454132f13644e84`)
     ");
 }
 
@@ -13034,7 +13034,7 @@ fn change_layout_src() -> Result<()> {
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0 (from `file://[TEMP_DIR]/`)
     "
     );
 
@@ -13063,7 +13063,7 @@ fn change_layout_src() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ project==0.1.0 (from file://[TEMP_DIR]/)
+     ~ project==0.1.0 (from `file://[TEMP_DIR]/`)
     "
     );
 
@@ -13119,7 +13119,7 @@ fn change_layout_custom_directory() -> Result<()> {
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0 (from `file://[TEMP_DIR]/`)
     "
     );
 
@@ -13142,7 +13142,7 @@ fn change_layout_custom_directory() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ project==0.1.0 (from file://[TEMP_DIR]/)
+     ~ project==0.1.0 (from `file://[TEMP_DIR]/`)
     "
     );
 
@@ -13165,7 +13165,7 @@ fn change_layout_custom_directory() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ project==0.1.0 (from file://[TEMP_DIR]/)
+     ~ project==0.1.0 (from `file://[TEMP_DIR]/`)
     "
     );
 
@@ -13305,7 +13305,7 @@ fn pep_751_install_invalid_artifact_urls() -> Result<()> {
         .arg("pylock.toml"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Invalid artifact URL: `data:application/octet-stream,ignored`
+    error: Invalid artifact URL: data:application/octet-stream,ignored
     "
     );
 
@@ -13330,7 +13330,7 @@ fn pep_751_install_invalid_artifact_urls() -> Result<()> {
         .arg("pylock.toml"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Invalid artifact URL: `data:application/octet-stream,ignored`
+    error: Invalid artifact URL: data:application/octet-stream,ignored
     "
     );
 
@@ -13431,7 +13431,7 @@ fn pep_751_install_directory() -> Result<()> {
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
-     + foo==1.0.0 (from file://[TEMP_DIR]/foo)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/foo`)
      + idna==3.6
      + sniffio==1.3.1
     "
@@ -13578,7 +13578,7 @@ fn pep_751_install_git() -> Result<()> {
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage.git@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
+     + uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage.git@0dacfd662c64cb4ceb16e6cf65a157a8b715b979`)
     "
     );
 
@@ -13625,7 +13625,7 @@ fn pep_751_install_url_wheel() -> Result<()> {
     ----- stderr -----
     Prepared 2 packages in [TIME]
     Installed 3 packages in [TIME]
-     + anyio==4.3.0 (from https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl)
+     + anyio==4.3.0 (from `https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl`)
      + idna==3.6
      + sniffio==1.3.1
     "
@@ -13680,7 +13680,7 @@ fn pep_751_install_url_sdist() -> Result<()> {
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + a==1.0.0 (from http://[LOCALHOST]/files/a-1.0.0.tar.gz)
+     + a==1.0.0 (from `http://[LOCALHOST]/files/a-1.0.0.tar.gz`)
     "
     );
 
@@ -13759,7 +13759,7 @@ fn pep_751_install_path_wheel() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Installed 1 package in [TIME]
-     + iniconfig==2.0.0 (from file://[TEMP_DIR]/iniconfig-2.0.0-py3-none-any.whl)
+     + iniconfig==2.0.0 (from `file://[TEMP_DIR]/iniconfig-2.0.0-py3-none-any.whl`)
     "
     );
 
@@ -13818,7 +13818,7 @@ fn pep_751_prefers_path_over_url() -> Result<()> {
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + basic-package==0.1.0
-     + ok==1.0.0 (from file://[TEMP_DIR]/ok-1.0.0-py3-none-any.whl)
+     + ok==1.0.0 (from `file://[TEMP_DIR]/ok-1.0.0-py3-none-any.whl`)
     ");
 
     Ok(())
@@ -13864,7 +13864,7 @@ fn pep_751_install_path_sdist() -> Result<()> {
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + iniconfig==2.0.0 (from file://[TEMP_DIR]/iniconfig-2.0.0.tar.gz)
+     + iniconfig==2.0.0 (from `file://[TEMP_DIR]/iniconfig-2.0.0.tar.gz`)
     "
     );
 
@@ -14105,7 +14105,7 @@ fn pep_751_hash_mismatch() -> Result<()> {
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + iniconfig==2.0.0 (from file://[TEMP_DIR]/iniconfig-2.0.0-py3-none-any.whl)
+     + iniconfig==2.0.0 (from `file://[TEMP_DIR]/iniconfig-2.0.0-py3-none-any.whl`)
     ");
 
     Ok(())
@@ -14201,7 +14201,7 @@ fn pep_751_rejects_mismatched_wheel_identity() -> Result<()> {
         .arg("pylock.toml"), @r#"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: The wheel filename "invalid.whl" is invalid: Must have a version
+    error: The wheel filename `invalid.whl` is invalid: Must have a version
     "#);
 
     Ok(())
@@ -14247,7 +14247,7 @@ fn pep_751_mix() -> Result<()> {
         .arg("pylock.dev.toml"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Multiple `pylock.toml` files specified: `pylock.toml` vs. `pylock.dev.toml`
+    error: Multiple `pylock.toml` files specified: pylock.toml vs. `pylock.dev.toml`
     "
     );
 
@@ -14708,7 +14708,7 @@ fn reserved_script_name() -> Result<()> {
     Prepared 1 package in [TIME]
     warning: The script name `activate.bash` is reserved for virtual environment activation scripts.
     Installed 1 package in [TIME]
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0 (from `file://[TEMP_DIR]/`)
     "
     );
 
@@ -14787,7 +14787,7 @@ fn install_in_prefix_symlinked_wheel_data_directory() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl)
+     + foo==0.1.0 (from `file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl`)
     ");
 
     context
@@ -14938,7 +14938,7 @@ fn reject_wheel_entrypoint_paths() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     error: Failed to install: foo-0.1.0-py3-none-any.whl (foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl))
-      cause: The wheel is invalid: Script path must resolve to a file within the scripts directory: `[TEMP_DIR]/escaped-entrypoint`
+      cause: The wheel is invalid: Script path must resolve to a file within the scripts directory: [TEMP_DIR]/escaped-entrypoint
     "
     );
 
@@ -15150,7 +15150,7 @@ fn warn_normalized_activation_wheel_entrypoint_name() -> Result<()> {
     Prepared 1 package in [TIME]
     warning: The script name `activate.bash` is reserved for virtual environment activation scripts.
     Installed 1 package in [TIME]
-     + foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl)
+     + foo==0.1.0 (from `file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl`)
     "
     );
 
@@ -15169,7 +15169,7 @@ fn accept_normalized_gui_wheel_entrypoint_paths() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl)
+     + foo==0.1.0 (from `file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl`)
     "
     );
 
@@ -15196,7 +15196,7 @@ fn accept_normalized_wheel_entrypoint_paths() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl)
+     + foo==0.1.0 (from `file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl`)
     "
     );
 
@@ -15277,7 +15277,7 @@ fn conflicting_flags_clap_bug() {
         .arg("tqdm"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: `--offline` and `--no-offline` cannot be used together. Boolean flags on different levels are currently not supported (https://github.com/clap-rs/clap/issues/6049)
+    error: `--offline` and `--no-offline` cannot be used together. Boolean flags on different levels are currently not supported (`https://github.com/clap-rs/clap/issues/6049`)
     "
     );
 }
@@ -15334,7 +15334,7 @@ fn offline_refresh_conflict_verbose() {
         .env(EnvVars::RUST_BACKTRACE, "1"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
+    DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
     DEBUG uv [VERSION] ([COMMIT] DATE)
     error: the argument `--offline` cannot be used with `--refresh`
     ");
@@ -15410,7 +15410,7 @@ fn strip_shebang_arguments() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + shebang-test==0.1.0 (from file://[TEMP_DIR]/shebang_test)
+     + shebang-test==0.1.0 (from `file://[TEMP_DIR]/shebang_test`)
     ");
 
     // Check the installed scripts have their shebangs stripped of arguments.
@@ -15510,7 +15510,7 @@ fn config_settings_package() -> Result<()> {
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
-     + setuptools-editable==0.1.0 (from file://[WORKSPACE]/test/packages/setuptools_editable)
+     + setuptools-editable==0.1.0 (from `file://[WORKSPACE]/test/packages/setuptools_editable`)
     "
     );
 
@@ -15526,7 +15526,7 @@ fn config_settings_package() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Uninstalled 1 package in [TIME]
-     - setuptools-editable==0.1.0 (from file://[WORKSPACE]/test/packages/setuptools_editable)
+     - setuptools-editable==0.1.0 (from `file://[WORKSPACE]/test/packages/setuptools_editable`)
     ");
 
     // Install the editable package with `editable_mode=compat`, scoped to the package.
@@ -15540,7 +15540,7 @@ fn config_settings_package() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + setuptools-editable==0.1.0 (from file://[WORKSPACE]/test/packages/setuptools_editable)
+     + setuptools-editable==0.1.0 (from `file://[WORKSPACE]/test/packages/setuptools_editable`)
     "
     );
 
@@ -15556,7 +15556,7 @@ fn config_settings_package() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Uninstalled 1 package in [TIME]
-     - setuptools-editable==0.1.0 (from file://[WORKSPACE]/test/packages/setuptools_editable)
+     - setuptools-editable==0.1.0 (from `file://[WORKSPACE]/test/packages/setuptools_editable`)
     ");
 
     // Install the editable package with `editable_mode=compat`, by scoped to a different package.
@@ -15570,7 +15570,7 @@ fn config_settings_package() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Installed 1 package in [TIME]
-     + setuptools-editable==0.1.0 (from file://[WORKSPACE]/test/packages/setuptools_editable)
+     + setuptools-editable==0.1.0 (from `file://[WORKSPACE]/test/packages/setuptools_editable`)
     "
     );
 
@@ -15812,7 +15812,7 @@ fn already_installed_url_dependency_no_sources() -> Result<()> {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+     + foo==0.1.0 (from `file://[TEMP_DIR]/foo`)
      + iniconfig==2.0.0
     ");
 
@@ -15823,7 +15823,7 @@ fn already_installed_url_dependency_no_sources() -> Result<()> {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + bar==0.1.0 (from file://[TEMP_DIR]/bar)
+     + bar==0.1.0 (from `file://[TEMP_DIR]/bar`)
     ");
 
     Ok(())
@@ -15954,8 +15954,8 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + a==0.2.0
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
-     + parent==0.1.0 (from file://[TEMP_DIR]/)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
+     + parent==0.1.0 (from `file://[TEMP_DIR]/`)
     ");
 
     // Change the constraints on a.
@@ -16001,8 +16001,8 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
     Installed [N] packages in [TIME]
      - a==0.2.0
      + a==0.1.0
-     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
-     ~ parent==0.1.0 (from file://[TEMP_DIR]/)
+     ~ child==0.1.0 (from `file://[TEMP_DIR]/child`)
+     ~ parent==0.1.0 (from `file://[TEMP_DIR]/`)
     ");
 
     Ok(())
@@ -16049,8 +16049,8 @@ fn overlapping_packages_warning() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + also-built-by-uv==0.1.0 (from file://[TEMP_DIR]/also-built-by-uv)
-     + built-by-uv==0.1.0 (from file://[WORKSPACE]/test/packages/built-by-uv)
+     + also-built-by-uv==0.1.0 (from `file://[TEMP_DIR]/also-built-by-uv`)
+     + built-by-uv==0.1.0 (from `file://[WORKSPACE]/test/packages/built-by-uv`)
     "
     );
 
@@ -16072,8 +16072,8 @@ fn overlapping_packages_warning() -> Result<()> {
     * also-built-by-uv (also_built_by_uv-0.1.0-py3-none-any.whl)
     * built-by-uv (built_by_uv-0.1.0-py3-none-any.whl)
     Installed 2 packages in [TIME]
-     + also-built-by-uv==0.1.0 (from file://[TEMP_DIR]/also-built-by-uv)
-     + built-by-uv==0.1.0 (from file://[WORKSPACE]/test/packages/built-by-uv)
+     + also-built-by-uv==0.1.0 (from `file://[TEMP_DIR]/also-built-by-uv`)
+     + built-by-uv==0.1.0 (from `file://[WORKSPACE]/test/packages/built-by-uv`)
     "
     );
 
@@ -16098,7 +16098,7 @@ fn overlapping_packages_warning() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Uninstalled 1 package in [TIME]
-     - built-by-uv==0.1.0 (from file://[WORKSPACE]/test/packages/built-by-uv)
+     - built-by-uv==0.1.0 (from `file://[WORKSPACE]/test/packages/built-by-uv`)
     "
     );
     uv_snapshot!(context.filters(), context.pip_uninstall()
@@ -16106,7 +16106,7 @@ fn overlapping_packages_warning() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Uninstalled 1 package in [TIME]
-     - also-built-by-uv==0.1.0 (from file://[TEMP_DIR]/also-built-by-uv)
+     - also-built-by-uv==0.1.0 (from `file://[TEMP_DIR]/also-built-by-uv`)
     "
     );
 
@@ -16119,7 +16119,7 @@ fn overlapping_packages_warning() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + built-by-uv==0.1.0 (from file://[WORKSPACE]/test/packages/built-by-uv)
+     + built-by-uv==0.1.0 (from `file://[WORKSPACE]/test/packages/built-by-uv`)
     "
     );
     // Currently, we don't warn if we install them one wheel at a time.
@@ -16131,7 +16131,7 @@ fn overlapping_packages_warning() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + also-built-by-uv==0.1.0 (from file://[TEMP_DIR]/also-built-by-uv)
+     + also-built-by-uv==0.1.0 (from `file://[TEMP_DIR]/also-built-by-uv`)
     "
     );
 
@@ -16212,8 +16212,8 @@ fn overlapping_empty_init_py() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + gpu-a==0.1.0 (from file://[TEMP_DIR]/gpu-a)
-     + gpu-b==0.1.0 (from file://[TEMP_DIR]/gpu-b)
+     + gpu-a==0.1.0 (from `file://[TEMP_DIR]/gpu-a`)
+     + gpu-b==0.1.0 (from `file://[TEMP_DIR]/gpu-b`)
     "
     );
 
@@ -16302,8 +16302,8 @@ fn overlapping_nested_files() -> Result<()> {
     * gpu-a (gpu_a-0.1.0-py3-none-any.whl)
     * gpu-b (gpu_b-0.1.0-py3-none-any.whl)
     Installed 2 packages in [TIME]
-     + gpu-a==0.1.0 (from file://[TEMP_DIR]/gpu-a)
-     + gpu-b==0.1.0 (from file://[TEMP_DIR]/gpu-b)
+     + gpu-a==0.1.0 (from `file://[TEMP_DIR]/gpu-a`)
+     + gpu-b==0.1.0 (from `file://[TEMP_DIR]/gpu-b`)
     "
     );
 
@@ -16375,8 +16375,8 @@ fn overlapping_file_without_enclosing_directory() -> Result<()> {
     * gpu-a (gpu_a-0.1.0-py3-none-any.whl)
     * gpu-b (gpu_b-0.1.0-py3-none-any.whl)
     Installed 2 packages in [TIME]
-     + gpu-a==0.1.0 (from file://[TEMP_DIR]/gpu-a)
-     + gpu-b==0.1.0 (from file://[TEMP_DIR]/gpu-b)
+     + gpu-a==0.1.0 (from `file://[TEMP_DIR]/gpu-a`)
+     + gpu-b==0.1.0 (from `file://[TEMP_DIR]/gpu-b`)
     "
     );
 
@@ -16420,7 +16420,7 @@ fn transitive_dependency_config_settings_invalidation() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + idna==3.6 (from file://[TEMP_DIR]/idna)
+     + idna==3.6 (from `file://[TEMP_DIR]/idna`)
     "
     );
 
@@ -16535,7 +16535,7 @@ fn pip_install_no_sources_editable_to_registry_switch() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + iniconfig==2.0.0 (from file://[TEMP_DIR]/local_pkg)
+     + iniconfig==2.0.0 (from `file://[TEMP_DIR]/local_pkg`)
     "
     );
 
@@ -16572,7 +16572,7 @@ fn install_with_system_interpreter() {
     exit_code: 2 (failure)
     ----- stderr -----
     Using Python 3.12.[LATEST] environment at: managed/cpython-3.12.[LATEST]-[PLATFORM]
-    error: The interpreter at managed/cpython-3.12.[LATEST]-[PLATFORM] is externally managed, and indicates the following:
+    error: The interpreter at `managed/cpython-3.12.[LATEST]-[PLATFORM]` is externally managed, and indicates the following:
 
       This Python installation is managed by uv and should not be modified.
 
@@ -16721,7 +16721,7 @@ fn build_backend_wrong_wheel_platform() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + py313==0.1.0 (from file://[TEMP_DIR]/child)
+     + py313==0.1.0 (from `file://[TEMP_DIR]/child`)
     ");
 
     // A Python 3.13 host with a 3.12 explicit target fails.
@@ -16754,7 +16754,7 @@ fn build_backend_wrong_wheel_platform() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + py313==0.1.0 (from file://[TEMP_DIR]/child)
+     + py313==0.1.0 (from `file://[TEMP_DIR]/child`)
     ");
 
     // A Python 3.13 host with a 3.12 explicit target fails.
@@ -16809,7 +16809,7 @@ fn build_backend_wrong_wheel_platform() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + parent==0.1.0 (from file://[TEMP_DIR]/)
+     + parent==0.1.0 (from `file://[TEMP_DIR]/`)
     ");
 
     // A build host of 3.12 fails.
@@ -16888,7 +16888,7 @@ fn install_editable_uv_build_data() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0 (from `file://[TEMP_DIR]/`)
     ");
 
     assert_snapshot!(
@@ -17033,7 +17033,7 @@ fn abi_compatibility_on_freethreaded_python() {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to determine installation plan
-      cause: A path ([WORKSPACE]/test/links/abi3_package-1.0.0-cp37-abi3-manylinux_2_17_x86_64.whl) dependency is incompatible with the current platform
+      cause: A path (`[WORKSPACE]/test/links/abi3_package-1.0.0-cp37-abi3-manylinux_2_17_x86_64.whl`) dependency is incompatible with the current platform
 
     hint: You're using free-threaded CPython 3.14 (`cp314t`), but the wheel was built for the stable ABI (`abi3`), which requires a GIL-enabled interpreter
     ");
@@ -17050,7 +17050,7 @@ fn abi_compatibility_on_freethreaded_python() {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to determine installation plan
-      cause: A path ([WORKSPACE]/test/links/cpython_package-1.0.0-cp314-cp314-manylinux_2_17_x86_64.whl) dependency is incompatible with the current platform
+      cause: A path (`[WORKSPACE]/test/links/cpython_package-1.0.0-cp314-cp314-manylinux_2_17_x86_64.whl`) dependency is incompatible with the current platform
 
     hint: You're using free-threaded CPython 3.14 (`cp314t`), but the wheel was built for the CPython 3.14 ABI (`cp314`), which requires a GIL-enabled interpreter
     ");
@@ -17068,7 +17068,7 @@ fn abi_compatibility_on_freethreaded_python() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + multi-abi-package==1.0.0 (from file://[WORKSPACE]/test/links/multi_abi_package-1.0.0-cp314-cp314t.abi3-manylinux_2_17_x86_64.whl)
+     + multi-abi-package==1.0.0 (from `file://[WORKSPACE]/test/links/multi_abi_package-1.0.0-cp314-cp314t.abi3-manylinux_2_17_x86_64.whl`)
     ");
 }
 
@@ -17156,7 +17156,7 @@ fn abi_compatibility_on_debug_python() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + cpython-package==1.0.0 (from file://[WORKSPACE]/test/links/cpython_package-1.0.0-cp314-cp314-manylinux_2_17_x86_64.whl)
+     + cpython-package==1.0.0 (from `file://[WORKSPACE]/test/links/cpython_package-1.0.0-cp314-cp314-manylinux_2_17_x86_64.whl`)
     ");
 
     // Check that debug wheels are supported.
@@ -17169,7 +17169,7 @@ fn abi_compatibility_on_debug_python() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + cpython-debug-package==1.0.0 (from file://[TEMP_DIR]/cpython_debug_package/dist/cpython_debug_package-1.0.0-cp314-cp314d-manylinux_2_17_x86_64.whl)
+     + cpython-debug-package==1.0.0 (from `file://[TEMP_DIR]/cpython_debug_package/dist/cpython_debug_package-1.0.0-cp314-cp314d-manylinux_2_17_x86_64.whl`)
     ");
 }
 
@@ -17188,7 +17188,7 @@ fn abi_compatibility_on_nondebug_python_with_debug_wheel() {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to determine installation plan
-      cause: A path (cpython_debug_package/dist/cpython_debug_package-1.0.0-cp314-cp314d-manylinux_2_17_x86_64.whl) dependency is incompatible with the current platform
+      cause: A path (`cpython_debug_package/dist/cpython_debug_package-1.0.0-cp314-cp314d-manylinux_2_17_x86_64.whl`) dependency is incompatible with the current platform
 
     hint: The wheel is compatible with CPython 3.14 (`cp314d`), but you're using CPython 3.14 (`cp314`)
     ");
@@ -17207,7 +17207,7 @@ fn fail_on_bz2_wheel() {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to download `futzed-bz2 @ http://[LOCALHOST]/futzed_bz2-0.1.0-py3-none-any.whl`
-      cause: Failed to read metadata: `http://[LOCALHOST]/futzed_bz2-0.1.0-py3-none-any.whl`
+      cause: Failed to read metadata: http://[LOCALHOST]/futzed_bz2-0.1.0-py3-none-any.whl
       cause: Archive contains a file with an unsupported compression method; files must be compressed with 'stored', 'DEFLATE', or 'zstd'
     "
     );
@@ -17226,7 +17226,7 @@ fn fail_on_lzma_wheel() {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to download `futzed-lzma @ http://[LOCALHOST]/futzed_lzma-0.1.0-py3-none-any.whl`
-      cause: Failed to read metadata: `http://[LOCALHOST]/futzed_lzma-0.1.0-py3-none-any.whl`
+      cause: Failed to read metadata: http://[LOCALHOST]/futzed_lzma-0.1.0-py3-none-any.whl
       cause: Archive contains a file with an unsupported compression method; files must be compressed with 'stored', 'DEFLATE', or 'zstd'
     "
     );

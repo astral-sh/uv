@@ -277,7 +277,7 @@ impl RequirementsSpecification {
                 if let RequirementsInput::Local(path) = input
                     && !path.exists()
                 {
-                    return Err(anyhow::anyhow!("File not found: `{}`", path.user_display()));
+                    return Err(anyhow::anyhow!("File not found: {}", path.user_display()));
                 }
 
                 let requirements_txt =
@@ -297,7 +297,7 @@ impl RequirementsSpecification {
                 let content = match fs_err::tokio::read_to_string(&path).await {
                     Ok(content) => content,
                     Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                        return Err(anyhow::anyhow!("File not found: `{}`", path.user_display()));
+                        return Err(anyhow::anyhow!("File not found: {}", path.user_display()));
                     }
                     Err(err) => {
                         return Err(anyhow::anyhow!(
@@ -308,7 +308,7 @@ impl RequirementsSpecification {
                     }
                 };
                 let pyproject_toml = PyProjectToml::from_toml(&content, path.user_display())
-                    .with_context(|| format!("Failed to parse: `{}`", path.user_display()))?;
+                    .with_context(|| format!("Failed to parse: {}", path.user_display()))?;
 
                 Self {
                     source_trees: vec![SourceTree::PyProjectToml(path.clone(), pyproject_toml)],
@@ -339,7 +339,7 @@ impl RequirementsSpecification {
             }
             RequirementsSource::SetupPy(path) => {
                 if !path.is_file() {
-                    return Err(anyhow::anyhow!("File not found: `{}`", path.user_display()));
+                    return Err(anyhow::anyhow!("File not found: {}", path.user_display()));
                 }
 
                 Self {
@@ -349,7 +349,7 @@ impl RequirementsSpecification {
             }
             RequirementsSource::SetupCfg(path) => {
                 if !path.is_file() {
-                    return Err(anyhow::anyhow!("File not found: `{}`", path.user_display()));
+                    return Err(anyhow::anyhow!("File not found: {}", path.user_display()));
                 }
 
                 Self {
@@ -361,7 +361,7 @@ impl RequirementsSpecification {
                 if let RequirementsInput::Local(path) = input
                     && !path.exists()
                 {
-                    return Err(anyhow::anyhow!("File not found: `{}`", path.user_display()));
+                    return Err(anyhow::anyhow!("File not found: {}", path.user_display()));
                 }
 
                 Self {
@@ -571,7 +571,7 @@ impl RequirementsSpecification {
             if let Some(pylock) = source.pylock {
                 if let Some(existing) = spec.pylock {
                     return Err(anyhow::anyhow!(
-                        "Multiple `pylock.toml` files specified: `{}` vs. `{}`",
+                        "Multiple `pylock.toml` files specified: {} vs. `{}`",
                         existing.user_display(),
                         pylock.user_display(),
                     ));
@@ -590,7 +590,7 @@ impl RequirementsSpecification {
                         != CanonicalUrl::new(existing.url().clone())
                 {
                     return Err(anyhow::anyhow!(
-                        "Multiple index URLs specified: `{existing}` vs. `{index_url}`",
+                        "Multiple index URLs specified: {existing} vs. {index_url}",
                     ));
                 }
                 spec.index_url = Some(index_url);
@@ -630,7 +630,7 @@ impl RequirementsSpecification {
                         != CanonicalUrl::new(existing.url().clone())
                 {
                     return Err(anyhow::anyhow!(
-                        "Multiple index URLs specified: `{existing}` vs. `{index_url}`",
+                        "Multiple index URLs specified: {existing} vs. {index_url}",
                     ));
                 }
                 spec.index_url = Some(index_url);
@@ -658,7 +658,7 @@ impl RequirementsSpecification {
                         != CanonicalUrl::new(existing.url().clone())
                 {
                     return Err(anyhow::anyhow!(
-                        "Multiple index URLs specified: `{existing}` vs. `{index_url}`",
+                        "Multiple index URLs specified: {existing} vs. {index_url}",
                     ));
                 }
                 spec.index_url = Some(index_url);
@@ -696,7 +696,7 @@ impl RequirementsSpecification {
     /// Parse an individual package requirement.
     pub fn parse_package(name: &str) -> Result<UnresolvedRequirementSpecification> {
         let requirement = RequirementsTxtRequirement::parse(name, &*CWD, false)
-            .with_context(|| format!("Failed to parse: `{name}`"))?;
+            .with_context(|| format!("Failed to parse: {name}"))?;
         Ok(UnresolvedRequirementSpecification::from(requirement))
     }
 

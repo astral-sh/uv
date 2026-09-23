@@ -96,7 +96,7 @@ fn tool_run_at_version() {
         .arg("--version"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pytest@`
+    error: Failed to parse: pytest@
       cause: Expected URL
              pytest@
                     ^
@@ -794,7 +794,7 @@ fn tool_run_url() {
     Installed [N] packages in [TIME]
      + blinker==1.7.0
      + click==8.1.7
-     + flask==3.0.3 (from https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl)
+     + flask==3.0.3 (from `https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl`)
      + itsdangerous==2.1.2
      + jinja2==3.1.3
      + markupsafe==2.1.5
@@ -863,7 +863,7 @@ fn tool_run_git() {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + black==24.2.0 (from git+https://github.com/psf/black@6fdf8a4af28071ed1d079c01122b34c5d587207a)
+     + black==24.2.0 (from `git+https://github.com/psf/black@6fdf8a4af28071ed1d079c01122b34c5d587207a`)
      + click==8.1.7
      + mypy-extensions==1.0.0
      + packaging==24.0
@@ -900,7 +900,7 @@ fn tool_run_git() {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + black==24.2.0 (from git+https://github.com/psf/black@6fdf8a4af28071ed1d079c01122b34c5d587207a)
+     + black==24.2.0 (from `git+https://github.com/psf/black@6fdf8a4af28071ed1d079c01122b34c5d587207a`)
      + click==8.1.7
      + mypy-extensions==1.0.0
      + packaging==24.0
@@ -951,7 +951,7 @@ fn tool_run_git_infers_static_requires_python() {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + static-requires-python-tool==0.1.0 (from git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=static)
+     + static-requires-python-tool==0.1.0 (from `git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=static`)
     ");
 }
 
@@ -1003,7 +1003,7 @@ fn tool_run_git_lfs() {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@e282f5be233e3f1d44934164895a043fc534b8aa#lfs=true)
+     + test-lfs-repo==0.1.0 (from `git+https://github.com/astral-sh/test-lfs-repo@e282f5be233e3f1d44934164895a043fc534b8aa#lfs=true`)
     ");
 
     uv_snapshot!(context.filters(), context.tool_run()
@@ -1033,7 +1033,7 @@ fn tool_run_git_lfs() {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@e282f5be233e3f1d44934164895a043fc534b8aa#lfs=true)
+     + test-lfs-repo==0.1.0 (from `git+https://github.com/astral-sh/test-lfs-repo@e282f5be233e3f1d44934164895a043fc534b8aa#lfs=true`)
     ");
 
     uv_snapshot!(context.filters(), context.tool_run()
@@ -1086,7 +1086,7 @@ fn tool_run_git_lfs() {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@e282f5be233e3f1d44934164895a043fc534b8aa)
+     + test-lfs-repo==0.1.0 (from `git+https://github.com/astral-sh/test-lfs-repo@e282f5be233e3f1d44934164895a043fc534b8aa`)
     Traceback (most recent call last):
       File "[CACHE_DIR]/archive-v0/[HASH]/bin/test-lfs-repo-assets", line 12, in <module>
         sys.exit(main_lfs())
@@ -1109,7 +1109,7 @@ fn tool_run_git_lfs() {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@e282f5be233e3f1d44934164895a043fc534b8aa)
+     + test-lfs-repo==0.1.0 (from `git+https://github.com/astral-sh/test-lfs-repo@e282f5be233e3f1d44934164895a043fc534b8aa`)
     Traceback (most recent call last):
       File "<frozen runpy>", line 198, in _run_module_as_main
       File "<frozen runpy>", line 88, in _run_code
@@ -1192,7 +1192,7 @@ fn tool_run_requirements_txt_arguments() {
     Werkzeug 3.0.1
 
     ----- stderr -----
-    warning: Ignoring `--index-url` from requirements file: `https://test.pypi.org/simple`. Instead, use the `--index-url` command-line argument, or set `index-url` in a `uv.toml` or `pyproject.toml` file.
+    warning: Ignoring `--index-url` from requirements file: https://test.pypi.org/simple. Instead, use the `--index-url` command-line argument, or set `index-url` in a `uv.toml` or `pyproject.toml` file.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -1627,7 +1627,7 @@ fn tool_run_with_editable() -> anyhow::Result<()> {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + black==0.1.0 (from file://[TEMP_DIR]/src/black_editable)
+     + black==0.1.0 (from `file://[TEMP_DIR]/src/black_editable`)
      + blinker==1.7.0
      + click==8.1.7
      + flask==3.0.2
@@ -1651,7 +1651,7 @@ fn tool_run_with_editable() -> anyhow::Result<()> {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + anyio==4.3.0+foo (from file://[TEMP_DIR]/src/anyio_local)
+     + anyio==4.3.0+foo (from `file://[TEMP_DIR]/src/anyio_local`)
      + blinker==1.7.0
      + click==8.1.7
      + flask==3.0.2
@@ -1677,7 +1677,7 @@ fn tool_run_with_editable() -> anyhow::Result<()> {
      + blinker==1.7.0
      + click==8.1.7
      + flask==3.0.2
-     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/`)
      + idna==3.6
      + itsdangerous==2.1.2
      + jinja2==3.1.3
@@ -2435,7 +2435,7 @@ fn tool_run_from_directory_uses_global_pin_when_within_requires_python_range() {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+     + foo==0.1.0 (from `file://[TEMP_DIR]/foo`)
     ");
 }
 
@@ -2502,7 +2502,7 @@ fn tool_run_from_directory_ignores_global_pin_outside_requires_python_range() {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+     + foo==0.1.0 (from `file://[TEMP_DIR]/foo`)
     ");
 }
 
@@ -2565,7 +2565,7 @@ fn run_with_env_file() -> anyhow::Result<()> {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + foo==1.0.0 (from file://[TEMP_DIR]/foo)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/foo`)
     ");
 
     context.temp_dir.child(".file").write_str(indoc! { "
@@ -3471,7 +3471,7 @@ fn tool_run_reresolve_python() -> anyhow::Result<()> {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + foo==1.0.0 (from file://[TEMP_DIR]/foo)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/foo`)
     ");
 
     // When an incompatible Python version is explicitly requested, we should not re-resolve
@@ -3536,7 +3536,7 @@ fn tool_run_windows_dotted_package_name() -> anyhow::Result<()> {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + package-name-with-dots==0.1.0 (from file://[TEMP_DIR]/package.name.with.dots)
+     + package-name-with-dots==0.1.0 (from `file://[TEMP_DIR]/package.name.with.dots`)
     "###);
 
     Ok(())

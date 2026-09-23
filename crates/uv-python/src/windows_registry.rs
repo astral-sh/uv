@@ -110,7 +110,7 @@ fn read_registry_entry(company: &str, tag: &str, tag_key: &Key) -> Option<Window
             Ok(version) => Some(version),
             Err(err) => {
                 debug!(
-                    "Skipping Python interpreter ({executable_path}) \
+                    "Skipping Python interpreter (`{executable_path}`) \
                     with invalid registry version {s}: {err}",
                 );
                 None

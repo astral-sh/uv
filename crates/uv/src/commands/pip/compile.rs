@@ -328,7 +328,7 @@ pub(crate) async fn pip_compile(
     .into_interpreter();
 
     debug!(
-        "Using Python {} interpreter at {} for builds",
+        "Using Python {} interpreter at `{}` for builds",
         interpreter.python_version(),
         interpreter.sys_executable().user_display().cyan()
     );

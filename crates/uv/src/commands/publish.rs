@@ -87,16 +87,19 @@ pub(crate) async fn publish(
         0 => bail!("No files found to publish"),
         1 => {
             if dry_run {
-                writeln!(printer.stderr(), "Checking 1 file against {publish_url}")?;
+                writeln!(printer.stderr(), "Checking 1 file against `{publish_url}`")?;
             } else {
-                writeln!(printer.stderr(), "Publishing 1 file to {publish_url}")?;
+                writeln!(printer.stderr(), "Publishing 1 file to `{publish_url}`")?;
             }
         }
         n => {
             if dry_run {
-                writeln!(printer.stderr(), "Checking {n} files against {publish_url}")?;
+                writeln!(
+                    printer.stderr(),
+                    "Checking {n} files against `{publish_url}`"
+                )?;
             } else {
-                writeln!(printer.stderr(), "Publishing {n} files to {publish_url}")?;
+                writeln!(printer.stderr(), "Publishing {n} files to `{publish_url}`")?;
             }
         }
     }
@@ -239,7 +242,7 @@ async fn publish_file(
     if session.check_existing(&prepared, reporter.clone()).await? {
         writeln!(
             printer.stderr(),
-            "File {} already exists, skipping",
+            "File `{}` already exists, skipping",
             prepared.filename()
         )?;
         return Ok(());

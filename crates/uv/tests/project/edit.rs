@@ -180,7 +180,7 @@ fn add_git() -> Result<()> {
     Resolved 5 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
+     + uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979`)
     ");
 
     uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage").arg("--tag=0.0.1"), @"
@@ -313,7 +313,7 @@ fn add_git_private_source() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-private-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
+     + uv-private-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071`)
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -404,7 +404,7 @@ fn add_git_private_raw() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-private-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
+     + uv-private-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071`)
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -499,7 +499,7 @@ async fn add_git_private_rate_limited_by_github_rest_api_403_response() -> Resul
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-private-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
+     + uv-private-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071`)
     ");
 
     Ok(())
@@ -539,7 +539,7 @@ async fn add_git_private_rate_limited_by_github_rest_api_429_response() -> Resul
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-private-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
+     + uv-private-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071`)
     ");
 
     Ok(())
@@ -608,7 +608,7 @@ fn add_git_branch() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
+     + uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979`)
     ");
 
     Ok(())
@@ -681,7 +681,7 @@ fn add_git_lfs() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true)
+     + test-lfs-repo==0.1.0 (from `git+https://github.com/astral-sh/test-lfs-repo@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true`)
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -750,8 +750,8 @@ fn add_git_lfs() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true)
-     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@214e0b7be16b3c7e5f72f475c11bf26f48ea82d4#lfs=true)
+     - test-lfs-repo==0.1.0 (from `git+https://github.com/astral-sh/test-lfs-repo@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true`)
+     + test-lfs-repo==0.1.0 (from `git+https://github.com/astral-sh/test-lfs-repo@214e0b7be16b3c7e5f72f475c11bf26f48ea82d4#lfs=true`)
     ");
 
     // Test LFS not found scenario resulting in an incomplete fetch cache
@@ -792,8 +792,8 @@ fn add_git_lfs() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@214e0b7be16b3c7e5f72f475c11bf26f48ea82d4#lfs=true)
-     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true)
+     - test-lfs-repo==0.1.0 (from `git+https://github.com/astral-sh/test-lfs-repo@214e0b7be16b3c7e5f72f475c11bf26f48ea82d4#lfs=true`)
+     + test-lfs-repo==0.1.0 (from `git+https://github.com/astral-sh/test-lfs-repo@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true`)
     ");
 
     // Verify that we can import the module and access LFS content
@@ -819,7 +819,7 @@ fn add_git_lfs() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true)
+     ~ test-lfs-repo==0.1.0 (from `git+https://github.com/astral-sh/test-lfs-repo@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true`)
     ");
 
     // Verify that we can import the module and access LFS content
@@ -885,7 +885,7 @@ fn add_git_raw() -> Result<()> {
     Resolved 5 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
+     + uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979`)
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -1023,7 +1023,7 @@ fn add_git_implicit() -> Result<()> {
     Resolved 5 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage.git@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+     + uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage.git@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389`)
     ");
 
     Ok(())
@@ -1088,7 +1088,7 @@ fn reinstall_local_source_trees() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + project2==0.1.0 (from file://[TEMP_DIR]/project2)
+     + project2==0.1.0 (from `file://[TEMP_DIR]/project2`)
     ");
 
     // Running `uv add` should reinstall the project.
@@ -1099,7 +1099,7 @@ fn reinstall_local_source_trees() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ project2==0.1.0 (from file://[TEMP_DIR]/project2)
+     ~ project2==0.1.0 (from `file://[TEMP_DIR]/project2`)
     ");
 
     Ok(())
@@ -1150,7 +1150,7 @@ fn add_unnamed() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
+     + uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979`)
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -1753,8 +1753,8 @@ fn add_remove_workspace() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + child1==0.1.0 (from file://[TEMP_DIR]/child1)
-     + child2==0.1.0 (from file://[TEMP_DIR]/child2)
+     + child1==0.1.0 (from `file://[TEMP_DIR]/child1`)
+     + child2==0.1.0 (from `file://[TEMP_DIR]/child2`)
     ");
 
     let pyproject_toml = fs_err::read_to_string(child1.join("pyproject.toml"))?;
@@ -1837,8 +1837,8 @@ fn add_remove_workspace() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 1 package in [TIME]
-     ~ child1==0.1.0 (from file://[TEMP_DIR]/child1)
-     - child2==0.1.0 (from file://[TEMP_DIR]/child2)
+     ~ child1==0.1.0 (from `file://[TEMP_DIR]/child1`)
+     - child2==0.1.0 (from `file://[TEMP_DIR]/child2`)
     ");
 
     let pyproject_toml = fs_err::read_to_string(child1.join("pyproject.toml"))?;
@@ -2339,8 +2339,8 @@ fn add_workspace_editable() -> Result<()> {
     Resolved 3 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + child1==0.1.0 (from file://[TEMP_DIR]/child1)
-     + child2==0.1.0 (from file://[TEMP_DIR]/child2)
+     + child1==0.1.0 (from `file://[TEMP_DIR]/child1`)
+     + child2==0.1.0 (from `file://[TEMP_DIR]/child2`)
     ");
 
     let pyproject_toml = fs_err::read_to_string(child1.join("pyproject.toml"))?;
@@ -2379,8 +2379,8 @@ fn add_workspace_editable() -> Result<()> {
     Prepared 2 packages in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     ~ child1==0.1.0 (from file://[TEMP_DIR]/child1)
-     ~ child2==0.1.0 (from file://[TEMP_DIR]/child2)
+     ~ child1==0.1.0 (from `file://[TEMP_DIR]/child1`)
+     ~ child2==0.1.0 (from `file://[TEMP_DIR]/child2`)
     ");
 
     let pyproject_toml = fs_err::read_to_string(child1.join("pyproject.toml"))?;
@@ -2507,7 +2507,7 @@ fn add_workspace_path() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -2627,7 +2627,7 @@ fn add_path_implicit_workspace() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/workspace/packages/child)
+     + child==0.1.0 (from `file://[TEMP_DIR]/workspace/packages/child`)
     ");
 
     let pyproject_toml = fs_err::read_to_string(workspace.join("pyproject.toml"))?;
@@ -2748,7 +2748,7 @@ fn add_path_no_workspace() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/workspace/packages/child)
+     + child==0.1.0 (from `file://[TEMP_DIR]/workspace/packages/child`)
     ");
 
     let pyproject_toml = fs_err::read_to_string(workspace.join("pyproject.toml"))?;
@@ -2856,7 +2856,7 @@ fn add_path_adjacent_directory() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + dependency==0.1.0 (from file://[TEMP_DIR]/dependency)
+     + dependency==0.1.0 (from `file://[TEMP_DIR]/dependency`)
     ");
 
     let pyproject_toml = fs_err::read_to_string(project.join("pyproject.toml"))?;
@@ -3021,7 +3021,7 @@ fn add_relative_and_absolute_paths() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + relative-dep==0.1.0 (from file://[TEMP_DIR]/relative_dep)
+     + relative-dep==0.1.0 (from `file://[TEMP_DIR]/relative_dep`)
     ");
 
     // Add the absolute dependency using an absolute path.
@@ -3031,7 +3031,7 @@ fn add_relative_and_absolute_paths() -> Result<()> {
     Resolved 3 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + absolute-dep==0.1.0 (from file://[TEMP_DIR]/absolute_dep)
+     + absolute-dep==0.1.0 (from `file://[TEMP_DIR]/absolute_dep`)
     ");
 
     // Add a dependency using a file:// URL (also absolute).
@@ -3042,7 +3042,7 @@ fn add_relative_and_absolute_paths() -> Result<()> {
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + file-url-dep==0.1.0 (from file://[TEMP_DIR]/file_url_dep)
+     + file-url-dep==0.1.0 (from `file://[TEMP_DIR]/file_url_dep`)
     ");
 
     // Expanded variables retain the portability behavior from #18680 and stay relative.
@@ -3052,7 +3052,7 @@ fn add_relative_and_absolute_paths() -> Result<()> {
     Resolved 5 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + expanded-dep==0.1.0 (from file://[TEMP_DIR]/expanded_dep)
+     + expanded-dep==0.1.0 (from `file://[TEMP_DIR]/expanded_dep`)
     ");
 
     // Check pyproject.toml - relative paths stay relative, absolute paths and file:// URLs
@@ -3317,7 +3317,7 @@ fn update() -> Result<()> {
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - requests==2.31.0
-     + requests==2.32.3 (from git+https://github.com/psf/requests@0e322af87745eff34caffe4df68456ebc20d9068)
+     + requests==2.32.3 (from `git+https://github.com/psf/requests@0e322af87745eff34caffe4df68456ebc20d9068`)
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -3677,7 +3677,7 @@ fn update_source_replace_url() -> Result<()> {
      + certifi==2024.2.2
      + charset-normalizer==3.3.2
      + idna==3.6
-     + requests==2.32.3 (from git+https://github.com/psf/requests@0e322af87745eff34caffe4df68456ebc20d9068)
+     + requests==2.32.3 (from `git+https://github.com/psf/requests@0e322af87745eff34caffe4df68456ebc20d9068`)
      + urllib3==2.2.1
     ");
 
@@ -3710,8 +3710,8 @@ fn update_source_replace_url() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - requests==2.32.3 (from git+https://github.com/psf/requests@0e322af87745eff34caffe4df68456ebc20d9068)
-     + requests==2.32.2 (from git+https://github.com/psf/requests@88dce9d854797c05d0ff296b70e0430535ef8aaf)
+     - requests==2.32.3 (from `git+https://github.com/psf/requests@0e322af87745eff34caffe4df68456ebc20d9068`)
+     + requests==2.32.2 (from `git+https://github.com/psf/requests@88dce9d854797c05d0ff296b70e0430535ef8aaf`)
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -3765,7 +3765,7 @@ fn add_non_normalized_source() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
+     + uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979`)
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -3814,7 +3814,7 @@ fn add_update_git_reference_project() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage.git@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+     + uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage.git@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389`)
     ");
 
     uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage").arg("--tag=0.0.1"), @"
@@ -3824,8 +3824,8 @@ fn add_update_git_reference_project() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage.git@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage.git@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
+     - uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage.git@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389`)
+     + uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage.git@0dacfd662c64cb4ceb16e6cf65a157a8b715b979`)
     ");
 
     uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage").arg("--branch=main"), @"
@@ -3834,8 +3834,8 @@ fn add_update_git_reference_project() -> Result<()> {
     Resolved 2 packages in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage.git@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage.git@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+     - uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage.git@0dacfd662c64cb4ceb16e6cf65a157a8b715b979`)
+     + uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage.git@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389`)
     ");
 
     uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage").arg("--rev=2005223fcad0e2c06daf2e14b93b790604868e1e"), @"
@@ -3845,8 +3845,8 @@ fn add_update_git_reference_project() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage.git@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage.git@2005223fcad0e2c06daf2e14b93b790604868e1e)
+     - uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage.git@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389`)
+     + uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage.git@2005223fcad0e2c06daf2e14b93b790604868e1e`)
     ");
 
     Ok(())
@@ -5612,7 +5612,7 @@ fn add_requirements_file() -> Result<()> {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + anyio==4.4.0 (from git+https://github.com/agronholm/anyio.git@053e8f0a0f7b0f4a47a012eb5c6b1d9d84344e6a)
+     + anyio==4.4.0 (from `git+https://github.com/agronholm/anyio.git@053e8f0a0f7b0f4a47a012eb5c6b1d9d84344e6a`)
      + blinker==1.7.0
      + click==8.1.7
      + flask==2.3.2
@@ -5718,7 +5718,7 @@ fn add_requirements_file_non_editable() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/packages/child)
+     + child==0.1.0 (from `file://[TEMP_DIR]/packages/child`)
     ");
 
     let pyproject_toml_content = context.read("pyproject.toml");
@@ -5787,7 +5787,7 @@ fn add_requirements_file_editable() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/packages/child)
+     + child==0.1.0 (from `file://[TEMP_DIR]/packages/child`)
     ");
 
     let pyproject_toml_content = context.read("pyproject.toml");
@@ -5857,7 +5857,7 @@ fn add_requirements_file_editable_override() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/packages/child)
+     + child==0.1.0 (from `file://[TEMP_DIR]/packages/child`)
     ");
 
     let pyproject_toml_content = context.read("pyproject.toml");
@@ -7504,7 +7504,7 @@ fn remove_repeated() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + anyio==4.3.0+foo (from file://[WORKSPACE]/test/packages/anyio_local)
+     + anyio==4.3.0+foo (from `file://[WORKSPACE]/test/packages/anyio_local`)
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -7571,7 +7571,7 @@ fn remove_repeated() -> Result<()> {
     warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 1 package in [TIME]
     Uninstalled 1 package in [TIME]
-     - anyio==4.3.0+foo (from file://[WORKSPACE]/test/packages/anyio_local)
+     - anyio==4.3.0+foo (from `file://[WORKSPACE]/test/packages/anyio_local`)
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -12013,7 +12013,7 @@ fn add_direct_url_subdirectory() -> Result<()> {
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + root==0.0.1 (from https://github.com/user-attachments/files/18216295/subdirectory-test.tar.gz#subdirectory=packages/root)
+     + root==0.0.1 (from `https://github.com/user-attachments/files/18216295/subdirectory-test.tar.gz#subdirectory=packages/root`)
      + sniffio==1.3.1
     ");
 
@@ -12140,7 +12140,7 @@ fn add_direct_url_subdirectory_raw() -> Result<()> {
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + root==0.0.1 (from https://github.com/user-attachments/files/18216295/subdirectory-test.tar.gz#subdirectory=packages/root)
+     + root==0.0.1 (from `https://github.com/user-attachments/files/18216295/subdirectory-test.tar.gz#subdirectory=packages/root`)
      + sniffio==1.3.1
     ");
 
@@ -13401,7 +13401,7 @@ fn add_unsupported_git_scheme() {
     uv_snapshot!(context.filters(), context.add().arg("git+fantasy://ferris/dreams/of/urls@7701ffcbae245819b828dc5f885a5201158897ef"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `git+fantasy://ferris/dreams/of/urls@7701ffcbae245819b828dc5f885a5201158897ef`
+    error: Failed to parse: git+fantasy://ferris/dreams/of/urls@7701ffcbae245819b828dc5f885a5201158897ef
       cause: Unsupported Git URL scheme `fantasy:` in `fantasy://ferris/dreams/of/urls` (expected one of `https:`, `ssh:`, or `file:`)
              git+fantasy://ferris/dreams/of/urls@7701ffcbae245819b828dc5f885a5201158897ef
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -13785,7 +13785,7 @@ async fn add_unexpected_error_code() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Request failed after 1 retry in [TIME]
-      cause: Failed to fetch: `http://[LOCALHOST]/anyio/`
+      cause: Failed to fetch: http://[LOCALHOST]/anyio/
       cause: HTTP status server error (503 Service Unavailable) for url (http://[LOCALHOST]/anyio/)
     "
     );
@@ -13825,7 +13825,7 @@ async fn add_invalid_ignore_error_code() -> Result<()> {
         |                      ^^^^^^^^^^^^^^^^
       1234 is not a valid HTTP status code
 
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 9, column 22
                |
              9 | ignore-error-codes = [401, 403, 1234]
@@ -13856,7 +13856,7 @@ fn add_invalid_requires_python() -> Result<()> {
     uv_snapshot!(context.add().arg("anyio"), @r#"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 4, column 19
                |
              4 | requires-python = "3.12"
@@ -13936,16 +13936,16 @@ fn add_auth_policy_always_without_credentials() -> Result<()> {
     uv_snapshot!(context.add().arg("anyio"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to fetch: `https://pypi.org/simple/anyio/`
-      cause: Missing credentials for https://pypi.org/simple/anyio/
+    error: Failed to fetch: https://pypi.org/simple/anyio/
+      cause: Missing credentials for `https://pypi.org/simple/anyio/`
     "
     );
 
     uv_snapshot!(context.pip_install().arg("black"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to fetch: `https://pypi.org/simple/black/`
-      cause: Missing credentials for https://pypi.org/simple/black/
+    error: Failed to fetch: https://pypi.org/simple/black/
+      cause: Missing credentials for `https://pypi.org/simple/black/`
     "
     );
     Ok(())
@@ -13976,8 +13976,8 @@ fn add_auth_policy_always_with_username_no_password() -> Result<()> {
     uv_snapshot!(context.add().arg("anyio"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to fetch: `https://pypi.org/simple/anyio/`
-      cause: Incomplete credentials for https://pypi.org/simple/anyio/
+    error: Failed to fetch: https://pypi.org/simple/anyio/
+      cause: Incomplete credentials for `https://pypi.org/simple/anyio/`
     "
     );
     Ok(())
@@ -14011,7 +14011,7 @@ async fn add_auth_policy_never_with_url_credentials() -> Result<()> {
     uv_snapshot!(context.filters(), context.add().arg("anyio"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to fetch: `http://[LOCALHOST]/basic-auth/files/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl`
+    error: Failed to fetch: http://[LOCALHOST]/basic-auth/files/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl
       cause: HTTP status client error (401 Unauthorized) for url (http://[LOCALHOST]/basic-auth/files/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl)
     "
     );
@@ -14807,7 +14807,7 @@ fn add_path_with_existing_workspace() -> Result<()> {
     Resolved 3 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + dep==0.1.0 (from file://[TEMP_DIR]/dep)
+     + dep==0.1.0 (from `file://[TEMP_DIR]/dep`)
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -14883,7 +14883,7 @@ fn add_path_with_workspace() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + dep==0.1.0 (from file://[TEMP_DIR]/dep)
+     + dep==0.1.0 (from `file://[TEMP_DIR]/dep`)
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -14948,7 +14948,7 @@ fn add_path_within_workspace_defaults_to_workspace() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + dep==0.1.0 (from file://[TEMP_DIR]/dep)
+     + dep==0.1.0 (from `file://[TEMP_DIR]/dep`)
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -15012,7 +15012,7 @@ fn add_path_with_no_workspace() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + dep==0.1.0 (from file://[TEMP_DIR]/dep)
+     + dep==0.1.0 (from `file://[TEMP_DIR]/dep`)
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -15082,7 +15082,7 @@ fn add_path_outside_workspace_no_default() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + dep==0.1.0 (from file://[TEMP_DIR]/external_dep)
+     + dep==0.1.0 (from `file://[TEMP_DIR]/external_dep`)
     ");
 
     let pyproject_toml = fs_err::read_to_string(workspace_toml)?;

@@ -1049,7 +1049,7 @@ pub(crate) async fn run(
         .as_ref()
         .map(|dir| {
             debug!(
-                "Creating ephemeral environment at: `{}`",
+                "Creating ephemeral environment at: {}",
                 dir.path().simplified_display()
             );
 
@@ -1168,7 +1168,7 @@ pub(crate) async fn run(
                     }
                     match create_symlink(&source, &target) {
                         Ok(()) => trace!(
-                            "Created link for {} -> {}",
+                            "Created link for `{}` -> `{}`",
                             target.user_display(),
                             source.user_display()
                         ),
@@ -2125,7 +2125,7 @@ fn copy_entrypoint(
         .open(target)?;
     file.write_all(contents.as_bytes())?;
 
-    trace!("Updated entrypoint at {}", target.user_display());
+    trace!("Updated entrypoint at `{}`", target.user_display());
 
     Ok(())
 }
@@ -2160,7 +2160,7 @@ fn copy_entrypoint(
         .open(target)?;
     launcher.write_to_file(&mut file, is_gui)?;
 
-    trace!("Updated entrypoint at {}", target.user_display());
+    trace!("Updated entrypoint at `{}`", target.user_display());
 
     Ok(())
 }

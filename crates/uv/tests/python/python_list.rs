@@ -674,8 +674,8 @@ async fn python_list_remote_python_downloads_json_url() -> Result<()> {
         .arg("--python-downloads-json-url").arg(format!("{}/404", server.uri())), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Error while fetching remote python downloads json from 'http://[LOCALHOST]/404'
-      cause: Failed to fetch: `http://[LOCALHOST]/404`
+    error: Error while fetching remote python downloads json from `http://[LOCALHOST]/404`
+      cause: Failed to fetch: http://[LOCALHOST]/404
       cause: HTTP status client error (404 Not Found) for url (http://[LOCALHOST]/404)
     ");
 
@@ -686,7 +686,7 @@ async fn python_list_remote_python_downloads_json_url() -> Result<()> {
         .arg("--python-downloads-json-url").arg(format!("{}/invalid", server.uri())), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Unable to parse the JSON Python download list at http://[LOCALHOST]/invalid
+    error: Unable to parse the JSON Python download list at `http://[LOCALHOST]/invalid`
       cause: EOF while parsing an object at line 1 column 1
     ");
 
@@ -697,7 +697,7 @@ async fn python_list_remote_python_downloads_json_url() -> Result<()> {
         .arg("--python-downloads-json-url").arg(format!("{}/invalid-hash", server.uri())), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Unable to parse the JSON Python download list at http://[LOCALHOST]/invalid-hash
+    error: Unable to parse the JSON Python download list at `http://[LOCALHOST]/invalid-hash`
       cause: Invalid hash digest length (expected 64 hexadecimal characters, found 5) at line 16 column 29
     ");
 

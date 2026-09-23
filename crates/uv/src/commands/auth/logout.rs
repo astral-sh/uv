@@ -58,14 +58,14 @@ pub(crate) async fn logout(
             provider
                 .remove(&url, &username)
                 .await
-                .with_context(|| format!("Unable to remove credentials for {display_url}"))?;
+                .with_context(|| format!("Unable to remove credentials for `{display_url}`"))?;
         }
         AuthBackend::TextStore(mut store, _lock) => {
             if store
                 .remove(service, Username::from(Some(username)))
                 .is_none()
             {
-                bail!("No matching entry found for {display_url}");
+                bail!("No matching entry found for `{display_url}`");
             }
             store
                 .write(TextCredentialStore::default_file()?, _lock)
@@ -75,7 +75,7 @@ pub(crate) async fn logout(
 
     writeln!(
         printer.stderr(),
-        "Removed credentials for {}",
+        "Removed credentials for `{}`",
         display_url.bold().cyan()
     )?;
 

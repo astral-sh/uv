@@ -105,7 +105,7 @@ impl TextStoreMode {
 
         match TextCredentialStore::read(&path).await {
             Ok((store, _lock)) => {
-                debug!("Loaded credential file {}", path.display());
+                debug!("Loaded credential file `{}`", path.display());
                 Some(store)
             }
             Err(err)
@@ -113,12 +113,12 @@ impl TextStoreMode {
                     .as_io_error()
                     .is_some_and(|err| err.kind() == std::io::ErrorKind::NotFound) =>
             {
-                debug!("No credentials file found at {}", path.display());
+                debug!("No credentials file found at `{}`", path.display());
                 None
             }
             Err(err) => {
                 warn!(
-                    "Failed to load credentials from {}: {}",
+                    "Failed to load credentials from `{}`: {}",
                     path.display(),
                     err
                 );
@@ -345,7 +345,7 @@ impl Middleware for AuthMiddleware {
         let url = tracing_url(&request, request_credentials.as_ref());
         let index = self.indexes.index_for(request.url());
         let auth_policy = self.indexes.auth_policy_for(request.url());
-        trace!("Handling request for {url} with authentication policy {auth_policy}");
+        trace!("Handling request for `{url}` with authentication policy {auth_policy}");
 
         let credentials: Option<Arc<Authentication>> = if matches!(auth_policy, AuthPolicy::Never) {
             None
@@ -365,7 +365,7 @@ impl Middleware for AuthMiddleware {
             }
 
             // We have no credentials
-            trace!("Request for {url} is unauthenticated, checking cache");
+            trace!("Request for `{url}` is unauthenticated, checking cache");
 
             // Check the cache for a URL match first. This can save us from
             // making a failing request
@@ -377,7 +377,7 @@ impl Middleware for AuthMiddleware {
 
                 // If it's fully authenticated, finish the request
                 if credentials.is_authenticated() {
-                    trace!("Request for {url} is fully authenticated");
+                    trace!("Request for `{url}` is fully authenticated");
                     return self
                         .complete_request(None, request, extensions, next, auth_policy)
                         .await;
@@ -385,7 +385,7 @@ impl Middleware for AuthMiddleware {
 
                 // If we just found a username, we'll make the request then look for password elsewhere
                 // if it fails
-                trace!("Found username for {url} in cache, attempting request");
+                trace!("Found username for `{url}` in cache, attempting request");
             }
             credentials
         };
@@ -403,9 +403,9 @@ impl Middleware for AuthMiddleware {
         let (mut retry_request, response) = if !must_authenticate {
             let url = tracing_url(&request, credentials.as_deref());
             if credentials.is_none() {
-                trace!("Attempting unauthenticated request for {url}");
+                trace!("Attempting unauthenticated request for `{url}`");
             } else {
-                trace!("Attempting partially authenticated request for {url}");
+                trace!("Attempting partially authenticated request for `{url}`");
             }
 
             // <https://github.com/TrueLayer/reqwest-middleware/blob/abdf1844c37092d323683c2396b7eefda1418d3c/reqwest-retry/src/middleware.rs#L141-L149>
@@ -431,7 +431,7 @@ impl Middleware for AuthMiddleware {
 
             // Otherwise, search for credentials
             trace!(
-                "Request for {url} failed with {}, checking for credentials",
+                "Request for `{url}` failed with {}, checking for credentials",
                 response.status()
             );
 
@@ -439,7 +439,7 @@ impl Middleware for AuthMiddleware {
         } else {
             // For endpoints where we require the user to provide credentials, we don't try the
             // unauthenticated request first.
-            trace!("Checking for credentials for {url}");
+            trace!("Checking for credentials for `{url}`");
             (request, None)
         };
         let retry_request_url = DisplaySafeUrl::ref_cast(retry_request.url());
@@ -463,7 +463,7 @@ impl Middleware for AuthMiddleware {
 
         if let Some(credentials) = credentials.as_ref() {
             if credentials.is_authenticated() {
-                trace!("Retrying request for {url} with credentials from cache {credentials:?}");
+                trace!("Retrying request for `{url}` with credentials from cache {credentials:?}");
                 retry_request = credentials.authenticate(retry_request).await?;
                 return self
                     .complete_request(None, retry_request, extensions, next, auth_policy)
@@ -483,7 +483,7 @@ impl Middleware for AuthMiddleware {
             .await?
         {
             retry_request = credentials.authenticate(retry_request).await?;
-            trace!("Retrying request for {url} with {credentials:?}");
+            trace!("Retrying request for `{url}` with {credentials:?}");
             return self
                 .complete_request(
                     Some(credentials),
@@ -497,7 +497,7 @@ impl Middleware for AuthMiddleware {
 
         if let Some(credentials) = credentials.as_ref() {
             if !attempt_has_username {
-                trace!("Retrying request for {url} with username from cache {credentials:?}");
+                trace!("Retrying request for `{url}` with username from cache {credentials:?}");
                 retry_request = credentials.authenticate(retry_request).await?;
                 return self
                     .complete_request(None, retry_request, extensions, next, auth_policy)
@@ -509,7 +509,7 @@ impl Middleware for AuthMiddleware {
             Ok(response)
         } else {
             Err(Error::Middleware(format_err!(
-                "Missing credentials for {url}"
+                "Missing credentials for `{url}`"
             )))
         }
     }
@@ -534,7 +534,7 @@ impl AuthMiddleware {
         let url = DisplaySafeUrl::from_url(request.url().clone());
         if matches!(auth_policy, AuthPolicy::Always) && !credentials.is_authenticated() {
             return Err(Error::Middleware(format_err!(
-                "Incomplete credentials for {url}"
+                "Incomplete credentials for `{url}`"
             )));
         }
         let result = next.run(request, extensions).await;
@@ -545,7 +545,7 @@ impl AuthMiddleware {
             .is_ok_and(|response| response.error_for_status_ref().is_ok())
         {
             // TODO(zanieb): Consider also updating the system keyring after successful use
-            trace!("Updating cached credentials for {url} to {credentials:?}");
+            trace!("Updating cached credentials for `{url}` to {credentials:?}");
             self.cache().insert(&url, credentials);
         }
 
@@ -567,13 +567,13 @@ impl AuthMiddleware {
 
         // If the request already contains complete authentication, send it and cache it.
         if credentials.is_authenticated() {
-            trace!("Request for {url} already contains complete authentication");
+            trace!("Request for `{url}` already contains complete authentication");
             return self
                 .complete_request(Some(credentials), request, extensions, next, auth_policy)
                 .await;
         }
 
-        trace!("Request for {url} is missing a password, looking for credentials");
+        trace!("Request for `{url}` is missing a password, looking for credentials");
 
         // There's just a username, try to find a password.
         // If we have an index, check the cache for that URL. Otherwise,
@@ -681,7 +681,7 @@ impl AuthMiddleware {
             .map(Authentication::from)
             .map(Arc::new)
         {
-            debug!("Found Hugging Face credentials for {url}");
+            debug!("Found Hugging Face credentials for `{url}`");
             self.cache().fetches.done(key, Some(credentials.clone()));
             return Ok(Some(credentials));
         }
@@ -692,7 +692,7 @@ impl AuthMiddleware {
             // If the S3 credential state is uninitialized, initialize it.
             let credentials = match &*s3_state {
                 S3CredentialState::Uninitialized => {
-                    trace!("Initializing S3 credentials for {url}");
+                    trace!("Initializing S3 credentials for `{url}`");
                     let signer = S3EndpointProvider::create_signer();
                     let credentials = Arc::new(Authentication::from(signer));
                     *s3_state = S3CredentialState::Initialized(Some(credentials.clone()));
@@ -702,7 +702,7 @@ impl AuthMiddleware {
             };
 
             if let Some(credentials) = credentials {
-                debug!("Found S3 credentials for {url}");
+                debug!("Found S3 credentials for `{url}`");
                 self.cache().fetches.done(key, Some(credentials.clone()));
                 return Ok(Some(credentials));
             }
@@ -714,7 +714,7 @@ impl AuthMiddleware {
             // If the GCS credential state is uninitialized, initialize it.
             let credentials = match &*gcs_state {
                 GcsCredentialState::Uninitialized => {
-                    trace!("Initializing GCS credentials for {url}");
+                    trace!("Initializing GCS credentials for `{url}`");
                     let signer = GcsEndpointProvider::create_signer();
                     let credentials = Arc::new(Authentication::from(signer));
                     *gcs_state = GcsCredentialState::Initialized(Some(credentials.clone()));
@@ -724,7 +724,7 @@ impl AuthMiddleware {
             };
 
             if let Some(credentials) = credentials {
-                debug!("Found GCS credentials for {url}");
+                debug!("Found GCS credentials for `{url}`");
                 self.cache().fetches.done(key, Some(credentials.clone()));
                 return Ok(Some(credentials));
             }
@@ -736,7 +736,7 @@ impl AuthMiddleware {
             // If the Azure credential state is uninitialized, initialize it.
             let credentials = match &*azure_state {
                 AzureCredentialState::Uninitialized => {
-                    trace!("Initializing Azure credentials for {url}");
+                    trace!("Initializing Azure credentials for `{url}`");
                     let signer = AzureEndpointProvider::create_signer();
                     let credentials = Arc::new(Authentication::from(signer));
                     *azure_state = AzureCredentialState::Initialized(Some(credentials.clone()));
@@ -746,7 +746,7 @@ impl AuthMiddleware {
             };
 
             if let Some(credentials) = credentials {
-                debug!("Found Azure credentials for {url}");
+                debug!("Found Azure credentials for `{url}`");
                 self.cache().fetches.done(key, Some(credentials.clone()));
                 return Ok(Some(credentials));
             }
@@ -754,7 +754,7 @@ impl AuthMiddleware {
 
         // Netrc support based on: <https://github.com/gribouille/netrc>.
         let credentials = if let Some(credentials) = self.netrc.get().and_then(|netrc| {
-            debug!("Checking netrc for credentials for {url}");
+            debug!("Checking netrc for credentials for `{url}`");
             Credentials::from_netrc(
                 netrc,
                 url,
@@ -763,12 +763,12 @@ impl AuthMiddleware {
                     .and_then(|credentials| credentials.username()),
             )
         }) {
-            debug!("Found credentials in netrc file for {url}");
+            debug!("Found credentials in netrc file for `{url}`");
             Some(credentials)
 
         // Text credential store support.
         } else if let Some(credentials) = self.text_store.get().await.and_then(|text_store| {
-            debug!("Checking text store for credentials for {url}");
+            debug!("Checking text store for credentials for `{url}`");
             match text_store.get_credentials(
                 url,
                 credentials
@@ -782,7 +782,7 @@ impl AuthMiddleware {
                 }
             }
         }) {
-            debug!("Found credentials in plaintext store for {url}");
+            debug!("Found credentials in plaintext store for `{url}`");
             Some(credentials)
         } else if let Some(credentials) = {
             if self.preview.is_enabled(PreviewFeature::NativeAuth) {
@@ -803,7 +803,7 @@ impl AuthMiddleware {
                     native_store.fetch(&index.root_url, username).await
                 } else {
                     debug!(
-                        "Checking native store for credentials for URL {}{}",
+                        "Checking native store for credentials for URL `{}{}`",
                         display_username, url
                     );
                     native_store.fetch(url, username).await
@@ -813,7 +813,7 @@ impl AuthMiddleware {
                 None
             }
         } {
-            debug!("Found credentials in native store for {url}");
+            debug!("Found credentials in native store for `{url}`");
             Some(credentials)
         // N.B. The keyring provider performs lookups for the exact URL then falls back to the host.
         //      But, in the absence of an index URL, we cache the result per realm. So in that case,
@@ -827,7 +827,7 @@ impl AuthMiddleware {
                 if let Some(username) = credentials.and_then(|credentials| credentials.username()) {
                     if let Some(index) = index {
                         debug!(
-                            "Checking keyring for credentials for index URL {}@{}",
+                            "Checking keyring for credentials for index URL `{}@{}`",
                             username, index.url
                         );
                         keyring
@@ -835,7 +835,7 @@ impl AuthMiddleware {
                             .await
                     } else {
                         debug!(
-                            "Checking keyring for credentials for full URL {}@{}",
+                            "Checking keyring for credentials for full URL `{}@{}`",
                             username, url
                         );
                         keyring.fetch(url, Some(username)).await
@@ -843,7 +843,7 @@ impl AuthMiddleware {
                 } else if matches!(auth_policy, AuthPolicy::Always) {
                     if let Some(index) = index {
                         debug!(
-                            "Checking keyring for credentials for index URL {} without username due to `authenticate = always`",
+                            "Checking keyring for credentials for index URL `{}` without username due to `authenticate = always`",
                             index.url
                         );
                         keyring
@@ -854,14 +854,14 @@ impl AuthMiddleware {
                     }
                 } else {
                     debug!(
-                        "Skipping keyring fetch for {url} without username; use `authenticate = always` to force"
+                        "Skipping keyring fetch for `{url}` without username; use `authenticate = always` to force"
                     );
                     None
                 }
             }
             None => None,
         } {
-            debug!("Found credentials in keyring for {url}");
+            debug!("Found credentials in keyring for `{url}`");
             Some(credentials)
         } else {
             None

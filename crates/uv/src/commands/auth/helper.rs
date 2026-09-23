@@ -69,7 +69,7 @@ async fn credentials_for_url(
         .as_ref()
         .is_some_and(|credentials| credentials.password().is_some())
     {
-        debug!("URL '{url}' contain a password; ignoring");
+        debug!("URL `{url}` contain a password; ignoring");
     }
 
     let backend = AuthBackend::from_settings(preview).await?;

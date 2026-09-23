@@ -126,7 +126,7 @@ impl CacheInfo {
                     };
                     if !metadata.is_file() {
                         warn!(
-                            "Expected file for cache key, but found directory: `{}`",
+                            "Expected file for cache key, but found directory: {}",
                             path.display()
                         );
                         continue;
@@ -154,7 +154,7 @@ impl CacheInfo {
                     };
                     if !metadata.is_dir() {
                         warn!(
-                            "Expected directory for cache key, but found file: `{}`",
+                            "Expected directory for cache key, but found file: {}",
                             path.display()
                         );
                         continue;
@@ -262,7 +262,7 @@ impl CacheInfo {
                         if !entry.path_is_symlink() {
                             // don't warn if it was a symlink - it may legitimately resolve to a directory
                             warn!(
-                                "Expected file for cache key, but found directory: `{}`",
+                                "Expected file for cache key, but found directory: {}",
                                 entry.path().display()
                             );
                         }

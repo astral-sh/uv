@@ -805,9 +805,9 @@ fn complex_namespace_packages() -> Result<()> {
     Uninstalled 2 packages in [TIME]
     Installed 2 packages in [TIME]
      - complex-project-part-a==1.0.0
-     + complex-project-part-a==1.0.0 (from file://[TEMP_DIR]/complex-project-part_a)
+     + complex-project-part-a==1.0.0 (from `file://[TEMP_DIR]/complex-project-part_a`)
      - complex-project-part-b==1.0.0
-     + complex-project-part-b==1.0.0 (from file://[TEMP_DIR]/complex-project-part_b)
+     + complex-project-part-b==1.0.0 (from `file://[TEMP_DIR]/complex-project-part_b`)
     "
     );
 
@@ -964,7 +964,7 @@ fn symlinked_file() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + project==1.0.0 (from file://[TEMP_DIR]/project-1.0.0-py3-none-any.whl)
+     + project==1.0.0 (from `file://[TEMP_DIR]/project-1.0.0-py3-none-any.whl`)
     ");
 
     // Check that we included the actual license text and not a broken symlink.
@@ -1175,7 +1175,7 @@ fn wheel_data_respects_excludes() -> Result<()> {
     uv_snapshot!(context.build().arg("--wheel").arg("--list"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    Building project-0.1.0-py3-none-any.whl will include the following files:
+    Building `project-0.1.0-py3-none-any.whl` will include the following files:
     project/__init__.py (src/project/__init__.py)
     project-0.1.0.data/data/public.txt (assets/public.txt)
     project-0.1.0.dist-info/WHEEL (generated)
@@ -1249,7 +1249,7 @@ fn wheel_data_symlink_containment() -> Result<()> {
     uv_snapshot!(context.build().arg("project").arg("--wheel").arg("--list"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    Building project-0.1.0-py3-none-any.whl will include the following files:
+    Building `project-0.1.0-py3-none-any.whl` will include the following files:
     project/__init__.py (src/project/__init__.py)
     project-0.1.0.data/data/public.txt (internal-assets/public.txt)
     project-0.1.0.dist-info/WHEEL (generated)
@@ -1338,8 +1338,8 @@ fn warn_on_redundant_module_names() -> Result<()> {
     Building source distribution...
     warning: Ignoring redundant module names in `tool.uv.build-backend.module-name`: `foo.bar`, `foo`, `foo.bar.baz`, `foobar.baz`
     Building wheel from source distribution...
-    Successfully built dist/project-0.1.0.tar.gz
-    Successfully built dist/project-0.1.0-py3-none-any.whl
+    Successfully built `dist/project-0.1.0.tar.gz`
+    Successfully built `dist/project-0.1.0-py3-none-any.whl`
     ");
 
     // But warnings shouldn't be printed in cases when the user might not
@@ -1350,8 +1350,8 @@ fn warn_on_redundant_module_names() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     Building wheel from source distribution...
-    Successfully built dist/project-0.1.0.tar.gz
-    Successfully built dist/project-0.1.0-py3-none-any.whl
+    Successfully built `dist/project-0.1.0.tar.gz`
+    Successfully built `dist/project-0.1.0-py3-none-any.whl`
     ");
 
     Ok(())
@@ -1639,8 +1639,8 @@ fn tool_uv_build_backend_without_build_backend() -> Result<()> {
     Building source distribution...
     warning: `project` defines settings for `uv_build` in `tool.uv.build-backend`, but the `build-system` table is missing
     Building wheel from source distribution...
-    Successfully built dist/project-0.1.0.tar.gz
-    Successfully built dist/project-0.1.0-py3-none-any.whl
+    Successfully built `dist/project-0.1.0.tar.gz`
+    Successfully built `dist/project-0.1.0-py3-none-any.whl`
     ");
 
     uv_snapshot!(context.filters(), context.pip_install().arg("."), @r"
@@ -1650,7 +1650,7 @@ fn tool_uv_build_backend_without_build_backend() -> Result<()> {
     warning: `project` defines settings for `uv_build` in `tool.uv.build-backend`, but the `build-system` table is missing
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0 (from `file://[TEMP_DIR]/`)
     ");
 
     // Ensure that the warning isn't shown for registry dependencies.
@@ -1661,7 +1661,7 @@ fn tool_uv_build_backend_without_build_backend() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - project==0.1.0 (from file://[TEMP_DIR]/)
+     - project==0.1.0 (from `file://[TEMP_DIR]/`)
      + project==0.1.0
     ");
 
@@ -1700,8 +1700,8 @@ fn tool_uv_build_backend_wrong_build_backend() -> Result<()> {
     Building source distribution...
     warning: `project` defines settings for `uv_build` in `tool.uv.build-backend`, but uses `hatchling.build` as build backend instead
     Building wheel from source distribution...
-    Successfully built project/dist/project-0.1.0.tar.gz
-    Successfully built project/dist/project-0.1.0-py2.py3-none-any.whl
+    Successfully built `project/dist/project-0.1.0.tar.gz`
+    Successfully built `project/dist/project-0.1.0-py2.py3-none-any.whl`
     ");
 
     uv_snapshot!(context.filters(), context.pip_install().arg(project.path()), @r"
@@ -1711,7 +1711,7 @@ fn tool_uv_build_backend_wrong_build_backend() -> Result<()> {
     warning: `project` defines settings for `uv_build` in `tool.uv.build-backend`, but uses `hatchling.build` as build backend instead
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + project==0.1.0 (from file://[TEMP_DIR]/project)
+     + project==0.1.0 (from `file://[TEMP_DIR]/project`)
     ");
 
     Ok(())
@@ -1752,8 +1752,8 @@ fn tool_uv_build_backend_in_tree_backend() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     Building wheel from source distribution...
-    Successfully built project/dist/project-0.1.0.tar.gz
-    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    Successfully built `project/dist/project-0.1.0.tar.gz`
+    Successfully built `project/dist/project-0.1.0-py3-none-any.whl`
     ");
 
     Ok(())
@@ -1785,8 +1785,8 @@ fn warn_on_license_classifier() -> Result<()> {
     Building source distribution...
     warning: Found license classifier `License :: OSI Approved :: MIT License`. License classifiers are ambiguous and deprecated per PEP 639; projects should use `project.license` and `project.license-files` instead.
     Building wheel from source distribution...
-    Successfully built dist/foo-1.0.0.tar.gz
-    Successfully built dist/foo-1.0.0-py3-none-any.whl
+    Successfully built `dist/foo-1.0.0.tar.gz`
+    Successfully built `dist/foo-1.0.0-py3-none-any.whl`
     ");
 
     Ok(())
@@ -1819,8 +1819,8 @@ fn rewrite_toml_1_1_by_default() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     Building wheel from source distribution...
-    Successfully built dist/foo-1.0.0.tar.gz
-    Successfully built dist/foo-1.0.0-py3-none-any.whl
+    Successfully built `dist/foo-1.0.0.tar.gz`
+    Successfully built `dist/foo-1.0.0-py3-none-any.whl`
     ");
 
     Ok(())

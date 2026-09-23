@@ -457,7 +457,7 @@ pub enum ErrorKind {
     #[error("Expected an index URL, but received non-base URL: {0}")]
     CannotBeABase(DisplaySafeUrl),
 
-    #[error("Failed to read metadata: `{0}`")]
+    #[error("Failed to read metadata: {0}")]
     Metadata(String, #[source] uv_metadata::Error),
 
     #[error("{0} isn't available locally, but making network requests to registries was banned")]
@@ -475,7 +475,7 @@ pub enum ErrorKind {
     LocalPackageNotFound(PackageName),
 
     /// The root was not found in the local (file-based) index.
-    #[error("Local index not found at: `{}`", _0.display())]
+    #[error("Local index not found at: {}", _0.display())]
     LocalIndexNotFound(PathBuf),
 
     /// The metadata file does not match a hash provided by its package index.
@@ -489,7 +489,7 @@ pub enum ErrorKind {
     },
 
     /// The metadata file could not be parsed.
-    #[error("Couldn't parse metadata of {0} from {1}")]
+    #[error("Couldn't parse metadata of `{0}` from `{1}`")]
     MetadataParseError(
         WheelFilename,
         String,
@@ -497,25 +497,25 @@ pub enum ErrorKind {
     ),
 
     /// An error that happened while making a request or in a reqwest middleware.
-    #[error("Failed to fetch: `{0}`")]
+    #[error("Failed to fetch: {0}")]
     WrappedReqwestError(DisplaySafeUrl, #[source] WrappedReqwestError),
 
-    #[error("Received some unexpected JSON from {}", url)]
+    #[error("Received some unexpected JSON from `{}`", url)]
     BadJson {
         source: serde_json::Error,
         url: DisplaySafeUrl,
     },
 
-    #[error("Received some unexpected HTML from {}", url)]
+    #[error("Received some unexpected HTML from `{}`", url)]
     BadHtml {
         source: html::Error,
         url: DisplaySafeUrl,
     },
 
-    #[error("Failed to read zip with range requests: `{0}`")]
+    #[error("Failed to read zip with range requests: {0}")]
     AsyncHttpRangeReader(DisplaySafeUrl, #[source] AsyncHttpRangeReaderError),
 
-    #[error("Wheel metadata range requests are required, but not supported for: `{0}`")]
+    #[error("Wheel metadata range requests are required, but not supported for: {0}")]
     MetadataRangeRequestsRequired(DisplaySafeUrl, #[source] Box<Error>),
 
     #[error("{0} is not a valid wheel filename")]
@@ -545,13 +545,13 @@ pub enum ErrorKind {
     #[error("Cache serialization failed")]
     Encode(#[source] rmp_serde::encode::Error),
 
-    #[error("Missing `Content-Type` header for {0}")]
+    #[error("Missing `Content-Type` header for `{0}`")]
     MissingContentType(DisplaySafeUrl),
 
-    #[error("Invalid `Content-Type` header for {0}")]
+    #[error("Invalid `Content-Type` header for `{0}`")]
     InvalidContentTypeHeader(DisplaySafeUrl, #[source] http::header::ToStrError),
 
-    #[error("Unsupported `Content-Type` \"{1}\" for {0}. Expected JSON or HTML.")]
+    #[error("Unsupported `Content-Type` \"{1}\" for `{0}`. Expected JSON or HTML.")]
     UnsupportedMediaType(DisplaySafeUrl, String),
 
     #[error("Reading from cache archive failed: {0}")]
@@ -561,7 +561,7 @@ pub enum ErrorKind {
     ArchiveWrite(String),
 
     #[error(
-        "Network connectivity is disabled, but the requested data wasn't found in the cache for: `{0}`"
+        "Network connectivity is disabled, but the requested data wasn't found in the cache for: {0}"
     )]
     Offline(String),
 }

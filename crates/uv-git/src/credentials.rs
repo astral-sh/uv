@@ -36,7 +36,7 @@ pub fn store_credentials(url: RepositoryUrl, credentials: Credentials) {
 /// Returns `true` if the store was updated.
 pub fn store_credentials_from_url(url: &DisplaySafeUrl) -> Result<bool, CredentialsFromUrlError> {
     if let Some(credentials) = Credentials::from_url(url)? {
-        trace!("Caching credentials for {url}");
+        trace!("Caching credentials for `{url}`");
         store_credentials(RepositoryUrl::new(url.clone()), credentials);
         Ok(true)
     } else {

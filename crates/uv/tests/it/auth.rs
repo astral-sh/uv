@@ -85,7 +85,7 @@ async fn add_package_native_auth_realm() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 0 (success)
     ----- stderr -----
-    Stored credentials for public@http://[LOCALHOST]/
+    Stored credentials for `public@http://[LOCALHOST]/`
     "
     );
 
@@ -112,7 +112,7 @@ async fn add_package_native_auth_realm() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 0 (success)
     ----- stderr -----
-    Removed credentials for public@http://[LOCALHOST]/
+    Removed credentials for `public@http://[LOCALHOST]/`
     "
     );
 
@@ -185,7 +185,7 @@ async fn add_package_native_auth() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 0 (success)
     ----- stderr -----
-    Stored credentials for public@http://[LOCALHOST]/basic-auth
+    Stored credentials for `public@http://[LOCALHOST]/basic-auth`
     "
     );
 
@@ -212,7 +212,7 @@ async fn add_package_native_auth() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 0 (success)
     ----- stderr -----
-    Removed credentials for public@http://[LOCALHOST]/basic-auth
+    Removed credentials for `public@http://[LOCALHOST]/basic-auth`
     "
     );
 
@@ -255,7 +255,7 @@ async fn token_native_auth() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to fetch credentials for http://[LOCALHOST]/basic-auth/simple
+    error: Failed to fetch credentials for `http://[LOCALHOST]/basic-auth/simple`
     ");
 
     // Without persisted credentials (with a username in the request)
@@ -266,7 +266,7 @@ async fn token_native_auth() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to fetch credentials for public@http://[LOCALHOST]/basic-auth/simple
+    error: Failed to fetch credentials for `public@http://[LOCALHOST]/basic-auth/simple`
     ");
 
     // Login to the index
@@ -279,7 +279,7 @@ async fn token_native_auth() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 0 (success)
     ----- stderr -----
-    Stored credentials for public@http://[LOCALHOST]/basic-auth
+    Stored credentials for `public@http://[LOCALHOST]/basic-auth`
     "
     );
 
@@ -301,7 +301,7 @@ async fn token_native_auth() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to fetch credentials for http://[LOCALHOST]/basic-auth/simple
+    error: Failed to fetch credentials for `http://[LOCALHOST]/basic-auth/simple`
     ");
 
     // With a mismatched username
@@ -313,7 +313,7 @@ async fn token_native_auth() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to fetch credentials for private@http://[LOCALHOST]/basic-auth/simple
+    error: Failed to fetch credentials for `private@http://[LOCALHOST]/basic-auth/simple`
     ");
 
     // Login to the index with a token
@@ -324,7 +324,7 @@ async fn token_native_auth() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 0 (success)
     ----- stderr -----
-    Stored credentials for http://[LOCALHOST]/basic-auth
+    Stored credentials for `http://[LOCALHOST]/basic-auth`
     "
     );
 
@@ -400,7 +400,7 @@ async fn token_native_auth_realm() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to fetch credentials for http://[LOCALHOST]/
+    error: Failed to fetch credentials for `http://[LOCALHOST]/`
     ");
 
     // Without persisted credentials (with a username in the request)
@@ -411,7 +411,7 @@ async fn token_native_auth_realm() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to fetch credentials for public@http://[LOCALHOST]/
+    error: Failed to fetch credentials for `public@http://[LOCALHOST]/`
     ");
 
     // Login to the index
@@ -424,7 +424,7 @@ async fn token_native_auth_realm() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 0 (success)
     ----- stderr -----
-    Stored credentials for public@http://[LOCALHOST]/
+    Stored credentials for `public@http://[LOCALHOST]/`
     "
     );
 
@@ -456,7 +456,7 @@ async fn token_native_auth_realm() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to fetch credentials for http://[LOCALHOST]/
+    error: Failed to fetch credentials for `http://[LOCALHOST]/`
     ");
 
     // Without the username (defaults to __token__ which wasn't stored)
@@ -465,7 +465,7 @@ async fn token_native_auth_realm() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to fetch credentials for http://[LOCALHOST]/basic-auth/simple
+    error: Failed to fetch credentials for `http://[LOCALHOST]/basic-auth/simple`
     ");
 
     // With a mismatched username
@@ -477,7 +477,7 @@ async fn token_native_auth_realm() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to fetch credentials for private@http://[LOCALHOST]/
+    error: Failed to fetch credentials for `private@http://[LOCALHOST]/`
     ");
 
     // With a mismatched port
@@ -488,7 +488,7 @@ async fn token_native_auth_realm() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to fetch credentials for public@https://192.0.2.1:1000/
+    error: Failed to fetch credentials for `public@https://192.0.2.1:1000/`
     ");
 
     // Login to the index with a token
@@ -499,7 +499,7 @@ async fn token_native_auth_realm() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 0 (success)
     ----- stderr -----
-    Stored credentials for http://[LOCALHOST]/
+    Stored credentials for `http://[LOCALHOST]/`
     "
     );
 
@@ -588,7 +588,7 @@ async fn login_native_auth() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 0 (success)
     ----- stderr -----
-    Stored credentials for public@http://[LOCALHOST]/basic-auth
+    Stored credentials for `public@http://[LOCALHOST]/basic-auth`
     "
     );
 
@@ -618,7 +618,7 @@ async fn login_token_native_auth() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 0 (success)
     ----- stderr -----
-    Stored credentials for http://[LOCALHOST]/basic-auth
+    Stored credentials for `http://[LOCALHOST]/basic-auth`
     "
     );
 
@@ -663,7 +663,7 @@ async fn logout_native_auth() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Unable to remove credentials for http://[LOCALHOST]/basic-auth
+    error: Unable to remove credentials for `http://[LOCALHOST]/basic-auth`
       cause: No matching entry found in secure storage
     ");
 
@@ -675,7 +675,7 @@ async fn logout_native_auth() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Unable to remove credentials for public@http://[LOCALHOST]/basic-auth
+    error: Unable to remove credentials for `public@http://[LOCALHOST]/basic-auth`
       cause: No matching entry found in secure storage
     ");
 
@@ -689,7 +689,7 @@ async fn logout_native_auth() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 0 (success)
     ----- stderr -----
-    Stored credentials for public@http://[LOCALHOST]/basic-auth
+    Stored credentials for `public@http://[LOCALHOST]/basic-auth`
     "
     );
 
@@ -700,7 +700,7 @@ async fn logout_native_auth() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Unable to remove credentials for http://[LOCALHOST]/basic-auth
+    error: Unable to remove credentials for `http://[LOCALHOST]/basic-auth`
       cause: No matching entry found in secure storage
     ");
 
@@ -712,7 +712,7 @@ async fn logout_native_auth() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 0 (success)
     ----- stderr -----
-    Removed credentials for public@http://[LOCALHOST]/basic-auth
+    Removed credentials for `public@http://[LOCALHOST]/basic-auth`
     ");
 
     // Login again
@@ -733,7 +733,7 @@ async fn logout_native_auth() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 0 (success)
     ----- stderr -----
-    Removed credentials for public@http://[LOCALHOST]/basic-auth
+    Removed credentials for `public@http://[LOCALHOST]/basic-auth`
     ");
 
     // Conflict between --username and a URL username is rejected
@@ -782,7 +782,7 @@ async fn logout_token_native_auth() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 0 (success)
     ----- stderr -----
-    Stored credentials for http://[LOCALHOST]/basic-auth
+    Stored credentials for `http://[LOCALHOST]/basic-auth`
     "
     );
 
@@ -792,7 +792,7 @@ async fn logout_token_native_auth() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 0 (success)
     ----- stderr -----
-    Removed credentials for http://[LOCALHOST]/basic-auth
+    Removed credentials for `http://[LOCALHOST]/basic-auth`
     ");
 
     Ok(())
@@ -813,7 +813,7 @@ fn login_native_auth_url() {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 0 (success)
     ----- stderr -----
-    Stored credentials for test@https://example.com/
+    Stored credentials for `test@https://example.com/`
     ");
 
     // HTTP URLs are not allowed - only HTTPS
@@ -841,7 +841,7 @@ fn login_native_auth_url() {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 0 (success)
     ----- stderr -----
-    Stored credentials for test@http://localhost:1324/
+    Stored credentials for `test@http://localhost:1324/`
     ");
 
     uv_snapshot!(context.auth_login()
@@ -853,7 +853,7 @@ fn login_native_auth_url() {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 0 (success)
     ----- stderr -----
-    Stored credentials for test@https://example.com/
+    Stored credentials for `test@https://example.com/`
     ");
 
     // A domain-only service with a path also gets https:// prepended
@@ -866,7 +866,7 @@ fn login_native_auth_url() {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 0 (success)
     ----- stderr -----
-    Stored credentials for test@https://example.com/
+    Stored credentials for `test@https://example.com/`
     ");
 
     // An invalid URL is rejected
@@ -890,7 +890,7 @@ fn login_native_auth_url() {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 0 (success)
     ----- stderr -----
-    Stored credentials for test@https://example.com/
+    Stored credentials for `test@https://example.com/`
     ");
 
     // URL with embedded username and separate password works
@@ -901,7 +901,7 @@ fn login_native_auth_url() {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 0 (success)
     ----- stderr -----
-    Stored credentials for test@https://example.com/
+    Stored credentials for `test@https://example.com/`
     ");
 
     // Conflict between --username and URL username is rejected
@@ -954,7 +954,7 @@ async fn login_text_store() {
         .arg("heron"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Stored credentials for public@http://[LOCALHOST]/basic-auth
+    Stored credentials for `public@http://[LOCALHOST]/basic-auth`
     "
     );
 
@@ -965,7 +965,7 @@ async fn login_text_store() {
         .arg("test-token"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Stored credentials for https://example.com/
+    Stored credentials for `https://example.com/`
     "
     );
 
@@ -1032,7 +1032,7 @@ async fn login_text_store() {
         .arg("testpass"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Stored credentials for testuser@http://127.0.0.1/
+    Stored credentials for `testuser@http://127.0.0.1/`
     ");
 
     // HTTP should be allowed on localhost
@@ -1044,7 +1044,7 @@ async fn login_text_store() {
         .arg("testpass"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Stored credentials for testuser@http://localhost/
+    Stored credentials for `testuser@http://localhost/`
     ");
 }
 
@@ -1060,7 +1060,7 @@ fn login_text_store_empty_file() -> Result<()> {
         .env(EnvVars::UV_CREDENTIALS_DIR, context.temp_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Stored credentials for https://example.com/
+    Stored credentials for `https://example.com/`
     ");
 
     uv_snapshot!(context.auth_token()
@@ -1089,7 +1089,7 @@ fn login_text_store_comments_only_file() -> Result<()> {
         .env(EnvVars::UV_CREDENTIALS_DIR, context.temp_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Stored credentials for https://example.com/
+    Stored credentials for `https://example.com/`
     ");
 
     Ok(())
@@ -1114,7 +1114,7 @@ fn login_password_stdin() -> Result<()> {
         .stdin(std::fs::File::open(password_file)?), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Stored credentials for testuser@https://example.com/
+    Stored credentials for `testuser@https://example.com/`
     "
     );
 
@@ -1149,7 +1149,7 @@ fn login_token_stdin() -> Result<()> {
         .stdin(std::fs::File::open(token_file)?), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Stored credentials for https://example.com/
+    Stored credentials for `https://example.com/`
     "
     );
 
@@ -1245,7 +1245,7 @@ async fn logout_text_store() {
         .arg("public"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Removed credentials for public@http://[LOCALHOST]/basic-auth
+    Removed credentials for `public@http://[LOCALHOST]/basic-auth`
     "
     );
 
@@ -1262,7 +1262,7 @@ async fn logout_text_store() {
         .arg("https://example.com/simple"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Removed credentials for https://example.com/
+    Removed credentials for `https://example.com/`
     "
     );
 
@@ -1294,7 +1294,7 @@ async fn auth_disabled_provider_uses_text_store() {
         .arg("disabled"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Stored credentials for public@http://[LOCALHOST]/basic-auth
+    Stored credentials for `public@http://[LOCALHOST]/basic-auth`
     "
     );
 
@@ -1325,7 +1325,7 @@ fn login_text_store_strips_simple_suffix() {
         .arg("testpass"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Stored credentials for testuser@https://example.com/
+    Stored credentials for `testuser@https://example.com/`
     "
     );
 
@@ -1338,7 +1338,7 @@ fn login_text_store_strips_simple_suffix() {
         .arg("devpipass"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Stored credentials for devpiuser@https://devpi.example.com/root
+    Stored credentials for `devpiuser@https://devpi.example.com/root`
     "
     );
 
@@ -1351,7 +1351,7 @@ fn login_text_store_strips_simple_suffix() {
         .arg("casepass"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Stored credentials for caseuser@https://registry.example.com/
+    Stored credentials for `caseuser@https://registry.example.com/`
     "
     );
 
@@ -1364,7 +1364,7 @@ fn login_text_store_strips_simple_suffix() {
         .arg("apipass"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Stored credentials for apiuser@https://custom.example.com/api/v1
+    Stored credentials for `apiuser@https://custom.example.com/api/v1`
     "
     );
 
@@ -1377,7 +1377,7 @@ fn login_text_store_strips_simple_suffix() {
         .arg("slashpass"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Stored credentials for slashuser@https://trailing.example.com/
+    Stored credentials for `slashuser@https://trailing.example.com/`
     "
     );
 }
@@ -1404,7 +1404,7 @@ fn logout_text_store_strips_simple_suffix() {
         .arg("testuser"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Removed credentials for testuser@https://example.com/
+    Removed credentials for `testuser@https://example.com/`
     "
     );
 
@@ -1426,7 +1426,7 @@ fn logout_text_store_strips_simple_suffix() {
         .arg("devpiuser"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Removed credentials for devpiuser@https://devpi.example.com/root
+    Removed credentials for `devpiuser@https://devpi.example.com/root`
     "
     );
 }
@@ -1507,7 +1507,7 @@ fn token_text_store_username() {
         .arg("https://example.com/simple"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to fetch credentials for https://example.com/simple
+    error: Failed to fetch credentials for `https://example.com/simple`
     "
     );
 
@@ -1518,7 +1518,7 @@ fn token_text_store_username() {
         .arg("wronguser"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to fetch credentials for wronguser@https://example.com/simple
+    error: Failed to fetch credentials for `wronguser@https://example.com/simple`
     "
     );
 
@@ -1556,7 +1556,7 @@ fn token_text_store_username() {
         .arg("https://userexample.com/simple"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to fetch credentials for https://userexample.com/simple
+    error: Failed to fetch credentials for `https://userexample.com/simple`
     "
     );
 }
@@ -1593,7 +1593,7 @@ fn logout_text_store_multiple_usernames() {
         .arg("user1"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Removed credentials for user1@https://example.com/
+    Removed credentials for `user1@https://example.com/`
     "
     );
 
@@ -1604,7 +1604,7 @@ fn logout_text_store_multiple_usernames() {
         .arg("user1"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to fetch credentials for user1@https://example.com/simple
+    error: Failed to fetch credentials for `user1@https://example.com/simple`
     "
     );
 
@@ -1623,7 +1623,7 @@ fn logout_text_store_multiple_usernames() {
         .arg("https://example.com/simple"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: No matching entry found for https://example.com/
+    error: No matching entry found for `https://example.com/`
     "
     );
 }
@@ -1652,7 +1652,7 @@ fn native_auth_prefix_match() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 0 (success)
     ----- stderr -----
-    Stored credentials for testuser@https://example.com/api
+    Stored credentials for `testuser@https://example.com/api`
     "
     );
 
@@ -1696,7 +1696,7 @@ fn native_auth_host_fallback() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 0 (success)
     ----- stderr -----
-    Stored credentials for testuser@https://example.com/
+    Stored credentials for `testuser@https://example.com/`
     "
     );
 
@@ -1720,7 +1720,7 @@ fn native_auth_host_fallback() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to fetch credentials for testuser@https://another-example.com/any/path
+    error: Failed to fetch credentials for `testuser@https://another-example.com/any/path`
     "
     );
 
@@ -1739,7 +1739,7 @@ fn bazel_helper_basic_auth() {
         .arg("--password").arg("testpass"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Stored credentials for testuser@https://test.example.com/
+    Stored credentials for `testuser@https://test.example.com/`
     ");
 
     uv_snapshot!(context.filters(), context.auth_helper()
@@ -1768,7 +1768,7 @@ fn bazel_helper_token() {
         .arg("--token").arg("mytoken123"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Stored credentials for https://api.example.com/
+    Stored credentials for `https://api.example.com/`
     ");
 
     // Test credential helper - tokens are stored as Basic auth with __token__ username
@@ -1887,7 +1887,7 @@ fn bazel_helper_username_in_uri() {
         .arg("--password").arg("specificpass"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Stored credentials for specificuser@https://test.example.com/
+    Stored credentials for `specificuser@https://test.example.com/`
     ");
 
     // Test with username in URI
@@ -1918,7 +1918,7 @@ fn bazel_helper_unknown_username_in_uri() {
         .arg("--password").arg("specificpass"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Stored credentials for specificuser@https://test.example.com/
+    Stored credentials for `specificuser@https://test.example.com/`
     ");
 
     // Test with username in URI

@@ -273,7 +273,7 @@ impl CandidateSelector {
                     [dist] => {
                         if dist.version() == version {
                             debug!(
-                                "Found installed version of {dist} that satisfies preference in {range}"
+                                "Found installed version of `{dist}` that satisfies preference in {range}"
                             );
 
                             // Verify that the installed distribution is compatible with the environment.
@@ -283,7 +283,7 @@ impl CandidateSelector {
                                 };
                                 !wheel_tags.is_compatible(tags)
                             }) {
-                                debug!("Platform tags mismatch for installed {dist}");
+                                debug!("Platform tags mismatch for installed `{dist}`");
                                 continue;
                             }
 
@@ -395,7 +395,7 @@ impl CandidateSelector {
                     };
                     !wheel_tags.is_compatible(tags)
                 }) {
-                    debug!("Platform tags mismatch for installed {dist}");
+                    debug!("Platform tags mismatch for installed `{dist}`");
                     return None;
                 }
 

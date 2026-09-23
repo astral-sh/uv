@@ -30,7 +30,7 @@ pub enum MetadataError {
     Workspace(#[from] WorkspaceError),
     #[error(transparent)]
     DependencyGroup(#[from] DependencyGroupError),
-    #[error("No pyproject.toml found at: {0}")]
+    #[error("No `pyproject.toml` found at: {0}")]
     MissingPyprojectToml(PathBuf),
     #[error("Failed to parse entry: `{0}`")]
     LoweringError(PackageName, #[source] Box<LoweringError>),

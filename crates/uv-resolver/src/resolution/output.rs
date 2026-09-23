@@ -169,7 +169,7 @@ pub(crate) fn from_state(
             tracing::warn!(
                 "found {} conflicting distributions in resolution, \
                  please report this as a bug at \
-                 https://github.com/astral-sh/uv/issues/new",
+                 `https://github.com/astral-sh/uv/issues/new`",
                 conflicting.len()
             );
         }

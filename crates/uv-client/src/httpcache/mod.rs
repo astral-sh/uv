@@ -318,7 +318,7 @@ impl ArchivedCachePolicy {
         // completely.
         if !self.is_storable() {
             tracing::trace!(
-                "Request {} does not match cache request {} because it isn't storable",
+                "Request `{}` does not match cache request `{}` because it isn't storable",
                 request.url(),
                 self.request.uri,
             );
@@ -331,7 +331,7 @@ impl ArchivedCachePolicy {
         // and..."
         if self.request.uri != request.url().as_str() {
             tracing::trace!(
-                "Request {} does not match cache URL of {}",
+                "Request `{}` does not match cache URL of `{}`",
                 request.url(),
                 self.request.uri,
             );
@@ -341,7 +341,7 @@ impl ArchivedCachePolicy {
         // be used for the presented request, and..."
         if request.method() != http::Method::GET && request.method() != http::Method::HEAD {
             tracing::trace!(
-                "Method {:?} for request {} is not supported by this cache",
+                "Method {:?} for request `{}` is not supported by this cache",
                 request.method(),
                 request.url(),
             );
@@ -354,7 +354,7 @@ impl ArchivedCachePolicy {
         // conservatively require revalidation.
         if !self.vary.matches(request.headers()) {
             tracing::trace!(
-                "Request {} does not match cached request because of the 'Vary' header",
+                "Request `{}` does not match cached request because of the 'Vary' header",
                 request.url(),
             );
             self.set_revalidation_headers(request);
@@ -777,7 +777,7 @@ impl ArchivedCachePolicy {
             // [RFC 9111 S5.2.1.4]: https://www.rfc-editor.org/rfc/rfc9111.html#section-5.2.1.4
             if reqcc.no_cache {
                 tracing::trace!(
-                    "Request to {} does not have a fresh cache entry because \
+                    "Request to `{}` does not have a fresh cache entry because \
                  it has a 'no-cache' cache-control directive",
                     request.url(),
                 );
@@ -791,7 +791,7 @@ impl ArchivedCachePolicy {
             if let Some(&max_age) = reqcc.max_age_seconds.as_ref() {
                 if age > max_age {
                     tracing::trace!(
-                        "Request to {} does not have a fresh cache entry because \
+                        "Request to `{}` does not have a fresh cache entry because \
                      the cached response's age is {} seconds and the max age \
                      allowed by the request is {} seconds",
                         request.url(),
@@ -811,7 +811,7 @@ impl ArchivedCachePolicy {
                 let time_to_live = freshness_lifetime.saturating_sub(unix_timestamp(now));
                 if time_to_live < min_fresh {
                     tracing::trace!(
-                        "Request to {} does not have a fresh cache entry because \
+                        "Request to `{}` does not have a fresh cache entry because \
                      the request set a 'min-fresh' cache-control directive, \
                      and its time-to-live is {} seconds but it needs to be \
                      at least {} seconds",
@@ -833,7 +833,7 @@ impl ArchivedCachePolicy {
             let allows_stale = self.allows_stale(now);
             if !allows_stale {
                 tracing::trace!(
-                    "Request to {} does not have a fresh cache entry because \
+                    "Request to `{}` does not have a fresh cache entry because \
                      its age is {} seconds, it is greater than or equal to the \
                      freshness lifetime of {} seconds and stale cached responses \
                      are not allowed",

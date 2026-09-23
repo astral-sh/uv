@@ -75,7 +75,7 @@ impl EntryPoints {
 
         let entry_points_mapping = parser
             .read(ini)
-            .map_err(|err| Error::InvalidWheel(format!("entry_points.txt is invalid: {err}")))?;
+            .map_err(|err| Error::InvalidWheel(format!("`entry_points.txt` is invalid: {err}")))?;
 
         let mut console_scripts = match entry_points_mapping.get("console_scripts") {
             Some(console_scripts) => {

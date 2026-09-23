@@ -185,7 +185,7 @@ async fn require_hashes_rejects_direct_url_hash_discovered_in_wheel_metadata() -
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to build `ok @ file://[TEMP_DIR]/ok-1.0.0.tar.gz#sha256=[SOURCE_HASH]`
-      cause: Hash-checking is enabled, but no hashes were provided or computed for: `ok @ file://[TEMP_DIR]/ok-1.0.0.tar.gz#sha256=[SOURCE_HASH]`
+      cause: Hash-checking is enabled, but no hashes were provided or computed for: ok @ file://[TEMP_DIR]/ok-1.0.0.tar.gz#sha256=[SOURCE_HASH]
     ");
 
     context.assert_backend_did_not_run();
@@ -212,8 +212,8 @@ async fn require_hashes_accepts_direct_url_hash_from_explicit_requirement() -> R
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + metadata-parent==1.0.0 (from http://[LOCALHOST]/files/metadata_parent-1.0.0-py3-none-any.whl)
-     + ok==1.0.0 (from file://[TEMP_DIR]/ok-1.0.0.tar.gz#sha256=[SOURCE_HASH])
+     + metadata-parent==1.0.0 (from `http://[LOCALHOST]/files/metadata_parent-1.0.0-py3-none-any.whl`)
+     + ok==1.0.0 (from `file://[TEMP_DIR]/ok-1.0.0.tar.gz#sha256=[SOURCE_HASH]`)
     ");
 
     context.assert_backend_ran();
@@ -240,8 +240,8 @@ async fn require_hashes_accepts_direct_url_hash_from_constraint() -> Result<()> 
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + metadata-parent==1.0.0 (from http://[LOCALHOST]/files/metadata_parent-1.0.0-py3-none-any.whl)
-     + ok==1.0.0 (from file://[TEMP_DIR]/ok-1.0.0.tar.gz#sha256=[SOURCE_HASH])
+     + metadata-parent==1.0.0 (from `http://[LOCALHOST]/files/metadata_parent-1.0.0-py3-none-any.whl`)
+     + ok==1.0.0 (from `file://[TEMP_DIR]/ok-1.0.0.tar.gz#sha256=[SOURCE_HASH]`)
     ");
 
     context.assert_backend_ran();
@@ -265,8 +265,8 @@ async fn verify_hashes_accepts_direct_url_hash_discovered_in_wheel_metadata() ->
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + metadata-parent==1.0.0 (from http://[LOCALHOST]/files/metadata_parent-1.0.0-py3-none-any.whl)
-     + ok==1.0.0 (from file://[TEMP_DIR]/ok-1.0.0.tar.gz#sha256=[SOURCE_HASH])
+     + metadata-parent==1.0.0 (from `http://[LOCALHOST]/files/metadata_parent-1.0.0-py3-none-any.whl`)
+     + ok==1.0.0 (from `file://[TEMP_DIR]/ok-1.0.0.tar.gz#sha256=[SOURCE_HASH]`)
     ");
 
     context.assert_backend_ran();

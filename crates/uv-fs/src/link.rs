@@ -769,7 +769,7 @@ fn try_hardlink_file(src: &Path, dst: &Path) -> io::Result<()> {
         Ok(()) => Ok(()),
         Err(err) if err.kind() == io::ErrorKind::TooManyLinks => {
             debug!(
-                "Hit link limit for {}, creating a fresh copy",
+                "Hit link limit for `{}`, creating a fresh copy",
                 src.display()
             );
             let mut parent = src.parent().unwrap_or(Path::new("."));

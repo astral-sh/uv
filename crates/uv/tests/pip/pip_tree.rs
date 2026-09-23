@@ -688,8 +688,8 @@ fn with_editable() {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + hatchling-editable==0.1.0 (from file://[WORKSPACE]/test/packages/hatchling_editable)
-     + iniconfig==2.0.1.dev6+g9cae431 (from git+https://github.com/pytest-dev/iniconfig@9cae43103df70bac6fde7b9f35ad11a9f1be0cb4)
+     + hatchling-editable==0.1.0 (from `file://[WORKSPACE]/test/packages/hatchling_editable`)
+     + iniconfig==2.0.1.dev6+g9cae431 (from `git+https://github.com/pytest-dev/iniconfig@9cae43103df70bac6fde7b9f35ad11a9f1be0cb4`)
     "
     );
 
@@ -1014,7 +1014,7 @@ fn no_duplicate_dependencies_with_markers() {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + debug==0.1.0 (from file://[TEMP_DIR]/debug)
+     + debug==0.1.0 (from `file://[TEMP_DIR]/debug`)
      + sniffio==1.3.1
     "
     );
@@ -1057,7 +1057,7 @@ fn no_duplicate_dependencies_with_markers() {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + debug==0.1.0 (from file://[TEMP_DIR]/debug)
+     + debug==0.1.0 (from `file://[TEMP_DIR]/debug`)
      + sniffio==1.3.1
     "
     );

@@ -1517,7 +1517,7 @@ impl BuildMessage {
             } => {
                 writeln!(
                     printer.stderr(),
-                    "Successfully built {}",
+                    "Successfully built `{}`",
                     output_dir.join(raw_filename).user_display().bold().cyan()
                 )?;
             }
@@ -1530,7 +1530,7 @@ impl BuildMessage {
                 writeln!(
                     printer.stdout(),
                     "{}",
-                    format!("Building {raw_filename} will include the following files:").bold()
+                    format!("Building `{raw_filename}` will include the following files:").bold()
                 )?;
                 for (file, source) in file_list {
                     if let Some(source) = source {

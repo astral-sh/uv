@@ -369,27 +369,27 @@ impl Serialize for WheelFilename {
 
 #[derive(Error, Debug)]
 pub enum WheelFilenameError {
-    #[error("The wheel filename \"{0}\" is invalid: {1}")]
+    #[error("The wheel filename `{0}` is invalid: {1}")]
     InvalidWheelFileName(String, String),
-    #[error("The wheel filename \"{0}\" has an invalid version: {1}")]
+    #[error("The wheel filename `{0}` has an invalid version: {1}")]
     InvalidVersion(String, VersionParseError),
-    #[error("The wheel filename \"{0}\" has an invalid package name")]
+    #[error("The wheel filename `{0}` has an invalid package name")]
     InvalidPackageName(String, InvalidNameError),
-    #[error("The wheel filename \"{0}\" has an invalid build tag: {1}")]
+    #[error("The wheel filename `{0}` has an invalid build tag: {1}")]
     InvalidBuildTag(String, BuildTagError),
-    #[error("The wheel filename \"{0}\" has an invalid language tag: {1}")]
+    #[error("The wheel filename `{0}` has an invalid language tag: {1}")]
     InvalidLanguageTag(String, ParseLanguageTagError),
-    #[error("The wheel filename \"{0}\" has an invalid ABI tag: {1}")]
+    #[error("The wheel filename `{0}` has an invalid ABI tag: {1}")]
     InvalidAbiTag(String, ParseAbiTagError),
-    #[error("The wheel filename \"{0}\" has an invalid platform tag: {1}")]
+    #[error("The wheel filename `{0}` has an invalid platform tag: {1}")]
     InvalidPlatformTag(String, ParsePlatformTagError),
-    #[error("The wheel filename \"{0}\" is missing a language tag")]
+    #[error("The wheel filename `{0}` is missing a language tag")]
     MissingLanguageTag(String),
-    #[error("The wheel filename \"{0}\" is missing an ABI tag")]
+    #[error("The wheel filename `{0}` is missing an ABI tag")]
     MissingAbiTag(String),
-    #[error("The wheel filename \"{0}\" is missing a platform tag")]
+    #[error("The wheel filename `{0}` is missing a platform tag")]
     MissingPlatformTag(String),
-    #[error("The wheel stem \"{0}\" has an unexpected extension")]
+    #[error("The wheel stem `{0}` has an unexpected extension")]
     UnexpectedExtension(String),
 }
 
@@ -400,89 +400,89 @@ mod tests {
     #[test]
     fn err_not_whl_extension() {
         let err = WheelFilename::from_str("foo.rs").unwrap_err();
-        insta::assert_snapshot!(err, @r#"The wheel filename "foo.rs" is invalid: Must end with .whl"#);
+        insta::assert_snapshot!(err, @r#"The wheel filename `foo.rs` is invalid: Must end with .whl"#);
     }
 
     #[test]
     fn err_1_part_empty() {
         let err = WheelFilename::from_str(".whl").unwrap_err();
-        insta::assert_snapshot!(err, @r#"The wheel filename ".whl" is invalid: Must have a version"#);
+        insta::assert_snapshot!(err, @r#"The wheel filename `.whl` is invalid: Must have a version"#);
     }
 
     #[test]
     fn err_1_part_no_version() {
         let err = WheelFilename::from_str("foo.whl").unwrap_err();
-        insta::assert_snapshot!(err, @r#"The wheel filename "foo.whl" is invalid: Must have a version"#);
+        insta::assert_snapshot!(err, @r#"The wheel filename `foo.whl` is invalid: Must have a version"#);
     }
 
     #[test]
     fn err_2_part_no_pythontag() {
         let err = WheelFilename::from_str("foo-1.2.3.whl").unwrap_err();
-        insta::assert_snapshot!(err, @r#"The wheel filename "foo-1.2.3.whl" is invalid: Must have a Python tag"#);
+        insta::assert_snapshot!(err, @r#"The wheel filename `foo-1.2.3.whl` is invalid: Must have a Python tag"#);
     }
 
     #[test]
     fn err_3_part_no_abitag() {
         let err = WheelFilename::from_str("foo-1.2.3-py3.whl").unwrap_err();
-        insta::assert_snapshot!(err, @r#"The wheel filename "foo-1.2.3-py3.whl" is invalid: Must have an ABI tag"#);
+        insta::assert_snapshot!(err, @r#"The wheel filename `foo-1.2.3-py3.whl` is invalid: Must have an ABI tag"#);
     }
 
     #[test]
     fn err_4_part_no_platformtag() {
         let err = WheelFilename::from_str("foo-1.2.3-py3-none.whl").unwrap_err();
-        insta::assert_snapshot!(err, @r#"The wheel filename "foo-1.2.3-py3-none.whl" is invalid: Must have a platform tag"#);
+        insta::assert_snapshot!(err, @r#"The wheel filename `foo-1.2.3-py3-none.whl` is invalid: Must have a platform tag"#);
     }
 
     #[test]
     fn err_too_many_parts() {
         let err =
             WheelFilename::from_str("foo-1.2.3-202206090410-py3-none-any-whoops.whl").unwrap_err();
-        insta::assert_snapshot!(err, @r#"The wheel filename "foo-1.2.3-202206090410-py3-none-any-whoops.whl" is invalid: Must have 5 or 6 components, but has more"#);
+        insta::assert_snapshot!(err, @r#"The wheel filename `foo-1.2.3-202206090410-py3-none-any-whoops.whl` is invalid: Must have 5 or 6 components, but has more"#);
     }
 
     #[test]
     fn err_invalid_package_name() {
         let err = WheelFilename::from_str("f!oo-1.2.3-py3-none-any.whl").unwrap_err();
-        insta::assert_snapshot!(err, @r#"The wheel filename "f!oo-1.2.3-py3-none-any.whl" has an invalid package name"#);
+        insta::assert_snapshot!(err, @r#"The wheel filename `f!oo-1.2.3-py3-none-any.whl` has an invalid package name"#);
     }
 
     #[test]
     fn err_invalid_version() {
         let err = WheelFilename::from_str("foo-x.y.z-py3-none-any.whl").unwrap_err();
-        insta::assert_snapshot!(err, @r#"The wheel filename "foo-x.y.z-py3-none-any.whl" has an invalid version: expected version to start with a number, but no leading ASCII digits were found"#);
+        insta::assert_snapshot!(err, @r#"The wheel filename `foo-x.y.z-py3-none-any.whl` has an invalid version: expected version to start with a number, but no leading ASCII digits were found"#);
     }
 
     #[test]
     fn err_invalid_build_tag() {
         let err = WheelFilename::from_str("foo-1.2.3-tag-py3-none-any.whl").unwrap_err();
-        insta::assert_snapshot!(err, @r#"The wheel filename "foo-1.2.3-tag-py3-none-any.whl" has an invalid build tag: must start with a digit"#);
+        insta::assert_snapshot!(err, @r#"The wheel filename `foo-1.2.3-tag-py3-none-any.whl` has an invalid build tag: must start with a digit"#);
 
         let err = WheelFilename::from_str("foo-1.2.3-1/../../target-py3-none-any.whl").unwrap_err();
-        insta::assert_snapshot!(err, @r#"The wheel filename "foo-1.2.3-1/../../target-py3-none-any.whl" has an invalid build tag: must contain only ASCII letters, digits, underscores, and periods"#);
+        insta::assert_snapshot!(err, @r#"The wheel filename `foo-1.2.3-1/../../target-py3-none-any.whl` has an invalid build tag: must contain only ASCII letters, digits, underscores, and periods"#);
     }
 
     #[test]
     fn err_invalid_tag_component() {
         let err = WheelFilename::from_str("foo-1.2.3-py3-none-../target.whl").unwrap_err();
-        insta::assert_snapshot!(err, @r#"The wheel filename "foo-1.2.3-py3-none-../target.whl" is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods"#);
+        insta::assert_snapshot!(err, @r#"The wheel filename `foo-1.2.3-py3-none-../target.whl` is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods"#);
 
         let err = WheelFilename::from_str(r"foo-1.2.3-py3-none-..\target.whl").unwrap_err();
-        insta::assert_snapshot!(err, @r#"The wheel filename "foo-1.2.3-py3-none-..\target.whl" is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods"#);
+        insta::assert_snapshot!(err, @r#"The wheel filename `foo-1.2.3-py3-none-..\target.whl` is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods"#);
 
         let err = WheelFilename::from_str("foo-1.2.3-py3-none-target:stream.whl").unwrap_err();
-        insta::assert_snapshot!(err, @r#"The wheel filename "foo-1.2.3-py3-none-target:stream.whl" is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods"#);
+        insta::assert_snapshot!(err, @r#"The wheel filename `foo-1.2.3-py3-none-target:stream.whl` is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods"#);
 
         let err = WheelFilename::from_str("foo-1.2.3-py3-none-freebsd_13_x86/64.whl").unwrap_err();
-        insta::assert_snapshot!(err, @r#"The wheel filename "foo-1.2.3-py3-none-freebsd_13_x86/64.whl" is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods"#);
+        insta::assert_snapshot!(err, @r#"The wheel filename `foo-1.2.3-py3-none-freebsd_13_x86/64.whl` is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods"#);
 
         let err = WheelFilename::from_str("foo-1.2.3-py3-none-unknown tag.whl").unwrap_err();
-        insta::assert_snapshot!(err, @r#"The wheel filename "foo-1.2.3-py3-none-unknown tag.whl" is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods"#);
+        insta::assert_snapshot!(err, @r#"The wheel filename `foo-1.2.3-py3-none-unknown tag.whl` is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods"#);
 
         let err = WheelFilename::from_str("foo-1.2.3-py3-none-unknown\u{e9}.whl").unwrap_err();
-        insta::assert_snapshot!(err, @"The wheel filename \"foo-1.2.3-py3-none-unknown\u{e9}.whl\" is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods");
+        insta::assert_snapshot!(err, @"The wheel filename `foo-1.2.3-py3-none-unknowné.whl` is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods");
 
         let err = WheelFilename::from_str("foo-1.2.3-py3-none-unknown..tag.whl").unwrap_err();
-        insta::assert_snapshot!(err, @r#"The wheel filename "foo-1.2.3-py3-none-unknown..tag.whl" is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods"#);
+        insta::assert_snapshot!(err, @r#"The wheel filename `foo-1.2.3-py3-none-unknown..tag.whl` is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods"#);
     }
 
     #[test]

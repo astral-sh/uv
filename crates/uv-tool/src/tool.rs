@@ -122,7 +122,7 @@ impl Display for ToolEntrypoint {
             windows => {
                 write!(
                     f,
-                    "{} ({})",
+                    "{} (`{}`)",
                     self.name,
                     self.install_path
                         .simplified_display()
@@ -133,7 +133,7 @@ impl Display for ToolEntrypoint {
             unix => {
                 write!(
                     f,
-                    "{} ({})",
+                    "{} (`{}`)",
                     self.name,
                     self.install_path.simplified_display()
                 )

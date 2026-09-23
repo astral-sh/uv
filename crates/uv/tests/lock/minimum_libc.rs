@@ -1046,7 +1046,7 @@ fn minimum_libc_invalid_configuration() -> Result<()> {
          |                                  ^^^^^^^^
       expected a libc version in the form `<major>.<minor>` (e.g., `2.31` or `1.2`)
 
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 11, column 34
                 |
              11 | minimum-libc-version = { glibc = "2.31.1" }
@@ -1074,7 +1074,7 @@ fn minimum_libc_invalid_configuration() -> Result<()> {
         |                                 ^^^^^
       invalid type: boolean `false`, expected a libc version string in the form `<major>.<minor>`
 
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 8, column 33
                |
              8 | minimum-libc-version = { musl = false }
@@ -1102,7 +1102,7 @@ fn minimum_libc_invalid_configuration() -> Result<()> {
         |                                  ^^^^
       invalid type: floating point `2.31`, expected a libc version string in the form `<major>.<minor>`
 
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 8, column 34
                |
              8 | minimum-libc-version = { glibc = 2.31 }
@@ -1130,7 +1130,7 @@ fn minimum_libc_invalid_configuration() -> Result<()> {
         |                          ^^^^^^^
       unknown field `unknown`, expected `glibc` or `musl`
 
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 8, column 26
                |
              8 | minimum-libc-version = { unknown = "1.2" }
@@ -1160,7 +1160,7 @@ fn minimum_libc_invalid_configuration() -> Result<()> {
         warning: Found both a `uv.toml` file and a `[tool.uv]` section in an adjacent `pyproject.toml`. The following fields from `[tool.uv]` will be ignored in favor of the `uv.toml` file:
         - no-index
         - find-links
-        error: Failed to parse: `uv.toml`. The `minimum-libc-version` field is not allowed in a `uv.toml` file. `minimum-libc-version` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.
+        error: Failed to parse: uv.toml. The `minimum-libc-version` field is not allowed in a `uv.toml` file. `minimum-libc-version` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.
     ");
     Ok(())
 }

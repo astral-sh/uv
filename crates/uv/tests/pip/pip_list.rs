@@ -268,7 +268,7 @@ fn list_outdated_git() -> Result<()> {
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==1.0.0
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
+     + uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979`)
     "
     );
 
@@ -340,7 +340,7 @@ fn list_editable() {
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + poetry-editable==0.1.0 (from file://[WORKSPACE]/test/packages/poetry_editable)
+     + poetry-editable==0.1.0 (from `file://[WORKSPACE]/test/packages/poetry_editable`)
      + sniffio==1.3.1
     "
     );
@@ -376,7 +376,7 @@ fn list_editable_only() {
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + poetry-editable==0.1.0 (from file://[WORKSPACE]/test/packages/poetry_editable)
+     + poetry-editable==0.1.0 (from `file://[WORKSPACE]/test/packages/poetry_editable`)
      + sniffio==1.3.1
     "
     );
@@ -435,7 +435,7 @@ fn list_exclude() {
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + poetry-editable==0.1.0 (from file://[WORKSPACE]/test/packages/poetry_editable)
+     + poetry-editable==0.1.0 (from `file://[WORKSPACE]/test/packages/poetry_editable`)
      + sniffio==1.3.1
     "
     );
@@ -500,7 +500,7 @@ fn list_format_json() {
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + poetry-editable==0.1.0 (from file://[WORKSPACE]/test/packages/poetry_editable)
+     + poetry-editable==0.1.0 (from `file://[WORKSPACE]/test/packages/poetry_editable`)
      + sniffio==1.3.1
     "
     );
@@ -549,7 +549,7 @@ fn list_format_freeze() {
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + poetry-editable==0.1.0 (from file://[WORKSPACE]/test/packages/poetry_editable)
+     + poetry-editable==0.1.0 (from `file://[WORKSPACE]/test/packages/poetry_editable`)
      + sniffio==1.3.1
     "
     );
@@ -656,7 +656,7 @@ Version: 0.1-bulbasaur
         .arg("--editable"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to read metadata from: `[SITE_PACKAGES]/paramiko.egg-link`
+    error: Failed to read metadata from: [SITE_PACKAGES]/paramiko.egg-link
      cause: after parsing `0.1-b`, found `ulbasaur`, which is not part of a valid version
     "
     );
@@ -681,7 +681,7 @@ fn list_ignores_quiet_flag_format_freeze() {
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + poetry-editable==0.1.0 (from file://[WORKSPACE]/test/packages/poetry_editable)
+     + poetry-editable==0.1.0 (from `file://[WORKSPACE]/test/packages/poetry_editable`)
      + sniffio==1.3.1
     "
     );

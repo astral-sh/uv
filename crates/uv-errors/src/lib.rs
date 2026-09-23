@@ -647,7 +647,7 @@ mod tests {
         )
         .unwrap();
         let output = anstream::adapter::strip_str(&output);
-        assert_snapshot!(output, @r"
+        assert_snapshot!(output, @"
         error: Failed to download package from
                https://files.pythonhosted.org/packages/verylongpackagename
         ");

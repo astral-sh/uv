@@ -90,7 +90,7 @@ pub enum ResolveError {
         env: ResolverEnvironment,
     },
 
-    #[error("Requirements contain conflicting indexes for package `{0}`: `{1}` vs. `{2}`")]
+    #[error("Requirements contain conflicting indexes for package `{0}`: {1} vs. `{2}`")]
     ConflictingIndexes(PackageName, String, String),
 
     #[error(

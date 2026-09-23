@@ -85,9 +85,9 @@ fn username_password_no_longer_supported() {
         .arg(dummy_wheel()), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Publishing 1 file to https://test.pypi.org/legacy/
-    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
-    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Publishing 1 file to `https://test.pypi.org/legacy/`
+    Hashing `ok-1.0.0-py3-none-any.whl` ([SIZE]B)
+    Uploading `ok-1.0.0-py3-none-any.whl` ([SIZE]B)
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to `https://test.pypi.org/legacy/`
       cause: Server returned status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
     "
@@ -108,9 +108,9 @@ fn invalid_token() {
         .arg(dummy_wheel()), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Publishing 1 file to https://test.pypi.org/legacy/
-    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
-    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Publishing 1 file to `https://test.pypi.org/legacy/`
+    Hashing `ok-1.0.0-py3-none-any.whl` ([SIZE]B)
+    Uploading `ok-1.0.0-py3-none-any.whl` ([SIZE]B)
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to `https://test.pypi.org/legacy/`
       cause: Server returned status code 403 Forbidden. Server says: 403 Invalid or non-existent authentication information. See https://test.pypi.org/help/#invalid-auth for more information.
     "
@@ -136,7 +136,7 @@ fn mixed_credentials() {
         .env(EnvVars::GITHUB_ACTIONS, "true"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Publishing 1 file to https://test.pypi.org/legacy/
+    Publishing 1 file to `https://test.pypi.org/legacy/`
     error: a username and a password are not allowed when using trusted publishing
     "
     );
@@ -157,7 +157,7 @@ fn missing_trusted_publishing_permission() {
         .env(EnvVars::GITHUB_ACTIONS, "true"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Publishing 1 file to https://test.pypi.org/legacy/
+    Publishing 1 file to `https://test.pypi.org/legacy/`
     error: Failed to obtain token for trusted publishing
       cause: Failed to obtain OIDC token: is the `id-token: write` permission missing?
       cause: GitHub Actions detection error
@@ -180,17 +180,17 @@ fn no_credentials() {
         .env(EnvVars::GITHUB_ACTIONS, "true"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Publishing 1 file to https://test.pypi.org/legacy/
+    Publishing 1 file to `https://test.pypi.org/legacy/`
     Note: Neither credentials nor keyring are configured, and there was an error fetching the trusted publishing token. If you don't want to use trusted publishing, you can ignore this error, but you need to provide credentials.
     error: Trusted publishing failed
       cause: Failed to obtain OIDC token: is the `id-token: write` permission missing?
       cause: GitHub Actions detection error
       cause: insufficient permissions: missing ACTIONS_ID_TOKEN_REQUEST_URL
-    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
-    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Hashing `ok-1.0.0-py3-none-any.whl` ([SIZE]B)
+    Uploading `ok-1.0.0-py3-none-any.whl` ([SIZE]B)
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to `https://test.pypi.org/legacy/`
       cause: Failed to send POST request
-      cause: Missing credentials for https://test.pypi.org/legacy/
+      cause: Missing credentials for `https://test.pypi.org/legacy/`
     "
     );
 }
@@ -234,9 +234,9 @@ fn dubious_filenames() {
         .arg(context.temp_dir.join("*")), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    warning: Skipping file that looks like a distribution, but is not a valid distribution filename: `[TEMP_DIR]/data.tar.gz`
-    warning: Skipping file that looks like a distribution, but is not a valid distribution filename: `[TEMP_DIR]/not-a-wheel.whl`
-    warning: Skipping file that looks like a distribution, but is not a valid distribution filename: `[TEMP_DIR]/not-sdist-1-2-3-asdf.zip`
+    warning: Skipping file that looks like a distribution, but is not a valid distribution filename: [TEMP_DIR]/data.tar.gz
+    warning: Skipping file that looks like a distribution, but is not a valid distribution filename: [TEMP_DIR]/not-a-wheel.whl
+    warning: Skipping file that looks like a distribution, but is not a valid distribution filename: [TEMP_DIR]/not-sdist-1-2-3-asdf.zip
     error: No files found to publish
     "
     );
@@ -270,13 +270,13 @@ async fn publish_wheels_before_sdist_in_filename_order() {
         .arg(format!("{}/upload", server.uri())), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Publishing 3 files to http://[LOCALHOST]/upload
-    Hashing basic_app-0.1.0-py3-none-any.whl ([SIZE]KiB)
-    Uploading basic_app-0.1.0-py3-none-any.whl ([SIZE]KiB)
-    Hashing basic_package-0.1.0-py3-none-any.whl ([SIZE]KiB)
-    Uploading basic_package-0.1.0-py3-none-any.whl ([SIZE]KiB)
-    Hashing basic_package-0.1.0.tar.gz ([SIZE]B)
-    Uploading basic_package-0.1.0.tar.gz ([SIZE]B)
+    Publishing 3 files to `http://[LOCALHOST]/upload`
+    Hashing `basic_app-0.1.0-py3-none-any.whl` ([SIZE]KiB)
+    Uploading `basic_app-0.1.0-py3-none-any.whl` ([SIZE]KiB)
+    Hashing `basic_package-0.1.0-py3-none-any.whl` ([SIZE]KiB)
+    Uploading `basic_package-0.1.0-py3-none-any.whl` ([SIZE]KiB)
+    Hashing `basic_package-0.1.0.tar.gz` ([SIZE]B)
+    Uploading `basic_package-0.1.0.tar.gz` ([SIZE]B)
     "
     );
 }
@@ -315,9 +315,9 @@ fn check_keyring_behaviours() {
         .env(EnvVars::PATH, venv_bin_path(&context.venv)), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Publishing 1 file to https://test.pypi.org/legacy/?ok
-    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
-    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Publishing 1 file to `https://test.pypi.org/legacy/?ok`
+    Hashing `ok-1.0.0-py3-none-any.whl` ([SIZE]B)
+    Uploading `ok-1.0.0-py3-none-any.whl` ([SIZE]B)
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to `https://test.pypi.org/legacy/?ok`
       cause: Server returned status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
     "
@@ -337,10 +337,10 @@ fn check_keyring_behaviours() {
         .env(EnvVars::PATH, venv_bin_path(&context.venv)),  @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Publishing 1 file to https://test.pypi.org/legacy/?ok
+    Publishing 1 file to `https://test.pypi.org/legacy/?ok`
     warning: Using `--keyring-provider` with a password or token and no check URL has no effect
-    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
-    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Hashing `ok-1.0.0-py3-none-any.whl` ([SIZE]B)
+    Uploading `ok-1.0.0-py3-none-any.whl` ([SIZE]B)
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to `https://test.pypi.org/legacy/?ok`
       cause: Server returned status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
     "
@@ -361,12 +361,12 @@ fn check_keyring_behaviours() {
         .env(EnvVars::PATH, venv_bin_path(&context.venv)), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Publishing 1 file to https://test.pypi.org/legacy/?ok
+    Publishing 1 file to `https://test.pypi.org/legacy/?ok`
     Keyring request for dummy@https://test.pypi.org/legacy/?ok
     Keyring request for dummy@test.pypi.org
     warning: Keyring has no password for URL `https://test.pypi.org/legacy/?ok` and username `dummy`
-    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
-    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Hashing `ok-1.0.0-py3-none-any.whl` ([SIZE]B)
+    Uploading `ok-1.0.0-py3-none-any.whl` ([SIZE]B)
     Keyring request for dummy@https://test.pypi.org/legacy/?ok
     Keyring request for dummy@test.pypi.org
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to `https://test.pypi.org/legacy/?ok`
@@ -388,10 +388,10 @@ fn check_keyring_behaviours() {
         .env(EnvVars::PATH, venv_bin_path(&context.venv)), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Publishing 1 file to https://test.pypi.org/legacy/?ok
+    Publishing 1 file to `https://test.pypi.org/legacy/?ok`
     Keyring request for dummy@https://test.pypi.org/legacy/?ok
-    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
-    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Hashing `ok-1.0.0-py3-none-any.whl` ([SIZE]B)
+    Uploading `ok-1.0.0-py3-none-any.whl` ([SIZE]B)
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to `https://test.pypi.org/legacy/?ok`
       cause: Server returned status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
     "
@@ -531,12 +531,12 @@ async fn read_index_credential_env_vars_for_check_url() {
         @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Publishing 1 file to http://[LOCALHOST]/upload
-    Hashing astral_test_private-0.1.0-py3-none-any.whl ([SIZE]KiB)
-    Uploading astral_test_private-0.1.0-py3-none-any.whl ([SIZE]KiB)
+    Publishing 1 file to `http://[LOCALHOST]/upload`
+    Hashing `astral_test_private-0.1.0-py3-none-any.whl` ([SIZE]KiB)
+    Uploading `astral_test_private-0.1.0-py3-none-any.whl` ([SIZE]KiB)
     error: Failed to publish `dist/astral_test_private-0.1.0-py3-none-any.whl` to `http://[LOCALHOST]/upload`
       cause: Failed to send POST request
-      cause: Missing credentials for http://[LOCALHOST]/upload
+      cause: Missing credentials for `http://[LOCALHOST]/upload`
     "
     );
     // Test that it works with credentials
@@ -551,8 +551,8 @@ async fn read_index_credential_env_vars_for_check_url() {
         @"
     exit_code: 0 (success)
     ----- stderr -----
-    Publishing 1 file to http://[LOCALHOST]/upload
-    File astral_test_private-0.1.0-py3-none-any.whl already exists, skipping
+    Publishing 1 file to `http://[LOCALHOST]/upload`
+    File `astral_test_private-0.1.0-py3-none-any.whl` already exists, skipping
     "
     );
 }
@@ -590,9 +590,9 @@ async fn check_url_missing_package_ignores_content_type() {
         .arg(dummy_wheel()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Publishing 1 file to http://[LOCALHOST]/upload
-    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
-    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Publishing 1 file to `http://[LOCALHOST]/upload`
+    Hashing `ok-1.0.0-py3-none-any.whl` ([SIZE]B)
+    Uploading `ok-1.0.0-py3-none-any.whl` ([SIZE]B)
     "
     );
 }
@@ -641,9 +641,9 @@ async fn check_url_missing_package_follows_redirect() {
         .arg(dummy_wheel()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Publishing 1 file to http://[LOCALHOST]/upload
-    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
-    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Publishing 1 file to `http://[LOCALHOST]/upload`
+    Hashing `ok-1.0.0-py3-none-any.whl` ([SIZE]B)
+    Uploading `ok-1.0.0-py3-none-any.whl` ([SIZE]B)
     "
     );
 }
@@ -700,11 +700,11 @@ async fn gitlab_trusted_publishing_pypi_id_token() {
         .env(EnvVars::PYPI_ID_TOKEN, "gitlab-oidc-jwt"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Publishing 2 files to http://[LOCALHOST]/upload
-    Hashing basic_app-0.1.0-py3-none-any.whl ([SIZE]KiB)
-    Uploading basic_app-0.1.0-py3-none-any.whl ([SIZE]KiB)
-    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
-    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Publishing 2 files to `http://[LOCALHOST]/upload`
+    Hashing `basic_app-0.1.0-py3-none-any.whl` ([SIZE]KiB)
+    Uploading `basic_app-0.1.0-py3-none-any.whl` ([SIZE]KiB)
+    Hashing `ok-1.0.0-py3-none-any.whl` ([SIZE]B)
+    Uploading `ok-1.0.0-py3-none-any.whl` ([SIZE]B)
     "
     );
 
@@ -780,9 +780,9 @@ async fn gitlab_trusted_publishing_testpypi_id_token() {
         .env(EnvVars::TESTPYPI_ID_TOKEN, "gitlab-oidc-jwt"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Publishing 1 file to http://[LOCALHOST]/upload
-    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
-    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Publishing 1 file to `http://[LOCALHOST]/upload`
+    Hashing `ok-1.0.0-py3-none-any.whl` ([SIZE]B)
+    Uploading `ok-1.0.0-py3-none-any.whl` ([SIZE]B)
     "
     );
 }
@@ -833,10 +833,10 @@ async fn trusted_publishing_burn_failure() {
         .env(EnvVars::PYPI_ID_TOKEN, "gitlab-oidc-jwt"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Publishing 1 file to http://[LOCALHOST]/upload
-    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
-    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
-    warning: Failed to invalidate trusted publishing token. It will expire naturally. Cause: Failed to fetch: `http://[LOCALHOST]/_/oidc/burn-token`
+    Publishing 1 file to `http://[LOCALHOST]/upload`
+    Hashing `ok-1.0.0-py3-none-any.whl` ([SIZE]B)
+    Uploading `ok-1.0.0-py3-none-any.whl` ([SIZE]B)
+    warning: Failed to invalidate trusted publishing token. It will expire naturally. Cause: Failed to fetch: http://[LOCALHOST]/_/oidc/burn-token
     "
     );
 
@@ -858,10 +858,10 @@ async fn trusted_publishing_burn_failure() {
         .env(EnvVars::PYPI_ID_TOKEN, "gitlab-oidc-jwt"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Publishing 1 file to http://[LOCALHOST]/upload
-    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
-    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
-    warning: Failed to invalidate trusted publishing token. It will expire naturally. Cause: Failed to fetch: `http://[LOCALHOST]/_/oidc/burn-token`
+    Publishing 1 file to `http://[LOCALHOST]/upload`
+    Hashing `ok-1.0.0-py3-none-any.whl` ([SIZE]B)
+    Uploading `ok-1.0.0-py3-none-any.whl` ([SIZE]B)
+    warning: Failed to invalidate trusted publishing token. It will expire naturally. Cause: Failed to fetch: http://[LOCALHOST]/_/oidc/burn-token
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to `http://[LOCALHOST]/upload`
       cause: Server returned status code 400 Bad Request. Server says: Upload failed
     "
@@ -913,9 +913,9 @@ async fn trusted_publishing_burn_after_prepare_failure() {
         .env(EnvVars::PYPI_ID_TOKEN, "gitlab-oidc-jwt"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Publishing 1 file to http://[LOCALHOST]/upload
-    Hashing a-1.0.0-py3-none-any.whl ([SIZE]B)
-    error: Failed to publish: `a-1.0.0-py3-none-any.whl`
+    Publishing 1 file to `http://[LOCALHOST]/upload`
+    Hashing `a-1.0.0-py3-none-any.whl` ([SIZE]B)
+    error: Failed to publish: a-1.0.0-py3-none-any.whl
       cause: Failed to read metadata
       cause: Failed to read from zip file
       cause: unable to locate the end of central directory record
@@ -936,11 +936,11 @@ async fn trusted_publishing_burn_after_prepare_failure() {
         .env(EnvVars::PYPI_ID_TOKEN, "gitlab-oidc-jwt"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Publishing 2 files to http://[LOCALHOST]/upload
-    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
-    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
-    Hashing z-1.0.0-py3-none-any.whl ([SIZE]B)
-    error: Failed to publish: `z-1.0.0-py3-none-any.whl`
+    Publishing 2 files to `http://[LOCALHOST]/upload`
+    Hashing `ok-1.0.0-py3-none-any.whl` ([SIZE]B)
+    Uploading `ok-1.0.0-py3-none-any.whl` ([SIZE]B)
+    Hashing `z-1.0.0-py3-none-any.whl` ([SIZE]B)
+    error: Failed to publish: z-1.0.0-py3-none-any.whl
       cause: Failed to read metadata
       cause: Failed to read from zip file
       cause: unable to locate the end of central directory record
@@ -992,8 +992,8 @@ async fn trusted_publishing_dry_run() {
         .env(EnvVars::PYPI_ID_TOKEN, "gitlab-oidc-jwt"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Checking 1 file against http://[LOCALHOST]/upload
-    Checking ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Checking 1 file against `http://[LOCALHOST]/upload`
+    Checking `ok-1.0.0-py3-none-any.whl` ([SIZE]B)
     "
     );
 
@@ -1010,9 +1010,9 @@ async fn trusted_publishing_dry_run() {
         .env(EnvVars::PYPI_ID_TOKEN, "gitlab-oidc-jwt"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    Checking 1 file against http://[LOCALHOST]/upload
-    Checking a-1.0.0-py3-none-any.whl ([SIZE]B)
-    error: Failed to publish: `a-1.0.0-py3-none-any.whl`
+    Checking 1 file against `http://[LOCALHOST]/upload`
+    Checking `a-1.0.0-py3-none-any.whl` ([SIZE]B)
+    error: Failed to publish: a-1.0.0-py3-none-any.whl
       cause: Failed to read metadata
       cause: Failed to read from zip file
       cause: unable to locate the end of central directory record
@@ -1097,8 +1097,8 @@ async fn trusted_publishing_all_skipped() {
         .env(EnvVars::PYPI_ID_TOKEN, "gitlab-oidc-jwt"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Publishing 2 files to http://[LOCALHOST]/upload
-    File ok-1.0.0-py3-none-any.whl already exists, skipping
+    Publishing 2 files to `http://[LOCALHOST]/upload`
+    File `ok-1.0.0-py3-none-any.whl` already exists, skipping
     warning: `ok-1.01.0-py3-none-any.whl` has a non-normalized filename (expected `ok-1.1.0-py3-none-any.whl`), skipping
     "
     );
@@ -1150,9 +1150,9 @@ async fn trusted_publishing_does_not_burn_explicit_token() {
         .env(EnvVars::PYPI_ID_TOKEN, "gitlab-oidc-jwt"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Publishing 1 file to http://[LOCALHOST]/upload
-    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
-    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Publishing 1 file to `http://[LOCALHOST]/upload`
+    Hashing `ok-1.0.0-py3-none-any.whl` ([SIZE]B)
+    Uploading `ok-1.0.0-py3-none-any.whl` ([SIZE]B)
     "
     );
 }
@@ -1182,9 +1182,9 @@ async fn upload_error_pypi_json() {
         .arg(dummy_wheel()), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Publishing 1 file to http://[LOCALHOST]/upload
-    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
-    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Publishing 1 file to `http://[LOCALHOST]/upload`
+    Hashing `ok-1.0.0-py3-none-any.whl` ([SIZE]B)
+    Uploading `ok-1.0.0-py3-none-any.whl` ([SIZE]B)
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to `http://[LOCALHOST]/upload`
       cause: Server returned status code 400 Bad Request. Server says: 400 Use 'source' as Python version for an sdist.
     "
@@ -1216,9 +1216,9 @@ async fn upload_error_problem_details() {
         .arg(dummy_wheel()), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Publishing 1 file to http://[LOCALHOST]/upload
-    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
-    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Publishing 1 file to `http://[LOCALHOST]/upload`
+    Hashing `ok-1.0.0-py3-none-any.whl` ([SIZE]B)
+    Uploading `ok-1.0.0-py3-none-any.whl` ([SIZE]B)
     error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to `http://[LOCALHOST]/upload`
       cause: Server returned status code 400 Bad Request. Server message: Bad Request, Missing required field `name`
     "
@@ -1246,8 +1246,8 @@ async fn dry_run_does_not_upload() {
         .arg(dummy_wheel()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Checking 1 file against http://[LOCALHOST]/upload
-    Checking ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Checking 1 file against `http://[LOCALHOST]/upload`
+    Checking `ok-1.0.0-py3-none-any.whl` ([SIZE]B)
     "
     );
 }
@@ -1274,14 +1274,14 @@ fn dry_run_reports_all_errors() {
         .arg(wheel_b.path()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    Checking 2 files against https://test.pypi.org/legacy/
-    Checking a-1.0.0-py3-none-any.whl ([SIZE]B)
-    error: Failed to publish: `a-1.0.0-py3-none-any.whl`
+    Checking 2 files against `https://test.pypi.org/legacy/`
+    Checking `a-1.0.0-py3-none-any.whl` ([SIZE]B)
+    error: Failed to publish: a-1.0.0-py3-none-any.whl
       cause: Failed to read metadata
       cause: Failed to read from zip file
       cause: unable to locate the end of central directory record
-    Checking b-1.0.0-py3-none-any.whl ([SIZE]B)
-    error: Failed to publish: `b-1.0.0-py3-none-any.whl`
+    Checking `b-1.0.0-py3-none-any.whl` ([SIZE]B)
+    error: Failed to publish: b-1.0.0-py3-none-any.whl
       cause: Failed to read metadata
       cause: Failed to read from zip file
       cause: unable to locate the end of central directory record
@@ -1325,10 +1325,10 @@ async fn publish_invalid_attestations() {
         .arg(app_attestation.path()), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Publishing 1 file to http://[LOCALHOST]/upload
-    Hashing basic_app-0.1.0-py3-none-any.whl ([SIZE]KiB)
-    error: Failed to publish: `[WORKSPACE]/test/links/basic_app-0.1.0-py3-none-any.whl`
-      cause: Invalid PEP 740 attestation (not JSON): `[TEMP_DIR]/basic_app-0.1.0-py3-none-any.whl.publish.attestation`
+    Publishing 1 file to `http://[LOCALHOST]/upload`
+    Hashing `basic_app-0.1.0-py3-none-any.whl` ([SIZE]KiB)
+    error: Failed to publish: [WORKSPACE]/test/links/basic_app-0.1.0-py3-none-any.whl
+      cause: Invalid PEP 740 attestation (not JSON): [TEMP_DIR]/basic_app-0.1.0-py3-none-any.whl.publish.attestation
       cause: EOF while parsing an object at line 1 column 1
     ");
 
@@ -1344,14 +1344,14 @@ async fn publish_invalid_attestations() {
         .arg(ok_attestation.path()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    Checking 2 files against http://[LOCALHOST]/upload
-    Checking basic_app-0.1.0-py3-none-any.whl ([SIZE]KiB)
-    error: Failed to publish: `[WORKSPACE]/test/links/basic_app-0.1.0-py3-none-any.whl`
-      cause: Invalid PEP 740 attestation (not JSON): `[TEMP_DIR]/basic_app-0.1.0-py3-none-any.whl.publish.attestation`
+    Checking 2 files against `http://[LOCALHOST]/upload`
+    Checking `basic_app-0.1.0-py3-none-any.whl` ([SIZE]KiB)
+    error: Failed to publish: [WORKSPACE]/test/links/basic_app-0.1.0-py3-none-any.whl
+      cause: Invalid PEP 740 attestation (not JSON): [TEMP_DIR]/basic_app-0.1.0-py3-none-any.whl.publish.attestation
       cause: EOF while parsing an object at line 1 column 1
-    Checking ok-1.0.0-py3-none-any.whl ([SIZE]B)
-    error: Failed to publish: `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl`
-      cause: Invalid PEP 740 attestation (not JSON): `[TEMP_DIR]/ok-1.0.0-py3-none-any.whl.publish.attestation`
+    Checking `ok-1.0.0-py3-none-any.whl` ([SIZE]B)
+    error: Failed to publish: [WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl
+      cause: Invalid PEP 740 attestation (not JSON): [TEMP_DIR]/ok-1.0.0-py3-none-any.whl.publish.attestation
       cause: EOF while parsing an object at line 1 column 1
     Found issues with 2 files
     ");
@@ -1378,11 +1378,11 @@ async fn publish_invalid_attestations() {
         .arg(ok_attestation.path()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Publishing 2 files to http://[LOCALHOST]/upload
-    Hashing basic_app-0.1.0-py3-none-any.whl ([SIZE]KiB)
-    Uploading basic_app-0.1.0-py3-none-any.whl ([SIZE]KiB)
-    Hashing ok-1.0.0-py3-none-any.whl ([SIZE]B)
-    Uploading ok-1.0.0-py3-none-any.whl ([SIZE]B)
+    Publishing 2 files to `http://[LOCALHOST]/upload`
+    Hashing `basic_app-0.1.0-py3-none-any.whl` ([SIZE]KiB)
+    Uploading `basic_app-0.1.0-py3-none-any.whl` ([SIZE]KiB)
+    Hashing `ok-1.0.0-py3-none-any.whl` ([SIZE]B)
+    Uploading `ok-1.0.0-py3-none-any.whl` ([SIZE]B)
     "
     );
 
@@ -1423,7 +1423,7 @@ fn non_normalized_filename_skip() {
         .arg(source_dist.path()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Publishing 2 files to https://test.pypi.org/legacy/
+    Publishing 2 files to `https://test.pypi.org/legacy/`
     warning: `ok-1.01.0-py3-none-any.whl` has a non-normalized filename (expected `ok-1.1.0-py3-none-any.whl`), skipping
     warning: `ok-1.01.0.tar.gz` has a non-normalized filename (expected `ok-1.1.0.tar.gz`), skipping
     "

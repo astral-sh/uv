@@ -72,7 +72,7 @@ fn find_uv_bin_target() -> anyhow::Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[TEMP_DIR]/fake-uv)
+     + uv==0.1.0 (from `file://[TEMP_DIR]/fake-uv`)
     "
     );
 
@@ -114,7 +114,7 @@ fn find_uv_bin_prefix() -> anyhow::Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[TEMP_DIR]/fake-uv)
+     + uv==0.1.0 (from `file://[TEMP_DIR]/fake-uv`)
     "
     );
 
@@ -162,7 +162,7 @@ fn find_uv_bin_base_prefix() -> anyhow::Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[TEMP_DIR]/fake-uv)
+     + uv==0.1.0 (from `file://[TEMP_DIR]/fake-uv`)
     "
     );
 
@@ -221,7 +221,7 @@ fn find_uv_bin_in_ephemeral_environment() -> anyhow::Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[TEMP_DIR]/fake-uv)
+     + uv==0.1.0 (from `file://[TEMP_DIR]/fake-uv`)
     "
     );
 
@@ -271,7 +271,7 @@ fn find_uv_bin_in_parent_of_ephemeral_environment() -> anyhow::Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[TEMP_DIR]/fake-uv)
+     + uv==0.1.0 (from `file://[TEMP_DIR]/fake-uv`)
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -318,7 +318,7 @@ fn find_uv_bin_user_bin() -> anyhow::Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[TEMP_DIR]/fake-uv)
+     + uv==0.1.0 (from `file://[TEMP_DIR]/fake-uv`)
     "
     );
 
@@ -395,7 +395,7 @@ fn find_uv_bin_error_message() -> anyhow::Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[TEMP_DIR]/fake-uv)
+     + uv==0.1.0 (from `file://[TEMP_DIR]/fake-uv`)
     "
     );
 
@@ -447,7 +447,7 @@ fn find_uv_bin_py38() -> anyhow::Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[TEMP_DIR]/fake-uv)
+     + uv==0.1.0 (from `file://[TEMP_DIR]/fake-uv`)
     "
     );
 
@@ -483,7 +483,7 @@ fn find_uv_bin_py39() -> anyhow::Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[TEMP_DIR]/fake-uv)
+     + uv==0.1.0 (from `file://[TEMP_DIR]/fake-uv`)
     "
     );
 
@@ -519,7 +519,7 @@ fn find_uv_bin_py310() -> anyhow::Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[TEMP_DIR]/fake-uv)
+     + uv==0.1.0 (from `file://[TEMP_DIR]/fake-uv`)
     "
     );
 
@@ -555,7 +555,7 @@ fn find_uv_bin_py311() -> anyhow::Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[TEMP_DIR]/fake-uv)
+     + uv==0.1.0 (from `file://[TEMP_DIR]/fake-uv`)
     "
     );
 
@@ -591,7 +591,7 @@ fn find_uv_bin_py312() -> anyhow::Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[TEMP_DIR]/fake-uv)
+     + uv==0.1.0 (from `file://[TEMP_DIR]/fake-uv`)
     "
     );
 
@@ -627,7 +627,7 @@ fn find_uv_bin_py313() -> anyhow::Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[TEMP_DIR]/fake-uv)
+     + uv==0.1.0 (from `file://[TEMP_DIR]/fake-uv`)
     "
     );
 
@@ -663,7 +663,7 @@ fn find_uv_bin_py314() -> anyhow::Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv==0.1.0 (from file://[TEMP_DIR]/fake-uv)
+     + uv==0.1.0 (from `file://[TEMP_DIR]/fake-uv`)
     "
     );
 

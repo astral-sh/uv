@@ -401,7 +401,7 @@ pub fn relative_to(
         })
         .ok_or_else(|| {
             std::io::Error::other(format!(
-                "Trivial strip failed: {} vs. {}",
+                "Trivial strip failed: {} vs. `{}`",
                 path.simplified_display(),
                 base.simplified_display()
             ))

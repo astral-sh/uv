@@ -251,7 +251,7 @@ async fn do_uninstall(
                 if minor_version_link.exists() {
                     if uv_fs::remove_symlink(&minor_version_link.symlink_directory).is_err() {
                         return Err(anyhow::anyhow!(
-                            "Failed to remove symlink directory {}",
+                            "Failed to remove symlink directory `{}`",
                             minor_version_link.symlink_directory.display()
                         ));
                     }

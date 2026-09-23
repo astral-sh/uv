@@ -267,7 +267,7 @@ pub(crate) async fn list(
         if show_paths {
             writeln!(
                 printer.stdout(),
-                "{} ({})",
+                "{} (`{}`)",
                 format!(
                     "{name} v{version}{version_specifier}{extra_requirements}{with_requirements}{python_version}{latest_version}"
                 )

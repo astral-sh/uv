@@ -133,11 +133,11 @@ pub enum PylockTomlErrorKind {
     MissingHashes(PackageName, &'static str),
     #[error(transparent)]
     FileHash(#[from] FileHashError),
-    #[error("URL must end in a valid wheel filename: `{0}`")]
+    #[error("URL must end in a valid wheel filename: {0}")]
     UrlMissingFilename(DisplaySafeUrl),
-    #[error("Invalid artifact URL: `{0}`")]
+    #[error("Invalid artifact URL: {0}")]
     InvalidArtifactUrl(UrlString),
-    #[error("Path must end in a valid wheel filename: `{0}`")]
+    #[error("Path must end in a valid wheel filename: {0}")]
     PathMissingFilename(Box<Path>),
     #[error("Wheel filename `{0}` does not match package name `{1}`")]
     WheelNameMismatch(WheelFilename, PackageName),

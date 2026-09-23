@@ -235,7 +235,7 @@ fn sync_unbounded_build_backend() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0 (from `file://[TEMP_DIR]/`)
     ");
 
     uv_snapshot!(context.filters(), context.sync()
@@ -248,7 +248,7 @@ fn sync_unbounded_build_backend() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ project==0.1.0 (from file://[TEMP_DIR]/)
+     ~ project==0.1.0 (from `file://[TEMP_DIR]/`)
     ");
 
     Ok(())
@@ -623,7 +623,7 @@ fn package() -> Result<()> {
     Resolved 6 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
      + iniconfig==2.0.0
     ");
 
@@ -709,8 +709,8 @@ fn multiple_packages() -> Result<()> {
     Prepared 6 packages in [TIME]
     Installed 6 packages in [TIME]
      + anyio==4.3.0
-     + bar==0.1.0 (from file://[TEMP_DIR]/packages/bar)
-     + foo==0.1.0 (from file://[TEMP_DIR]/packages/foo)
+     + bar==0.1.0 (from `file://[TEMP_DIR]/packages/bar`)
+     + foo==0.1.0 (from `file://[TEMP_DIR]/packages/foo`)
      + idna==3.6
      + sniffio==1.3.1
      + typing-extensions==4.10.0
@@ -726,7 +726,7 @@ fn multiple_packages() -> Result<()> {
     Resolved 9 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + baz==0.1.0 (from file://[TEMP_DIR]/packages/baz)
+     + baz==0.1.0 (from `file://[TEMP_DIR]/packages/baz`)
      + iniconfig==2.0.0
     ");
 
@@ -1146,7 +1146,7 @@ fn mixed_requires_python() -> Result<()> {
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
-     + bird-feeder==0.1.0 (from file://[TEMP_DIR]/packages/bird-feeder)
+     + bird-feeder==0.1.0 (from `file://[TEMP_DIR]/packages/bird-feeder`)
      + idna==3.6
      + sniffio==1.3.1
     ");
@@ -1532,7 +1532,7 @@ fn sync_non_project_dev_dependencies() -> Result<()> {
     Resolved 11 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
      + iniconfig==2.0.0
     ");
 
@@ -1649,13 +1649,13 @@ fn sync_non_project_frozen() -> Result<()> {
         .env(EnvVars::RUST_LOG, "uv_workspace=trace"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    DEBUG Found workspace root: `[TEMP_DIR]/`
-    TRACE Discovering workspace members for: `[TEMP_DIR]/`
-    TRACE Processing workspace member: `foo`
-    DEBUG Adding discovered workspace member: `[TEMP_DIR]/foo`
-    TRACE Processing workspace member: `bar`
-    DEBUG Adding discovered workspace member: `[TEMP_DIR]/bar`
-    DEBUG Found project root: `[TEMP_DIR]/`
+    DEBUG Found workspace root: [TEMP_DIR]/
+    TRACE Discovering workspace members for: [TEMP_DIR]/
+    TRACE Processing workspace member: foo
+    DEBUG Adding discovered workspace member: [TEMP_DIR]/foo
+    TRACE Processing workspace member: bar
+    DEBUG Adding discovered workspace member: [TEMP_DIR]/bar
+    DEBUG Found project root: [TEMP_DIR]/
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + typing-extensions==4.10.0
@@ -1787,7 +1787,7 @@ fn sync_non_project_group() -> Result<()> {
     Resolved 6 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
      + iniconfig==2.0.0
     ");
 
@@ -1810,7 +1810,7 @@ fn sync_non_project_group() -> Result<()> {
     Uninstalled 5 packages in [TIME]
     Installed 1 package in [TIME]
      - anyio==4.3.0
-     - child==0.1.0 (from file://[TEMP_DIR]/child)
+     - child==0.1.0 (from `file://[TEMP_DIR]/child`)
      - idna==3.6
      - iniconfig==2.0.0
      - sniffio==1.3.1
@@ -1822,7 +1822,7 @@ fn sync_non_project_group() -> Result<()> {
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Installed 2 packages in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
      + iniconfig==2.0.0
     ");
 
@@ -1940,7 +1940,7 @@ fn sync_build_isolation() -> Result<()> {
      - pathspec==0.12.1
      - pluggy==1.4.0
      - setuptools==69.2.0
-     + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
+     + source-distribution==0.0.1 (from `https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`)
      - trove-classifiers==2024.3.3
      - wheel==0.43.0
     ");
@@ -2021,7 +2021,7 @@ fn sync_build_isolation_package() -> Result<()> {
      - packaging==24.0
      - pathspec==0.12.1
      - pluggy==1.4.0
-     + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
+     + source-distribution==0.0.1 (from `https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`)
      - trove-classifiers==2024.3.3
     ");
 
@@ -2105,7 +2105,7 @@ fn sync_build_isolation_package_order() -> Result<()> {
      + packaging==24.0
      + pathspec==0.12.1
      + pluggy==1.4.0
-     + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
+     + source-distribution==0.0.1 (from `https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`)
      + trove-classifiers==2024.3.3
     ");
 
@@ -2138,8 +2138,8 @@ fn sync_build_isolation_package_order() -> Result<()> {
      - packaging==24.0
      - pathspec==0.12.1
      - pluggy==1.4.0
-     - source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
-     + source-distribution==0.0.3 (from https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz)
+     - source-distribution==0.0.1 (from `https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`)
+     + source-distribution==0.0.3 (from `https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz`)
      - trove-classifiers==2024.3.3
     ");
 
@@ -2171,8 +2171,8 @@ fn sync_build_isolation_package_order() -> Result<()> {
      + packaging==24.0
      + pathspec==0.12.1
      + pluggy==1.4.0
-     - source-distribution==0.0.3 (from https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz)
-     + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
+     - source-distribution==0.0.3 (from `https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz`)
+     + source-distribution==0.0.1 (from `https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`)
      + trove-classifiers==2024.3.3
     ");
 
@@ -2254,7 +2254,7 @@ fn sync_build_isolation_extra() -> Result<()> {
      + packaging==24.0
      + pathspec==0.12.1
      + pluggy==1.4.0
-     + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
+     + source-distribution==0.0.1 (from `https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`)
      + trove-classifiers==2024.3.3
     ");
 
@@ -2275,7 +2275,7 @@ fn sync_build_isolation_extra() -> Result<()> {
      + packaging==24.0
      + pathspec==0.12.1
      + pluggy==1.4.0
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0 (from `file://[TEMP_DIR]/`)
      + trove-classifiers==2024.3.3
     ");
 
@@ -2291,7 +2291,7 @@ fn sync_build_isolation_extra() -> Result<()> {
      - packaging==24.0
      - pathspec==0.12.1
      - pluggy==1.4.0
-     + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
+     + source-distribution==0.0.1 (from `https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`)
      - trove-classifiers==2024.3.3
     ");
 
@@ -2386,7 +2386,7 @@ fn sync_extra_build_dependencies() -> Result<()> {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
     ");
 
     context.venv().arg("--clear").assert().success();
@@ -2395,7 +2395,7 @@ fn sync_extra_build_dependencies() -> Result<()> {
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
     ");
 
     // Adding `extra-build-dependencies` with the wrong name should fail the build
@@ -2520,8 +2520,8 @@ fn sync_extra_build_dependencies() -> Result<()> {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + bad-child==0.1.0 (from file://[TEMP_DIR]/bad_child)
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + bad-child==0.1.0 (from `file://[TEMP_DIR]/bad_child`)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
     ");
 
     Ok(())
@@ -2606,7 +2606,7 @@ fn sync_extra_build_dependencies_setuptools_legacy() -> Result<()> {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
     ");
 
     Ok(())
@@ -2707,7 +2707,7 @@ fn sync_extra_build_dependencies_setuptools() -> Result<()> {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
     ");
 
     Ok(())
@@ -2778,7 +2778,7 @@ fn sync_extra_build_dependencies_sources() -> Result<()> {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
     ");
 
     // TODO(zanieb): We want to test with `--no-sources` too but unfortunately that's not easy
@@ -2873,7 +2873,7 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
     ");
 
     // Pin `anyio` to the Test PyPI.
@@ -2923,7 +2923,7 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+     ~ child==0.1.0 (from `file://[TEMP_DIR]/child`)
     ");
 
     Ok(())
@@ -3101,7 +3101,7 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
     ");
 
     // Assert pipreqs module name to package name lookup works.
@@ -3196,7 +3196,7 @@ fn sync_reset_state() -> Result<()> {
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0 (from `file://[TEMP_DIR]/`)
      + pydantic-core==2.17.0
      + typing-extensions==4.10.0
     ");
@@ -3247,8 +3247,8 @@ fn sync_relative_wheel() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 2 packages in [TIME]
-     + ok==1.0.0 (from file://[TEMP_DIR]/wheels/ok-1.0.0-py3-none-any.whl)
-     + relative-wheel==0.1.0 (from file://[TEMP_DIR]/)
+     + ok==1.0.0 (from `file://[TEMP_DIR]/wheels/ok-1.0.0-py3-none-any.whl`)
+     + relative-wheel==0.1.0 (from `file://[TEMP_DIR]/`)
     ");
 
     let lock = context.read("uv.lock");
@@ -4547,7 +4547,7 @@ fn sync_default_groups_gibberish() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync(), @r#"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 14, column 26
                 |
              14 |         default-groups = "gibberish"
@@ -4769,7 +4769,7 @@ fn sync_group_member() -> Result<()> {
     Resolved 4 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
      + iniconfig==2.0.0
      + typing-extensions==4.10.0
     ");
@@ -4893,7 +4893,7 @@ fn sync_group_non_project_member() -> Result<()> {
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
      + iniconfig==2.0.0
      + typing-extensions==4.10.0
     ");
@@ -4936,7 +4936,7 @@ fn sync_group_transitive_self() -> Result<()> {
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==4.3.0
-     + idna==3.6 (from file://[TEMP_DIR]/)
+     + idna==3.6 (from `file://[TEMP_DIR]/`)
      + sniffio==1.3.1
     ");
 
@@ -5070,7 +5070,7 @@ fn sync_group_self() -> Result<()> {
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + iniconfig==2.0.0
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0 (from `file://[TEMP_DIR]/`)
      + typing-extensions==4.10.0
     ");
 
@@ -5150,7 +5150,7 @@ fn sync_workspace_member_group_self_conflicting_extra() -> Result<()> {
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + idna==3.6
-     + member==0.0.0 (from file://[TEMP_DIR]/member)
+     + member==0.0.0 (from `file://[TEMP_DIR]/member`)
     "
     );
 
@@ -5363,8 +5363,8 @@ fn sync_workspace_members_with_transitive_dependencies() -> Result<()> {
     Installed 5 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + pkg-a==0.0.1 (from file://[TEMP_DIR]/packages/pkg-a)
-     + pkg-b==0.0.1 (from file://[TEMP_DIR]/packages/pkg-b)
+     + pkg-a==0.0.1 (from `file://[TEMP_DIR]/packages/pkg-a`)
+     + pkg-b==0.0.1 (from `file://[TEMP_DIR]/packages/pkg-b`)
      + sniffio==1.3.1
     ");
 
@@ -5436,7 +5436,7 @@ fn sync_non_existent_extra_workspace_member() -> Result<()> {
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
      + idna==3.6
      + sniffio==1.3.1
     ");
@@ -5698,7 +5698,7 @@ fn no_install_project() -> Result<()> {
     Installed 1 package in [TIME]
      - anyio==3.7.0
      - idna==3.6
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0 (from `file://[TEMP_DIR]/`)
      - sniffio==1.3.1
     ");
 
@@ -5813,16 +5813,16 @@ fn no_install_workspace() -> Result<()> {
         .env(EnvVars::RUST_LOG, "uv_workspace=trace"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    DEBUG Found workspace root: `[TEMP_DIR]/`
-    TRACE Discovering workspace members for: `[TEMP_DIR]/`
-    DEBUG Adding root workspace member: `[TEMP_DIR]/`
-    TRACE Processing workspace member: `child`
-    DEBUG Found project root: `[TEMP_DIR]/`
-    DEBUG Found workspace root: `[TEMP_DIR]/`
-    TRACE Discovering workspace members for: `[TEMP_DIR]/`
-    DEBUG Adding root workspace member: `[TEMP_DIR]/`
-    TRACE Processing workspace member: `child`
-    DEBUG Ignoring missing workspace member: `[TEMP_DIR]/child`
+    DEBUG Found workspace root: [TEMP_DIR]/
+    TRACE Discovering workspace members for: [TEMP_DIR]/
+    DEBUG Adding root workspace member: [TEMP_DIR]/
+    TRACE Processing workspace member: child
+    DEBUG Found project root: [TEMP_DIR]/
+    DEBUG Found workspace root: [TEMP_DIR]/
+    TRACE Discovering workspace members for: [TEMP_DIR]/
+    DEBUG Adding root workspace member: [TEMP_DIR]/
+    TRACE Processing workspace member: child
+    DEBUG Ignoring missing workspace member: [TEMP_DIR]/child
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Installed 4 packages in [TIME]
@@ -6036,7 +6036,7 @@ fn no_install_package() -> Result<()> {
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + idna==3.6
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0 (from `file://[TEMP_DIR]/`)
      + sniffio==1.3.1
     ");
 
@@ -6050,7 +6050,7 @@ fn no_install_package() -> Result<()> {
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      + anyio==3.7.0
-     - project==0.1.0 (from file://[TEMP_DIR]/)
+     - project==0.1.0 (from `file://[TEMP_DIR]/`)
     ");
 
     Ok(())
@@ -6095,7 +6095,7 @@ fn project_no_build() -> Result<()> {
     Installed 4 packages in [TIME]
      + anyio==3.7.0
      + idna==3.6
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0 (from `file://[TEMP_DIR]/`)
      + sniffio==1.3.1
     ");
 
@@ -6105,7 +6105,7 @@ fn project_no_build() -> Result<()> {
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Uninstalled 1 package in [TIME]
-     - project==0.1.0 (from file://[TEMP_DIR]/)
+     - project==0.1.0 (from `file://[TEMP_DIR]/`)
     ");
 
     Ok(())
@@ -6260,7 +6260,7 @@ fn sync_extra_build_dependencies_script() -> Result<()> {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
     ");
 
     Ok(())
@@ -6336,7 +6336,7 @@ fn sync_extra_build_dependencies_script_sources() -> Result<()> {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
     ");
 
     Ok(())
@@ -6571,7 +6571,7 @@ fn convert_to_virtual() -> Result<()> {
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0 (from `file://[TEMP_DIR]/`)
     ");
 
     let lock = context.read("uv.lock");
@@ -6628,7 +6628,7 @@ fn convert_to_virtual() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Uninstalled 1 package in [TIME]
-     - project==0.1.0 (from file://[TEMP_DIR]/)
+     - project==0.1.0 (from `file://[TEMP_DIR]/`)
     ");
 
     let lock = context.read("uv.lock");
@@ -6762,7 +6762,7 @@ fn convert_to_package() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0 (from `file://[TEMP_DIR]/`)
     ");
 
     let lock = context.read("uv.lock");
@@ -7464,7 +7464,7 @@ fn sync_workspace_custom_environment_path() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
      - iniconfig==2.0.0
     ");
 
@@ -7508,7 +7508,7 @@ fn sync_workspace_custom_environment_path() -> Result<()> {
     Resolved 3 packages in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
      - iniconfig==2.0.0
     ");
 
@@ -7746,7 +7746,7 @@ fn sync_update_project() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + my-project==0.2.0 (from file://[TEMP_DIR]/)
+     + my-project==0.2.0 (from `file://[TEMP_DIR]/`)
     ");
 
     Ok(())
@@ -8206,7 +8206,7 @@ fn sync_override_package() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + project==0.0.0 (from file://[TEMP_DIR]/)
+     + project==0.0.0 (from `file://[TEMP_DIR]/`)
     ");
 
     // Mark the source as `package = true`.
@@ -8236,8 +8236,8 @@ fn sync_override_package() -> Result<()> {
     Prepared 2 packages in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 2 packages in [TIME]
-     + core==0.1.0 (from file://[TEMP_DIR]/core)
-     ~ project==0.0.0 (from file://[TEMP_DIR]/)
+     + core==0.1.0 (from `file://[TEMP_DIR]/core`)
+     ~ project==0.0.0 (from `file://[TEMP_DIR]/`)
     ");
 
     // Remove `package = false`.
@@ -8263,7 +8263,7 @@ fn sync_override_package() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ core==0.1.0 (from file://[TEMP_DIR]/core)
+     ~ core==0.1.0 (from `file://[TEMP_DIR]/core`)
     ");
 
     // Mark the source as `package = false`.
@@ -8293,8 +8293,8 @@ fn sync_override_package() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 1 package in [TIME]
-     - core==0.1.0 (from file://[TEMP_DIR]/core)
-     ~ project==0.0.0 (from file://[TEMP_DIR]/)
+     - core==0.1.0 (from `file://[TEMP_DIR]/core`)
+     ~ project==0.0.0 (from `file://[TEMP_DIR]/`)
     ");
 
     // Update the source `tool.uv` to `package = true`
@@ -8342,7 +8342,7 @@ fn sync_override_package() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ project==0.0.0 (from file://[TEMP_DIR]/)
+     ~ project==0.0.0 (from `file://[TEMP_DIR]/`)
     ");
 
     // Remove the `package = false` mark.
@@ -8372,8 +8372,8 @@ fn sync_override_package() -> Result<()> {
     Prepared 2 packages in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 2 packages in [TIME]
-     + core==0.1.0 (from file://[TEMP_DIR]/core)
-     ~ project==0.0.0 (from file://[TEMP_DIR]/)
+     + core==0.1.0 (from `file://[TEMP_DIR]/core`)
+     ~ project==0.0.0 (from `file://[TEMP_DIR]/`)
     ");
 
     Ok(())
@@ -8450,7 +8450,7 @@ fn transitive_dev() -> Result<()> {
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
      + idna==3.6
      + sniffio==1.3.1
     ");
@@ -8527,8 +8527,8 @@ fn sync_no_editable() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
-     + root==0.1.0 (from file://[TEMP_DIR]/)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
+     + root==0.1.0 (from `file://[TEMP_DIR]/`)
     ");
 
     uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_NO_EDITABLE, "1"), @"
@@ -8603,8 +8603,8 @@ fn sync_no_editable_ignores_source_changes() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
-     + root==0.1.0 (from file://[TEMP_DIR]/)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
+     + root==0.1.0 (from `file://[TEMP_DIR]/`)
     ");
 
     root_source.write_str(indoc! {r#"
@@ -8637,8 +8637,8 @@ fn sync_no_editable_ignores_source_changes() -> Result<()> {
     Creating virtual environment at: fresh
     Resolved 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
-     + root==0.1.0 (from file://[TEMP_DIR]/)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
+     + root==0.1.0 (from `file://[TEMP_DIR]/`)
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("python").arg("-c").arg("import root, child; print(root.VALUE); print(child.VALUE)").env(EnvVars::UV_PROJECT_ENVIRONMENT, "fresh").env_remove(EnvVars::VIRTUAL_ENV), @"
@@ -8865,7 +8865,7 @@ fn sync_dynamic_extra() -> Result<()> {
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + iniconfig==2.0.0
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0 (from `file://[TEMP_DIR]/`)
      + typing-extensions==4.10.0
     ");
 
@@ -9013,7 +9013,7 @@ fn build_system_requires_workspace() -> Result<()> {
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
-     + project==0.1.0 (from file://[TEMP_DIR]/project)
+     + project==0.1.0 (from `file://[TEMP_DIR]/project`)
     ");
 
     Ok(())
@@ -9090,7 +9090,7 @@ fn build_system_requires_path() -> Result<()> {
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
-     + project==0.1.0 (from file://[TEMP_DIR]/project)
+     + project==0.1.0 (from `file://[TEMP_DIR]/project`)
     ");
 
     Ok(())
@@ -9159,7 +9159,7 @@ fn sync_invalid_environment() -> Result<()> {
         uv_snapshot!(context.filters(), context.sync(), @"
         exit_code: 0 (success)
         ----- stderr -----
-        warning: Ignoring existing virtual environment linked to non-existent Python interpreter: .venv/[BIN]/[PYTHON] -> does-not-exist
+        warning: Ignoring existing virtual environment linked to non-existent Python interpreter: .venv/[BIN]/[PYTHON] -> `does-not-exist`
         Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
         Removed virtual environment at: .venv
         Creating virtual environment at: .venv
@@ -9245,7 +9245,7 @@ fn sync_partial_environment_delete() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + temp==0.1.0 (from file://[TEMP_DIR]/)
+     + temp==0.1.0 (from `file://[TEMP_DIR]/`)
     ");
 
     // Create a directory that's unreadable, erroring on trying to delete its children.
@@ -9282,7 +9282,7 @@ fn sync_partial_environment_delete() -> Result<()> {
     Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
-     + temp==0.1.0 (from file://[TEMP_DIR]/)
+     + temp==0.1.0 (from `file://[TEMP_DIR]/`)
     ");
 
     Ok(())
@@ -9368,7 +9368,7 @@ fn sync_no_sources_package() -> Result<()> {
     Installed 4 packages in [TIME]
      + anyio==3.7.0
      + idna==3.6
-     + iniconfig==2.0.0 (from git+https://github.com/pytest-dev/iniconfig@93f5930e668c0d1ddf4597e38dd0dea4e2665e7a)
+     + iniconfig==2.0.0 (from `git+https://github.com/pytest-dev/iniconfig@93f5930e668c0d1ddf4597e38dd0dea4e2665e7a`)
      + sniffio==1.3.1
     ");
 
@@ -9631,10 +9631,10 @@ fn sync_all() -> Result<()> {
     Prepared 6 packages in [TIME]
     Installed 6 packages in [TIME]
      + anyio==4.3.0
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
      + idna==3.6
      + iniconfig==2.0.0
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0 (from `file://[TEMP_DIR]/`)
      + sniffio==1.3.1
     ");
 
@@ -9708,7 +9708,7 @@ fn sync_all_extras() -> Result<()> {
     Resolved 8 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
      + iniconfig==2.0.0
      + sniffio==1.3.1
      + typing-extensions==4.10.0
@@ -9880,8 +9880,8 @@ fn sync_all_extras_dynamic() -> Result<()> {
     Resolved 6 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
+     + project==0.1.0 (from `file://[TEMP_DIR]/`)
      + sniffio==1.3.1
     ");
 
@@ -9976,7 +9976,7 @@ fn sync_all_groups() -> Result<()> {
     Resolved 8 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
      + iniconfig==2.0.0
      + sniffio==1.3.1
      + typing-extensions==4.10.0
@@ -10332,8 +10332,8 @@ fn sync_stale_egg_info() -> Result<()> {
     Resolved 4 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 3 packages in [TIME]
-     + member==0.1.dev5+gfea1041 (from git+https://github.com/astral-sh/uv-stale-egg-info-test.git@fea10416b9c479ac88fb217e14e40249b63bfbee#subdirectory=member)
-     + root==0.1.dev5+gfea1041 (from git+https://github.com/astral-sh/uv-stale-egg-info-test.git@fea10416b9c479ac88fb217e14e40249b63bfbee)
+     + member==0.1.dev5+gfea1041 (from `git+https://github.com/astral-sh/uv-stale-egg-info-test.git@fea10416b9c479ac88fb217e14e40249b63bfbee#subdirectory=member`)
+     + root==0.1.dev5+gfea1041 (from `git+https://github.com/astral-sh/uv-stale-egg-info-test.git@fea10416b9c479ac88fb217e14e40249b63bfbee`)
      + setuptools==69.2.0
     ");
 
@@ -10421,8 +10421,8 @@ fn sync_git_repeated_member_static_metadata() -> Result<()> {
     Resolved 3 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + uv-git-workspace-in-root==0.1.0 (from git+https://github.com/astral-sh/workspace-in-root-test.git@d3ab48d2338296d47e28dbb2fb327c5e2ac4ac68)
-     + workspace-member-in-subdir==0.1.0 (from git+https://github.com/astral-sh/workspace-in-root-test.git@d3ab48d2338296d47e28dbb2fb327c5e2ac4ac68#subdirectory=workspace-member-in-subdir)
+     + uv-git-workspace-in-root==0.1.0 (from `git+https://github.com/astral-sh/workspace-in-root-test.git@d3ab48d2338296d47e28dbb2fb327c5e2ac4ac68`)
+     + workspace-member-in-subdir==0.1.0 (from `git+https://github.com/astral-sh/workspace-in-root-test.git@d3ab48d2338296d47e28dbb2fb327c5e2ac4ac68#subdirectory=workspace-member-in-subdir`)
     ");
 
     Ok(())
@@ -10531,9 +10531,9 @@ fn sync_git_repeated_member_dynamic_metadata() -> Result<()> {
     Resolved 5 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
-     + dependency==0.1.0 (from git+https://github.com/astral-sh/uv-dynamic-metadata-test.git@6c5aa0a65db737c9e7e2e60dc865bd8087012e64#subdirectory=dependency)
+     + dependency==0.1.0 (from `git+https://github.com/astral-sh/uv-dynamic-metadata-test.git@6c5aa0a65db737c9e7e2e60dc865bd8087012e64#subdirectory=dependency`)
      + iniconfig==2.0.0
-     + package==0.1.0 (from git+https://github.com/astral-sh/uv-dynamic-metadata-test.git@6c5aa0a65db737c9e7e2e60dc865bd8087012e64)
+     + package==0.1.0 (from `git+https://github.com/astral-sh/uv-dynamic-metadata-test.git@6c5aa0a65db737c9e7e2e60dc865bd8087012e64`)
      + typing-extensions==4.10.0
     ");
 
@@ -10621,8 +10621,8 @@ fn sync_git_repeated_member_backwards_path() -> Result<()> {
     Resolved 3 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + dependency==0.1.0 (from git+https://github.com/astral-sh/uv-backwards-path-test@4bcc7fcd2e548c2ab7ba6b97b1c4e3ababccc7a9#subdirectory=dependency)
-     + package==0.1.0 (from git+https://github.com/astral-sh/uv-backwards-path-test@4bcc7fcd2e548c2ab7ba6b97b1c4e3ababccc7a9#subdirectory=root)
+     + dependency==0.1.0 (from `git+https://github.com/astral-sh/uv-backwards-path-test@4bcc7fcd2e548c2ab7ba6b97b1c4e3ababccc7a9#subdirectory=dependency`)
+     + package==0.1.0 (from `git+https://github.com/astral-sh/uv-backwards-path-test@4bcc7fcd2e548c2ab7ba6b97b1c4e3ababccc7a9#subdirectory=root`)
     ");
 
     Ok(())
@@ -10707,8 +10707,8 @@ fn sync_git_path_archive() -> Result<()> {
     Resolved 3 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + archive-in-git-test==0.1.0 (from git+https://github.com/astral-sh/archive-in-git-test.git@bb7ce6abf9f90544767701de5b7b0c7802dc642b)
-     + iniconfig==2.0.0 (from git+https://github.com/astral-sh/archive-in-git-test.git@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0-py3-none-any.whl)
+     + archive-in-git-test==0.1.0 (from `git+https://github.com/astral-sh/archive-in-git-test.git@bb7ce6abf9f90544767701de5b7b0c7802dc642b`)
+     + iniconfig==2.0.0 (from `git+https://github.com/astral-sh/archive-in-git-test.git@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0-py3-none-any.whl`)
     "###);
 
     Ok(())
@@ -10879,7 +10879,7 @@ fn mismatched_name_cached_wheel() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz)
+     + iniconfig==2.0.0 (from `https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`)
     ");
 
     pyproject_toml.write_str(
@@ -10980,8 +10980,8 @@ fn sync_git_path_dependency() -> Result<()> {
     Resolved 3 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + package1==0.1.0 (from git+https://github.com/astral-sh/uv-path-dependency-test.git@28781b32cf1f260cdb2c8040628079eb265202bd#subdirectory=package1)
-     + package2==0.1.0 (from git+https://github.com/astral-sh/uv-path-dependency-test.git@28781b32cf1f260cdb2c8040628079eb265202bd#subdirectory=package2)
+     + package1==0.1.0 (from `git+https://github.com/astral-sh/uv-path-dependency-test.git@28781b32cf1f260cdb2c8040628079eb265202bd#subdirectory=package1`)
+     + package2==0.1.0 (from `git+https://github.com/astral-sh/uv-path-dependency-test.git@28781b32cf1f260cdb2c8040628079eb265202bd#subdirectory=package2`)
     ");
 
     Ok(())
@@ -11217,8 +11217,8 @@ fn sync_git_metadata_archive_dependency() -> Result<()> {
     Resolved 3 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + basic-package==0.1.0 (from git+file://[TEMP_DIR]/repository/@[COMMIT]#path=root/archives/basic_package-0.1.0-py3-none-any.whl)
-     + root==0.1.0 (from git+file://[TEMP_DIR]/repository/@[COMMIT]#subdirectory=root)
+     + basic-package==0.1.0 (from `git+file://[TEMP_DIR]/repository/@[COMMIT]#path=root/archives/basic_package-0.1.0-py3-none-any.whl`)
+     + root==0.1.0 (from `git+file://[TEMP_DIR]/repository/@[COMMIT]#subdirectory=root`)
     ");
 
     let lock = context.read("uv.lock");
@@ -12676,7 +12676,7 @@ fn prune_cache_url_subdirectory() -> Result<()> {
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + root==0.0.1 (from https://github.com/user-attachments/files/18216295/subdirectory-test.tar.gz#subdirectory=packages/root)
+     + root==0.0.1 (from `https://github.com/user-attachments/files/18216295/subdirectory-test.tar.gz#subdirectory=packages/root`)
      + sniffio==1.3.1
     ");
 
@@ -12954,7 +12954,7 @@ fn sync_workspace_member_build_constraints() -> Result<()> {
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + a==2.0.0
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
     ");
 
     let lock = context.read("uv.lock");
@@ -12975,7 +12975,7 @@ fn sync_workspace_member_build_constraints() -> Result<()> {
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + a==2.0.0
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
     ");
 
     Ok(())
@@ -13246,9 +13246,9 @@ fn repeated_dev_member_all_packages() -> Result<()> {
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
-     + first==0.1.0 (from file://[TEMP_DIR]/)
+     + first==0.1.0 (from `file://[TEMP_DIR]/`)
      + iniconfig==2.0.0
-     + second==0.1.0 (from file://[TEMP_DIR]/second)
+     + second==0.1.0 (from `file://[TEMP_DIR]/second`)
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--all-packages"), @"
@@ -13289,7 +13289,7 @@ fn direct_url_dependency_metadata() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Installed 1 package in [TIME]
-     + tqdm==4.67.1 (from https://files.pythonhosted.org/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl)
+     + tqdm==4.67.1 (from `https://files.pythonhosted.org/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`)
     ");
 
     Ok(())
@@ -13365,7 +13365,7 @@ fn sync_url_with_query_parameters() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + source-distribution==0.0.3 (from https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz?foo=bar)
+     + source-distribution==0.0.3 (from `https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz?foo=bar`)
     ");
 
     Ok(())
@@ -13716,7 +13716,7 @@ fn conflicting_editable() -> Result<()> {
     Resolved 3 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
     ");
 
     uv_snapshot!(context.filters(), context.pip_list().arg("--format").arg("json"), @r#"
@@ -13732,7 +13732,7 @@ fn conflicting_editable() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+     ~ child==0.1.0 (from `file://[TEMP_DIR]/child`)
     ");
 
     uv_snapshot!(context.filters(), context.pip_list().arg("--format").arg("json"), @r#"
@@ -13867,7 +13867,7 @@ fn undeclared_editable() -> Result<()> {
     Resolved 3 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
     ");
 
     uv_snapshot!(context.filters(), context.pip_list().arg("--format").arg("json"), @r#"
@@ -13883,7 +13883,7 @@ fn undeclared_editable() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+     ~ child==0.1.0 (from `file://[TEMP_DIR]/child`)
     ");
 
     uv_snapshot!(context.filters(), context.pip_list().arg("--format").arg("json"), @r#"
@@ -14089,7 +14089,7 @@ fn sync_config_settings_package() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + dependency==0.1.0 (from file://[TEMP_DIR]/dependency)
+     + dependency==0.1.0 (from `file://[TEMP_DIR]/dependency`)
     ");
 
     // When installed without `editable_mode=compat`, the `finder.py` file should be present.
@@ -14127,7 +14127,7 @@ fn sync_config_settings_package() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + dependency==0.1.0 (from file://[TEMP_DIR]/dependency)
+     + dependency==0.1.0 (from `file://[TEMP_DIR]/dependency`)
     ");
 
     // When installed with `editable_mode=compat`, the `finder.py` file should _not_ be present.
@@ -14164,7 +14164,7 @@ fn sync_config_settings_package() -> Result<()> {
     Creating virtual environment at: .venv
     Resolved 2 packages in [TIME]
     Installed 1 package in [TIME]
-     + dependency==0.1.0 (from file://[TEMP_DIR]/dependency)
+     + dependency==0.1.0 (from `file://[TEMP_DIR]/dependency`)
     ");
 
     // When installed without `editable_mode=compat`, the `finder.py` file should be present.
@@ -14340,7 +14340,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + a==0.2.0
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
     ");
 
     // Change the constraints on a.
@@ -14386,7 +14386,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     Installed [N] packages in [TIME]
      - a==0.2.0
      + a==0.1.0
-     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+     ~ child==0.1.0 (from `file://[TEMP_DIR]/child`)
     ");
 
     // Now, we'll set a constraint in the parent project
@@ -14576,7 +14576,7 @@ fn sync_extra_build_variables() -> Result<()> {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + parent==0.1.0 (from file://[TEMP_DIR]/)
+     + parent==0.1.0 (from `file://[TEMP_DIR]/`)
     ");
 
     Ok(())
@@ -14639,7 +14639,7 @@ fn sync_git_lfs() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true)
+     + test-lfs-repo==0.1.0 (from `git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true`)
     ");
 
     // Verify that we can import the module and access LFS content
@@ -14689,7 +14689,7 @@ fn sync_git_lfs() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true)
+     ~ test-lfs-repo==0.1.0 (from `git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true`)
     ");
 
     uv_snapshot!(context.filters(), context.python_command()
@@ -14719,8 +14719,8 @@ fn sync_git_lfs() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true)
-     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb)
+     - test-lfs-repo==0.1.0 (from `git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true`)
+     + test-lfs-repo==0.1.0 (from `git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb`)
     ");
 
     // Verify that LFS content is missing (import should fail)
@@ -14746,7 +14746,7 @@ fn sync_git_lfs() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb)
+     ~ test-lfs-repo==0.1.0 (from `git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb`)
     ");
 
     uv_snapshot!(context.filters(), context.python_command()
@@ -14816,8 +14816,8 @@ fn sync_git_lfs() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb)
-     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true)
+     - test-lfs-repo==0.1.0 (from `git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb`)
+     + test-lfs-repo==0.1.0 (from `git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true`)
     ");
 
     // Verify that we can import the module when UV_GIT_LFS is set
@@ -14837,8 +14837,8 @@ fn sync_git_lfs() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true)
-     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb)
+     - test-lfs-repo==0.1.0 (from `git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true`)
+     + test-lfs-repo==0.1.0 (from `git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb`)
     ");
 
     uv_snapshot!(context.filters(), context.python_command()
@@ -14863,8 +14863,8 @@ fn sync_git_lfs() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb)
-     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true)
+     - test-lfs-repo==0.1.0 (from `git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb`)
+     + test-lfs-repo==0.1.0 (from `git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true`)
     ");
 
     uv_snapshot!(context.filters(), context.python_command()
@@ -14883,8 +14883,8 @@ fn sync_git_lfs() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true)
-     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb)
+     - test-lfs-repo==0.1.0 (from `git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true`)
+     + test-lfs-repo==0.1.0 (from `git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb`)
     ");
 
     uv_snapshot!(context.filters(), context.python_command()
@@ -14941,8 +14941,8 @@ fn sync_git_lfs() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb)
-     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true)
+     - test-lfs-repo==0.1.0 (from `git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb`)
+     + test-lfs-repo==0.1.0 (from `git+https://github.com/astral-sh/test-lfs-repo.git@261c828b8e05251f3a3e4f6b47b149d691c7efbb#lfs=true`)
     ");
 
     uv_snapshot!(context.filters(), context.python_command()
@@ -15067,7 +15067,7 @@ fn sync_extra_build_dependencies_cache() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
     ");
 
     // Running `uv sync` again should be a no-op.
@@ -15101,7 +15101,7 @@ fn sync_extra_build_dependencies_cache() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+     ~ child==0.1.0 (from `file://[TEMP_DIR]/child`)
     ");
 
     // Running `uv sync` again should be a no-op.
@@ -15134,7 +15134,7 @@ fn sync_extra_build_dependencies_cache() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+     ~ child==0.1.0 (from `file://[TEMP_DIR]/child`)
     ");
 
     // Remove the build dependency.
@@ -15157,7 +15157,7 @@ fn sync_extra_build_dependencies_cache() -> Result<()> {
     Resolved 2 packages in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+     ~ child==0.1.0 (from `file://[TEMP_DIR]/child`)
     ");
 
     // Add a build variable.
@@ -15183,7 +15183,7 @@ fn sync_extra_build_dependencies_cache() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+     ~ child==0.1.0 (from `file://[TEMP_DIR]/child`)
     ");
 
     // Running `uv sync` again should be a no-op.
@@ -15559,7 +15559,7 @@ fn toggle_workspace_editable() -> Result<()> {
     Resolved 3 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
      + iniconfig==2.0.0
     ");
 
@@ -15625,7 +15625,7 @@ fn toggle_workspace_editable() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+     ~ child==0.1.0 (from `file://[TEMP_DIR]/child`)
     ");
 
     assert!(!context.site_packages().join("_child.pth").exists());
@@ -15636,7 +15636,7 @@ fn toggle_workspace_editable() -> Result<()> {
     Resolved 3 packages in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+     ~ child==0.1.0 (from `file://[TEMP_DIR]/child`)
     ");
 
     assert!(context.site_packages().join("_child.pth").exists());
@@ -15664,7 +15664,7 @@ fn toggle_workspace_editable() -> Result<()> {
     Resolved 3 packages in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+     ~ child==0.1.0 (from `file://[TEMP_DIR]/child`)
     ");
 
     let lock = context.read("uv.lock");
@@ -15732,7 +15732,7 @@ fn toggle_workspace_editable() -> Result<()> {
     Resolved 3 packages in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+     ~ child==0.1.0 (from `file://[TEMP_DIR]/child`)
     ");
 
     // Verify that `_child.pth` exists in the site-packages directory.
@@ -15814,7 +15814,7 @@ fn workspace_editable_conflict() -> Result<()> {
     Resolved 4 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + child1==0.1.0 (from file://[TEMP_DIR]/child1)
+     + child1==0.1.0 (from `file://[TEMP_DIR]/child1`)
      + iniconfig==2.0.0
     ");
 
@@ -15909,7 +15909,7 @@ fn workspace_editable_conflict() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ child1==0.1.0 (from file://[TEMP_DIR]/child1)
+     ~ child1==0.1.0 (from `file://[TEMP_DIR]/child1`)
     ");
 
     let lock = context.read("uv.lock");
@@ -16112,7 +16112,7 @@ fn sync_no_sources_editable_to_package_switch() -> Result<()> {
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
-     + test-no-sources==0.0.1 (from file://[TEMP_DIR]/)
+     + test-no-sources==0.0.1 (from `file://[TEMP_DIR]/`)
     ");
 
     // Step 2: `uv sync` should switch to an editable installation.
@@ -16124,7 +16124,7 @@ fn sync_no_sources_editable_to_package_switch() -> Result<()> {
     Uninstalled 3 packages in [TIME]
     Installed 1 package in [TIME]
      - anyio==4.3.0
-     + anyio==4.3.0 (from file://[TEMP_DIR]/local_dep)
+     + anyio==4.3.0 (from `file://[TEMP_DIR]/local_dep`)
      - idna==3.6
      - sniffio==1.3.1
     ");
@@ -16136,7 +16136,7 @@ fn sync_no_sources_editable_to_package_switch() -> Result<()> {
     Resolved 4 packages in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 3 packages in [TIME]
-     - anyio==4.3.0 (from file://[TEMP_DIR]/local_dep)
+     - anyio==4.3.0 (from `file://[TEMP_DIR]/local_dep`)
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
@@ -16174,7 +16174,7 @@ fn sync_fails_ambiguous_url() -> Result<()> {
          |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
       ambiguous user/pass authority in URL (not percent-encoded?): https:***@domain/a/b/c
 
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 10, column 15
                 |
              10 |         url = "https://user/name:password@domain/a/b/c"
@@ -16242,7 +16242,7 @@ fn sync_reinstalls_on_version_change() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/packages/child)
+     + child==0.1.0 (from `file://[TEMP_DIR]/packages/child`)
     ");
 
     // Now bump the child's version to 0.1.1.
@@ -16276,8 +16276,8 @@ fn sync_reinstalls_on_version_change() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - child==0.1.0 (from file://[TEMP_DIR]/packages/child)
-     + child==0.1.1 (from file://[TEMP_DIR]/packages/child)
+     - child==0.1.0 (from `file://[TEMP_DIR]/packages/child`)
+     + child==0.1.1 (from `file://[TEMP_DIR]/packages/child`)
     ");
 
     Ok(())
@@ -16747,7 +16747,7 @@ fn sync_frozen_workspace_member_git_credentials() -> Result<()> {
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-private-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
+     + uv-private-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071`)
     ");
 
     Ok(())
@@ -16865,7 +16865,7 @@ fn project_build_hashes_lock_and_sync() -> Result<()> {
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0 (from `file://[TEMP_DIR]/`)
     ");
 
     // Changing only a hash makes `--locked` reject the existing lockfile.
@@ -16938,7 +16938,7 @@ fn project_build_hashes_unpinned() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0 (from `file://[TEMP_DIR]/`)
     ");
     Ok(())
 }
@@ -17009,7 +17009,7 @@ fn project_build_hashes_pip() -> Result<()> {
             Resolved 1 package in [TIME]
             Prepared 1 package in [TIME]
             Installed 1 package in [TIME]
-             + project==0.1.0 (from file://[TEMP_DIR]/)
+             + project==0.1.0 (from `file://[TEMP_DIR]/`)
             ");
         }
         context
@@ -17033,7 +17033,7 @@ fn project_build_hashes_pip() -> Result<()> {
             Prepared 1 package in [TIME]
             Uninstalled 1 package in [TIME]
             Installed 1 package in [TIME]
-             ~ project==0.1.0 (from file://[TEMP_DIR]/)
+             ~ project==0.1.0 (from `file://[TEMP_DIR]/`)
             ");
         }
         context
@@ -17091,7 +17091,7 @@ fn project_build_hashes_script_run_with() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0 (from `file://[TEMP_DIR]/`)
     ");
     context
         .temp_dir
@@ -17157,7 +17157,7 @@ fn project_build_hashes_run_with_stale_lock() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + project==0.1.0 (from file://[TEMP_DIR]/package)
+     + project==0.1.0 (from `file://[TEMP_DIR]/package`)
     ");
     package
         .child("backend-executed")

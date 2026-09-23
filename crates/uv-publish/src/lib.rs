@@ -52,7 +52,7 @@ use crate::trusted_publishing::{TrustedPublishingError, TrustedPublishingService
 
 #[derive(Error, Debug)]
 pub enum PublishError {
-    #[error("The publish path is not a valid glob pattern: `{0}`")]
+    #[error("The publish path is not a valid glob pattern: {0}")]
     Pattern(String, #[source] PatternError),
     /// [`GlobError`] is a wrapped io error.
     #[error(transparent)]
@@ -61,9 +61,9 @@ pub enum PublishError {
     NoFiles,
     #[error(transparent)]
     Fmt(#[from] fmt::Error),
-    #[error("File is neither a wheel nor a source distribution: `{}`", _0.user_display())]
+    #[error("File is neither a wheel nor a source distribution: {}", _0.user_display())]
     InvalidFilename(PathBuf),
-    #[error("Failed to publish: `{}`", _0.user_display())]
+    #[error("Failed to publish: {}", _0.user_display())]
     PublishPrepare(PathBuf, #[source] Box<PublishPrepareError>),
     #[error("Failed to publish `{}` to `{}`", _0.user_display(), _1)]
     PublishSend(
@@ -80,7 +80,7 @@ pub enum PublishError {
     #[error(transparent)]
     ClientBuild(#[from] ClientBuildError),
     #[error(
-        "Local file and index file do not match for {filename}. \
+        "Local file and index file do not match for `{filename}`. \
         Local: {hash_algorithm}={local}, Remote: {hash_algorithm}={remote}"
     )]
     HashMismatch {
@@ -89,7 +89,7 @@ pub enum PublishError {
         local: String,
         remote: String,
     },
-    #[error("Hash is missing in index for {0}")]
+    #[error("Hash is missing in index for `{0}`")]
     MissingHash(Box<DistFilename>),
     #[error(transparent)]
     RetryParsing(#[from] RetryParsingError),
@@ -106,21 +106,21 @@ pub enum PublishPrepareError {
     Metadata(#[from] uv_metadata::Error),
     #[error("Failed to read metadata")]
     Metadata23(#[from] MetadataError),
-    #[error("Only files ending in `.tar.gz` are valid source distributions: `{0}`")]
+    #[error("Only files ending in `.tar.gz` are valid source distributions: {0}")]
     InvalidExtension(SourceDistFilename),
-    #[error("No PKG-INFO file found")]
+    #[error("No `PKG-INFO` file found")]
     MissingPkgInfo,
-    #[error("Multiple PKG-INFO files found: `{0}`")]
+    #[error("Multiple `PKG-INFO` files found: {0}")]
     MultiplePkgInfo(String),
     #[error("Failed to decode source distribution")]
     Decode(#[source] tar_codec::DecodeError),
-    #[error("Failed to read: `{0}`")]
+    #[error("Failed to read: {0}")]
     Read(String, #[source] tar_codec::DecodeError),
     #[error(transparent)]
     TokioTar(io::Error),
-    #[error("Failed to read: `{0}`")]
+    #[error("Failed to read: {0}")]
     TokioTarRead(String, #[source] io::Error),
-    #[error("Invalid PEP 740 attestation (not JSON): `{0}`")]
+    #[error("Invalid PEP 740 attestation (not JSON): {0}")]
     InvalidAttestation(PathBuf, #[source] serde_json::Error),
 }
 
@@ -461,7 +461,7 @@ fn group_files(files: Vec<PathBuf>, no_attestations: bool) -> Vec<PreparedDistri
             && let Some(dist_name) = filename_parts.next()
         {
             debug!(
-                "Found attestation for distribution: `{}` -> `{}`",
+                "Found attestation for distribution: {} -> {}",
                 file.user_display(),
                 dist_name
             );
@@ -472,7 +472,7 @@ fn group_files(files: Vec<PathBuf>, no_attestations: bool) -> Vec<PreparedDistri
                 .push(file);
         } else {
             let Some(dist_filename) = DistFilename::try_from_normalized_filename(&filename) else {
-                debug!("Not a distribution filename: `{filename}`");
+                debug!("Not a distribution filename: {filename}");
                 // I've never seen these in upper case
                 #[expect(clippy::case_sensitive_file_extension_comparisons)]
                 if filename.ends_with(".whl")
@@ -484,7 +484,7 @@ fn group_files(files: Vec<PathBuf>, no_attestations: bool) -> Vec<PreparedDistri
                 {
                     warn_user!(
                         "Skipping file that looks like a distribution, \
-                        but is not a valid distribution filename: `{}`",
+                        but is not a valid distribution filename: {}",
                         file.user_display()
                     );
                 }
@@ -846,7 +846,7 @@ impl<'a> PublishSession<'a> {
             .cache(cache_refresh)
             .wrap_existing(self.upload_client)?;
 
-        debug!("Checking for {filename} in the registry");
+        debug!("Checking for `{filename}` in the registry");
         let response = match registry_client
             .simple_detail(
                 filename.name(),
@@ -862,7 +862,7 @@ impl<'a> PublishSession<'a> {
                     uv_client::ErrorKind::RemotePackageNotFound(_) => {
                         // The package doesn't exist, so we can't have uploaded it.
                         warn!(
-                            "Package not found in the registry; skipping upload check for {filename}"
+                            "Package not found in the registry; skipping upload check for `{filename}`"
                         );
                         Ok(false)
                     }
@@ -909,7 +909,7 @@ impl<'a> PublishSession<'a> {
             })?;
             if &local_hash == remote_hash {
                 debug!(
-                    "Found {filename} in the registry with matching hash {}",
+                    "Found `{filename}` in the registry with matching hash {}",
                     remote_hash.digest()
                 );
                 Ok(true)
@@ -955,7 +955,7 @@ async fn hash_file<const COUNT: usize>(
     reporter: Arc<impl Reporter>,
 ) -> Result<[HashDigest; COUNT], io::Error> {
     let path = path.as_ref().to_path_buf();
-    debug!("Hashing {}", path.user_display());
+    debug!("Hashing `{}`", path.user_display());
     let filename = filename.clone();
 
     // Read and hash the file in one blocking task, instead of dispatching each read separately.

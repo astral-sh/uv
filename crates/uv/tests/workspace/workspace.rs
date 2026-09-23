@@ -47,7 +47,7 @@ fn test_albatross_in_examples_bird_feeder() {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + bird-feeder==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-in-example/examples/bird-feeder)
+     + bird-feeder==1.0.0 (from `file://[TEMP_DIR]/workspace/albatross-in-example/examples/bird-feeder`)
      + iniconfig==2.0.0
     "
     );
@@ -82,7 +82,7 @@ fn test_albatross_in_examples() {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + albatross==0.1.0 (from file://[TEMP_DIR]/workspace/albatross-in-example)
+     + albatross==0.1.0 (from `file://[TEMP_DIR]/workspace/albatross-in-example`)
      + iniconfig==2.0.0
     "
     );
@@ -117,7 +117,7 @@ fn test_albatross_just_project() {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + albatross==0.1.0 (from file://[TEMP_DIR]/workspace/albatross-just-project)
+     + albatross==0.1.0 (from `file://[TEMP_DIR]/workspace/albatross-just-project`)
      + iniconfig==2.0.0
     "
     );
@@ -152,7 +152,7 @@ fn test_albatross_project_in_excluded() {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + albatross==0.1.0 (from file://[TEMP_DIR]/workspace/albatross-project-in-excluded)
+     + albatross==0.1.0 (from `file://[TEMP_DIR]/workspace/albatross-project-in-excluded`)
      + iniconfig==2.0.0
     "
     );
@@ -170,7 +170,7 @@ fn test_albatross_project_in_excluded() {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 2 packages in [TIME]
-     + bird-feeder==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-project-in-excluded/excluded/bird-feeder)
+     + bird-feeder==1.0.0 (from `file://[TEMP_DIR]/workspace/albatross-project-in-excluded/excluded/bird-feeder`)
      + iniconfig==2.0.0
     "
     );
@@ -216,11 +216,11 @@ fn test_albatross_root_workspace() {
     Resolved 5 packages in [TIME]
     Prepared 5 packages in [TIME]
     Installed 5 packages in [TIME]
-     + albatross==0.1.0 (from file://[TEMP_DIR]/workspace/albatross-root-workspace)
-     + bird-feeder==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-root-workspace/packages/bird-feeder)
+     + albatross==0.1.0 (from `file://[TEMP_DIR]/workspace/albatross-root-workspace`)
+     + bird-feeder==1.0.0 (from `file://[TEMP_DIR]/workspace/albatross-root-workspace/packages/bird-feeder`)
      + idna==3.6
      + iniconfig==2.0.0
-     + seeds==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-root-workspace/packages/seeds)
+     + seeds==1.0.0 (from `file://[TEMP_DIR]/workspace/albatross-root-workspace/packages/seeds`)
     "
     );
 
@@ -257,10 +257,10 @@ fn test_albatross_root_workspace_bird_feeder() {
     Resolved 5 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
-     + bird-feeder==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-root-workspace/packages/bird-feeder)
+     + bird-feeder==1.0.0 (from `file://[TEMP_DIR]/workspace/albatross-root-workspace/packages/bird-feeder`)
      + idna==3.6
      + iniconfig==2.0.0
-     + seeds==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-root-workspace/packages/seeds)
+     + seeds==1.0.0 (from `file://[TEMP_DIR]/workspace/albatross-root-workspace/packages/seeds`)
     "
     );
 
@@ -297,10 +297,10 @@ fn test_albatross_root_workspace_albatross() {
     Resolved 5 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
-     + bird-feeder==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-root-workspace/packages/bird-feeder)
+     + bird-feeder==1.0.0 (from `file://[TEMP_DIR]/workspace/albatross-root-workspace/packages/bird-feeder`)
      + idna==3.6
      + iniconfig==2.0.0
-     + seeds==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-root-workspace/packages/seeds)
+     + seeds==1.0.0 (from `file://[TEMP_DIR]/workspace/albatross-root-workspace/packages/seeds`)
     "
     );
 
@@ -338,9 +338,9 @@ fn test_albatross_virtual_workspace() {
     Prepared 5 packages in [TIME]
     Installed 5 packages in [TIME]
      + anyio==4.3.0
-     + bird-feeder==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-virtual-workspace/packages/bird-feeder)
+     + bird-feeder==1.0.0 (from `file://[TEMP_DIR]/workspace/albatross-virtual-workspace/packages/bird-feeder`)
      + idna==3.6
-     + seeds==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-virtual-workspace/packages/seeds)
+     + seeds==1.0.0 (from `file://[TEMP_DIR]/workspace/albatross-virtual-workspace/packages/seeds`)
      + sniffio==1.3.1
     "
     );
@@ -388,9 +388,9 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
     Prepared 5 packages in [TIME]
     Installed 5 packages in [TIME]
      + anyio==4.3.0
-     + bird-feeder==1.0.0 (from file://[TEMP_DIR]/albatross-virtual-workspace/packages/bird-feeder)
+     + bird-feeder==1.0.0 (from `file://[TEMP_DIR]/albatross-virtual-workspace/packages/bird-feeder`)
      + idna==3.6
-     + seeds==1.0.0 (from file://[TEMP_DIR]/albatross-virtual-workspace/packages/seeds)
+     + seeds==1.0.0 (from `file://[TEMP_DIR]/albatross-virtual-workspace/packages/seeds`)
      + sniffio==1.3.1
     "
     );
@@ -410,7 +410,7 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
     Resolved 7 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + albatross==0.1.0 (from file://[TEMP_DIR]/albatross-virtual-workspace/packages/albatross)
+     + albatross==0.1.0 (from `file://[TEMP_DIR]/albatross-virtual-workspace/packages/albatross`)
      + iniconfig==2.0.0
     "
     );
@@ -446,12 +446,12 @@ fn test_uv_run_virtual_workspace_root() -> Result<()> {
     Resolved 7 packages in [TIME]
     Prepared 7 packages in [TIME]
     Installed 7 packages in [TIME]
-     + albatross==0.1.0 (from file://[TEMP_DIR]/albatross-virtual-workspace/packages/albatross)
+     + albatross==0.1.0 (from `file://[TEMP_DIR]/albatross-virtual-workspace/packages/albatross`)
      + anyio==4.3.0
-     + bird-feeder==1.0.0 (from file://[TEMP_DIR]/albatross-virtual-workspace/packages/bird-feeder)
+     + bird-feeder==1.0.0 (from `file://[TEMP_DIR]/albatross-virtual-workspace/packages/bird-feeder`)
      + idna==3.6
      + iniconfig==2.0.0
-     + seeds==1.0.0 (from file://[TEMP_DIR]/albatross-virtual-workspace/packages/seeds)
+     + seeds==1.0.0 (from `file://[TEMP_DIR]/albatross-virtual-workspace/packages/seeds`)
      + sniffio==1.3.1
     "
     );
@@ -485,10 +485,10 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
     Resolved 5 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
-     + bird-feeder==1.0.0 (from file://[TEMP_DIR]/albatross-root-workspace/packages/bird-feeder)
+     + bird-feeder==1.0.0 (from `file://[TEMP_DIR]/albatross-root-workspace/packages/bird-feeder`)
      + idna==3.6
      + iniconfig==2.0.0
-     + seeds==1.0.0 (from file://[TEMP_DIR]/albatross-root-workspace/packages/seeds)
+     + seeds==1.0.0 (from `file://[TEMP_DIR]/albatross-root-workspace/packages/seeds`)
     "
     );
 
@@ -507,7 +507,7 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
     Resolved 5 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + albatross==0.1.0 (from file://[TEMP_DIR]/albatross-root-workspace)
+     + albatross==0.1.0 (from `file://[TEMP_DIR]/albatross-root-workspace`)
     "
     );
 
@@ -541,11 +541,11 @@ fn test_uv_run_isolate() -> Result<()> {
     Resolved 5 packages in [TIME]
     Prepared 5 packages in [TIME]
     Installed 5 packages in [TIME]
-     + albatross==0.1.0 (from file://[TEMP_DIR]/albatross-root-workspace)
-     + bird-feeder==1.0.0 (from file://[TEMP_DIR]/albatross-root-workspace/packages/bird-feeder)
+     + albatross==0.1.0 (from `file://[TEMP_DIR]/albatross-root-workspace`)
+     + bird-feeder==1.0.0 (from `file://[TEMP_DIR]/albatross-root-workspace/packages/bird-feeder`)
      + idna==3.6
      + iniconfig==2.0.0
-     + seeds==1.0.0 (from file://[TEMP_DIR]/albatross-root-workspace/packages/seeds)
+     + seeds==1.0.0 (from `file://[TEMP_DIR]/albatross-root-workspace/packages/seeds`)
     "
     );
 
@@ -584,10 +584,10 @@ fn test_uv_run_isolate() -> Result<()> {
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Installed 4 packages in [TIME]
-     + bird-feeder==1.0.0 (from file://[TEMP_DIR]/albatross-root-workspace/packages/bird-feeder)
+     + bird-feeder==1.0.0 (from `file://[TEMP_DIR]/albatross-root-workspace/packages/bird-feeder`)
      + idna==3.6
      + iniconfig==2.0.0
-     + seeds==1.0.0 (from file://[TEMP_DIR]/albatross-root-workspace/packages/seeds)
+     + seeds==1.0.0 (from `file://[TEMP_DIR]/albatross-root-workspace/packages/seeds`)
     Traceback (most recent call last):
       File "[TEMP_DIR]/albatross-root-workspace/check_installed_albatross.py", line 1, in <module>
         from albatross import fly
@@ -2237,8 +2237,8 @@ fn workspace_members_with_leading_dot_slash() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + bar==0.1.0 (from file://[TEMP_DIR]/workspace/packages/bar)
-     + foo==0.1.0 (from file://[TEMP_DIR]/workspace/packages/foo)
+     + bar==0.1.0 (from `file://[TEMP_DIR]/workspace/packages/bar`)
+     + foo==0.1.0 (from `file://[TEMP_DIR]/workspace/packages/foo`)
     "
     );
 

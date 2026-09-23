@@ -291,10 +291,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     Err(Error::Extract(name, err)) => {
                         if err.is_http_streaming_unsupported() {
                             warn!(
-                                "Streaming unsupported for {dist}; downloading wheel to disk ({err})"
+                                "Streaming unsupported for `{dist}`; downloading wheel to disk ({err})"
                             );
                         } else if err.is_http_streaming_failed() {
-                            warn!("Streaming failed for {dist}; downloading wheel to disk ({err})");
+                            warn!(
+                                "Streaming failed for `{dist}`; downloading wheel to disk ({err})"
+                            );
                         } else {
                             return Err(Error::Extract(name, err));
                         }
@@ -366,10 +368,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     Err(Error::Extract(name, err)) => {
                         if err.is_http_streaming_unsupported() {
                             warn!(
-                                "Streaming unsupported for {dist}; downloading wheel to disk ({err})"
+                                "Streaming unsupported for `{dist}`; downloading wheel to disk ({err})"
                             );
                         } else if err.is_http_streaming_failed() {
-                            warn!("Streaming failed for {dist}; downloading wheel to disk ({err})");
+                            warn!(
+                                "Streaming failed for `{dist}`; downloading wheel to disk ({err})"
+                            );
                         } else {
                             return Err(Error::Extract(name, err));
                         }
@@ -635,7 +639,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             }
             Err(err) if err.is_http_streaming_unsupported() => {
                 warn!(
-                    "Streaming unsupported when fetching metadata for {dist}; downloading wheel directly ({err})"
+                    "Streaming unsupported when fetching metadata for `{dist}`; downloading wheel directly ({err})"
                 );
 
                 // If the request failed due to an error that could be resolved by
@@ -1263,7 +1267,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             }
 
             // Finally our resumption, which is a range request.
-            debug!("Resuming download of {url} at byte {offset}");
+            debug!("Resuming download of `{url}` at byte {offset}");
             let resumed_response = retry_state
                 .send(self.request_with_offset(url.clone(), offset))
                 .await?;
@@ -1271,7 +1275,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             // A chunked response can fail after all wheel bytes arrive, leaving no satisfiable
             // range. Return the original error so the outer retry policy can restart in full.
             if resumed_response.status() == reqwest::StatusCode::RANGE_NOT_SATISFIABLE {
-                debug!("Range not satisfiable while resuming {url}; abandoning resumed download");
+                debug!("Range not satisfiable while resuming `{url}`; abandoning resumed download");
                 return Err(err);
             }
             resumed_response.error_for_status_ref()?;

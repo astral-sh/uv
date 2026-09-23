@@ -645,7 +645,7 @@ impl VersionMapLazy {
                         }
                         None => {
                             warn_user_once!(
-                                "{} is missing an upload date, but user provided: {included_version_cutoff}",
+                                "`{}` is missing an upload date, but user provided: {included_version_cutoff}",
                                 file.filename,
                             );
                             (true, None)

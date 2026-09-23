@@ -16,17 +16,17 @@ use crate::{ArchiveInfo, DirInfo, DirectUrl, VcsInfo, VcsKind};
 
 #[derive(Debug, Error)]
 pub enum ParsedUrlError {
-    #[error("Unsupported URL prefix `{prefix}` in URL: `{url}` ({message})")]
+    #[error("Unsupported URL prefix `{prefix}` in URL: {url} ({message})")]
     UnsupportedUrlPrefix {
         prefix: String,
         url: String,
         message: &'static str,
     },
-    #[error("Invalid path in file URL: `{0}`")]
+    #[error("Invalid path in file URL: {0}")]
     InvalidFileUrl(String),
     #[error(transparent)]
     GitUrlParse(#[from] GitUrlParseError),
-    #[error("Not a valid URL: `{0}`")]
+    #[error("Not a valid URL: {0}")]
     UrlParse(String, #[source] DisplaySafeUrlError),
     #[error(transparent)]
     VerbatimUrl(#[from] VerbatimUrlError),

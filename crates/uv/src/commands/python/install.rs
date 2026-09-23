@@ -1271,7 +1271,7 @@ async fn compile_stdlib_bytecode(
         Ok(path) if path.starts_with(&interpreter_path) => path,
         _ => {
             warn!(
-                "The stdlib path for {} ({}) is not a subdirectory of its installation path ({}).",
+                "The stdlib path for {} (`{}`) is not a subdirectory of its installation path (`{}`).",
                 installation.key(),
                 interpreter.stdlib().display(),
                 interpreter_path.display()

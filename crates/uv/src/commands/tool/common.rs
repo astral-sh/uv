@@ -152,10 +152,10 @@ pub(crate) fn remove_entrypoints(tool: &Tool) {
 /// Remove the entrypoints at the given paths.
 fn remove_entrypoint_paths<'a>(entrypoints: impl IntoIterator<Item = &'a Path>) {
     for executable in entrypoints {
-        debug!("Removing executable: `{}`", executable.simplified_display());
+        debug!("Removing executable: {}", executable.simplified_display());
         if let Err(err) = fs_err::remove_file(executable) {
             warn!(
-                "Failed to remove executable: `{}`: {err}",
+                "Failed to remove executable: {}: {err}",
                 executable.simplified_display()
             );
         }
