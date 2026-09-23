@@ -43,21 +43,9 @@ pub struct DependencyModifiers {
 #[serde(rename_all = "kebab-case")]
 pub struct DependencyModifierEntries {
     #[serde(default)]
-    overrides: Vec<Override>,
+    pub overrides: Vec<Override>,
     #[serde(default, rename = "excludes")]
-    exclusions: Vec<ExcludeDependency>,
-}
-
-impl DependencyModifierEntries {
-    /// Return the override entries.
-    pub fn overrides(&self) -> &[Override] {
-        &self.overrides
-    }
-
-    /// Return the exclusion entries.
-    pub fn exclusions(&self) -> &[ExcludeDependency] {
-        &self.exclusions
-    }
+    pub exclusions: Vec<ExcludeDependency>,
 }
 
 /// Display modifiers in a deterministic order, using the same entries as lockfiles.
@@ -173,16 +161,70 @@ impl DependencyModifiers {
         &mut self,
         overrides: impl IntoIterator<Item = Override>,
     ) -> Result<(), ScopedOverrideSourceError> {
-        for entry in overrides {
-            self.insert_override(entry)?;
+        for override_entry in overrides {
+            match override_entry {
+                Override::Requirement(requirement) => {
+                    self.global.insert_override(*requirement);
+                }
+                Override::Package(package) => {
+                    for requirement in &package.dependencies {
+                        match &requirement.source {
+                            RequirementSource::Registry { index: None, .. } => {}
+                            RequirementSource::Registry { index: Some(_), .. } => {
+                                return Err(ScopedOverrideSourceError::Index {
+                                    package: package.package.name.clone(),
+                                    dependency: requirement.name.clone(),
+                                });
+                            }
+                            RequirementSource::Url { .. }
+                            | RequirementSource::GitDirectory { .. }
+                            | RequirementSource::GitPath { .. }
+                            | RequirementSource::Path { .. }
+                            | RequirementSource::Directory { .. } => {
+                                return Err(ScopedOverrideSourceError::Url {
+                                    package: package.package.name.clone(),
+                                    dependency: requirement.name.clone(),
+                                });
+                            }
+                        }
+                    }
+
+                    let modifiers = self.scoped.entry(package.package.name).or_default();
+                    let scope = if let Some(version) = package.package.version {
+                        modifiers.versions.entry(version).or_default()
+                    } else {
+                        &mut modifiers.versionless
+                    };
+                    scope.has_overrides = true;
+                    for requirement in package.dependencies {
+                        scope.insert_override(requirement);
+                    }
+                }
+            }
         }
         Ok(())
     }
 
     /// Add exclusion entries to this collection.
     pub fn extend_exclusions(&mut self, exclusions: impl IntoIterator<Item = ExcludeDependency>) {
-        for entry in exclusions {
-            self.insert_exclusion(entry);
+        for exclusion in exclusions {
+            match exclusion {
+                ExcludeDependency::Dependency(dependency) => {
+                    self.global.insert_exclusion(dependency);
+                }
+                ExcludeDependency::Package(package) => {
+                    let modifiers = self.scoped.entry(package.package.name).or_default();
+                    let scope = if let Some(version) = package.package.version {
+                        modifiers.versions.entry(version).or_default()
+                    } else {
+                        &mut modifiers.versionless
+                    };
+                    scope.has_exclusions = true;
+                    for dependency in package.dependencies {
+                        scope.insert_exclusion(dependency);
+                    }
+                }
+            }
         }
     }
 
@@ -449,72 +491,6 @@ impl PackageModifiers {
 }
 
 impl DependencyModifiers {
-    fn insert_override(
-        &mut self,
-        override_entry: Override,
-    ) -> Result<(), ScopedOverrideSourceError> {
-        match override_entry {
-            Override::Requirement(requirement) => {
-                self.global.insert_override(*requirement);
-            }
-            Override::Package(package) => {
-                for requirement in &package.dependencies {
-                    match &requirement.source {
-                        RequirementSource::Registry { index: None, .. } => {}
-                        RequirementSource::Registry { index: Some(_), .. } => {
-                            return Err(ScopedOverrideSourceError::Index {
-                                package: package.package.name.clone(),
-                                dependency: requirement.name.clone(),
-                            });
-                        }
-                        RequirementSource::Url { .. }
-                        | RequirementSource::GitDirectory { .. }
-                        | RequirementSource::GitPath { .. }
-                        | RequirementSource::Path { .. }
-                        | RequirementSource::Directory { .. } => {
-                            return Err(ScopedOverrideSourceError::Url {
-                                package: package.package.name.clone(),
-                                dependency: requirement.name.clone(),
-                            });
-                        }
-                    }
-                }
-
-                let modifiers = self.scoped.entry(package.package.name).or_default();
-                let scope = if let Some(version) = package.package.version {
-                    modifiers.versions.entry(version).or_default()
-                } else {
-                    &mut modifiers.versionless
-                };
-                scope.has_overrides = true;
-                for requirement in package.dependencies {
-                    scope.insert_override(requirement);
-                }
-            }
-        }
-        Ok(())
-    }
-
-    fn insert_exclusion(&mut self, exclusion: ExcludeDependency) {
-        match exclusion {
-            ExcludeDependency::Dependency(dependency) => {
-                self.global.insert_exclusion(dependency);
-            }
-            ExcludeDependency::Package(package) => {
-                let modifiers = self.scoped.entry(package.package.name).or_default();
-                let scope = if let Some(version) = package.package.version {
-                    modifiers.versions.entry(version).or_default()
-                } else {
-                    &mut modifiers.versionless
-                };
-                scope.has_exclusions = true;
-                for dependency in package.dependencies {
-                    scope.insert_exclusion(dependency);
-                }
-            }
-        }
-    }
-
     fn apply_overrides<'a, I>(
         &'a self,
         requirements: I,
