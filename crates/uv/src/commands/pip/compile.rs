@@ -14,9 +14,9 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    BuildIsolation, BuildOptions, Concurrency, Constraints, DependencyModifiers,
-    ExtrasSpecification, HashCheckingMode, IndexStrategy, NoBinary, NoBuild, NoSources,
-    PipCompileFormat, Reinstall, Upgrade,
+    BuildIsolation, BuildOptions, Concurrency, Constraints, ExcludeDependency, ExtrasSpecification,
+    HashCheckingMode, IndexStrategy, NoBinary, NoBuild, NoSources, Override, PipCompileFormat,
+    Reinstall, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -72,7 +72,8 @@ pub(crate) async fn pip_compile(
     excludes: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
     constraints_from_workspace: Vec<Requirement>,
-    modifiers_from_workspace: DependencyModifiers,
+    overrides_from_workspace: Vec<Override<Requirement>>,
+    excludes_from_workspace: Vec<ExcludeDependency>,
     build_constraints_from_workspace: Vec<NameRequirementSpecification>,
     environments: SupportedEnvironments,
     required_environments: SupportedEnvironments,
@@ -208,7 +209,8 @@ pub(crate) async fn pip_compile(
         requirements,
         constraints,
         overrides,
-        mut modifiers,
+        mut override_dependencies,
+        excludes,
         pylock,
         pylock_groups: _,
         source_trees,
@@ -231,7 +233,7 @@ pub(crate) async fn pip_compile(
     )
     .await?;
 
-    modifiers.extend(modifiers_from_workspace);
+    override_dependencies.extend(overrides_from_workspace);
 
     // Reject `pylock.toml` files, which are valid outputs but not inputs.
     if pylock.is_some() {
@@ -248,6 +250,11 @@ pub(crate) async fn pip_compile(
                 .into_iter()
                 .map(NameRequirementSpecification::from),
         )
+        .collect();
+
+    let excludes: Vec<ExcludeDependency> = excludes
+        .into_iter()
+        .chain(excludes_from_workspace)
         .collect();
 
     // Read build constraints.
@@ -565,7 +572,8 @@ pub(crate) async fn pip_compile(
         requirements,
         constraints,
         overrides,
-        modifiers,
+        override_dependencies,
+        excludes,
         source_trees,
         project,
         BTreeSet::default(),

@@ -220,7 +220,8 @@ fn write_manifest(writer: &mut LockWriter, manifest: &ResolverManifest) -> Resul
     let has_manifest = !manifest.members.is_empty()
         || !manifest.requirements.is_empty()
         || !manifest.constraints.is_empty()
-        || !manifest.modifiers.is_empty()
+        || !manifest.overrides.is_empty()
+        || !manifest.excludes.is_empty()
         || !manifest.build_constraints.is_empty()
         || has_dependency_groups
         || !manifest.dependency_metadata.is_empty();
@@ -236,16 +237,8 @@ fn write_manifest(writer: &mut LockWriter, manifest: &ResolverManifest) -> Resul
     }
     write_serialized_non_empty_array(writer, "requirements", &manifest.requirements)?;
     write_serialized_non_empty_array(writer, "constraints", &manifest.constraints)?;
-    write_serialized_non_empty_array(
-        writer,
-        "overrides",
-        &manifest.modifiers.overrides.iter().collect::<BTreeSet<_>>(),
-    )?;
-    write_serialized_non_empty_array(
-        writer,
-        "excludes",
-        &manifest.modifiers.excludes.iter().collect::<BTreeSet<_>>(),
-    )?;
+    write_serialized_non_empty_array(writer, "overrides", &manifest.overrides)?;
+    write_serialized_non_empty_array(writer, "excludes", &manifest.excludes)?;
     write_serialized_non_empty_array(writer, "build-constraints", &manifest.build_constraints)?;
 
     if has_dependency_groups {

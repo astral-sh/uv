@@ -14,8 +14,8 @@ use tracing::{debug, warn};
 use uv_cache::{Cache, Refresh};
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, Constraints, DependencyGroupsWithDefaults, DependencyModifiers,
-    ExtrasSpecification, GitLfsSetting, HashCheckingMode, InstallOptions, TargetTriple,
+    BuildOptions, Concurrency, Constraints, DependencyGroupsWithDefaults, ExcludeDependency,
+    ExtrasSpecification, GitLfsSetting, HashCheckingMode, InstallOptions, Override, TargetTriple,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{
@@ -313,7 +313,8 @@ impl ToolLock {
     pub(crate) fn manifest(
         requirements: &[Requirement],
         constraints: &[Requirement],
-        modifiers: DependencyModifiers,
+        overrides: &[Requirement],
+        excludes: &[ExcludeDependency],
         build_constraints: &[NameRequirementSpecification],
         dependency_metadata: &DependencyMetadata,
     ) -> ResolverManifest {
@@ -321,7 +322,8 @@ impl ToolLock {
             std::iter::empty::<PackageName>(),
             requirements.iter().cloned(),
             constraints.iter().cloned(),
-            modifiers,
+            overrides.iter().cloned().map(Override::Requirement),
+            excludes.iter().cloned(),
             build_constraints.iter().cloned(),
             std::iter::empty::<(GroupName, Vec<Requirement>)>(),
             dependency_metadata.values().cloned(),
@@ -399,7 +401,8 @@ impl ToolLock {
         self,
         requirements: &[Requirement],
         constraints: &[Requirement],
-        modifiers: &DependencyModifiers,
+        overrides: &[Requirement],
+        excludes: &[ExcludeDependency],
         build_constraints: &Constraints,
         refresh: &Refresh,
         interpreter: &Interpreter,
@@ -511,8 +514,13 @@ impl ToolLock {
 
         let requires_python =
             RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
+        let overrides = overrides
+            .iter()
+            .cloned()
+            .map(Override::Requirement)
+            .collect::<Vec<_>>();
         let Self { root, lock } = self;
-        let validated = Box::pin(ValidatedLock::validate(
+        let validated = ValidatedLock::validate(
             lock,
             &root,
             &BTreeMap::new(),
@@ -521,7 +529,8 @@ impl ToolLock {
             requirements,
             &BTreeMap::new(),
             constraints,
-            modifiers,
+            &overrides,
+            excludes,
             build_constraints,
             &Conflicts::empty(),
             None,
@@ -538,7 +547,7 @@ impl ToolLock {
             &database,
             preview,
             printer,
-        ))
+        )
         .await?;
         let satisfied = validated.is_satisfied();
         let usable = validated.is_usable();
@@ -731,7 +740,8 @@ pub(crate) fn finalize_tool_install(
     python: Option<PythonRequest>,
     requirements: Vec<Requirement>,
     constraints: Vec<Requirement>,
-    modifiers: DependencyModifiers,
+    overrides: Vec<Requirement>,
+    excludes: Vec<ExcludeDependency>,
     build_constraints: Vec<NameRequirementSpecification>,
     lock: Option<&ToolLock>,
     printer: Printer,
@@ -924,7 +934,8 @@ pub(crate) fn finalize_tool_install(
     let tool = Tool::new(
         requirements,
         constraints,
-        modifiers,
+        overrides,
+        excludes,
         build_constraints,
         python,
         installed_entrypoints,

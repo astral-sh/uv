@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use serde::Deserialize;
 use toml_edit::{Array, Item, Table, Value, value};
 
-use uv_configuration::DependencyModifiers;
+use uv_configuration::ExcludeDependency;
 use uv_distribution_types::{NameRequirementSpecification, Requirement};
 use uv_fs::{PortablePath, Simplified};
 use uv_pypi_types::VerbatimParsedUrl;
@@ -22,8 +22,10 @@ pub struct Tool {
     requirements: Vec<Requirement>,
     /// The constraints requested by the user during installation.
     constraints: Vec<Requirement>,
-    /// The dependency modifiers requested by the user during installation.
-    modifiers: DependencyModifiers,
+    /// The overrides requested by the user during installation.
+    overrides: Vec<Requirement>,
+    /// The excludes requested by the user during installation.
+    excludes: Vec<ExcludeDependency>,
     /// The build constraints requested by the user during installation.
     build_constraints: Vec<NameRequirementSpecification>,
     /// The Python requested by the user during installation.
@@ -41,8 +43,10 @@ struct ToolWire {
     requirements: Vec<RequirementWire>,
     #[serde(default)]
     constraints: Vec<Requirement>,
-    #[serde(flatten)]
-    modifiers: DependencyModifiers,
+    #[serde(default)]
+    overrides: Vec<Requirement>,
+    #[serde(default)]
+    excludes: Vec<ExcludeDependency>,
     #[serde(default)]
     build_constraint_dependencies: Vec<NameRequirementSpecification>,
     python: Option<PythonRequest>,
@@ -70,7 +74,8 @@ impl From<Tool> for ToolWire {
                 .map(RequirementWire::Requirement)
                 .collect(),
             constraints: tool.constraints,
-            modifiers: tool.modifiers,
+            overrides: tool.overrides,
+            excludes: tool.excludes,
             build_constraint_dependencies: tool.build_constraints,
             python: tool.python,
             entrypoints: tool.entrypoints,
@@ -93,7 +98,8 @@ impl TryFrom<ToolWire> for Tool {
                 })
                 .collect(),
             constraints: tool.constraints,
-            modifiers: tool.modifiers,
+            overrides: tool.overrides,
+            excludes: tool.excludes,
             build_constraints: tool.build_constraint_dependencies,
             python: tool.python,
             entrypoints: tool.entrypoints,
@@ -168,7 +174,8 @@ impl Tool {
     pub fn new(
         requirements: Vec<Requirement>,
         constraints: Vec<Requirement>,
-        modifiers: DependencyModifiers,
+        overrides: Vec<Requirement>,
+        excludes: Vec<ExcludeDependency>,
         build_constraints: Vec<NameRequirementSpecification>,
         python: Option<PythonRequest>,
         entrypoints: impl IntoIterator<Item = ToolEntrypoint>,
@@ -179,7 +186,8 @@ impl Tool {
         Self {
             requirements,
             constraints,
-            modifiers,
+            overrides,
+            excludes,
             build_constraints,
             python,
             entrypoints,
@@ -241,16 +249,19 @@ impl Tool {
             });
         }
 
-        let overrides = self
-            .modifiers
-            .overrides
-            .iter()
-            .map(|r#override| {
-                serde::Serialize::serialize(&r#override, toml_edit::ser::ValueSerializer::new())
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        if !overrides.is_empty() {
+        if !self.overrides.is_empty() {
             table.insert("overrides", {
+                let overrides = self
+                    .overrides
+                    .iter()
+                    .map(|r#override| {
+                        serde::Serialize::serialize(
+                            &r#override,
+                            toml_edit::ser::ValueSerializer::new(),
+                        )
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+
                 let overrides = match overrides.as_slice() {
                     [] => Array::new(),
                     [r#override] => Array::from_iter([r#override]),
@@ -260,16 +271,19 @@ impl Tool {
             });
         }
 
-        let excludes = self
-            .modifiers
-            .excludes
-            .iter()
-            .map(|r#exclude| {
-                serde::Serialize::serialize(&r#exclude, toml_edit::ser::ValueSerializer::new())
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        if !excludes.is_empty() {
+        if !self.excludes.is_empty() {
             table.insert("excludes", {
+                let excludes = self
+                    .excludes
+                    .iter()
+                    .map(|r#exclude| {
+                        serde::Serialize::serialize(
+                            &r#exclude,
+                            toml_edit::ser::ValueSerializer::new(),
+                        )
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+
                 let excludes = match excludes.as_slice() {
                     [] => Array::new(),
                     [r#exclude] => Array::from_iter([r#exclude]),
@@ -349,8 +363,12 @@ impl Tool {
         &self.constraints
     }
 
-    pub fn modifiers(&self) -> &DependencyModifiers {
-        &self.modifiers
+    pub fn overrides(&self) -> &[Requirement] {
+        &self.overrides
+    }
+
+    pub fn excludes(&self) -> &[ExcludeDependency] {
+        &self.excludes
     }
 
     pub fn build_constraints(&self) -> &[NameRequirementSpecification] {
