@@ -85,13 +85,27 @@
       "workflow": "promote-pull-request.yml"
     },
     {
-      "repository": "uv-security",
+      "repository": "uv-dev",
       "on": {
-        "pull_request": ["ready_for_review"]
+        "pull_request": ["labeled"]
       },
       "conditions": {
+        "/label/name": "bot:promote",
         "/sender/type": "User"
       },
+      "allow_draft": true,
+      "workflow": "promote-pull-request.yml"
+    },
+    {
+      "repository": "uv-security",
+      "on": {
+        "pull_request": ["labeled"]
+      },
+      "conditions": {
+        "/label/name": "bot:promote",
+        "/sender/type": "User"
+      },
+      "allow_draft": true,
       "workflow": "promote-pull-request.yml"
     },
     {
