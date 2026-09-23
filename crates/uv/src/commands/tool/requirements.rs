@@ -9,7 +9,9 @@ use uv_pep440::{
 use uv_pep508::MarkerTree;
 use version_ranges::Ranges;
 
-/// Compare normalized requirements, including precision-sensitive version clauses.
+/// Compare requirements already ordered and partitioned by [`normalize_requirements`].
+/// Registry constraints are compared by accepted versions and prerelease opt-in; the source,
+/// scope, extras, groups, and markers must match.
 pub(super) fn requirements_equal(left: &[Requirement], right: &[Requirement]) -> bool {
     left.len() == right.len()
         && left.iter().zip(right).all(|(left, right)| {
@@ -26,6 +28,8 @@ struct RequirementsKey {
 }
 
 impl RequirementsKey {
+    /// Replace registry specifiers with their accepted range for comparison.
+    /// Keep prerelease opt-in separate because equal ranges can have different prerelease policies.
     fn new(mut requirement: Requirement) -> Self {
         let mut range = Ranges::full();
         let mut prerelease = false;
@@ -45,7 +49,9 @@ impl RequirementsKey {
 
 /// Merge requirements with the same source and scope across disjoint marker regions.
 /// Extras are unioned and version constraints intersected wherever markers overlap.
-/// Sort the result with the tool target first.
+/// The first requirement identifies the tool target. Its package stays first, retaining the
+/// original requirement if all of its markers are false. Other requirements are sorted independently
+/// of input order.
 pub(super) fn normalize_requirements(requirements: Vec<Requirement>) -> Vec<Requirement> {
     let target = requirements.first().cloned();
     let mut sources = BTreeMap::<Requirement, Vec<Requirement>>::new();
@@ -139,7 +145,8 @@ pub(super) fn normalize_requirements(requirements: Vec<Requirement>) -> Vec<Requ
     normalized
 }
 
-/// Combine disjoint regions with identical extras and constraints.
+/// Combine disjoint marker regions with equivalent extras, accepted versions, and prerelease opt-in.
+/// Keep the first region's simplified specifiers when multiple forms accept the same versions.
 fn coalesce(requirements: Vec<Requirement>) -> Vec<Requirement> {
     let mut combined = IndexMap::<RequirementsKey, Requirement>::new();
     for mut requirement in requirements {
@@ -157,13 +164,16 @@ fn coalesce(requirements: Vec<Requirement>) -> Vec<Requirement> {
 }
 
 /// Remove clauses implied by the remaining constraints without changing prerelease opt-in.
+/// For example, `>=1rc1,>=1` keeps both clauses because the first opts into prereleases.
 fn simplify_specifiers(specifiers: VersionSpecifiers) -> VersionSpecifiers {
     let mut specifiers = specifiers
         .into_iter()
         .map(normalize_specifier)
         .collect::<Vec<_>>();
     specifiers.sort_by_cached_key(ToString::to_string);
-    specifiers.dedup_by(|left, right| left.to_string() == right.to_string());
+    specifiers.dedup_by(|left, right| {
+        left == right && left.version().release().len() == right.version().release().len()
+    });
 
     // A pair of inclusive bounds can be an exact pin. Use PEP 440 ranges for this comparison,
     // including local versions; an ordinary numeric interval does not model `==` correctly.
@@ -217,6 +227,8 @@ fn simplify_specifiers(specifiers: VersionSpecifiers) -> VersionSpecifiers {
 }
 
 /// Normalize insignificant trailing zeros, keeping precision-sensitive operators intact.
+/// Wildcard and compatible-release clauses, such as `==1.0.*` and `~=1.0.0`, retain their release
+/// precision because it changes which versions they accept.
 fn normalize_specifier(specifier: VersionSpecifier) -> VersionSpecifier {
     match specifier.operator() {
         Operator::EqualStar | Operator::NotEqualStar | Operator::TildeEqual => specifier,
@@ -228,22 +240,24 @@ fn normalize_specifier(specifier: VersionSpecifier) -> VersionSpecifier {
         | Operator::GreaterThan
         | Operator::GreaterThanEqual => {
             let release = specifier.version().release();
-            if release.len() <= 1 || release.last() != Some(&0) {
+            let mut release_len = release.len();
+            while release_len > 1 && release[release_len - 1] == 0 {
+                release_len -= 1;
+            }
+            if release_len == release.len() {
                 return specifier;
             }
-            let mut release = release.to_vec();
-            while release.len() > 1 && release.last() == Some(&0) {
-                release.pop();
-            }
-            VersionSpecifier::from_version(
-                *specifier.operator(),
-                specifier.version().clone().with_release(release),
-            )
-            .unwrap_or(specifier)
+            let version = specifier
+                .version()
+                .clone()
+                .with_release(&release[..release_len]);
+            VersionSpecifier::from_version(*specifier.operator(), version).unwrap_or(specifier)
         }
     }
 }
 
+/// Whether this clause opts into prereleases under the explicit prerelease policy.
+/// Excluding a prerelease, as in `!=1rc1`, does not opt in.
 fn allows_prereleases(specifier: &VersionSpecifier) -> bool {
     match specifier.operator() {
         Operator::NotEqual | Operator::NotEqualStar => false,
@@ -266,7 +280,7 @@ mod tests {
     use insta::assert_snapshot;
     use uv_distribution_types::{Requirement, RequirementSource};
     use uv_pep440::{Version, VersionSpecifiers};
-    use uv_pep508::MarkerTree;
+    use uv_pep508::{MarkerTree, Requirement as Pep508Requirement};
     use uv_pypi_types::VerbatimParsedUrl;
 
     use super::{
@@ -277,9 +291,9 @@ mod tests {
         inputs
             .iter()
             .map(|input| {
-                Ok(Requirement::from(uv_pep508::Requirement::<
-                    VerbatimParsedUrl,
-                >::from_str(input)?))
+                Ok(Requirement::from(
+                    Pep508Requirement::<VerbatimParsedUrl>::from_str(input)?,
+                ))
             })
             .collect()
     }
