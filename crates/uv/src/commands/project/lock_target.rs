@@ -17,7 +17,7 @@ use uv_distribution_types::{
     Index, IndexLocations, MinimumLibcVersion, NameRequirementSpecification, Requirement,
     RequiresPython,
 };
-use uv_lock::Lock;
+use uv_lock::{Lock, LockFeatures};
 use uv_normalize::{GroupName, PackageName};
 use uv_pep508::RequirementOrigin;
 use uv_pypi_types::{Conflicts, SupportedEnvironments, VerbatimParsedUrl};
@@ -402,8 +402,12 @@ impl<'lock> LockTarget<'lock> {
     }
 
     /// Write the lockfile to disk.
-    pub(crate) async fn commit(self, lock: &Lock) -> Result<(), ProjectError> {
-        let encoded = lock.to_toml()?;
+    pub(crate) async fn commit(
+        self,
+        lock: &Lock,
+        features: LockFeatures,
+    ) -> Result<(), ProjectError> {
+        let encoded = lock.to_toml(features)?;
         fs_err::tokio::write(self.lock_path(), encoded).await?;
         Ok(())
     }

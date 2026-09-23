@@ -1,7 +1,9 @@
 //! Parsing, validation, traversal, and export of lockfiles.
 
+mod features;
 mod lock;
 
+pub use features::LockFeatures;
 pub use lock::{
     CanonicalLockError, DependencySelection, Installable, InstallableRootKind, Lock, LockError,
     LockParseError, Metadata, Package, PackageMap, PylockToml, PylockTomlError,

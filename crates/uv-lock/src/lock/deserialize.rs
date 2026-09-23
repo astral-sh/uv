@@ -874,6 +874,8 @@ mod tests {
 
     use serde::Deserialize;
 
+    use crate::LockFeatures;
+
     use super::super::{LockParseError, VERSION};
     use super::{Cursor, Error, Lock, ValueDeserializer, from_str};
 
@@ -1544,7 +1546,9 @@ dev = [{ name = "dependency", specifier = ">=1" }]
     #[test]
     fn canonical_round_trip_uses_fast_path() {
         let lock: Lock = toml::from_str(CANONICAL_LOCK).expect("valid TOML lock");
-        let canonical = lock.to_toml().expect("lock serializes canonically");
+        let canonical = lock
+            .to_toml(LockFeatures::empty())
+            .expect("lock serializes canonically");
 
         assert_eq!(
             Lock::from_canonical_toml(&canonical).expect("writer output uses fast path"),

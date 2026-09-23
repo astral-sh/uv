@@ -23,7 +23,7 @@ use uv_distribution_types::{
 };
 use uv_git::ResolvedRepositoryReference;
 use uv_git_types::GitOid;
-use uv_lock::{Lock, Package, ResolverManifest, SatisfiesResult};
+use uv_lock::{Lock, LockFeatures, Package, ResolverManifest, SatisfiesResult};
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::Version;
 use uv_preview::{Preview, PreviewFeature};
@@ -224,7 +224,8 @@ pub(crate) async fn lock(
         .with_refresh(&refresh)
         .with_lockfile_contents_check(
             matches!(&refresh, Refresh::All(..))
-                && preview.is_enabled(PreviewFeature::LockfileFormatCheck),
+                && (preview.is_enabled(PreviewFeature::LockfileFormatCheck)
+                    || preview.is_enabled(PreviewFeature::LockDependencyShorthand)),
         )
         .execute(target),
     )
@@ -471,7 +472,9 @@ impl<'env> LockOperation<'env> {
                 // If the lockfile changed, write it to disk.
                 if !matches!(self.mode, LockMode::DryRun(_)) {
                     if let LockResult::Changed(_, lock) = &result {
-                        target.commit(lock).await?;
+                        target
+                            .commit(lock, LockFeatures::from(self.preview))
+                            .await?;
                     }
                 }
 
@@ -1142,7 +1145,9 @@ async fn do_lock(
             };
 
             let unchanged = if let Some(check_lockfile_contents) = check_lockfile_contents {
-                previous.is_some() && check_lockfile_contents == lock.to_toml()?.as_str()
+                previous.is_some()
+                    && check_lockfile_contents
+                        == lock.to_toml(LockFeatures::from(preview))?.as_str()
             } else {
                 previous.as_ref().is_some_and(|previous| *previous == lock)
             };

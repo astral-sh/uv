@@ -327,6 +327,8 @@ pub enum PreviewFeature {
     LockfileFormatCheck,
     /// Omit `package.metadata` from `uv.lock`, except for remote URL dependencies.
     LockWithoutMetadata,
+    /// Writes name-only dependencies in `uv.lock` as strings. Older uv versions cannot read this syntax.
+    LockDependencyShorthand,
     /// Uses the new `tar-codec` encoding/decoding backend, instead of `astral-tokio-tar`.
     TarCodec,
     /// Allows selecting configured package indexes by name with `--index` and `--default-index`.

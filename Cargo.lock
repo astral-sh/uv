@@ -6812,6 +6812,7 @@ dependencies = [
 name = "uv-lock"
 version = "0.0.85"
 dependencies = [
+ "bitflags 2.13.1",
  "cyclonedx-bom",
  "either",
  "fs-err",
@@ -6825,6 +6826,7 @@ dependencies = [
  "petgraph",
  "rustc-hash",
  "serde",
+ "serde-untagged",
  "serde_json",
  "smallvec",
  "thiserror",

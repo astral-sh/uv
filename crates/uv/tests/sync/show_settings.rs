@@ -3808,6 +3808,7 @@ fn preview_features() {
     +            IndexHashAlgorithm,
     +            LockfileFormatCheck,
     +            LockWithoutMetadata,
+    +            LockDependencyShorthand,
     +            TarCodec,
     +            IndexByName,
     +            ArtifactHashFiltering,
