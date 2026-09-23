@@ -65,7 +65,7 @@ pub enum PublishError {
     InvalidFilename(PathBuf),
     #[error("Failed to publish: `{}`", _0.user_display())]
     PublishPrepare(PathBuf, #[source] Box<PublishPrepareError>),
-    #[error("Failed to publish `{}` to {}", _0.user_display(), _1)]
+    #[error("Failed to publish `{}` to `{}`", _0.user_display(), _1)]
     PublishSend(
         PathBuf,
         Box<DisplaySafeUrl>,
@@ -2257,7 +2257,7 @@ mod tests {
         assert_snapshot!(
             &capture,
             @"
-        error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to [SERVER]/final
+        error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to `[SERVER]/final`
           cause: Too many redirects, only 10 redirects are allowed
         "
         );
@@ -2291,7 +2291,7 @@ mod tests {
         assert_snapshot!(
             &capture,
             @"
-        error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to https://different.auth.tld/final/
+        error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to `https://different.auth.tld/final/`
           cause: Redirected URL is not in the same realm. Redirected to: https://different.auth.tld/final/
         "
         );
@@ -2330,7 +2330,7 @@ mod tests {
         assert_snapshot!(
             &capture,
             @"
-        error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to [SERVER]/final
+        error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to `[SERVER]/final`
           cause: Server returned status code 400 Bad Request. Server says: 400 Error: Use 'source' as Python version for an sdist.
         "
         );
@@ -2372,7 +2372,7 @@ mod tests {
         assert_snapshot!(
             &capture,
             @"
-        error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to [SERVER]/final
+        error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to `[SERVER]/final`
           cause: Server returned status code 400 Bad Request. Server message: Bad Request, Missing required field `name`
         "
         );
