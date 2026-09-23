@@ -7,6 +7,8 @@
 
 Released on 2026-09-22.
 
+This release addresses [GHSA-2cv4-cqwr-gwf7](https://github.com/astral-sh/uv/security/advisories/GHSA-2cv4-cqwr-gwf7), which is a path traversal weakness during wheel installation on Windows. No other platforms are affected by this advisory.
+
 ### Enhancements
 
 - Add `--output-format json` to `uv pip install` and `uv pip sync`, including for `--dry-run` and `--check` ([#21893](https://github.com/astral-sh/uv/pull/21893))
