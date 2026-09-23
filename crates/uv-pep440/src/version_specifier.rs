@@ -672,7 +672,8 @@ impl VersionSpecifier {
                 {
                     warn!("Using arbitrary equality (`===`) is discouraged");
                 }
-                self.version.to_string() == version.to_string()
+                // Compare full versions, including local labels, as in the resolver's singleton range.
+                this == version
             }
             Operator::NotEqual => this != other.as_ref(),
             Operator::NotEqualStar => {
