@@ -109,10 +109,8 @@ Ok(
             requirements: {},
             dependency_groups: {},
             constraints: {},
-            modifiers: DependencyModifiers {
-                overrides: [],
-                excludes: [],
-            },
+            overrides: {},
+            excludes: {},
             build_constraints: {},
             dependency_metadata: {},
         },

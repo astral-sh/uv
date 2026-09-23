@@ -7,7 +7,10 @@ use anyhow::{Context, Result};
 use fs_err as fs;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
-use uv_configuration::{DependencyMode, DependencyModifierScope, DependencyModifiers, Override};
+use uv_configuration::{
+    DependencyMode, DependencyModifierScope, DependencyModifiers, ExcludeDependency, Excludes,
+    Override, Overrides,
+};
 use uv_distribution_filename::EggInfoFilename;
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, Diagnostic, ExtraBuildRequires, ExtraBuildVariables,
@@ -332,7 +335,8 @@ impl SitePackages {
         requirements: &[UnresolvedRequirementSpecification],
         constraints: &[NameRequirementSpecification],
         overrides: &[UnresolvedRequirementSpecification],
-        modifiers: &DependencyModifiers,
+        override_dependencies: &[Override<Requirement>],
+        exclude_dependencies: &[ExcludeDependency],
         dependency_metadata: &DependencyMetadata,
         dependency_mode: DependencyMode,
         installation: InstallationStrategy,
@@ -422,14 +426,22 @@ impl SitePackages {
             named
         };
 
-        let mut modifiers = modifiers.clone();
-        modifiers.overrides.extend(
-            overrides
+        let overrides = Overrides::from_entries(
+            override_dependencies
                 .iter()
-                .map(Cow::as_ref)
                 .cloned()
-                .map(Override::requirement),
-        );
+                .chain(
+                    overrides
+                        .iter()
+                        .map(Cow::as_ref)
+                        .cloned()
+                        .map(Override::Requirement),
+                )
+                .collect(),
+        )?;
+        let excludes = Excludes::from_entries(exclude_dependencies.iter().cloned());
+
+        let modifiers = DependencyModifiers::new(overrides, excludes);
 
         match self.satisfies_requirements(
             requirements.iter().map(Cow::as_ref),

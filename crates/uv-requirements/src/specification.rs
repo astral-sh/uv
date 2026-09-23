@@ -38,7 +38,8 @@ use url::Url;
 use uv_cache_key::CanonicalUrl;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    DependencyGroups, DependencyModifiers, ExcludeDependency, NoBinary, NoBuild, RequirementsInput,
+    DependencyGroups, ExcludeDependency, NoBinary, NoBuild, Override, PackageOverride,
+    RequirementsInput,
 };
 use uv_distribution_types::{Index, Requirement};
 use uv_distribution_types::{
@@ -49,7 +50,7 @@ use uv_fs::{CWD, Simplified};
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pypi_types::PyProjectToml;
 use uv_requirements_txt::{RequirementsTxt, RequirementsTxtRequirement, SourceCache};
-use uv_scripts::Pep723Metadata;
+use uv_scripts::{OverrideDependency, Pep723Metadata};
 use uv_warnings::warn_user;
 
 use crate::{RequirementsSource, SourceTree};
@@ -64,8 +65,10 @@ pub struct RequirementsSpecification {
     pub constraints: Vec<NameRequirementSpecification>,
     /// The overrides for the project.
     pub overrides: Vec<UnresolvedRequirementSpecification>,
-    /// The modifiers that have already been lowered to named requirements.
-    pub modifiers: DependencyModifiers,
+    /// The overrides that have already been lowered to named requirements.
+    pub override_dependencies: Vec<Override<Requirement>>,
+    /// The excludes for the project.
+    pub excludes: Vec<ExcludeDependency>,
     /// The `pylock.toml` file from which to extract the resolution.
     pub pylock: Option<RequirementsInput>,
     /// The dependency groups to use for a `pylock.toml` input.
@@ -92,15 +95,6 @@ pub struct RequirementsSpecification {
     pub no_build: NoBuild,
 }
 
-/// How requirements and modifier settings from a source contribute to the combined specification.
-#[derive(Clone, Copy)]
-enum SourceRole {
-    Requirements,
-    Constraints,
-    Overrides,
-    Exclusions,
-}
-
 impl RequirementsSpecification {
     /// Read the requirements and constraints from a source.
     #[instrument(skip_all, level = tracing::Level::DEBUG, fields(source = % source))]
@@ -108,17 +102,11 @@ impl RequirementsSpecification {
         source: &RequirementsSource,
         client_builder: &BaseClientBuilder<'_>,
     ) -> Result<Self> {
-        Self::from_source_with_cache(
-            source,
-            SourceRole::Requirements,
-            client_builder,
-            &mut SourceCache::default(),
-        )
-        .await
+        Self::from_source_with_cache(source, client_builder, &mut SourceCache::default()).await
     }
 
     /// Create a [`RequirementsSpecification`] from PEP 723 script metadata.
-    fn from_pep723_metadata(metadata: &Pep723Metadata, role: SourceRole) -> Result<Self> {
+    fn from_pep723_metadata(metadata: &Pep723Metadata) -> Self {
         let requirements = metadata
             .dependencies
             .as_ref()
@@ -150,34 +138,32 @@ impl RequirementsSpecification {
                 })
                 .unwrap_or_default();
 
-            let (include_overrides, include_exclusions) = match role {
-                SourceRole::Requirements => (true, true),
-                SourceRole::Constraints => (false, false),
-                SourceRole::Overrides => (true, false),
-                SourceRole::Exclusions => (false, true),
-            };
-            let modifiers = DependencyModifiers::from_parts(
-                tool_uv
-                    .override_dependencies
-                    .as_ref()
-                    .filter(|_| include_overrides)
-                    .into_iter()
-                    .flatten()
-                    .cloned()
-                    .map(|entry| entry.map_requirements(Requirement::from)),
-                tool_uv
-                    .exclude_dependencies
-                    .as_ref()
-                    .filter(|_| include_exclusions)
-                    .into_iter()
-                    .flatten()
-                    .cloned(),
-            )?;
+            let override_dependencies = tool_uv
+                .override_dependencies
+                .as_ref()
+                .into_iter()
+                .flatten()
+                .map(|dependency| match dependency {
+                    OverrideDependency::Requirement(requirement) => {
+                        Override::Requirement(Requirement::from(requirement.clone()))
+                    }
+                    OverrideDependency::Package(package) => Override::Package(PackageOverride {
+                        package: package.package.clone(),
+                        dependencies: package
+                            .dependencies
+                            .iter()
+                            .cloned()
+                            .map(Requirement::from)
+                            .collect(),
+                    }),
+                })
+                .collect();
 
-            Ok(Self {
+            Self {
                 requirements,
                 constraints,
-                modifiers,
+                override_dependencies,
+                excludes: tool_uv.exclude_dependencies.clone().unwrap_or_default(),
                 index_url: tool_uv
                     .top_level
                     .index_url
@@ -215,12 +201,12 @@ impl RequirementsSpecification {
                         .unwrap_or_default(),
                 ),
                 ..Self::default()
-            })
+            }
         } else {
-            Ok(Self {
+            Self {
                 requirements,
                 ..Self::default()
-            })
+            }
         }
     }
 
@@ -267,7 +253,6 @@ impl RequirementsSpecification {
     #[instrument(skip_all, level = tracing::Level::DEBUG, fields(source = % source))]
     async fn from_source_with_cache(
         source: &RequirementsSource,
-        role: SourceRole,
         client_builder: &BaseClientBuilder<'_>,
         cache: &mut SourceCache,
     ) -> Result<Self> {
@@ -350,7 +335,7 @@ impl RequirementsSpecification {
                     Err(err) => return Err(err.into()),
                 };
 
-                Self::from_pep723_metadata(&metadata, role)?
+                Self::from_pep723_metadata(&metadata)
             }
             RequirementsSource::SetupPy(path) => {
                 if !path.is_file() {
@@ -401,7 +386,7 @@ impl RequirementsSpecification {
 
                 // Detect if it's a PEP 723 script.
                 if let Some(metadata) = Pep723Metadata::parse(content.as_bytes())? {
-                    Self::from_pep723_metadata(&metadata, role)?
+                    Self::from_pep723_metadata(&metadata)
                 } else {
                     // If it's not a PEP 723 script, assume it's a `requirements.txt` file.
                     let requirements_txt = RequirementsTxt::parse_str(
@@ -565,13 +550,7 @@ impl RequirementsSpecification {
         // Resolve sources into specifications so we know their `source_tree`.
         let mut requirement_sources = Vec::new();
         for source in requirements {
-            let source = Self::from_source_with_cache(
-                source,
-                SourceRole::Requirements,
-                client_builder,
-                &mut cache,
-            )
-            .await?;
+            let source = Self::from_source_with_cache(source, client_builder, &mut cache).await?;
             requirement_sources.push(source);
         }
 
@@ -582,7 +561,9 @@ impl RequirementsSpecification {
             spec.requirements.extend(source.requirements);
             spec.constraints.extend(source.constraints);
             spec.overrides.extend(source.overrides);
-            spec.modifiers.extend(source.modifiers);
+            spec.override_dependencies
+                .extend(source.override_dependencies);
+            spec.excludes.extend(source.excludes);
             spec.extras.extend(source.extras);
             spec.source_trees.extend(source.source_trees);
 
@@ -625,13 +606,7 @@ impl RequirementsSpecification {
         // Read all constraints, treating both requirements _and_ constraints as constraints.
         // Overrides are ignored.
         for source in constraints {
-            let source = Self::from_source_with_cache(
-                source,
-                SourceRole::Constraints,
-                client_builder,
-                &mut cache,
-            )
-            .await?;
+            let source = Self::from_source_with_cache(source, client_builder, &mut cache).await?;
             for entry in source.requirements {
                 match entry.requirement {
                     UnresolvedRequirement::Named(requirement) => {
@@ -671,16 +646,11 @@ impl RequirementsSpecification {
         // Read all overrides, treating both requirements _and_ overrides as overrides.
         // Constraints are ignored.
         for source in overrides {
-            let source = Self::from_source_with_cache(
-                source,
-                SourceRole::Overrides,
-                client_builder,
-                &mut cache,
-            )
-            .await?;
+            let source = Self::from_source_with_cache(source, client_builder, &mut cache).await?;
             spec.overrides.extend(source.requirements);
             spec.overrides.extend(source.overrides);
-            spec.modifiers.extend(source.modifiers);
+            spec.override_dependencies
+                .extend(source.override_dependencies);
 
             if let Some(index_url) = source.index_url {
                 if let Some(existing) = spec.index_url
@@ -703,18 +673,11 @@ impl RequirementsSpecification {
 
         // Collect excludes.
         for source in excludes {
-            let source = Self::from_source_with_cache(
-                source,
-                SourceRole::Exclusions,
-                client_builder,
-                &mut cache,
-            )
-            .await?;
+            let source = Self::from_source_with_cache(source, client_builder, &mut cache).await?;
             for req_spec in source.requirements {
                 match req_spec.requirement {
                     UnresolvedRequirement::Named(requirement) => {
-                        spec.modifiers
-                            .excludes
+                        spec.excludes
                             .push(ExcludeDependency::Dependency(requirement.name));
                     }
                     UnresolvedRequirement::Unnamed(requirement) => {
@@ -724,7 +687,7 @@ impl RequirementsSpecification {
                     }
                 }
             }
-            spec.modifiers.extend(source.modifiers);
+            spec.excludes.extend(source.excludes);
         }
 
         Ok(spec)
@@ -745,12 +708,13 @@ impl RequirementsSpecification {
         Self::from_sources(requirements, &[], &[], &[], None, client_builder).await
     }
 
-    /// Initialize a [`RequirementsSpecification`] from requirements, constraints, and dependency
-    /// modifiers.
-    pub fn from_resolved(
+    /// Initialize a [`RequirementsSpecification`] from a list of [`Requirement`], including
+    /// constraints, overrides, and excludes.
+    pub fn from_excludes(
         requirements: Vec<Requirement>,
         constraints: Vec<Requirement>,
-        modifiers: DependencyModifiers,
+        overrides: Vec<Requirement>,
+        excludes: Vec<ExcludeDependency>,
     ) -> Self {
         Self {
             requirements: requirements
@@ -761,7 +725,11 @@ impl RequirementsSpecification {
                 .into_iter()
                 .map(NameRequirementSpecification::from)
                 .collect(),
-            modifiers,
+            overrides: overrides
+                .into_iter()
+                .map(UnresolvedRequirementSpecification::from)
+                .collect(),
+            excludes,
             ..Self::default()
         }
     }

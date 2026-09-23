@@ -14,9 +14,9 @@ use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::{cache_digest, cache_name};
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    ActiveEnvironment, Concurrency, Constraints, DependencyGroupsWithDefaults, DependencyModifiers,
-    DryRun, ExtrasSpecification, GitLfsSetting, HashCheckingMode, Override, PackageOverride,
-    Reinstall, TargetTriple, Upgrade,
+    ActiveEnvironment, Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun,
+    ExtrasSpecification, GitLfsSetting, HashCheckingMode, Override, PackageOverride, Reinstall,
+    TargetTriple, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
@@ -53,7 +53,7 @@ use uv_torch::TorchStrategy;
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
-use uv_workspace::pyproject::{ExtraBuildDependency, OverrideDependency};
+use uv_workspace::pyproject::ExtraBuildDependency;
 use uv_workspace::{ProjectEnvironmentSelection, RequiresPythonSources, Workspace, WorkspaceCache};
 
 use crate::commands::locked_requirements::{LockedRequirements, read_lock_requirements};
@@ -2539,7 +2539,8 @@ pub(crate) async fn resolve_environment(
         requirements,
         constraints,
         overrides,
-        modifiers,
+        override_dependencies,
+        excludes,
         source_trees,
         ..
     } = spec.requirements;
@@ -2700,7 +2701,8 @@ pub(crate) async fn resolve_environment(
         requirements,
         constraints,
         overrides,
-        modifiers,
+        override_dependencies,
+        excludes,
         source_trees,
         project,
         BTreeSet::default(),
@@ -2942,7 +2944,8 @@ pub(crate) async fn update_environment(
         requirements,
         constraints,
         overrides,
-        modifiers,
+        override_dependencies,
+        excludes,
         source_trees,
         ..
     } = spec;
@@ -2963,7 +2966,8 @@ pub(crate) async fn update_environment(
             &requirements,
             &constraints,
             &overrides,
-            &modifiers,
+            &override_dependencies,
+            &excludes,
             dependency_metadata,
             DependencyMode::Transitive,
             InstallationStrategy::Permissive,
@@ -3094,7 +3098,8 @@ pub(crate) async fn update_environment(
         requirements,
         constraints,
         overrides,
-        modifiers,
+        override_dependencies,
+        excludes,
         source_trees,
         project,
         BTreeSet::default(),
@@ -3333,10 +3338,10 @@ pub(crate) async fn script_specification(
         let mut overrides = Vec::new();
         for entry in override_entries {
             match entry {
-                OverrideDependency::Requirement(requirement) => {
+                Override::Requirement(requirement) => {
                     overrides.extend(
                         LoweredRequirement::from_non_workspace_requirement(
-                            *requirement,
+                            requirement,
                             script_dir.as_ref(),
                             script_sources.as_ref(),
                             &script_indexes,
@@ -3347,11 +3352,11 @@ pub(crate) async fn script_specification(
                         )
                         .await
                         .map_ok(LoweredRequirement::into_inner)
-                        .map_ok(Override::requirement)
+                        .map_ok(Override::Requirement)
                         .collect::<Result<Vec<_>, _>>()?,
                     );
                 }
-                OverrideDependency::Package(package) => {
+                Override::Package(package) => {
                     let mut dependencies = Vec::new();
                     for requirement in package.dependencies.into_vec() {
                         dependencies.extend(
@@ -3390,10 +3395,10 @@ pub(crate) async fn script_specification(
         .cloned()
         .collect::<Vec<_>>();
 
-    let modifiers = DependencyModifiers::from_parts(overrides, excludes)
-        .map_err(|error| ProjectError::Operation(error.into()))?;
-    let specification =
-        RequirementsSpecification::from_resolved(requirements, constraints, modifiers);
+    let mut specification =
+        RequirementsSpecification::from_excludes(requirements, constraints, Vec::new(), Vec::new());
+    specification.override_dependencies = overrides;
+    specification.excludes = excludes;
     Ok(Some(specification))
 }
 

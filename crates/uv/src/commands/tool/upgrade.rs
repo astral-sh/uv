@@ -353,21 +353,24 @@ async fn upgrade_tool(
         .chain(constraints)
         .cloned()
         .collect::<Vec<_>>();
-    let modifiers = existing_tool_receipt.modifiers().clone();
+    let manifest_overrides = existing_tool_receipt.overrides().to_vec();
+    let manifest_excludes = existing_tool_receipt.excludes().to_vec();
     let lock_manifest = ToolLock::manifest(
         existing_tool_receipt.requirements(),
         &manifest_constraints,
-        modifiers.clone(),
+        &manifest_overrides,
+        &manifest_excludes,
         &build_constraints,
         &settings.resolver.dependency_metadata,
     );
     let build_constraints = Constraints::from_specifications(build_constraints);
 
     // Resolve the requirements.
-    let spec = RequirementsSpecification::from_resolved(
+    let spec = RequirementsSpecification::from_excludes(
         existing_tool_receipt.requirements().to_vec(),
         manifest_constraints,
-        modifiers,
+        manifest_overrides,
+        manifest_excludes,
     );
     // Initialize any shared state.
     let state = PlatformState::default();
@@ -612,7 +615,8 @@ async fn upgrade_tool(
             existing_tool_receipt.python().to_owned(),
             existing_tool_receipt.requirements().to_vec(),
             existing_tool_receipt.constraints().to_vec(),
-            existing_tool_receipt.modifiers().clone(),
+            existing_tool_receipt.overrides().to_vec(),
+            existing_tool_receipt.excludes().to_vec(),
             existing_tool_receipt.build_constraints().to_vec(),
             tool_lock.as_ref(),
             printer,

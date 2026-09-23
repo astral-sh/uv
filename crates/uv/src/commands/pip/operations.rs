@@ -15,7 +15,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{
     BuildOptions, Concurrency, Constraints, DependencyGroups, DependencyModifiers, DryRun,
-    ExtrasSpecification, Override, Reinstall, Upgrade,
+    ExcludeDependency, Excludes, ExtrasSpecification, Override, Overrides, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, SourcedDependencyGroups};
@@ -106,7 +106,8 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     requirements: Vec<UnresolvedRequirementSpecification>,
     constraints: Vec<NameRequirementSpecification>,
     overrides: Vec<UnresolvedRequirementSpecification>,
-    mut modifiers: DependencyModifiers,
+    lowered_overrides: Vec<Override<Requirement>>,
+    excludes: Vec<ExcludeDependency>,
     source_trees: Vec<SourceTree>,
     mut project: Option<PackageName>,
     workspace_members: BTreeSet<PackageName>,
@@ -316,16 +317,22 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         overrides
     };
 
-    // Collect constraints and dependency modifiers.
+    // Collect constraints, overrides, and excludes.
     let constraints = Constraints::from_requirements(
         constraints
             .into_iter()
             .map(|constraint| constraint.requirement)
             .chain(upgrade.constraints().cloned()),
     );
-    modifiers
-        .overrides
-        .extend(overrides.into_iter().map(Override::requirement));
+    let overrides = Overrides::from_entries(
+        lowered_overrides
+            .into_iter()
+            .chain(overrides.into_iter().map(Override::Requirement))
+            .collect(),
+    )
+    .map_err(anyhow::Error::from)?;
+    let excludes = Excludes::from_entries(excludes);
+    let modifiers = DependencyModifiers::new(overrides, excludes);
     let preferences = Preferences::from_iter(preferences, &resolver_env);
 
     // Determine any lookahead requirements.
@@ -1389,9 +1396,6 @@ pub(crate) fn diagnose_environment<'a>(
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum Error {
     #[error(transparent)]
-    ScopedOverride(#[from] uv_configuration::ScopedOverrideSourceError),
-
-    #[error(transparent)]
     Prepare(#[from] uv_installer::PrepareError),
 
     #[error("{header}")]
@@ -1444,8 +1448,7 @@ impl Error {
                 header: NoSolutionHeader::new(source.environment().clone()),
                 source,
             },
-            error @ (Self::ScopedOverride(_)
-            | Self::Prepare(_)
+            error @ (Self::Prepare(_)
             | Self::NoSolution { .. }
             | Self::Resolve(_)
             | Self::Uninstall(_)
@@ -1470,8 +1473,7 @@ impl Error {
             Self::Requirements(source) | Self::RequirementsWithContext { source, .. } => {
                 Self::RequirementsWithContext { context, source }
             }
-            error @ (Self::ScopedOverride(_)
-            | Self::Prepare(_)
+            error @ (Self::Prepare(_)
             | Self::Resolve(_)
             | Self::Uninstall(_)
             | Self::Hash(_)
@@ -1492,11 +1494,7 @@ impl Error {
             Self::Requirements(error) | Self::RequirementsWithContext { source: error, .. } => {
                 error.is_user_failure()
             }
-            Self::ScopedOverride(_)
-            | Self::Uninstall(_)
-            | Self::Io(_)
-            | Self::Fmt(_)
-            | Self::Anyhow(_) => false,
+            Self::Uninstall(_) | Self::Io(_) | Self::Fmt(_) | Self::Anyhow(_) => false,
         }
     }
 }
@@ -1543,8 +1541,7 @@ impl uv_errors::Hinted for Error {
                 }
                 uv_errors::Hints::none()
             }
-            Self::ScopedOverride(_)
-            | Self::Prepare(_)
+            Self::Prepare(_)
             | Self::Uninstall(_)
             | Self::Hash(_)
             | Self::Io(_)

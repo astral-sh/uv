@@ -92,10 +92,8 @@ fn pip_compile_baseline() {
         excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
-        modifiers_from_workspace: DependencyModifiers {
-            overrides: [],
-            excludes: [],
-        },
+        overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -474,10 +472,8 @@ fn pip_install_baseline() {
         build_constraints: [],
         dry_run: Disabled,
         constraints_from_workspace: [],
-        modifiers_from_workspace: DependencyModifiers {
-            overrides: [],
-            excludes: [],
-        },
+        overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         modifications: Sufficient,
         refresh: None(

@@ -11,9 +11,9 @@ use uv_errors::{Hinted, Hints};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    BuildIsolation, BuildOptions, Concurrency, Constraints, DependencyModifiers, DryRun,
-    EditableMode, ExtrasSpecification, HashCheckingMode, IndexStrategy, NoSources, Reinstall,
-    Upgrade,
+    BuildIsolation, BuildOptions, Concurrency, Constraints, DryRun, EditableMode,
+    ExcludeDependency, ExtrasSpecification, HashCheckingMode, IndexStrategy, NoSources, Override,
+    Reinstall, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -83,7 +83,8 @@ pub(crate) async fn pip_install(
     excludes: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
     constraints_from_workspace: Vec<Requirement>,
-    modifiers_from_workspace: DependencyModifiers,
+    overrides_from_workspace: Vec<Override<Requirement>>,
+    excludes_from_workspace: Vec<ExcludeDependency>,
     build_constraints_from_workspace: Vec<NameRequirementSpecification>,
     editable: Option<EditableMode>,
     extras: &ExtrasSpecification,
@@ -142,7 +143,8 @@ pub(crate) async fn pip_install(
         requirements,
         constraints,
         overrides,
-        mut modifiers,
+        mut override_dependencies,
+        excludes,
         pylock,
         pylock_groups,
         source_trees,
@@ -166,7 +168,7 @@ pub(crate) async fn pip_install(
     )
     .await?;
 
-    modifiers.extend(modifiers_from_workspace);
+    override_dependencies.extend(overrides_from_workspace);
 
     let hash_checking = HashCheckingMode::from_requirements_txt(hash_checking, require_hashes);
 
@@ -187,6 +189,11 @@ pub(crate) async fn pip_install(
                 .into_iter()
                 .map(NameRequirementSpecification::from),
         )
+        .collect();
+
+    let excludes: Vec<ExcludeDependency> = excludes
+        .into_iter()
+        .chain(excludes_from_workspace)
         .collect();
 
     // Read build constraints.
@@ -329,7 +336,8 @@ pub(crate) async fn pip_install(
             &requirements,
             &constraints,
             &overrides,
-            &modifiers,
+            &override_dependencies,
+            &excludes,
             &dependency_metadata,
             dependency_mode,
             InstallationStrategy::Permissive,
@@ -542,7 +550,8 @@ pub(crate) async fn pip_install(
             requirements,
             constraints,
             overrides,
-            modifiers,
+            override_dependencies,
+            excludes,
             source_trees,
             project,
             BTreeSet::default(),

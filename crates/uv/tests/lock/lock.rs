@@ -3444,9 +3444,6 @@ fn lock_project_with_scoped_overrides() -> Result<()> {
             "sniffio",
             # The package-scoped override takes precedence for AnyIO's dependency.
             { package = { name = "anyio", version = "3.7.0" }, dependencies = ["idna==3.2"] },
-            # Duplicate entries do not change the canonical lockfile.
-            "idna==3.1",
-            { package = { name = "anyio", version = "3.7.0" }, dependencies = ["idna==3.2"] },
         ]
         "#,
     )?;
@@ -3520,12 +3517,6 @@ fn lock_project_with_scoped_overrides() -> Result<()> {
     });
 
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 4 packages in [TIME]
-    ");
-
-    uv_snapshot!(context.filters(), context.lock().arg("--check").arg("--refresh"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
@@ -3907,7 +3898,7 @@ fn lock_project_with_excludes() -> Result<()> {
         dependencies = ["flask==3.0.0"]
 
         [tool.uv]
-        exclude-dependencies = ["werkzeug", "werkzeug"]
+        exclude-dependencies = ["werkzeug"]
         "#,
     )?;
 
@@ -3917,8 +3908,8 @@ fn lock_project_with_excludes() -> Result<()> {
     Resolved 8 packages in [TIME]
     ");
 
-    // Re-run with `--locked --refresh`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--refresh"), @"
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 8 packages in [TIME]

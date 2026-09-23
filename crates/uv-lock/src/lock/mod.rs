@@ -23,8 +23,10 @@ use url::Url;
 use uv_cache_key::RepositoryUrl;
 use uv_configuration::{
     BuildOptions, Constraints, DependencyGroupsWithDefaults, DependencyModifierScope,
-    DependencyModifiers, ExcludeNewer, ExcludeNewerPackage, ExtrasSpecificationWithDefaults,
-    ForkStrategy, InstallTarget, Prerelease, PrereleaseMode, PrereleasePackage, ResolutionMode,
+    DependencyModifiers, ExcludeDependency, ExcludeNewer, ExcludeNewerPackage, Excludes,
+    ExtrasSpecificationWithDefaults, ForkStrategy, InstallTarget, Override, Overrides,
+    PackageOverride, Prerelease, PrereleaseMode, PrereleasePackage, ResolutionMode,
+    ScopedOverrideSourceError,
 };
 use uv_distribution::{
     DistributionDatabase, FlatRequiresDist, Metadata as DistributionMetadata, RequiresDist,
@@ -3998,7 +4000,8 @@ impl Lock {
         required_members: &BTreeMap<PackageName, Editability>,
         requirements: &[Requirement],
         constraints: &[Requirement],
-        modifiers: &DependencyModifiers,
+        overrides: &[Override<Requirement>],
+        excludes: &[ExcludeDependency],
         build_constraints: &Constraints,
         dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
         dependency_metadata: &DependencyMetadata,
@@ -4105,29 +4108,54 @@ impl Lock {
             expected
         };
 
-        // Validate that the lockfile was generated with the same dependency modifiers.
-        let normalized_modifiers = {
-            let normalize =
-                |requirement| normalize_requirement(requirement, root, &self.requires_python);
-            let expected = modifiers.clone().try_normalize_requirements(normalize)?;
-            let actual = self
+        // Validate that the lockfile was generated with the same overrides.
+        let normalized_overrides = {
+            let normalize = |entry: Override<Requirement>| -> Result<_, LockError> {
+                match entry {
+                    Override::Requirement(requirement) => Ok(Override::Requirement(
+                        normalize_requirement(requirement, root, &self.requires_python)?,
+                    )),
+                    Override::Package(package) => Ok(Override::Package(PackageOverride {
+                        package: package.package,
+                        dependencies: package
+                            .dependencies
+                            .into_vec()
+                            .into_iter()
+                            .map(|requirement| {
+                                normalize_requirement(requirement, root, &self.requires_python)
+                            })
+                            .collect::<Result<Vec<_>, _>>()?
+                            .into_boxed_slice(),
+                    })),
+                }
+            };
+            let expected: BTreeSet<_> = overrides
+                .iter()
+                .cloned()
+                .map(normalize)
+                .collect::<Result<_, _>>()?;
+            let actual: BTreeSet<_> = self
                 .manifest
-                .modifiers
-                .clone()
-                .try_normalize_requirements(normalize)?;
+                .overrides
+                .iter()
+                .cloned()
+                .map(normalize)
+                .collect::<Result<_, _>>()?;
             if expected != actual {
-                return Ok(SatisfiesResult::MismatchedDependencyModifiers(
-                    expected, actual,
-                ));
+                return Ok(SatisfiesResult::MismatchedOverrides(expected, actual));
             }
             expected
         };
 
-        let dependency_modifiers = if allow_missing_package_metadata {
-            normalized_modifiers
-        } else {
-            DependencyModifiers::default()
-        };
+        // Validate that the lockfile was generated with the same excludes.
+        {
+            let expected: BTreeSet<_> = excludes.iter().cloned().collect();
+            let actual: BTreeSet<_> = self.manifest.excludes.iter().cloned().collect();
+            if expected != actual {
+                return Ok(SatisfiesResult::MismatchedExcludes(expected, actual));
+            }
+        }
+
         let mut source_tree_metadata = FxHashMap::default();
 
         // Validate that the lockfile was generated with the same build constraints.
@@ -4216,6 +4244,15 @@ impl Lock {
             }
         }
 
+        let dependency_modifiers = if allow_missing_package_metadata {
+            DependencyModifiers::new(
+                Overrides::from_entries(normalized_overrides.into_iter().collect())
+                    .map_err(LockErrorKind::InvalidScopedOverride)?,
+                Excludes::from_entries(excludes.iter().cloned()),
+            )
+        } else {
+            DependencyModifiers::default()
+        };
         // Projectless workspace groups and scripts are root declarations, so apply only
         // global overrides and exclusions before using them for sources or validation.
         let root_requirements = dependency_modifiers
@@ -5819,8 +5856,13 @@ pub enum SatisfiesResult<'lock> {
     MismatchedRequirements(BTreeSet<Requirement>, BTreeSet<Requirement>),
     /// The lockfile uses a different set of constraints.
     MismatchedConstraints(BTreeSet<Requirement>, BTreeSet<Requirement>),
-    /// The lockfile uses a different set of dependency modifiers.
-    MismatchedDependencyModifiers(DependencyModifiers, DependencyModifiers),
+    /// The lockfile uses a different set of overrides.
+    MismatchedOverrides(
+        BTreeSet<Override<Requirement>>,
+        BTreeSet<Override<Requirement>>,
+    ),
+    /// The lockfile uses a different set of excludes.
+    MismatchedExcludes(BTreeSet<ExcludeDependency>, BTreeSet<ExcludeDependency>),
     /// The lockfile uses a different set of build constraints.
     MismatchedBuildConstraints(
         BTreeSet<NameRequirementSpecification>,
@@ -5990,9 +6032,12 @@ pub struct ResolverManifest {
     /// The constraints provided to the resolver.
     #[serde(default)]
     constraints: BTreeSet<Requirement>,
-    /// The dependency modifiers provided to the resolver.
-    #[serde(flatten)]
-    modifiers: DependencyModifiers,
+    /// The overrides provided to the resolver.
+    #[serde(default)]
+    overrides: BTreeSet<Override<Requirement>>,
+    /// The excludes provided to the resolver.
+    #[serde(default)]
+    excludes: BTreeSet<ExcludeDependency>,
     /// The build constraints provided to the resolver.
     #[serde(default)]
     build_constraints: BTreeSet<NameRequirementSpecification>,
@@ -6003,12 +6048,13 @@ pub struct ResolverManifest {
 
 impl ResolverManifest {
     /// Initialize a [`ResolverManifest`] with the given members, requirements, constraints, and
-    /// dependency modifiers.
+    /// overrides.
     pub fn new(
         members: impl IntoIterator<Item = PackageName>,
         requirements: impl IntoIterator<Item = Requirement>,
         constraints: impl IntoIterator<Item = Requirement>,
-        modifiers: DependencyModifiers,
+        overrides: impl IntoIterator<Item = Override<Requirement>>,
+        excludes: impl IntoIterator<Item = ExcludeDependency>,
         build_constraints: impl IntoIterator<Item = NameRequirementSpecification>,
         dependency_groups: impl IntoIterator<Item = (GroupName, Vec<Requirement>)>,
         dependency_metadata: impl IntoIterator<Item = StaticMetadata>,
@@ -6017,7 +6063,8 @@ impl ResolverManifest {
             members: members.into_iter().collect(),
             requirements: requirements.into_iter().collect(),
             constraints: constraints.into_iter().collect(),
-            modifiers,
+            overrides: overrides.into_iter().collect(),
+            excludes: excludes.into_iter().collect(),
             build_constraints: build_constraints.into_iter().collect(),
             dependency_groups: dependency_groups
                 .into_iter()
@@ -6041,9 +6088,26 @@ impl ResolverManifest {
                 .into_iter()
                 .map(|requirement| requirement.relative_to(root))
                 .collect::<Result<BTreeSet<_>, _>>()?,
-            modifiers: self
-                .modifiers
-                .try_normalize_requirements(|requirement| requirement.relative_to(root))?,
+            overrides: self
+                .overrides
+                .into_iter()
+                .map(|entry| match entry {
+                    Override::Requirement(requirement) => {
+                        Ok(Override::Requirement(requirement.relative_to(root)?))
+                    }
+                    Override::Package(package) => Ok(Override::Package(PackageOverride {
+                        package: package.package,
+                        dependencies: package
+                            .dependencies
+                            .into_vec()
+                            .into_iter()
+                            .map(|requirement| requirement.relative_to(root))
+                            .collect::<Result<Vec<_>, _>>()?
+                            .into_boxed_slice(),
+                    })),
+                })
+                .collect::<Result<BTreeSet<_>, io::Error>>()?,
+            excludes: self.excludes,
             build_constraints: self
                 .build_constraints
                 .into_iter()
@@ -9588,6 +9652,10 @@ impl std::fmt::Display for WheelTagHint {
 /// is with the caller somewhere in such cases.
 #[derive(Debug, thiserror::Error)]
 enum LockErrorKind {
+    /// An error that occurs when the overrides for validating a
+    /// metadata-free lockfile cannot be scoped to their packages.
+    #[error(transparent)]
+    InvalidScopedOverride(#[from] ScopedOverrideSourceError),
     /// An error that occurs when multiple packages with the same
     /// ID were found.
     #[error("Found duplicate package `{id}`", id = id.cyan())]
