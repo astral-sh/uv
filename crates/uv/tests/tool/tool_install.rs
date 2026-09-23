@@ -5167,8 +5167,8 @@ fn tool_install_overrides() -> Result<()> {
         [tool]
         requirements = [{ name = "black" }]
         overrides = [
-            { name = "anyio", specifier = ">=3" },
             { name = "click", specifier = "<8" },
+            { name = "anyio", specifier = ">=3" },
         ]
         entrypoints = [
             { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
@@ -5179,6 +5179,17 @@ fn tool_install_overrides() -> Result<()> {
         exclude-newer = "2024-03-25T00:00:00Z"
         "#);
     });
+
+    // Installing with the same overrides should reuse the tool environment.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("--overrides")
+        .arg(overrides_txt.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    `black` is already installed
+    ");
 
     Ok(())
 }

@@ -241,8 +241,8 @@ impl Tool {
             });
         }
 
-        let modifiers = self.modifiers.to_entries();
-        let overrides = modifiers
+        let overrides = self
+            .modifiers
             .overrides
             .iter()
             .map(|r#override| {
@@ -260,8 +260,9 @@ impl Tool {
             });
         }
 
-        let excludes = modifiers
-            .exclusions
+        let excludes = self
+            .modifiers
+            .excludes
             .iter()
             .map(|r#exclude| {
                 serde::Serialize::serialize(&r#exclude, toml_edit::ser::ValueSerializer::new())
