@@ -95,19 +95,19 @@ impl TryFrom<ToolWire> for Tool {
 
     fn try_from(tool: ToolWire) -> Result<Self, Self::Error> {
         Ok(Self {
-            requirements: NormalizedRequirements::new(
+            requirements: NormalizedRequirements::from(
                 tool.requirements
                     .into_iter()
                     .map(|req| match req {
                         RequirementWire::Requirement(requirements) => requirements,
                         RequirementWire::Deprecated(requirement) => Requirement::from(requirement),
                     })
-                    .collect(),
+                    .collect::<Vec<_>>(),
             ),
-            constraints: NormalizedConstraints::new(tool.constraints),
-            overrides: NormalizedOverrides::new(tool.overrides),
-            excludes: NormalizedExcludes::new(tool.excludes),
-            build_constraints: NormalizedBuildConstraints::new(tool.build_constraint_dependencies),
+            constraints: NormalizedConstraints::from(tool.constraints),
+            overrides: NormalizedOverrides::from(tool.overrides),
+            excludes: NormalizedExcludes::from(tool.excludes),
+            build_constraints: NormalizedBuildConstraints::from(tool.build_constraint_dependencies),
             python: tool.python,
             entrypoints: tool.entrypoints,
             options: tool.options.into(),

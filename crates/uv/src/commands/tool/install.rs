@@ -154,7 +154,7 @@ pub(crate) async fn install(
     .await?
     .into_interpreter();
 
-    let receipt_build_constraints = NormalizedBuildConstraints::new(
+    let receipt_build_constraints = NormalizedBuildConstraints::from(
         operations::read_constraints(build_constraints, &client_builder).await?,
     );
     let build_constraints =
@@ -435,18 +435,18 @@ pub(crate) async fn install(
         )
     };
 
-    let requirements = NormalizedRequirements::new(requirements);
+    let requirements = NormalizedRequirements::from(requirements);
 
     // Resolve the constraints.
-    let receipt_constraints = NormalizedConstraints::new(
+    let receipt_constraints = NormalizedConstraints::from(
         spec.constraints
             .into_iter()
             .map(|constraint| constraint.requirement)
-            .collect(),
+            .collect::<Vec<_>>(),
     );
 
     // Resolve the overrides.
-    let receipt_overrides = NormalizedOverrides::new(
+    let receipt_overrides = NormalizedOverrides::from(
         resolve_names(
             spec.overrides,
             &interpreter,
@@ -465,7 +465,7 @@ pub(crate) async fn install(
     );
 
     // Resolve the excludes.
-    let receipt_excludes = NormalizedExcludes::new(spec.excludes);
+    let receipt_excludes = NormalizedExcludes::from(spec.excludes);
 
     // Convert to tool options.
     let options = ToolOptions::from(options);

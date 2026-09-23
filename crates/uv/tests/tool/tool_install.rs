@@ -26,7 +26,7 @@ use uv_static::EnvVars;
 use uv_test::packse::{
     PackseServer, generate_wheel, generate_wheel_with_files, scenario::Scenario,
 };
-use uv_test::uv_snapshot;
+use uv_test::{TestContext, uv_snapshot};
 
 #[cfg(feature = "test-git")]
 fn tool_install_git_path(bin_dir: &ChildPath) -> OsString {
@@ -6565,12 +6565,11 @@ fn tool_install_lock_revalidates_changed_constraints() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn tool_install_with_build_hashes() -> Result<()> {
+/// Create a local tool and return the SHA-256 digest of its build dependency's wheel.
+fn build_hash_test_context() -> Result<(TestContext, String)> {
     let context = uv_test::test_context!("3.12")
         .with_filtered_exe_suffix()
         .with_tool_dirs();
-    let bin_dir = context.temp_dir.child("bin");
     let (filename, wheel) = generate_wheel(
         &"build-dependency".parse()?,
         &"1.0.0".parse()?,
@@ -6627,6 +6626,14 @@ fn tool_install_with_build_hashes() -> Result<()> {
             shutil.copyfile(wheel, Path(wheel_directory) / wheel.name)
             return wheel.name
     "#})?;
+    Ok((context, hash))
+}
+
+#[test]
+fn tool_install_with_build_hashes() -> Result<()> {
+    let (context, hash) = build_hash_test_context()?;
+    let bin_dir = context.temp_dir.child("bin");
+    let project = context.temp_dir.child("project");
     let constraints = context.temp_dir.child("constraints.txt");
     // The last nonempty hash declaration for a registry version takes precedence.
     let incorrect_hash = "0".repeat(64);
@@ -6802,66 +6809,9 @@ fn tool_install_with_build_hashes() -> Result<()> {
 
 #[test]
 fn tool_install_lock_with_build_hashes() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
+    let (context, hash) = build_hash_test_context()?;
     let bin_dir = context.temp_dir.child("bin");
-    let (filename, wheel) = generate_wheel(
-        &"build-dependency".parse()?,
-        &"1.0.0".parse()?,
-        &[],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[],
-    );
-    let hash = hex::encode(Sha256::digest(&wheel));
-    context
-        .temp_dir
-        .child("wheels")
-        .child(filename)
-        .write_binary(&wheel)?;
-    let (filename, wheel) = generate_wheel_with_files(
-        &"hash-tool".parse()?,
-        &"1.0.0".parse()?,
-        &[],
-        &BTreeMap::new(),
-        None,
-        "py3-none-any",
-        &[
-            ("hash_tool/cli.py", "def main():\n    print('tool-ok')\n"),
-            (
-                "hash_tool-1.0.0.dist-info/entry_points.txt",
-                "[console_scripts]\nhash-tool = hash_tool.cli:main\n",
-            ),
-        ],
-    );
-    context
-        .temp_dir
-        .child("wheels")
-        .child(filename)
-        .write_binary(&wheel)?;
-    let context = context.with_filter((hash.clone(), "[BUILD_HASH]"));
     let project = context.temp_dir.child("project");
-    project.child("pyproject.toml").write_str(indoc! {r#"
-        [build-system]
-        requires = ["build-dependency==1.0.0"]
-        build-backend = "backend"
-        backend-path = ["."]
-    "#})?;
-    project.child("backend.py").write_str(indoc! {r#"
-        import shutil
-        from pathlib import Path
-
-        import build_dependency
-
-        Path(__file__).with_name("backend-executed").touch()
-
-        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-            wheel = Path(__file__).parent.parent / "wheels" / "hash_tool-1.0.0-py3-none-any.whl"
-            shutil.copyfile(wheel, Path(wheel_directory) / wheel.name)
-            return wheel.name
-    "#})?;
     let constraints = context.temp_dir.child("constraints.txt");
     // The last nonempty hash declaration for a registry version takes precedence.
     let incorrect_hash = "0".repeat(64);

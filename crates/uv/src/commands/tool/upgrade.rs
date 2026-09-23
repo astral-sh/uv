@@ -347,13 +347,13 @@ async fn upgrade_tool(
     let settings = ResolverInstallerSettings::from(options.clone());
 
     let build_constraints = existing_tool_receipt.build_constraints().to_vec();
-    let manifest_constraints = NormalizedConstraints::new(
+    let manifest_constraints = NormalizedConstraints::from(
         existing_tool_receipt
             .constraints()
             .iter()
             .chain(constraints)
             .cloned()
-            .collect(),
+            .collect::<Vec<_>>(),
     );
     let manifest_overrides = existing_tool_receipt.overrides().to_vec();
     let manifest_excludes = existing_tool_receipt.excludes().to_vec();
