@@ -37,7 +37,7 @@ use crate::commands::project::{
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::{ToolLock, remove_entrypoints, tool_environment_spec};
-use crate::commands::tool::requirements::normalize_receipt;
+use crate::commands::tool::requirements::normalize_requirements;
 use crate::commands::{ExitStatus, conjunction, tool::common::finalize_tool_install};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -302,7 +302,7 @@ async fn upgrade_tool(
         }
     };
 
-    let (existing_tool_receipt, normalized_receipt) = normalize_receipt(existing_tool_receipt);
+    let existing_tool_receipt = existing_tool_receipt.map_requirements(normalize_requirements);
 
     let environment = match installed_tools.get_environment(name, cache) {
         Ok(Some(environment)) => environment,
@@ -638,7 +638,7 @@ async fn upgrade_tool(
             name,
             existing_tool_receipt.with_options(ToolOptions::from(options)),
         )?;
-    } else if normalized_receipt {
+    } else {
         installed_tools.add_tool_receipt(name, existing_tool_receipt)?;
     }
 

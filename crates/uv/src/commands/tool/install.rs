@@ -49,9 +49,7 @@ use crate::commands::tool::common::{
     ToolLock, ToolPython, finalize_tool_install, refine_interpreter, remove_entrypoints,
     tool_environment_spec,
 };
-use crate::commands::tool::requirements::{
-    normalize_receipt, normalize_requirements, requirements_equal,
-};
+use crate::commands::tool::requirements::{normalize_requirements, requirements_equal};
 use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::{UvError, reporters::PythonDownloadReporter};
 use crate::printer::Printer;
@@ -486,15 +484,13 @@ pub(crate) async fn install(
     //
     // (If we find existing entrypoints later on, and the tool _doesn't_ exist, we'll avoid removing
     // the external tool's entrypoints (without `--force`).)
-    let mut normalized_receipt = false;
     let (existing_tool_receipt, invalid_tool_receipt) =
         match installed_tools.get_tool_receipt(package_name) {
             Ok(None) => (None, false),
-            Ok(Some(receipt)) => {
-                let (receipt, changed) = normalize_receipt(receipt);
-                normalized_receipt = changed;
-                (Some(receipt), false)
-            }
+            Ok(Some(receipt)) => (
+                Some(receipt.map_requirements(normalize_requirements)),
+                false,
+            ),
             Err(_) => {
                 // If the tool is not installed properly, remove the environment and continue.
                 match installed_tools.remove_environment(package_name) {
@@ -650,14 +646,9 @@ pub(crate) async fn install(
                     ),
                     Ok(SatisfiesResult::Fresh { .. })
                 );
-                if already_installed {
-                    // Then we're done! Though we might need to update the receipt.
-                    if normalized_receipt || *tool_receipt.options() != options {
-                        installed_tools.add_tool_receipt(
-                            package_name,
-                            tool_receipt.clone().with_options(options),
-                        )?;
-                    }
+                if already_installed && let Some(tool_receipt) = existing_tool_receipt {
+                    installed_tools
+                        .add_tool_receipt(package_name, tool_receipt.with_options(options))?;
 
                     writeln!(
                         printer.stderr(),

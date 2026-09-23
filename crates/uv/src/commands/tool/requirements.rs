@@ -7,19 +7,7 @@ use uv_pep440::{
     Operator, Version, VersionSpecifier, VersionSpecifiers, canonicalize_version_ranges,
 };
 use uv_pep508::MarkerTree;
-use uv_tool::Tool;
 use version_ranges::Ranges;
-
-/// Normalize an existing receipt, reporting whether it needs to be written back.
-pub(super) fn normalize_receipt(receipt: Tool) -> (Tool, bool) {
-    let requirements = normalize_requirements(receipt.requirements().to_vec());
-    let changed = requirements != receipt.requirements()
-        || requirements
-            .iter()
-            .map(ToString::to_string)
-            .ne(receipt.requirements().iter().map(ToString::to_string));
-    (receipt.with_requirements(requirements), changed)
-}
 
 /// Compare normalized requirements, including precision-sensitive version clauses.
 pub(super) fn requirements_equal(left: &[Requirement], right: &[Requirement]) -> bool {
