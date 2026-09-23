@@ -18,6 +18,7 @@ use futures::executor::block_on;
 use indoc::{formatdoc, indoc};
 use insta::{allow_duplicates, assert_snapshot};
 use predicates::prelude::predicate;
+use serde_json::json;
 use sha2::{Digest, Sha256};
 use url::Url;
 use walkdir::WalkDir;
@@ -34,6 +35,7 @@ use uv_test::archive::write_tar_gz;
 #[cfg(feature = "test-git")]
 use uv_test::decode_token;
 use uv_test::find_links::FindLinksServer;
+use uv_test::package_server::PackageServer;
 #[cfg(windows)]
 use uv_test::packse::generate_wheel_with_files;
 use uv_test::packse::{PackseServer, generate_wheel};
@@ -8556,32 +8558,20 @@ async fn find_links_uppercase_html() -> Result<()> {
 #[tokio::test]
 async fn registry_wheel_size_is_advisory() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let server = MockServer::start().await;
+    let server = PackageServer::new(&"tqdm".parse()?).await;
     let wheel_filename = "tqdm-1000.0.0-py3-none-any.whl";
     let wheel_path = context
         .workspace_root
         .join("test/links")
         .join(wheel_filename);
 
-    Mock::given(method("GET"))
-        .and(path("/tqdm/"))
-        .respond_with(ResponseTemplate::new(200).set_body_raw(
-            formatdoc! {r#"
-                {{
-                    "name": "tqdm",
-                    "files": [{{
-                        "filename": "{wheel_filename}",
-                        "url": "/{wheel_filename}",
-                        "hashes": {{}},
-                        "size": 1,
-                        "core-metadata": true,
-                        "upload-time": "2024-03-24T00:00:00Z"
-                    }}]
-                }}
-            "#},
-            "application/vnd.pypi.simple.v1+json",
-        ))
-        .mount(&server)
+    server
+        .serve_with(
+            wheel_filename,
+            &fs::read(wheel_path)?,
+            None,
+            json!({ "size": 1, "core-metadata": true }),
+        )
         .await;
     Mock::given(method("GET"))
         .and(path(format!("/{wheel_filename}.metadata")))
@@ -8591,18 +8581,13 @@ async fn registry_wheel_size_is_advisory() -> Result<()> {
             Version: 1000.0.0
         "}))
         .expect(1)
-        .mount(&server)
-        .await;
-    Mock::given(method("GET"))
-        .and(path(format!("/{wheel_filename}")))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs::read(wheel_path)?))
-        .mount(&server)
+        .mount(server.mock_server())
         .await;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("tqdm==1000.0.0")
         .arg("--index-url")
-        .arg(server.uri()), @"
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -8620,31 +8605,20 @@ async fn registry_wheel_size_is_advisory() -> Result<()> {
 #[tokio::test]
 async fn reject_wheel_with_multiple_dist_info_directories() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let server = MockServer::start().await;
+    let server = PackageServer::new(&"validation".parse()?).await;
     let wheel_filename = "validation-3.0.0-py3-none-any.whl";
     let wheel_path = context
         .workspace_root
         .join("test/links")
         .join(wheel_filename);
 
-    Mock::given(method("GET"))
-        .and(path("/validation/"))
-        .respond_with(ResponseTemplate::new(200).set_body_raw(
-            formatdoc! {r#"
-                {{
-                    "name": "validation",
-                    "files": [{{
-                        "filename": "{wheel_filename}",
-                        "url": "/{wheel_filename}",
-                        "hashes": {{}},
-                        "core-metadata": true,
-                        "upload-time": "2024-03-24T00:00:00Z"
-                    }}]
-                }}
-            "#},
-            "application/vnd.pypi.simple.v1+json",
-        ))
-        .mount(&server)
+    server
+        .serve_with(
+            wheel_filename,
+            &fs::read(wheel_path)?,
+            None,
+            json!({ "core-metadata": true }),
+        )
         .await;
     Mock::given(method("GET"))
         .and(path(format!("/{wheel_filename}.metadata")))
@@ -8654,18 +8628,13 @@ async fn reject_wheel_with_multiple_dist_info_directories() -> Result<()> {
             Version: 3.0.0
         "}))
         .expect(1)
-        .mount(&server)
-        .await;
-    Mock::given(method("GET"))
-        .and(path(format!("/{wheel_filename}")))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs::read(wheel_path)?))
-        .mount(&server)
+        .mount(server.mock_server())
         .await;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("validation==3.0.0")
         .arg("--index-url")
-        .arg(server.uri()), @"
+        .arg(server.index_url()), @"
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]

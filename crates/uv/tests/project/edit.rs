@@ -28,6 +28,7 @@ use uv_cache_key::{RepositoryUrl, cache_digest};
 use uv_fs::Simplified;
 use uv_static::EnvVars;
 
+use uv_test::package_server::PackageServer;
 use uv_test::{uv_snapshot, venv_bin_path};
 
 /// Add a PyPI requirement.
@@ -13652,44 +13653,32 @@ async fn add_empty_ignore_error_codes() -> Result<()> {
 async fn lock_forbidden_index_with_available_package() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
-    let server = MockServer::start().await;
+    let server = PackageServer::new(&"anyio".parse()?).await;
+    let wheel_filename = "anyio-4.3.0-py3-none-any.whl";
 
-    Mock::given(method("GET"))
-        .and(path("/anyio/"))
-        .respond_with(ResponseTemplate::new(200).set_body_raw(
-            r#"
-            {
-                "name": "anyio",
-                "files": [{
-                    "filename": "anyio-4.3.0-py3-none-any.whl",
-                    "url": "/anyio-4.3.0-py3-none-any.whl",
-                    "hashes": {
-                        "sha256": "048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8"
-                    },
-                    "core-metadata": true,
-                    "requires-python": ">=3.8",
-                    "upload-time": "2024-02-19T08:36:26Z"
-                }]
-            }
-            "#,
-            "application/vnd.pypi.simple.v1+json",
-        ))
-        .mount(&server)
+    // Resolution uses the separate metadata without downloading the wheel.
+    server
+        .serve_with(
+            wheel_filename,
+            b"",
+            Some("048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8"),
+            json!({ "core-metadata": true, "requires-python": ">=3.8" }),
+        )
         .await;
     Mock::given(method("GET"))
-        .and(path("/anyio-4.3.0-py3-none-any.whl.metadata"))
+        .and(path(format!("/{wheel_filename}.metadata")))
         .respond_with(ResponseTemplate::new(200).set_body_string(indoc! {"
             Metadata-Version: 2.3
             Name: anyio
             Version: 4.3.0
             Requires-Dist: idna>=2.8
         "}))
-        .mount(&server)
+        .mount(server.mock_server())
         .await;
     Mock::given(method("GET"))
-        .and(path("/idna/"))
+        .and(path("/simple/idna/"))
         .respond_with(ResponseTemplate::new(403))
-        .mount(&server)
+        .mount(server.mock_server())
         .await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -13706,7 +13695,7 @@ async fn lock_forbidden_index_with_available_package() -> Result<()> {
         ignore-error-codes = []
         default = true
         "#,
-        server_url = server.uri(),
+        server_url = server.index_url(),
     })?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
@@ -13716,7 +13705,7 @@ async fn lock_forbidden_index_with_available_package() -> Result<()> {
       cause: Because idna was not found in the package registry and all versions of anyio depend on idna>=2.8, we can conclude that all versions of anyio cannot be used.
              And because your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
-    hint: An index (http://[LOCALHOST]/) returned a 403 Forbidden error, but uv received a successful response from another request to the index. If the failing package is not present on this index, consider adding `ignore-error-codes = [403]` to the index's `[[tool.uv.index]]` entry to continue searching across indexes.
+    hint: An index (http://[LOCALHOST]/simple) returned a 403 Forbidden error, but uv received a successful response from another request to the index. If the failing package is not present on this index, consider adding `ignore-error-codes = [403]` to the index's `[[tool.uv.index]]` entry to continue searching across indexes.
     ");
     Ok(())
 }

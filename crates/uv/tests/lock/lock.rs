@@ -12409,39 +12409,31 @@ async fn lock_index_hash_algorithm() -> Result<()> {
 #[tokio::test]
 async fn lock_index_hash_algorithm_missing() -> Result<()> {
     let context = uv_test::test_context!("3.13");
-    let server = MockServer::start().await;
+    let server = PackageServer::new(&"basic-package".parse()?).await;
+    let wheel_filename = "basic_package-0.1.0-py3-none-any.whl";
 
-    let simple_index = json!({
-        "meta": {
-            "api-version": "1.1"
-        },
-        "name": "basic-package",
-        "files": [{
-            "filename": "basic_package-0.1.0-py3-none-any.whl",
-            "url": format!("{}/files/basic_package-0.1.0-py3-none-any.whl", server.uri()),
-            "hashes": {
-                "sha512": "765bde25938af485e492e25ee0e8cde262462565122c1301213a69bf9ceb2008e3997b652a604092a238c4b1a6a334e697ff3cee3c22f9a617cb14f34e26ef17"
-            },
-            "core-metadata": true
-        }]
-    });
-
-    Mock::given(method("GET"))
-        .and(path("/simple/basic-package/"))
-        .respond_with(ResponseTemplate::new(200).set_body_raw(
-            simple_index.to_string(),
-            "application/vnd.pypi.simple.v1+json",
-        ))
-        .mount(&server)
+    // Resolution uses the separate metadata without downloading the wheel.
+    server
+        .serve_with(
+            wheel_filename,
+            b"",
+            None,
+            json!({
+                "hashes": {
+                    "sha512": "765bde25938af485e492e25ee0e8cde262462565122c1301213a69bf9ceb2008e3997b652a604092a238c4b1a6a334e697ff3cee3c22f9a617cb14f34e26ef17"
+                },
+                "core-metadata": true,
+            }),
+        )
         .await;
     Mock::given(method("GET"))
-        .and(path("/files/basic_package-0.1.0-py3-none-any.whl.metadata"))
+        .and(path(format!("/{wheel_filename}.metadata")))
         .respond_with(ResponseTemplate::new(200).set_body_string(indoc! {"
             Metadata-Version: 2.1
             Name: basic-package
             Version: 0.1.0
         "}))
-        .mount(&server)
+        .mount(server.mock_server())
         .await;
 
     context
@@ -12459,11 +12451,11 @@ async fn lock_index_hash_algorithm_missing() -> Result<()> {
 
         [[tool.uv.index]]
         name = "test-registry"
-        url = "{}/simple"
+        url = "{}"
         explicit = true
         hash-algorithm = "sha256"
         "#,
-            server.uri()
+            server.index_url()
         })?;
 
     uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
