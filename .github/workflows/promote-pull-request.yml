@@ -748,7 +748,7 @@ jobs:
           REJECTION_REASON: ${{ needs.prepare.outputs.rejection_reason || needs.promote.outputs.rejection_reason || needs.update-pull-request-parent.outputs.rejection_reason || (needs.update-pull-request-parent.outputs.outcome == 'conflicts' && 'Updating the merged parent requires conflict resolution.') || (needs.update-pull-request-parent.outputs.outcome == 'empty' && 'No child commits remain after updating the merged parent.') || '' }}
           UPSTREAM_NUMBER: ${{ needs.promote.outputs.number }}
         run: |
-          current_approval=$(
+          get_current_approval() {
             gh api --method GET "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/events" --paginate --slurp |
               jq --raw-output --arg repository "$GITHUB_REPOSITORY" --arg label "$PROMOTION_LABEL" '
                 [.[][]] as $events |
@@ -756,7 +756,8 @@ jobs:
                 [$events[] | select(.actor.type == "User" and
                   ((.event == "ready_for_review" and $repository == "astral-sh/uv-dev") or
                    (.event == "labeled" and .label.name == $label and .id == $label_id))) | .id] | last // empty'
-          )
+          }
+          current_approval=$(get_current_approval)
           pull_request=$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER")
           if [ -z "$APPROVAL_ID" ] || [ "$current_approval" != "$APPROVAL_ID" ] || ! jq --exit-status \
             --argjson repository_id "$GITHUB_REPOSITORY_ID" \
@@ -815,7 +816,7 @@ jobs:
             comment="$comment Please review the updated changes and mark it ready for review again."
           fi
           if [ "$GITHUB_REPOSITORY" = "astral-sh/uv-security" ]; then
-            comment+=" Review the changes; when ready, remove and re-add \`bot:promote\` to retry."
+            comment+=" Review the changes, then add \`bot:promote\` to retry."
           fi
           if [ -n "$UPSTREAM_NUMBER" ]; then
             comment="$comment An upstream pull request was already created at [#$UPSTREAM_NUMBER](https://github.com/astral-sh/uv/pull/$UPSTREAM_NUMBER)."
@@ -830,6 +831,29 @@ jobs:
               --raw-field body="$comment" --silent
           else
             gh pr comment "$PULL_REQUEST_NUMBER" --repo "$GITHUB_REPOSITORY" --body "$comment"
+          fi
+
+          # Removing `bot:promote` invalidates the approval, so finish recovery first.
+          current_approval=$(get_current_approval)
+          pull_request=$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER")
+          if [ "$current_approval" != "$APPROVAL_ID" ] || ! jq --exit-status \
+            --argjson repository_id "$GITHUB_REPOSITORY_ID" \
+            '.state == "open" and .base.repo.id == $repository_id and .head.repo.id == $repository_id' \
+            <<< "$pull_request" > /dev/null; then
+            echo "The rejected promotion was superseded during recovery; leaving its label unchanged."
+            exit 0
+          fi
+          if jq --exit-status --arg label "$PROMOTION_LABEL" \
+            '.labels | any(.name == $label)' <<< "$pull_request" > /dev/null; then
+            if ! gh api --method DELETE \
+              "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/labels/$PROMOTION_LABEL" --silent; then
+              pull_request=$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER")
+              if jq --exit-status --arg label "$PROMOTION_LABEL" \
+                '.labels | any(.name == $label)' <<< "$pull_request" > /dev/null; then
+                echo "Failed to remove the $PROMOTION_LABEL label." >&2
+                exit 1
+              fi
+            fi
           fi
 
           if [ "$GITHUB_REPOSITORY" = "astral-sh/uv-security" ]; then
