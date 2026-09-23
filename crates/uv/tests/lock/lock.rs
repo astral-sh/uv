@@ -10815,7 +10815,7 @@ fn lock_relative_inactive_dependency_metadata_paths() -> Result<()> {
          [[manifest.dependency-metadata]]
          name = "authored-parent"
          version = "0.1.0"
-        +requires-dist = ["active-child @ file://[TEMP_DIR]/active-child", "child @ file://[TEMP_DIR]/child ; python_full_version < '0'", "parent @ file://[TEMP_DIR]/parent", "relative-child @ file://[TEMP_DIR]/relative-child"]
+        +requires-dist = ["active-child @ file://[TEMP_DIR]/active-child", "child @ file://[TEMP_DIR]/child ; python_version < '0'", "parent @ file://[TEMP_DIR]/parent", "relative-child @ file://[TEMP_DIR]/relative-child"]
         +
         +[[package]]
         +name = "active-child"
@@ -10835,7 +10835,7 @@ fn lock_relative_inactive_dependency_metadata_paths() -> Result<()> {
         +[package.metadata]
         +requires-dist = [
         +    { name = "active-child", directory = "[TEMP_DIR]/active-child" },
-        +    { name = "child", marker = "python_full_version < '0'", directory = "[TEMP_DIR]/child" },
+        +    { name = "child", marker = "python_version < '0'", directory = "[TEMP_DIR]/child" },
         +    { name = "parent", directory = "[TEMP_DIR]/parent" },
         +    { name = "relative-child", directory = "relative-child" },
         +]
@@ -10846,7 +10846,7 @@ fn lock_relative_inactive_dependency_metadata_paths() -> Result<()> {
          source = { editable = "member" }
 
         +[package.metadata]
-        +requires-dist = [{ name = "child", marker = "python_full_version < '0'", directory = "[TEMP_DIR]/child" }]
+        +requires-dist = [{ name = "child", marker = "python_version < '0'", directory = "[TEMP_DIR]/child" }]
         +
         +[[package]]
         +name = "parent"
@@ -11007,7 +11007,7 @@ fn lock_ignored_dependency_metadata_paths() -> Result<()> {
         assert_snapshot!(paths, @r#"
         source = { directory = "active-child" }
             { name = "active-child", directory = "active-child" },
-            { name = "inactive-child", marker = "python_full_version < '0'", directory = "inactive-child" },
+            { name = "inactive-child", marker = "python_version < '0'", directory = "inactive-child" },
         "#);
     });
 
