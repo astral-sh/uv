@@ -203,6 +203,302 @@ fn tool_install() {
 }
 
 #[test]
+fn tool_install_duplicate_requirements() {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
+    let bin_dir = context.temp_dir.child("bin");
+    let links = context.workspace_root.join("test/links");
+
+    let mut command = context.tool_install();
+    command
+        .arg("simple-launcher")
+        .arg("--with")
+        .arg("ok<3")
+        .arg("--with")
+        .arg("ok>1")
+        .arg("--with")
+        .arg("ok<3")
+        .arg("--with")
+        .arg("ok<4")
+        .arg("--with")
+        .arg("ok")
+        .arg("--with")
+        .arg("ok==1; python_version < '3.12'")
+        .arg("--with")
+        .arg("ok>=2; python_version >= '3.12'")
+        .arg("--with")
+        .arg("simple-launcher")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links)
+        .env(EnvVars::PATH, bin_dir.as_os_str());
+
+    uv_snapshot!(context.filters(), &mut command, @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + ok==2.0.0
+     + simple-launcher==0.1.0
+    Installed 1 executable: simple_launcher
+    ");
+
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("tools/simple-launcher/uv-receipt.toml"), @r#"
+        [tool]
+        requirements = [
+            { name = "simple-launcher" },
+            { name = "ok", marker = "python_full_version < '3.12'", specifier = "==1,>1" },
+            { name = "ok", marker = "python_full_version >= '3.12'", specifier = ">=2,<3" },
+        ]
+        entrypoints = [
+            { name = "simple_launcher", install-path = "[TEMP_DIR]/bin/simple_launcher", from = "simple-launcher" },
+        ]
+
+        [tool.options]
+        no-index = true
+        find-links = ["file://[WORKSPACE]/test/links"]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "#);
+    });
+
+    uv_snapshot!(context.filters(), &mut command, @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    `simple-launcher` is already installed
+    ");
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("simple-launcher")
+        .arg("--with")
+        .arg("ok<4,>1,<3")
+        .arg("--with")
+        .arg("ok==1; python_version < '3.12'")
+        .arg("--with")
+        .arg("ok>=2; python_version >= '3.12'")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links)
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    `simple-launcher` is already installed
+    ");
+
+    uv_snapshot!(context.filters(), command.arg("--with").arg("ok<2"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: you require ok<2 and ok>=2, which are incompatible
+    ");
+}
+
+#[test]
+fn tool_install_duplicate_extras() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "tool-duplicate-extras"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.main-tool.versions."1.0.0"]
+        sdist = false
+        entry_points = ["main"]
+        extras = { a = ["dep-a"], b = ["dep-b"], c = ["dep-c"] }
+
+        [packages.dep-a.versions."1.0.0"]
+        sdist = false
+
+        [packages.dep-b.versions."1.0.0"]
+        sdist = false
+
+        [packages.dep-c.versions."1.0.0"]
+        sdist = false
+    "#})?;
+    let index = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
+    let bin_dir = context.temp_dir.child("bin");
+
+    let mut command = context.tool_install();
+    command
+        .arg("main-tool[b]<2")
+        .arg("--with")
+        .arg("main-tool[a,b]>=1")
+        .arg("--with")
+        .arg("main-tool[c]; python_version >= '3.13'")
+        .arg("--index-url")
+        .arg(index.index_url())
+        .env(EnvVars::PATH, bin_dir.as_os_str());
+
+    uv_snapshot!(context.filters(), &mut command, @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + dep-a==1.0.0
+     + dep-b==1.0.0
+     + main-tool==1.0.0
+    Installed 1 executable: main
+    ");
+
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("tools/main-tool/uv-receipt.toml"), @r#"
+        [tool]
+        requirements = [
+            { name = "main-tool", extras = ["a", "b"], marker = "python_full_version < '3.13'", specifier = ">=1,<2" },
+            { name = "main-tool", extras = ["a", "b", "c"], marker = "python_full_version >= '3.13'", specifier = ">=1,<2" },
+        ]
+        entrypoints = [
+            { name = "main", install-path = "[TEMP_DIR]/bin/main", from = "main-tool" },
+        ]
+
+        [tool.options]
+        index-url = "http://[LOCALHOST]/simple/"
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "#);
+    });
+
+    uv_snapshot!(context.filters(), &mut command, @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    `main-tool[b]<2` is already installed
+    ");
+
+    uv_snapshot!(context.filters(), context.tool_list()
+        .args(["--show-extras", "--show-version-specifiers"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    main-tool v1.0.0 [required: >=1, <2] [extras: a, b, c]
+    - main
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn tool_install_duplicate_prerelease_requirements() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "tool-duplicate-prereleases"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.main-tool.versions."1.0.0"]
+        sdist = false
+        entry_points = ["main"]
+
+        [packages.main-tool.versions."2.0.0rc1"]
+        sdist = false
+        entry_points = ["main"]
+    "#})?;
+    let index = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("main-tool>=1")
+        .args(["--with", "main-tool>=1rc1", "--with", "main-tool!=1"])
+        .args(["--prerelease", "explicit", "--index-url"])
+        .arg(index.index_url())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + main-tool==2.0.0rc1
+    Installed 1 executable: main
+    ");
+
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("tools/main-tool/uv-receipt.toml"), @r#"
+        [tool]
+        requirements = [{ name = "main-tool", specifier = ">=1rc1,!=1,>=1" }]
+        entrypoints = [
+            { name = "main", install-path = "[TEMP_DIR]/bin/main", from = "main-tool" },
+        ]
+
+        [tool.options]
+        index-url = "http://[LOCALHOST]/simple/"
+        prerelease = "explicit"
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "#);
+    });
+    Ok(())
+}
+
+#[test]
+fn tool_install_duplicate_sources() {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
+    let bin_dir = context.temp_dir.child("bin");
+    let links = context.workspace_root.join("test/links");
+    let first = format!(
+        "ok @ {} ; python_version < '3.12'",
+        links.join("ok-1.0.0-py3-none-any.whl").display()
+    );
+    let second = format!("ok @ {}", links.join("ok-2.0.0-py3-none-any.whl").display());
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("simple-launcher")
+        .arg("--with")
+        .arg(&first)
+        .arg("--with")
+        .arg(&second)
+        .arg("--with")
+        .arg("ok<3")
+        .arg("--with")
+        .arg("ok")
+        .arg("--with")
+        .arg(format!("ok @ {}", links.join(".").join("ok-2.0.0-py3-none-any.whl").display()))
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links)
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + ok==2.0.0 (from file://[WORKSPACE]/test/links/ok-2.0.0-py3-none-any.whl)
+     + simple-launcher==0.1.0
+    Installed 1 executable: simple_launcher
+    ");
+
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("tools/simple-launcher/uv-receipt.toml"), @r#"
+        [tool]
+        requirements = [
+            { name = "simple-launcher" },
+            { name = "ok", specifier = "<3" },
+            { name = "ok", path = "[WORKSPACE]/test/links/ok-2.0.0-py3-none-any.whl" },
+            { name = "ok", marker = "python_full_version < '3.12'", path = "[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl" },
+        ]
+        entrypoints = [
+            { name = "simple_launcher", install-path = "[TEMP_DIR]/bin/simple_launcher", from = "simple-launcher" },
+        ]
+
+        [tool.options]
+        no-index = true
+        find-links = ["file://[WORKSPACE]/test/links"]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "#);
+    });
+}
+
+#[test]
 fn tool_install_relative_exclude_newer_receipt_preserves_span() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_exe_suffix()
@@ -229,7 +525,7 @@ fn tool_install_relative_exclude_newer_receipt_preserves_span() {
     }, {
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
-        requirements = [{ name = "black", specifier = "==24.2.0" }]
+        requirements = [{ name = "black", specifier = "==24.2" }]
         entrypoints = [
             { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
@@ -1699,7 +1995,7 @@ fn tool_install_version() {
         // We should have a tool receipt
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
-        requirements = [{ name = "black", specifier = "==24.2.0" }]
+        requirements = [{ name = "black", specifier = "==24.2" }]
         entrypoints = [
             { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
@@ -1848,7 +2144,7 @@ fn tool_install_editable() {
         // We should have a tool receipt
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
-        requirements = [{ name = "black", specifier = "==24.2.0" }]
+        requirements = [{ name = "black", specifier = "==24.2" }]
         entrypoints = [
             { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
@@ -4775,7 +5071,7 @@ fn tool_install_at_version() {
     }, {
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
-        requirements = [{ name = "black", specifier = "==24.1.0" }]
+        requirements = [{ name = "black", specifier = "==24.1" }]
         entrypoints = [
             { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
             { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
@@ -4915,7 +5211,7 @@ fn tool_install_from_at_version() {
     }, {
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
-        requirements = [{ name = "executable-application", specifier = "==0.2.0" }]
+        requirements = [{ name = "executable-application", specifier = "==0.2" }]
         entrypoints = [
             { name = "app", install-path = "[TEMP_DIR]/bin/app", from = "executable-application" },
         ]
@@ -5504,7 +5800,7 @@ fn tool_install_with_executables_from() -> Result<()> {
         assert_snapshot!(receipt, @r#"
         [tool]
         requirements = [
-            { name = "main-tool", specifier = "==1.0.0" },
+            { name = "main-tool", specifier = "==1" },
             { name = "dependency-tool" },
             { name = "extra-tool" },
         ]

@@ -19,6 +19,99 @@ use uv_test::packse::{PackseServer, scenario::Scenario};
 use uv_test::{uv_snapshot, venv_bin_path};
 
 #[test]
+fn tool_upgrade_duplicate_requirements() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
+    let bin_dir = context.temp_dir.child("bin");
+    let links = context.workspace_root.join("test/links");
+    let mut install = context.tool_install();
+    install
+        .arg("simple-launcher")
+        .args(["--with", "ok<3", "--no-index", "--find-links"])
+        .arg(&links)
+        .env(EnvVars::PATH, bin_dir.as_os_str());
+
+    uv_snapshot!(context.filters(), &mut install, @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + ok==2.0.0
+     + simple-launcher==0.1.0
+    Installed 1 executable: simple_launcher
+    ");
+
+    let receipt = context
+        .temp_dir
+        .child("tools/simple-launcher/uv-receipt.toml");
+    let normalized = fs_err::read_to_string(&receipt)?;
+    let legacy = normalized.replace(
+        "{ name = \"ok\", specifier = \"<3\" },",
+        "{ name = \"ok\", specifier = \"<4\" },\n    { name = \"ok\", specifier = \"<3\" },\n    { name = \"ok\" },",
+    );
+    assert_ne!(legacy, normalized);
+    receipt.write_str(&legacy)?;
+
+    // A repeat install normalizes old receipts without reinstalling the packages.
+    uv_snapshot!(context.filters(), &mut install, @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    `simple-launcher` is already installed
+    ");
+    assert_eq!(fs_err::read_to_string(&receipt)?, normalized);
+
+    // Upgrades also rewrite the receipt when all installed versions are already current.
+    receipt.write_str(&legacy)?;
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("simple-launcher")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Nothing to upgrade
+    ");
+    assert_eq!(fs_err::read_to_string(&receipt)?, normalized);
+
+    // The same migration applies when only a dependency is upgraded.
+    uv_snapshot!(context.filters(), install.arg("--with").arg("ok==1"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - ok==2.0.0
+     + ok==1.0.0
+    Installed 1 executable: simple_launcher
+    ");
+    receipt.write_str(&legacy)?;
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("simple-launcher")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Modified simple-launcher environment
+     - ok==1.0.0
+     + ok==2.0.0
+    ");
+    assert_eq!(fs_err::read_to_string(&receipt)?, normalized);
+
+    receipt.write_str(&legacy)?;
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("simple-launcher")
+        .args(["--preview-features", "tool-install-locks"])
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Nothing to upgrade
+    ");
+    assert_eq!(fs_err::read_to_string(&receipt)?, normalized);
+
+    Ok(())
+}
+
+#[test]
 fn tool_upgrade_empty() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
@@ -701,7 +794,7 @@ fn tool_upgrade_pinned_hint() {
      - pytz==2018.5
      + pytz==2024.1
 
-    hint: `babel` is pinned to `2.6.0` (installed with an exact version pin); reinstall with `uv tool install babel@latest` to upgrade to a new version.
+    hint: `babel` is pinned to `2.6` (installed with an exact version pin); reinstall with `uv tool install babel@latest` to upgrade to a new version.
     ");
 }
 
@@ -745,7 +838,7 @@ fn tool_upgrade_pinned_hint_with_mixed_constraint() {
      - pytz==2018.5
      + pytz==2024.1
 
-    hint: `babel` is pinned to `2.6.0` (installed with an exact version pin); reinstall with `uv tool install babel@latest` to upgrade to a new version.
+    hint: `babel` is pinned to `2.6` (installed with an exact version pin); reinstall with `uv tool install babel@latest` to upgrade to a new version.
     ");
 }
 

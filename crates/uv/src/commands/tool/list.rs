@@ -202,6 +202,7 @@ pub(crate) async fn list(
                     .filter(|req| req.name == name)
                     .map(|req| req.source.to_string())
                     .filter(|s| !s.is_empty())
+                    .unique()
                     .peekable()
             })
             .take_if(|specifiers| specifiers.peek().is_some())
@@ -217,6 +218,8 @@ pub(crate) async fn list(
                     .iter()
                     .filter(|req| req.name == name)
                     .flat_map(|req| req.extras.iter()) // Flatten the extras from all matching requirements
+                    .sorted()
+                    .dedup()
                     .peekable()
             })
             .take_if(|extras| extras.peek().is_some())
@@ -249,6 +252,7 @@ pub(crate) async fn list(
             .map(|requirements| {
                 let requirements = requirements
                     .map(|req| format!("{}{}", req.name, req.source))
+                    .unique()
                     .join(", ");
                 format!(" [with: {requirements}]")
             })

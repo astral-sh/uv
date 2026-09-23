@@ -195,6 +195,15 @@ impl Tool {
         }
     }
 
+    /// Replace the requirements recorded in the receipt.
+    #[must_use]
+    pub fn with_requirements(self, requirements: Vec<Requirement>) -> Self {
+        Self {
+            requirements,
+            ..self
+        }
+    }
+
     /// Create a new [`Tool`] with the given [`ToolOptions`].
     #[must_use]
     pub fn with_options(self, options: ToolOptions) -> Self {
