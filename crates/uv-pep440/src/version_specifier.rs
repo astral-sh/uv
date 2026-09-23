@@ -672,7 +672,9 @@ impl VersionSpecifier {
                 {
                     warn!("Using arbitrary equality (`===`) is discouraged");
                 }
-                // Compare full versions, including local labels, as in the resolver's singleton range.
+                // We compare the full version. This isn't standards-compliant (see:
+                // https://peps.python.org/pep-0440/#arbitrary-equality), but it's consistent with the
+                // resolver, which (until the resolver is also standards-compliant) is more important.
                 this == version
             }
             Operator::NotEqual => this != other.as_ref(),
