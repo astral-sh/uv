@@ -1077,8 +1077,8 @@ async fn get_or_create_environment(
     .await?;
     let mut modifiers = spec.modifiers.clone();
     modifiers
-        .extend_overrides(overrides.iter().cloned().map(Override::requirement))
-        .map_err(|error| ProjectError::Operation(error.into()))?;
+        .overrides
+        .extend(overrides.iter().cloned().map(Override::requirement));
 
     // Check if the tool is already installed in a compatible environment.
     if !isolated && !request.is_latest() {

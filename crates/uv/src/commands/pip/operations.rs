@@ -324,8 +324,8 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             .chain(upgrade.constraints().cloned()),
     );
     modifiers
-        .extend_overrides(overrides.into_iter().map(Override::requirement))
-        .map_err(anyhow::Error::from)?;
+        .overrides
+        .extend(overrides.into_iter().map(Override::requirement));
     let preferences = Preferences::from_iter(preferences, &resolver_env);
 
     // Determine any lookahead requirements.

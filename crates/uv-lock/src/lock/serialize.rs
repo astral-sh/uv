@@ -239,12 +239,12 @@ fn write_manifest(writer: &mut LockWriter, manifest: &ResolverManifest) -> Resul
     write_serialized_non_empty_array(
         writer,
         "overrides",
-        manifest.modifiers.overrides.iter().collect::<BTreeSet<_>>(),
+        &manifest.modifiers.overrides.iter().collect::<BTreeSet<_>>(),
     )?;
     write_serialized_non_empty_array(
         writer,
         "excludes",
-        manifest.modifiers.excludes.iter().collect::<BTreeSet<_>>(),
+        &manifest.modifiers.excludes.iter().collect::<BTreeSet<_>>(),
     )?;
     write_serialized_non_empty_array(writer, "build-constraints", &manifest.build_constraints)?;
 
@@ -606,13 +606,12 @@ fn write_dependency_inline(
 }
 
 /// Writes a Serde-backed array, omitting the key when the array is empty.
-fn write_serialized_non_empty_array<'a, T: Serialize + 'a>(
+fn write_serialized_non_empty_array<T: Serialize>(
     writer: &mut LockWriter,
     key: &str,
-    values: impl IntoIterator<Item = &'a T, IntoIter: ExactSizeIterator>,
+    values: &BTreeSet<T>,
 ) -> Result<(), WriteError> {
-    let values = values.into_iter();
-    if values.len() == 0 {
+    if values.is_empty() {
         return Ok(());
     }
     write_serialized_array(writer, key, values)
@@ -622,12 +621,11 @@ fn write_serialized_non_empty_array<'a, T: Serialize + 'a>(
 ///
 /// Empty and single-element arrays stay on one line, while larger arrays place each element on
 /// its own line. Unlike [`write_serialized_non_empty_array`], this retains empty dependency groups.
-fn write_serialized_array<'a, T: Serialize + 'a>(
+fn write_serialized_array<T: Serialize>(
     writer: &mut LockWriter,
     key: &str,
-    values: impl IntoIterator<Item = &'a T, IntoIter: ExactSizeIterator>,
+    values: &BTreeSet<T>,
 ) -> Result<(), WriteError> {
-    let values = values.into_iter();
     writer.key_start(key)?;
     let write_value = |writer: &mut LockWriter, value: &T| {
         let value = serialize_value(value)?;
