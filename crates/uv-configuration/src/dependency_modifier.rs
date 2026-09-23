@@ -70,22 +70,6 @@ impl DependencyModifiers {
         self.excludes.extend(modifiers.excludes);
     }
 
-    /// Add override entries to this collection.
-    pub fn extend_overrides(
-        &mut self,
-        overrides: impl IntoIterator<Item = Override>,
-    ) -> Result<(), ScopedOverrideSourceError> {
-        let overrides = overrides.into_iter().collect::<Vec<_>>();
-        validate_overrides(&overrides)?;
-        self.overrides.extend(overrides);
-        Ok(())
-    }
-
-    /// Add exclusion entries to this collection.
-    pub fn extend_exclusions(&mut self, exclusions: impl IntoIterator<Item = ExcludeDependency>) {
-        self.excludes.extend(exclusions);
-    }
-
     /// Return whether the collection is empty.
     pub fn is_empty(&self) -> bool {
         self.overrides.is_empty() && self.excludes.is_empty()

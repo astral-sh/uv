@@ -714,7 +714,8 @@ impl RequirementsSpecification {
                 match req_spec.requirement {
                     UnresolvedRequirement::Named(requirement) => {
                         spec.modifiers
-                            .extend_exclusions([ExcludeDependency::Dependency(requirement.name)]);
+                            .excludes
+                            .push(ExcludeDependency::Dependency(requirement.name));
                     }
                     UnresolvedRequirement::Unnamed(requirement) => {
                         return Err(anyhow::anyhow!(

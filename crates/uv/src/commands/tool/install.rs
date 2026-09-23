@@ -457,7 +457,8 @@ pub(crate) async fn install(
 
     let mut receipt_modifiers = spec.modifiers.clone();
     receipt_modifiers
-        .extend_overrides(receipt_overrides.iter().cloned().map(Override::requirement))?;
+        .overrides
+        .extend(receipt_overrides.iter().cloned().map(Override::requirement));
 
     // Convert to tool options.
     let options = ToolOptions::from(options);

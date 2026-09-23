@@ -423,13 +423,13 @@ impl SitePackages {
         };
 
         let mut modifiers = modifiers.clone();
-        modifiers.extend_overrides(
+        modifiers.overrides.extend(
             overrides
                 .iter()
                 .map(Cow::as_ref)
                 .cloned()
                 .map(Override::requirement),
-        )?;
+        );
 
         match self.satisfies_requirements(
             requirements.iter().map(Cow::as_ref),
