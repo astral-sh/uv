@@ -593,6 +593,14 @@ async fn upgrade_tool(
         (environment, outcome, None)
     };
 
+    let constraint = match &outcome {
+        UpgradeOutcome::UpgradeDependencies | UpgradeOutcome::NoOp => {
+            pinned_requirement_version(&existing_tool_receipt, name)
+                .map(|version| UpgradeConstraint::PinnedVersion { version })
+        }
+        UpgradeOutcome::UpgradeTool | UpgradeOutcome::UpgradeEnvironment => None,
+    };
+
     if matches!(
         outcome,
         UpgradeOutcome::UpgradeEnvironment | UpgradeOutcome::UpgradeTool
@@ -628,21 +636,11 @@ async fn upgrade_tool(
         ToolLock::write(&tool_dir, tool_lock.as_ref())?;
         installed_tools.add_tool_receipt(
             name,
-            existing_tool_receipt
-                .clone()
-                .with_options(ToolOptions::from(options)),
+            existing_tool_receipt.with_options(ToolOptions::from(options)),
         )?;
     } else if normalized_receipt {
-        installed_tools.add_tool_receipt(name, existing_tool_receipt.clone())?;
+        installed_tools.add_tool_receipt(name, existing_tool_receipt)?;
     }
-
-    let constraint = match &outcome {
-        UpgradeOutcome::UpgradeDependencies | UpgradeOutcome::NoOp => {
-            pinned_requirement_version(&existing_tool_receipt, name)
-                .map(|version| UpgradeConstraint::PinnedVersion { version })
-        }
-        UpgradeOutcome::UpgradeTool | UpgradeOutcome::UpgradeEnvironment => None,
-    };
 
     Ok(UpgradeReport {
         outcome,

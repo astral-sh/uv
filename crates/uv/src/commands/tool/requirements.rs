@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::mem;
+use std::{iter, mem};
 
 use indexmap::IndexMap;
 use uv_distribution_types::{Requirement, RequirementSource};
@@ -24,35 +24,40 @@ pub(super) fn normalize_receipt(receipt: Tool) -> (Tool, bool) {
 /// Compare normalized requirements, including precision-sensitive version clauses.
 pub(super) fn requirements_equal(left: &[Requirement], right: &[Requirement]) -> bool {
     left.len() == right.len()
-        && left
-            .iter()
-            .zip(right)
-            .all(|(left, right)| requirement_key(left.clone()) == requirement_key(right.clone()))
+        && left.iter().zip(right).all(|(left, right)| {
+            RequirementsKey::new(left.clone()) == RequirementsKey::new(right.clone())
+        })
 }
 
-/// Compare registry constraints by their accepted versions and prerelease policy.
-fn requirement_key(mut requirement: Requirement) -> (Requirement, Ranges<Version>, bool) {
-    let mut range = Ranges::full();
-    let mut prerelease = false;
-    if let RequirementSource::Registry { specifier, .. } = &mut requirement.source {
-        for specifier in mem::take(specifier) {
-            prerelease |= allows_prereleases(&specifier);
-            range = range.intersection(&Ranges::from(specifier));
+/// A requirement with registry constraints compared by accepted versions and prerelease policy.
+#[derive(Eq, Hash, PartialEq)]
+struct RequirementsKey {
+    requirement: Requirement,
+    range: Ranges<Version>,
+    prerelease: bool,
+}
+
+impl RequirementsKey {
+    fn new(mut requirement: Requirement) -> Self {
+        let mut range = Ranges::full();
+        let mut prerelease = false;
+        if let RequirementSource::Registry { specifier, .. } = &mut requirement.source {
+            for specifier in mem::take(specifier) {
+                prerelease |= allows_prereleases(&specifier);
+                range = range.intersection(&Ranges::from(specifier));
+            }
+        }
+        Self {
+            requirement,
+            range: canonicalize_version_ranges(&range).unwrap_or(range),
+            prerelease,
         }
     }
-    let range = canonicalize_version_ranges(&range).unwrap_or(range);
-    (requirement, range, prerelease)
 }
 
-/// Normalize the conjunction of requirements in a tool receipt.
-///
-/// Requirements with the same source and scope are partitioned into disjoint marker regions.
-/// Within each region, extras are unioned and version constraints are intersected. Regions with
-/// identical requirements are then combined. The target package remains first; the rest are sorted
-/// so that changing the order of `--with` arguments does not trigger a reinstall.
-///
-/// Source equality includes hashes, index metadata, Git references, and editability. In particular,
-/// a registry constraint cannot replace a direct source, even when it accepts that source's version.
+/// Merge requirements with the same source and scope across disjoint marker regions.
+/// Extras are unioned and version constraints intersected wherever markers overlap.
+/// Sort the result with the tool target first.
 pub(super) fn normalize_requirements(requirements: Vec<Requirement>) -> Vec<Requirement> {
     let target = requirements.first().cloned();
     let mut sources = BTreeMap::<Requirement, Vec<Requirement>>::new();
@@ -72,13 +77,15 @@ pub(super) fn normalize_requirements(requirements: Vec<Requirement>) -> Vec<Requ
     }
 
     let mut normalized = Vec::new();
-    for requirements in sources.values_mut() {
+    for mut requirements in sources.into_values() {
         // Include specifier precision: `==1.*` and `==1.0.*` accept different versions,
         // even though `1` and `1.0` compare equal as PEP 440 versions.
-        requirements
-            .sort_by_cached_key(|requirement| (requirement.clone(), requirement.to_string()));
+        requirements.sort_by(|left, right| {
+            left.cmp(right)
+                .then_with(|| left.to_string().cmp(&right.to_string()))
+        });
         let mut regions: Vec<Requirement> = Vec::new();
-        for requirement in requirements.drain(..) {
+        for requirement in requirements {
             let mut remaining = requirement.marker;
             let mut next = Vec::new();
             for region in regions {
@@ -109,7 +116,10 @@ pub(super) fn normalize_requirements(requirements: Vec<Requirement>) -> Vec<Requ
                     },
                 ) = (&mut combined.source, &requirement.source)
                 {
-                    *specifier = specifier.iter().chain(other.iter()).cloned().collect();
+                    *specifier = mem::take(specifier)
+                        .into_iter()
+                        .chain(other.iter().cloned())
+                        .collect();
                 }
                 next.push(combined);
             }
@@ -125,28 +135,25 @@ pub(super) fn normalize_requirements(requirements: Vec<Requirement>) -> Vec<Requ
     }
 
     // A false target marker should still identify the tool in its receipt.
-    if let Some(target) = &target
+    let target_name = target.as_ref().map(|target| target.name.clone());
+    if let Some(target) = target
         && !normalized
             .iter()
             .any(|requirement| requirement.name == target.name)
     {
-        normalized.push(target.clone());
+        normalized.push(target);
     }
-    normalized.sort_by_cached_key(|requirement| {
-        (
-            target
-                .as_ref()
-                .is_some_and(|target| requirement.name != target.name),
-            requirement.clone(),
-            requirement.to_string(),
-        )
+    normalized.sort_by(|left, right| {
+        (Some(&left.name) != target_name.as_ref(), left)
+            .cmp(&(Some(&right.name) != target_name.as_ref(), right))
+            .then_with(|| left.to_string().cmp(&right.to_string()))
     });
     normalized
 }
 
 /// Combine disjoint regions with identical extras and constraints.
 fn coalesce(requirements: Vec<Requirement>) -> Vec<Requirement> {
-    let mut combined = IndexMap::<_, Requirement>::new();
+    let mut combined = IndexMap::<RequirementsKey, Requirement>::new();
     for mut requirement in requirements {
         if let RequirementSource::Registry { specifier, .. } = &mut requirement.source {
             *specifier = simplify_specifiers(mem::take(specifier));
@@ -154,7 +161,7 @@ fn coalesce(requirements: Vec<Requirement>) -> Vec<Requirement> {
         let mut key = requirement.clone();
         key.marker = MarkerTree::TRUE;
         combined
-            .entry(requirement_key(key))
+            .entry(RequirementsKey::new(key))
             .and_modify(|existing| existing.marker = existing.marker.or(requirement.marker))
             .or_insert(requirement);
     }
@@ -172,7 +179,9 @@ fn simplify_specifiers(specifiers: VersionSpecifiers) -> VersionSpecifiers {
 
     // A pair of inclusive bounds can be an exact pin. Use PEP 440 ranges for this comparison,
     // including local versions; an ordinary numeric interval does not model `==` correctly.
-    let range = Ranges::<Version>::from(specifiers.iter().cloned().collect::<VersionSpecifiers>());
+    let range = specifiers.iter().fold(Ranges::full(), |range, specifier| {
+        range.intersection(&Ranges::from(specifier.clone()))
+    });
     let range = canonicalize_version_ranges(&range).unwrap_or(range);
     for specifier in &specifiers {
         let equal = normalize_specifier(VersionSpecifier::equals_version(
@@ -180,15 +189,12 @@ fn simplify_specifiers(specifiers: VersionSpecifiers) -> VersionSpecifiers {
         ));
         let equal_range = Ranges::<Version>::from(equal.clone());
         if range == canonicalize_version_ranges(&equal_range).unwrap_or(equal_range) {
-            let mut pinned = vec![equal];
-            if !pinned.iter().any(allows_prereleases)
-                && let Some(prerelease) = specifiers
-                    .iter()
-                    .find(|specifier| allows_prereleases(specifier))
-            {
-                pinned.push(prerelease.clone());
-            }
-            return pinned.into_iter().collect();
+            let prerelease = if allows_prereleases(&equal) {
+                None
+            } else {
+                specifiers.into_iter().find(allows_prereleases)
+            };
+            return iter::once(equal).chain(prerelease).collect();
         }
     }
     let mut index = 0;
@@ -233,7 +239,11 @@ fn normalize_specifier(specifier: VersionSpecifier) -> VersionSpecifier {
         | Operator::LessThanEqual
         | Operator::GreaterThan
         | Operator::GreaterThanEqual => {
-            let mut release = specifier.version().release().to_vec();
+            let release = specifier.version().release();
+            if release.len() <= 1 || release.last() != Some(&0) {
+                return specifier;
+            }
+            let mut release = release.to_vec();
             while release.len() > 1 && release.last() == Some(&0) {
                 release.pop();
             }
