@@ -3,7 +3,7 @@ use std::process::Command;
 use anyhow::{Result, bail};
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
 use serde_json::json;
@@ -67,25 +67,39 @@ fn tool_upgrade_duplicate_inputs() -> Result<()> {
         .temp_dir
         .child("tools/simple-launcher/uv-receipt.toml");
     let normalized = fs_err::read_to_string(&receipt)?;
-    let legacy = normalized.replace(
-        "{ name = \"ok\", specifier = \"<3\" },",
-        "{ name = \"ok\", specifier = \"<4\" },\n    { name = \"ok\", specifier = \"<3\" },\n    { name = \"ok\" },",
-    );
-    let legacy = legacy
-        .replace(
-            "constraints = [{ name = \"ok\", specifier = \"<4\" }]",
-            "constraints = [{ name = \"ok\", specifier = \"<5\" }, { name = \"ok\", specifier = \"<4.0\" }]",
-        )
-        .replace(
-            "overrides = [{ name = \"unused\", specifier = \">=1\" }]",
-            "overrides = [{ name = \"unused\", specifier = \">=0\" }, { name = \"unused\", specifier = \">=1.0\" }]",
-        )
-        .replace("excludes = [\"excluded\"]", "excludes = [\"excluded\", \"excluded\"]")
-        .replace(
-            "build-constraint-dependencies = [{ name = \"setuptools\", specifier = \"<80\" }]",
-            "build-constraint-dependencies = [{ name = \"setuptools\", specifier = \"<81\" }, { name = \"setuptools\", specifier = \"<80.0\" }]",
-        );
-    assert_ne!(legacy, normalized);
+    let legacy = formatdoc! {r#"
+        [tool]
+        requirements = [
+            {{ name = "simple-launcher" }},
+            {{ name = "ok", specifier = "<4" }},
+            {{ name = "ok", specifier = "<3" }},
+            {{ name = "ok" }},
+        ]
+        constraints = [
+            {{ name = "ok", specifier = "<5" }},
+            {{ name = "ok", specifier = "<4.0" }},
+        ]
+        overrides = [
+            {{ name = "unused", specifier = ">=0" }},
+            {{ name = "unused", specifier = ">=1.0" }},
+        ]
+        excludes = ["excluded", "excluded"]
+        build-constraint-dependencies = [
+            {{ name = "setuptools", specifier = "<81" }},
+            {{ name = "setuptools", specifier = "<80.0" }},
+        ]
+        entrypoints = [
+            {{ name = "simple_launcher", install-path = {entrypoint}, from = "simple-launcher" }},
+        ]
+
+        [tool.options]
+        no-index = true
+        find-links = [{links}]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "#,
+        entrypoint = json!(bin_dir.join(format!("simple_launcher{}", std::env::consts::EXE_SUFFIX))),
+        links = json!(links),
+    };
     receipt.write_str(&legacy)?;
 
     // A repeat install normalizes old receipts without reinstalling the packages.

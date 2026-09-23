@@ -13,9 +13,10 @@ use assert_fs::{
     assert::PathAssert,
     fixture::{FileTouch, FileWriteBin, FileWriteStr, PathChild, PathCreateDir},
 };
-use indoc::indoc;
-use insta::{allow_duplicates, assert_snapshot};
+use indoc::{formatdoc, indoc};
+use insta::assert_snapshot;
 use predicates::prelude::predicate;
+use serde_json::json;
 use sha2::{Digest, Sha256};
 #[cfg(windows)]
 use uv_fs::Simplified;
@@ -492,26 +493,41 @@ fn tool_install_duplicate_yanked_requirements() -> Result<()> {
         "#);
     });
 
-    for requirement in [
-        "main-tool>=1,<=1",
-        "main-tool==1,>=0",
-        "main-tool===1,===1.0",
-    ] {
-        let context = uv_test::test_context!("3.12").with_tool_dirs();
-        let bin_dir = context.temp_dir.child("bin");
-        allow_duplicates! {
-            uv_snapshot!(context.filters(), context.tool_install()
-                .arg(requirement)
-                .arg("--index-url")
-                .arg(index.index_url())
-                .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-            exit_code: 1 (failure)
-            ----- stderr -----
-            error: No solution found when resolving dependencies
-              cause: Because main-tool==1.0.0 was yanked and you require main-tool==1.0.0, we can conclude that your requirements are unsatisfiable.
-            ");
-        }
-    }
+    let context = uv_test::test_context!("3.12").with_tool_dirs();
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("main-tool>=1,<=1")
+        .arg("--index-url")
+        .arg(index.index_url())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because main-tool==1.0.0 was yanked and you require main-tool==1.0.0, we can conclude that your requirements are unsatisfiable.
+    ");
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("main-tool==1,>=0")
+        .arg("--index-url")
+        .arg(index.index_url())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because main-tool==1.0.0 was yanked and you require main-tool==1.0.0, we can conclude that your requirements are unsatisfiable.
+    ");
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("main-tool===1,===1.0")
+        .arg("--index-url")
+        .arg(index.index_url())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because main-tool==1.0.0 was yanked and you require main-tool==1.0.0, we can conclude that your requirements are unsatisfiable.
+    ");
     Ok(())
 }
 
@@ -6348,11 +6364,27 @@ fn tool_install_lock_verifies_hashes() -> Result<()> {
         .success();
 
     let lock_path = tool_dir.child("simple-launcher").child("uv.lock");
-    let lock = fs_err::read_to_string(&lock_path)?;
-    lock_path.write_str(&lock.replace(
-        "sha256:5327e0bb67cdb46800999de6dcf034bf0a5335702883494af0d8b7f6ca48cee4",
-        "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-    ))?;
+    lock_path.write_str(&formatdoc! {r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        requirements = [{{ name = "simple-launcher", path = {wheel} }}]
+
+        [[package]]
+        name = "simple-launcher"
+        version = "0.1.0"
+        source = {{ path = {wheel} }}
+        wheels = [
+            {{ filename = "simple_launcher-0.1.0-py3-none-any.whl", hash = "sha256:0000000000000000000000000000000000000000000000000000000000000000" }},
+        ]
+        "#,
+        wheel = json!(wheel),
+    })?;
 
     uv_snapshot!(context.filters(), context.tool_install()
         .arg(&wheel)
@@ -6535,253 +6567,464 @@ fn tool_install_lock_revalidates_changed_constraints() -> Result<()> {
 
 #[test]
 fn tool_install_with_build_hashes() -> Result<()> {
-    for preview in ["--no-preview", "--preview-features=tool-install-locks"] {
-        let context = uv_test::test_context!("3.12")
-            .with_filtered_exe_suffix()
-            .with_tool_dirs();
-        let bin_dir = context.temp_dir.child("bin");
-        let (filename, wheel) = generate_wheel(
-            &"build-dependency".parse()?,
-            &"1.0.0".parse()?,
-            &[],
-            &BTreeMap::new(),
-            None,
-            "py3-none-any",
-            &[],
-        );
-        let hash = hex::encode(Sha256::digest(&wheel));
-        context
-            .temp_dir
-            .child("wheels")
-            .child(filename)
-            .write_binary(&wheel)?;
-        let (filename, wheel) = generate_wheel_with_files(
-            &"hash-tool".parse()?,
-            &"1.0.0".parse()?,
-            &[],
-            &BTreeMap::new(),
-            None,
-            "py3-none-any",
-            &[
-                ("hash_tool/cli.py", "def main():\n    print('tool-ok')\n"),
-                (
-                    "hash_tool-1.0.0.dist-info/entry_points.txt",
-                    "[console_scripts]\nhash-tool = hash_tool.cli:main\n",
-                ),
-            ],
-        );
-        context
-            .temp_dir
-            .child("wheels")
-            .child(filename)
-            .write_binary(&wheel)?;
-        let context = context.with_filter((hash.clone(), "[BUILD_HASH]"));
-        let project = context.temp_dir.child("project");
-        project.child("pyproject.toml").write_str(indoc! {r#"
-            [build-system]
-            requires = ["build-dependency==1.0.0"]
-            build-backend = "backend"
-            backend-path = ["."]
-        "#})?;
-        project.child("backend.py").write_str(indoc! {r#"
-            import shutil
-            from pathlib import Path
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
+    let bin_dir = context.temp_dir.child("bin");
+    let (filename, wheel) = generate_wheel(
+        &"build-dependency".parse()?,
+        &"1.0.0".parse()?,
+        &[],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+        &[],
+    );
+    let hash = hex::encode(Sha256::digest(&wheel));
+    context
+        .temp_dir
+        .child("wheels")
+        .child(filename)
+        .write_binary(&wheel)?;
+    let (filename, wheel) = generate_wheel_with_files(
+        &"hash-tool".parse()?,
+        &"1.0.0".parse()?,
+        &[],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+        &[
+            ("hash_tool/cli.py", "def main():\n    print('tool-ok')\n"),
+            (
+                "hash_tool-1.0.0.dist-info/entry_points.txt",
+                "[console_scripts]\nhash-tool = hash_tool.cli:main\n",
+            ),
+        ],
+    );
+    context
+        .temp_dir
+        .child("wheels")
+        .child(filename)
+        .write_binary(&wheel)?;
+    let context = context.with_filter((hash.clone(), "[BUILD_HASH]"));
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [build-system]
+        requires = ["build-dependency==1.0.0"]
+        build-backend = "backend"
+        backend-path = ["."]
+    "#})?;
+    project.child("backend.py").write_str(indoc! {r#"
+        import shutil
+        from pathlib import Path
 
-            import build_dependency
+        import build_dependency
 
-            Path(__file__).with_name("backend-executed").touch()
+        Path(__file__).with_name("backend-executed").touch()
 
-            def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-                wheel = Path(__file__).parent.parent / "wheels" / "hash_tool-1.0.0-py3-none-any.whl"
-                shutil.copyfile(wheel, Path(wheel_directory) / wheel.name)
-                return wheel.name
-        "#})?;
-        let constraints = context.temp_dir.child("constraints.txt");
-        // The last nonempty hash declaration for a registry version takes precedence.
-        let incorrect_hash = "0".repeat(64);
-        constraints.write_str(&format!(
-            "build-dependency==1.0.0 --hash=sha256:{incorrect_hash}\nbuild-dependency==1 --hash=sha256:{hash}\n"
-        ))?;
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            wheel = Path(__file__).parent.parent / "wheels" / "hash_tool-1.0.0-py3-none-any.whl"
+            shutil.copyfile(wheel, Path(wheel_directory) / wheel.name)
+            return wheel.name
+    "#})?;
+    let constraints = context.temp_dir.child("constraints.txt");
+    // The last nonempty hash declaration for a registry version takes precedence.
+    let incorrect_hash = "0".repeat(64);
+    constraints.write_str(&format!(
+        "build-dependency==1.0.0 --hash=sha256:{incorrect_hash}\nbuild-dependency==1 --hash=sha256:{hash}\n"
+    ))?;
 
-        let install = || {
-            let mut command = context.tool_install();
-            command
-                .arg("hash-tool @ ./project")
-                .args(["--no-index", "--find-links", "wheels"])
-                .args(["--build-constraint", "constraints.txt", "--no-cache"])
-                .arg(preview)
-                .env(EnvVars::PATH, bin_dir.as_os_str());
-            command
-        };
-        allow_duplicates! {
-            uv_snapshot!(context.filters(), install(), @"
-            exit_code: 0 (success)
-            ----- stderr -----
-            Resolved 1 package in [TIME]
-            Prepared 1 package in [TIME]
-            Installed 1 package in [TIME]
-             + hash-tool==1.0.0 (from file://[TEMP_DIR]/project)
-            Installed 1 executable: hash-tool
-            ");
-        }
-        allow_duplicates! {
-            insta::with_settings!({ filters => context.filters() }, {
-                assert_snapshot!(context.read("tools/hash-tool/uv-receipt.toml"), @r#"
-                [tool]
-                requirements = [{ name = "hash-tool", directory = "[TEMP_DIR]/project" }]
-                build-constraint-dependencies = [
-                    { name = "build-dependency", specifier = "==1", hashes = ["sha256:0000000000000000000000000000000000000000000000000000000000000000"] },
-                    { name = "build-dependency", specifier = "==1", hashes = ["sha256:[BUILD_HASH]"] },
-                ]
-                entrypoints = [
-                    { name = "hash-tool", install-path = "[TEMP_DIR]/bin/hash-tool", from = "hash-tool" },
-                ]
-
-                [tool.options]
-                no-index = true
-                find-links = ["file://[TEMP_DIR]/wheels"]
-                exclude-newer = "2024-03-25T00:00:00Z"
-                "#);
-            });
-        }
-
-        // Reversing the declarations must change the hash that is checked.
-        fs_err::remove_file(project.child("backend-executed"))?;
-        constraints.write_str(&format!(
-            "build-dependency==1 --hash=sha256:{hash}\nbuild-dependency==1.0.0 --hash=sha256:{incorrect_hash}\n"
-        ))?;
-        allow_duplicates! {
-            uv_snapshot!(context.filters(), install().arg("--reinstall"), @"
-            exit_code: 1 (failure)
-            ----- stderr -----
-            error: Failed to build `hash-tool @ file://[TEMP_DIR]/project`
-              cause: Failed to install requirements from `build-system.requires`
-              cause: Failed to download `build-dependency==1.0.0`
-              cause: Hash mismatch for `build-dependency==1.0.0`
-
-                     Expected:
-                       sha256:0000000000000000000000000000000000000000000000000000000000000000
-
-                     Computed:
-                       sha256:[BUILD_HASH]
-            ");
-        }
-        project
-            .child("backend-executed")
-            .assert(predicate::path::missing());
-
-        // Name inference must check hashes before importing the build backend.
-        allow_duplicates! {
-            uv_snapshot!(context.filters(), context.tool_install()
-                .arg("./project")
-                .args(["--no-index", "--find-links", "wheels"])
-                .args(["--build-constraint", "constraints.txt", "--no-cache"])
-                .arg(preview)
-                .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-            exit_code: 2 (failure)
-            ----- stderr -----
-            error: Failed to install requirements from `build-system.requires`
-              cause: Failed to download `build-dependency==1.0.0`
-              cause: Hash mismatch for `build-dependency==1.0.0`
-
-                     Expected:
-                       sha256:0000000000000000000000000000000000000000000000000000000000000000
-
-                     Computed:
-                       sha256:[BUILD_HASH]
-            ");
-        }
-        project
-            .child("backend-executed")
-            .assert(predicate::path::missing());
-
-        allow_duplicates! {
-            uv_snapshot!(context.filters(), context.tool_run()
-                .args(["--from", "./project"])
-                .args(["--no-index", "--find-links", "wheels"])
-                .args(["--build-constraint", "constraints.txt", "--no-cache"])
-                .arg(preview)
-                .arg("hash-tool"), @"
-            exit_code: 1 (failure)
-            ----- stderr -----
-            error: Failed to resolve `--with` requirement
-              cause: Failed to install requirements from `build-system.requires`
-              cause: Failed to download `build-dependency==1.0.0`
-              cause: Hash mismatch for `build-dependency==1.0.0`
-
-                     Expected:
-                       sha256:0000000000000000000000000000000000000000000000000000000000000000
-
-                     Computed:
-                       sha256:[BUILD_HASH]
-            ");
-        }
-        project
-            .child("backend-executed")
-            .assert(predicate::path::missing());
-
-        // Upgrades must retain the original hashes without re-reading the constraints file.
-        fs_err::remove_file(&constraints)?;
-        let mut upgrade = context.tool_upgrade();
-        upgrade
-            .args(["hash-tool", "--reinstall", "--no-cache"])
-            .arg(preview)
+    let install = || {
+        let mut command = context.tool_install();
+        command
+            .arg("hash-tool @ ./project")
+            .args(["--no-index", "--find-links", "wheels"])
+            .args(["--build-constraint", "constraints.txt", "--no-cache"])
+            .arg("--no-preview")
             .env(EnvVars::PATH, bin_dir.as_os_str());
-        if preview == "--no-preview" {
-            uv_snapshot!(context.filters(), upgrade, @"
-            exit_code: 0 (success)
-            ----- stderr -----
-            Modified hash-tool environment
-             ~ hash-tool==1.0.0 (from file://[TEMP_DIR]/project)
-            Nothing to upgrade
-            ");
-        } else {
-            upgrade.assert().success();
-        }
-        project
-            .child("backend-executed")
-            .assert(predicate::path::exists());
+        command
+    };
+    uv_snapshot!(context.filters(), install(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + hash-tool==1.0.0 (from file://[TEMP_DIR]/project)
+    Installed 1 executable: hash-tool
+    ");
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("tools/hash-tool/uv-receipt.toml"), @r#"
+        [tool]
+        requirements = [{ name = "hash-tool", directory = "[TEMP_DIR]/project" }]
+        build-constraint-dependencies = [
+            { name = "build-dependency", specifier = "==1", hashes = ["sha256:0000000000000000000000000000000000000000000000000000000000000000"] },
+            { name = "build-dependency", specifier = "==1", hashes = ["sha256:[BUILD_HASH]"] },
+        ]
+        entrypoints = [
+            { name = "hash-tool", install-path = "[TEMP_DIR]/bin/hash-tool", from = "hash-tool" },
+        ]
 
-        // Unpinned hashes are ignored in verification mode, including when saved in a tool receipt.
-        fs_err::remove_file(project.child("backend-executed"))?;
-        constraints.write_str(&format!(
-            "build-dependency>=1.0.0 --hash=sha256:{}\n",
-            "0".repeat(64)
-        ))?;
-        install().arg("--reinstall").assert().success();
-        project
-            .child("backend-executed")
-            .assert(predicate::path::exists());
-        allow_duplicates! {
-            insta::with_settings!({ filters => context.filters() }, {
-                assert_snapshot!(context.read("tools/hash-tool/uv-receipt.toml"), @r#"
-                [tool]
-                requirements = [{ name = "hash-tool", directory = "[TEMP_DIR]/project" }]
-                build-constraint-dependencies = [{ name = "build-dependency", specifier = ">=1", hashes = ["sha256:0000000000000000000000000000000000000000000000000000000000000000"] }]
-                entrypoints = [
-                    { name = "hash-tool", install-path = "[TEMP_DIR]/bin/hash-tool", from = "hash-tool" },
-                ]
+        [tool.options]
+        no-index = true
+        find-links = ["file://[TEMP_DIR]/wheels"]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "#);
+    });
 
-                [tool.options]
-                no-index = true
-                find-links = ["file://[TEMP_DIR]/wheels"]
-                exclude-newer = "2024-03-25T00:00:00Z"
-                "#);
-            });
-        }
+    // Reversing the declarations must change the hash that is checked.
+    fs_err::remove_file(project.child("backend-executed"))?;
+    constraints.write_str(&format!(
+        "build-dependency==1 --hash=sha256:{hash}\nbuild-dependency==1.0.0 --hash=sha256:{incorrect_hash}\n"
+    ))?;
+    uv_snapshot!(context.filters(), install().arg("--reinstall"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to build `hash-tool @ file://[TEMP_DIR]/project`
+      cause: Failed to install requirements from `build-system.requires`
+      cause: Failed to download `build-dependency==1.0.0`
+      cause: Hash mismatch for `build-dependency==1.0.0`
 
-        fs_err::remove_file(project.child("backend-executed"))?;
-        fs_err::remove_file(constraints)?;
-        context
-            .tool_upgrade()
-            .args(["hash-tool", "--reinstall", "--no-cache"])
-            .arg(preview)
-            .env(EnvVars::PATH, bin_dir.as_os_str())
-            .assert()
-            .success();
-        project
-            .child("backend-executed")
-            .assert(predicate::path::exists());
-    }
+             Expected:
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+             Computed:
+               sha256:[BUILD_HASH]
+    ");
+    project
+        .child("backend-executed")
+        .assert(predicate::path::missing());
+
+    // Name inference must check hashes before importing the build backend.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("./project")
+        .args(["--no-index", "--find-links", "wheels"])
+        .args(["--build-constraint", "constraints.txt", "--no-cache"])
+        .arg("--no-preview")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to install requirements from `build-system.requires`
+      cause: Failed to download `build-dependency==1.0.0`
+      cause: Hash mismatch for `build-dependency==1.0.0`
+
+             Expected:
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+             Computed:
+               sha256:[BUILD_HASH]
+    ");
+    project
+        .child("backend-executed")
+        .assert(predicate::path::missing());
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .args(["--from", "./project"])
+        .args(["--no-index", "--find-links", "wheels"])
+        .args(["--build-constraint", "constraints.txt", "--no-cache"])
+        .arg("--no-preview")
+        .arg("hash-tool"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to resolve `--with` requirement
+      cause: Failed to install requirements from `build-system.requires`
+      cause: Failed to download `build-dependency==1.0.0`
+      cause: Hash mismatch for `build-dependency==1.0.0`
+
+             Expected:
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+             Computed:
+               sha256:[BUILD_HASH]
+    ");
+    project
+        .child("backend-executed")
+        .assert(predicate::path::missing());
+
+    // Upgrades must retain the original hashes without re-reading the constraints file.
+    fs_err::remove_file(&constraints)?;
+    let mut upgrade = context.tool_upgrade();
+    upgrade
+        .args(["hash-tool", "--reinstall", "--no-cache"])
+        .arg("--no-preview")
+        .env(EnvVars::PATH, bin_dir.as_os_str());
+    uv_snapshot!(context.filters(), upgrade, @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Modified hash-tool environment
+     ~ hash-tool==1.0.0 (from file://[TEMP_DIR]/project)
+    Nothing to upgrade
+    ");
+    project
+        .child("backend-executed")
+        .assert(predicate::path::exists());
+
+    // Unpinned hashes are ignored in verification mode, including when saved in a tool receipt.
+    fs_err::remove_file(project.child("backend-executed"))?;
+    constraints.write_str(&format!(
+        "build-dependency>=1.0.0 --hash=sha256:{}\n",
+        "0".repeat(64)
+    ))?;
+    install().arg("--reinstall").assert().success();
+    project
+        .child("backend-executed")
+        .assert(predicate::path::exists());
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("tools/hash-tool/uv-receipt.toml"), @r#"
+        [tool]
+        requirements = [{ name = "hash-tool", directory = "[TEMP_DIR]/project" }]
+        build-constraint-dependencies = [{ name = "build-dependency", specifier = ">=1", hashes = ["sha256:0000000000000000000000000000000000000000000000000000000000000000"] }]
+        entrypoints = [
+            { name = "hash-tool", install-path = "[TEMP_DIR]/bin/hash-tool", from = "hash-tool" },
+        ]
+
+        [tool.options]
+        no-index = true
+        find-links = ["file://[TEMP_DIR]/wheels"]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "#);
+    });
+
+    fs_err::remove_file(project.child("backend-executed"))?;
+    fs_err::remove_file(constraints)?;
+    context
+        .tool_upgrade()
+        .args(["hash-tool", "--reinstall", "--no-cache"])
+        .arg("--no-preview")
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+    project
+        .child("backend-executed")
+        .assert(predicate::path::exists());
+    Ok(())
+}
+
+#[test]
+fn tool_install_lock_with_build_hashes() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
+    let bin_dir = context.temp_dir.child("bin");
+    let (filename, wheel) = generate_wheel(
+        &"build-dependency".parse()?,
+        &"1.0.0".parse()?,
+        &[],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+        &[],
+    );
+    let hash = hex::encode(Sha256::digest(&wheel));
+    context
+        .temp_dir
+        .child("wheels")
+        .child(filename)
+        .write_binary(&wheel)?;
+    let (filename, wheel) = generate_wheel_with_files(
+        &"hash-tool".parse()?,
+        &"1.0.0".parse()?,
+        &[],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+        &[
+            ("hash_tool/cli.py", "def main():\n    print('tool-ok')\n"),
+            (
+                "hash_tool-1.0.0.dist-info/entry_points.txt",
+                "[console_scripts]\nhash-tool = hash_tool.cli:main\n",
+            ),
+        ],
+    );
+    context
+        .temp_dir
+        .child("wheels")
+        .child(filename)
+        .write_binary(&wheel)?;
+    let context = context.with_filter((hash.clone(), "[BUILD_HASH]"));
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [build-system]
+        requires = ["build-dependency==1.0.0"]
+        build-backend = "backend"
+        backend-path = ["."]
+    "#})?;
+    project.child("backend.py").write_str(indoc! {r#"
+        import shutil
+        from pathlib import Path
+
+        import build_dependency
+
+        Path(__file__).with_name("backend-executed").touch()
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            wheel = Path(__file__).parent.parent / "wheels" / "hash_tool-1.0.0-py3-none-any.whl"
+            shutil.copyfile(wheel, Path(wheel_directory) / wheel.name)
+            return wheel.name
+    "#})?;
+    let constraints = context.temp_dir.child("constraints.txt");
+    // The last nonempty hash declaration for a registry version takes precedence.
+    let incorrect_hash = "0".repeat(64);
+    constraints.write_str(&format!(
+        "build-dependency==1.0.0 --hash=sha256:{incorrect_hash}\nbuild-dependency==1 --hash=sha256:{hash}\n"
+    ))?;
+
+    let install = || {
+        let mut command = context.tool_install();
+        command
+            .arg("hash-tool @ ./project")
+            .args(["--no-index", "--find-links", "wheels"])
+            .args(["--build-constraint", "constraints.txt", "--no-cache"])
+            .arg("--preview-features=tool-install-locks")
+            .env(EnvVars::PATH, bin_dir.as_os_str());
+        command
+    };
+    uv_snapshot!(context.filters(), install(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + hash-tool==1.0.0 (from file://[TEMP_DIR]/project)
+    Installed 1 executable: hash-tool
+    ");
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("tools/hash-tool/uv-receipt.toml"), @r#"
+        [tool]
+        requirements = [{ name = "hash-tool", directory = "[TEMP_DIR]/project" }]
+        build-constraint-dependencies = [
+            { name = "build-dependency", specifier = "==1", hashes = ["sha256:0000000000000000000000000000000000000000000000000000000000000000"] },
+            { name = "build-dependency", specifier = "==1", hashes = ["sha256:[BUILD_HASH]"] },
+        ]
+        entrypoints = [
+            { name = "hash-tool", install-path = "[TEMP_DIR]/bin/hash-tool", from = "hash-tool" },
+        ]
+
+        [tool.options]
+        no-index = true
+        find-links = ["file://[TEMP_DIR]/wheels"]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "#);
+    });
+
+    // Reversing the declarations must change the hash that is checked.
+    fs_err::remove_file(project.child("backend-executed"))?;
+    constraints.write_str(&format!(
+        "build-dependency==1 --hash=sha256:{hash}\nbuild-dependency==1.0.0 --hash=sha256:{incorrect_hash}\n"
+    ))?;
+    uv_snapshot!(context.filters(), install().arg("--reinstall"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to build `hash-tool @ file://[TEMP_DIR]/project`
+      cause: Failed to install requirements from `build-system.requires`
+      cause: Failed to download `build-dependency==1.0.0`
+      cause: Hash mismatch for `build-dependency==1.0.0`
+
+             Expected:
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+             Computed:
+               sha256:[BUILD_HASH]
+    ");
+    project
+        .child("backend-executed")
+        .assert(predicate::path::missing());
+
+    // Name inference must check hashes before importing the build backend.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("./project")
+        .args(["--no-index", "--find-links", "wheels"])
+        .args(["--build-constraint", "constraints.txt", "--no-cache"])
+        .arg("--preview-features=tool-install-locks")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to install requirements from `build-system.requires`
+      cause: Failed to download `build-dependency==1.0.0`
+      cause: Hash mismatch for `build-dependency==1.0.0`
+
+             Expected:
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+             Computed:
+               sha256:[BUILD_HASH]
+    ");
+    project
+        .child("backend-executed")
+        .assert(predicate::path::missing());
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .args(["--from", "./project"])
+        .args(["--no-index", "--find-links", "wheels"])
+        .args(["--build-constraint", "constraints.txt", "--no-cache"])
+        .arg("--preview-features=tool-install-locks")
+        .arg("hash-tool"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to resolve `--with` requirement
+      cause: Failed to install requirements from `build-system.requires`
+      cause: Failed to download `build-dependency==1.0.0`
+      cause: Hash mismatch for `build-dependency==1.0.0`
+
+             Expected:
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+             Computed:
+               sha256:[BUILD_HASH]
+    ");
+    project
+        .child("backend-executed")
+        .assert(predicate::path::missing());
+
+    // Upgrades must retain the original hashes without re-reading the constraints file.
+    fs_err::remove_file(&constraints)?;
+    let mut upgrade = context.tool_upgrade();
+    upgrade
+        .args(["hash-tool", "--reinstall", "--no-cache"])
+        .arg("--preview-features=tool-install-locks")
+        .env(EnvVars::PATH, bin_dir.as_os_str());
+    upgrade.assert().success();
+    project
+        .child("backend-executed")
+        .assert(predicate::path::exists());
+
+    // Unpinned hashes are ignored in verification mode, including when saved in a tool receipt.
+    fs_err::remove_file(project.child("backend-executed"))?;
+    constraints.write_str(&format!(
+        "build-dependency>=1.0.0 --hash=sha256:{}\n",
+        "0".repeat(64)
+    ))?;
+    install().arg("--reinstall").assert().success();
+    project
+        .child("backend-executed")
+        .assert(predicate::path::exists());
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("tools/hash-tool/uv-receipt.toml"), @r#"
+        [tool]
+        requirements = [{ name = "hash-tool", directory = "[TEMP_DIR]/project" }]
+        build-constraint-dependencies = [{ name = "build-dependency", specifier = ">=1", hashes = ["sha256:0000000000000000000000000000000000000000000000000000000000000000"] }]
+        entrypoints = [
+            { name = "hash-tool", install-path = "[TEMP_DIR]/bin/hash-tool", from = "hash-tool" },
+        ]
+
+        [tool.options]
+        no-index = true
+        find-links = ["file://[TEMP_DIR]/wheels"]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "#);
+    });
+
+    fs_err::remove_file(project.child("backend-executed"))?;
+    fs_err::remove_file(constraints)?;
+    context
+        .tool_upgrade()
+        .args(["hash-tool", "--reinstall", "--no-cache"])
+        .arg("--preview-features=tool-install-locks")
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+    project
+        .child("backend-executed")
+        .assert(predicate::path::exists());
     Ok(())
 }
