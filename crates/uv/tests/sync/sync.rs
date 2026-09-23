@@ -17,6 +17,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use uv_fs::Simplified;
 use uv_static::EnvVars;
+use uv_test::package_server::PackageServer;
 use uv_test::packse::{PackseServer, generate_wheel, generate_wheel_with_files};
 
 use uv_test::{TestContext, download_to_disk, uv_snapshot, venv_bin_path};
@@ -15349,38 +15350,11 @@ async fn sync_deprecated_zstd_wheel() -> Result<()> {
 /// extension (e.g., `.tar.bz2`). The resolver should reject it as incompatible.
 #[tokio::test]
 async fn sync_non_pep625_sdist() -> Result<()> {
-    use serde_json::json;
-    use wiremock::{
-        Mock, MockServer, ResponseTemplate,
-        matchers::{method, path},
-    };
-
     let context = uv_test::test_context!("3.13");
-    let server = MockServer::start().await;
-
-    let sdist_url = format!("{}/files/basic_package-0.1.0.tar.bz2", server.uri());
-
-    let simple_index = json!({
-        "meta": {
-            "api-version": "1.1"
-        },
-        "name": "basic-package",
-        "files": [{
-            "filename": "basic_package-0.1.0.tar.bz2",
-            "url": sdist_url,
-            "hashes": {
-                "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
-            }
-        }]
-    });
-
-    Mock::given(method("GET"))
-        .and(path("/simple/basic-package/"))
-        .respond_with(ResponseTemplate::new(200).set_body_raw(
-            simple_index.to_string().into_bytes(),
-            "application/vnd.pypi.simple.v1+json",
-        ))
-        .mount(&server)
+    let server = PackageServer::new(&"basic-package".parse()?).await;
+    // The unsupported filename must be rejected before the archive is downloaded.
+    server
+        .serve("basic_package-0.1.0.tar.bz2", b"", Some(&"0".repeat(64)))
         .await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -15396,9 +15370,9 @@ async fn sync_non_pep625_sdist() -> Result<()> {
 
         [[tool.uv.index]]
         name = "test-registry"
-        url = "{}/simple"
+        url = "{}"
         "#,
-        server.uri()
+        server.index_url()
     })?;
 
     uv_snapshot!(context.filters(), context.sync().env_remove(EnvVars::UV_EXCLUDE_NEWER), @"

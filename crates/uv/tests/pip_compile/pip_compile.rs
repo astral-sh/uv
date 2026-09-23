@@ -38,6 +38,7 @@ use uv_static::EnvVars;
 use uv_test::archive::{generate_source_archive, write_tar_gz};
 #[cfg(feature = "test-universal")]
 use uv_test::diff_snapshot;
+use uv_test::package_server::PackageServer;
 use uv_test::packse::PackseServer;
 use uv_test::packse::scenario::{ArtifactMetadata, Package, PackageMetadata, Scenario};
 use uv_test::{DEFAULT_PYTHON_VERSION, TestContext, download_to_disk, uv_snapshot};
@@ -5858,27 +5859,20 @@ async fn generate_hashes_url_fragment_source_subdirectory() -> Result<()> {
 #[tokio::test]
 async fn generate_hashes_url_fragment_source_mismatch() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let server = MockServer::start().await;
+    let name = "source-package".parse()?;
+    let server = PackageServer::new(&name).await;
+    let filename = "source.tar.gz";
+    let source_url = server.file_url(filename);
     let sentinel = context.temp_dir.child("backend-executed");
-    let source = generate_source_archive(
-        &"source-package".parse()?,
-        &"1.0.0".parse()?,
-        "",
-        Some(sentinel.path()),
-    )?;
+    let source = generate_source_archive(&name, &"1.0.0".parse()?, "", Some(sentinel.path()))?;
     let source_hash = hex::encode(Sha256::digest(&source));
     let context = context.with_filter((source_hash, "[SOURCE_HASH]"));
-    Mock::given(method("GET"))
-        .and(path("/source.tar.gz"))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(source))
-        .mount(&server)
-        .await;
+    server.serve(filename, &source, None).await;
     context
         .temp_dir
         .child("requirements.in")
         .write_str(&format!(
-            "source-package @ {}/source.tar.gz#sha256={}",
-            server.uri(),
+            "source-package @ {source_url}#sha256={}",
             "0".repeat(64),
         ))?;
 
@@ -5902,11 +5896,7 @@ async fn generate_hashes_url_fragment_source_mismatch() -> Result<()> {
     context
         .temp_dir
         .child("requirements.in")
-        .write_str(&format!(
-            "{}/source.tar.gz#sha256={}",
-            server.uri(),
-            "0".repeat(64),
-        ))?;
+        .write_str(&format!("{source_url}#sha256={}", "0".repeat(64)))?;
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
         .arg("--generate-hashes"), @"
@@ -5926,7 +5916,7 @@ async fn generate_hashes_url_fragment_source_mismatch() -> Result<()> {
     context
         .temp_dir
         .child("requirements.in")
-        .write_str(&format!("{}/source.tar.gz", server.uri()))?;
+        .write_str(&source_url)?;
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
         .arg("--generate-hashes"), @r"
