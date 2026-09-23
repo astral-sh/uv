@@ -3422,10 +3422,10 @@ fn lock_project_with_overrides() -> Result<()> {
     Ok(())
 }
 
-/// Re-resolving preserves lock equality when modifiers are unordered or repeated.
+/// Modifier grouping, order, and duplicates do not require rewriting the lockfile.
 #[cfg(feature = "test-universal")]
 #[test]
-fn lock_check_refresh_unordered_overrides_and_excludes() -> Result<()> {
+fn lock_check_refresh_unordered_manifest_modifiers() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     context.temp_dir.child("pyproject.toml").write_str(
         r#"
@@ -3436,12 +3436,89 @@ fn lock_check_refresh_unordered_overrides_and_excludes() -> Result<()> {
         dependencies = []
 
         [tool.uv]
-        override-dependencies = ["zulu==1", "alpha==1", "zulu==1"]
-        exclude-dependencies = ["zulu", "alpha", "zulu"]
+        override-dependencies = [
+            "zulu==1", "alpha==1", "zulu==1",
+            { package = { name = "unused" }, dependencies = ["zulu==2", "alpha==2"] },
+            { package = { name = "unused", version = "1" }, dependencies = [] },
+        ]
+        exclude-dependencies = [
+            "zulu", "alpha", "zulu",
+            { package = { name = "unused" }, dependencies = ["zulu", "alpha"] },
+            { package = { name = "unused", version = "1" }, dependencies = [] },
+        ]
         "#,
     )?;
 
-    context.lock().assert().success();
+    context.lock().arg("--offline").assert().success();
+
+    insta::with_settings!({filters => context.filters()}, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        overrides = [
+            { package = { name = "unused" }, dependencies = [{ name = "alpha", specifier = "==2" }, { name = "zulu", specifier = "==2" }] },
+            { package = { name = "unused", version = "1" }, dependencies = [] },
+            { name = "alpha", specifier = "==1" },
+            { name = "zulu", specifier = "==1" },
+        ]
+        excludes = [
+            { package = { name = "unused" }, dependencies = ["alpha", "zulu"] },
+            { package = { name = "unused", version = "1" }, dependencies = [] },
+            "alpha",
+            "zulu",
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        "#);
+    });
+
+    let mut lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+    for key in ["overrides", "excludes"] {
+        let Some(entries) = lock["manifest"][key].as_array_mut() else {
+            anyhow::bail!("manifest {key} were not an array");
+        };
+        let mut values = Vec::new();
+        for entry in entries.iter() {
+            if let Some(table) = entry.as_inline_table()
+                && let Some(dependencies) = table
+                    .get("dependencies")
+                    .and_then(toml_edit::Value::as_array)
+                && !dependencies.is_empty()
+            {
+                for dependency in dependencies {
+                    let mut table = table.clone();
+                    table.insert(
+                        "dependencies",
+                        toml_edit::Array::from_iter([dependency.clone()]).into(),
+                    );
+                    values.push(toml_edit::Value::InlineTable(table));
+                }
+            } else {
+                values.push(entry.clone());
+            }
+        }
+        *entries = values.iter().rev().chain(&values).cloned().collect();
+    }
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&lock.to_string())?;
+
+    context
+        .lock()
+        .arg("--check")
+        .arg("--offline")
+        .assert()
+        .success();
 
     uv_snapshot!(context.filters(), context.lock().arg("--check").arg("--refresh"), @"
     exit_code: 0 (success)

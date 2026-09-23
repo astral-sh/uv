@@ -241,9 +241,10 @@ impl Tool {
             });
         }
 
-        let overrides = self
-            .modifiers
-            .override_entries()
+        let modifiers = self.modifiers.to_entries();
+        let overrides = modifiers
+            .overrides()
+            .iter()
             .map(|r#override| {
                 serde::Serialize::serialize(&r#override, toml_edit::ser::ValueSerializer::new())
             })
@@ -259,9 +260,9 @@ impl Tool {
             });
         }
 
-        let excludes = self
-            .modifiers
-            .exclusion_entries()
+        let excludes = modifiers
+            .exclusions()
+            .iter()
             .map(|r#exclude| {
                 serde::Serialize::serialize(&r#exclude, toml_edit::ser::ValueSerializer::new())
             })

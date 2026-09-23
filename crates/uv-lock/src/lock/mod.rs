@@ -23,9 +23,8 @@ use url::Url;
 use uv_cache_key::RepositoryUrl;
 use uv_configuration::{
     BuildOptions, Constraints, DependencyGroupsWithDefaults, DependencyModifierScope,
-    DependencyModifiers, ExcludeDependency, ExcludeNewer, ExcludeNewerPackage,
-    ExtrasSpecificationWithDefaults, ForkStrategy, InstallTarget, Override, Prerelease,
-    PrereleaseMode, PrereleasePackage, ResolutionMode, ScopedOverrideSourceError,
+    DependencyModifiers, ExcludeNewer, ExcludeNewerPackage, ExtrasSpecificationWithDefaults,
+    ForkStrategy, InstallTarget, Prerelease, PrereleaseMode, PrereleasePackage, ResolutionMode,
 };
 use uv_distribution::{
     DistributionDatabase, FlatRequiresDist, Metadata as DistributionMetadata, RequiresDist,
@@ -4107,41 +4106,25 @@ impl Lock {
         };
 
         // Validate that the lockfile was generated with the same dependency modifiers.
-        let normalized_overrides = {
-            let normalize = |entry: &Override| {
-                entry.clone().try_map_requirements(|requirement| {
-                    normalize_requirement(requirement, root, &self.requires_python)
-                })
-            };
-            let expected = (
-                modifiers
-                    .override_entries()
-                    .map(normalize)
-                    .collect::<Result<BTreeSet<_>, _>>()?,
-                modifiers.exclusion_entries().cloned().collect(),
-            );
-            let actual = (
-                self.manifest
-                    .overrides
-                    .iter()
-                    .map(normalize)
-                    .collect::<Result<BTreeSet<_>, _>>()?,
-                self.manifest.excludes.clone(),
-            );
+        let normalized_modifiers = {
+            let normalize =
+                |requirement| normalize_requirement(requirement, root, &self.requires_python);
+            let expected = modifiers.clone().try_map_requirements(normalize)?;
+            let actual = self
+                .manifest
+                .modifiers
+                .clone()
+                .try_map_requirements(normalize)?;
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedDependencyModifiers(
                     expected, actual,
                 ));
             }
-            expected.0
+            expected
         };
 
         let dependency_modifiers = if allow_missing_package_metadata {
-            DependencyModifiers::from_parts(
-                normalized_overrides,
-                modifiers.exclusion_entries().cloned(),
-            )
-            .map_err(LockErrorKind::InvalidScopedOverride)?
+            normalized_modifiers
         } else {
             DependencyModifiers::default()
         };
@@ -5837,10 +5820,7 @@ pub enum SatisfiesResult<'lock> {
     /// The lockfile uses a different set of constraints.
     MismatchedConstraints(BTreeSet<Requirement>, BTreeSet<Requirement>),
     /// The lockfile uses a different set of dependency modifiers.
-    MismatchedDependencyModifiers(
-        (BTreeSet<Override>, BTreeSet<ExcludeDependency>),
-        (BTreeSet<Override>, BTreeSet<ExcludeDependency>),
-    ),
+    MismatchedDependencyModifiers(DependencyModifiers, DependencyModifiers),
     /// The lockfile uses a different set of build constraints.
     MismatchedBuildConstraints(
         BTreeSet<NameRequirementSpecification>,
@@ -6010,12 +5990,9 @@ pub struct ResolverManifest {
     /// The constraints provided to the resolver.
     #[serde(default)]
     constraints: BTreeSet<Requirement>,
-    /// The overrides provided to the resolver.
-    #[serde(default)]
-    overrides: BTreeSet<Override>,
-    /// The excludes provided to the resolver.
-    #[serde(default)]
-    excludes: BTreeSet<ExcludeDependency>,
+    /// The dependency modifiers provided to the resolver.
+    #[serde(flatten)]
+    modifiers: DependencyModifiers,
     /// The build constraints provided to the resolver.
     #[serde(default)]
     build_constraints: BTreeSet<NameRequirementSpecification>,
@@ -6036,13 +6013,11 @@ impl ResolverManifest {
         dependency_groups: impl IntoIterator<Item = (GroupName, Vec<Requirement>)>,
         dependency_metadata: impl IntoIterator<Item = StaticMetadata>,
     ) -> Self {
-        let (overrides, excludes) = modifiers.into_parts();
         Self {
             members: members.into_iter().collect(),
             requirements: requirements.into_iter().collect(),
             constraints: constraints.into_iter().collect(),
-            overrides: overrides.into_iter().collect(),
-            excludes: excludes.into_iter().collect(),
+            modifiers,
             build_constraints: build_constraints.into_iter().collect(),
             dependency_groups: dependency_groups
                 .into_iter()
@@ -6066,14 +6041,9 @@ impl ResolverManifest {
                 .into_iter()
                 .map(|requirement| requirement.relative_to(root))
                 .collect::<Result<BTreeSet<_>, _>>()?,
-            overrides: self
-                .overrides
-                .into_iter()
-                .map(|entry| {
-                    entry.try_map_requirements(|requirement| requirement.relative_to(root))
-                })
-                .collect::<Result<BTreeSet<_>, io::Error>>()?,
-            excludes: self.excludes,
+            modifiers: self
+                .modifiers
+                .try_map_requirements(|requirement| requirement.relative_to(root))?,
             build_constraints: self
                 .build_constraints
                 .into_iter()
@@ -9618,10 +9588,6 @@ impl std::fmt::Display for WheelTagHint {
 /// is with the caller somewhere in such cases.
 #[derive(Debug, thiserror::Error)]
 enum LockErrorKind {
-    /// An error that occurs when the overrides for validating a
-    /// metadata-free lockfile cannot be scoped to their packages.
-    #[error(transparent)]
-    InvalidScopedOverride(#[from] ScopedOverrideSourceError),
     /// An error that occurs when multiple packages with the same
     /// ID were found.
     #[error("Found duplicate package `{id}`", id = id.cyan())]

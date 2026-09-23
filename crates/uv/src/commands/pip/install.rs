@@ -166,7 +166,7 @@ pub(crate) async fn pip_install(
     )
     .await?;
 
-    modifiers.extend(modifiers_from_workspace)?;
+    modifiers.extend(modifiers_from_workspace);
 
     let hash_checking = HashCheckingMode::from_requirements_txt(hash_checking, require_hashes);
 

@@ -5167,8 +5167,8 @@ fn tool_install_overrides() -> Result<()> {
         [tool]
         requirements = [{ name = "black" }]
         overrides = [
-            { name = "click", specifier = "<8" },
             { name = "anyio", specifier = ">=3" },
+            { name = "click", specifier = "<8" },
         ]
         entrypoints = [
             { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },

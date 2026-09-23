@@ -4017,6 +4017,40 @@ fn override_dependency() -> Result<()> {
     Ok(())
 }
 
+/// Identical overrides from multiple files retain every source annotation.
+#[test]
+fn duplicate_override_annotations() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str("idna")?;
+    context.temp_dir.child("first.txt").write_str("idna==3.6")?;
+    context
+        .temp_dir
+        .child("second.txt")
+        .write_str("idna==3.6")?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--override").arg("first.txt")
+        .arg("--override").arg("second.txt")
+        .arg("--no-header"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    idna==3.6
+        # via
+        #   --override first.txt
+        #   --override second.txt
+        #   -r requirements.in
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Check that `tool.uv.override-dependencies` in `pyproject.toml` is respected.
 #[test]
 fn override_dependency_from_pyproject() -> Result<()> {
@@ -4144,6 +4178,105 @@ fn scoped_override_dependency_from_pyproject() -> Result<()> {
     idna==3.6
         # via
         #   example (pyproject.toml)
+        #   anyio
+    sniffio==1.3.1
+        # via anyio
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Merge package modifiers from input scripts and workspace settings before applying scope precedence.
+#[test]
+fn merge_scoped_modifiers_from_multiple_sources() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+
+        [tool.uv]
+        override-dependencies = [
+            "idna==3.6",
+            { package = { name = "anyio", version = "3.7.0" }, dependencies = ["typing-extensions==4.9.0"] },
+        ]
+        exclude-dependencies = [
+            { package = { name = "anyio", version = "3.7.0" }, dependencies = ["sniffio"] },
+        ]
+    "#})?;
+    context.temp_dir.child("first.py").write_str(indoc! {r#"
+        # /// script
+        # dependencies = ["anyio==3.7.0"]
+        #
+        # [tool.uv]
+        # override-dependencies = [
+        #   { package = { name = "anyio" }, dependencies = ["idna==3.2", "typing-extensions==4.10.0"] },
+        # ]
+        # exclude-dependencies = [
+        #   { package = { name = "anyio" }, dependencies = ["idna"] },
+        # ]
+        # ///
+    "#})?;
+    context.temp_dir.child("second.py").write_str(indoc! {r#"
+        # /// script
+        # dependencies = []
+        #
+        # [tool.uv]
+        # override-dependencies = [
+        #   { package = { name = "anyio", version = "3.7.0" }, dependencies = [] },
+        # ]
+        # exclude-dependencies = [
+        #   { package = { name = "anyio", version = "3.7.0" }, dependencies = [] },
+        # ]
+        # ///
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("first.py")
+        .arg("second.py")
+        .arg("--no-header"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    anyio==3.7.0
+    idna==3.6
+        # via
+        #   --override (workspace)
+        #   anyio
+    typing-extensions==4.9.0
+        # via
+        #   --override (workspace)
+        #   anyio
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    // Empty exact-version scopes disable both kinds of versionless modifiers.
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+
+        [tool.uv]
+        override-dependencies = ["idna==3.6"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("first.py")
+        .arg("second.py")
+        .arg("--no-header"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    anyio==3.7.0
+    idna==3.6
+        # via
+        #   --override (workspace)
         #   anyio
     sniffio==1.3.1
         # via anyio

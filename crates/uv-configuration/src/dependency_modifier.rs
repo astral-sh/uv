@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::BTreeSet;
 use std::fmt;
 
 use either::Either;
@@ -10,7 +11,9 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::MarkerTree;
 
-use crate::{ExcludeDependency, Override, ScopedOverrideSourceError};
+use crate::{
+    ExcludeDependency, Override, PackageExclusion, PackageOverride, ScopedOverrideSourceError,
+};
 
 /// The package and optional version selected by a dependency modifier.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
@@ -28,29 +31,43 @@ pub struct PackageDependencyModifierTarget {
     version: Option<Version>,
 }
 
-/// An indexed collection of dependency overrides and exclusions.
+/// Dependency overrides and exclusions merged by package within each scope.
 #[derive(Default, Clone, PartialEq, Eq)]
 pub struct DependencyModifiers {
-    entries: DependencyModifierEntries,
-    index: DependencyModifierIndex,
+    global: ScopeModifiers,
+    scoped: FxHashMap<PackageName, PackageModifiers>,
 }
 
-#[derive(Default, Clone, PartialEq, Eq, serde::Deserialize)]
+/// Temporary entries for reading and writing lockfiles and tool receipts.
+#[derive(serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
-struct DependencyModifierEntries {
+pub struct DependencyModifierEntries {
     #[serde(default)]
     overrides: Vec<Override>,
     #[serde(default, rename = "excludes")]
     exclusions: Vec<ExcludeDependency>,
 }
 
-/// Custom `Debug` to hide the derived index from `--show-settings` output.
+impl DependencyModifierEntries {
+    /// Return the override entries.
+    pub fn overrides(&self) -> &[Override] {
+        &self.overrides
+    }
+
+    /// Return the exclusion entries.
+    pub fn exclusions(&self) -> &[ExcludeDependency] {
+        &self.exclusions
+    }
+}
+
+/// Display modifiers in a deterministic order, using the same entries as lockfiles.
 impl fmt::Debug for DependencyModifiers {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let entries = self.to_entries();
         formatter
             .debug_struct("DependencyModifiers")
-            .field("overrides", &self.entries.overrides)
-            .field("exclusions", &self.entries.exclusions)
+            .field("overrides", &entries.overrides)
+            .field("exclusions", &entries.exclusions)
             .finish_non_exhaustive()
     }
 }
@@ -79,33 +96,68 @@ impl<'de> serde::Deserialize<'de> for DependencyModifiers {
 impl DependencyModifiers {
     /// Return whether the collection contains modifiers scoped to this package.
     pub fn has_scoped_package(&self, package: &PackageName) -> bool {
-        self.index.scoped.contains_key(package)
+        self.scoped.contains_key(package)
     }
 
-    /// Return the override entries.
-    pub fn override_entries(&self) -> impl Iterator<Item = &Override> {
-        self.entries.overrides.iter()
+    /// Return whether the collection contains no global or scoped modifiers.
+    pub fn is_empty(&self) -> bool {
+        self.global.dependencies.is_empty() && self.scoped.is_empty()
     }
 
-    /// Return the exclusion entries.
-    pub fn exclusion_entries(&self) -> impl Iterator<Item = &ExcludeDependency> {
-        self.entries.exclusions.iter()
+    /// Convert the merged modifiers to sorted entries for lockfiles and tool receipts.
+    pub fn to_entries(&self) -> DependencyModifierEntries {
+        let mut entries = DependencyModifierEntries {
+            overrides: self
+                .global
+                .overrides()
+                .cloned()
+                .map(Override::requirement)
+                .collect(),
+            exclusions: self
+                .global
+                .dependencies
+                .iter()
+                .filter(|(_, modifier)| modifier.excluded)
+                .map(|(name, _)| ExcludeDependency::Dependency(name.clone()))
+                .collect(),
+        };
+        for (name, modifiers) in &self.scoped {
+            modifiers.versionless.append_entries(
+                PackageDependencyModifierTarget {
+                    name: name.clone(),
+                    version: None,
+                },
+                &mut entries,
+            );
+            for (version, scope) in &modifiers.versions {
+                scope.append_entries(
+                    PackageDependencyModifierTarget {
+                        name: name.clone(),
+                        version: Some(version.clone()),
+                    },
+                    &mut entries,
+                );
+            }
+        }
+        entries.overrides.sort_unstable();
+        entries.overrides.dedup();
+        entries.exclusions.sort_unstable();
+        entries
     }
 
-    /// Consume the collection and return its override and exclusion entries.
-    pub fn into_parts(self) -> (Vec<Override>, Vec<ExcludeDependency>) {
-        (self.entries.overrides, self.entries.exclusions)
+    /// Merge another collection of dependency modifiers.
+    pub fn extend(&mut self, modifiers: Self) {
+        self.global.extend(modifiers.global);
+        for (name, package) in modifiers.scoped {
+            let target = self.scoped.entry(name).or_default();
+            target.versionless.extend(package.versionless);
+            for (version, scope) in package.versions {
+                target.versions.entry(version).or_default().extend(scope);
+            }
+        }
     }
 
-    /// Add all entries from another collection of dependency modifiers.
-    pub fn extend(&mut self, modifiers: Self) -> Result<(), ScopedOverrideSourceError> {
-        let (overrides, exclusions) = modifiers.into_parts();
-        self.extend_overrides(overrides)?;
-        self.extend_exclusions(exclusions);
-        Ok(())
-    }
-
-    /// Create an indexed collection from separate override and exclusion wire entries.
+    /// Merge override and exclusion inputs into modifiers keyed by package.
     pub fn from_parts(
         overrides: impl IntoIterator<Item = Override>,
         exclusions: impl IntoIterator<Item = ExcludeDependency>,
@@ -122,8 +174,7 @@ impl DependencyModifiers {
         overrides: impl IntoIterator<Item = Override>,
     ) -> Result<(), ScopedOverrideSourceError> {
         for entry in overrides {
-            self.index.insert_override(&entry)?;
-            self.entries.overrides.push(entry);
+            self.insert_override(entry)?;
         }
         Ok(())
     }
@@ -131,42 +182,56 @@ impl DependencyModifiers {
     /// Add exclusion entries to this collection.
     pub fn extend_exclusions(&mut self, exclusions: impl IntoIterator<Item = ExcludeDependency>) {
         for entry in exclusions {
-            self.index.insert_exclusion(&entry);
-            self.entries.exclusions.push(entry);
+            self.insert_exclusion(entry);
         }
+    }
+
+    /// Fallibly map override requirements, retaining exclusions and explicitly empty scopes.
+    pub fn try_map_requirements<E>(
+        mut self,
+        mut function: impl FnMut(Requirement) -> Result<Requirement, E>,
+    ) -> Result<Self, E> {
+        self.global = self.global.try_map_requirements(&mut function)?;
+        for package in self.scoped.values_mut() {
+            package.versionless =
+                std::mem::take(&mut package.versionless).try_map_requirements(&mut function)?;
+            for scope in package.versions.values_mut() {
+                *scope = std::mem::take(scope).try_map_requirements(&mut function)?;
+            }
+        }
+        Ok(self)
     }
 
     /// Return all global override [`Requirement`]s that are not excluded.
     pub fn global_overrides(&self) -> impl Iterator<Item = &Requirement> {
-        self.index
-            .global_overrides
+        self.global
+            .dependencies
             .values()
-            .flatten()
-            .filter(|requirement| !self.is_excluded(&requirement.name))
+            .filter(|modifier| !modifier.excluded)
+            .flat_map(|modifier| &modifier.overrides)
     }
 
     /// Return all scoped override [`Requirement`]s that are not excluded in their scope.
     pub fn scoped_overrides(&self) -> impl Iterator<Item = &Requirement> {
-        self.index
-            .scoped
-            .iter()
-            .flat_map(move |(package, modifiers)| {
-                modifiers
-                    .overrides
-                    .iter()
-                    .flat_map(|overrides| overrides.values().flatten())
-                    .filter(move |requirement| {
-                        !self.is_excluded(&requirement.name)
-                            && !modifiers.is_versionless_override_excluded(&requirement.name)
-                    })
-                    .chain(modifiers.override_versions.iter().flat_map(
-                        move |(version, overrides)| {
-                            overrides.values().flatten().filter(move |requirement| {
+        self.scoped.iter().flat_map(move |(package, modifiers)| {
+            modifiers
+                .versionless
+                .overrides()
+                .filter(move |requirement| {
+                    !self.is_excluded(&requirement.name)
+                        && !modifiers.is_versionless_override_excluded(&requirement.name)
+                })
+                .chain(
+                    modifiers
+                        .versions
+                        .iter()
+                        .flat_map(move |(version, overrides)| {
+                            overrides.overrides().filter(move |requirement| {
                                 !self.is_excluded_for(package, version, &requirement.name)
                             })
-                        },
-                    ))
-            })
+                        }),
+                )
+        })
     }
 
     /// Return the scoped override [`Requirement`]s that apply to a specific package version and
@@ -176,18 +241,17 @@ impl DependencyModifiers {
         package: &PackageName,
         version: &Version,
     ) -> impl Iterator<Item = &Requirement> {
-        self.index
-            .scoped
+        self.scoped
             .get(package)
             .and_then(|modifiers| modifiers.for_version(version).0)
             .into_iter()
-            .flat_map(|overrides| overrides.values().flatten())
+            .flat_map(ScopeModifiers::overrides)
             .filter(|requirement| !self.is_excluded_for(package, version, &requirement.name))
     }
 
     /// Return whether a dependency is globally excluded.
     pub fn is_excluded(&self, dependency: &PackageName) -> bool {
-        self.index.is_excluded(None, dependency)
+        self.global.is_excluded(dependency)
     }
 
     /// Return whether a dependency is excluded from a specific package version.
@@ -197,13 +261,12 @@ impl DependencyModifiers {
         version: &Version,
         dependency: &PackageName,
     ) -> bool {
-        self.index.is_excluded(
-            self.index
+        self.is_excluded(dependency)
+            || self
                 .scoped
                 .get(package)
-                .and_then(|modifiers| modifiers.for_version(version).1),
-            dependency,
-        )
+                .and_then(|modifiers| modifiers.for_version(version).1)
+                .is_some_and(|scope| scope.is_excluded(dependency))
     }
 
     /// Apply dependency modifiers in a specific [`DependencyModifierScope`].
@@ -220,83 +283,179 @@ impl DependencyModifiers {
         let (overrides, exclusions) = match scope {
             DependencyModifierScope::Global => (None, None),
             DependencyModifierScope::Package(package, version) => self
-                .index
                 .scoped
                 .get(package)
                 .map(|modifiers| modifiers.for_version(version))
                 .unwrap_or_default(),
             DependencyModifierScope::DependencyGroup(package, version) => {
                 let exclusions = self
-                    .index
                     .scoped
                     .get(package)
                     .and_then(|modifiers| modifiers.for_version(version).1);
                 (None, exclusions)
             }
         };
-        self.index
-            .apply_overrides(requirements, overrides)
-            .filter(move |requirement| !self.index.is_excluded(exclusions, &requirement.name))
+        self.apply_overrides(requirements, overrides)
+            .filter(move |requirement| {
+                !self.is_excluded(&requirement.name)
+                    && !exclusions.is_some_and(|scope| scope.is_excluded(&requirement.name))
+            })
     }
 }
 
-type OverrideMap = FxHashMap<PackageName, Vec<Requirement>>;
-type ExclusionSet = FxHashSet<PackageName>;
+#[derive(Default, Clone, Eq)]
+struct DependencyModifier {
+    // Equal requirements can have distinct origins needed for source annotations.
+    overrides: Vec<Requirement>,
+    excluded: bool,
+}
+
+impl PartialEq for DependencyModifier {
+    fn eq(&self, other: &Self) -> bool {
+        self.excluded == other.excluded
+            && self.overrides.iter().collect::<BTreeSet<_>>()
+                == other.overrides.iter().collect::<BTreeSet<_>>()
+    }
+}
 
 #[derive(Default, Clone, PartialEq, Eq)]
-struct DependencyModifierIndex {
-    global_overrides: OverrideMap,
-    global_exclusions: ExclusionSet,
-    scoped: FxHashMap<PackageName, PackageModifiers>,
+struct ScopeModifiers {
+    dependencies: FxHashMap<PackageName, DependencyModifier>,
+    // An explicitly empty scope replaces a less specific scope of the same kind.
+    has_overrides: bool,
+    has_exclusions: bool,
+}
+
+impl ScopeModifiers {
+    fn insert_override(&mut self, requirement: Requirement) {
+        self.has_overrides = true;
+        self.dependencies
+            .entry(requirement.name.clone())
+            .or_default()
+            .overrides
+            .push(requirement);
+    }
+
+    fn insert_exclusion(&mut self, name: PackageName) {
+        self.has_exclusions = true;
+        self.dependencies.entry(name).or_default().excluded = true;
+    }
+
+    fn overrides(&self) -> impl Iterator<Item = &Requirement> {
+        self.dependencies
+            .values()
+            .flat_map(|modifier| &modifier.overrides)
+    }
+
+    fn is_excluded(&self, dependency: &PackageName) -> bool {
+        self.dependencies
+            .get(dependency)
+            .is_some_and(|modifier| modifier.excluded)
+    }
+
+    fn extend(&mut self, scope: Self) {
+        self.has_overrides |= scope.has_overrides;
+        self.has_exclusions |= scope.has_exclusions;
+        for (name, modifier) in scope.dependencies {
+            let target = self.dependencies.entry(name).or_default();
+            target.overrides.extend(modifier.overrides);
+            target.excluded |= modifier.excluded;
+        }
+    }
+
+    fn try_map_requirements<E>(
+        self,
+        function: &mut impl FnMut(Requirement) -> Result<Requirement, E>,
+    ) -> Result<Self, E> {
+        let mut mapped = Self {
+            has_overrides: self.has_overrides,
+            has_exclusions: self.has_exclusions,
+            ..Self::default()
+        };
+        for (name, modifier) in self.dependencies {
+            if modifier.excluded {
+                mapped.insert_exclusion(name);
+            }
+            for requirement in modifier.overrides {
+                mapped.insert_override(function(requirement)?);
+            }
+        }
+        Ok(mapped)
+    }
+
+    fn append_entries(
+        &self,
+        package: PackageDependencyModifierTarget,
+        entries: &mut DependencyModifierEntries,
+    ) {
+        if self.has_overrides {
+            let mut dependencies = self.overrides().cloned().collect::<Vec<_>>();
+            dependencies.sort_unstable();
+            dependencies.dedup();
+            entries.overrides.push(Override::Package(PackageOverride {
+                package: package.clone(),
+                dependencies: dependencies.into_boxed_slice(),
+            }));
+        }
+        if self.has_exclusions {
+            let mut dependencies = self
+                .dependencies
+                .iter()
+                .filter(|(_, modifier)| modifier.excluded)
+                .map(|(name, _)| name.clone())
+                .collect::<Vec<_>>();
+            dependencies.sort_unstable();
+            entries
+                .exclusions
+                .push(ExcludeDependency::Package(PackageExclusion {
+                    package,
+                    dependencies: dependencies.into_boxed_slice(),
+                }));
+        }
+    }
 }
 
 #[derive(Default, Clone, PartialEq, Eq)]
 struct PackageModifiers {
-    overrides: Option<OverrideMap>,
-    exclusions: Option<ExclusionSet>,
-    override_versions: FxHashMap<Version, OverrideMap>,
-    exclusion_versions: FxHashMap<Version, ExclusionSet>,
+    versionless: ScopeModifiers,
+    versions: FxHashMap<Version, ScopeModifiers>,
 }
 
 impl PackageModifiers {
     /// Select the most specific override and exclusion scopes independently. An exact-version
     /// scope replaces the versionless scope, including when it is empty.
-    fn for_version(&self, version: &Version) -> (Option<&OverrideMap>, Option<&ExclusionSet>) {
+    fn for_version(&self, version: &Version) -> (Option<&ScopeModifiers>, Option<&ScopeModifiers>) {
+        let exact = self.versions.get(version);
         (
-            self.override_versions
-                .get(version)
-                .or(self.overrides.as_ref()),
-            self.exclusion_versions
-                .get(version)
-                .or(self.exclusions.as_ref()),
+            exact
+                .filter(|scope| scope.has_overrides)
+                .or(self.versionless.has_overrides.then_some(&self.versionless)),
+            exact
+                .filter(|scope| scope.has_exclusions)
+                .or(self.versionless.has_exclusions.then_some(&self.versionless)),
         )
     }
 
     /// Return whether a dependency is excluded everywhere its versionless override applies.
     /// Exact-version exclusions can allow it again, unless an exact-version override shadows it.
     fn is_versionless_override_excluded(&self, dependency: &PackageName) -> bool {
-        self.exclusions
-            .as_ref()
-            .is_some_and(|exclusions| exclusions.contains(dependency))
+        self.versionless.is_excluded(dependency)
             && self
-                .exclusion_versions
-                .iter()
-                .filter(|(version, _)| !self.override_versions.contains_key(*version))
-                .all(|(_, exclusions)| exclusions.contains(dependency))
+                .versions
+                .values()
+                .filter(|scope| scope.has_exclusions && !scope.has_overrides)
+                .all(|scope| scope.is_excluded(dependency))
     }
 }
 
-impl DependencyModifierIndex {
+impl DependencyModifiers {
     fn insert_override(
         &mut self,
-        override_entry: &Override,
+        override_entry: Override,
     ) -> Result<(), ScopedOverrideSourceError> {
         match override_entry {
             Override::Requirement(requirement) => {
-                self.global_overrides
-                    .entry(requirement.name.clone())
-                    .or_default()
-                    .push(requirement.as_ref().clone());
+                self.global.insert_override(*requirement);
             }
             Override::Package(package) => {
                 for requirement in &package.dependencies {
@@ -321,49 +480,45 @@ impl DependencyModifierIndex {
                     }
                 }
 
-                let modifiers = self.scoped.entry(package.package.name.clone()).or_default();
-                let overrides = if let Some(version) = package.package.version.clone() {
-                    modifiers.override_versions.entry(version).or_default()
+                let modifiers = self.scoped.entry(package.package.name).or_default();
+                let scope = if let Some(version) = package.package.version {
+                    modifiers.versions.entry(version).or_default()
                 } else {
-                    modifiers.overrides.get_or_insert_default()
+                    &mut modifiers.versionless
                 };
-                for requirement in &package.dependencies {
-                    overrides
-                        .entry(requirement.name.clone())
-                        .or_default()
-                        .push(requirement.clone());
+                scope.has_overrides = true;
+                for requirement in package.dependencies {
+                    scope.insert_override(requirement);
                 }
             }
         }
         Ok(())
     }
 
-    fn insert_exclusion(&mut self, exclusion: &ExcludeDependency) {
+    fn insert_exclusion(&mut self, exclusion: ExcludeDependency) {
         match exclusion {
             ExcludeDependency::Dependency(dependency) => {
-                self.global_exclusions.insert(dependency.clone());
+                self.global.insert_exclusion(dependency);
             }
             ExcludeDependency::Package(package) => {
-                let modifiers = self.scoped.entry(package.package.name.clone()).or_default();
-                let exclusions = if let Some(version) = package.package.version.clone() {
-                    modifiers.exclusion_versions.entry(version).or_default()
+                let modifiers = self.scoped.entry(package.package.name).or_default();
+                let scope = if let Some(version) = package.package.version {
+                    modifiers.versions.entry(version).or_default()
                 } else {
-                    modifiers.exclusions.get_or_insert_default()
+                    &mut modifiers.versionless
                 };
-                exclusions.extend(package.dependencies.iter().cloned());
+                scope.has_exclusions = true;
+                for dependency in package.dependencies {
+                    scope.insert_exclusion(dependency);
+                }
             }
         }
-    }
-
-    fn is_excluded(&self, scoped: Option<&ExclusionSet>, dependency: &PackageName) -> bool {
-        self.global_exclusions.contains(dependency)
-            || scoped.is_some_and(|exclusions| exclusions.contains(dependency))
     }
 
     fn apply_overrides<'a, I>(
         &'a self,
         requirements: I,
-        scoped: Option<&'a OverrideMap>,
+        scoped: Option<&'a ScopeModifiers>,
     ) -> impl Iterator<Item = Cow<'a, Requirement>> + use<'a, I>
     where
         I: IntoIterator<Item = &'a Requirement>,
@@ -375,9 +530,8 @@ impl DependencyModifierIndex {
                 .map(|requirement| requirement.name.clone())
                 .collect::<FxHashSet<_>>();
             let mut additions = scoped
-                .iter()
-                .filter(|(name, _)| !names.contains(*name))
-                .flat_map(|(_, requirements)| requirements)
+                .overrides()
+                .filter(|requirement| !names.contains(&requirement.name))
                 .collect::<Vec<_>>();
             additions.sort_unstable();
 
@@ -399,11 +553,14 @@ impl DependencyModifierIndex {
     fn apply_requirement<'a>(
         &'a self,
         requirement: &'a Requirement,
-        scoped: Option<&'a OverrideMap>,
+        scoped: Option<&'a ScopeModifiers>,
     ) -> impl Iterator<Item = Cow<'a, Requirement>> {
         let Some(overrides) = scoped
-            .and_then(|overrides| overrides.get(&requirement.name))
-            .or_else(|| self.global_overrides.get(&requirement.name))
+            .and_then(|scope| scope.dependencies.get(&requirement.name))
+            .filter(|modifier| !modifier.overrides.is_empty())
+            .or_else(|| self.global.dependencies.get(&requirement.name))
+            .filter(|modifier| !modifier.overrides.is_empty())
+            .map(|modifier| &modifier.overrides)
         else {
             return Either::Left(std::iter::once(Cow::Borrowed(requirement)));
         };

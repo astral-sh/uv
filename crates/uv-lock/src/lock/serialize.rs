@@ -1,4 +1,3 @@
-use std::collections::BTreeSet;
 use std::fmt;
 
 use rustc_hash::FxHashMap;
@@ -220,8 +219,7 @@ fn write_manifest(writer: &mut LockWriter, manifest: &ResolverManifest) -> Resul
     let has_manifest = !manifest.members.is_empty()
         || !manifest.requirements.is_empty()
         || !manifest.constraints.is_empty()
-        || !manifest.overrides.is_empty()
-        || !manifest.excludes.is_empty()
+        || !manifest.modifiers.is_empty()
         || !manifest.build_constraints.is_empty()
         || has_dependency_groups
         || !manifest.dependency_metadata.is_empty();
@@ -237,8 +235,9 @@ fn write_manifest(writer: &mut LockWriter, manifest: &ResolverManifest) -> Resul
     }
     write_serialized_non_empty_array(writer, "requirements", &manifest.requirements)?;
     write_serialized_non_empty_array(writer, "constraints", &manifest.constraints)?;
-    write_serialized_non_empty_array(writer, "overrides", &manifest.overrides)?;
-    write_serialized_non_empty_array(writer, "excludes", &manifest.excludes)?;
+    let modifiers = manifest.modifiers.to_entries();
+    write_serialized_non_empty_array(writer, "overrides", modifiers.overrides())?;
+    write_serialized_non_empty_array(writer, "excludes", modifiers.exclusions())?;
     write_serialized_non_empty_array(writer, "build-constraints", &manifest.build_constraints)?;
 
     if has_dependency_groups {
@@ -599,12 +598,13 @@ fn write_dependency_inline(
 }
 
 /// Writes a Serde-backed array, omitting the key when the array is empty.
-fn write_serialized_non_empty_array<T: Serialize>(
+fn write_serialized_non_empty_array<'a, T: Serialize + 'a>(
     writer: &mut LockWriter,
     key: &str,
-    values: &BTreeSet<T>,
+    values: impl IntoIterator<Item = &'a T, IntoIter: ExactSizeIterator>,
 ) -> Result<(), WriteError> {
-    if values.is_empty() {
+    let values = values.into_iter();
+    if values.len() == 0 {
         return Ok(());
     }
     write_serialized_array(writer, key, values)
@@ -614,11 +614,12 @@ fn write_serialized_non_empty_array<T: Serialize>(
 ///
 /// Empty and single-element arrays stay on one line, while larger arrays place each element on
 /// its own line. Unlike [`write_serialized_non_empty_array`], this retains empty dependency groups.
-fn write_serialized_array<T: Serialize>(
+fn write_serialized_array<'a, T: Serialize + 'a>(
     writer: &mut LockWriter,
     key: &str,
-    values: &BTreeSet<T>,
+    values: impl IntoIterator<Item = &'a T, IntoIter: ExactSizeIterator>,
 ) -> Result<(), WriteError> {
+    let values = values.into_iter();
     writer.key_start(key)?;
     let write_value = |writer: &mut LockWriter, value: &T| {
         let value = serialize_value(value)?;
