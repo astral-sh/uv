@@ -1530,7 +1530,7 @@ impl BuildMessage {
                 writeln!(
                     printer.stdout(),
                     "{}",
-                    format!("Building `{raw_filename}` will include the following files:").bold()
+                    format!("Building {raw_filename} will include the following files:").bold()
                 )?;
                 for (file, source) in file_list {
                     if let Some(source) = source {

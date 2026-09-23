@@ -100,8 +100,7 @@ The documentation is divided into:
 1. Wrap URLs and file paths in backticks when they are part of a sentence. Omit the backticks when
    introducing the value with a colon, e.g., `Failed to read: path/to/file` instead of
    ``Failed to read: `path/to/file` ``. This applies to progress messages, errors, warnings, and
-   logs. Output intended to be read as data, such as bare paths and requirements files, should not
-   include backticks.
+   logs on stderr. Keep stdout output formats unchanged, since they may be consumed by scripts.
 1. All CLI output must be interpretable and understandable _without_ the use of color and other
    styling. (For example: even if a command is rendered in green, wrap it in backticks.)
 1. `NO_COLOR` must be respected when using any colors or styling.

@@ -1175,7 +1175,7 @@ fn wheel_data_respects_excludes() -> Result<()> {
     uv_snapshot!(context.build().arg("--wheel").arg("--list"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    Building `project-0.1.0-py3-none-any.whl` will include the following files:
+    Building project-0.1.0-py3-none-any.whl will include the following files:
     project/__init__.py (src/project/__init__.py)
     project-0.1.0.data/data/public.txt (assets/public.txt)
     project-0.1.0.dist-info/WHEEL (generated)
@@ -1249,7 +1249,7 @@ fn wheel_data_symlink_containment() -> Result<()> {
     uv_snapshot!(context.build().arg("project").arg("--wheel").arg("--list"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    Building `project-0.1.0-py3-none-any.whl` will include the following files:
+    Building project-0.1.0-py3-none-any.whl will include the following files:
     project/__init__.py (src/project/__init__.py)
     project-0.1.0.data/data/public.txt (internal-assets/public.txt)
     project-0.1.0.dist-info/WHEEL (generated)

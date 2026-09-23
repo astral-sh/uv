@@ -2966,7 +2966,7 @@ fn build_list_files() -> Result<()> {
         .arg("--list"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    Building `built_by_uv-0.1.0.tar.gz` will include the following files:
+    Building built_by_uv-0.1.0.tar.gz will include the following files:
     built_by_uv-0.1.0/PKG-INFO (generated)
     built_by_uv-0.1.0/pyproject.toml (generated)
     built_by_uv-0.1.0/pyproject.toml.orig (pyproject.toml)
@@ -2983,7 +2983,7 @@ fn build_list_files() -> Result<()> {
     built_by_uv-0.1.0/src/built_by_uv/build-only.h (src/built_by_uv/build-only.h)
     built_by_uv-0.1.0/src/built_by_uv/cli.py (src/built_by_uv/cli.py)
     built_by_uv-0.1.0/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
-    Building `built_by_uv-0.1.0-py3-none-any.whl` will include the following files:
+    Building built_by_uv-0.1.0-py3-none-any.whl will include the following files:
     built_by_uv/__init__.py (src/built_by_uv/__init__.py)
     built_by_uv/arithmetic/__init__.py (src/built_by_uv/arithmetic/__init__.py)
     built_by_uv/arithmetic/circle.py (src/built_by_uv/arithmetic/circle.py)
@@ -3023,7 +3023,7 @@ fn build_list_files() -> Result<()> {
         .arg("--wheel"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    Building `built_by_uv-0.1.0.tar.gz` will include the following files:
+    Building built_by_uv-0.1.0.tar.gz will include the following files:
     built_by_uv-0.1.0/PKG-INFO (generated)
     built_by_uv-0.1.0/pyproject.toml (generated)
     built_by_uv-0.1.0/pyproject.toml.orig (pyproject.toml)
@@ -3040,7 +3040,7 @@ fn build_list_files() -> Result<()> {
     built_by_uv-0.1.0/src/built_by_uv/build-only.h (src/built_by_uv/build-only.h)
     built_by_uv-0.1.0/src/built_by_uv/cli.py (src/built_by_uv/cli.py)
     built_by_uv-0.1.0/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
-    Building `built_by_uv-0.1.0-py3-none-any.whl` will include the following files:
+    Building built_by_uv-0.1.0-py3-none-any.whl will include the following files:
     built_by_uv/__init__.py (src/built_by_uv/__init__.py)
     built_by_uv/arithmetic/__init__.py (src/built_by_uv/arithmetic/__init__.py)
     built_by_uv/arithmetic/circle.py (src/built_by_uv/arithmetic/circle.py)
