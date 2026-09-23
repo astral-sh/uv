@@ -228,17 +228,27 @@ impl DependencyModifiers {
         }
     }
 
-    /// Fallibly map override requirements, retaining exclusions and explicitly empty scopes.
-    pub fn try_map_requirements<E>(
+    /// Normalize override requirements without changing their package names.
+    ///
+    /// The callback must retain each requirement's name so that the package index stays valid.
+    pub fn try_normalize_requirements<E>(
         mut self,
         mut function: impl FnMut(Requirement) -> Result<Requirement, E>,
     ) -> Result<Self, E> {
-        self.global = self.global.try_map_requirements(&mut function)?;
-        for package in self.scoped.values_mut() {
-            package.versionless =
-                std::mem::take(&mut package.versionless).try_map_requirements(&mut function)?;
-            for scope in package.versions.values_mut() {
-                *scope = std::mem::take(scope).try_map_requirements(&mut function)?;
+        let scopes =
+            std::iter::once(&mut self.global).chain(self.scoped.values_mut().flat_map(|package| {
+                std::iter::once(&mut package.versionless).chain(package.versions.values_mut())
+            }));
+        for scope in scopes {
+            for (name, modifier) in &mut scope.dependencies {
+                modifier.overrides = std::mem::take(&mut modifier.overrides)
+                    .into_iter()
+                    .map(|requirement| {
+                        let requirement = function(requirement)?;
+                        debug_assert_eq!(&requirement.name, name);
+                        Ok(requirement)
+                    })
+                    .collect::<Result<_, E>>()?;
             }
         }
         Ok(self)
@@ -405,26 +415,6 @@ impl ScopeModifiers {
         }
     }
 
-    fn try_map_requirements<E>(
-        self,
-        function: &mut impl FnMut(Requirement) -> Result<Requirement, E>,
-    ) -> Result<Self, E> {
-        let mut mapped = Self {
-            has_overrides: self.has_overrides,
-            has_exclusions: self.has_exclusions,
-            ..Self::default()
-        };
-        for (name, modifier) in self.dependencies {
-            if modifier.excluded {
-                mapped.insert_exclusion(name);
-            }
-            for requirement in modifier.overrides {
-                mapped.insert_override(function(requirement)?);
-            }
-        }
-        Ok(mapped)
-    }
-
     fn append_entries(
         &self,
         package: PackageDependencyModifierTarget,
@@ -531,33 +521,29 @@ impl DependencyModifiers {
         requirement: &'a Requirement,
         scoped: Option<&'a ScopeModifiers>,
     ) -> impl Iterator<Item = Cow<'a, Requirement>> {
-        let Some(overrides) = scoped
+        let overrides = scoped
             .and_then(|scope| scope.dependencies.get(&requirement.name))
             .filter(|modifier| !modifier.overrides.is_empty())
             .or_else(|| self.global.dependencies.get(&requirement.name))
             .filter(|modifier| !modifier.overrides.is_empty())
-            .map(|modifier| &modifier.overrides)
-        else {
-            return Either::Left(std::iter::once(Cow::Borrowed(requirement)));
-        };
+            .map(|modifier| modifier.overrides.as_slice());
 
         // ASSUMPTION: There is one `extra = "..."`, and it's either the only marker or part
         // of the main conjunction.
-        let Some(extra_expression) = requirement.marker.top_level_extra() else {
-            return Either::Right(Either::Left(overrides.iter().map(Cow::Borrowed)));
+        let (requirements, extra_expression) = match overrides {
+            Some(overrides) => (overrides, requirement.marker.top_level_extra()),
+            None => (std::slice::from_ref(requirement), None),
         };
-
-        // When the original requirement is an optional dependency, the override(s) need to
-        // be optional for the same extra, otherwise we activate extras that should be inactive.
-        Either::Right(Either::Right(overrides.iter().map(
-            move |override_requirement| {
-                let marker = MarkerTree::expression(extra_expression.clone())
-                    .and(override_requirement.marker);
-                Cow::Owned(Requirement {
-                    marker,
-                    ..override_requirement.clone()
-                })
-            },
-        )))
+        requirements.iter().map(move |requirement| {
+            let Some(extra_expression) = &extra_expression else {
+                return Cow::Borrowed(requirement);
+            };
+            // When the original requirement is an optional dependency, the override(s) need to
+            // be optional for the same extra, otherwise we activate extras that should be inactive.
+            Cow::Owned(Requirement {
+                marker: MarkerTree::expression(extra_expression.clone()).and(requirement.marker),
+                ..requirement.clone()
+            })
+        })
     }
 }
