@@ -312,6 +312,69 @@ fn sync_relocatable_envs_default() -> Result<()> {
     Ok(())
 }
 
+/// Moving a relocatable environment with its editable project leaves a stale source path.
+#[test]
+fn sync_relocatable_editable() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let project_dir = context.temp_dir.child("project");
+    project_dir.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv-build"]
+        build-backend = "uv_build"
+    "#})?;
+    project_dir
+        .child("src/project/__init__.py")
+        .write_str("VALUE = 'hello'\n")?;
+
+    context
+        .venv()
+        .current_dir(project_dir.path())
+        .arg("--relocatable")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.sync()
+        .current_dir(project_dir.path())
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/project)
+    ");
+
+    uv_snapshot!(context.filters(), context.run()
+        .current_dir(project_dir.path())
+        .env_remove(EnvVars::VIRTUAL_ENV)
+        .args(["--no-sync", "python", "-I", "-c", "import project; print(project.VALUE)"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    hello
+    ");
+
+    let relocated_dir = context.temp_dir.child("relocated");
+    fs_err::rename(project_dir.path(), relocated_dir.path())?;
+
+    uv_snapshot!(context.filters(), context.run()
+        .current_dir(relocated_dir.path())
+        .env_remove(EnvVars::VIRTUAL_ENV)
+        .args(["--no-sync", "python", "-I", "-c", "import project; print(project.VALUE)"]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Traceback (most recent call last):
+      File \"<string>\", line 1, in <module>
+    ModuleNotFoundError: No module named 'project'
+    ");
+
+    Ok(())
+}
+
 /// Ensure that `uv sync` reuses remote wheels cached by `uv pip install`.
 #[test]
 fn sync_reuses_pip_install_wheel_cache() -> Result<()> {
