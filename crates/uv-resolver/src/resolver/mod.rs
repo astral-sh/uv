@@ -12,7 +12,7 @@ use std::{mem, thread};
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
 use papaya::{HashMap, ResizeMode};
-use pubgrub::{ConflictId, Id, Ranges, State, Term};
+use pubgrub::{ConflictId, Id, Ranges, State};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::{self, Receiver};
 use tokio::sync::oneshot;
@@ -524,18 +524,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     let range = state
                         .pubgrub
                         .partial_solution
-                        .term_intersection_for_package(next_id)
-                        .and_then(|term| match term {
-                            Term {
-                                negative: false,
-                                set: range,
-                            } => Some(range),
-                            Term {
-                                negative: true,
-                                set: _,
-                            } => None,
-                        })
-                        .expect("a package was chosen but we don't have a positive term");
+                        .required_versions_for_package(next_id)
+                        .expect("a package was chosen without required versions");
 
                     // Within a fixed resolver environment, an implicit registry candidate is
                     // stable for a given range and pre-release policy. Avoid repeating candidate
@@ -623,7 +613,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             state
                                 .pubgrub
                                 .partial_solution
-                                .unchanging_term_for_package(next_id),
+                                .unchanging_versions_for_package(next_id)
+                                .as_deref(),
                             &state.python_requirement,
                             &self.selector,
                             &state.env,

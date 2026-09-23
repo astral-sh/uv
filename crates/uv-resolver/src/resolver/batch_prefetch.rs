@@ -1,8 +1,6 @@
 use std::cmp::min;
 use std::sync::Arc;
 
-use pubgrub::Term;
-
 use itertools::Itertools;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, trace};
@@ -77,7 +75,7 @@ impl BatchPrefetcher {
         index: Option<&IndexMetadata>,
         version: &Version,
         current_range: &Range<Version>,
-        unchangeable_constraints: Option<&Term<Range<Version>>>,
+        unchangeable_constraints: Option<&Range<Version>>,
         python_requirement: &PythonRequirement,
         selector: &CandidateSelector,
         env: &ResolverEnvironment,
@@ -191,7 +189,7 @@ impl BatchPrefetcherRunner {
     fn send_prefetch(
         &self,
         name: &PackageName,
-        unchangeable_constraints: Option<&Term<Range<Version>>>,
+        unchangeable_constraints: Option<&Range<Version>>,
         total_prefetch: usize,
         versions_response: &Arc<VersionsResponse>,
         mut phase: BatchPrefetchStrategy,
@@ -237,11 +235,7 @@ impl BatchPrefetcherRunner {
                     // prefetching for foo 1.60 and have a dependency for `foo>=1.50`, so we should
                     // only prefetch 1.60 to 1.50, knowing 1.49 will always be rejected.
                     if let Some(unchangeable_constraints) = &unchangeable_constraints {
-                        range = if unchangeable_constraints.negative {
-                            range.difference(&unchangeable_constraints.set)
-                        } else {
-                            range.intersection(&unchangeable_constraints.set)
-                        };
+                        range = range.intersection(unchangeable_constraints);
                     }
                     if let Some(candidate) =
                         selector.select_no_preference(name, &range, version_map, env)
