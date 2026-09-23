@@ -1669,6 +1669,10 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
     "#})
     .await?;
     let trusted_digest = hex::encode(Sha256::digest(&trusted));
+    let replacement_digest = hex::encode(Sha256::digest(&replacement));
+    let context = context
+        .with_filter((trusted_digest.clone(), "[TRUSTED_HASH]"))
+        .with_filter((replacement_digest, "[REPLACEMENT_HASH]"));
     let mut source = Vec::new();
     write_tar_gz(
         &mut source,
@@ -1893,10 +1897,10 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
       cause: Hash mismatch for `review-dep==1.0.0`
 
              Expected:
-               sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb
+               sha256:[TRUSTED_HASH]
 
              Computed:
-               sha256:1aa0f7263e4991934282ab8912e95fdd34f24459d7c4f8b845c2281a04c89807
+               sha256:[REPLACEMENT_HASH]
     ");
     assert!(
         !sentinel.exists(),
@@ -1913,10 +1917,10 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
       cause: Hash mismatch for `review-dep==1.0.0`
 
              Expected:
-               sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb
+               sha256:[TRUSTED_HASH]
 
              Computed:
-               sha256:1aa0f7263e4991934282ab8912e95fdd34f24459d7c4f8b845c2281a04c89807
+               sha256:[REPLACEMENT_HASH]
     ");
     assert!(
         !sentinel.exists(),
@@ -1933,10 +1937,10 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
       cause: Hash mismatch for `review-dep==1.0.0`
 
              Expected:
-               sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb
+               sha256:[TRUSTED_HASH]
 
              Computed:
-               sha256:1aa0f7263e4991934282ab8912e95fdd34f24459d7c4f8b845c2281a04c89807
+               sha256:[REPLACEMENT_HASH]
     ");
     assert!(
         !sentinel.exists(),
@@ -1955,10 +1959,10 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
       cause: Hash mismatch for `review-dep==1.0.0`
 
              Expected:
-               sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb
+               sha256:[TRUSTED_HASH]
 
              Computed:
-               sha256:1aa0f7263e4991934282ab8912e95fdd34f24459d7c4f8b845c2281a04c89807
+               sha256:[REPLACEMENT_HASH]
 
     hint: `demo-pkg` was included because `project` (v0.1.0) depends on `demo-pkg`
     ");
@@ -2004,10 +2008,10 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
       cause: Hash mismatch for `review-dep==1.0.0`
 
              Expected:
-               sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb
+               sha256:[TRUSTED_HASH]
 
              Computed:
-               sha256:1aa0f7263e4991934282ab8912e95fdd34f24459d7c4f8b845c2281a04c89807
+               sha256:[REPLACEMENT_HASH]
 
     hint: `demo-pkg` was included because `project` (v0.1.0) depends on `demo-pkg`
     ");
@@ -2095,6 +2099,11 @@ async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
         r#"Path(os.environ["UV_LOCK_TEST_SENTINEL"]).write_text("executed\n")"#,
         "",
     )?;
+    let trusted_digest = hex::encode(Sha256::digest(&trusted_archive));
+    let replacement_digest = hex::encode(Sha256::digest(&replacement_archive));
+    let context = context
+        .with_filter((trusted_digest, "[TRUSTED_HASH]"))
+        .with_filter((replacement_digest, "[REPLACEMENT_HASH]"));
 
     Mock::given(method("GET"))
         .and(path(archive_path))
@@ -2134,7 +2143,7 @@ async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
         name = "demo-pkg"
         version = "1.0.0"
         source = { url = "http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz" }
-        sdist = { hash = "sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f" }
+        sdist = { hash = "sha256:[TRUSTED_HASH]" }
 
         [[package]]
         name = "project"
@@ -2176,10 +2185,10 @@ async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
       cause: Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
 
              Expected:
-               sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
+               sha256:[TRUSTED_HASH]
 
              Computed:
-               sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
+               sha256:[REPLACEMENT_HASH]
     ");
     assert!(!sentinel.exists(), "the locked build backend was executed");
 
@@ -2194,10 +2203,10 @@ async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
       cause: Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
 
              Expected:
-               sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
+               sha256:[TRUSTED_HASH]
 
              Computed:
-               sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
+               sha256:[REPLACEMENT_HASH]
     ");
     assert!(
         !sentinel.exists(),
@@ -2216,10 +2225,10 @@ async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
       cause: Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
 
              Expected:
-               sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
+               sha256:[TRUSTED_HASH]
 
              Computed:
-               sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
+               sha256:[REPLACEMENT_HASH]
     ");
     assert!(
         !sentinel.exists(),
@@ -2235,10 +2244,10 @@ async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
       cause: Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
 
              Expected:
-               sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
+               sha256:[TRUSTED_HASH]
 
              Computed:
-               sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
+               sha256:[REPLACEMENT_HASH]
     ");
     assert!(
         !sentinel.exists(),
@@ -2275,7 +2284,7 @@ async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
         name = "demo-pkg"
         version = "1.0.0"
         source = { url = "http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz" }
-        sdist = { hash = "sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc" }
+        sdist = { hash = "sha256:[REPLACEMENT_HASH]" }
 
         [[package]]
         name = "project"
@@ -2308,6 +2317,10 @@ async fn lock_sdist_registry_changed_index_locked_hash_mismatch() -> Result<()> 
         "",
     )?;
     let trusted_digest = hex::encode(Sha256::digest(&trusted_archive));
+    let replacement_digest = hex::encode(Sha256::digest(&replacement_archive));
+    let context = context
+        .with_filter((trusted_digest.clone(), "[TRUSTED_HASH]"))
+        .with_filter((replacement_digest, "[REPLACEMENT_HASH]"));
 
     let mut simple_index = json!({
         "meta": { "api-version": "1.0" },
@@ -2381,10 +2394,10 @@ async fn lock_sdist_registry_changed_index_locked_hash_mismatch() -> Result<()> 
       cause: Hash mismatch for `demo-pkg==1.0.0`
 
              Expected:
-               sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
+               sha256:[TRUSTED_HASH]
 
              Computed:
-               sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
+               sha256:[REPLACEMENT_HASH]
 
     hint: `demo-pkg` (v1.0.0) was included because `project` (v0.1.0) depends on `demo-pkg==1.0.0`
     ");
@@ -2412,6 +2425,10 @@ async fn lock_sdist_registry_missing_index_locked_hash_mismatch() -> Result<()> 
         "",
     )?;
     let trusted_digest = hex::encode(Sha256::digest(&trusted_archive));
+    let replacement_digest = hex::encode(Sha256::digest(&replacement_archive));
+    let context = context
+        .with_filter((trusted_digest.clone(), "[TRUSTED_HASH]"))
+        .with_filter((replacement_digest, "[REPLACEMENT_HASH]"));
 
     let mut simple_index = json!({
         "meta": { "api-version": "1.0" },
@@ -2484,10 +2501,10 @@ async fn lock_sdist_registry_missing_index_locked_hash_mismatch() -> Result<()> 
       cause: Hash mismatch for `demo-pkg==1.0.0`
 
              Expected:
-               sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
+               sha256:[TRUSTED_HASH]
 
              Computed:
-               sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
+               sha256:[REPLACEMENT_HASH]
 
     hint: `demo-pkg` (v1.0.0) was included because `project` (v0.1.0) depends on `demo-pkg==1.0.0`
     ");
@@ -2514,6 +2531,11 @@ async fn lock_sdist_url_root_subdirectory_locked_hash_mismatch() -> Result<()> {
         r#"Path(os.environ["UV_LOCK_TEST_SENTINEL"]).write_text("executed\n")"#,
         "",
     )?;
+    let trusted_digest = hex::encode(Sha256::digest(&trusted_archive));
+    let replacement_digest = hex::encode(Sha256::digest(&replacement_archive));
+    let context = context
+        .with_filter((trusted_digest, "[TRUSTED_HASH]"))
+        .with_filter((replacement_digest, "[REPLACEMENT_HASH]"));
 
     Mock::given(method("GET"))
         .and(path(archive_path))
@@ -2554,10 +2576,10 @@ async fn lock_sdist_url_root_subdirectory_locked_hash_mismatch() -> Result<()> {
       cause: Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz#subdirectory=.`
 
              Expected:
-               sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
+               sha256:[TRUSTED_HASH]
 
              Computed:
-               sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
+               sha256:[REPLACEMENT_HASH]
     ");
     assert!(
         !sentinel.exists(),
@@ -2582,6 +2604,11 @@ async fn lock_sdist_url_rejected_archive_not_cached() -> Result<()> {
         r#"Path(os.environ["UV_LOCK_TEST_SENTINEL"]).write_text("executed\n")"#,
         "",
     )?;
+    let trusted_digest = hex::encode(Sha256::digest(&trusted_archive));
+    let replacement_digest = hex::encode(Sha256::digest(&replacement_archive));
+    let context = context
+        .with_filter((trusted_digest, "[TRUSTED_HASH]"))
+        .with_filter((replacement_digest, "[REPLACEMENT_HASH]"));
     let malformed_archive = b"not an archive";
 
     Mock::given(method("GET"))
@@ -2623,10 +2650,10 @@ async fn lock_sdist_url_rejected_archive_not_cached() -> Result<()> {
       cause: Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
 
              Expected:
-               sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
+               sha256:[TRUSTED_HASH]
 
              Computed:
-               sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
+               sha256:[REPLACEMENT_HASH]
     ");
     assert!(
         !sentinel.exists(),
@@ -2703,6 +2730,11 @@ async fn lock_sdist_url_equivalent_subdirectory_locked_hash_mismatch() -> Result
         r#"Path(os.environ["UV_LOCK_TEST_SENTINEL"]).write_text("executed\n")"#,
         "nested/",
     )?;
+    let trusted_digest = hex::encode(Sha256::digest(&trusted_archive));
+    let replacement_digest = hex::encode(Sha256::digest(&replacement_archive));
+    let context = context
+        .with_filter((trusted_digest, "[TRUSTED_HASH]"))
+        .with_filter((replacement_digest, "[REPLACEMENT_HASH]"));
 
     Mock::given(method("GET"))
         .and(path(archive_path))
@@ -2750,10 +2782,10 @@ async fn lock_sdist_url_equivalent_subdirectory_locked_hash_mismatch() -> Result
       cause: Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz#subdirectory=nested/../nested`
 
              Expected:
-               sha256:09c631b3e8d48a04c4d7e3bc64d61dbc10a6b89131dffadd885eccb3ffa5e455
+               sha256:[TRUSTED_HASH]
 
              Computed:
-               sha256:4d8741dcbddac394ac2680d99589d36c9d8fd7b3b19665531de9cc02550ec5eb
+               sha256:[REPLACEMENT_HASH]
     ");
     assert!(
         !sentinel.exists(),
@@ -2776,6 +2808,11 @@ fn lock_sdist_path_locked_hash_mismatch() -> Result<()> {
         r#"Path(os.environ["UV_LOCK_TEST_SENTINEL"]).write_text("executed\n")"#,
         "",
     )?;
+    let trusted_digest = hex::encode(Sha256::digest(&trusted));
+    let replacement_digest = hex::encode(Sha256::digest(&replacement));
+    let context = context
+        .with_filter((trusted_digest, "[TRUSTED_HASH]"))
+        .with_filter((replacement_digest, "[REPLACEMENT_HASH]"));
 
     archive.write_binary(&trusted)?;
     context
@@ -2807,10 +2844,10 @@ fn lock_sdist_path_locked_hash_mismatch() -> Result<()> {
       cause: Hash mismatch for `demo-pkg @ file://[TEMP_DIR]/demo_pkg-1.0.0.tar.gz`
 
              Expected:
-               sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
+               sha256:[TRUSTED_HASH]
 
              Computed:
-               sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
+               sha256:[REPLACEMENT_HASH]
     ");
     assert!(!sentinel.exists(), "the locked backend was executed");
 
@@ -2822,10 +2859,10 @@ fn lock_sdist_path_locked_hash_mismatch() -> Result<()> {
       cause: Hash mismatch for `demo-pkg @ file://[TEMP_DIR]/demo_pkg-1.0.0.tar.gz`
 
              Expected:
-               sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
+               sha256:[TRUSTED_HASH]
 
              Computed:
-               sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
+               sha256:[REPLACEMENT_HASH]
     ");
     assert!(!sentinel.exists(), "the refreshed backend was executed");
 
@@ -2855,6 +2892,11 @@ fn lock_sdist_path_rejected_archive_not_cached() -> Result<()> {
         r#"Path(os.environ["UV_LOCK_TEST_SENTINEL"]).write_text("executed\n")"#,
         "",
     )?;
+    let trusted_digest = hex::encode(Sha256::digest(&trusted));
+    let replacement_digest = hex::encode(Sha256::digest(&replacement));
+    let context = context
+        .with_filter((trusted_digest, "[TRUSTED_HASH]"))
+        .with_filter((replacement_digest, "[REPLACEMENT_HASH]"));
 
     archive.write_binary(&trusted)?;
     context
@@ -2886,10 +2928,10 @@ fn lock_sdist_path_rejected_archive_not_cached() -> Result<()> {
       cause: Hash mismatch for `demo-pkg @ file://[TEMP_DIR]/demo_pkg-1.0.0.tar.gz`
 
              Expected:
-               sha256:93703857ad8ea956f6661f1d78d445be4340afa15f8b87bf1f3a79621068847f
+               sha256:[TRUSTED_HASH]
 
              Computed:
-               sha256:883b65920e21bce11c2697819dab77eb70e18d810b2746f49e46155d6ca527bc
+               sha256:[REPLACEMENT_HASH]
 
     hint: `demo-pkg` was included because `project` (v0.1.0) depends on `demo-pkg`
     ");
