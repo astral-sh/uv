@@ -19,6 +19,9 @@ env:
 
 jobs:
   publish-versions:
+    permissions:
+      contents: read
+      id-token: write # for the credential broker
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     environment:
       name: release
@@ -32,8 +35,25 @@ jobs:
       - name: "Set branch name"
         run: echo "BRANCH_NAME=update-versions-$VERSION-$(date +%s)" >> $GITHUB_ENV
 
-      - name: "Clone versions repo"
-        run: git clone https://${{ secrets.ASTRAL_VERSIONS_PAT }}@github.com/astral-sh/versions.git astral-versions
+      - name: "Get versions token"
+        id: token
+        uses: open-security-tools/ost-simple-sts@88f85462c7e9c9e2fb2745bd5ce4ee163aec0420 # v0.0.5
+        with:
+          exchange-url: ${{ secrets.RELEASES_STS_API_URL }}/exchange
+          audience: ${{ secrets.RELEASES_STS_API_URL }}
+          repository: astral-sh/versions
+          permissions: |
+            contents: write
+            pull_requests: write
+
+      - name: "Checkout versions repo"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: astral-sh/versions
+          ref: main
+          path: astral-versions
+          token: ${{ steps.token.outputs.token }}
+          persist-credentials: false
 
       - name: "Install uv"
         uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
@@ -51,8 +71,8 @@ jobs:
       - name: "Commit versions"
         working-directory: astral-versions
         run: |
-          git config user.name "astral-versions-bot"
-          git config user.email "176161322+astral-versions-bot@users.noreply.github.com"
+          git config user.name "astral-releases-bot[bot]"
+          git config user.email "328004183+astral-releases-bot[bot]@users.noreply.github.com"
 
           git checkout -b "$BRANCH_NAME"
           git add -A
@@ -61,13 +81,14 @@ jobs:
       - name: "Create Pull Request"
         working-directory: astral-versions
         env:
-          GITHUB_TOKEN: ${{ secrets.ASTRAL_VERSIONS_PAT }}
+          GH_TOKEN: ${{ steps.token.outputs.token }}
         run: |
           pull_request_title="Add uv $VERSION"
 
           gh pr list --state open --json title --jq ".[] | select(.title == \"$pull_request_title\") | .number" | \
             xargs -I {} gh pr close {}
 
+          gh auth setup-git
           git push origin "$BRANCH_NAME"
 
           gh pr create --base main --head "$BRANCH_NAME" \
@@ -79,7 +100,7 @@ jobs:
         if: ${{ !fromJson(inputs.plan).announcement_tag_is_implicit }}
         working-directory: astral-versions
         env:
-          GITHUB_TOKEN: ${{ secrets.ASTRAL_VERSIONS_PAT }}
+          GH_TOKEN: ${{ steps.token.outputs.token }}
         run: |
           # Wait for PR to be created before merging
           sleep 10

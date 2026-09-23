@@ -455,6 +455,9 @@ jobs:
       - plan
       - publish-github
     if: ${{ always() && needs.publish-github.result == 'success' }}
+    permissions:
+      contents: read
+      id-token: write # for the credential broker
     uses: $/.github/workflows/publish-versions.yml
     with:
       plan: ${{ needs.plan.outputs.val }}
