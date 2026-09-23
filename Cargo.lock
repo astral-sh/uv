@@ -7504,7 +7504,11 @@ dependencies = [
 name = "uv-tool"
 version = "0.0.86"
 dependencies = [
+ "anyhow",
+ "astral-version-ranges",
  "fs-err",
+ "indexmap",
+ "insta",
  "owo-colors",
  "pathdiff",
  "serde",

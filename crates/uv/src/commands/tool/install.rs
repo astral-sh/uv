@@ -29,7 +29,10 @@ use uv_python::{
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
-use uv_tool::{InstalledTools, Tool};
+use uv_tool::{
+    InstalledTools, NormalizedBuildConstraints, NormalizedConstraints, NormalizedExcludes,
+    NormalizedOverrides, NormalizedRequirements, Tool,
+};
 use uv_types::{HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::{warn_user, warn_user_once, warn_user_with_chain};
 use uv_workspace::WorkspaceCache;
@@ -49,7 +52,6 @@ use crate::commands::tool::common::{
     ToolLock, ToolPython, finalize_tool_install, refine_interpreter, remove_entrypoints,
     tool_environment_spec,
 };
-use crate::commands::tool::requirements::{normalize_requirements, requirements_equal};
 use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::{UvError, reporters::PythonDownloadReporter};
 use crate::printer::Printer;
@@ -152,8 +154,9 @@ pub(crate) async fn install(
     .await?
     .into_interpreter();
 
-    let receipt_build_constraints =
-        operations::read_constraints(build_constraints, &client_builder).await?;
+    let receipt_build_constraints = NormalizedBuildConstraints::new(
+        operations::read_constraints(build_constraints, &client_builder).await?,
+    );
     let build_constraints =
         Constraints::from_specifications(receipt_build_constraints.iter().cloned());
 
@@ -384,7 +387,7 @@ pub(crate) async fn install(
         requirements.push(requirement.clone());
         requirements.extend(
             resolve_names(
-                spec.requirements.clone(),
+                spec.requirements,
                 &interpreter,
                 &settings,
                 &build_constraints,
@@ -432,34 +435,37 @@ pub(crate) async fn install(
         )
     };
 
-    let requirements = normalize_requirements(requirements);
+    let requirements = NormalizedRequirements::new(requirements);
 
     // Resolve the constraints.
-    let receipt_constraints = spec
-        .constraints
-        .into_iter()
-        .map(|constraint| constraint.requirement)
-        .collect::<Vec<_>>();
+    let receipt_constraints = NormalizedConstraints::new(
+        spec.constraints
+            .into_iter()
+            .map(|constraint| constraint.requirement)
+            .collect(),
+    );
 
     // Resolve the overrides.
-    let receipt_overrides = resolve_names(
-        spec.overrides,
-        &interpreter,
-        &settings,
-        &build_constraints,
-        &client_builder,
-        &state,
-        &concurrency,
-        &cache,
-        workspace_cache,
-        printer,
-        preview,
-        lfs,
-    )
-    .await?;
+    let receipt_overrides = NormalizedOverrides::new(
+        resolve_names(
+            spec.overrides,
+            &interpreter,
+            &settings,
+            &build_constraints,
+            &client_builder,
+            &state,
+            &concurrency,
+            &cache,
+            workspace_cache,
+            printer,
+            preview,
+            lfs,
+        )
+        .await?,
+    );
 
     // Resolve the excludes.
-    let receipt_excludes = spec.excludes.clone();
+    let receipt_excludes = NormalizedExcludes::new(spec.excludes);
 
     // Convert to tool options.
     let options = ToolOptions::from(options);
@@ -487,10 +493,7 @@ pub(crate) async fn install(
     let (existing_tool_receipt, invalid_tool_receipt) =
         match installed_tools.get_tool_receipt(package_name) {
             Ok(None) => (None, false),
-            Ok(Some(receipt)) => (
-                Some(receipt.map_requirements(normalize_requirements)),
-                false,
-            ),
+            Ok(Some(receipt)) => (Some(receipt), false),
             Err(_) => {
                 // If the tool is not installed properly, remove the environment and continue.
                 match installed_tools.remove_environment(package_name) {
@@ -583,11 +586,11 @@ pub(crate) async fn install(
     }) {
         if let Some(tool_receipt) = existing_tool_receipt.as_ref() {
             if !tool_locks
-                && requirements_equal(&requirements, tool_receipt.requirements())
-                && receipt_constraints == tool_receipt.constraints()
-                && receipt_overrides == tool_receipt.overrides()
-                && receipt_excludes == tool_receipt.excludes()
-                && receipt_build_constraints == tool_receipt.build_constraints()
+                && &requirements == tool_receipt.requirements()
+                && &receipt_constraints == tool_receipt.constraints()
+                && &receipt_overrides == tool_receipt.overrides()
+                && &receipt_excludes == tool_receipt.excludes()
+                && &receipt_build_constraints == tool_receipt.build_constraints()
             {
                 let ResolverInstallerSettings {
                     resolver:
@@ -630,7 +633,7 @@ pub(crate) async fn install(
                     site_packages.satisfies_requirements(
                         requirements.iter(),
                         receipt_constraints.iter().chain(latest.iter()),
-                        &Overrides::from_requirements(receipt_overrides.clone()),
+                        &Overrides::from_requirements(receipt_overrides.to_vec()),
                         &Excludes::from_entries(receipt_excludes.iter().cloned()),
                         dependency_metadata,
                         DependencyMode::Transitive,
@@ -680,7 +683,7 @@ pub(crate) async fn install(
             .cloned()
             .map(UnresolvedRequirementSpecification::from)
             .collect(),
-        excludes: receipt_excludes.clone(),
+        excludes: receipt_excludes.to_vec(),
         ..spec
     };
 

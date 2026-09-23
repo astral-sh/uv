@@ -23,7 +23,7 @@ use uv_python::{
 };
 use uv_requirements::RequirementsSpecification;
 use uv_settings::{Combine, PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
-use uv_tool::{InstalledTools, Tool};
+use uv_tool::{InstalledTools, NormalizedConstraints, Tool};
 use uv_types::{HashStrategy, SourceTreeEditablePolicy};
 use uv_workspace::WorkspaceCache;
 
@@ -37,7 +37,6 @@ use crate::commands::project::{
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::{ToolLock, remove_entrypoints, tool_environment_spec};
-use crate::commands::tool::requirements::normalize_requirements;
 use crate::commands::{ExitStatus, conjunction, tool::common::finalize_tool_install};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -302,8 +301,6 @@ async fn upgrade_tool(
         }
     };
 
-    let existing_tool_receipt = existing_tool_receipt.map_requirements(normalize_requirements);
-
     let environment = match installed_tools.get_environment(name, cache) {
         Ok(Some(environment)) => environment,
         Ok(None) => {
@@ -350,12 +347,14 @@ async fn upgrade_tool(
     let settings = ResolverInstallerSettings::from(options.clone());
 
     let build_constraints = existing_tool_receipt.build_constraints().to_vec();
-    let manifest_constraints = existing_tool_receipt
-        .constraints()
-        .iter()
-        .chain(constraints)
-        .cloned()
-        .collect::<Vec<_>>();
+    let manifest_constraints = NormalizedConstraints::new(
+        existing_tool_receipt
+            .constraints()
+            .iter()
+            .chain(constraints)
+            .cloned()
+            .collect(),
+    );
     let manifest_overrides = existing_tool_receipt.overrides().to_vec();
     let manifest_excludes = existing_tool_receipt.excludes().to_vec();
     let lock_manifest = ToolLock::manifest(
@@ -371,7 +370,7 @@ async fn upgrade_tool(
     // Resolve the requirements.
     let spec = RequirementsSpecification::from_excludes(
         existing_tool_receipt.requirements().to_vec(),
-        manifest_constraints,
+        manifest_constraints.into_inner(),
         manifest_overrides,
         manifest_excludes,
     );
@@ -624,11 +623,11 @@ async fn upgrade_tool(
             &ToolOptions::from(options),
             true,
             existing_tool_receipt.python().to_owned(),
-            existing_tool_receipt.requirements().to_vec(),
-            existing_tool_receipt.constraints().to_vec(),
-            existing_tool_receipt.overrides().to_vec(),
-            existing_tool_receipt.excludes().to_vec(),
-            existing_tool_receipt.build_constraints().to_vec(),
+            existing_tool_receipt.requirements().clone(),
+            existing_tool_receipt.constraints().clone(),
+            existing_tool_receipt.overrides().clone(),
+            existing_tool_receipt.excludes().clone(),
+            existing_tool_receipt.build_constraints().clone(),
             tool_lock.as_ref(),
             printer,
         )?;

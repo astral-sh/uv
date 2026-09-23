@@ -11,6 +11,11 @@ use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::PythonRequest;
 use uv_settings::{ToolOptions, ToolOptionsWire};
 
+use crate::{
+    NormalizedBuildConstraints, NormalizedConstraints, NormalizedExcludes, NormalizedOverrides,
+    NormalizedRequirements,
+};
+
 /// A tool entry.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(try_from = "ToolWire", into = "ToolWire")]
@@ -19,15 +24,15 @@ pub struct Tool {
     ///
     /// The first requirement is the tool target itself; any remaining requirements come from
     /// `--with`.
-    requirements: Vec<Requirement>,
+    requirements: NormalizedRequirements,
     /// The constraints requested by the user during installation.
-    constraints: Vec<Requirement>,
+    constraints: NormalizedConstraints,
     /// The overrides requested by the user during installation.
-    overrides: Vec<Requirement>,
+    overrides: NormalizedOverrides,
     /// The excludes requested by the user during installation.
-    excludes: Vec<ExcludeDependency>,
+    excludes: NormalizedExcludes,
     /// The build constraints requested by the user during installation.
-    build_constraints: Vec<NameRequirementSpecification>,
+    build_constraints: NormalizedBuildConstraints,
     /// The Python requested by the user during installation.
     python: Option<PythonRequest>,
     /// A mapping of entry point names to their metadata.
@@ -70,13 +75,14 @@ impl From<Tool> for ToolWire {
         Self {
             requirements: tool
                 .requirements
+                .into_inner()
                 .into_iter()
                 .map(RequirementWire::Requirement)
                 .collect(),
-            constraints: tool.constraints,
-            overrides: tool.overrides,
-            excludes: tool.excludes,
-            build_constraint_dependencies: tool.build_constraints,
+            constraints: tool.constraints.into_inner(),
+            overrides: tool.overrides.into_inner(),
+            excludes: tool.excludes.into_inner(),
+            build_constraint_dependencies: tool.build_constraints.into_inner(),
             python: tool.python,
             entrypoints: tool.entrypoints,
             options: tool.options.into(),
@@ -89,18 +95,19 @@ impl TryFrom<ToolWire> for Tool {
 
     fn try_from(tool: ToolWire) -> Result<Self, Self::Error> {
         Ok(Self {
-            requirements: tool
-                .requirements
-                .into_iter()
-                .map(|req| match req {
-                    RequirementWire::Requirement(requirements) => requirements,
-                    RequirementWire::Deprecated(requirement) => Requirement::from(requirement),
-                })
-                .collect(),
-            constraints: tool.constraints,
-            overrides: tool.overrides,
-            excludes: tool.excludes,
-            build_constraints: tool.build_constraint_dependencies,
+            requirements: NormalizedRequirements::new(
+                tool.requirements
+                    .into_iter()
+                    .map(|req| match req {
+                        RequirementWire::Requirement(requirements) => requirements,
+                        RequirementWire::Deprecated(requirement) => Requirement::from(requirement),
+                    })
+                    .collect(),
+            ),
+            constraints: NormalizedConstraints::new(tool.constraints),
+            overrides: NormalizedOverrides::new(tool.overrides),
+            excludes: NormalizedExcludes::new(tool.excludes),
+            build_constraints: NormalizedBuildConstraints::new(tool.build_constraint_dependencies),
             python: tool.python,
             entrypoints: tool.entrypoints,
             options: tool.options.into(),
@@ -172,11 +179,11 @@ fn each_element_on_its_line_array(elements: impl Iterator<Item = impl Into<Value
 impl Tool {
     /// Create a new `Tool`.
     pub fn new(
-        requirements: Vec<Requirement>,
-        constraints: Vec<Requirement>,
-        overrides: Vec<Requirement>,
-        excludes: Vec<ExcludeDependency>,
-        build_constraints: Vec<NameRequirementSpecification>,
+        requirements: NormalizedRequirements,
+        constraints: NormalizedConstraints,
+        overrides: NormalizedOverrides,
+        excludes: NormalizedExcludes,
+        build_constraints: NormalizedBuildConstraints,
         python: Option<PythonRequest>,
         entrypoints: impl IntoIterator<Item = ToolEntrypoint>,
         options: ToolOptions,
@@ -193,16 +200,6 @@ impl Tool {
             entrypoints,
             options,
         }
-    }
-
-    /// Transform the requirements recorded in the receipt.
-    #[must_use]
-    pub fn map_requirements(
-        mut self,
-        transform: impl FnOnce(Vec<Requirement>) -> Vec<Requirement>,
-    ) -> Self {
-        self.requirements = transform(self.requirements);
-        self
     }
 
     /// Create a new [`Tool`] with the given [`ToolOptions`].
@@ -365,23 +362,23 @@ impl Tool {
         &self.entrypoints
     }
 
-    pub fn requirements(&self) -> &[Requirement] {
+    pub fn requirements(&self) -> &NormalizedRequirements {
         &self.requirements
     }
 
-    pub fn constraints(&self) -> &[Requirement] {
+    pub fn constraints(&self) -> &NormalizedConstraints {
         &self.constraints
     }
 
-    pub fn overrides(&self) -> &[Requirement] {
+    pub fn overrides(&self) -> &NormalizedOverrides {
         &self.overrides
     }
 
-    pub fn excludes(&self) -> &[ExcludeDependency] {
+    pub fn excludes(&self) -> &NormalizedExcludes {
         &self.excludes
     }
 
-    pub fn build_constraints(&self) -> &[NameRequirementSpecification] {
+    pub fn build_constraints(&self) -> &NormalizedBuildConstraints {
         &self.build_constraints
     }
 

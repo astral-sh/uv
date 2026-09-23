@@ -250,7 +250,8 @@ fn tool_install_duplicate_requirements() {
         [tool]
         requirements = [
             { name = "simple-launcher" },
-            { name = "ok", marker = "python_full_version < '3.12'", specifier = "==1,>1" },
+            { name = "ok", marker = "python_full_version < '3.12'", specifier = "==1" },
+            { name = "ok", marker = "python_full_version < '3.12'", specifier = ">1,<3" },
             { name = "ok", marker = "python_full_version >= '3.12'", specifier = ">=2,<3" },
         ]
         entrypoints = [
@@ -435,6 +436,82 @@ fn tool_install_duplicate_prerelease_requirements() -> Result<()> {
         exclude-newer = "2024-03-25T00:00:00Z"
         "#);
     });
+    Ok(())
+}
+
+#[test]
+fn tool_install_duplicate_yanked_requirements() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "tool-yanked-requirements"
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.main-tool.versions."1.0.0"]
+        sdist = false
+        yanked = true
+        entry_points = ["main"]
+    "#})?;
+    let index = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("main-tool==1")
+        .args(["--with", "main-tool>=1rc1", "--with", "main-tool==1.0"])
+        .arg("--index-url")
+        .arg(index.index_url())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + main-tool==1.0.0
+    warning: `main-tool==1.0.0` is yanked
+    Installed 1 executable: main
+    ");
+
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("tools/main-tool/uv-receipt.toml"), @r#"
+        [tool]
+        requirements = [
+            { name = "main-tool", specifier = "==1" },
+            { name = "main-tool", specifier = ">=1rc1" },
+        ]
+        entrypoints = [
+            { name = "main", install-path = "[TEMP_DIR]/bin/main", from = "main-tool" },
+        ]
+
+        [tool.options]
+        index-url = "http://[LOCALHOST]/simple/"
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "#);
+    });
+
+    for requirement in [
+        "main-tool>=1,<=1",
+        "main-tool==1,>=0",
+        "main-tool===1,===1.0",
+    ] {
+        let context = uv_test::test_context!("3.12").with_tool_dirs();
+        let bin_dir = context.temp_dir.child("bin");
+        allow_duplicates! {
+            uv_snapshot!(context.filters(), context.tool_install()
+                .arg(requirement)
+                .arg("--index-url")
+                .arg(index.index_url())
+                .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+            exit_code: 1 (failure)
+            ----- stderr -----
+            error: No solution found when resolving dependencies
+              cause: Because main-tool==1.0.0 was yanked and you require main-tool==1.0.0, we can conclude that your requirements are unsatisfiable.
+            ");
+        }
+    }
     Ok(())
 }
 
@@ -5341,8 +5418,12 @@ fn tool_install_constraints() -> Result<()> {
 
     let constraints_txt = context.temp_dir.child("constraints.txt");
     constraints_txt.write_str(indoc::indoc! {r"
+        mypy-extensions[unused]<2
+        anyio>=3.0
         mypy-extensions<1
-        anyio>=3
+        anyio>=2
+        ignored
+        impossible<0; sys_platform == 'win32' and sys_platform != 'win32'
     "})?;
 
     // Install `black`.
@@ -5373,8 +5454,8 @@ fn tool_install_constraints() -> Result<()> {
         [tool]
         requirements = [{ name = "black" }]
         constraints = [
-            { name = "mypy-extensions", specifier = "<1" },
             { name = "anyio", specifier = ">=3" },
+            { name = "mypy-extensions", specifier = "<1" },
         ]
         entrypoints = [
             { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
@@ -5386,7 +5467,11 @@ fn tool_install_constraints() -> Result<()> {
         "#);
     });
 
-    // Installing with the same constraints should be a no-op.
+    // Equivalent constraints should be a no-op despite ordering, extras, and redundant clauses.
+    constraints_txt.write_str(indoc! {r"
+        anyio>=3
+        mypy-extensions<1
+    "})?;
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("black")
         .arg("--constraints")
@@ -5434,8 +5519,10 @@ fn tool_install_overrides() -> Result<()> {
 
     let overrides_txt = context.temp_dir.child("overrides.txt");
     overrides_txt.write_str(indoc::indoc! {r"
-        click<8
+        click<9
         anyio>=3
+        click<8
+        mypy-extensions; sys_platform == 'win32' and sys_platform != 'win32'
     "})?;
 
     // Install `black`.
@@ -5451,7 +5538,6 @@ fn tool_install_overrides() -> Result<()> {
     Installed [N] packages in [TIME]
      + black==24.3.0
      + click==7.1.2
-     + mypy-extensions==1.0.0
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
@@ -5466,8 +5552,9 @@ fn tool_install_overrides() -> Result<()> {
         [tool]
         requirements = [{ name = "black" }]
         overrides = [
-            { name = "click", specifier = "<8" },
             { name = "anyio", specifier = ">=3" },
+            { name = "click", specifier = "<8" },
+            { name = "mypy-extensions", marker = "python_version < '0'" },
         ]
         entrypoints = [
             { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
@@ -5478,6 +5565,22 @@ fn tool_install_overrides() -> Result<()> {
         exclude-newer = "2024-03-25T00:00:00Z"
         "#);
     });
+
+    // Equivalent overrides retain the false marker that suppresses `mypy-extensions`.
+    overrides_txt.write_str(indoc! {r"
+        mypy-extensions; sys_platform == 'win32' and sys_platform != 'win32'
+        anyio>=3.0
+        click<8.0
+    "})?;
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("--overrides")
+        .arg(overrides_txt.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    `black` is already installed
+    ");
 
     Ok(())
 }
@@ -6494,7 +6597,11 @@ fn tool_install_with_build_hashes() -> Result<()> {
                 return wheel.name
         "#})?;
         let constraints = context.temp_dir.child("constraints.txt");
-        constraints.write_str(&format!("build-dependency==1.0.0 --hash=sha256:{hash}\n"))?;
+        // The last nonempty hash declaration for a registry version takes precedence.
+        let incorrect_hash = "0".repeat(64);
+        constraints.write_str(&format!(
+            "build-dependency==1.0.0 --hash=sha256:{incorrect_hash}\nbuild-dependency==1 --hash=sha256:{hash}\n"
+        ))?;
 
         let install = || {
             let mut command = context.tool_install();
@@ -6522,7 +6629,10 @@ fn tool_install_with_build_hashes() -> Result<()> {
                 assert_snapshot!(context.read("tools/hash-tool/uv-receipt.toml"), @r#"
                 [tool]
                 requirements = [{ name = "hash-tool", directory = "[TEMP_DIR]/project" }]
-                build-constraint-dependencies = [{ name = "build-dependency", specifier = "==1.0.0", hashes = ["sha256:[BUILD_HASH]"] }]
+                build-constraint-dependencies = [
+                    { name = "build-dependency", specifier = "==1", hashes = ["sha256:0000000000000000000000000000000000000000000000000000000000000000"] },
+                    { name = "build-dependency", specifier = "==1", hashes = ["sha256:[BUILD_HASH]"] },
+                ]
                 entrypoints = [
                     { name = "hash-tool", install-path = "[TEMP_DIR]/bin/hash-tool", from = "hash-tool" },
                 ]
@@ -6535,11 +6645,10 @@ fn tool_install_with_build_hashes() -> Result<()> {
             });
         }
 
-        // The supplied hash is checked even when it isn't required.
+        // Reversing the declarations must change the hash that is checked.
         fs_err::remove_file(project.child("backend-executed"))?;
         constraints.write_str(&format!(
-            "build-dependency==1.0.0 --hash=sha256:{}\n",
-            "0".repeat(64)
+            "build-dependency==1 --hash=sha256:{hash}\nbuild-dependency==1.0.0 --hash=sha256:{incorrect_hash}\n"
         ))?;
         allow_duplicates! {
             uv_snapshot!(context.filters(), install().arg("--reinstall"), @"
@@ -6648,7 +6757,7 @@ fn tool_install_with_build_hashes() -> Result<()> {
                 assert_snapshot!(context.read("tools/hash-tool/uv-receipt.toml"), @r#"
                 [tool]
                 requirements = [{ name = "hash-tool", directory = "[TEMP_DIR]/project" }]
-                build-constraint-dependencies = [{ name = "build-dependency", specifier = ">=1.0.0", hashes = ["sha256:0000000000000000000000000000000000000000000000000000000000000000"] }]
+                build-constraint-dependencies = [{ name = "build-dependency", specifier = ">=1", hashes = ["sha256:0000000000000000000000000000000000000000000000000000000000000000"] }]
                 entrypoints = [
                     { name = "hash-tool", install-path = "[TEMP_DIR]/bin/hash-tool", from = "hash-tool" },
                 ]

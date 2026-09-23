@@ -19,17 +19,37 @@ use uv_test::packse::{PackseServer, scenario::Scenario};
 use uv_test::{uv_snapshot, venv_bin_path};
 
 #[test]
-fn tool_upgrade_duplicate_requirements() -> Result<()> {
+fn tool_upgrade_duplicate_inputs() -> Result<()> {
     let context = uv_test::test_context!("3.12")
         .with_filtered_exe_suffix()
         .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
     let links = context.workspace_root.join("test/links");
+    context
+        .temp_dir
+        .child("constraints.txt")
+        .write_str("ok<4\n")?;
+    context
+        .temp_dir
+        .child("overrides.txt")
+        .write_str("unused>=1\n")?;
+    context
+        .temp_dir
+        .child("excludes.txt")
+        .write_str("excluded\n")?;
+    context
+        .temp_dir
+        .child("build-constraints.txt")
+        .write_str("setuptools<80\n")?;
     let mut install = context.tool_install();
     install
         .arg("simple-launcher")
         .args(["--with", "ok<3", "--no-index", "--find-links"])
         .arg(&links)
+        .args(["--constraints", "constraints.txt"])
+        .args(["--overrides", "overrides.txt"])
+        .args(["--excludes", "excludes.txt"])
+        .args(["--build-constraints", "build-constraints.txt"])
         .env(EnvVars::PATH, bin_dir.as_os_str());
 
     uv_snapshot!(context.filters(), &mut install, @"
@@ -51,6 +71,20 @@ fn tool_upgrade_duplicate_requirements() -> Result<()> {
         "{ name = \"ok\", specifier = \"<3\" },",
         "{ name = \"ok\", specifier = \"<4\" },\n    { name = \"ok\", specifier = \"<3\" },\n    { name = \"ok\" },",
     );
+    let legacy = legacy
+        .replace(
+            "constraints = [{ name = \"ok\", specifier = \"<4\" }]",
+            "constraints = [{ name = \"ok\", specifier = \"<5\" }, { name = \"ok\", specifier = \"<4.0\" }]",
+        )
+        .replace(
+            "overrides = [{ name = \"unused\", specifier = \">=1\" }]",
+            "overrides = [{ name = \"unused\", specifier = \">=0\" }, { name = \"unused\", specifier = \">=1.0\" }]",
+        )
+        .replace("excludes = [\"excluded\"]", "excludes = [\"excluded\", \"excluded\"]")
+        .replace(
+            "build-constraint-dependencies = [{ name = \"setuptools\", specifier = \"<80\" }]",
+            "build-constraint-dependencies = [{ name = \"setuptools\", specifier = \"<81\" }, { name = \"setuptools\", specifier = \"<80.0\" }]",
+        );
     assert_ne!(legacy, normalized);
     receipt.write_str(&legacy)?;
 
@@ -1725,7 +1759,6 @@ fn tool_upgrade_writes_preview_lock() {
 
         [manifest]
         requirements = [{ name = "simple-launcher" }]
-        constraints = [{ name = "simple-launcher" }]
 
         [[package]]
         name = "simple-launcher"
@@ -1806,7 +1839,7 @@ async fn tool_upgrade_resolution_hints() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to upgrade simple-launcher
-      cause: Because simple-launcher was not found in the package registry and you require simple-launcher>0.1.0, we can conclude that your requirements are unsatisfiable.
+      cause: Because simple-launcher was not found in the package registry and you require simple-launcher>0.1, we can conclude that your requirements are unsatisfiable.
 
     hint: An index URL (http://[LOCALHOST]/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
     ");

@@ -1,39 +1,236 @@
 use std::collections::BTreeMap;
-use std::{iter, mem};
+use std::mem;
+use std::ops::Deref;
 
 use indexmap::IndexMap;
-use uv_distribution_types::{Requirement, RequirementSource};
+use uv_configuration::{ExcludeDependency, Excludes};
+use uv_distribution_types::{NameRequirementSpecification, Requirement, RequirementSource};
 use uv_pep440::{
     Operator, Version, VersionSpecifier, VersionSpecifiers, canonicalize_version_ranges,
 };
 use uv_pep508::MarkerTree;
 use version_ranges::Ranges;
 
-/// Compare requirements already ordered and partitioned by [`normalize_requirements`].
-/// Registry constraints are compared by accepted versions and prerelease opt-in; the source,
-/// scope, extras, groups, and markers must match.
-pub(super) fn requirements_equal(left: &[Requirement], right: &[Requirement]) -> bool {
+/// Tool requirements, with the target package first and equivalent declarations combined.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct NormalizedRequirements(RequirementSet);
+
+impl NormalizedRequirements {
+    /// Normalize requirements while keeping the tool target first.
+    pub fn new(requirements: Vec<Requirement>) -> Self {
+        Self(RequirementSet(normalize_requirements(requirements)))
+    }
+
+    /// Consume the normalized collection.
+    pub fn into_inner(self) -> Vec<Requirement> {
+        self.0.0
+    }
+}
+
+impl Deref for NormalizedRequirements {
+    type Target = [Requirement];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0.0
+    }
+}
+
+/// Constraints compared by their restrictions, without extras or empty declarations.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct NormalizedConstraints(RequirementSet);
+
+impl NormalizedConstraints {
+    /// Normalize constraints, dropping false markers and empty declarations and ignoring extras.
+    pub fn new(mut constraints: Vec<Requirement>) -> Self {
+        constraints.retain(|requirement| {
+            if let RequirementSource::Registry { specifier, .. } = &requirement.source
+                && specifier.is_empty()
+            {
+                return false;
+            }
+            !requirement.marker.is_false()
+        });
+        for constraint in &mut constraints {
+            constraint.extras = Box::new([]);
+        }
+        Self(RequirementSet(normalize(constraints)))
+    }
+
+    /// Consume the normalized collection.
+    pub fn into_inner(self) -> Vec<Requirement> {
+        self.0.0
+    }
+}
+
+impl Deref for NormalizedConstraints {
+    type Target = [Requirement];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0.0
+    }
+}
+
+/// Replacement requirements, including false markers that suppress the original dependency.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct NormalizedOverrides(RequirementSet);
+
+impl NormalizedOverrides {
+    /// Normalize replacements without dropping false markers that suppress dependencies.
+    pub fn new(overrides: Vec<Requirement>) -> Self {
+        Self(RequirementSet(normalize(overrides)))
+    }
+
+    /// Consume the normalized collection.
+    pub fn into_inner(self) -> Vec<Requirement> {
+        self.0.0
+    }
+}
+
+impl Deref for NormalizedOverrides {
+    type Target = [Requirement];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0.0
+    }
+}
+
+/// Exclusions sorted and deduplicated within each package scope.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct NormalizedExcludes(Vec<ExcludeDependency>);
+
+impl NormalizedExcludes {
+    /// Combine duplicate exclusions within each package and version scope.
+    pub fn new(excludes: Vec<ExcludeDependency>) -> Self {
+        Self(Excludes::from_entries(excludes).into_entries())
+    }
+
+    /// Consume the normalized collection.
+    pub fn into_inner(self) -> Vec<ExcludeDependency> {
+        self.0
+    }
+}
+
+impl Deref for NormalizedExcludes {
+    type Target = [ExcludeDependency];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+/// Build constraints with hash-bearing declarations kept in their original order.
+#[derive(Debug, Clone, Eq)]
+pub struct NormalizedBuildConstraints(Vec<NameRequirementSpecification>);
+
+impl NormalizedBuildConstraints {
+    /// Normalize hashless registry declarations between hash-bearing declarations.
+    /// Later hashes for the same registry version take precedence. URL fragments can also carry
+    /// hashes, so non-registry declarations retain their positions.
+    /// Bare constraints remain because hash validation checks for unpinned declarations.
+    pub fn new(constraints: Vec<NameRequirementSpecification>) -> Self {
+        let mut normalized = Vec::new();
+        let mut unhashed = Vec::new();
+        for mut constraint in constraints {
+            if constraint.requirement.marker.is_false() {
+                continue;
+            }
+            constraint.requirement.extras = Box::new([]);
+            if constraint.hashes.is_empty()
+                && let RequirementSource::Registry { .. } = &constraint.requirement.source
+            {
+                unhashed.push(constraint.requirement);
+                continue;
+            }
+            normalized.extend(
+                normalize(mem::take(&mut unhashed))
+                    .into_iter()
+                    .map(NameRequirementSpecification::from),
+            );
+            if let RequirementSource::Registry { specifier, .. } =
+                &mut constraint.requirement.source
+            {
+                *specifier = simplify_specifiers(mem::take(specifier));
+            }
+            constraint.requirement.groups.sort();
+            constraint.hashes.sort();
+            constraint.hashes.dedup();
+            normalized.push(constraint);
+        }
+        normalized.extend(
+            normalize(unhashed)
+                .into_iter()
+                .map(NameRequirementSpecification::from),
+        );
+        normalized.dedup_by(|left, right| {
+            left.hashes == right.hashes
+                && RequirementsKey::new(left.requirement.clone())
+                    == RequirementsKey::new(right.requirement.clone())
+        });
+        Self(normalized)
+    }
+
+    /// Consume the normalized collection.
+    pub fn into_inner(self) -> Vec<NameRequirementSpecification> {
+        self.0
+    }
+}
+
+impl PartialEq for NormalizedBuildConstraints {
+    fn eq(&self, other: &Self) -> bool {
+        self.len() == other.len()
+            && self.iter().zip(other.iter()).all(|(left, right)| {
+                left.hashes == right.hashes
+                    && RequirementsKey::new(left.requirement.clone())
+                        == RequirementsKey::new(right.requirement.clone())
+            })
+    }
+}
+
+impl Deref for NormalizedBuildConstraints {
+    type Target = [NameRequirementSpecification];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone, Eq)]
+struct RequirementSet(Vec<Requirement>);
+
+impl PartialEq for RequirementSet {
+    fn eq(&self, other: &Self) -> bool {
+        requirements_equal(&self.0, &other.0)
+    }
+}
+
+/// Compare normalized requirements with matching order and marker partitions.
+/// Registry constraints are compared by accepted versions, prerelease opt-in, and yanked-version
+/// eligibility; the source, scope, extras, groups, and markers must match.
+fn requirements_equal(left: &[Requirement], right: &[Requirement]) -> bool {
     left.len() == right.len()
         && left.iter().zip(right).all(|(left, right)| {
             RequirementsKey::new(left.clone()) == RequirementsKey::new(right.clone())
         })
 }
 
-/// A requirement with registry constraints compared by accepted versions and prerelease policy.
+/// A requirement compared by accepted versions and prerelease and yanked-version policies.
 #[derive(Eq, Hash, PartialEq)]
 struct RequirementsKey {
     requirement: Requirement,
     range: Ranges<Version>,
     prerelease: bool,
+    yanked: bool,
 }
 
 impl RequirementsKey {
     /// Replace registry specifiers with their accepted range for comparison.
-    /// Keep prerelease opt-in separate because equal ranges can have different prerelease policies.
+    /// Track prerelease and yanked-version policies separately from the accepted range.
     fn new(mut requirement: Requirement) -> Self {
         let mut range = Ranges::full();
         let mut prerelease = false;
+        let mut yanked = false;
         if let RequirementSource::Registry { specifier, .. } = &mut requirement.source {
+            yanked = allows_yanked(specifier.iter());
             for specifier in mem::take(specifier) {
                 prerelease |= allows_prereleases(&specifier);
                 range = range.intersection(&Ranges::from(specifier));
@@ -43,17 +240,15 @@ impl RequirementsKey {
             requirement,
             range: canonicalize_version_ranges(&range).unwrap_or(range),
             prerelease,
+            yanked,
         }
     }
 }
 
 /// Merge requirements with the same source and scope across disjoint marker regions.
 /// Extras are unioned and version constraints intersected wherever markers overlap.
-/// The first requirement identifies the tool target. Its package stays first, retaining the
-/// original requirement if all of its markers are false. Other requirements are sorted independently
-/// of input order.
-pub(super) fn normalize_requirements(requirements: Vec<Requirement>) -> Vec<Requirement> {
-    let target = requirements.first().cloned();
+/// Standalone pins stay separate because they permit yanked versions.
+fn normalize(requirements: Vec<Requirement>) -> Vec<Requirement> {
     let mut sources = BTreeMap::<Requirement, Vec<Requirement>>::new();
     for mut requirement in requirements {
         let mut extras = requirement.extras.into_vec();
@@ -64,7 +259,9 @@ pub(super) fn normalize_requirements(requirements: Vec<Requirement>) -> Vec<Requ
         let mut key = requirement.clone();
         key.extras = Box::new([]);
         key.marker = MarkerTree::TRUE;
-        if let RequirementSource::Registry { specifier, .. } = &mut key.source {
+        if let RequirementSource::Registry { specifier, .. } = &mut key.source
+            && !allows_yanked(specifier.iter())
+        {
             *specifier = VersionSpecifiers::empty();
         }
         sources.entry(key).or_default().push(requirement);
@@ -109,6 +306,7 @@ pub(super) fn normalize_requirements(requirements: Vec<Requirement>) -> Vec<Requ
                         specifier: other, ..
                     },
                 ) = (&mut combined.source, &requirement.source)
+                    && !allows_yanked(specifier.iter())
                 {
                     *specifier = mem::take(specifier)
                         .into_iter()
@@ -117,7 +315,7 @@ pub(super) fn normalize_requirements(requirements: Vec<Requirement>) -> Vec<Requ
                 }
                 next.push(combined);
             }
-            if !remaining.is_false() {
+            if !remaining.is_false() || requirement.marker.is_false() {
                 next.push(Requirement {
                     marker: remaining,
                     ..requirement
@@ -128,6 +326,20 @@ pub(super) fn normalize_requirements(requirements: Vec<Requirement>) -> Vec<Requ
         normalized.extend(regions);
     }
 
+    normalized.sort_by(|left, right| {
+        left.cmp(right)
+            .then_with(|| left.to_string().cmp(&right.to_string()))
+    });
+    normalized
+}
+
+/// The first requirement identifies the tool target. Its package stays first, retaining the
+/// original requirement if all of its markers are false. Other requirements are sorted independently
+/// of input order.
+fn normalize_requirements(mut requirements: Vec<Requirement>) -> Vec<Requirement> {
+    let target = requirements.first().cloned();
+    requirements.retain(|requirement| !requirement.marker.is_false());
+    let mut normalized = normalize(requirements);
     // A false target marker should still identify the tool in its receipt.
     let target_name = target.as_ref().map(|target| target.name.clone());
     if let Some(target) = target
@@ -145,7 +357,7 @@ pub(super) fn normalize_requirements(requirements: Vec<Requirement>) -> Vec<Requ
     normalized
 }
 
-/// Combine disjoint marker regions with equivalent extras, accepted versions, and prerelease opt-in.
+/// Combine disjoint marker regions with equivalent extras, accepted versions, and candidate policies.
 /// Keep the first region's simplified specifiers when multiple forms accept the same versions.
 fn coalesce(requirements: Vec<Requirement>) -> Vec<Requirement> {
     let mut combined = IndexMap::<RequirementsKey, Requirement>::new();
@@ -163,57 +375,32 @@ fn coalesce(requirements: Vec<Requirement>) -> Vec<Requirement> {
     combined.into_values().collect()
 }
 
-/// Remove clauses implied by the remaining constraints without changing prerelease opt-in.
+/// Remove implied clauses without changing prerelease opt-in or yanked-version eligibility.
 /// For example, `>=1rc1,>=1` keeps both clauses because the first opts into prereleases.
+/// Likewise, `==1,>=0` keeps both clauses because a standalone pin would permit yanked versions.
 fn simplify_specifiers(specifiers: VersionSpecifiers) -> VersionSpecifiers {
     let mut specifiers = specifiers
         .into_iter()
         .map(normalize_specifier)
         .collect::<Vec<_>>();
     specifiers.sort_by_cached_key(ToString::to_string);
-    specifiers.dedup_by(|left, right| {
-        left == right && left.version().release().len() == right.version().release().len()
-    });
-
-    // A pair of inclusive bounds can be an exact pin. Use PEP 440 ranges for this comparison,
-    // including local versions; an ordinary numeric interval does not model `==` correctly.
-    let range = specifiers.iter().fold(Ranges::full(), |range, specifier| {
-        range.intersection(&Ranges::from(specifier.clone()))
-    });
-    let range = canonicalize_version_ranges(&range).unwrap_or(range);
-    for specifier in &specifiers {
-        let equal = normalize_specifier(VersionSpecifier::equals_version(
-            specifier.version().clone(),
-        ));
-        let equal_range = Ranges::<Version>::from(equal.clone());
-        if range == canonicalize_version_ranges(&equal_range).unwrap_or(equal_range) {
-            let prerelease = if allows_prereleases(&equal) {
-                None
-            } else {
-                specifiers.into_iter().find(allows_prereleases)
-            };
-            return iter::once(equal).chain(prerelease).collect();
-        }
-    }
     let mut index = 0;
     while index < specifiers.len() {
         let specifier = &specifiers[index];
-        if allows_prereleases(specifier)
-            && !specifiers
-                .iter()
-                .enumerate()
-                .any(|(other_index, other)| other_index != index && allows_prereleases(other))
-        {
-            index += 1;
-            continue;
-        }
         let remaining = specifiers
             .iter()
             .enumerate()
             .filter(|(other_index, _)| *other_index != index)
-            .fold(Ranges::full(), |range, (_, specifier)| {
-                range.intersection(&Ranges::from(specifier.clone()))
-            });
+            .map(|(_, specifier)| specifier);
+        if allows_yanked(remaining.clone())
+            || (allows_prereleases(specifier) && !remaining.clone().any(allows_prereleases))
+        {
+            index += 1;
+            continue;
+        }
+        let remaining = remaining.fold(Ranges::full(), |range, specifier| {
+            range.intersection(&Ranges::from(specifier.clone()))
+        });
         let range = Ranges::<Version>::from(specifier.clone());
         let remaining = canonicalize_version_ranges(&remaining).unwrap_or(remaining);
         let range = canonicalize_version_ranges(&range).unwrap_or(range);
@@ -224,6 +411,25 @@ fn simplify_specifiers(specifiers: VersionSpecifiers) -> VersionSpecifiers {
         }
     }
     specifiers.into_iter().collect()
+}
+
+/// A standalone equality clause permits its version even when the index marks it as yanked.
+fn allows_yanked<'a>(mut specifiers: impl Iterator<Item = &'a VersionSpecifier>) -> bool {
+    let Some(specifier) = specifiers.next() else {
+        return false;
+    };
+    specifiers.next().is_none()
+        && match specifier.operator() {
+            Operator::Equal | Operator::ExactEqual => true,
+            Operator::NotEqual
+            | Operator::TildeEqual
+            | Operator::LessThan
+            | Operator::LessThanEqual
+            | Operator::GreaterThan
+            | Operator::GreaterThanEqual
+            | Operator::EqualStar
+            | Operator::NotEqualStar => false,
+        }
 }
 
 /// Normalize insignificant trailing zeros, keeping precision-sensitive operators intact.
@@ -278,13 +484,15 @@ mod tests {
 
     use anyhow::Result;
     use insta::assert_snapshot;
+    use uv_configuration::{ExcludeDependency, Excludes};
     use uv_distribution_types::{Requirement, RequirementSource};
     use uv_pep440::{Version, VersionSpecifiers};
     use uv_pep508::{MarkerTree, Requirement as Pep508Requirement};
     use uv_pypi_types::VerbatimParsedUrl;
 
     use super::{
-        allows_prereleases, normalize_requirements, requirements_equal, simplify_specifiers,
+        NormalizedExcludes, allows_prereleases, allows_yanked, normalize_requirements,
+        requirements_equal, simplify_specifiers,
     };
 
     fn requirements(inputs: &[&str]) -> Result<Vec<Requirement>> {
@@ -296,6 +504,61 @@ mod tests {
                 ))
             })
             .collect()
+    }
+
+    #[test]
+    fn scoped_exclusions() -> Result<()> {
+        #[derive(serde::Deserialize)]
+        struct Input {
+            excludes: Vec<ExcludeDependency>,
+        }
+
+        let original = toml::from_str::<Input>(
+            r#"
+            excludes = [
+                "global", "global",
+                { package = { name = "tool" }, dependencies = ["b", "a", "a"] },
+                { package = { name = "tool" }, dependencies = ["c"] },
+                { package = { name = "tool", version = "1" }, dependencies = [] },
+                { package = { name = "other" }, dependencies = ["a"] },
+            ]
+        "#,
+        )?
+        .excludes;
+        let normalized = NormalizedExcludes::new(original.clone());
+        let indexed = Excludes::from_entries(original);
+        let normalized_index = Excludes::from_entries(normalized.iter().cloned());
+        for package in ["tool", "other", "unrelated"] {
+            for version in ["1", "2"] {
+                for dependency in ["a", "b", "c", "global", "unrelated"] {
+                    assert_eq!(
+                        indexed.contains_for(
+                            &package.parse()?,
+                            &version.parse()?,
+                            &dependency.parse()?
+                        ),
+                        normalized_index.contains_for(
+                            &package.parse()?,
+                            &version.parse()?,
+                            &dependency.parse()?
+                        ),
+                    );
+                }
+            }
+        }
+        let expected = toml::from_str::<Input>(
+            r#"
+            excludes = [
+                "global",
+                { package = { name = "other" }, dependencies = ["a"] },
+                { package = { name = "tool" }, dependencies = ["a", "b", "c"] },
+                { package = { name = "tool", version = "1" }, dependencies = [] },
+            ]
+        "#,
+        )?
+        .excludes;
+        assert_eq!(normalized, NormalizedExcludes::new(expected));
+        Ok(())
     }
 
     #[test]
@@ -335,6 +598,8 @@ mod tests {
             ("foo!=1.*", "foo!=1.0.*"),
             ("foo===1", "foo==1"),
             ("foo~=1.0", "foo~=1.0.0"),
+            ("foo>=1,<=1.0", "foo==1.0"),
+            ("foo==1,>=0", "foo==1"),
         ] {
             assert!(
                 !requirements_equal(
@@ -347,10 +612,6 @@ mod tests {
         assert!(requirements_equal(
             &normalize_requirements(requirements(&["foo===1"])?),
             &normalize_requirements(requirements(&["foo===1.0"])?),
-        ));
-        assert!(requirements_equal(
-            &normalize_requirements(requirements(&["foo>=1,<=1.0"])?),
-            &normalize_requirements(requirements(&["foo==1.0"])?),
         ));
         assert!(requirements_equal(
             &normalize_requirements(requirements(&["foo~=1.2"])?),
@@ -399,8 +660,8 @@ mod tests {
         ~=1.2,>=1,<2 -> ~=1.2
         ==1.*,==1.0.* -> ==1.0.*
         !=1.*,!=1.0.* -> !=1.*
-        >=1,<=1 -> ==1
-        ===1,===1.0 -> ===1
+        >=1,<=1 -> <=1, >=1
+        ===1,===1.0 -> ===1, ===1
         >=1a1,>=1 -> >=1a1, >=1
         >=1a1,>=1b1,>=1 -> >=1b1, >=1
         !=1a1,>=1 -> >=1
@@ -480,6 +741,11 @@ mod tests {
                 assert_eq!(
                     original.iter().any(allows_prereleases),
                     normalized.iter().any(allows_prereleases),
+                    "{original} -> {normalized}"
+                );
+                assert_eq!(
+                    allows_yanked(original.iter()),
+                    allows_yanked(normalized.iter()),
                     "{original} -> {normalized}"
                 );
                 for version in &versions {

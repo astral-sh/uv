@@ -45,7 +45,10 @@ use uv_requirements::RequirementsSpecification;
 use uv_resolver::{FlatIndex, OptionsBuilder, Preference, ResolverOutput};
 use uv_settings::{PythonInstallMirrors, ToolOptions};
 use uv_shell::Shell;
-use uv_tool::{InstalledTools, Tool, ToolEntrypoint, entrypoint_paths};
+use uv_tool::{
+    InstalledTools, NormalizedBuildConstraints, NormalizedConstraints, NormalizedExcludes,
+    NormalizedOverrides, NormalizedRequirements, Tool, ToolEntrypoint, entrypoint_paths,
+};
 use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
@@ -738,11 +741,11 @@ pub(crate) fn finalize_tool_install(
     options: &ToolOptions,
     force: bool,
     python: Option<PythonRequest>,
-    requirements: Vec<Requirement>,
-    constraints: Vec<Requirement>,
-    overrides: Vec<Requirement>,
-    excludes: Vec<ExcludeDependency>,
-    build_constraints: Vec<NameRequirementSpecification>,
+    requirements: NormalizedRequirements,
+    constraints: NormalizedConstraints,
+    overrides: NormalizedOverrides,
+    excludes: NormalizedExcludes,
+    build_constraints: NormalizedBuildConstraints,
     lock: Option<&ToolLock>,
     printer: Printer,
 ) -> anyhow::Result<()> {
