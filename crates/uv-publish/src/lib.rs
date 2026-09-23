@@ -65,7 +65,7 @@ pub enum PublishError {
     InvalidFilename(PathBuf),
     #[error("Failed to publish: `{}`", _0.user_display())]
     PublishPrepare(PathBuf, #[source] Box<PublishPrepareError>),
-    #[error("Failed to publish `{}` to {}", _0.user_display(), _1)]
+    #[error("Failed to publish `{}` to `{}`", _0.user_display(), _1)]
     PublishSend(
         PathBuf,
         Box<DisplaySafeUrl>,
