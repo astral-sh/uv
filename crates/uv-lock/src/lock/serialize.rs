@@ -236,8 +236,8 @@ fn write_manifest(writer: &mut LockWriter, manifest: &ResolverManifest) -> Resul
     write_serialized_non_empty_array(writer, "requirements", &manifest.requirements)?;
     write_serialized_non_empty_array(writer, "constraints", &manifest.constraints)?;
     let modifiers = manifest.modifiers.to_entries();
-    write_serialized_non_empty_array(writer, "overrides", modifiers.overrides())?;
-    write_serialized_non_empty_array(writer, "excludes", modifiers.exclusions())?;
+    write_serialized_non_empty_array(writer, "overrides", &modifiers.overrides)?;
+    write_serialized_non_empty_array(writer, "excludes", &modifiers.exclusions)?;
     write_serialized_non_empty_array(writer, "build-constraints", &manifest.build_constraints)?;
 
     if has_dependency_groups {

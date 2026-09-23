@@ -243,7 +243,7 @@ impl Tool {
 
         let modifiers = self.modifiers.to_entries();
         let overrides = modifiers
-            .overrides()
+            .overrides
             .iter()
             .map(|r#override| {
                 serde::Serialize::serialize(&r#override, toml_edit::ser::ValueSerializer::new())
@@ -261,7 +261,7 @@ impl Tool {
         }
 
         let excludes = modifiers
-            .exclusions()
+            .exclusions
             .iter()
             .map(|r#exclude| {
                 serde::Serialize::serialize(&r#exclude, toml_edit::ser::ValueSerializer::new())
