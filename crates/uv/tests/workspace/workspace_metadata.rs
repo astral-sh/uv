@@ -464,6 +464,8 @@ fn workspace_metadata_script_includes_existing_environment() -> Result<()> {
     Ok(())
 }
 
+/// Syncing a script warms the interpreter cache without running the new environment's Python,
+/// and the inferred metadata matches a subsequent query of that interpreter.
 #[test]
 fn workspace_metadata_script_sync_caches_interpreter() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.12"]);
@@ -527,6 +529,9 @@ fn workspace_metadata_script_sync_caches_interpreter() -> Result<()> {
     Ok(())
 }
 
+/// A launcher override can change `sys.executable` and `sys.prefix`, so syncing a script must
+/// leave its interpreter uncached when `PYTHONEXECUTABLE` is set. A subsequent query should
+/// report the override environment instead of the script environment's inferred metadata.
 #[test]
 #[cfg(target_os = "macos")]
 fn workspace_metadata_script_sync_launcher_override() -> Result<()> {
