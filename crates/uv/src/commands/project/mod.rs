@@ -2045,6 +2045,9 @@ impl ProjectEnvironment {
                     update_project_environment_link(&environment, workspace, link_error_reporting);
                 }
 
+                // Cache the new environment's metadata without querying Python on the next invocation.
+                environment.interpreter().cache_virtualenv(cache)?;
+
                 if replace_environment {
                     Ok(Self::Replaced(environment))
                 } else {
@@ -2231,6 +2234,9 @@ impl ScriptEnvironment {
                     uv_virtualenv::Seed::Disabled,
                     upgradeable,
                 )?;
+
+                // Cache the new environment's metadata without querying Python on the next invocation.
+                environment.interpreter().cache_virtualenv(cache)?;
 
                 Ok(if replaced {
                     Self::Replaced(environment)
