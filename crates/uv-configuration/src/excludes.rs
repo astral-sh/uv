@@ -100,17 +100,17 @@ impl Excludes {
     }
 
     /// Check if a package is excluded.
-    pub fn contains(&self, name: &PackageName) -> bool {
+    pub(crate) fn contains(&self, name: &PackageName) -> bool {
         self.global.contains(name)
     }
 
     /// Return whether any exclusions are scoped to the given package.
-    pub fn has_scoped_package(&self, package: &PackageName) -> bool {
+    pub(crate) fn has_scoped_package(&self, package: &PackageName) -> bool {
         self.scoped.contains_key(package)
     }
 
     /// Check if a dependency is excluded from a specific package version.
-    pub fn contains_for(
+    pub(crate) fn contains_for(
         &self,
         package: &PackageName,
         version: &Version,
@@ -123,7 +123,7 @@ impl Excludes {
     ///
     /// A versionless scope remains eligible if any exact-version exclusion allows the dependency
     /// at a version where the override is not shadowed by an exact override scope.
-    pub fn contains_for_scope(
+    pub(crate) fn contains_for_scope(
         &self,
         overrides: &Overrides,
         package: &PackageName,
@@ -156,7 +156,7 @@ impl Excludes {
     }
 
     /// Check if a dependency is excluded with optional package-version context.
-    pub fn contains_for_package(
+    fn contains_for_package(
         &self,
         package: Option<(&PackageName, &Version)>,
         dependency: &PackageName,
