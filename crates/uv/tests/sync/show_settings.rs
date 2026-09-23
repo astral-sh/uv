@@ -228,8 +228,7 @@ fn pip_compile_baseline() {
         constraints_from_workspace: [],
         modifiers_from_workspace: DependencyModifiers {
             overrides: [],
-            exclusions: [],
-            ..
+            excludes: [],
         },
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
@@ -612,8 +611,7 @@ fn pip_install_baseline() {
         constraints_from_workspace: [],
         modifiers_from_workspace: DependencyModifiers {
             overrides: [],
-            exclusions: [],
-            ..
+            excludes: [],
         },
         build_constraints_from_workspace: [],
         modifications: Sufficient,

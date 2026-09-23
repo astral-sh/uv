@@ -111,8 +111,7 @@ Ok(
             constraints: {},
             modifiers: DependencyModifiers {
                 overrides: [],
-                exclusions: [],
-                ..
+                excludes: [],
             },
             build_constraints: {},
             dependency_metadata: {},
