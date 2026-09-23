@@ -522,7 +522,7 @@ mod tests {
 
         assert_snapshot!(format_err(&err), @r#"
         Unsupported glob expression in: tool.uv.build-backend.source-include
-          Caused by: Invalid character `@` at position 3 in glob: `**/@test`
+          Caused by: Invalid character `@` at position 3 in glob: **/@test
 
         hint: Characters can be escaped with a backslash
         "#);

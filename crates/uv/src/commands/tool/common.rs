@@ -897,7 +897,7 @@ pub(crate) fn finalize_tool_install(
 
         let mut names = BTreeSet::new();
         for (name, src, target) in target_entrypoints {
-            debug!("Installing executable: `{name}`");
+            debug!("Installing executable: {name}");
 
             #[cfg(unix)]
             replace_symlink(src, &target).context("Failed to install executable")?;

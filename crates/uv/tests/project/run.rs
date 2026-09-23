@@ -3284,7 +3284,7 @@ fn run_from_directory() -> Result<()> {
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + foo==1.0.0 (from `file://[TEMP_DIR]/project`)
-    error: Failed to spawn: `./project/main.py`
+    error: Failed to spawn: ./project/main.py
       cause: [OS ERROR 2]
     ");
 
@@ -4122,7 +4122,7 @@ fn run_script_without_build_system() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     Checked in [TIME]
-    error: Failed to spawn: `entry`
+    error: Failed to spawn: entry
       cause: No such file or directory (os error 2)
     ");
 

@@ -919,7 +919,7 @@ fn python_source_files_for_installs<'a>(
     ];
     installs.iter().flat_map(move |install| {
         let dist_info = match installed_dist_info_path(&layout, install.path()).with_context(|| {
-            format!("Failed to locate installed distribution for bytecode compilation: `{install}`")
+            format!("Failed to locate installed distribution for bytecode compilation: {install}")
         }) {
             Ok(dist_info) => dist_info,
             Err(err) => return Box::new(std::iter::once(Err(err))) as PythonSourceFileIterator,

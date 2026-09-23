@@ -155,7 +155,7 @@ fn install_wheel_cache_incompatible_with_older_uv() -> Result<()> {
              + uv==[VERSION]
             Resolved 1 package in [TIME]
             Installed 1 package in [TIME]
-             + large-wheel==1.0.0 (from `file://[TEMP_DIR]/large_wheel-1.0.0-py3-none-any.whl`)
+             + large-wheel==1.0.0 (from file://[TEMP_DIR]/large_wheel-1.0.0-py3-none-any.whl)
             ");
         }
         Ok::<(), anyhow::Error>(())
@@ -5571,7 +5571,7 @@ fn launcher() -> Result<()> {
     let filters = [
         (r"(\d+m )?(\d+\.)?\d+(ms|s)", "[TIME]"),
         (
-            r"simple-launcher==0\.1\.0 \(from .+\.whl\)",
+            r"simple-launcher==0\.1\.0 \(from `.+\.whl`\)",
             "simple_launcher.whl",
         ),
     ];
@@ -5611,7 +5611,7 @@ fn launcher_with_symlink() -> Result<()> {
     let filters = [
         (r"(\d+m )?(\d+\.)?\d+(ms|s)", "[TIME]"),
         (
-            r"simple-launcher==0\.1\.0 \(from .+\.whl\)",
+            r"simple-launcher==0\.1\.0 \(from `.+\.whl`\)",
             "simple_launcher.whl",
         ),
     ];
@@ -12318,7 +12318,7 @@ fn invalid_group() -> Result<()> {
         .arg("--group").arg("./:foo"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: invalid value './:foo' for '--group <GROUP>': The `--group` path is required to end in 'pyproject.toml' for compatibility with pip; got: ./
+    error: invalid value './:foo' for '--group <GROUP>': The `--group` path is required to end in `pyproject.toml` for compatibility with pip; got: ./
 
     For more information, try '--help'.
     ");
@@ -12328,7 +12328,7 @@ fn invalid_group() -> Result<()> {
         .arg("--group").arg("subdir/:foo"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: invalid value 'subdir/:foo' for '--group <GROUP>': The `--group` path is required to end in 'pyproject.toml' for compatibility with pip; got: subdir/
+    error: invalid value 'subdir/:foo' for '--group <GROUP>': The `--group` path is required to end in `pyproject.toml` for compatibility with pip; got: subdir/
 
     For more information, try '--help'.
     ");
@@ -14487,7 +14487,7 @@ requires_python = "==3.13.*"
         .arg("pylock.toml:test"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: invalid value 'pylock.toml:test' for '--group <GROUP>': The `--group` path is required to end in 'pyproject.toml' for compatibility with pip; got: pylock.toml
+    error: invalid value 'pylock.toml:test' for '--group <GROUP>': The `--group` path is required to end in `pyproject.toml` for compatibility with pip; got: pylock.toml
 
     For more information, try '--help'.
     "
@@ -15299,7 +15299,7 @@ fn conflicting_flags_clap_bug_color() -> Result<()> {
         .output()?;
 
     assert_eq!(output.status.code(), Some(2));
-    insta::assert_snapshot!(format!("{:?}", String::from_utf8_lossy(&output.stderr)), @r#""\u{1b}[1m\u{1b}[31merror\u{1b}[39m\u{1b}[0m\u{1b}[1m:\u{1b}[0m `\u{1b}[32m--offline\u{1b}[39m` and `\u{1b}[32m--no-offline\u{1b}[39m` cannot be used together. Boolean flags on different levels are currently not supported (https://github.com/clap-rs/clap/issues/6049)\n""#);
+    insta::assert_snapshot!(format!("{:?}", String::from_utf8_lossy(&output.stderr)), @r#""\u{1b}[1m\u{1b}[31merror\u{1b}[39m\u{1b}[0m\u{1b}[1m:\u{1b}[0m `\u{1b}[32m--offline\u{1b}[39m` and `\u{1b}[32m--no-offline\u{1b}[39m` cannot be used together. Boolean flags on different levels are currently not supported (`https://github.com/clap-rs/clap/issues/6049`)\n""#);
 
     Ok(())
 }

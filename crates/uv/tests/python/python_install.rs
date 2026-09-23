@@ -2543,7 +2543,7 @@ fn python_install_cached() {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to install cpython-3.12.[LATEST]-[PLATFORM]
-      cause: An offline Python installation was requested, but cpython-3.12.[PATCH]-[DATE]-[PLATFORM].tar.gz) is missing in python-cache
+      cause: An offline Python installation was requested, but `cpython-3.12.[PATCH]-[DATE]-[PLATFORM].tar.gz`) is missing in `python-cache`
     ");
 }
 

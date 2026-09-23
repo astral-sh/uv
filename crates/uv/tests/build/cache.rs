@@ -496,8 +496,10 @@ async fn index_source_hashes() -> Result<()> {
 async fn binary_payloads_stay_in_archive_without_preview() -> Result<()> {
     let server = MockServer::start().await;
     for streaming in [false, true] {
-        let context = uv_test::test_context!("3.12")
-            .with_filter((r" \(from (?:file|http)://.*\)", " (from [WHEEL_URL])"));
+        let context = uv_test::test_context!("3.12").with_filter((
+            r" \(from `(?:file|http)://[^`]+`\)",
+            " (from `[WHEEL_URL]`)",
+        ));
         let wheel = binary_payload_wheel(&context)?;
         let mut command = context.pip_install();
         if streaming {
@@ -546,7 +548,10 @@ async fn all_files_except_record_use_archive_file_store() -> Result<()> {
     for (streaming, concurrent_installs) in [(false, "1"), (false, "4"), (true, "1"), (true, "4")] {
         let context = uv_test::test_context!("3.12")
             .with_concurrent_installs(concurrent_installs)
-            .with_filter((r" \(from (?:file|http)://.*\)", " (from [WHEEL_URL])"));
+            .with_filter((
+                r" \(from `(?:file|http)://[^`]+`\)",
+                " (from `[WHEEL_URL]`)",
+            ));
         let wheel = binary_payload_wheel(&context)?;
         let mut command = context.pip_install();
         command.args(["--preview-features", "content-addressed-cache"]);

@@ -621,7 +621,7 @@ impl<'a> Planner<'a> {
                             }
 
                             warn!(
-                                "Cached wheel filename does not match requested distribution for: `{}` (found: {})",
+                                "Cached wheel filename does not match requested distribution for: {} (found: {})",
                                 sdist,
                                 wheel.filename()
                             );
@@ -649,7 +649,7 @@ impl<'a> Planner<'a> {
                         }
 
                         warn!(
-                            "Cached wheel filename does not match requested distribution for: `{}` (found: {})",
+                            "Cached wheel filename does not match requested distribution for: {} (found: {})",
                             sdist,
                             wheel.filename()
                         );
@@ -670,7 +670,7 @@ impl<'a> Planner<'a> {
                         }
 
                         warn!(
-                            "Cached wheel filename does not match requested distribution for: `{}` (found: {})",
+                            "Cached wheel filename does not match requested distribution for: {} (found: {})",
                             sdist,
                             wheel.filename()
                         );
@@ -697,7 +697,7 @@ impl<'a> Planner<'a> {
                             }
 
                             warn!(
-                                "Cached wheel filename does not match requested distribution for: `{}` (found: {})",
+                                "Cached wheel filename does not match requested distribution for: {} (found: {})",
                                 sdist,
                                 wheel.filename()
                             );
@@ -733,7 +733,7 @@ impl<'a> Planner<'a> {
                             }
 
                             warn!(
-                                "Cached wheel filename does not match requested distribution for: `{}` (found: {})",
+                                "Cached wheel filename does not match requested distribution for: {} (found: {})",
                                 sdist,
                                 wheel.filename()
                             );

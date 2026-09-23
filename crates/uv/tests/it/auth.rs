@@ -27,7 +27,7 @@ async fn invalid_cloud_endpoint_urls() {
                 .env(env_var, "not-a-url"), @"
             exit_code: 2 (failure)
             ----- stderr -----
-            error: Failed to fetch: `http://[LOCALHOST]/basic-auth/simple/iniconfig/`
+            error: Failed to fetch: http://[LOCALHOST]/basic-auth/simple/iniconfig/
               cause: Invalid `UV_[CLOUD]_ENDPOINT_URL`
               cause: relative URL without a base
             ");

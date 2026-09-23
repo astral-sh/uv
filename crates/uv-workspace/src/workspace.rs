@@ -232,7 +232,7 @@ pub enum WorkspaceErrorKind {
     #[error("Failed to find directories for glob: `{0}`")]
     Pattern(String, #[source] PatternError),
     // Syntax and other errors.
-    #[error("Directory walking failed for `tool.uv.workspace.members` glob: `{0}`")]
+    #[error("Directory walking failed for `tool.uv.workspace.members` glob: {0}")]
     GlobWalk(String, #[source] GlobError),
     #[error(transparent)]
     Io(#[from] std::io::Error),

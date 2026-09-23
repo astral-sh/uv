@@ -1324,7 +1324,7 @@ pub(crate) async fn run(
     // TODO(zanieb): Throw a nicer error message if the command is not found
     let handle = process
         .spawn()
-        .with_context(|| format!("Failed to spawn: `{}`", command.display_executable()))?;
+        .with_context(|| format!("Failed to spawn: {}", command.display_executable()))?;
 
     run_to_completion(handle).await
 }
