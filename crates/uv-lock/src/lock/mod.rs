@@ -4119,12 +4119,12 @@ impl Lock {
         let normalized_modifiers = {
             let normalize =
                 |requirement| normalize_requirement(requirement, root, &self.requires_python);
-            let expected = modifiers.clone().try_map_requirements(normalize)?;
+            let expected = modifiers.clone().try_normalize_requirements(normalize)?;
             let actual = self
                 .manifest
                 .modifiers
                 .clone()
-                .try_map_requirements(normalize)?;
+                .try_normalize_requirements(normalize)?;
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedDependencyModifiers(
                     expected, actual,
@@ -6067,7 +6067,7 @@ impl ResolverManifest {
                 .collect::<Result<BTreeSet<_>, _>>()?,
             modifiers: self
                 .modifiers
-                .try_map_requirements(|requirement| requirement.relative_to(root))?,
+                .try_normalize_requirements(|requirement| requirement.relative_to(root))?,
             build_constraints: self
                 .build_constraints
                 .into_iter()
