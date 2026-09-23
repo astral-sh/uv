@@ -208,10 +208,10 @@ pub async fn metadata(
         },
     };
     let mut export = metadata_for_target(install_target);
-    let (environment, environment_created) = if sync.is_some() {
-        let (environment, environment_created) = match &source {
+    let environment = if sync.is_some() {
+        Some(match &source {
             MetadataSource::Manifest(LockTarget::Workspace(workspace)) => {
-                let environment = ProjectEnvironment::get_or_init(
+                ProjectEnvironment::get_or_init(
                     ProjectEnvironmentTarget::from(*workspace),
                     None,
                     &groups,
@@ -229,75 +229,52 @@ pub async fn metadata(
                     LinkErrorReporting::User,
                     printer,
                 )
-                .await?;
-                let environment_created = match environment {
-                    ProjectEnvironment::Existing(_) => false,
-                    ProjectEnvironment::Replaced(_) | ProjectEnvironment::Created(_) => true,
-                    ProjectEnvironment::WouldReplace(_, _, _)
-                    | ProjectEnvironment::WouldCreate(_, _, _) => false,
-                };
-                (environment.into_environment()?, environment_created)
+                .await?
+                .into_environment()?
             }
-            MetadataSource::Manifest(LockTarget::Script(script)) => {
-                let environment = ScriptEnvironment::get_or_init(
-                    (*script).into(),
-                    python.as_deref().map(PythonRequest::parse),
-                    &client_builder,
-                    python_preference,
-                    python_arch,
-                    python_downloads,
-                    &install_mirrors,
-                    false,
-                    config_discovery,
-                    active,
-                    cache,
-                    DryRun::Disabled,
-                    printer,
-                )
-                .await?;
-                let environment_created = match environment {
-                    ScriptEnvironment::Existing(_) => false,
-                    ScriptEnvironment::Replaced(_) | ScriptEnvironment::Created(_) => true,
-                    ScriptEnvironment::WouldReplace(_, _, _)
-                    | ScriptEnvironment::WouldCreate(_, _, _) => false,
-                };
-                (environment.into_environment()?, environment_created)
-            }
-            MetadataSource::Lockfile(workspace) => {
-                let environment = ProjectEnvironment::get_or_init(
-                    ProjectEnvironmentTarget::Lockfile {
-                        root: workspace.root(),
-                        lock,
-                    },
-                    Some(install_target),
-                    &groups,
-                    python.as_deref().map(PythonRequest::parse),
-                    &install_mirrors,
-                    &client_builder,
-                    python_preference,
-                    python_arch,
-                    python_downloads,
-                    false,
-                    config_discovery,
-                    active,
-                    cache,
-                    DryRun::Disabled,
-                    LinkErrorReporting::User,
-                    printer,
-                )
-                .await?;
-                let environment_created = match environment {
-                    ProjectEnvironment::Existing(_) => false,
-                    ProjectEnvironment::Replaced(_) | ProjectEnvironment::Created(_) => true,
-                    ProjectEnvironment::WouldReplace(_, _, _)
-                    | ProjectEnvironment::WouldCreate(_, _, _) => false,
-                };
-                (environment.into_environment()?, environment_created)
-            }
-        };
-        (Some(environment), environment_created)
+            MetadataSource::Manifest(LockTarget::Script(script)) => ScriptEnvironment::get_or_init(
+                (*script).into(),
+                python.as_deref().map(PythonRequest::parse),
+                &client_builder,
+                python_preference,
+                python_arch,
+                python_downloads,
+                &install_mirrors,
+                false,
+                config_discovery,
+                active,
+                cache,
+                DryRun::Disabled,
+                printer,
+            )
+            .await?
+            .into_environment()?,
+            MetadataSource::Lockfile(workspace) => ProjectEnvironment::get_or_init(
+                ProjectEnvironmentTarget::Lockfile {
+                    root: workspace.root(),
+                    lock,
+                },
+                Some(install_target),
+                &groups,
+                python.as_deref().map(PythonRequest::parse),
+                &install_mirrors,
+                &client_builder,
+                python_preference,
+                python_arch,
+                python_downloads,
+                false,
+                config_discovery,
+                active,
+                cache,
+                DryRun::Disabled,
+                LinkErrorReporting::User,
+                printer,
+            )
+            .await?
+            .into_environment()?,
+        })
     } else {
-        let environment = match &source {
+        match &source {
             MetadataSource::Manifest(LockTarget::Workspace(workspace)) => {
                 ProjectInterpreter::discover_existing(workspace.install_path(), active, cache)?
             }
@@ -307,9 +284,7 @@ pub async fn metadata(
             MetadataSource::Lockfile(workspace) => {
                 ProjectInterpreter::discover_existing(workspace.root(), active, cache)?
             }
-        };
-        // The environment is always discovered, never created.
-        (environment, false)
+        }
     };
 
     if let Some(environment) = environment {
@@ -335,11 +310,6 @@ pub async fn metadata(
         )
         .await
         .context("Failed to collect module owners")?;
-        if environment_created {
-            // Prime the interpreter cache so we don't have to query on the next uv
-            // invocation.
-            environment.interpreter().cache_virtualenv(cache)?;
-        }
         export = export
             .with_environment(&environment)
             .with_module_owners(module_owners);
