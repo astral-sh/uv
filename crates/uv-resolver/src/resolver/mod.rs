@@ -481,7 +481,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             continue 'FORK;
                         };
                         trace!(
-                            "Chose package for decision: {}. remaining choices: {}",
+                            "Chose package for decision: {}. undecided packages: {}",
                             state.pubgrub.package_store[highest_priority_pkg],
                             state
                                 .pubgrub
