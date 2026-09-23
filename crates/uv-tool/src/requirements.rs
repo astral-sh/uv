@@ -22,7 +22,7 @@ use version_ranges::Ranges;
 pub struct NormalizedRequirements(RequirementSet);
 
 impl NormalizedRequirements {
-    pub fn into_inner(self) -> Vec<Requirement> {
+    pub(crate) fn into_inner(self) -> Vec<Requirement> {
         self.0.0
     }
 }
@@ -100,7 +100,7 @@ impl Deref for NormalizedConstraints {
 pub struct NormalizedOverrides(RequirementSet);
 
 impl NormalizedOverrides {
-    pub fn into_inner(self) -> Vec<Requirement> {
+    pub(crate) fn into_inner(self) -> Vec<Requirement> {
         self.0.0
     }
 }
@@ -127,7 +127,7 @@ impl Deref for NormalizedOverrides {
 pub struct NormalizedExcludes(Vec<ExcludeDependency>);
 
 impl NormalizedExcludes {
-    pub fn into_inner(self) -> Vec<ExcludeDependency> {
+    pub(crate) fn into_inner(self) -> Vec<ExcludeDependency> {
         self.0
     }
 }
@@ -152,7 +152,7 @@ impl Deref for NormalizedExcludes {
 pub struct NormalizedBuildConstraints(Vec<NameRequirementSpecification>);
 
 impl NormalizedBuildConstraints {
-    pub fn into_inner(self) -> Vec<NameRequirementSpecification> {
+    pub(crate) fn into_inner(self) -> Vec<NameRequirementSpecification> {
         self.0
     }
 }
