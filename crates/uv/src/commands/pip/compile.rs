@@ -231,7 +231,7 @@ pub(crate) async fn pip_compile(
     )
     .await?;
 
-    modifiers.extend(modifiers_from_workspace)?;
+    modifiers.extend(modifiers_from_workspace);
 
     // Reject `pylock.toml` files, which are valid outputs but not inputs.
     if pylock.is_some() {

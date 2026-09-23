@@ -51,25 +51,6 @@ impl<T> Override<T> {
             Self::Requirement(requirement) => Override::requirement(function(*requirement)),
         }
     }
-
-    /// Fallibly map the requirements in this override.
-    pub fn try_map_requirements<E>(
-        self,
-        mut function: impl FnMut(T) -> Result<T, E>,
-    ) -> Result<Self, E> {
-        Ok(match self {
-            Self::Package(package) => Self::Package(PackageOverride {
-                package: package.package,
-                dependencies: package
-                    .dependencies
-                    .into_vec()
-                    .into_iter()
-                    .map(function)
-                    .collect::<Result<Box<[_]>, _>>()?,
-            }),
-            Self::Requirement(requirement) => Self::requirement(function(*requirement)?),
-        })
-    }
 }
 
 // A derived `#[serde(untagged)]` implementation collapses detailed requirement parse errors into

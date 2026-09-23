@@ -95,8 +95,11 @@ Ok(
             requirements: {},
             dependency_groups: {},
             constraints: {},
-            overrides: {},
-            excludes: {},
+            modifiers: DependencyModifiers {
+                overrides: [],
+                exclusions: [],
+                ..
+            },
             build_constraints: {},
             dependency_metadata: {},
         },
