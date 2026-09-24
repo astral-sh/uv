@@ -105,7 +105,7 @@ impl HashStrategy {
                 digests.retain(|digest| digest.algorithm() != HashAlgorithm::Md5);
             }
             let digests = if let Some(constraint) = constraints.hashes_for_id(id) {
-                combine_constraint_hashes(id, digests, constraint, id, mode)?
+                combine_constraint_hashes(id, digests, constraint, id)?
             } else {
                 digests
             };
@@ -285,7 +285,7 @@ impl HashStrategy {
 
     /// Collect hashes from [`UnresolvedRequirement`] entries and constraints.
     ///
-    /// For duplicate registry pins and local files, the last nonempty hash list wins. Remote
+    /// Repeated constraints intersect allowed hashes for registry pins and local files. Remote
     /// archive URLs combine hashes across algorithms and reject conflicting digests for the same
     /// algorithm. Registry pins accept any allowed digest; direct references must match all
     /// supplied digests. When requirements and constraints both supply hashes, registry pins
@@ -341,6 +341,9 @@ impl HashStrategy {
                 continue;
             }
 
+            if let Some(existing) = constraint_hashes.get(&id) {
+                digests = combine_constraint_hashes(&id, digests, existing, requirement)?;
+            }
             merge_hashes(&mut constraint_hashes, id, digests, requirement)?;
         }
 
@@ -399,7 +402,7 @@ impl HashStrategy {
                 if digests.is_empty() && requirement_hashes.contains_key(&id) {
                     continue;
                 }
-                combine_constraint_hashes(&id, digests, constraint, requirement, mode)?
+                combine_constraint_hashes(&id, digests, constraint, requirement)?
             } else {
                 digests
             };
@@ -590,13 +593,12 @@ fn hash_validation<'a>(id: &VersionId, digests: &'a [HashDigest]) -> HashValidat
     }
 }
 
-/// Combine hashes for a requirement and an applicable constraint.
+/// Combine allowed hashes with an applicable constraint.
 fn combine_constraint_hashes(
     id: &VersionId,
     mut digests: Vec<HashDigest>,
     constraint: &[HashDigest],
     requirement: impl Display,
-    mode: HashCheckingMode,
 ) -> Result<Vec<HashDigest>, HashStrategyError> {
     if digests.is_empty() {
         // If there are _only_ hashes on the constraints, use them.
@@ -607,10 +609,7 @@ fn combine_constraint_hashes(
             // If there are constraint and requirement hashes, take the intersection.
             digests.retain(|digest| constraint.contains(digest));
             if digests.is_empty() {
-                return Err(HashStrategyError::NoIntersection(
-                    requirement.to_string(),
-                    mode,
-                ));
+                return Err(HashStrategyError::NoIntersection(requirement.to_string()));
             }
         }
         VersionId::ArchiveUrl { .. }
@@ -697,10 +696,8 @@ pub enum HashStrategyError {
     InsecureHashAlgorithm(String, HashAlgorithm, HashCheckingMode),
     #[error("In `{1}` mode, all requirements must have a hash, but none were provided for: {0}")]
     MissingHashes(String, HashCheckingMode),
-    #[error(
-        "In `{1}` mode, all requirements must have a hash, but there were no overlapping hashes between the requirements and constraints for: {0}"
-    )]
-    NoIntersection(String, HashCheckingMode),
+    #[error("Conflicting hashes for `{0}`: no hash is allowed by all requirements and constraints")]
+    NoIntersection(String),
 }
 
 #[cfg(test)]
