@@ -35,6 +35,7 @@ pub use vcs::*;
 mod active_environment;
 mod annotation_style;
 mod authentication;
+pub mod build_backend;
 mod build_options;
 mod concurrency;
 mod constraints;

@@ -3803,6 +3803,7 @@ fn preview_features() {
     +            PackagedInit,
     +            CentralizedProjectEnvs,
     +            ToolInstallLocks,
+    +            LockedTools,
     +            WorkspaceListScripts,
     +            NoDistutilsPatch,
     +            IndexHashAlgorithm,

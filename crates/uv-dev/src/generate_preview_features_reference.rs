@@ -132,6 +132,7 @@ mod tests {
         - <a id="init-project-flag" href="#init-project-flag"><code>init-project-flag</code></a>: Rejects the deprecated `--project` option in `uv init`.
         - <a id="json-output" href="#json-output"><code>json-output</code></a>: Allows `--output-format json` for various uv commands.
         - <a id="lock-without-metadata" href="#lock-without-metadata"><code>lock-without-metadata</code></a>: Omit `package.metadata` from `uv.lock`, except for remote URL dependencies.
+        - <a id="locked-tools" href="#locked-tools"><code>locked-tools</code></a>: Includes locks in built distributions and allows installing tools from their packaged locks.
         - <a id="lockfile-format-check" href="#lockfile-format-check"><code>lockfile-format-check</code></a>: Rejects non-canonical lockfile formatting when using `--locked` or `--check`.
         - <a id="malware-check" href="#malware-check"><code>malware-check</code></a>: Allows `uv sync` and other commands to check for malware using [OSV](https://osv.dev) before
           installing packages.
