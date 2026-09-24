@@ -194,14 +194,14 @@ impl Overrides {
     }
 
     /// Return an iterator over all global [`Requirement`]s in the override set.
-    pub fn global_requirements(&self) -> impl Iterator<Item = &Requirement> {
+    pub(crate) fn global_requirements(&self) -> impl Iterator<Item = &Requirement> {
         self.global
             .values()
             .flat_map(|requirements| requirements.iter())
     }
 
     /// Return all scoped [`Requirement`]s with the package and version they apply to.
-    pub fn scoped_requirements(
+    pub(crate) fn scoped_requirements(
         &self,
     ) -> impl Iterator<Item = (&PackageName, Option<&Version>, &Requirement)> {
         self.scoped.iter().flat_map(|(package, entries)| {
@@ -216,7 +216,7 @@ impl Overrides {
     }
 
     /// Return the scoped [`Requirement`]s that apply to a specific package version.
-    pub fn scoped_requirements_for(
+    pub(crate) fn scoped_requirements_for(
         &self,
         package: &PackageName,
         version: &Version,
@@ -227,7 +227,7 @@ impl Overrides {
     }
 
     /// Return whether any overrides are scoped to the given package.
-    pub fn has_scoped_package(&self, package: &PackageName) -> bool {
+    pub(crate) fn has_scoped_package(&self, package: &PackageName) -> bool {
         self.scoped.contains_key(package)
     }
 
@@ -255,48 +255,13 @@ impl Overrides {
         })
     }
 
-    /// Apply the overrides to a set of requirements.
+    /// Apply overrides with optional package-version context.
     ///
     /// NB: Change this method together with [`Constraints::apply`].
-    pub fn apply<'a, I>(
-        &'a self,
-        requirements: I,
-    ) -> impl Iterator<Item = Cow<'a, Requirement>> + use<'a, I>
-    where
-        I: IntoIterator<Item = &'a Requirement>,
-    {
-        self.apply_inner(requirements, None)
-    }
-
-    /// Apply the overrides to the dependencies of a specific package version.
-    pub fn apply_for<'a, I>(
-        &'a self,
-        package: &PackageName,
-        version: &Version,
-        requirements: I,
-    ) -> impl Iterator<Item = Cow<'a, Requirement>> + use<'a, I>
-    where
-        I: IntoIterator<Item = &'a Requirement>,
-    {
-        self.apply_inner(requirements, Some((package, version)))
-    }
-
-    /// Apply overrides with optional package-version context.
-    pub fn apply_for_package<'a, I>(
+    pub(crate) fn apply_for_package<'a, I>(
         &'a self,
         package: Option<(&PackageName, &Version)>,
         requirements: I,
-    ) -> impl Iterator<Item = Cow<'a, Requirement>> + use<'a, I>
-    where
-        I: IntoIterator<Item = &'a Requirement>,
-    {
-        self.apply_inner(requirements, package)
-    }
-
-    fn apply_inner<'a, I>(
-        &'a self,
-        requirements: I,
-        package: Option<(&PackageName, &Version)>,
     ) -> impl Iterator<Item = Cow<'a, Requirement>> + use<'a, I>
     where
         I: IntoIterator<Item = &'a Requirement>,
