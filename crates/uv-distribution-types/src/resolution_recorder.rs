@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use uv_normalize::PackageName;
 
 /// Configuration lookups made by a runtime resolution, including unsuccessful lookups.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default)]
 pub struct ResolutionLookups {
     /// Dependency names whose global constraints were consulted.
     pub constraints: BTreeSet<PackageName>,
@@ -89,9 +89,9 @@ impl ResolutionRecorder {
         self.lookups().dependency_metadata.insert(name.clone());
     }
 
-    /// Return a copy of the recorded lookups.
-    pub fn snapshot(&self) -> ResolutionLookups {
-        self.lookups().clone()
+    /// Take the recorded lookups, leaving an empty record in all copies of the recorder.
+    pub fn take(&self) -> ResolutionLookups {
+        std::mem::take(&mut *self.lookups())
     }
 
     /// Acquire the shared lookup sets.
