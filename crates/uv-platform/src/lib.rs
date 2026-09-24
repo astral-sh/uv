@@ -1,5 +1,6 @@
 //! Platform detection for operating system, architecture, and libc.
 
+use std::borrow::Cow;
 use std::cmp;
 use std::fmt;
 use std::str::FromStr;
@@ -8,12 +9,13 @@ use thiserror::Error;
 use tracing::trace;
 
 pub use crate::arch::{Arch, ArchVariant};
-pub use crate::libc::{Libc, LibcDetectionError, LibcVersion};
+pub use crate::host::{LinuxOsRelease, OsRelease, OsType};
+pub use crate::libc::{Libc, LibcDetectionError};
 pub use crate::os::Os;
 
 mod arch;
 mod cpuinfo;
-pub mod host;
+mod host;
 mod libc;
 mod os;
 
@@ -137,16 +139,17 @@ impl Platform {
     /// Convert this platform to a `cargo-dist` style triple string.
     pub fn as_cargo_dist_triple(&self) -> String {
         use target_lexicon::{
-            Architecture, ArmArchitecture, OperatingSystem, Riscv64Architecture, X86_32Architecture,
+            Architecture, ArmArchitecture, Environment, OperatingSystem, Riscv64Architecture,
+            X86_32Architecture,
         };
 
         let Self { os, arch, libc } = &self;
 
         let arch_name = match arch.family() {
             // Special cases where Display doesn't match target triple
-            Architecture::X86_32(X86_32Architecture::I686) => "i686".to_string(),
-            Architecture::Riscv64(Riscv64Architecture::Riscv64) => "riscv64gc".to_string(),
-            _ => arch.to_string(),
+            Architecture::X86_32(X86_32Architecture::I686) => Cow::Borrowed("i686"),
+            Architecture::Riscv64(Riscv64Architecture::Riscv64) => Cow::Borrowed("riscv64gc"),
+            _ => Cow::Owned(arch.to_string()),
         };
         let vendor = match &**os {
             OperatingSystem::Darwin(_) => "apple",
@@ -154,18 +157,28 @@ impl Platform {
             _ => "unknown",
         };
         let os_name = match &**os {
-            OperatingSystem::Darwin(_) => "darwin",
-            _ => &os.to_string(),
+            OperatingSystem::Darwin(_) => Cow::Borrowed("darwin"),
+            _ => Cow::Owned(os.to_string()),
         };
 
         let abi = match (&**os, libc) {
-            (OperatingSystem::Windows, _) => Some("msvc".to_string()),
+            (OperatingSystem::Windows, _) => Some(Cow::Borrowed("msvc")),
             (OperatingSystem::Linux, Libc::Some(env)) => Some({
-                // Special suffix for ARM with hardware float
-                if matches!(arch.family(), Architecture::Arm(ArmArchitecture::Armv7)) {
-                    format!("{env}eabihf")
+                // If we've detected a bare `gnu` or `musl` environment on ARMv7,
+                // that means our floating point environment detection failed.
+                // We currently assume hard-float in that case, for two reasons:
+                // 1. Statistically, we expect the overwhelming majority of ARMv7 Linux hosts to
+                //    be hard-float.
+                // 2. We currently only ship hard-float ARMv7 builds of ruff and uv anyways,
+                //    so we don't even have a soft-float build to fall back to.
+                // By contrast, we *do* ship soft-float Python builds via PBS, but PBS
+                // installations don't take this pathway.
+                if matches!(arch.family(), Architecture::Arm(ArmArchitecture::Armv7))
+                    && matches!(env, Environment::Gnu | Environment::Musl)
+                {
+                    Cow::Owned(format!("{env}eabihf"))
                 } else {
-                    env.to_string()
+                    Cow::Owned(env.to_string())
                 }
             }),
             _ => None,
@@ -507,5 +520,33 @@ mod tests {
         assert_eq!(platform_linux.os.to_string(), "linux");
         assert_eq!(platform_linux.arch.to_string(), "aarch64");
         assert_eq!(platform_linux.libc.to_string(), "gnu");
+    }
+
+    #[test]
+    fn test_as_cargo_dist_triple_armv7_libc_handling() {
+        // This mapping reflects our current behavior: we currently ship
+        // only hard-float artifacts for ARMv7, so if we fail to detect
+        // the float ABI (i.e., we get the generic `Gnu` or `Musl`),
+        // we assume hard-float.
+        for (arch, libc, expected) in [
+            // ARMv7: detected ABI passes through unchanged.
+            ("armv7", "gnueabihf", "armv7-unknown-linux-gnueabihf"),
+            ("armv7", "gnueabi", "armv7-unknown-linux-gnueabi"),
+            ("armv7", "musleabihf", "armv7-unknown-linux-musleabihf"),
+            ("armv7", "musleabi", "armv7-unknown-linux-musleabi"),
+            // ARMv7: generic libc (detection failure) is biased to hard-float.
+            ("armv7", "gnu", "armv7-unknown-linux-gnueabihf"),
+            ("armv7", "musl", "armv7-unknown-linux-musleabihf"),
+            // Non-ARMv7: libc passes through unchanged.
+            ("aarch64", "gnu", "aarch64-unknown-linux-gnu"),
+            ("x86_64", "musl", "x86_64-unknown-linux-musl"),
+        ] {
+            let platform = Platform::from_parts("linux", arch, libc).unwrap();
+            assert_eq!(
+                platform.as_cargo_dist_triple(),
+                expected,
+                "linux-{arch}-{libc}"
+            );
+        }
     }
 }

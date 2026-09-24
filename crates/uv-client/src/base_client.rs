@@ -1,54 +1,47 @@
-use std::error::Error;
-use std::fmt::Debug;
-use std::fmt::Write;
+use std::env;
+use std::fmt::{Debug, Write};
 use std::num::ParseIntError;
-use std::sync::Arc;
-use std::time::{Duration, SystemTime, SystemTimeError};
-use std::{env, io, iter};
+use std::sync::{Arc, OnceLock};
+use std::time::{Duration, SystemTimeError};
 
 use anyhow::anyhow;
-
-use http::{
-    HeaderMap, HeaderName, HeaderValue, Method, StatusCode,
-    header::{
-        AUTHORIZATION, CONTENT_ENCODING, CONTENT_LENGTH, CONTENT_TYPE, COOKIE, LOCATION,
-        PROXY_AUTHORIZATION, REFERER, TRANSFER_ENCODING, WWW_AUTHENTICATE,
-    },
+use http::header::{
+    AUTHORIZATION, CONTENT_ENCODING, CONTENT_LENGTH, CONTENT_TYPE, COOKIE, LOCATION,
+    PROXY_AUTHORIZATION, REFERER, TRANSFER_ENCODING, WWW_AUTHENTICATE,
 };
-use itertools::Itertools;
+use http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode};
 use reqwest::{
     Certificate, Client, ClientBuilder, IntoUrl, NoProxy, Proxy, Request, Response, multipart,
 };
 use reqwest_middleware::{ClientWithMiddleware, Middleware};
 use reqwest_retry::policies::ExponentialBackoff;
-use reqwest_retry::{
-    Jitter, RetryPolicy, RetryTransientMiddleware, Retryable, RetryableStrategy,
-    default_on_request_error, default_on_request_success,
-};
-
+use reqwest_retry::{Jitter, RetryTransientMiddleware};
 use thiserror::Error;
-
-use tracing::{debug, trace, warn};
+use tracing::{debug, warn};
 use url::ParseError;
 use url::Url;
 
-use uv_auth::{AuthMiddleware, Credentials, CredentialsCache, Indexes, PyxTokenStore};
+use uv_auth::{
+    AuthMiddleware, Credentials, CredentialsCache, CredentialsFromUrlError, Indexes, RealmRef,
+};
 use uv_configuration::ProxyUrlKind;
-use uv_configuration::{KeyringProviderType, ProxyUrl, TrustedHost};
-
+use uv_configuration::{Concurrency, KeyringProviderType, ProxyUrl, TrustedHost};
+use uv_distribution_types::IndexCredentialsError;
+use uv_git::GitHttpSettings;
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
 use uv_preview::Preview;
 use uv_redacted::DisplaySafeUrl;
 use uv_redacted::DisplaySafeUrlError;
 use uv_static::EnvVars;
+use uv_threads::min_stack_size;
 use uv_version::version;
-use uv_warnings::warn_user_once;
+use uv_warnings::warn_user_once_with_chain;
 
 use crate::linehaul::LineHaul;
-use crate::middleware::OfflineMiddleware;
+use crate::middleware::{AzureStorageMiddleware, OfflineMiddleware};
 use crate::tls::{Certificates, read_identity};
-use crate::{Connectivity, WrappedReqwestError};
+use crate::{Connectivity, MetadataRangeRequest, RetriableError, RetryState, UvRetryableStrategy};
 
 pub const DEFAULT_RETRIES: u32 = 3;
 
@@ -71,6 +64,26 @@ pub const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 /// timeout on the entire upload.
 pub const DEFAULT_READ_TIMEOUT_UPLOAD: Duration = Duration::from_mins(15);
 
+#[derive(Debug, Error)]
+pub enum ClientBuildError {
+    #[error("failed to build HTTP client")]
+    Reqwest(#[from] reqwest::Error),
+    #[error(transparent)]
+    Credentials(#[from] CredentialsFromUrlError),
+    #[error(transparent)]
+    IndexCredentials(#[from] IndexCredentialsError),
+}
+
+impl ClientBuildError {
+    /// Return whether this is an expected user-facing failure.
+    pub fn is_user_failure(&self) -> bool {
+        match self {
+            Self::Credentials(_) | Self::IndexCredentials(_) => true,
+            Self::Reqwest(_) => false,
+        }
+    }
+}
+
 /// Selectively skip parts or the entire auth middleware.
 #[derive(Debug, Clone, Copy, Default)]
 pub enum AuthIntegration {
@@ -91,6 +104,7 @@ pub struct BaseClientBuilder<'a> {
     preview: Preview,
     allow_insecure_host: Vec<TrustedHost>,
     system_certs: bool,
+    custom_certificates: Option<Certificates>,
     retries: u32,
     pub connectivity: Connectivity,
     markers: Option<&'a MarkerEnvironment>,
@@ -101,6 +115,7 @@ pub struct BaseClientBuilder<'a> {
     indexes: Indexes,
     read_timeout: Duration,
     connect_timeout: Duration,
+    metadata_range_request: MetadataRangeRequest,
     extra_middleware: Option<ExtraMiddleware>,
     proxies: Vec<Proxy>,
     http_proxy: Option<ProxyUrl>,
@@ -119,6 +134,44 @@ pub struct BaseClientBuilder<'a> {
     client_name: Option<&'static str>,
     /// Whether to disable retry delays (for testing).
     no_retry_delay: bool,
+    /// A shared, dedicated blocking pool for short-lived cache reads.
+    cache_read_runtime: Arc<CacheReadRuntime>,
+}
+
+#[derive(Debug)]
+struct CacheReadRuntime {
+    workers: usize,
+    runtime: OnceLock<tokio::runtime::Runtime>,
+}
+
+impl CacheReadRuntime {
+    fn new(workers: usize) -> Self {
+        Self {
+            workers,
+            runtime: OnceLock::new(),
+        }
+    }
+
+    fn get(&self) -> &tokio::runtime::Runtime {
+        self.runtime.get_or_init(|| {
+            tokio::runtime::Builder::new_current_thread()
+                .thread_name("uv-cache-read")
+                .thread_stack_size(min_stack_size())
+                .max_blocking_threads(self.workers)
+                .build()
+                .expect("Failed building the cache-read Runtime")
+        })
+    }
+}
+
+impl Drop for CacheReadRuntime {
+    fn drop(&mut self) {
+        if let Some(runtime) = self.runtime.take() {
+            // This pool can be released from within uv's main runtime, where waiting for another
+            // runtime to shut down is not permitted.
+            runtime.shutdown_background();
+        }
+    }
 }
 
 /// The policy for handling HTTP redirects.
@@ -135,7 +188,7 @@ pub enum RedirectPolicy {
 }
 
 impl RedirectPolicy {
-    pub fn reqwest_policy(self) -> reqwest::redirect::Policy {
+    fn reqwest_policy(self) -> reqwest::redirect::Policy {
         match self {
             Self::BypassMiddleware => reqwest::redirect::Policy::default(),
             Self::RetriggerMiddleware => reqwest::redirect::Policy::none(),
@@ -163,6 +216,7 @@ impl Default for BaseClientBuilder<'_> {
             preview: Preview::default(),
             allow_insecure_host: vec![],
             system_certs: false,
+            custom_certificates: None,
             connectivity: Connectivity::Online,
             retries: DEFAULT_RETRIES,
             markers: None,
@@ -172,6 +226,7 @@ impl Default for BaseClientBuilder<'_> {
             indexes: Indexes::new(),
             read_timeout: DEFAULT_READ_TIMEOUT,
             connect_timeout: DEFAULT_CONNECT_TIMEOUT,
+            metadata_range_request: MetadataRangeRequest::default(),
             extra_middleware: None,
             proxies: vec![],
             http_proxy: None,
@@ -182,7 +237,8 @@ impl Default for BaseClientBuilder<'_> {
             custom_client: None,
             subcommand: None,
             client_name: None,
-            no_retry_delay: env::var_os(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY).is_some(),
+            no_retry_delay: env::var_os(EnvVars::UV_INTERNAL__TEST_NO_HTTP_RETRY_DELAY).is_some(),
+            cache_read_runtime: Arc::new(CacheReadRuntime::new(Concurrency::DEFAULT_CACHE_READS)),
         }
     }
 }
@@ -250,9 +306,23 @@ impl<'a> BaseClientBuilder<'a> {
         self
     }
 
+    /// Require wheel metadata to be fetched with HTTP range requests when separate metadata is
+    /// unavailable.
     #[must_use]
-    pub fn system_certs(&self) -> bool {
-        self.system_certs
+    pub fn metadata_range_request(mut self, request: MetadataRangeRequest) -> Self {
+        self.metadata_range_request = request;
+        self
+    }
+
+    pub(crate) fn configured_metadata_range_request(&self) -> MetadataRangeRequest {
+        self.metadata_range_request
+    }
+
+    /// Set the number of workers available for reading cached HTTP responses.
+    #[must_use]
+    pub fn cache_read_concurrency(mut self, workers: usize) -> Self {
+        self.cache_read_runtime = Arc::new(CacheReadRuntime::new(workers));
+        self
     }
 
     #[must_use]
@@ -261,14 +331,21 @@ impl<'a> BaseClientBuilder<'a> {
         self
     }
 
+    /// Use custom certificate authorities for TLS verification.
     #[must_use]
-    pub fn markers(mut self, markers: &'a MarkerEnvironment) -> Self {
+    pub fn custom_certificates(mut self, certificates: Certificates) -> Self {
+        self.custom_certificates = Some(certificates);
+        self
+    }
+
+    #[must_use]
+    pub(crate) fn markers(mut self, markers: &'a MarkerEnvironment) -> Self {
         self.markers = Some(markers);
         self
     }
 
     #[must_use]
-    pub fn platform(mut self, platform: &'a Platform) -> Self {
+    pub(crate) fn platform(mut self, platform: &'a Platform) -> Self {
         self.platform = Some(platform);
         self
     }
@@ -280,7 +357,7 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     #[must_use]
-    pub fn indexes(mut self, indexes: Indexes) -> Self {
+    pub(crate) fn indexes(mut self, indexes: Indexes) -> Self {
         self.indexes = indexes;
         self
     }
@@ -340,7 +417,7 @@ impl<'a> BaseClientBuilder<'a> {
     /// leakage to untrusted domains.
     #[cfg(test)]
     #[must_use]
-    pub fn allow_cross_origin_credentials(mut self) -> Self {
+    pub(crate) fn allow_cross_origin_credentials(mut self) -> Self {
         self.cross_origin_credential_policy = CrossOriginCredentialsPolicy::Insecure;
         self
     }
@@ -362,7 +439,10 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     /// See [`CredentialsCache::store_credentials_from_url`].
-    pub fn store_credentials_from_url(&self, url: &DisplaySafeUrl) -> bool {
+    pub fn store_credentials_from_url(
+        &self,
+        url: &DisplaySafeUrl,
+    ) -> Result<bool, CredentialsFromUrlError> {
         self.credentials_cache.store_credentials_from_url(url)
     }
 
@@ -380,7 +460,7 @@ impl<'a> BaseClientBuilder<'a> {
         retry_policy(self.retries, self.no_retry_delay)
     }
 
-    pub fn build(&self) -> BaseClient {
+    pub fn build(&self) -> Result<BaseClient, ClientBuildError> {
         if let Some(name) = self.client_name {
             debug!(
                 "Using request connect timeout of {}s and read timeout of {}s for {} client",
@@ -397,10 +477,10 @@ impl<'a> BaseClientBuilder<'a> {
         }
 
         // Use the custom client if provided, otherwise create a new one
-        let (raw_client, raw_dangerous_client) = match &self.custom_client {
-            Some(client) => (client.clone(), client.clone()),
+        let (raw_client, raw_dangerous_client, certificate_source) = match &self.custom_client {
+            Some(client) => (client.clone(), client.clone(), CertificateSource::Unknown),
             None => {
-                self.create_secure_and_insecure_clients(self.read_timeout, self.connect_timeout)
+                self.create_secure_and_insecure_clients(self.read_timeout, self.connect_timeout)?
             }
         };
 
@@ -416,7 +496,7 @@ impl<'a> BaseClientBuilder<'a> {
             cross_origin_credentials_policy: self.cross_origin_credential_policy,
         };
 
-        BaseClient {
+        Ok(BaseClient {
             connectivity: self.connectivity,
             allow_insecure_host: self.allow_insecure_host.clone(),
             retries: self.retries,
@@ -428,11 +508,13 @@ impl<'a> BaseClientBuilder<'a> {
             read_timeout: self.read_timeout,
             connect_timeout: self.connect_timeout,
             credentials_cache: self.credentials_cache.clone(),
-        }
+            certificate_source,
+            cache_read_runtime: self.cache_read_runtime.clone(),
+        })
     }
 
     /// Share the underlying client between two different middleware configurations.
-    pub fn wrap_existing(&self, existing: &BaseClient) -> BaseClient {
+    pub(crate) fn wrap_existing(&self, existing: &BaseClient) -> BaseClient {
         // Wrap in any relevant middleware and handle connectivity.
         let client = RedirectClientWithMiddleware {
             client: self.apply_middleware(existing.raw_client.clone()),
@@ -457,6 +539,8 @@ impl<'a> BaseClientBuilder<'a> {
             read_timeout: existing.read_timeout,
             connect_timeout: existing.connect_timeout,
             credentials_cache: existing.credentials_cache.clone(),
+            certificate_source: existing.certificate_source,
+            cache_read_runtime: self.cache_read_runtime.clone(),
         }
     }
 
@@ -464,7 +548,7 @@ impl<'a> BaseClientBuilder<'a> {
         &self,
         read_timeout: Duration,
         connect_timeout: Duration,
-    ) -> (Client, Client) {
+    ) -> Result<(Client, Client, CertificateSource), ClientBuildError> {
         // Create user agent.
         let mut user_agent_string = format!("uv/{}", version());
 
@@ -474,8 +558,17 @@ impl<'a> BaseClientBuilder<'a> {
             let _ = write!(user_agent_string, " {output}");
         }
 
-        // Load custom CA certificates from `SSL_CERT_FILE` and `SSL_CERT_DIR`.
-        let custom_certs = Certificates::from_env().map(|certs| certs.to_reqwest_certs());
+        let custom_certs = self
+            .custom_certificates
+            .as_ref()
+            .map(Certificates::to_reqwest_certs);
+        let certificate_source = if custom_certs.is_some() {
+            CertificateSource::Custom
+        } else if self.system_certs {
+            CertificateSource::System
+        } else {
+            CertificateSource::WebPki
+        };
 
         // Create a secure client that validates certificates.
         let raw_client = self.create_client(
@@ -485,7 +578,7 @@ impl<'a> BaseClientBuilder<'a> {
             custom_certs.clone(),
             Security::Secure,
             self.redirect_policy,
-        );
+        )?;
 
         // Create an insecure client that accepts invalid certificates.
         let raw_dangerous_client = self.create_client(
@@ -495,9 +588,9 @@ impl<'a> BaseClientBuilder<'a> {
             custom_certs,
             Security::Insecure,
             self.redirect_policy,
-        );
+        )?;
 
-        (raw_client, raw_dangerous_client)
+        Ok((raw_client, raw_dangerous_client, certificate_source))
     }
 
     fn create_client(
@@ -508,7 +601,7 @@ impl<'a> BaseClientBuilder<'a> {
         custom_certs: Option<Vec<Certificate>>,
         security: Security,
         redirect_policy: RedirectPolicy,
-    ) -> Client {
+    ) -> Result<Client, ClientBuildError> {
         // Configure the builder.
         let client_builder = ClientBuilder::new()
             .http1_title_case_headers()
@@ -528,8 +621,8 @@ impl<'a> BaseClientBuilder<'a> {
 
         // Configure the certificate source.
         //
-        // `SSL_CERT_FILE` and `SSL_CERT_DIR` override the default certificate source when they
-        // contain valid certificates.
+        // Non-empty `SSL_CERT_FILE` and `SSL_CERT_DIR` values override the default certificate
+        // source, even when no valid certificates can be loaded from their configured paths.
         let client_builder = if let Some(custom_certs) = custom_certs {
             client_builder.tls_certs_only(custom_certs)
         } else if self.system_certs {
@@ -543,7 +636,11 @@ impl<'a> BaseClientBuilder<'a> {
             match read_identity(&ssl_client_cert) {
                 Ok(identity) => client_builder.identity(identity),
                 Err(err) => {
-                    warn_user_once!("Ignoring invalid `SSL_CLIENT_CERT`: {err}");
+                    warn_user_once_with_chain!(
+                        anyhow::Error::from(err)
+                            .context("Ignoring invalid `SSL_CLIENT_CERT`")
+                            .as_ref()
+                    );
                     client_builder
                 }
             }
@@ -564,50 +661,24 @@ impl<'a> BaseClientBuilder<'a> {
 
         if let Some(http_proxy) = &self.http_proxy {
             let proxy = http_proxy
-                .as_proxy(ProxyUrlKind::Http)
+                .as_proxy(ProxyUrlKind::Http)?
                 .no_proxy(no_proxy.clone());
             client_builder = client_builder.proxy(proxy);
         }
 
         if let Some(https_proxy) = &self.https_proxy {
-            let proxy = https_proxy.as_proxy(ProxyUrlKind::Https).no_proxy(no_proxy);
+            let proxy = https_proxy
+                .as_proxy(ProxyUrlKind::Https)?
+                .no_proxy(no_proxy);
             client_builder = client_builder.proxy(proxy);
         }
 
-        let client_builder = client_builder;
-
-        client_builder
-            .build()
-            .expect("Failed to build HTTP client.")
+        client_builder.build().map_err(Into::into)
     }
 
     fn apply_middleware(&self, client: Client) -> ClientWithMiddleware {
         match self.connectivity {
             Connectivity::Online => {
-                // Create a base client to using in the authentication middleware.
-                let base_client = {
-                    let mut client = reqwest_middleware::ClientBuilder::new(client.clone());
-
-                    // Avoid uncloneable errors with a streaming body during publish.
-                    if self.retries > 0 {
-                        // Initialize the retry strategy.
-                        let retry_strategy = RetryTransientMiddleware::new_with_policy_and_strategy(
-                            self.retry_policy(),
-                            UvRetryableStrategy,
-                        );
-                        client = client.with(retry_strategy);
-                    }
-
-                    // When supplied, add the extra middleware.
-                    if let Some(extra_middleware) = &self.extra_middleware {
-                        for middleware in &extra_middleware.0 {
-                            client = client.with_arc(middleware.clone());
-                        }
-                    }
-
-                    client.build()
-                };
-
                 let mut client = reqwest_middleware::ClientBuilder::new(client);
 
                 // Avoid uncloneable errors with a streaming body during publish.
@@ -627,31 +698,27 @@ impl<'a> BaseClientBuilder<'a> {
                     }
                 }
 
+                client = client.with(AzureStorageMiddleware {
+                    preview: self.preview,
+                });
+
                 // Initialize the authentication middleware to set headers.
                 match self.auth_integration {
                     AuthIntegration::Default => {
-                        let mut auth_middleware = AuthMiddleware::new()
+                        let auth_middleware = AuthMiddleware::new()
                             .with_cache_arc(self.credentials_cache.clone())
-                            .with_base_client(base_client)
                             .with_indexes(self.indexes.clone())
                             .with_keyring(self.keyring.to_provider())
                             .with_preview(self.preview);
-                        if let Ok(token_store) = PyxTokenStore::from_settings() {
-                            auth_middleware = auth_middleware.with_pyx_token_store(token_store);
-                        }
                         client = client.with(auth_middleware);
                     }
                     AuthIntegration::OnlyAuthenticated => {
-                        let mut auth_middleware = AuthMiddleware::new()
+                        let auth_middleware = AuthMiddleware::new()
                             .with_cache_arc(self.credentials_cache.clone())
-                            .with_base_client(base_client)
                             .with_indexes(self.indexes.clone())
                             .with_keyring(self.keyring.to_provider())
                             .with_preview(self.preview)
                             .with_only_authenticated(true);
-                        if let Ok(token_store) = PyxTokenStore::from_settings() {
-                            auth_middleware = auth_middleware.with_pyx_token_store(token_store);
-                        }
                         client = client.with(auth_middleware);
                     }
                     AuthIntegration::NoAuthMiddleware => {
@@ -693,6 +760,23 @@ pub struct BaseClient {
     no_retry_delay: bool,
     /// Global authentication cache for a uv invocation to share credentials across uv clients.
     credentials_cache: Arc<CredentialsCache>,
+    /// The certificate roots used by the underlying HTTP client.
+    certificate_source: CertificateSource,
+    /// A shared, dedicated blocking pool for short-lived cache reads.
+    cache_read_runtime: Arc<CacheReadRuntime>,
+}
+
+/// The certificate roots used by a [`BaseClient`].
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub(crate) enum CertificateSource {
+    /// The system certificate roots.
+    System,
+    /// The bundled `WebPKI` certificate roots.
+    WebPki,
+    /// Custom certificate roots.
+    Custom,
+    /// An externally constructed client whose certificate roots are unknown.
+    Unknown,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -704,6 +788,10 @@ enum Security {
 }
 
 impl BaseClient {
+    pub(crate) fn cache_read_runtime(&self) -> &tokio::runtime::Runtime {
+        self.cache_read_runtime.get()
+    }
+
     /// Selects the appropriate client based on the host's trustworthiness.
     pub fn for_host(&self, url: &DisplaySafeUrl) -> &RedirectClientWithMiddleware {
         if self.disable_ssl(url) {
@@ -714,26 +802,28 @@ impl BaseClient {
     }
 
     /// Executes a request, applying redirect policy.
-    pub async fn execute(&self, req: Request) -> reqwest_middleware::Result<Response> {
+    pub(crate) async fn execute(&self, req: Request) -> reqwest_middleware::Result<Response> {
         let client = self.for_host(&DisplaySafeUrl::from_url(req.url().clone()));
         client.execute(req).await
     }
 
     /// Returns `true` if the host is trusted to use the insecure client.
-    pub fn disable_ssl(&self, url: &DisplaySafeUrl) -> bool {
+    fn disable_ssl(&self, url: &DisplaySafeUrl) -> bool {
         self.allow_insecure_host
             .iter()
             .any(|allow_insecure_host| allow_insecure_host.matches(url))
     }
 
-    /// The configured client read timeout.
-    pub fn read_timeout(&self) -> Duration {
-        self.read_timeout
+    /// Return the [`GitHttpSettings`] for fetching from the given URL.
+    pub fn git_http_settings(&self, url: &DisplaySafeUrl) -> GitHttpSettings {
+        GitHttpSettings::default()
+            .with_disabled_ssl(self.disable_ssl(url))
+            .with_offline(self.connectivity().is_offline())
     }
 
-    /// The configured client connect timeout.
-    pub fn connect_timeout(&self) -> Duration {
-        self.connect_timeout
+    /// The configured client read timeout.
+    pub(crate) fn read_timeout(&self) -> Duration {
+        self.read_timeout
     }
 
     /// The configured connectivity mode.
@@ -746,8 +836,12 @@ impl BaseClient {
         retry_policy(self.retries, self.no_retry_delay)
     }
 
-    pub fn credentials_cache(&self) -> &CredentialsCache {
+    pub(crate) fn credentials_cache(&self) -> &CredentialsCache {
         &self.credentials_cache
+    }
+
+    pub(crate) fn certificate_source(&self) -> CertificateSource {
+        self.certificate_source
     }
 
     /// The reqwest client without middleware.
@@ -784,12 +878,12 @@ impl RedirectClientWithMiddleware {
     }
 
     /// Convenience method to make a `HEAD` request to a URL.
-    pub fn head<U: IntoUrl>(&self, url: U) -> RequestBuilder<'_> {
+    pub(crate) fn head<U: IntoUrl>(&self, url: U) -> RequestBuilder<'_> {
         RequestBuilder::new(self.client.head(url), self)
     }
 
     /// Executes a request, applying the redirect policy.
-    pub async fn execute(&self, req: Request) -> reqwest_middleware::Result<Response> {
+    async fn execute(&self, req: Request) -> reqwest_middleware::Result<Response> {
         match self.redirect_policy {
             RedirectPolicy::BypassMiddleware => self.client.execute(req).await,
             RedirectPolicy::RetriggerMiddleware => self.execute_with_redirect_handling(req).await,
@@ -944,9 +1038,8 @@ fn request_into_redirect(
     let mut headers = HeaderMap::new();
     std::mem::swap(req.headers_mut(), &mut headers);
 
-    let cross_host = redirect_url.host_str() != original_req_url.host_str()
-        || redirect_url.port_or_known_default() != original_req_url.port_or_known_default();
-    if cross_host {
+    let cross_realm = RealmRef::from(&*redirect_url) != RealmRef::from(&*original_req_url);
+    if cross_realm {
         if cross_origin_credentials_policy == CrossOriginCredentialsPolicy::Secure {
             debug!("Received a cross-origin redirect. Removing sensitive headers.");
             headers.remove(AUTHORIZATION);
@@ -965,10 +1058,17 @@ fn request_into_redirect(
     // Check if there are credentials on the redirect location itself.
     // If so, move them to Authorization header.
     if !redirect_url.username().is_empty() {
-        if let Some(credentials) = Credentials::from_url(&redirect_url) {
+        if let Some(credentials) =
+            Credentials::from_url(&redirect_url).map_err(reqwest_middleware::Error::middleware)?
+        {
             let _ = redirect_url.set_username("");
             let _ = redirect_url.set_password(None);
-            headers.insert(AUTHORIZATION, credentials.to_header_value());
+            headers.insert(
+                AUTHORIZATION,
+                credentials
+                    .to_header_value()
+                    .map_err(reqwest_middleware::Error::middleware)?,
+            );
         }
     }
 
@@ -1025,7 +1125,7 @@ pub struct RequestBuilder<'a> {
 }
 
 impl<'a> RequestBuilder<'a> {
-    pub fn new(
+    fn new(
         builder: reqwest_middleware::RequestBuilder,
         client: &'a RedirectClientWithMiddleware,
     ) -> Self {
@@ -1041,20 +1141,6 @@ impl<'a> RequestBuilder<'a> {
         <HeaderValue as TryFrom<V>>::Error: Into<http::Error>,
     {
         self.builder = self.builder.header(key, value);
-        self
-    }
-
-    /// Add a set of Headers to the existing ones on this Request.
-    ///
-    /// The headers will be merged in to any already set.
-    pub fn headers(mut self, headers: HeaderMap) -> Self {
-        self.builder = self.builder.headers(headers);
-        self
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    pub fn version(mut self, version: reqwest::Version) -> Self {
-        self.builder = self.builder.version(version);
         self
     }
 
@@ -1092,233 +1178,6 @@ fn retry_policy(retries: u32, no_retry_delay: bool) -> ExponentialBackoff {
             .retry_bounds(Duration::from_secs(2), Duration::from_secs(30));
     }
     builder.build_with_max_retries(retries)
-}
-
-/// An extension over [`DefaultRetryableStrategy`] that logs transient request failures and
-/// adds additional retry cases.
-pub struct UvRetryableStrategy;
-
-impl RetryableStrategy for UvRetryableStrategy {
-    fn handle(&self, res: &Result<Response, reqwest_middleware::Error>) -> Option<Retryable> {
-        let retryable = match res {
-            Ok(success) => default_on_request_success(success),
-            Err(err) => retryable_on_request_failure(err),
-        };
-
-        // Log on transient errors
-        if retryable == Some(Retryable::Transient) {
-            match res {
-                Ok(response) => {
-                    debug!("Transient request failure for: {}", response.url());
-                }
-                Err(err) => {
-                    let context = iter::successors(err.source(), |&err| err.source())
-                        .map(|err| format!("  Caused by: {err}"))
-                        .join("\n");
-                    debug!(
-                        "Transient request failure for {}, retrying: {err}\n{context}",
-                        err.url().map(Url::as_str).unwrap_or("unknown URL")
-                    );
-                }
-            }
-        }
-        retryable
-    }
-}
-
-/// Whether the error looks like a network error that should be retried.
-///
-/// This is an extension over [`reqwest_middleware::default_on_request_failure`], which is missing
-/// a number of cases:
-/// * Inside the reqwest or reqwest-middleware error is an `io::Error` such as a broken pipe
-/// * When streaming a response, a reqwest error may be hidden several layers behind errors
-///   of different crates processing the stream, including `io::Error` layers
-/// * Any `h2` error
-pub fn retryable_on_request_failure(err: &(dyn Error + 'static)) -> Option<Retryable> {
-    // First, try to show a nice trace log
-    if let Some((Some(status), Some(url))) = find_source::<WrappedReqwestError>(&err)
-        .map(|request_err| (request_err.status(), request_err.url()))
-    {
-        trace!(
-            "Considering retry of response HTTP {status} for {url}",
-            url = DisplaySafeUrl::from_url(url.clone())
-        );
-    } else {
-        trace!("Considering retry of error: {err:?}");
-    }
-
-    let mut has_known_error = false;
-    // IO Errors or reqwest errors may be nested through custom IO errors or stream processing
-    // crates
-    let mut current_source = Some(err);
-    while let Some(source) = current_source {
-        // Handle different kinds of reqwest error nesting not accessible by downcast.
-        let reqwest_err = if let Some(reqwest_err) = source.downcast_ref::<reqwest::Error>() {
-            Some(reqwest_err)
-        } else if let Some(reqwest_err) = source
-            .downcast_ref::<WrappedReqwestError>()
-            .and_then(|err| err.inner())
-        {
-            Some(reqwest_err)
-        } else if let Some(reqwest_middleware::Error::Reqwest(reqwest_err)) =
-            source.downcast_ref::<reqwest_middleware::Error>()
-        {
-            Some(reqwest_err)
-        } else {
-            None
-        };
-
-        if let Some(reqwest_err) = reqwest_err {
-            has_known_error = true;
-            // Ignore the default retry strategy returning fatal.
-            if default_on_request_error(reqwest_err) == Some(Retryable::Transient) {
-                trace!("Transient nested reqwest error");
-                return Some(Retryable::Transient);
-            }
-            if is_retryable_status_error(reqwest_err) {
-                trace!("Transient nested reqwest status code error");
-                return Some(Retryable::Transient);
-            }
-
-            trace!("Fatal nested reqwest error");
-        } else if source.downcast_ref::<h2::Error>().is_some() {
-            // All h2 errors look like errors that should be retried
-            // https://github.com/astral-sh/uv/issues/15916
-            trace!("Transient nested h2 error");
-            return Some(Retryable::Transient);
-        } else if let Some(io_err) = source.downcast_ref::<io::Error>() {
-            has_known_error = true;
-            let retryable_io_err_kinds = [
-                // https://github.com/astral-sh/uv/issues/12054
-                io::ErrorKind::BrokenPipe,
-                // From reqwest-middleware
-                io::ErrorKind::ConnectionAborted,
-                // https://github.com/astral-sh/uv/issues/3514
-                io::ErrorKind::ConnectionReset,
-                // https://github.com/astral-sh/uv/issues/14699
-                io::ErrorKind::InvalidData,
-                // https://github.com/astral-sh/uv/issues/17697#issuecomment-3817060484
-                io::ErrorKind::TimedOut,
-                // https://github.com/astral-sh/uv/issues/9246
-                io::ErrorKind::UnexpectedEof,
-            ];
-            if retryable_io_err_kinds.contains(&io_err.kind()) {
-                trace!("Transient IO error: `{}`", io_err.kind());
-                return Some(Retryable::Transient);
-            }
-
-            trace!(
-                "Fatal IO error `{}`, not a transient IO error kind",
-                io_err.kind()
-            );
-        }
-
-        current_source = source.source();
-    }
-
-    if !has_known_error {
-        trace!("Cannot retry error: neither an IO error nor a reqwest error");
-    }
-
-    None
-}
-
-/// Per-request retry state and policy.
-pub struct RetryState {
-    retry_policy: ExponentialBackoff,
-    start_time: SystemTime,
-    total_retries: u32,
-    url: DisplaySafeUrl,
-}
-
-impl RetryState {
-    /// Initialize the [`RetryState`] and record the start time for the retry policy.
-    pub fn start(retry_policy: ExponentialBackoff, url: impl Into<DisplaySafeUrl>) -> Self {
-        Self {
-            retry_policy,
-            start_time: SystemTime::now(),
-            total_retries: 0,
-            url: url.into(),
-        }
-    }
-
-    /// The number of retries across all requests.
-    ///
-    /// After a failed retryable request, this equals the maximum number of retries.
-    pub fn total_retries(&self) -> u32 {
-        self.total_retries
-    }
-
-    /// The total duration from the first request to the (failure) of the last request.
-    pub fn duration(&self) -> Result<Duration, SystemTimeError> {
-        self.start_time.elapsed()
-    }
-
-    /// Determines whether request should be retried.
-    ///
-    /// Takes the number of retries from nested layers associated with the specific `err` type as
-    /// `error_retries`.
-    ///
-    /// Returns the backoff duration if the request should be retried.
-    #[must_use]
-    pub fn should_retry(
-        &mut self,
-        err: &(dyn Error + 'static),
-        error_retries: u32,
-    ) -> Option<Duration> {
-        // If the middleware performed any retries, consider them in our budget.
-        self.total_retries += error_retries;
-        match retryable_on_request_failure(err) {
-            Some(Retryable::Transient) => {
-                // Capture `now` before calling the policy so that `execute_after`
-                // (computed from a `SystemTime::now()` inside the library) is always
-                // >= `now`, making `duration_since` reliable.
-                let now = SystemTime::now();
-                let retry_decision = self
-                    .retry_policy
-                    .should_retry(self.start_time, self.total_retries);
-                if let reqwest_retry::RetryDecision::Retry { execute_after } = retry_decision {
-                    let duration = execute_after
-                        .duration_since(now)
-                        .unwrap_or_else(|_| Duration::default());
-
-                    self.total_retries += 1;
-                    return Some(duration);
-                }
-
-                None
-            }
-            Some(Retryable::Fatal) | None => None,
-        }
-    }
-
-    /// Wait before retrying the request.
-    pub async fn sleep_backoff(&self, duration: Duration) {
-        debug!(
-            "Transient failure while handling response from {}; retrying after {:.1}s...",
-            self.url,
-            duration.as_secs_f32(),
-        );
-        // TODO(konsti): Should we show a spinner plus a message in the CLI while
-        // waiting?
-        tokio::time::sleep(duration).await;
-    }
-}
-
-/// An error type that supports URL-fallback and exponential-backoff retry logic.
-///
-/// Used by [`fetch_with_url_fallback`] to drive the retry loop without knowing the concrete error
-/// type.
-pub trait RetriableError: std::error::Error + Sized + 'static {
-    /// Returns `true` if an alternative URL should be tried immediately (without backoff).
-    fn should_try_next_url(&self) -> bool;
-
-    /// Returns the number of inner retries already recorded in this error.
-    fn retries(&self) -> u32;
-
-    /// Wrap the error to indicate that the operation was retried `retries` times before failing.
-    #[must_use]
-    fn into_retried(self, retries: u32, duration: Duration) -> Self;
 }
 
 /// Try a fallible async operation against each URL in order, with exponential backoff.
@@ -1373,32 +1232,6 @@ where
     }
 }
 
-/// Whether the error is a status code error that is retryable.
-///
-/// Port of `reqwest_retry::default_on_request_success`.
-fn is_retryable_status_error(reqwest_err: &reqwest::Error) -> bool {
-    let Some(status) = reqwest_err.status() else {
-        return false;
-    };
-    status.is_server_error()
-        || status == StatusCode::REQUEST_TIMEOUT
-        || status == StatusCode::TOO_MANY_REQUESTS
-}
-
-/// Find the first source error of a specific type.
-///
-/// See <https://github.com/seanmonstar/reqwest/issues/1602#issuecomment-1220996681>
-fn find_source<E: Error + 'static>(orig: &dyn Error) -> Option<&E> {
-    let mut cause = orig.source();
-    while let Some(err) = cause {
-        if let Some(typed) = err.downcast_ref() {
-            return Some(typed);
-        }
-        cause = err.source();
-    }
-    None
-}
-
 // TODO(konsti): Remove once we find a native home for `retries_from_env`
 #[derive(Debug, Error)]
 pub enum RetryParsingError {
@@ -1410,13 +1243,17 @@ pub enum RetryParsingError {
 mod tests {
     use super::*;
 
-    use anyhow::Result;
-    use insta::assert_debug_snapshot;
+    use anyhow::{Context, Result};
     use reqwest::{Client, Method};
-    use wiremock::matchers::{method, path};
+    use wiremock::matchers::method;
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    use crate::base_client::request_into_redirect;
+    #[tokio::test]
+    async fn cache_read_runtime_can_be_dropped_from_an_async_context() {
+        let runtime = CacheReadRuntime::new(1);
+        runtime.get().spawn_blocking(|| {}).await.unwrap();
+        drop(runtime);
+    }
 
     #[tokio::test]
     async fn test_redirect_preserves_authorization_header_on_same_origin() -> Result<()> {
@@ -1452,6 +1289,46 @@ mod tests {
             assert!(redirect_request.headers().contains_key(AUTHORIZATION));
         }
 
+        Ok(())
+    }
+
+    /// A scheme change crosses an authentication realm even when the effective port is unchanged.
+    #[test]
+    fn test_redirect_removes_sensitive_headers_on_scheme_change() -> Result<()> {
+        for (source, target) in [
+            (
+                "https://example.com:8080/wheel",
+                "http://example.com:8080/wheel",
+            ),
+            (
+                "http://example.com:8080/wheel",
+                "https://example.com:8080/wheel",
+            ),
+            ("https://example.com/wheel", "http://example.com:443/wheel"),
+        ] {
+            let request = Client::new()
+                .get(source)
+                .header(AUTHORIZATION, "Bearer source-token")
+                .header(COOKIE, "session=source-session")
+                .header(PROXY_AUTHORIZATION, "Basic source-proxy")
+                .header(WWW_AUTHENTICATE, "Basic realm=source")
+                .build()?;
+            let response = Response::from(
+                http::Response::builder()
+                    .status(303)
+                    .header(LOCATION, target)
+                    .body("")?,
+            );
+            let redirected =
+                request_into_redirect(request, &response, CrossOriginCredentialsPolicy::Secure)?
+                    .context("expected a redirect request")?;
+            for header in [AUTHORIZATION, COOKIE, PROXY_AUTHORIZATION, WWW_AUTHENTICATE] {
+                assert!(
+                    !redirected.headers().contains_key(&header),
+                    "retained {header} on redirect from {source} to {target}"
+                );
+            }
+        }
         Ok(())
     }
 
@@ -1603,74 +1480,6 @@ mod tests {
 
             assert!(!redirect_request.headers().contains_key(REFERER));
         }
-
-        Ok(())
-    }
-
-    /// Enumerate which status codes we are retrying.
-    #[tokio::test]
-    async fn retried_status_codes() -> Result<()> {
-        let server = MockServer::start().await;
-        let client = Client::default();
-        let middleware_client = ClientWithMiddleware::default();
-        let mut retried = Vec::new();
-        for status in 100..599 {
-            // Test all standard status codes and an example for a non-RFC code used in the wild.
-            if StatusCode::from_u16(status)?.canonical_reason().is_none() && status != 420 {
-                continue;
-            }
-
-            Mock::given(path(format!("/{status}")))
-                .respond_with(ResponseTemplate::new(status))
-                .mount(&server)
-                .await;
-
-            let response = middleware_client
-                .get(format!("{}/{}", server.uri(), status))
-                .send()
-                .await;
-
-            let middleware_retry =
-                UvRetryableStrategy.handle(&response) == Some(Retryable::Transient);
-
-            let response = client
-                .get(format!("{}/{}", server.uri(), status))
-                .send()
-                .await?;
-
-            let uv_retry = match response.error_for_status() {
-                Ok(_) => false,
-                Err(err) => retryable_on_request_failure(&err) == Some(Retryable::Transient),
-            };
-
-            // Ensure we're retrying the same status code as the reqwest_retry crate. We may choose
-            // to deviate from this later.
-            assert_eq!(middleware_retry, uv_retry);
-            if uv_retry {
-                retried.push(status);
-            }
-        }
-
-        assert_debug_snapshot!(retried, @"
-        [
-            100,
-            102,
-            103,
-            408,
-            429,
-            500,
-            501,
-            502,
-            503,
-            504,
-            505,
-            506,
-            507,
-            508,
-            510,
-            511,
-        ]
-        ");
 
         Ok(())
     }

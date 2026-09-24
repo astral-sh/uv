@@ -1,0 +1,15 @@
+name = "transitive-package-only-yanked"
+description = "The user requires any version of package `a` which requires `b` which only has yanked versions available."
+
+[root]
+requires = ["a"]
+
+[expected]
+satisfiable = false
+explanation = "Yanked versions should not be installed, even if they are the only one available."
+
+[packages.a.versions."0.1.0"]
+requires = ["b"]
+
+[packages.b.versions."1.0.0"]
+yanked = true

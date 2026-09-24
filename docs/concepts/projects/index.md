@@ -15,4 +15,5 @@ Working on projects is a core part of the uv experience. Learn more about using 
 - [Using lockfiles and syncing the environment](./sync.md)
 - [Configuring the project for advanced use cases](./config.md)
 - [Building distributions to publish a project](./build.md)
+- [Exporting a lockfile to different formats](./export.md)
 - [Using workspaces to work on multiple projects at once](./workspaces.md)

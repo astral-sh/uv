@@ -1,0 +1,26 @@
+name = "fork-allows-non-conflicting-repeated-dependencies"
+description = '''
+This test ensures that multiple non-conflicting dependency
+specifications with the same package name are allowed and supported.
+
+This test exists because the universal resolver forks itself based on
+duplicate dependency specifications by looking at package name. So at
+first glance, a case like this could perhaps cause an errant fork.
+While it's difficult to test for "does not create a fork" (at time of
+writing, the implementation does not fork), we can at least check that
+this case is handled correctly without issue. Namely, forking should
+only occur when there are duplicate dependency specifications with
+disjoint marker expressions.
+'''
+
+[resolver_options]
+universal = true
+
+[expected]
+satisfiable = true
+
+[root]
+requires = ["a>=1", "a<2"]
+
+[packages.a.versions."1.0.0"]
+[packages.a.versions."2.0.0"]

@@ -1,0 +1,28 @@
+name = "fork-upgrade"
+description = '''
+This test checks that we discard fork markers when using `--upgrade`.
+'''
+
+[resolver_options]
+universal = true
+
+[expected]
+satisfiable = true
+
+[root]
+requires = ["foo"]
+
+[packages.foo.versions."1.0.0"]
+requires = [
+  # Provoke a fork
+  "bar==1; sys_platform == 'linux'",
+  "bar==2; sys_platform != 'linux'",
+]
+[packages.foo.versions."2.0.0"]
+requires = [
+  # No fork
+  "bar==2",
+]
+
+[packages.bar.versions."1.0.0"]
+[packages.bar.versions."2.0.0"]

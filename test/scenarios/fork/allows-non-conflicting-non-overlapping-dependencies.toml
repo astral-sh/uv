@@ -1,0 +1,24 @@
+name = "fork-allows-non-conflicting-non-overlapping-dependencies"
+description = '''
+This test ensures that multiple non-conflicting but also
+non-overlapping dependency specifications with the same package name
+are allowed and supported.
+
+At time of writing, this provokes a fork in the resolver, but it
+arguably shouldn't since the requirements themselves do not conflict
+with one another. However, this does impact resolution. Namely, it
+leaves the `a>=1` fork free to choose `a==2.0.0` since it behaves as if
+the `a<2` constraint doesn't exist.
+'''
+
+[resolver_options]
+universal = true
+
+[expected]
+satisfiable = true
+
+[root]
+requires = ["a>=1 ; sys_platform == 'linux'", "a<2 ; sys_platform == 'darwin'"]
+
+[packages.a.versions."1.0.0"]
+[packages.a.versions."2.0.0"]

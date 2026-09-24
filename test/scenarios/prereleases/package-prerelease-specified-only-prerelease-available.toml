@@ -1,0 +1,18 @@
+name = "package-prerelease-specified-only-prerelease-available"
+description = "The user requires a version of `a` with a prerelease specifier and only prerelease releases are available."
+
+[root]
+requires = ["a>=0.1.0a1"]
+
+[expected]
+satisfiable = true
+explanation = "The latest prerelease version should be selected."
+
+[expected.packages]
+a = "0.3.0a1"
+
+[packages.a.versions."0.1.0a1"]
+
+[packages.a.versions."0.2.0a1"]
+
+[packages.a.versions."0.3.0a1"]

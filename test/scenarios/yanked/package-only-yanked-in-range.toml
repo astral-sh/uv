@@ -1,0 +1,14 @@
+name = "package-only-yanked-in-range"
+description = "The user requires a version of package `a` which only matches yanked versions."
+
+[root]
+requires = ["a>0.1.0"]
+
+[expected]
+satisfiable = false
+explanation = "Since there are other versions of `a` available, yanked versions should not be selected without explicit opt-in."
+
+[packages.a.versions."0.1.0"]
+
+[packages.a.versions."1.0.0"]
+yanked = true

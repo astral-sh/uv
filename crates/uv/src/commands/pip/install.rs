@@ -1,28 +1,33 @@
 use std::collections::BTreeSet;
+use std::path::PathBuf;
 
-use anyhow::Context;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use tracing::{Level, debug, enabled, info_span, warn};
+use thiserror::Error;
+use tracing::{Level, debug, enabled, warn};
+
+use uv_errors::{Hinted, Hints};
 
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
+use uv_cli::PipInstallFormat;
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    BuildIsolation, BuildOptions, Concurrency, Constraints, DryRun, ExtrasSpecification,
-    HashCheckingMode, IndexStrategy, NoSources, Reinstall, Upgrade,
+    BuildIsolation, BuildOptions, Concurrency, Constraints, DryRun, EditableMode,
+    ExcludeDependency, ExtrasSpecification, HashCheckingMode, IndexStrategy, NoSources, Override,
+    Reinstall, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations,
+    ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, Name,
     NameRequirementSpecification, Origin, PackageConfigSettings, Requirement, Resolution,
-    UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
-use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
+use uv_normalize::{DefaultExtras, DefaultGroups};
+use uv_pep440::Version;
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::Conflicts;
 use uv_python::{
@@ -31,23 +36,45 @@ use uv_python::{
 };
 use uv_requirements::{GroupsSpecification, RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
-    DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PrereleaseMode, PylockToml,
-    PythonRequirement, ResolutionMode, ResolverEnvironment,
+    DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, Prerelease, PythonRequirement,
+    ResolutionMode, ResolverEnvironment,
 };
 use uv_settings::PythonInstallMirrors;
-use uv_torch::{TorchMode, TorchSource, TorchStrategy};
-use uv_types::HashStrategy;
+use uv_torch::{AmdGpuArchitecture, TorchMode, TorchStrategy};
+use uv_types::{HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 
+use crate::commands::editable::apply_editable_mode;
+use crate::commands::install_report::write_install_report;
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
-use crate::commands::pip::operations::Modifications;
+use crate::commands::pip::operations::{Changelog, Modifications};
 use crate::commands::pip::operations::{report_interpreter, report_target_environment};
 use crate::commands::pip::{operations, resolution_markers, resolution_tags};
+use crate::commands::pylock::{read_pylock_toml, resolve_pylock_toml};
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{ExitStatus, diagnostics};
+use crate::commands::{ExitStatus, UvError};
 use crate::printer::Printer;
+
+/// The interpreter is externally managed and cannot be modified.
+#[derive(Debug, Error)]
+#[error("{message}")]
+pub(crate) struct ExternallyManagedError {
+    message: String,
+    root: PathBuf,
+    system: bool,
+}
+
+impl Hinted for ExternallyManagedError {
+    fn hints(&self) -> Hints<'_> {
+        if self.system {
+            Hints::from("Virtual environments were not considered due to the `--system` flag")
+        } else {
+            Hints::from("Consider creating a virtual environment, e.g., with `uv venv`")
+        }
+    }
+}
 
 /// Install packages into the current environment.
 #[expect(clippy::fn_params_excessive_bools)]
@@ -58,18 +85,21 @@ pub(crate) async fn pip_install(
     excludes: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
     constraints_from_workspace: Vec<Requirement>,
-    overrides_from_workspace: Vec<Requirement>,
-    excludes_from_workspace: Vec<uv_normalize::PackageName>,
-    build_constraints_from_workspace: Vec<Requirement>,
+    overrides_from_workspace: Vec<Override<Requirement>>,
+    excludes_from_workspace: Vec<ExcludeDependency>,
+    build_constraints_from_workspace: Vec<NameRequirementSpecification>,
+    editable: Option<EditableMode>,
     extras: &ExtrasSpecification,
     groups: &GroupsSpecification,
     resolution_mode: ResolutionMode,
-    prerelease_mode: PrereleaseMode,
+    prerelease: Prerelease,
     dependency_mode: DependencyMode,
     upgrade: Upgrade,
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     torch_backend: Option<TorchMode>,
+    cuda_driver_version: Option<Version>,
+    amd_gpu_architecture: Option<AmdGpuArchitecture>,
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
     client_builder: &BaseClientBuilder<'_>,
@@ -102,6 +132,7 @@ pub(crate) async fn pip_install(
     cache: Cache,
     workspace_cache: WorkspaceCache,
     dry_run: DryRun,
+    output_format: PipInstallFormat,
     printer: Printer,
     preview: Preview,
 ) -> anyhow::Result<ExitStatus> {
@@ -115,13 +146,16 @@ pub(crate) async fn pip_install(
         requirements,
         constraints,
         overrides,
+        mut override_dependencies,
         excludes,
         pylock,
+        pylock_groups,
         source_trees,
         groups,
         index_url,
         extra_index_urls,
         no_index,
+        require_hashes,
         find_links,
         no_binary,
         no_build,
@@ -136,6 +170,10 @@ pub(crate) async fn pip_install(
         &client_builder,
     )
     .await?;
+
+    override_dependencies.extend(overrides_from_workspace);
+
+    let hash_checking = HashCheckingMode::from_requirements_txt(hash_checking, require_hashes);
 
     if pylock.is_some() {
         if !preview.is_enabled(PreviewFeature::Pylock) {
@@ -156,33 +194,18 @@ pub(crate) async fn pip_install(
         )
         .collect();
 
-    let overrides: Vec<UnresolvedRequirementSpecification> = overrides
-        .iter()
-        .cloned()
-        .chain(
-            overrides_from_workspace
-                .into_iter()
-                .map(UnresolvedRequirementSpecification::from),
-        )
-        .collect();
-
-    let excludes: Vec<PackageName> = excludes
+    let excludes: Vec<ExcludeDependency> = excludes
         .into_iter()
         .chain(excludes_from_workspace)
         .collect();
 
     // Read build constraints.
-    let build_constraints: Vec<NameRequirementSpecification> =
+    let build_constraints = Constraints::from_specifications(
         operations::read_constraints(build_constraints, &client_builder)
             .await?
             .into_iter()
-            .chain(
-                build_constraints_from_workspace
-                    .iter()
-                    .cloned()
-                    .map(NameRequirementSpecification::from),
-            )
-            .collect();
+            .chain(build_constraints_from_workspace.iter().cloned()),
+    );
 
     // Detect the current Python interpreter.
     let environment = if target.is_some() || prefix.is_some() {
@@ -200,7 +223,6 @@ pub(crate) async fn pip_install(
             install_mirrors.python_install_mirror.as_deref(),
             install_mirrors.pypy_install_mirror.as_deref(),
             install_mirrors.python_downloads_json_url.as_deref(),
-            preview,
         )
         .await?;
         report_interpreter(&installation, true, printer)?;
@@ -214,7 +236,6 @@ pub(crate) async fn pip_install(
             EnvironmentPreference::from_system_flag(system, true),
             PythonPreference::default().with_system_flag(system),
             &cache,
-            preview,
         )?;
         report_target_environment(&environment, &cache, printer)?;
         environment
@@ -259,25 +280,12 @@ pub(crate) async fn pip_install(
                 ),
             };
 
-            let error_message = if system {
-                // Add a hint about the `--system` flag
-                format!(
-                    "{}\n{}{} Virtual environments were not considered due to the `--system` flag",
-                    managed_message,
-                    "hint".bold().cyan(),
-                    ":".bold()
-                )
-            } else {
-                // Add a hint to create a virtual environment
-                format!(
-                    "{}\n{}{} Consider creating a virtual environment, e.g., with `uv venv`",
-                    managed_message,
-                    "hint".bold().cyan(),
-                    ":".bold()
-                )
-            };
-
-            return Err(anyhow::Error::msg(error_message));
+            return Err(ExternallyManagedError {
+                message: managed_message,
+                root: environment.root().to_path_buf(),
+                system,
+            }
+            .into());
         }
     }
 
@@ -302,8 +310,19 @@ pub(crate) async fn pip_install(
         interpreter,
     )?;
 
-    // Determine the set of installed packages.
-    let site_packages = SitePackages::from_environment(&environment)?;
+    // With sufficient modifications, installation only needs installed distributions selected by
+    // the resolution. A `pylock.toml` resolution never consults the environment, while reinstalling
+    // every package excludes all installed distributions from candidate selection, including for
+    // transitive dependencies. Delay the environment scan in either case, then restrict it to the
+    // resolved package names.
+    let defer_site_packages = matches!(modifications, Modifications::Sufficient)
+        && (pylock.is_some() || matches!(&reinstall, Reinstall::All));
+
+    let site_packages = if defer_site_packages {
+        None
+    } else {
+        Some(SitePackages::from_environment(&environment)?)
+    };
 
     // Check if the current environment satisfies the requirements.
     // Ideally, the resolver would be fast enough to let us remove this check. But right now, for large environments,
@@ -314,11 +333,16 @@ pub(crate) async fn pip_install(
         && groups.is_empty()
         && pylock.is_none()
         && matches!(modifications, Modifications::Sufficient)
+        && let Some(site_packages) = &site_packages
     {
         match site_packages.satisfies_spec(
             &requirements,
             &constraints,
             &overrides,
+            &override_dependencies,
+            &excludes,
+            &dependency_metadata,
+            dependency_mode,
             InstallationStrategy::Permissive,
             &marker_env,
             &tags,
@@ -342,6 +366,20 @@ pub(crate) async fn pip_install(
                 }
                 DefaultInstallLogger.on_check(requirements.len(), start, printer, dry_run)?;
 
+                if strict && !dry_run.enabled() {
+                    operations::diagnose_environment(
+                        recursive_requirements
+                            .iter()
+                            .map(|requirement| &requirement.name),
+                        &environment,
+                        &marker_env,
+                        &tags,
+                        &dependency_metadata,
+                        printer,
+                    )?;
+                }
+
+                write_install_report(&Changelog::default(), dry_run, output_format, printer)?;
                 return Ok(ExitStatus::Success);
             }
             SatisfiesResult::Unsatisfied(requirement) => {
@@ -371,7 +409,7 @@ pub(crate) async fn pip_install(
             hash_checking,
         )?
     } else {
-        HashStrategy::None
+        HashStrategy::default()
     };
 
     // Incorporate any index locations from the provided sources.
@@ -393,21 +431,15 @@ pub(crate) async fn pip_install(
     // Determine the PyTorch backend.
     let torch_backend = torch_backend
         .map(|mode| {
-            let source = if uv_auth::PyxTokenStore::from_settings()
-                .is_ok_and(|store| store.has_credentials())
-            {
-                TorchSource::Pyx
-            } else {
-                TorchSource::default()
-            };
             TorchStrategy::from_mode(
                 mode,
-                source,
                 python_platform
                     .map(TargetTriple::platform)
                     .as_ref()
                     .unwrap_or(interpreter.platform())
                     .os(),
+                cuda_driver_version,
+                amd_gpu_architecture,
             )
         })
         .transpose()?;
@@ -419,19 +451,13 @@ pub(crate) async fn pip_install(
         .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
-        .build();
+        .build()?;
 
     // Combine the `--no-binary` and `--no-build` flags from the requirements files.
     let build_options = build_options.combine(no_binary, no_build);
 
     // Resolve the flat indexes from `--find-links`.
-    let flat_index = {
-        let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), &cache);
-        let entries = client
-            .fetch_all(index_locations.flat_indexes().map(Index::url))
-            .await?;
-        FlatIndex::from_entries(entries, Some(&tags), &hasher, &build_options)
-    };
+    let flat_index = FlatIndex::load(&client, &cache, &index_locations).await?;
 
     // Determine whether to enable build isolation.
     let types_build_isolation = match build_isolation {
@@ -442,26 +468,16 @@ pub(crate) async fn pip_install(
         }
     };
 
-    // Enforce (but never require) the build constraints, if `--require-hashes` or `--verify-hashes`
-    // is provided. _Requiring_ hashes would be too strict, and would break with pip.
+    // Verify supplied build hashes unless hash verification was explicitly disabled.
     let build_hasher = if hash_checking.is_some() {
-        HashStrategy::from_requirements(
-            std::iter::empty(),
-            build_constraints
-                .iter()
-                .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
+        HashStrategy::from_constraints(
+            &build_constraints,
             Some(&marker_env),
             HashCheckingMode::Verify,
         )?
     } else {
-        HashStrategy::None
+        HashStrategy::default()
     };
-    let build_constraints = Constraints::from_requirements(
-        build_constraints
-            .iter()
-            .map(|constraint| constraint.requirement.clone()),
-    );
-
     // Initialize any shared state.
     let state = SharedState::default();
 
@@ -486,50 +502,14 @@ pub(crate) async fn pip_install(
         &build_hasher,
         exclude_newer.clone(),
         sources.clone(),
+        SourceTreeEditablePolicy::Project,
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
     );
 
     let (resolution, hasher) = if let Some(pylock) = pylock {
-        // Read the `pylock.toml` from disk or URL, and deserialize it from TOML.
-        let (install_path, content) =
-            if pylock.starts_with("http://") || pylock.starts_with("https://") {
-                // Fetch the `pylock.toml` over HTTP(S).
-                let url = uv_redacted::DisplaySafeUrl::parse(&pylock.to_string_lossy())?;
-                let client = client_builder.build();
-                let response = client
-                    .for_host(&url)
-                    .get(url::Url::from(url.clone()))
-                    .send()
-                    .await?;
-                response.error_for_status_ref()?;
-                let content = response.text().await?;
-                // Use the current working directory as the install path for remote lock files.
-                let install_path = std::env::current_dir()?;
-                (install_path, content)
-            } else {
-                let install_path = std::path::absolute(&pylock)?;
-                let install_path = install_path.parent().unwrap().to_path_buf();
-                let content = fs_err::tokio::read_to_string(&pylock).await?;
-                (install_path, content)
-            };
-        let lock = info_span!("toml::from_str pip install", path = %pylock.display())
-            .in_scope(|| toml::from_str::<PylockToml>(&content))
-            .with_context(|| {
-                format!("Not a valid `pylock.toml` file: {}", pylock.user_display())
-            })?;
-
-        // Verify that the Python version is compatible with the lock file.
-        if let Some(requires_python) = lock.requires_python.as_ref() {
-            if !requires_python.contains(interpreter.python_version()) {
-                return Err(anyhow::anyhow!(
-                    "The requested interpreter resolved to Python {}, which is incompatible with the `pylock.toml`'s Python requirement: `{}`",
-                    interpreter.python_version(),
-                    requires_python,
-                ));
-            }
-        }
+        let (install_path, lock) = read_pylock_toml(&pylock, &client_builder).await?;
 
         // Convert the extras and groups specifications into a concrete form.
         let extras = extras.with_defaults(DefaultExtras::default());
@@ -538,34 +518,30 @@ pub(crate) async fn pip_install(
             .cloned()
             .collect::<Vec<_>>();
 
-        let groups = groups
-            .get(&pylock)
-            .cloned()
-            .unwrap_or_default()
-            .with_defaults(DefaultGroups::List(lock.default_groups.clone()));
+        let groups = pylock_groups.with_defaults(DefaultGroups::List(lock.default_groups.clone()));
         let groups = groups
             .group_names(lock.dependency_groups.iter())
             .cloned()
             .collect::<Vec<_>>();
 
-        let resolution = lock.to_resolution(
+        resolve_pylock_toml(
+            lock,
             &install_path,
-            marker_env.markers(),
+            interpreter,
+            python_version.as_ref(),
+            python_platform.as_ref(),
             &extras,
             &groups,
-            &tags,
             &build_options,
-        )?;
-        let hasher = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?;
-
-        (resolution, hasher)
+            hash_checking,
+        )?
     } else {
         // When resolving, don't take any external preferences into account.
         let preferences = Vec::default();
 
         let options = OptionsBuilder::new()
             .resolution_mode(resolution_mode)
-            .prerelease_mode(prerelease_mode)
+            .prerelease(prerelease)
             .dependency_mode(dependency_mode)
             .exclude_newer(exclude_newer.clone())
             .index_strategy(index_strategy)
@@ -574,10 +550,11 @@ pub(crate) async fn pip_install(
             .build();
 
         // Resolve the requirements.
-        let resolution = match operations::resolve(
+        let (resolution, hasher) = match operations::resolve(
             requirements,
             constraints,
             overrides,
+            override_dependencies,
             excludes,
             source_trees,
             project,
@@ -605,17 +582,25 @@ pub(crate) async fn pip_install(
         )
         .await
         {
-            Ok(graph) => Resolution::from(graph),
+            Ok((graph, hasher)) => (Resolution::from(graph), hasher),
             Err(err) => {
-                return diagnostics::OperationDiagnostic::with_system_certs(
-                    client_builder.system_certs(),
-                )
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                return Err(UvError::from(err).into());
             }
         };
 
         (resolution, hasher)
+    };
+
+    // If necessary, convert editable distributions to non-editable.
+    let resolution = apply_editable_mode(resolution, editable);
+
+    let site_packages = match site_packages {
+        // Only resolved packages can be modified when using sufficient installation semantics.
+        None => SitePackages::from_environment_for_packages(
+            &environment,
+            resolution.distributions().map(Name::name),
+        )?,
+        Some(site_packages) => site_packages,
     };
 
     // Constrain any build requirements marked as `match-runtime = true`.
@@ -642,13 +627,14 @@ pub(crate) async fn pip_install(
         &build_hasher,
         exclude_newer.clone(),
         sources,
+        SourceTreeEditablePolicy::Project,
         workspace_cache,
         concurrency.clone(),
         preview,
     );
 
     // Sync the environment.
-    match operations::install(
+    let changelog = match operations::install(
         &resolution,
         site_packages,
         InstallationStrategy::Permissive,
@@ -656,7 +642,7 @@ pub(crate) async fn pip_install(
         &reinstall,
         &build_options,
         link_mode,
-        compile,
+        compile.then_some(operations::BytecodeCompilation::Installed),
         &hasher,
         &tags,
         &client,
@@ -673,15 +659,15 @@ pub(crate) async fn pip_install(
     )
     .await
     {
-        Ok(..) => {}
-        Err(err) => {
-            return diagnostics::OperationDiagnostic::with_system_certs(
-                client_builder.system_certs(),
-            )
-            .report(err)
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+        Ok(changelog) => changelog,
+        Err(operations::Error::OutdatedEnvironment(changelog)) => {
+            write_install_report(&changelog, dry_run, output_format, printer)?;
+            return Ok(ExitStatus::Failure);
         }
-    }
+        Err(err) => {
+            return Err(UvError::from(err).into());
+        }
+    };
 
     // Notify the user of any resolution diagnostics.
     operations::diagnose_resolution(resolution.diagnostics(), printer)?;
@@ -689,7 +675,7 @@ pub(crate) async fn pip_install(
     // Notify the user of any environment diagnostics.
     if strict && !dry_run.enabled() {
         operations::diagnose_environment(
-            &resolution,
+            resolution.distributions().map(Name::name),
             &environment,
             &marker_env,
             &tags,
@@ -698,5 +684,6 @@ pub(crate) async fn pip_install(
         )?;
     }
 
+    write_install_report(&changelog, dry_run, output_format, printer)?;
     Ok(ExitStatus::Success)
 }

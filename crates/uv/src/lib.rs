@@ -11,10 +11,9 @@ use std::process::ExitCode;
 use std::str::FromStr;
 use std::sync::atomic::Ordering;
 
-use anstream::eprintln;
 use anyhow::{Result, anyhow, bail};
 use clap::error::{ContextKind, ContextValue};
-use clap::{CommandFactory, Parser};
+use clap::{CommandFactory, Error, Parser};
 use futures::FutureExt;
 use owo_colors::OwoColorize;
 use settings::PipTreeSettings;
@@ -29,48 +28,117 @@ use uv_cache_info::Timestamp;
 use uv_cli::SelfUpdateArgs;
 use uv_cli::{
     AuthCommand, AuthHelperCommand, AuthNamespace, BuildBackendCommand, CacheCommand,
-    CacheNamespace, Cli, Commands, PipCommand, PipNamespace, ProjectCommand, PythonCommand,
-    PythonNamespace, SelfCommand, SelfNamespace, ToolCommand, ToolNamespace, TopLevelArgs,
-    WorkspaceCommand, WorkspaceNamespace, compat::CompatArgs,
+    CacheNamespace, CacheSizeOutputFormat, Cli, Commands, PipCommand, PipNamespace, ProjectCommand,
+    PythonCommand, PythonNamespace, SelfCommand, SelfNamespace, ToolCommand, ToolNamespace,
+    TopLevelArgs, WorkspaceCommand, WorkspaceNamespace, compat::CompatArgs, options::ArgumentError,
 };
 use uv_client::BaseClientBuilder;
-use uv_configuration::min_stack_size;
 use uv_flags::EnvironmentFlags;
-use uv_fs::{CWD, Simplified};
+use uv_fs::{CWD, Simplified, normalize_path};
 #[cfg(feature = "self-update")]
 use uv_pep440::release_specifiers_to_ranges;
 use uv_pep508::VersionOrUrl;
-use uv_preview::{Preview, PreviewFeature};
+use uv_preview::PreviewFeature;
 use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl};
-use uv_python::PythonRequest;
+use uv_python::{ConfigDiscovery, PythonRequest};
 use uv_requirements::{GroupsSpecification, RequirementsSource};
 use uv_requirements_txt::RequirementsTxtRequirement;
 use uv_scripts::{Pep723Error, Pep723Item, Pep723Script};
 use uv_settings::{Combine, EnvironmentOptions, FilesystemOptions, Options};
 use uv_static::EnvVars;
+use uv_threads::{RAYON_PARALLELISM, min_stack_size};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
-use crate::commands::{ExitStatus, ParsedRunCommand, RunCommand, ScriptPath, ToolRunCommand};
+use crate::commands::{
+    ExitStatus, ParsedRunCommand, ProjectError, RunCommand, ScriptPath, ToolRunCommand, UvError,
+};
 use crate::printer::Printer;
 use crate::settings::{
     CacheSettings, GlobalSettings, PipCheckSettings, PipCompileSettings, PipFreezeSettings,
     PipInstallSettings, PipListSettings, PipShowSettings, PipSyncSettings, PipUninstallSettings,
-    PublishSettings,
+    PublishSettings, resolve_color,
 };
 
 pub(crate) mod child;
-pub(crate) mod commands;
+pub mod commands;
 #[cfg(not(feature = "self-update"))]
 mod install_source;
-pub(crate) mod logging;
+mod logging;
 pub(crate) mod printer;
 pub(crate) mod settings;
-#[cfg(windows)]
-mod windows_exception;
+
+/// Construct the shared HTTP client builder from the resolved global settings.
+pub(crate) fn base_client_builder<'a>(globals: &GlobalSettings) -> BaseClientBuilder<'a> {
+    let client_builder = BaseClientBuilder::new(
+        globals.network_settings.connectivity,
+        globals.network_settings.system_certs,
+        globals.network_settings.allow_insecure_host.clone(),
+        globals.preview,
+        globals.network_settings.read_timeout,
+        globals.network_settings.connect_timeout,
+        globals.network_settings.retries,
+    )
+    .metadata_range_request(globals.network_settings.metadata_range_request)
+    .cache_read_concurrency(globals.concurrency.cache_reads)
+    .http_proxy(globals.network_settings.http_proxy.clone())
+    .https_proxy(globals.network_settings.https_proxy.clone())
+    .no_proxy(globals.network_settings.no_proxy.clone());
+
+    if let Some(certificates) = &globals.network_settings.custom_certificates {
+        client_builder.custom_certificates(certificates.clone())
+    } else {
+        client_builder
+    }
+}
+
+/// Whether to initialize process-global state.
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[doc(hidden)]
+pub enum GlobalInitialization {
+    /// Initialize process-global state for the first uv invocation in this process.
+    Initialize,
+    /// Reuse process-global state, which has to be initialized by an earlier invocation.
+    Reuse,
+}
+
+impl GlobalInitialization {
+    const fn needs_initialization(self) -> bool {
+        matches!(self, Self::Initialize)
+    }
+}
+
+/// uv was installed through an external package manager and cannot update itself.
+#[cfg(not(feature = "self-update"))]
+#[derive(Debug, thiserror::Error)]
+#[error("uv was installed through an external package manager and cannot update itself.")]
+struct ExternallyInstalledError {
+    install_source: Option<InstallSource>,
+}
+
+#[cfg(not(feature = "self-update"))]
+impl uv_errors::Hinted for ExternallyInstalledError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        if let Some(source) = &self.install_source {
+            uv_errors::Hints::from(format!(
+                "You installed uv using {}. To update uv, run `{}`",
+                source.description(),
+                source.update_instructions(),
+            ))
+        } else {
+            uv_errors::Hints::from("Please use your package manager to update uv")
+        }
+    }
+}
 
 #[instrument(skip_all)]
-async fn run(cli: Cli) -> Result<ExitStatus> {
+#[doc(hidden)]
+pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Result<ExitStatus> {
+    let config_discovery = ConfigDiscovery::from_args(cli.top_level.no_config);
+
+    // Configure color before resolving settings so argument errors retain their styling.
+    anstream::ColorChoice::write_global(resolve_color(&cli.top_level.global_args).into());
+
     // Enable flag to pick up warnings generated by workspace loading.
     if cli.top_level.global_args.quiet == 0 {
         uv_warnings::enable();
@@ -108,18 +176,39 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     let environment = EnvironmentOptions::new()?;
 
     // Resolve preview flags before config discovery for decisions that affect the discovery root.
-    let early_preview = Preview::from_args(
-        settings::resolve_preview(&cli.top_level.global_args, None, &environment),
-        cli.top_level.global_args.no_preview,
-        &cli.top_level.global_args.preview_features,
-    );
+    let early_preview = settings::resolve_preview(&cli.top_level.global_args, None, &environment)?;
+
+    if global_initialization.needs_initialization() {
+        // Make the early preview flags globally available.
+        uv_preview::set(early_preview)?;
+    }
+
+    if global_initialization.needs_initialization() {
+        // Configure the `tracing` crate, which controls internal logging.
+        #[cfg(feature = "tracing-durations-export")]
+        let (durations_layer, _duration_guard) =
+            logging::setup_durations(environment.tracing_durations_file.as_ref())?;
+        #[cfg(not(feature = "tracing-durations-export"))]
+        let durations_layer = None::<tracing_subscriber::layer::Identity>;
+        logging::setup_logging(
+            match cli.top_level.global_args.verbose {
+                0 => logging::Level::Off,
+                1 => logging::Level::DebugUv,
+                2 => logging::Level::TraceUv,
+                3.. => logging::Level::TraceAll,
+            },
+            durations_layer,
+            resolve_color(&cli.top_level.global_args),
+            environment.log_context.unwrap_or_default(),
+        )?;
+    }
 
     // Determine the project directory.
     //
     // If `--project` points to a `pyproject.toml` file, resolve to its parent directory,
     // since downstream code (e.g., `FilesystemOptions::find`) expects a directory.
-    let project_dir = if let Some(project) = &cli.top_level.global_args.project {
-        let path = uv_fs::normalize_path_buf(std::path::absolute(project)?);
+    let project_dir: Cow<'_, Path> = if let Some(project) = &cli.top_level.global_args.project {
+        let path = normalize_path(std::path::absolute(project)?);
         if let Some(name) = path.file_name()
             && name == "pyproject.toml"
             && path.is_file()
@@ -127,14 +216,13 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         {
             Cow::Owned(parent.to_path_buf())
         } else {
-            Cow::Owned(path)
+            path
         }
     } else if let Some(run_command) = &parsed_run_command
-        && early_preview.is_enabled(PreviewFeature::TargetWorkspaceDiscovery)
         && let Some(dir) = run_command.script_dir()
     {
-        // When running a target with the preview flag enabled, discover the workspace starting
-        // from the target's directory rather than the current working directory.
+        // When running a target, discover the workspace starting from the target's directory
+        // rather than the current working directory.
         Cow::Owned(std::path::absolute(dir)?)
     } else {
         Cow::Borrowed(&*CWD)
@@ -150,31 +238,15 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     if !skip_project_validation {
         if let Some(project_path) = cli.top_level.global_args.project.as_ref() {
             if !project_dir.exists() {
-                if early_preview.is_enabled(PreviewFeature::ProjectDirectoryMustExist) {
-                    bail!(
-                        "Project directory `{}` does not exist",
-                        project_path.user_display()
-                    );
-                }
-                warn_user_once!(
-                    "Project directory `{}` does not exist. \
-                    This will become an error in a future release. \
-                    Use `--preview-features project-directory-must-exist` to error on this now.",
+                bail!(
+                    "Project directory `{}` does not exist",
                     project_path.user_display()
                 );
             } else if !project_dir.is_dir() {
                 // `--project path/to/pyproject.toml` is resolved to its parent above,
                 // so this only triggers for other file types (see #18508).
-                if early_preview.is_enabled(PreviewFeature::ProjectDirectoryMustExist) {
-                    bail!(
-                        "Project path `{}` is not a directory",
-                        project_path.user_display()
-                    );
-                }
-                warn_user_once!(
-                    "Project path `{}` is not a directory. \
-                    This will become an error in a future release. \
-                    Use `--preview-features project-directory-must-exist` to error on this now.",
+                bail!(
+                    "Project path `{}` is not a directory",
                     project_path.user_display()
                 );
             }
@@ -190,7 +262,11 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             }) => false,
 
             // Supports `--isolated` as its own argument, so we can't warn either way.
-            Commands::Project(command) if matches!(**command, ProjectCommand::Run(_)) => false,
+            Commands::Project(command)
+                if matches!(**command, ProjectCommand::Run(_) | ProjectCommand::Check(_)) =>
+            {
+                false
+            }
 
             // `--isolated` moved to `--no-workspace`.
             Commands::Project(command) if matches!(**command, ProjectCommand::Init(_)) => {
@@ -226,6 +302,12 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     //    If found, this file is combined with the user configuration file.
     // 3. The nearest configuration file (`uv.toml` or `pyproject.toml`) in the directory tree,
     //    starting from the current directory.
+
+    // Pass the (possibly non-existent) cache dir path to the initial workspace discovery.
+    let discovery_cache = Cache::from_settings(
+        cli.top_level.cache_args.no_cache,
+        cli.top_level.cache_args.cache_dir.clone(),
+    )?;
     let workspace_cache = WorkspaceCache::default();
     let filesystem = if let Some(config_file) = cli.top_level.config_file.as_ref() {
         if config_file
@@ -236,23 +318,31 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 "The `--config-file` argument expects to receive a `uv.toml` file, not a `pyproject.toml`. If you're trying to run a command from another project, use the `--project` argument instead."
             );
         }
-        Some(FilesystemOptions::from_file(config_file)?)
-    } else if deprecated_isolated || cli.top_level.no_config {
+        Some(FilesystemOptions::from_file(config_file).map_err(map_settings_error)?)
+    } else if deprecated_isolated || !config_discovery.enabled() {
         None
     } else if matches!(&*cli.command, Commands::Tool(_) | Commands::Self_(_)) {
         // For commands that operate at the user-level, ignore local configuration.
-        FilesystemOptions::user()?.combine(FilesystemOptions::system()?)
-    } else if let Ok(workspace) =
-        Workspace::discover(&project_dir, &DiscoveryOptions::default(), &workspace_cache).await
+        FilesystemOptions::user()
+            .map_err(map_settings_error)?
+            .combine(FilesystemOptions::system().map_err(map_settings_error)?)
+    } else if let Ok(workspace) = Workspace::discover(
+        &project_dir,
+        &DiscoveryOptions::default(),
+        &discovery_cache,
+        &workspace_cache,
+    )
+    .await
     {
-        let project = FilesystemOptions::find(workspace.install_path())?;
-        let system = FilesystemOptions::system()?;
-        let user = FilesystemOptions::user()?;
+        let project =
+            FilesystemOptions::find(workspace.install_path()).map_err(map_settings_error)?;
+        let system = FilesystemOptions::system().map_err(map_settings_error)?;
+        let user = FilesystemOptions::user().map_err(map_settings_error)?;
         project.combine(user).combine(system)
     } else {
-        let project = FilesystemOptions::find(&project_dir)?;
-        let system = FilesystemOptions::system()?;
-        let user = FilesystemOptions::user()?;
+        let project = FilesystemOptions::find(&project_dir).map_err(map_settings_error)?;
+        let system = FilesystemOptions::system().map_err(map_settings_error)?;
+        let user = FilesystemOptions::user().map_err(map_settings_error)?;
         project.combine(user).combine(system)
     };
 
@@ -304,6 +394,14 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             | ProjectCommand::Export(uv_cli::ExportArgs {
                 script: Some(script),
                 ..
+            })
+            | ProjectCommand::Audit(uv_cli::AuditArgs {
+                script: Some(script),
+                ..
+            })
+            | ProjectCommand::Check(uv_cli::CheckArgs {
+                script: Some(script),
+                ..
             }) => match Pep723Script::read(script).await {
                 Ok(Some(script)) => Some(Pep723Item::Script(script)),
                 Ok(None) => {
@@ -323,6 +421,29 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 Err(err) => return Err(err.into()),
             },
             _ => None,
+        }
+    } else if let Commands::Workspace(WorkspaceNamespace {
+        command: WorkspaceCommand::Metadata(args),
+    }) = &*cli.command
+        && let Some(script) = args.script.as_ref()
+    {
+        match Pep723Script::read(script).await {
+            Ok(Some(script)) => Some(Pep723Item::Script(script)),
+            Ok(None) => {
+                bail!(
+                    "`{}` does not contain a PEP 723 metadata tag; run `{}` to initialize the script",
+                    script.user_display().cyan(),
+                    format!("uv init --script {}", script.user_display()).green()
+                )
+            }
+            Err(Pep723Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+                bail!(
+                    "Failed to read `{}` (not found); run `{}` to create a PEP 723 script",
+                    script.user_display().cyan(),
+                    format!("uv init --script {}", script.user_display()).green()
+                )
+            }
+            Err(err) => return Err(err.into()),
         }
     } else if let Commands::Python(uv_cli::PythonNamespace {
         command:
@@ -355,43 +476,41 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     };
 
     // If the target is a PEP 723 script, merge the metadata into the filesystem metadata.
-    let filesystem = script
+    let script_filesystem = script
         .as_ref()
         .map(Pep723Item::metadata)
         .and_then(|metadata| metadata.tool.as_ref())
         .and_then(|tool| tool.uv.as_ref())
         .map(|uv| Options::simple(uv.globals.clone(), uv.top_level.clone()))
-        .map(FilesystemOptions::from)
-        .combine(filesystem);
+        .map(FilesystemOptions::from);
+    let script_filesystem = if let Some(Pep723Item::Script(script)) = script.as_ref() {
+        let script_dir = script.path.parent().expect("script path has no parent");
+        script_filesystem
+            .map(|options| options.relative_to(script_dir))
+            .transpose()?
+    } else {
+        script_filesystem
+    };
+    let filesystem = script_filesystem.combine(filesystem);
+
+    let custom_certificate_file = match &*cli.command {
+        Commands::Pip(PipNamespace { cert, .. }) => cert.as_deref(),
+        _ => None,
+    };
 
     // Resolve the global settings.
     let globals = GlobalSettings::resolve(
         &cli.top_level.global_args,
         filesystem.as_ref(),
         &environment,
-    );
-
-    // Set the global flags.
-    uv_flags::init(EnvironmentFlags::from(&environment))
-        .map_err(|()| anyhow::anyhow!("Flags are already initialized"))?;
-
-    // Configure the `tracing` crate, which controls internal logging.
-    #[cfg(feature = "tracing-durations-export")]
-    let (durations_layer, _duration_guard) =
-        logging::setup_durations(environment.tracing_durations_file.as_ref())?;
-    #[cfg(not(feature = "tracing-durations-export"))]
-    let durations_layer = None::<tracing_subscriber::layer::Identity>;
-    logging::setup_logging(
-        match globals.verbose {
-            0 => logging::Level::Off,
-            1 => logging::Level::DebugUv,
-            2 => logging::Level::TraceUv,
-            3.. => logging::Level::TraceAll,
-        },
-        durations_layer,
-        globals.color,
-        environment.log_context.unwrap_or_default(),
+        custom_certificate_file,
     )?;
+
+    if global_initialization.needs_initialization() {
+        // Set the global flags.
+        uv_flags::init(EnvironmentFlags::from(&environment))
+            .map_err(|()| anyhow::anyhow!("Flags are already initialized"))?;
+    }
 
     debug!("uv {}", uv_cli::version::uv_self_version());
     if let Some(config_file) = cli.top_level.config_file.as_ref() {
@@ -406,74 +525,34 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         );
     }
 
-    // Adjust open file limits on Unix if the preview feature is enabled.
+    // Adjust open file limits on Unix.
     #[cfg(unix)]
-    if globals.preview.is_enabled(PreviewFeature::AdjustUlimit) {
+    if global_initialization.needs_initialization() {
         match uv_unix::adjust_open_file_limit() {
             Ok(_) | Err(uv_unix::OpenFileLimitError::AlreadySufficient { .. }) => {}
-            // TODO(zanieb): When moving out of preview, consider changing this to a log instead of
-            // a warning because it's okay if we fail here.
-            Err(err) => warn_user!("{err}"),
+            Err(err) => debug!("{err}"),
         }
     }
 
     // Resolve the cache settings.
     let cache_settings = CacheSettings::resolve(*cli.top_level.cache_args, filesystem.as_ref());
 
-    // Set the global preview configuration.
-    uv_preview::init(globals.preview)?;
+    if global_initialization.needs_initialization() {
+        // Set and finalize the global preview configuration.
+        uv_preview::set(globals.preview)?;
+        uv_preview::finalize()?;
+    }
 
     // Enforce the required version.
     if let Some(required_version) = globals.required_version.as_ref() {
         let package_version = uv_pep440::Version::from_str(uv_version::version())?;
         if !required_version.contains(&package_version) {
-            #[cfg(feature = "self-update")]
-            let hint = {
-                // If the required version range includes a lower bound that's higher than
-                // the current version, suggest `uv self update`.
-                let ranges = release_specifiers_to_ranges(required_version.specifiers().clone());
-
-                if let Some(singleton) = ranges.as_singleton() {
-                    // E.g., `==1.0.0`
-                    format!(
-                        ". Update `uv` by running `{}`.",
-                        format!("uv self update {singleton}").green()
-                    )
-                } else if ranges
-                    .bounding_range()
-                    .iter()
-                    .any(|(lowest, _highest)| match lowest {
-                        Bound::Included(version) => **version > package_version,
-                        Bound::Excluded(version) => **version > package_version,
-                        Bound::Unbounded => false,
-                    })
-                {
-                    // E.g., `>=1.0.0`
-                    format!(". Update `uv` by running `{}`.", "uv self update".cyan())
-                } else {
-                    String::new()
-                }
-            };
-            #[cfg(not(feature = "self-update"))]
-            let hint = "";
-            return Err(anyhow::anyhow!(
-                "Required uv version `{required_version}` does not match the running version `{package_version}`{hint}",
-            ));
+            return Err(required_version_error(required_version, &package_version));
         }
     }
 
     // Configure the `Printer`, which controls user-facing output in the CLI.
-    let printer = if globals.quiet == 1 {
-        Printer::Quiet
-    } else if globals.quiet > 1 {
-        Printer::Silent
-    } else if globals.verbose > 0 {
-        Printer::Verbose
-    } else if globals.no_progress {
-        Printer::NoProgress
-    } else {
-        Printer::Default
-    };
+    let printer = Printer::new(globals.quiet, globals.verbose, globals.no_progress);
 
     // Configure the `warn!` macros, which control user-facing warnings in the CLI.
     if globals.quiet > 0 {
@@ -484,23 +563,8 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
 
     anstream::ColorChoice::write_global(globals.color.into());
 
-    miette::set_hook(Box::new(|_| {
-        Box::new(
-            miette::MietteHandlerOpts::new()
-                .break_words(false)
-                .word_separator(textwrap::WordSeparator::AsciiSpace)
-                .word_splitter(textwrap::WordSplitter::NoHyphenation)
-                .wrap_lines(
-                    std::env::var(EnvVars::UV_NO_WRAP)
-                        .map(|_| false)
-                        .unwrap_or(true),
-                )
-                .build(),
-        )
-    }))?;
-
     // Don't initialize the rayon threadpool yet, this is too costly when we're doing a noop sync.
-    uv_configuration::RAYON_PARALLELISM.store(globals.concurrency.installs, Ordering::Relaxed);
+    RAYON_PARALLELISM.store(globals.concurrency.installs, Ordering::Relaxed);
 
     // Write out any resolved settings.
     macro_rules! show_settings {
@@ -524,20 +588,52 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         debug!("Disabling the uv cache due to `--no-cache`");
     }
     let cache = Cache::from_settings(cache_settings.no_cache, cache_settings.cache_dir)?;
+    // This check happens after the first (fallible) workspace discovery, which we need to resolve
+    // the settings that go into the cache constructor, but the check happens before the first
+    // workspace discovery that's used beyond settings discovery.
+    let cache_dir = std::path::absolute(cache.root())?;
+    // PEP 517 hooks run from uv-managed source trees, including source distributions extracted
+    // into the cache, and can invoke uv recursively.
+    let project_is_in_build_dir =
+        std::env::var_os(EnvVars::UV_INTERNAL__BUILD_DIR).is_some_and(|build_dir| {
+            std::path::absolute(build_dir).is_ok_and(|build_dir| {
+                project_dir.starts_with(&build_dir)
+                    || fs_err::canonicalize(&*project_dir).is_ok_and(|project_dir| {
+                        fs_err::canonicalize(build_dir)
+                            .is_ok_and(|build_dir| project_dir.starts_with(build_dir))
+                    })
+            })
+        });
+    if !project_is_in_build_dir {
+        if project_dir.starts_with(&cache_dir) {
+            bail!(
+                "The project directory `{}` is inside the cache directory `{}`",
+                project_dir.user_display(),
+                cache_dir.user_display()
+            );
+        }
+        if let Ok(cache_dir) = fs_err::canonicalize(&cache_dir)
+            && let Ok(project_dir) = fs_err::canonicalize(&*project_dir)
+            && project_dir.starts_with(&cache_dir)
+        {
+            bail!(
+                "The project directory `{}` is inside the cache directory `{}`",
+                project_dir.user_display(),
+                cache_dir.user_display()
+            );
+        }
+    }
+
+    // Workspace discovery excludes the cache root, so only reuse the earlier discovery when the
+    // resolved cache has the same root.
+    let workspace_cache = if cache.root() == discovery_cache.root() {
+        workspace_cache
+    } else {
+        WorkspaceCache::default()
+    };
 
     // Configure the global network settings.
-    let client_builder = BaseClientBuilder::new(
-        globals.network_settings.connectivity,
-        globals.network_settings.system_certs,
-        globals.network_settings.allow_insecure_host.clone(),
-        globals.preview,
-        globals.network_settings.read_timeout,
-        globals.network_settings.connect_timeout,
-        globals.network_settings.retries,
-    )
-    .http_proxy(globals.network_settings.http_proxy.clone())
-    .https_proxy(globals.network_settings.https_proxy.clone())
-    .no_proxy(globals.network_settings.no_proxy.clone());
+    let client_builder = base_client_builder(&globals);
 
     match *cli.command {
         Commands::Auth(AuthNamespace {
@@ -552,7 +648,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.username,
                 args.password,
                 args.token,
-                client_builder,
                 printer,
                 globals.preview,
             )
@@ -565,14 +660,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             let args = settings::AuthLogoutSettings::resolve(args);
             show_settings!(args);
 
-            commands::auth_logout(
-                args.service,
-                args.username,
-                client_builder,
-                printer,
-                globals.preview,
-            )
-            .await
+            commands::auth_logout(args.service, args.username, printer, globals.preview).await
         }
         Commands::Auth(AuthNamespace {
             command: AuthCommand::Token(args),
@@ -581,19 +669,12 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             let args = settings::AuthTokenSettings::resolve(args);
             show_settings!(args);
 
-            commands::auth_token(
-                args.service,
-                args.username,
-                client_builder,
-                printer,
-                globals.preview,
-            )
-            .await
+            commands::auth_token(args.service, args.username, printer, globals.preview).await
         }
         Commands::Auth(AuthNamespace {
-            command: AuthCommand::Dir(args),
+            command: AuthCommand::Dir,
         }) => {
-            commands::auth_dir(args.service.as_ref(), printer)?;
+            commands::auth_dir(printer)?;
             Ok(ExitStatus::Success)
         }
         Commands::Auth(AuthNamespace {
@@ -607,9 +688,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             }
 
             match args.command {
-                AuthHelperCommand::Get => {
-                    commands::auth_helper(client_builder, globals.preview, printer).await
-                }
+                AuthHelperCommand::Get => commands::auth_helper(globals.preview, printer).await,
             }
         }
         Commands::Help(args) => commands::help(
@@ -619,17 +698,18 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         ),
         Commands::Pip(PipNamespace {
             command: PipCommand::Compile(args),
+            ..
         }) => {
             args.compat_args.validate()?;
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipCompileSettings::resolve(args, filesystem, environment);
+            let args = PipCompileSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
             globals
                 .network_settings
-                .check_refresh_conflict(&args.refresh);
+                .check_refresh_conflict(&args.refresh)?;
 
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
@@ -668,7 +748,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 groups: args.settings.groups,
             };
 
-            commands::pip_compile(
+            Box::pin(commands::pip_compile(
                 &requirements,
                 &constraints,
                 &overrides,
@@ -679,6 +759,8 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.excludes_from_workspace,
                 args.build_constraints_from_workspace,
                 args.environments,
+                args.required_environments,
+                args.minimum_libc_version,
                 args.settings.extras,
                 groups,
                 args.settings.output_file.as_deref(),
@@ -703,6 +785,8 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.settings.index_locations,
                 args.settings.index_strategy,
                 args.settings.torch_backend,
+                args.settings.cuda_driver_version,
+                args.settings.amd_gpu_architecture,
                 args.settings.dependency_metadata,
                 args.settings.keyring_provider,
                 &client_builder.subcommand(vec!["pip".to_owned(), "compile".to_owned()]),
@@ -730,22 +814,23 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 workspace_cache,
                 printer,
                 globals.preview,
-            )
+            ))
             .await
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Sync(args),
+            ..
         }) => {
             args.compat_args.validate()?;
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipSyncSettings::resolve(args, filesystem, environment);
+            let args = PipSyncSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
             globals
                 .network_settings
-                .check_refresh_conflict(&args.refresh);
+                .check_refresh_conflict(&args.refresh)?;
 
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
@@ -774,7 +859,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 groups: args.settings.groups,
             };
 
-            commands::pip_sync(
+            Box::pin(commands::pip_sync(
                 &requirements,
                 &constraints,
                 &build_constraints,
@@ -787,6 +872,8 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.settings.index_locations,
                 args.settings.index_strategy,
                 args.settings.torch_backend,
+                args.settings.cuda_driver_version,
+                args.settings.amd_gpu_architecture,
                 args.settings.dependency_metadata,
                 args.settings.keyring_provider,
                 &client_builder.subcommand(vec!["pip".to_owned(), "sync".to_owned()]),
@@ -815,18 +902,20 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 cache,
                 workspace_cache,
                 args.dry_run,
+                args.output_format,
                 printer,
                 globals.preview,
-            )
+            ))
             .await
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Install(args),
+            ..
         }) => {
             args.compat_args.validate()?;
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let mut args = PipInstallSettings::resolve(args, filesystem, environment);
+            let mut args = PipInstallSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             let mut requirements = Vec::with_capacity(
@@ -914,7 +1003,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             // Check for conflicts between offline and refresh.
             globals
                 .network_settings
-                .check_refresh_conflict(&args.refresh);
+                .check_refresh_conflict(&args.refresh)?;
 
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
@@ -933,6 +1022,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.overrides_from_workspace,
                 args.excludes_from_workspace,
                 args.build_constraints_from_workspace,
+                args.editable,
                 &args.settings.extras,
                 &groups,
                 args.settings.resolution,
@@ -942,6 +1032,8 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.settings.index_locations,
                 args.settings.index_strategy,
                 args.settings.torch_backend,
+                args.settings.cuda_driver_version,
+                args.settings.amd_gpu_architecture,
                 args.settings.dependency_metadata,
                 args.settings.keyring_provider,
                 &client_builder.subcommand(vec!["pip".to_owned(), "install".to_owned()]),
@@ -974,6 +1066,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 cache,
                 workspace_cache,
                 args.dry_run,
+                args.output_format,
                 printer,
                 globals.preview,
             ))
@@ -981,9 +1074,12 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Uninstall(args),
+            ..
         }) => {
+            args.compat_args.validate()?;
+
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipUninstallSettings::resolve(args, filesystem, environment);
+            let args = PipUninstallSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Initialize the cache.
@@ -1011,15 +1107,15 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 &client_builder.subcommand(vec!["pip".to_owned(), "uninstall".to_owned()]),
                 args.dry_run,
                 printer,
-                globals.preview,
             )
             .await
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Freeze(args),
+            ..
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipFreezeSettings::resolve(args, filesystem, environment);
+            let args = PipFreezeSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Initialize the cache.
@@ -1037,16 +1133,16 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.paths,
                 &cache,
                 printer,
-                globals.preview,
             )
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::List(args),
+            ..
         }) => {
             args.compat_args.validate()?;
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipListSettings::resolve(args, filesystem, environment);
+            let args = PipListSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Initialize the cache.
@@ -1072,15 +1168,15 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.settings.prefix,
                 &cache,
                 printer,
-                globals.preview,
             )
             .await
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Show(args),
+            ..
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipShowSettings::resolve(args, filesystem, environment);
+            let args = PipShowSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Initialize the cache.
@@ -1097,14 +1193,14 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.files,
                 &cache,
                 printer,
-                globals.preview,
             )
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Tree(args),
+            ..
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipTreeSettings::resolve(args, filesystem, environment);
+            let args = PipTreeSettings::resolve(args, filesystem, environment)?;
 
             // Initialize the cache.
             let cache = cache.init().await?;
@@ -1130,15 +1226,15 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.settings.system,
                 &cache,
                 printer,
-                globals.preview,
             )
             .await
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Check(args),
+            ..
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipCheckSettings::resolve(args, filesystem, environment);
+            let args = PipCheckSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Initialize the cache.
@@ -1152,11 +1248,11 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 &args.settings.dependency_metadata,
                 &cache,
                 printer,
-                globals.preview,
             )
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Debug(_),
+            ..
         }) => Err(anyhow!(
             "pip's `debug` is unsupported (consider using `uvx pip debug` instead)"
         )),
@@ -1165,29 +1261,36 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         })
         | Commands::Clean(args) => {
             show_settings!(args);
-            commands::cache_clean(&args.package, args.force, cache, printer).await
+            commands::cache_clean(&args.package, args.force, cache, printer, globals.preview).await
         }
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Prune(args),
         }) => {
             show_settings!(args);
-            commands::cache_prune(args.ci, args.force, cache, printer).await
+            commands::cache_prune(args.ci, args.force, cache, printer, globals.preview).await
         }
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Dir,
         }) => commands::cache_dir(&cache, printer),
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Size(args),
-        }) => commands::cache_size(&cache, args.human, printer, globals.preview),
+        }) => {
+            let output_format = if args.human {
+                CacheSizeOutputFormat::Human
+            } else {
+                args.output_format
+            };
+            commands::cache_size(&cache, output_format, printer, globals.preview)
+        }
         Commands::Build(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::BuildSettings::resolve(args, filesystem, environment);
+            let args = settings::BuildSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
             globals
                 .network_settings
-                .check_refresh_conflict(&args.refresh);
+                .check_refresh_conflict(&args.refresh)?;
 
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
@@ -1204,6 +1307,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
 
             commands::build_frontend(
                 &project_dir,
+                args.skip_dependency_check,
                 args.src,
                 args.package,
                 args.all_packages,
@@ -1222,7 +1326,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.install_mirrors,
                 &args.settings,
                 &client_builder.subcommand(vec!["build".to_owned()]),
-                cli.top_level.no_config,
+                config_discovery,
                 globals.python_preference,
                 globals.python_downloads,
                 globals.concurrency,
@@ -1249,13 +1353,13 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             }
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::VenvSettings::resolve(args, filesystem, environment);
+            let args = settings::VenvSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
             globals
                 .network_settings
-                .check_refresh_conflict(&args.refresh);
+                .check_refresh_conflict(&args.refresh)?;
 
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
@@ -1280,9 +1384,14 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.allow_existing,
                 args.clear,
                 args.no_clear,
+                if args.force {
+                    uv_virtualenv::ClearNonVirtualenv::Allow
+                } else {
+                    uv_virtualenv::ClearNonVirtualenv::Error
+                },
             );
 
-            commands::venv(
+            Box::pin(commands::venv(
                 &project_dir,
                 args.path,
                 python_request,
@@ -1297,12 +1406,12 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 &client_builder.subcommand(vec!["venv".to_owned()]),
                 uv_virtualenv::Prompt::from_args(prompt),
                 args.system_site_packages,
-                args.seed,
+                uv_virtualenv::Seed::from_args(args.seed),
                 on_existing,
                 args.settings.exclude_newer,
                 globals.concurrency,
-                cli.top_level.no_config,
                 args.no_project,
+                config_discovery,
                 &cache,
                 &workspace_cache,
                 printer,
@@ -1312,7 +1421,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                         .is_enabled(PreviewFeature::RelocatableEnvsDefault)
                         && !args.no_relocatable),
                 globals.preview,
-            )
+            ))
             .await
         }
         Commands::Project(project) => {
@@ -1322,7 +1431,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 run_command,
                 script,
                 globals,
-                cli.top_level.no_config,
+                config_discovery,
                 cli.top_level.global_args.project.is_some(),
                 client_builder,
                 filesystem,
@@ -1362,22 +1471,10 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         }
         #[cfg(not(feature = "self-update"))]
         Commands::Self_(_) => {
-            const BASE_MESSAGE: &str =
-                "uv was installed through an external package manager and cannot update itself.";
-
-            let message = match InstallSource::detect() {
-                Some(source) => format!(
-                    "{base}\n\n{hint}{colon} You installed uv using {}. To update uv, run `{}`",
-                    source.description(),
-                    source.update_instructions().green(),
-                    hint = "hint".bold().cyan(),
-                    colon = ":".bold(),
-                    base = BASE_MESSAGE
-                ),
-                None => format!("{BASE_MESSAGE} Please use your package manager to update uv."),
-            };
-
-            anyhow::bail!(message);
+            return Err(ExternallyInstalledError {
+                install_source: InstallSource::detect(),
+            }
+            .into());
         }
         Commands::GenerateShellCompletion(args) => {
             args.shell.generate(&mut Cli::command(), &mut stdout());
@@ -1423,13 +1520,13 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 filesystem,
                 invocation_source,
                 environment,
-            );
+            )?;
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
             globals
                 .network_settings
-                .check_refresh_conflict(&args.refresh);
+                .check_refresh_conflict(&args.refresh)?;
 
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
@@ -1514,20 +1611,20 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             command: ToolCommand::Install(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::ToolInstallSettings::resolve(args, filesystem, environment);
+            let args = settings::ToolInstallSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
             globals
                 .network_settings
-                .check_refresh_conflict(&args.refresh);
+                .check_refresh_conflict(&args.refresh)?;
 
             // Initialize the cache.
-            let cache = cache.init().await?.with_refresh(
-                args.refresh
-                    .combine(Refresh::from(args.settings.reinstall.clone()))
-                    .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
-            );
+            let refresh = args
+                .refresh
+                .combine(Refresh::from(args.settings.reinstall.clone()))
+                .combine(Refresh::from(args.settings.resolver.upgrade.clone()));
+            let cache = cache.init().await?.with_refresh(refresh.clone());
 
             let mut entrypoints = Vec::with_capacity(args.with_executables_from.len());
             let mut requirements = Vec::with_capacity(
@@ -1602,8 +1699,9 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 globals.python_downloads,
                 globals.installer_metadata,
                 globals.concurrency,
-                cli.top_level.no_config,
+                config_discovery,
                 cache,
+                refresh,
                 &workspace_cache,
                 printer,
                 globals.preview,
@@ -1614,7 +1712,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             command: ToolCommand::List(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::ToolListSettings::resolve(args, filesystem);
+            let args = settings::ToolListSettings::resolve(args, filesystem)?;
             show_settings!(args);
 
             // Initialize the cache.
@@ -1627,6 +1725,8 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.show_extras,
                 args.show_python,
                 args.outdated,
+                args.args,
+                args.filesystem,
                 client_builder.subcommand(vec!["tool".to_owned(), "list".to_owned()]),
                 globals.concurrency,
                 &cache,
@@ -1635,10 +1735,34 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             .await
         }
         Commands::Tool(ToolNamespace {
+            command: ToolCommand::Audit(args),
+        }) => {
+            let args = settings::ToolAuditSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            let cache = cache.init().await?;
+
+            commands::tool_audit(
+                args.names,
+                args.output_format,
+                args.service_format,
+                args.service_url,
+                args.ignore,
+                args.ignore_until_fixed,
+                args.filesystem,
+                client_builder.subcommand(vec!["tool".to_owned(), "audit".to_owned()]),
+                globals.concurrency,
+                &cache,
+                printer,
+                globals.preview,
+            )
+            .await
+        }
+        Commands::Tool(ToolNamespace {
             command: ToolCommand::Upgrade(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::ToolUpgradeSettings::resolve(args, filesystem, &environment);
+            let args = settings::ToolUpgradeSettings::resolve(args, filesystem, &environment)?;
             show_settings!(args);
 
             // Initialize the cache.
@@ -1718,7 +1842,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 &client_builder.subcommand(vec!["python".to_owned(), "list".to_owned()]),
                 &cache,
                 printer,
-                globals.preview,
             )
             .await
         }
@@ -1726,7 +1849,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             command: PythonCommand::Install(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::PythonInstallSettings::resolve(args, filesystem, environment);
+            let args = settings::PythonInstallSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Initialize the cache.
@@ -1747,7 +1870,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 client_builder.subcommand(vec!["python".to_owned(), "install".to_owned()]),
                 args.default,
                 globals.python_downloads,
-                cli.top_level.no_config,
+                config_discovery,
                 args.compile_bytecode,
                 &globals.concurrency,
                 &cache,
@@ -1760,7 +1883,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             command: PythonCommand::Upgrade(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::PythonUpgradeSettings::resolve(args, filesystem, environment);
+            let args = settings::PythonUpgradeSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
             let upgrade = commands::PythonUpgrade::Enabled(commands::PythonUpgradeSource::Upgrade);
 
@@ -1782,7 +1905,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 client_builder.subcommand(vec!["python".to_owned(), "upgrade".to_owned()]),
                 args.default,
                 globals.python_downloads,
-                cli.top_level.no_config,
+                config_discovery,
                 args.compile_bytecode,
                 &globals.concurrency,
                 &cache,
@@ -1804,7 +1927,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             command: PythonCommand::Find(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::PythonFindSettings::resolve(args, filesystem, environment);
+            let args = settings::PythonFindSettings::resolve(args, filesystem, environment)?;
 
             // Initialize the cache.
             let cache = cache.init().await?;
@@ -1818,10 +1941,9 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                     &client_builder.subcommand(vec!["python".to_owned(), "find".to_owned()]),
                     globals.python_preference,
                     globals.python_downloads,
-                    cli.top_level.no_config,
+                    config_discovery,
                     &cache,
                     printer,
-                    globals.preview,
                 )
                 .await
             } else {
@@ -1831,15 +1953,14 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                     args.show_version,
                     args.resolve_links,
                     args.no_project,
-                    cli.top_level.no_config,
                     args.system,
+                    config_discovery,
                     globals.python_preference,
                     args.python_downloads_json_url.as_deref(),
                     &client_builder.subcommand(vec!["python".to_owned(), "find".to_owned()]),
                     &cache,
                     &workspace_cache,
                     printer,
-                    globals.preview,
                 )
                 .await
             }
@@ -1848,12 +1969,12 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             command: PythonCommand::Pin(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::PythonPinSettings::resolve(args, filesystem, environment);
+            let args = settings::PythonPinSettings::resolve(args, filesystem, environment)?;
 
             // Initialize the cache.
             let cache = cache.init().await?;
 
-            commands::python_pin(
+            Box::pin(commands::python_pin(
                 &project_dir,
                 args.request,
                 args.resolved,
@@ -1867,8 +1988,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 &cache,
                 &workspace_cache,
                 printer,
-                globals.preview,
-            )
+            ))
             .await
         }
         Commands::Python(PythonNamespace {
@@ -1888,8 +2008,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             Ok(ExitStatus::Success)
         }
         Commands::Publish(args) => {
-            show_settings!(args);
-
             if args.skip_existing {
                 bail!(
                     "`uv publish` does not support `--skip-existing` because there is not a \
@@ -1901,20 +2019,22 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             }
 
             // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = PublishSettings::resolve(args, filesystem);
+            show_settings!(args);
+
             let PublishSettings {
                 files,
                 username,
                 password,
                 dry_run,
                 no_attestations,
-                direct,
                 publish_url,
                 trusted_publishing,
                 keyring_provider,
                 check_url,
                 index,
                 index_locations,
-            } = PublishSettings::resolve(args, filesystem);
+            } = args;
 
             commands::publish(
                 files,
@@ -1930,8 +2050,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 index_locations,
                 dry_run,
                 no_attestations,
-                direct,
-                globals.preview,
                 &cache,
                 printer,
             )
@@ -1940,13 +2058,13 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         Commands::Workspace(WorkspaceNamespace { command }) => match command {
             WorkspaceCommand::Metadata(args) => {
                 // Resolve the settings from the command-line arguments and workspace configuration.
-                let args = settings::MetadataSettings::resolve(args, filesystem, environment);
+                let args = settings::MetadataSettings::resolve(args, filesystem, environment)?;
                 show_settings!(args);
 
                 // Check for conflicts between offline and refresh.
                 globals
                     .network_settings
-                    .check_refresh_conflict(&args.refresh);
+                    .check_refresh_conflict(&args.refresh)?;
 
                 // Initialize the cache.
                 let cache = cache.init().await?.with_refresh(
@@ -1955,20 +2073,28 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                         .combine(Refresh::from(args.settings.upgrade.clone())),
                 );
 
+                let script = script.and_then(|script| match script {
+                    Pep723Item::Script(script) => Some(script),
+                    Pep723Item::Remote(..) | Pep723Item::Stdin(..) => None,
+                });
+
                 Box::pin(commands::metadata(
                     &project_dir,
                     args.lock_check,
                     args.frozen,
-                    args.dry_run,
                     args.refresh,
+                    args.sync,
+                    args.active,
                     args.python,
                     args.install_mirrors,
+                    args.malware_settings,
                     args.settings,
-                    client_builder.subcommand(vec!["workspace metadata".to_owned()]),
+                    client_builder.subcommand(vec!["workspace".to_owned(), "metadata".to_owned()]),
+                    script,
                     globals.python_preference,
                     globals.python_downloads,
                     globals.concurrency,
-                    cli.top_level.no_config,
+                    config_discovery,
                     &cache,
                     &workspace_cache,
                     printer,
@@ -1977,10 +2103,26 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 .await
             }
             WorkspaceCommand::Dir(args) => {
-                commands::dir(args.package, &project_dir, &workspace_cache, printer).await
+                commands::dir(
+                    args.package,
+                    &project_dir,
+                    &cache,
+                    &workspace_cache,
+                    printer,
+                )
+                .await
             }
             WorkspaceCommand::List(args) => {
-                commands::list(&project_dir, args.paths, &workspace_cache, printer).await
+                commands::list(
+                    &project_dir,
+                    args.paths,
+                    args.scripts,
+                    &cache,
+                    &workspace_cache,
+                    printer,
+                    globals.preview,
+                )
+                .await
             }
         },
         Commands::BuildBackend { command } => spawn_blocking(move || match command {
@@ -2022,6 +2164,53 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     }
 }
 
+fn map_settings_error(err: uv_settings::Error) -> anyhow::Error {
+    match err {
+        uv_settings::Error::RequiredVersion {
+            required_version,
+            package_version,
+        } => required_version_error(&required_version, &package_version),
+        err => err.into(),
+    }
+}
+
+fn required_version_error(
+    required_version: &uv_configuration::RequiredVersion,
+    package_version: &uv_pep440::Version,
+) -> anyhow::Error {
+    #[cfg(feature = "self-update")]
+    let hint = {
+        // If the required version range includes a lower bound that's higher than the current
+        // version, suggest `uv self update`.
+        let ranges = release_specifiers_to_ranges(required_version.specifiers().clone());
+
+        if let Some(singleton) = ranges.as_singleton() {
+            format!(
+                ". Update `uv` by running `{}`.",
+                format!("uv self update {singleton}").green()
+            )
+        } else if ranges
+            .bounding_range()
+            .iter()
+            .any(|(lowest, _highest)| match lowest {
+                Bound::Included(version) => **version > *package_version,
+                Bound::Excluded(version) => **version > *package_version,
+                Bound::Unbounded => false,
+            })
+        {
+            format!(". Update `uv` by running `{}`.", "uv self update".cyan())
+        } else {
+            String::new()
+        }
+    };
+    #[cfg(not(feature = "self-update"))]
+    let hint = "";
+
+    anyhow!(
+        "Required uv version `{required_version}` does not match the running version `{package_version}`{hint}",
+    )
+}
+
 /// Run a [`ProjectCommand`].
 async fn run_project(
     project_command: Box<ProjectCommand>,
@@ -2029,8 +2218,7 @@ async fn run_project(
     command: Option<RunCommand>,
     script: Option<Pep723Item>,
     globals: GlobalSettings,
-    // TODO(zanieb): Determine a better story for passing `no_config` in here
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     explicit_project: bool,
     client_builder: BaseClientBuilder<'_>,
     filesystem: Option<FilesystemOptions>,
@@ -2054,40 +2242,28 @@ async fn run_project(
     match *project_command {
         ProjectCommand::Init(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::InitSettings::resolve(args, filesystem, environment);
+            let args = settings::InitSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
-            // The `--project` arg is being deprecated for `init` with a warning now and an error in preview.
+            // The `--project` argument is not supported for `init`.
             if explicit_project {
-                if globals.preview.is_enabled(PreviewFeature::InitProjectFlag) {
-                    bail!(
-                        "The `--project` option cannot be used in `uv init`. {}",
-                        if args.path.is_some() {
-                            "Use `--directory` instead."
-                        } else {
-                            "Use `--directory` or a positional path instead."
-                        }
-                    )
-                }
-
-                warn_user!(
-                    "Use of the `--project` option in `uv init` is deprecated and will be removed in a future release. {}",
+                bail!(
+                    "The `--project` option cannot be used in `uv init`. {}",
                     if args.path.is_some() {
-                        "Since a positional path was provided, the `--project` option has no effect. Consider using `--directory` instead."
+                        "Use `--directory` instead."
                     } else {
-                        "Consider using `uv init <PATH>` instead."
+                        "Use `--directory` or a positional path instead."
                     }
-                );
+                )
             }
 
             // Initialize the cache.
             let cache = cache.init().await?;
 
-            commands::init(
+            Box::pin(commands::init(
                 project_dir,
                 args.path,
                 args.name,
-                args.package,
                 args.kind,
                 args.bare,
                 args.description,
@@ -2103,22 +2279,21 @@ async fn run_project(
                 &client_builder.subcommand(vec!["init".to_owned()]),
                 globals.python_preference,
                 globals.python_downloads,
-                no_config,
+                config_discovery,
                 &cache,
                 printer,
-                globals.preview,
-            )
+            ))
             .await
         }
         ProjectCommand::Run(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::RunSettings::resolve(args, filesystem, environment);
+            let args = settings::RunSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
             globals
                 .network_settings
-                .check_refresh_conflict(&args.refresh);
+                .check_refresh_conflict(&args.refresh)?;
 
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
@@ -2157,7 +2332,7 @@ async fn run_project(
                 args.all_packages,
                 args.package,
                 args.no_project,
-                no_config,
+                config_discovery,
                 args.extras,
                 args.groups,
                 args.editable,
@@ -2177,18 +2352,21 @@ async fn run_project(
                 args.env_file,
                 globals.preview,
                 args.max_recursion_depth,
+                args.malware_settings,
+                #[cfg(unix)]
+                args.run_rlimit_nofile,
             ))
             .await
         }
         ProjectCommand::Sync(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::SyncSettings::resolve(args, filesystem, environment);
+            let args = settings::SyncSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
             globals
                 .network_settings
-                .check_refresh_conflict(&args.refresh);
+                .check_refresh_conflict(&args.refresh)?;
 
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
@@ -2227,24 +2405,25 @@ async fn run_project(
                 script,
                 globals.installer_metadata,
                 globals.concurrency,
-                no_config,
+                config_discovery,
                 &cache,
                 workspace_cache,
                 printer,
                 globals.preview,
                 args.output_format,
+                args.malware_settings,
             ))
             .await
         }
         ProjectCommand::Lock(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::LockSettings::resolve(args, filesystem, environment);
+            let args = settings::LockSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
             globals
                 .network_settings
-                .check_refresh_conflict(&args.refresh);
+                .check_refresh_conflict(&args.refresh)?;
 
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
@@ -2280,7 +2459,36 @@ async fn run_project(
                 globals.python_preference,
                 globals.python_downloads,
                 globals.concurrency,
-                no_config,
+                config_discovery,
+                &cache,
+                workspace_cache,
+                printer,
+                globals.preview,
+            ))
+            .await
+        }
+        ProjectCommand::Upgrade(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::UpgradeSettings::resolve(args, filesystem, environment)?;
+            show_settings!(args);
+
+            // Initialize the cache.
+            let cache = cache
+                .init()
+                .await?
+                .with_refresh(Refresh::from(args.settings.upgrade.clone()));
+
+            Box::pin(commands::upgrade(
+                project_dir,
+                args.packages,
+                args.exclude,
+                args.install_mirrors,
+                args.settings,
+                client_builder.subcommand(vec!["upgrade".to_owned()]),
+                globals.python_preference,
+                globals.python_downloads,
+                globals.concurrency,
+                config_discovery,
                 &cache,
                 workspace_cache,
                 printer,
@@ -2290,7 +2498,7 @@ async fn run_project(
         }
         ProjectCommand::Add(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let mut args = settings::AddSettings::resolve(args, filesystem, environment);
+            let mut args = settings::AddSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // If the script already exists, use it; otherwise, propagate the file path and we'll
@@ -2362,7 +2570,7 @@ async fn run_project(
             // Check for conflicts between offline and refresh.
             globals
                 .network_settings
-                .check_refresh_conflict(&args.refresh);
+                .check_refresh_conflict(&args.refresh)?;
 
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
@@ -2415,22 +2623,23 @@ async fn run_project(
                 globals.python_downloads,
                 globals.installer_metadata,
                 globals.concurrency,
-                no_config,
+                config_discovery,
                 &cache,
                 printer,
                 globals.preview,
+                &args.malware_settings,
             ))
             .await
         }
         ProjectCommand::Remove(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::RemoveSettings::resolve(args, filesystem, environment);
+            let args = settings::RemoveSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
             globals
                 .network_settings
-                .check_refresh_conflict(&args.refresh);
+                .check_refresh_conflict(&args.refresh)?;
 
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
@@ -2464,25 +2673,31 @@ async fn run_project(
                 globals.python_downloads,
                 globals.installer_metadata,
                 globals.concurrency,
-                no_config,
+                config_discovery,
                 &cache,
                 printer,
                 globals.preview,
+                args.malware_settings,
             ))
             .await
         }
         ProjectCommand::Version(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::VersionSettings::resolve(args, filesystem, environment);
+            let args = settings::VersionSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
             globals
                 .network_settings
-                .check_refresh_conflict(&args.refresh);
+                .check_refresh_conflict(&args.refresh)?;
 
-            // Initialize the cache.
-            let cache = cache.init().await?.with_refresh(
+            // Reading a project version only accesses `pyproject.toml` or the lockfile.
+            let cache = if args.value.is_none() && args.bump.is_empty() {
+                cache
+            } else {
+                cache.init().await?
+            }
+            .with_refresh(
                 args.refresh
                     .combine(Refresh::from(args.settings.reinstall.clone()))
                     .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
@@ -2509,17 +2724,18 @@ async fn run_project(
                 globals.python_downloads,
                 globals.installer_metadata,
                 globals.concurrency,
-                no_config,
+                config_discovery,
                 &cache,
                 workspace_cache,
                 printer,
                 globals.preview,
+                args.malware_settings,
             ))
             .await
         }
         ProjectCommand::Tree(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::TreeSettings::resolve(args, filesystem, environment);
+            let args = settings::TreeSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Initialize the cache.
@@ -2538,6 +2754,7 @@ async fn run_project(
                 args.lock_check,
                 args.frozen,
                 args.universal,
+                args.format,
                 args.depth,
                 args.prune,
                 args.package,
@@ -2555,8 +2772,9 @@ async fn run_project(
                 globals.python_preference,
                 globals.python_downloads,
                 globals.concurrency,
-                no_config,
+                config_discovery,
                 &cache,
+                workspace_cache,
                 printer,
                 globals.preview,
             ))
@@ -2564,7 +2782,7 @@ async fn run_project(
         }
         ProjectCommand::Export(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::ExportSettings::resolve(args, filesystem, environment);
+            let args = settings::ExportSettings::resolve(args, filesystem, environment)?;
             show_settings!(args);
 
             // Initialize the cache.
@@ -2586,6 +2804,7 @@ async fn run_project(
                 args.hashes,
                 args.install_options,
                 args.output_file,
+                args.batch,
                 args.extras,
                 args.groups,
                 args.editable,
@@ -2593,6 +2812,8 @@ async fn run_project(
                 args.frozen,
                 args.include_annotations,
                 args.include_header,
+                args.include_index_url,
+                args.include_find_links,
                 script,
                 args.python,
                 args.install_mirrors,
@@ -2601,9 +2822,10 @@ async fn run_project(
                 globals.python_preference,
                 globals.python_downloads,
                 globals.concurrency,
-                no_config,
+                config_discovery,
                 globals.quiet > 0,
                 &cache,
+                workspace_cache,
                 printer,
                 globals.preview,
             )
@@ -2612,7 +2834,7 @@ async fn run_project(
         }
         ProjectCommand::Format(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::FormatSettings::resolve(args, filesystem);
+            let args = settings::FormatSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
             // Initialize the cache.
@@ -2620,6 +2842,7 @@ async fn run_project(
 
             Box::pin(commands::format(
                 project_dir,
+                args.ruff_path,
                 args.check,
                 args.diff,
                 args.extra_args,
@@ -2628,14 +2851,73 @@ async fn run_project(
                 args.show_version,
                 client_builder.subcommand(vec!["format".to_owned()]),
                 cache,
+                workspace_cache,
                 printer,
                 globals.preview,
                 args.no_project,
             ))
             .await
         }
+        ProjectCommand::Check(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::CheckSettings::resolve(args, filesystem, environment)?;
+            show_settings!(args);
+
+            // Check for conflicts between offline and refresh.
+            globals
+                .network_settings
+                .check_refresh_conflict(&args.refresh)?;
+
+            // Initialize the cache.
+            let cache = cache.init().await?.with_refresh(
+                args.refresh
+                    .combine(Refresh::from(args.settings.reinstall.clone()))
+                    .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
+            );
+
+            let script = script.and_then(|script| match script {
+                Pep723Item::Script(script) => Some(script),
+                Pep723Item::Remote(..) | Pep723Item::Stdin(..) => None,
+            });
+
+            Box::pin(commands::check(
+                project_dir,
+                args.ty_path,
+                args.fix,
+                args.lock_check,
+                args.frozen,
+                args.no_sync,
+                args.no_install_project,
+                args.isolated,
+                args.all_packages,
+                args.package,
+                args.extras,
+                args.groups,
+                args.python,
+                args.install_mirrors,
+                args.settings,
+                args.ty_version,
+                args.show_version,
+                args.show_command,
+                script,
+                client_builder.subcommand(vec!["check".to_owned()]),
+                globals.python_preference,
+                globals.python_downloads,
+                globals.installer_metadata,
+                globals.concurrency,
+                &cache,
+                workspace_cache,
+                globals.color,
+                printer,
+                globals.preview,
+                args.no_project,
+                config_discovery,
+                args.malware_settings,
+            ))
+            .await
+        }
         ProjectCommand::Audit(audit_args) => {
-            let args = settings::AuditSettings::resolve(audit_args, filesystem, environment);
+            let args = settings::AuditSettings::resolve(audit_args, filesystem, environment)?;
             show_settings!(args);
 
             // Initialize the cache.
@@ -2663,16 +2945,63 @@ async fn run_project(
                 globals.python_preference,
                 globals.python_downloads,
                 globals.concurrency,
-                no_config,
+                config_discovery,
                 cache,
+                workspace_cache,
                 printer,
                 globals.preview,
+                args.output_format,
                 args.service_format,
                 args.service_url,
                 args.ignore,
                 args.ignore_until_fixed,
             ))
             .await
+        }
+    }
+}
+
+/// Hint users who used `uv <subcommand>` when they meant `uv pip <subcommand>`.
+fn suggest_subcommand(err: &mut Error) {
+    if let Some(ContextValue::String(subcommand)) = err.get(ContextKind::InvalidSubcommand) {
+        match subcommand.as_str() {
+            "compile" => {
+                err.insert(
+                    ContextKind::SuggestedSubcommand,
+                    ContextValue::String("uv pip compile".to_string()),
+                );
+            }
+            "install" => {
+                err.insert(
+                    ContextKind::SuggestedSubcommand,
+                    ContextValue::String("uv pip install".to_string()),
+                );
+            }
+            "uninstall" => {
+                err.insert(
+                    ContextKind::SuggestedSubcommand,
+                    ContextValue::String("uv pip uninstall".to_string()),
+                );
+            }
+            "freeze" => {
+                err.insert(
+                    ContextKind::SuggestedSubcommand,
+                    ContextValue::String("uv pip freeze".to_string()),
+                );
+            }
+            "list" => {
+                err.insert(
+                    ContextKind::SuggestedSubcommand,
+                    ContextValue::String("uv pip list".to_string()),
+                );
+            }
+            "show" => {
+                err.insert(
+                    ContextKind::SuggestedSubcommand,
+                    ContextValue::String("uv pip show".to_string()),
+                );
+            }
+            _ => {}
         }
     }
 }
@@ -2698,7 +3027,7 @@ where
     T: Into<OsString> + Clone,
 {
     #[cfg(windows)]
-    windows_exception::setup();
+    uv_windows::install_unhandled_exception_handler();
 
     // Set the `UV` variable to the current executable so it is implicitly propagated to all child
     // processes, e.g., in `uv run`.
@@ -2716,51 +3045,18 @@ where
     let cli = match Cli::try_parse_from(args) {
         Ok(cli) => cli,
         Err(mut err) => {
-            if let Some(ContextValue::String(subcommand)) = err.get(ContextKind::InvalidSubcommand)
-            {
-                match subcommand.as_str() {
-                    "compile" => {
-                        err.insert(
-                            ContextKind::SuggestedSubcommand,
-                            ContextValue::String("uv pip compile".to_string()),
-                        );
-                    }
-                    "install" => {
-                        err.insert(
-                            ContextKind::SuggestedSubcommand,
-                            ContextValue::String("uv pip install".to_string()),
-                        );
-                    }
-                    "uninstall" => {
-                        err.insert(
-                            ContextKind::SuggestedSubcommand,
-                            ContextValue::String("uv pip uninstall".to_string()),
-                        );
-                    }
-                    "freeze" => {
-                        err.insert(
-                            ContextKind::SuggestedSubcommand,
-                            ContextValue::String("uv pip freeze".to_string()),
-                        );
-                    }
-                    "list" => {
-                        err.insert(
-                            ContextKind::SuggestedSubcommand,
-                            ContextValue::String("uv pip list".to_string()),
-                        );
-                    }
-                    "show" => {
-                        err.insert(
-                            ContextKind::SuggestedSubcommand,
-                            ContextValue::String("uv pip show".to_string()),
-                        );
-                    }
-                    _ => {}
-                }
-            }
+            suggest_subcommand(&mut err);
             err.exit()
         }
     };
+
+    // Configure a printer for failures that escape command execution. The resolved `no_progress`
+    // setting can differ due to environment variables, but it does not affect important stderr.
+    let printer = Printer::new(
+        cli.top_level.global_args.quiet,
+        cli.top_level.global_args.verbose,
+        cli.top_level.global_args.no_progress,
+    );
 
     // See `min_stack_size` doc comment about `main2`
     let min_stack_size = min_stack_size();
@@ -2771,7 +3067,7 @@ where
             .build()
             .expect("Failed building the Runtime");
         // Box the large main future to avoid stack overflows.
-        let result = runtime.block_on(Box::pin(run(cli)));
+        let result = runtime.block_on(Box::pin(run(cli, GlobalInitialization::Initialize)));
         // Avoid waiting for pending tasks to complete.
         //
         // The resolver may have kicked off HTTP requests during resolution that
@@ -2791,17 +3087,43 @@ where
     match result {
         Ok(code) => code.into(),
         Err(err) => {
-            trace!("Error trace: {err:?}");
-            let mut causes = err.chain();
-            eprintln!(
-                "{}: {}",
-                "error".red().bold(),
-                causes.next().unwrap().to_string().trim()
-            );
-            for err in causes {
-                eprintln!("  {}: {}", "Caused by".red().bold(), err.to_string().trim());
+            let error = match err.downcast::<UvError>() {
+                Ok(error) => error,
+                Err(err) if err.is::<ArgumentError>() => UvError::argument(err),
+                Err(err)
+                    if matches!(
+                        err.downcast_ref::<ProjectError>(),
+                        Some(ProjectError::LockFormat(..))
+                    ) =>
+                {
+                    UvError::User(err)
+                }
+                Err(err) => UvError::unexpected(err),
+            };
+            match error {
+                UvError::User(err) => {
+                    commands::diagnostics::write_error_chain(&err, printer)
+                        .expect("writing to stderr should not fail");
+                    ExitStatus::Failure.into()
+                }
+                UvError::Argument(err) => {
+                    commands::diagnostics::write_error_chain(&err, printer)
+                        .expect("writing to stderr should not fail");
+                    ExitStatus::Error.into()
+                }
+                UvError::Unexpected(err) => {
+                    trace!(
+                        "Error chain:\n{}",
+                        uv_errors::debug_error_chain(err.as_ref())
+                    );
+                    if err.backtrace().status() == std::backtrace::BacktraceStatus::Captured {
+                        trace!("Error backtrace:\n{}", err.backtrace());
+                    }
+                    commands::diagnostics::write_error_chain(&err, printer)
+                        .expect("writing to stderr should not fail");
+                    ExitStatus::Error.into()
+                }
             }
-            ExitStatus::Error.into()
         }
     }
 }

@@ -1,0 +1,22 @@
+name = "incompatible-python-compatible-override-other-wheel"
+description = "The user requires a package which requires a incompatible Python version, but they request a compatible Python version for package resolution. There are only source distributions available for the compatible version of the package, but there is an incompatible version with a wheel available."
+
+[root]
+requires = ["a"]
+
+[expected]
+satisfiable = true
+explanation = "Since there are no wheels for the version of the package compatible with the target and it is not compatible with the local installation, we cannot build the source distribution to determine its dependencies. However, the source distribution includes static metadata, which we can use to determine dependencies without building the package."
+
+[packages.a.versions."1.0.0"]
+requires_python = ">=3.10"
+wheel = false
+
+[packages.a.versions."2.0.0"]
+requires_python = ">=3.12"
+
+[resolver_options]
+python = "3.11"
+
+[environment]
+python = "3.9"

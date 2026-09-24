@@ -1,0 +1,11 @@
+name = "transitive-requires-package-does-not-exist"
+description = "The user requires package `a` but `a` requires package `b` which does not exist"
+
+[root]
+requires = ["a"]
+
+[expected]
+satisfiable = false
+
+[packages.a.versions."1.0.0"]
+requires = ["b"]

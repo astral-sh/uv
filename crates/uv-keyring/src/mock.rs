@@ -7,11 +7,10 @@ that is platform-independent, provides no persistence, and allows the client
 to specify the return values (including errors) for each call. The credentials
 in this store have no attributes at all.
 
-To use this credential store instead of the default, make this call during
-application startup _before_ creating any entries:
-```rust
-keyring::set_default_credential_builder(keyring::mock::default_credential_builder());
-```
+To use this credential store instead of the default, call
+[`set_default_credential_builder`](crate::set_default_credential_builder)
+with [`default_credential_builder`] during application startup
+_before_ creating any entries.
 
 You can then create entries as you usually do, and call their usual methods
 to set, get, and delete passwords.  There is no persistence other than
@@ -22,23 +21,12 @@ If you want a method call on an entry to fail in a specific way, you can
 downcast the entry to a [`MockCredential`] and then call [`set_error`](MockCredential::set_error)
 with the appropriate error.  The next entry method called on the credential
 will fail with the error you set.  The error will then be cleared, so the next
-call on the mock will operate as usual.  Here's a complete example:
-```rust
-# use keyring::{Entry, Error, mock, mock::MockCredential};
-# keyring::set_default_credential_builder(mock::default_credential_builder());
-let entry = Entry::new("service", "user").unwrap();
-let mock: &MockCredential = entry.get_credential().downcast_ref().unwrap();
-mock.set_error(Error::Invalid("mock error".to_string(), "takes precedence".to_string()));
-entry.set_password("test").expect_err("error will override");
-entry.set_password("test").expect("error has been cleared");
-```
+call on the mock will operate as usual.
  */
 use std::cell::RefCell;
 use std::sync::Mutex;
 
-use crate::credential::{
-    Credential, CredentialApi, CredentialBuilder, CredentialBuilderApi, CredentialPersistence,
-};
+use crate::credential::CredentialApi;
 use crate::error::{Error, Result, decode_password};
 
 /// The concrete mock credential
@@ -46,8 +34,8 @@ use crate::error::{Error, Result, decode_password};
 /// Mocks use an internal mutability pattern since entries are read-only.
 /// The mutex is used to make sure these are Sync.
 #[derive(Debug)]
-pub struct MockCredential {
-    pub inner: Mutex<RefCell<MockData>>,
+struct MockCredential {
+    inner: Mutex<RefCell<MockData>>,
 }
 
 impl Default for MockCredential {
@@ -66,9 +54,9 @@ impl Default for MockCredential {
 /// (Everything about this structure is public for transparency.
 /// Most keystore implementation hide their internals.)
 #[derive(Debug, Default)]
-pub struct MockData {
-    pub secret: Option<Vec<u8>>,
-    pub error: Option<Error>,
+struct MockData {
+    secret: Option<Vec<u8>>,
+    error: Option<Error>,
 }
 
 #[async_trait::async_trait]
@@ -196,7 +184,7 @@ impl MockCredential {
     /// Error returns always take precedence over the normal
     /// behavior of the mock.  But once an error has been
     /// returned it is removed, so the mock works thereafter.
-    pub fn set_error(&self, err: Error) {
+    fn set_error(&self, err: Error) {
         let mut inner = self
             .inner
             .lock()
@@ -206,48 +194,12 @@ impl MockCredential {
     }
 }
 
-/// The builder for mock credentials.
-pub struct MockCredentialBuilder;
-
-impl CredentialBuilderApi for MockCredentialBuilder {
-    /// Build a mock credential for the given target, service, and user.
-    ///
-    /// Since mocks don't persist between sessions,  all mocks
-    /// start off without passwords.
-    fn build(&self, target: Option<&str>, service: &str, user: &str) -> Result<Box<Credential>> {
-        let credential = MockCredential::new_with_target(target, service, user);
-        Ok(Box::new(credential))
-    }
-
-    /// Get an [Any][std::any::Any] reference to the mock credential builder.
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    /// This keystore keeps the password in the entry!
-    fn persistence(&self) -> CredentialPersistence {
-        CredentialPersistence::EntryOnly
-    }
-}
-
-/// Return a mock credential builder for use by clients.
-pub fn default_credential_builder() -> Box<CredentialBuilder> {
-    Box::new(MockCredentialBuilder {})
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{MockCredential, default_credential_builder};
-    use crate::credential::CredentialPersistence;
-    use crate::{Entry, Error, tests::generate_random_string};
+    use std::assert_matches;
 
-    #[test]
-    fn test_persistence() {
-        assert!(matches!(
-            default_credential_builder().persistence(),
-            CredentialPersistence::EntryOnly
-        ));
-    }
+    use super::MockCredential;
+    use crate::{Entry, Error, tests::generate_random_string};
 
     fn entry_new(service: &str, user: &str) -> Entry {
         let credential = MockCredential::new_with_target(None, service, user);
@@ -303,11 +255,9 @@ mod tests {
             "mock error".to_string(),
             "is an error".to_string(),
         ));
-        assert!(
-            matches!(
-                entry.set_password(password).await,
-                Err(Error::Invalid(_, _))
-            ),
+        assert_matches!(
+            entry.set_password(password).await,
+            Err(Error::Invalid(_, _)),
             "set: No error"
         );
         entry
@@ -315,8 +265,9 @@ mod tests {
             .await
             .expect("set: Error not cleared");
         mock.set_error(Error::NoEntry);
-        assert!(
-            matches!(entry.get_password().await, Err(Error::NoEntry)),
+        assert_matches!(
+            entry.get_password().await,
+            Err(Error::NoEntry),
             "get: No error"
         );
         let stored_password = entry.get_password().await.expect("get: Error not cleared");
@@ -325,16 +276,18 @@ mod tests {
             "Retrieved and set ascii passwords don't match"
         );
         mock.set_error(Error::TooLong("mock".to_string(), 3));
-        assert!(
-            matches!(entry.delete_credential().await, Err(Error::TooLong(_, 3))),
+        assert_matches!(
+            entry.delete_credential().await,
+            Err(Error::TooLong(_, 3)),
             "delete: No error"
         );
         entry
             .delete_credential()
             .await
             .expect("delete: Error not cleared");
-        assert!(
-            matches!(entry.get_password().await, Err(Error::NoEntry)),
+        assert_matches!(
+            entry.get_password().await,
+            Err(Error::NoEntry),
             "Able to read a deleted ascii password"
         );
     }

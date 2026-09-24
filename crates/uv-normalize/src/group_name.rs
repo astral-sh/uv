@@ -39,7 +39,7 @@ impl GroupName {
     ///
     /// At present, this is no more efficient than calling [`GroupName::from_str`].
     #[expect(clippy::needless_pass_by_value)]
-    pub fn from_owned(name: String) -> Result<Self, InvalidNameError> {
+    fn from_owned(name: String) -> Result<Self, InvalidNameError> {
         validate_and_normalize_ref(&name).map(Self)
     }
 

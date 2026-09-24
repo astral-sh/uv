@@ -1,10 +1,10 @@
 use std::convert::Infallible;
 
-use pubgrub::{Dependencies, DependencyProvider, PackageResolutionStatistics, Range};
+use pubgrub::{Dependencies, DependencyProvider, PackageResolutionStatistics};
 
 use uv_pep440::Version;
 
-use crate::pubgrub::{PubGrubPackage, PubGrubPriority, PubGrubTiebreaker};
+use crate::pubgrub::{PubGrubPackage, PubGrubPriority, PubGrubTiebreaker, Range};
 use crate::resolver::UnavailableReason;
 
 /// We don't use a dependency provider, we interact with state directly, but we still need this one
@@ -53,6 +53,7 @@ mod tests {
 
     #[test]
     fn priority_size() {
+        assert_eq!(size_of::<PubGrubTiebreaker>(), 4);
         assert_eq!(
             size_of::<<UvDependencyProvider as DependencyProvider>::Priority>(),
             24

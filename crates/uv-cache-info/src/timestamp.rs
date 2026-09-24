@@ -21,21 +21,21 @@ impl Timestamp {
 
     /// Return the [`Timestamp`] for the given metadata.
     pub fn from_metadata(metadata: &std::fs::Metadata) -> Self {
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::MetadataExt;
+        cfg_select! {
+            unix => {
+                use std::os::unix::fs::MetadataExt;
 
-            let ctime = u64::try_from(metadata.ctime()).expect("ctime to be representable as u64");
-            let ctime_nsec = u32::try_from(metadata.ctime_nsec())
-                .expect("ctime_nsec to be representable as u32");
-            let duration = std::time::Duration::new(ctime, ctime_nsec);
-            Self(std::time::UNIX_EPOCH + duration)
-        }
-
-        #[cfg(not(unix))]
-        {
-            let modified = metadata.modified().expect("modified time to be available");
-            Self(modified)
+                let ctime =
+                    u64::try_from(metadata.ctime()).expect("ctime to be representable as u64");
+                let ctime_nsec = u32::try_from(metadata.ctime_nsec())
+                    .expect("ctime_nsec to be representable as u32");
+                let duration = std::time::Duration::new(ctime, ctime_nsec);
+                Self(std::time::UNIX_EPOCH + duration)
+            },
+            _ => {
+                let modified = metadata.modified().expect("modified time to be available");
+                Self(modified)
+            },
         }
     }
 

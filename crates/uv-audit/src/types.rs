@@ -36,7 +36,7 @@ impl Dependency {
 /// within that bucket. For example, `CVE-2026-12345` or `PYSEC-2023-0001`.
 ///
 /// No assumptions should be made about the format of these identifiers.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct VulnerabilityID(SmallString);
 
 impl VulnerabilityID {
@@ -68,6 +68,16 @@ pub enum AdverseStatus {
     Deprecated,
 }
 
+impl std::fmt::Display for AdverseStatus {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::Archived => "archived",
+            Self::Quarantined => "quarantined",
+            Self::Deprecated => "deprecated",
+        })
+    }
+}
+
 /// A vulnerability within a dependency.
 #[derive(Debug)]
 pub struct Vulnerability {
@@ -92,7 +102,7 @@ pub struct Vulnerability {
 }
 
 impl Vulnerability {
-    pub fn new(
+    pub(crate) fn new(
         dependency: Dependency,
         id: VulnerabilityID,
         summary: Option<String>,
@@ -145,10 +155,13 @@ impl Vulnerability {
 }
 
 /// An adverse project status, such as an archived or deprecated project.
+///
+/// PEP 792 status markers are project-level, so this finding carries only the
+/// project name — not a specific version.
 #[derive(Debug)]
 pub struct ProjectStatus {
-    /// The dependency with the adverse status.
-    pub dependency: Dependency,
+    /// The name of the project with the adverse status.
+    pub name: PackageName,
     /// The adverse status of the project.
     pub status: AdverseStatus,
     /// An optional (index-supplied) reason for the adverse status.

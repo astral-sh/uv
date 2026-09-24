@@ -3,6 +3,7 @@
 //! implementing [`BuildContext`].
 
 use std::ffi::{OsStr, OsString};
+use std::future::{self, Future};
 use std::path::Path;
 
 use anyhow::{Context, Result};
@@ -16,8 +17,10 @@ use uv_build_backend::check_direct_build;
 use uv_build_frontend::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
-use uv_configuration::{BuildKind, BuildOptions, Constraints, IndexStrategy, NoSources, Reinstall};
-use uv_configuration::{BuildOutput, Concurrency};
+use uv_configuration::{
+    BuildKind, BuildOptions, Constraints, IndexStrategy, NoSources, Overrides, Reinstall,
+};
+use uv_configuration::{BuildOutput, Concurrency, Excludes};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
@@ -30,13 +33,14 @@ use uv_installer::{InstallationStrategy, Installer, Plan, Planner, Preparer, Sit
 use uv_preview::Preview;
 use uv_pypi_types::Conflicts;
 use uv_python::{Interpreter, PythonEnvironment};
+use uv_requirements::LookaheadResolver;
 use uv_resolver::{
     ExcludeNewer, FlatIndex, Flexibility, InMemoryIndex, Manifest, OptionsBuilder,
     PythonRequirement, Resolver, ResolverEnvironment,
 };
 use uv_types::{
     AnyErrorBuild, BuildArena, BuildContext, BuildIsolation, BuildStack, EmptyInstalledPackages,
-    HashStrategy, InFlight,
+    HashStrategy, InFlight, ResolvedRequirements, SourceTreeEditablePolicy,
 };
 use uv_workspace::WorkspaceCache;
 
@@ -59,16 +63,57 @@ pub enum BuildDispatchError {
 
     #[error(transparent)]
     Prepare(#[from] uv_installer::PrepareError),
+
+    #[error(transparent)]
+    Lookahead(#[from] uv_requirements::Error),
+}
+
+impl uv_errors::Hinted for BuildDispatchError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        match self {
+            Self::BuildFrontend(err) => err.hints(),
+            Self::Resolve(err) => err.hints(),
+            Self::Anyhow(err) => {
+                // Walk the anyhow error chain to find hint-bearing errors
+                // (e.g., ResolveError wrapped via `with_context`).
+                for cause in err.chain() {
+                    if let Some(resolve_err) = cause.downcast_ref::<uv_resolver::ResolveError>() {
+                        let hints = resolve_err.hints();
+                        if !hints.is_empty() {
+                            return hints;
+                        }
+                    }
+                }
+                uv_errors::Hints::none()
+            }
+            _ => uv_errors::Hints::none(),
+        }
+    }
 }
 
 impl IsBuildBackendError for BuildDispatchError {
+    fn is_user_failure(&self) -> bool {
+        match self {
+            Self::BuildFrontend(error) => error.is_user_failure(),
+            Self::Resolve(error) => error.is_user_failure(),
+            Self::Prepare(error) => error.is_user_failure(),
+            Self::Lookahead(error) => error.is_user_failure(),
+            Self::Anyhow(error) => error
+                .chain()
+                .find_map(|cause| cause.downcast_ref::<uv_resolver::ResolveError>())
+                .is_some_and(uv_resolver::ResolveError::is_user_failure),
+            Self::Tags(_) | Self::Join(_) => false,
+        }
+    }
+
     fn is_build_backend_error(&self) -> bool {
         match self {
             Self::Tags(_)
             | Self::Resolve(_)
             | Self::Join(_)
             | Self::Anyhow(_)
-            | Self::Prepare(_) => false,
+            | Self::Prepare(_)
+            | Self::Lookahead(_) => false,
             Self::BuildFrontend(err) => err.is_build_backend_error(),
         }
     }
@@ -76,6 +121,7 @@ impl IsBuildBackendError for BuildDispatchError {
 
 /// The main implementation of [`BuildContext`], used by the CLI, see [`BuildContext`]
 /// documentation.
+#[derive(Clone)]
 pub struct BuildDispatch<'a> {
     client: &'a RegistryClient,
     cache: &'a Cache,
@@ -98,6 +144,7 @@ pub struct BuildDispatch<'a> {
     source_build_context: SourceBuildContext,
     build_extra_env_vars: FxHashMap<OsString, OsString>,
     sources: NoSources,
+    source_tree_editable_policy: SourceTreeEditablePolicy,
     workspace_cache: WorkspaceCache,
     concurrency: Concurrency,
     preview: Preview,
@@ -124,6 +171,7 @@ impl<'a> BuildDispatch<'a> {
         hasher: &'a HashStrategy,
         exclude_newer: ExcludeNewer,
         sources: NoSources,
+        source_tree_editable_policy: SourceTreeEditablePolicy,
         workspace_cache: WorkspaceCache,
         concurrency: Concurrency,
         preview: Preview,
@@ -150,9 +198,29 @@ impl<'a> BuildDispatch<'a> {
             source_build_context: SourceBuildContext::new(concurrency.builds_semaphore.clone()),
             build_extra_env_vars: FxHashMap::default(),
             sources,
+            source_tree_editable_policy,
             workspace_cache,
             concurrency,
             preview,
+        }
+    }
+
+    /// Fork the dispatch with a different hash strategy.
+    ///
+    /// In-memory resolution, download, and build caches are reset, since they may depend on the
+    /// previous policy.
+    #[must_use]
+    pub fn fork<'fork>(&'fork self, hasher: &'fork HashStrategy) -> BuildDispatch<'fork> {
+        BuildDispatch {
+            hasher,
+            shared_state: SharedState {
+                build_arena: BuildArena::default(),
+                ..self.shared_state.fork()
+            },
+            source_build_context: SourceBuildContext::new(
+                self.concurrency.builds_semaphore.clone(),
+            ),
+            ..self.clone()
         }
     }
 
@@ -176,8 +244,8 @@ impl<'a> BuildDispatch<'a> {
 impl BuildContext for BuildDispatch<'_> {
     type SourceDistBuilder = SourceBuild;
 
-    async fn interpreter(&self) -> &Interpreter {
-        self.interpreter
+    fn interpreter(&self) -> impl Future<Output = &Interpreter> + '_ {
+        future::ready(self.interpreter)
     }
 
     fn cache(&self) -> &Cache {
@@ -220,6 +288,10 @@ impl BuildContext for BuildDispatch<'_> {
         &self.sources
     }
 
+    fn source_tree_editable_policy(&self) -> SourceTreeEditablePolicy {
+        self.source_tree_editable_policy
+    }
+
     fn locations(&self) -> &IndexLocations {
         self.index_locations
     }
@@ -240,13 +312,48 @@ impl BuildContext for BuildDispatch<'_> {
         &'data self,
         requirements: &'data [Requirement],
         build_stack: &'data BuildStack,
-    ) -> Result<Resolution, BuildDispatchError> {
+    ) -> Result<ResolvedRequirements, BuildDispatchError> {
         let python_requirement = PythonRequirement::from_interpreter(self.interpreter);
-        let marker_env = self.interpreter.resolver_marker_environment();
+        let marker_env = self.interpreter.to_resolver_marker_environment();
+        let resolver_env = ResolverEnvironment::specific(marker_env);
         let tags = self.interpreter.tags()?;
 
+        // Walk any URL requirements transitively so their sub-URLs (for example, a workspace
+        // member that depends on another workspace member) are known before the resolver runs
+        // its URL allow-list check. This mirrors what the project resolver does in
+        // `uv_requirements::LookaheadResolver` and prevents a `DisallowedUrl` error when one
+        // `build-system.requires` entry pulls in another URL dependency.
+        let hasher = self
+            .hasher
+            .clone()
+            .augment_with_requirements(requirements.iter())
+            .map_err(uv_requirements::Error::from)?;
+        let overrides = Overrides::default();
+        let excludes = Excludes::default();
+        let (lookaheads, hasher) = LookaheadResolver::new(
+            requirements,
+            self.constraints,
+            &overrides,
+            &excludes,
+            self.dependency_metadata,
+            &hasher,
+            &self.shared_state.index,
+            DistributionDatabase::new(
+                self.client,
+                self,
+                self.concurrency.downloads_semaphore.clone(),
+            )
+            .with_build_stack(build_stack),
+        )
+        .resolve(&resolver_env)
+        .await?;
+
+        let manifest = Manifest::simple(requirements.to_vec())
+            .with_constraints(self.constraints.clone())
+            .with_lookaheads(lookaheads);
+
         let resolver = Resolver::new(
-            Manifest::simple(requirements.to_vec()).with_constraints(self.constraints.clone()),
+            manifest,
             OptionsBuilder::new()
                 .exclude_newer(self.exclude_newer.clone())
                 .index_strategy(self.index_strategy)
@@ -254,14 +361,14 @@ impl BuildContext for BuildDispatch<'_> {
                 .flexibility(Flexibility::Fixed)
                 .build(),
             &python_requirement,
-            ResolverEnvironment::specific(marker_env),
+            resolver_env,
             self.interpreter.markers(),
             // Conflicting groups only make sense when doing universal resolution.
             Conflicts::empty(),
             Some(tags),
             self.flat_index,
             &self.shared_state.index,
-            self.hasher,
+            &hasher,
             self,
             EmptyInstalledPackages,
             DistributionDatabase::new(
@@ -280,22 +387,25 @@ impl BuildContext for BuildDispatch<'_> {
                     .join(", ")
             )
         })?);
-        Ok(resolution)
+        Ok(ResolvedRequirements::new(resolution, hasher))
     }
 
     #[instrument(
-        skip(self, resolution, venv),
+        skip(self, requirements, venv),
         fields(
-            resolution = resolution.distributions().map(ToString::to_string).join(", "),
+            resolution = requirements.resolution().distributions().map(ToString::to_string).join(", "),
             venv = ?venv.root()
         )
     )]
     async fn install<'data>(
         &'data self,
-        resolution: &'data Resolution,
+        requirements: &'data ResolvedRequirements,
         venv: &'data PythonEnvironment,
         build_stack: &'data BuildStack,
     ) -> Result<Vec<CachedDist>, BuildDispatchError> {
+        let resolution = requirements.resolution();
+        let hasher = requirements.hasher();
+
         debug!(
             "Installing in {} in {}",
             resolution
@@ -321,7 +431,7 @@ impl BuildContext for BuildDispatch<'_> {
             InstallationStrategy::Permissive,
             &Reinstall::default(),
             self.build_options,
-            self.hasher,
+            hasher,
             self.index_locations,
             self.config_settings,
             self.config_settings_package,
@@ -355,7 +465,7 @@ impl BuildContext for BuildDispatch<'_> {
             let preparer = Preparer::new(
                 self.cache,
                 tags,
-                self.hasher,
+                hasher,
                 self.build_options,
                 DistributionDatabase::new(
                     self.client,
@@ -378,8 +488,9 @@ impl BuildContext for BuildDispatch<'_> {
 
         // Remove any unnecessary packages.
         if !reinstalls.is_empty() {
+            let layout = venv.interpreter().layout();
             for dist_info in &reinstalls {
-                let summary = uv_installer::uninstall(dist_info)
+                let summary = uv_installer::uninstall(dist_info, &layout)
                     .await
                     .context("Failed to uninstall build dependencies")?;
                 debug!(
@@ -418,6 +529,7 @@ impl BuildContext for BuildDispatch<'_> {
         source: &'data Path,
         subdirectory: Option<&'data Path>,
         install_path: &'data Path,
+        stop_discovery_at: Option<&'data Path>,
         version_id: Option<&'data str>,
         dist: Option<&'data SourceDist>,
         sources: &'data NoSources,
@@ -432,22 +544,6 @@ impl BuildContext for BuildDispatch<'_> {
                 VersionOrUrlRef::Version(version) => Some(version),
                 VersionOrUrlRef::Url(_) => None,
             });
-
-        // Note we can only prevent builds by name for packages with names
-        // unless all builds are disabled.
-        if self
-            .build_options
-            .no_build_requirement(dist_name)
-            // We always allow editable builds
-            && !matches!(build_kind, BuildKind::Editable)
-        {
-            let err = if let Some(dist) = dist {
-                uv_build_frontend::Error::NoSourceDistBuild(dist.name().clone())
-            } else {
-                uv_build_frontend::Error::NoSourceDistBuilds
-            };
-            return Err(err);
-        }
 
         // Push the current distribution onto the build stack, to prevent cyclic dependencies.
         if let Some(dist) = dist {
@@ -481,6 +577,7 @@ impl BuildContext for BuildDispatch<'_> {
             source,
             subdirectory,
             install_path,
+            stop_discovery_at,
             dist_name,
             dist_version,
             self.interpreter,
@@ -522,7 +619,12 @@ impl BuildContext for BuildDispatch<'_> {
         // Only perform the direct build if the backend is uv in a compatible version.
         let source_tree_str = source_tree.display().to_string();
         let identifier = version_id.unwrap_or_else(|| &source_tree_str);
-        if let Err(reason) = check_direct_build(&source_tree, uv_version::version()) {
+        if let Err(reason) = check_direct_build(
+            &source_tree,
+            uv_version::version(),
+            &self.interpreter.to_resolver_marker_environment(),
+            self.constraints.requirements().cloned().map(Into::into),
+        ) {
             trace!("Requirements for direct build not matched because {reason}");
             return Ok(None);
         }
@@ -612,18 +714,14 @@ impl SharedState {
         &self.index
     }
 
+    /// Return mutable access to the index owner. Removing cached entries additionally requires
+    /// exclusive access to the index's shared storage.
+    pub fn index_mut(&mut self) -> &mut InMemoryIndex {
+        &mut self.index
+    }
+
     /// Return the [`InFlight`] used by the [`SharedState`].
     pub fn in_flight(&self) -> &InFlight {
         &self.in_flight
-    }
-
-    /// Return the [`IndexCapabilities`] used by the [`SharedState`].
-    pub fn capabilities(&self) -> &IndexCapabilities {
-        &self.capabilities
-    }
-
-    /// Return the [`BuildArena`] used by the [`SharedState`].
-    pub fn build_arena(&self) -> &BuildArena<SourceBuild> {
-        &self.build_arena
     }
 }

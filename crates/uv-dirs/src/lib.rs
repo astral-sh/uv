@@ -161,32 +161,31 @@ fn locate_system_config_windows(system_drive: impl AsRef<Path>) -> Option<PathBu
 ///
 /// On Windows, uses `%SYSTEMDRIVE%\ProgramData\uv\uv.toml`.
 pub fn system_config_file() -> Option<PathBuf> {
-    #[cfg(windows)]
-    {
-        env::var(EnvVars::SYSTEMDRIVE)
-            .ok()
-            .and_then(|system_drive| locate_system_config_windows(format!("{system_drive}\\")))
-    }
-
-    #[cfg(not(windows))]
-    {
-        if let Some(path) =
-            locate_system_config_xdg(env::var(EnvVars::XDG_CONFIG_DIRS).ok().as_deref())
-        {
-            return Some(path);
-        }
-
-        // Fallback to `/etc/uv/uv.toml` if `XDG_CONFIG_DIRS` is not set or no valid
-        // path is found.
-        let candidate = Path::new("/etc/uv/uv.toml");
-        match candidate.try_exists() {
-            Ok(true) => Some(candidate.to_path_buf()),
-            Ok(false) => None,
-            Err(err) => {
-                tracing::warn!("Failed to query system configuration file: {err}");
-                None
+    cfg_select! {
+        windows => {
+            env::var(EnvVars::SYSTEMDRIVE)
+                .ok()
+                .and_then(|system_drive| locate_system_config_windows(format!("{system_drive}\\")))
+        },
+        _ => {
+            if let Some(path) =
+                locate_system_config_xdg(env::var(EnvVars::XDG_CONFIG_DIRS).ok().as_deref())
+            {
+                return Some(path);
             }
-        }
+
+            // Fallback to `/etc/uv/uv.toml` if `XDG_CONFIG_DIRS` is not set or no valid
+            // path is found.
+            let candidate = Path::new("/etc/uv/uv.toml");
+            match candidate.try_exists() {
+                Ok(true) => Some(candidate.to_path_buf()),
+                Ok(false) => None,
+                Err(err) => {
+                    tracing::warn!("Failed to query system configuration file: {err}");
+                    None
+                }
+            }
+        },
     }
 }
 

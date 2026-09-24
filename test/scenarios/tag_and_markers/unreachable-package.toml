@@ -1,0 +1,16 @@
+name = "unreachable-package"
+description = "`c` is not reachable due to the markers, it should be excluded from the lockfile"
+
+[root]
+requires = ["a==1.0.0; sys_platform == 'win32'"]
+
+[expected]
+satisfiable = true
+
+[packages.a.versions."1.0.0"]
+requires = ["b==1.0.0; sys_platform == 'linux'"]
+
+[packages.b.versions."1.0.0"]
+
+[resolver_options]
+universal = true

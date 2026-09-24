@@ -3,21 +3,23 @@
 //! When we receive the requirements from `pip sync`, we check which requirements already fulfilled
 //! in the users environment ([`InstalledDist`]), whether the matching package is in our wheel cache
 //! ([`CachedDist`]) or whether we need to download, (potentially build) and install it ([`Dist`]).
-//! These three variants make up [`BuiltDist`].
 //!
 //! ## `Dist`
 //! A [`Dist`] is either a built distribution (a wheel), or a source distribution that exists at
 //! some location. We translate every PEP 508 requirement e.g. from `requirements.txt` or from
 //! `pyproject.toml`'s `[project] dependencies` into a [`Dist`] by checking each index.
-//! * [`BuiltDist`]: A wheel, with its three possible origins:
+//! * [`BuiltDist`]: A wheel, with its four possible origins:
 //!   * [`RegistryBuiltDist`]
 //!   * [`DirectUrlBuiltDist`]
 //!   * [`PathBuiltDist`]
-//! * [`SourceDist`]: A source distribution, with its four possible origins:
+//!   * [`GitPathBuiltDist`]
+//! * [`SourceDist`]: A source distribution, with its six possible origins:
 //!   * [`RegistrySourceDist`]
 //!   * [`DirectUrlSourceDist`]
-//!   * [`GitSourceDist`]
+//!   * [`GitDirectorySourceDist`]
+//!   * [`GitPathSourceDist`]
 //!   * [`PathSourceDist`]
+//!   * [`DirectorySourceDist`]
 //!
 //! ## `CachedDist`
 //! A [`CachedDist`] is a built distribution (wheel) that exists in the local cache, with the two
@@ -26,17 +28,25 @@
 //! * [`CachedDirectUrlDist`]
 //!
 //! ## `InstalledDist`
-//! An [`InstalledDist`] is built distribution (wheel) that is installed in a virtual environment,
-//! with the two possible origins we currently track:
+//! An [`InstalledDist`] is a distribution installed in a Python environment, with the five kinds
+//! we currently track:
 //! * [`InstalledRegistryDist`]
 //! * [`InstalledDirectUrlDist`]
+//! * [`InstalledEggInfoFile`]
+//! * [`InstalledEggInfoDirectory`]
+//! * [`InstalledLegacyEditable`]
 //!
-//! Since we read this information from [`direct_url.json`](https://packaging.python.org/en/latest/specifications/direct-url-data-structure/), it doesn't match the information [`Dist`] exactly.
+//! Direct URL information for an [`InstalledDirectUrlDist`] comes from
+//! [`direct_url.json`](https://packaging.python.org/en/latest/specifications/direct-url-data-structure/)
+//! and may not match the original [`Dist`] exactly.
 use std::borrow::Cow;
+use std::ffi::OsStr;
+use std::fmt::Display;
 use std::path;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use memchr::memchr3;
 use url::Url;
 
 use uv_distribution_filename::{
@@ -48,7 +58,8 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::{Pep508Url, VerbatimUrl};
 use uv_pypi_types::{
-    ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl, VerbatimParsedUrl,
+    ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, ParsedPathUrl,
+    ParsedUrl, VerbatimParsedUrl,
 };
 use uv_redacted::DisplaySafeUrl;
 
@@ -63,6 +74,7 @@ pub use crate::dependency_metadata::*;
 pub use crate::diagnostic::*;
 pub use crate::dist_error::*;
 pub use crate::error::*;
+pub use crate::exclude_newer::*;
 pub use crate::file::*;
 pub use crate::hash::*;
 pub use crate::id::*;
@@ -71,6 +83,7 @@ pub use crate::index_name::*;
 pub use crate::index_url::*;
 pub use crate::installed::*;
 pub use crate::known_platform::*;
+pub use crate::minimum_libc_version::MinimumLibcVersion;
 pub use crate::origin::*;
 pub use crate::pip_index::*;
 pub use crate::prioritized_distribution::*;
@@ -94,6 +107,7 @@ mod dependency_metadata;
 mod diagnostic;
 mod dist_error;
 mod error;
+mod exclude_newer;
 mod file;
 mod hash;
 mod id;
@@ -101,7 +115,9 @@ mod index;
 mod index_name;
 mod index_url;
 mod installed;
+mod installed_modules;
 mod known_platform;
+mod minimum_libc_version;
 mod origin;
 mod pip_index;
 mod prioritized_distribution;
@@ -120,16 +136,6 @@ pub enum VersionOrUrlRef<'a, T: Pep508Url = VerbatimUrl> {
     Version(&'a Version),
     /// A URL, used to identify a distribution at an arbitrary location.
     Url(&'a T),
-}
-
-impl<'a, T: Pep508Url> VersionOrUrlRef<'a, T> {
-    /// If it is a URL, return its value.
-    pub fn url(&self) -> Option<&'a T> {
-        match self {
-            Self::Version(_) => None,
-            Self::Url(url) => Some(url),
-        }
-    }
 }
 
 impl Verbatim for VersionOrUrlRef<'_> {
@@ -160,14 +166,6 @@ pub enum InstalledVersion<'a> {
 }
 
 impl<'a> InstalledVersion<'a> {
-    /// If it is a URL, return its value.
-    pub fn url(&self) -> Option<&'a DisplaySafeUrl> {
-        match self {
-            Self::Version(_) => None,
-            Self::Url(url, _) => Some(url),
-        }
-    }
-
     /// If it is a version, return its value.
     pub fn version(&self) -> &'a Version {
         match self {
@@ -186,9 +184,9 @@ impl std::fmt::Display for InstalledVersion<'_> {
     }
 }
 
-/// Either a built distribution, a wheel, or a source distribution that exists at some location.
+/// Either a built distribution (a wheel) or a source distribution that exists at some location.
 ///
-/// The location can be an index, URL or path (wheel), or index, URL, path or Git repository (source distribution).
+/// The location can be an index, URL, path, or Git repository (wheel or source distribution).
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum Dist {
     Built(BuiltDist),
@@ -202,20 +200,32 @@ pub enum DistRef<'a> {
     Source(&'a SourceDist),
 }
 
-/// A wheel, with its three possible origins (index, url, path)
+impl Display for DistRef<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Built(built_dist) => Display::fmt(&built_dist, f),
+            Self::Source(source_dist) => Display::fmt(&source_dist, f),
+        }
+    }
+}
+
+/// A wheel, with its four possible origins (index, URL, path, or Git path)
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum BuiltDist {
     Registry(RegistryBuiltDist),
     DirectUrl(DirectUrlBuiltDist),
     Path(PathBuiltDist),
+    GitPath(GitPathBuiltDist),
 }
 
-/// A source distribution, with its possible origins (index, url, path, git)
+/// A source distribution, with its six possible origins (index, URL, Git directory, Git path,
+/// path, or directory).
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum SourceDist {
     Registry(RegistrySourceDist),
     DirectUrl(DirectUrlSourceDist),
-    Git(GitSourceDist),
+    GitDirectory(GitDirectorySourceDist),
+    GitPath(GitPathSourceDist),
     Path(PathSourceDist),
     Directory(DirectorySourceDist),
 }
@@ -226,6 +236,8 @@ pub struct RegistryBuiltWheel {
     pub filename: WheelFilename,
     pub file: Box<File>,
     pub index: IndexUrl,
+    /// Whether the recorded size must be validated when the wheel is downloaded.
+    pub size_is_authoritative: bool,
 }
 
 /// A built distribution (wheel) that exists in a registry, like `PyPI`.
@@ -268,6 +280,8 @@ pub struct DirectUrlBuiltDist {
     pub location: Box<DisplaySafeUrl>,
     /// The URL as it was provided by the user.
     pub url: VerbatimUrl,
+    /// The expected size of the archive, if provided by a lockfile.
+    pub size: Option<u64>,
 }
 
 /// A built distribution (wheel) that exists in a local directory.
@@ -277,6 +291,18 @@ pub struct PathBuiltDist {
     /// The absolute path to the wheel which we use for installing.
     pub install_path: Box<Path>,
     /// The URL as it was provided by the user.
+    pub url: VerbatimUrl,
+}
+
+/// A built distribution (wheel) that exists in a Git repository.
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct GitPathBuiltDist {
+    pub filename: WheelFilename,
+    /// The URL without the revision and path fragment.
+    pub git: Box<GitUrl>,
+    /// The path within the Git repository to the distribution which we use for installing.
+    pub install_path: PathBuf,
+    /// The URL as it was provided by the user, including the revision and path fragment.
     pub url: VerbatimUrl,
 }
 
@@ -297,6 +323,8 @@ pub struct RegistrySourceDist {
     /// skip emitting wheels to the lockfile just because the host generating
     /// the lockfile didn't have any compatible wheels available.
     pub wheels: Vec<RegistryBuiltWheel>,
+    /// Whether the recorded size must be validated when the source distribution is downloaded.
+    pub size_is_authoritative: bool,
 }
 
 /// A source distribution that exists at an arbitrary URL.
@@ -313,16 +341,33 @@ pub struct DirectUrlSourceDist {
     pub ext: SourceDistExtension,
     /// The URL as it was provided by the user, including the subdirectory fragment.
     pub url: VerbatimUrl,
+    /// The expected size of the archive, if provided by a lockfile.
+    pub size: Option<u64>,
 }
 
-/// A source distribution that exists in a Git repository.
+/// A source distribution that exists at the root or in a subdirectory of a Git repository.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct GitSourceDist {
+pub struct GitDirectorySourceDist {
     pub name: PackageName,
     /// The URL without the revision and subdirectory fragment.
     pub git: Box<GitUrl>,
     /// The subdirectory within the Git repository in which the source distribution is located.
     pub subdirectory: Option<Box<Path>>,
+    /// The URL as it was provided by the user, including the revision and subdirectory fragment.
+    pub url: VerbatimUrl,
+}
+
+/// A source distribution that exists in a local archive (e.g., a `.tar.gz` file) within a Git
+/// repository.
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct GitPathSourceDist {
+    pub name: PackageName,
+    /// The URL without the revision and subdirectory fragment.
+    pub git: Box<GitUrl>,
+    /// The path within the Git repository to the distribution which we use for installing.
+    pub install_path: PathBuf,
+    /// The file extension, e.g. `tar.gz`, `zip`, etc.
+    pub ext: SourceDistExtension,
     /// The URL as it was provided by the user, including the revision and subdirectory fragment.
     pub url: VerbatimUrl,
 }
@@ -340,6 +385,13 @@ pub struct PathSourceDist {
     pub url: VerbatimUrl,
 }
 
+/// Whether a source distribution is a first-party workspace member.
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub enum FirstParty {
+    Yes,
+    No,
+}
+
 /// A source distribution that exists in a local directory.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct DirectorySourceDist {
@@ -350,6 +402,8 @@ pub struct DirectorySourceDist {
     pub editable: Option<bool>,
     /// Whether the package should be built and installed.
     pub r#virtual: Option<bool>,
+    /// Whether the package is a first-party workspace member.
+    pub first_party: FirstParty,
     /// The URL as it was provided by the user.
     pub url: VerbatimUrl,
 }
@@ -380,15 +434,20 @@ impl Dist {
                     filename,
                     location: Box::new(location),
                     url,
+                    size: None,
                 })))
             }
             DistExtension::Source(ext) => {
+                if !ext.is_pep625_compliant() {
+                    return Err(Error::NotPep625Filename(url.verbatim().to_string()));
+                }
                 Ok(Self::Source(SourceDist::DirectUrl(DirectUrlSourceDist {
                     name,
                     location: Box::new(location),
                     subdirectory,
                     ext,
                     url,
+                    size: None,
                 })))
             }
         }
@@ -416,7 +475,11 @@ impl Dist {
         match ext {
             DistExtension::Wheel => {
                 // Validate that the name in the wheel matches that of the requirement.
-                let filename = WheelFilename::from_str(&url.filename()?)?;
+                let filename = install_path
+                    .file_name()
+                    .and_then(OsStr::to_str)
+                    .ok_or_else(|| Error::MissingWheelFilename(install_path.clone()))?;
+                let filename = WheelFilename::from_str(filename)?;
                 if filename.name != name {
                     return Err(Error::PackageNameMismatch(
                         name,
@@ -431,6 +494,10 @@ impl Dist {
                 })))
             }
             DistExtension::Source(ext) => {
+                if !ext.is_pep625_compliant() {
+                    return Err(Error::NotPep625Filename(url.verbatim().to_string()));
+                }
+
                 // If there is a version in the filename, record it.
                 let version = url
                     .filename()
@@ -476,23 +543,69 @@ impl Dist {
             install_path: install_path.into_boxed_path(),
             editable,
             r#virtual,
+            first_party: FirstParty::No,
             url,
         })))
     }
 
-    /// A remote source distribution from a `git+https://` or `git+ssh://` url.
-    pub fn from_git_url(
+    /// Create a [`Dist`] for a source tree within a Git repository (i.e., a `git+https://` or `git+ssh://` URL).
+    pub fn from_git_directory_url(
         name: PackageName,
         url: VerbatimUrl,
         git: GitUrl,
         subdirectory: Option<Box<Path>>,
     ) -> Result<Self, Error> {
-        Ok(Self::Source(SourceDist::Git(GitSourceDist {
-            name,
-            git: Box::new(git),
-            subdirectory,
-            url,
-        })))
+        Ok(Self::Source(SourceDist::GitDirectory(
+            GitDirectorySourceDist {
+                name,
+                git: Box::new(git),
+                subdirectory,
+                url,
+            },
+        )))
+    }
+
+    /// Create a [`Dist`] for a source archive within a Git repository (i.e., a `git+https://` or `git+ssh://` URL).
+    pub fn from_git_path_url(
+        name: PackageName,
+        url: VerbatimUrl,
+        git: GitUrl,
+        install_path: PathBuf,
+        ext: DistExtension,
+    ) -> Result<Self, Error> {
+        match ext {
+            DistExtension::Wheel => {
+                // Validate that the name in the wheel matches that of the requirement.
+                let filename = install_path
+                    .file_name()
+                    .and_then(OsStr::to_str)
+                    .ok_or_else(|| Error::MissingWheelFilename(install_path.clone()))?;
+                let filename = WheelFilename::from_str(filename)?;
+                if filename.name != name {
+                    return Err(Error::PackageNameMismatch(
+                        name,
+                        filename.name,
+                        url.verbatim().to_string(),
+                    ));
+                }
+
+                Ok(Self::Built(BuiltDist::GitPath(GitPathBuiltDist {
+                    filename,
+                    git: Box::new(git),
+                    install_path,
+                    url,
+                })))
+            }
+            DistExtension::Source(ext) => {
+                Ok(Self::Source(SourceDist::GitPath(GitPathSourceDist {
+                    name,
+                    git: Box::new(git),
+                    install_path,
+                    ext,
+                    url,
+                })))
+            }
+        }
     }
 
     /// Create a [`Dist`] for a URL-based distribution.
@@ -515,14 +628,17 @@ impl Dist {
                 directory.editable,
                 directory.r#virtual,
             ),
-            ParsedUrl::Git(git) => {
-                Self::from_git_url(name, url.verbatim, git.url, git.subdirectory)
+            ParsedUrl::GitDirectory(git) => {
+                Self::from_git_directory_url(name, url.verbatim, git.url, git.subdirectory)
+            }
+            ParsedUrl::GitPath(git) => {
+                Self::from_git_path_url(name, url.verbatim, git.url, git.install_path, git.ext)
             }
         }
     }
 
     /// Return true if the distribution is editable.
-    pub fn is_editable(&self) -> bool {
+    fn is_editable(&self) -> bool {
         match self {
             Self::Source(dist) => dist.is_editable(),
             Self::Built(_) => false,
@@ -530,7 +646,7 @@ impl Dist {
     }
 
     /// Return true if the distribution refers to a local file or directory.
-    pub fn is_local(&self) -> bool {
+    fn is_local(&self) -> bool {
         match self {
             Self::Source(dist) => dist.is_local(),
             Self::Built(dist) => dist.is_local(),
@@ -568,14 +684,6 @@ impl Dist {
             Self::Source(source_dist) => source_dist.version(),
         }
     }
-
-    /// Convert this distribution into a reference.
-    pub fn as_ref(&self) -> DistRef<'_> {
-        match self {
-            Self::Built(dist) => DistRef::Built(dist),
-            Self::Source(dist) => DistRef::Source(dist),
-        }
-    }
 }
 
 impl<'a> From<&'a Dist> for DistRef<'a> {
@@ -601,7 +709,7 @@ impl<'a> From<&'a BuiltDist> for DistRef<'a> {
 
 impl BuiltDist {
     /// Return true if the distribution refers to a local file or directory.
-    pub fn is_local(&self) -> bool {
+    fn is_local(&self) -> bool {
         matches!(self, Self::Path(_))
     }
 
@@ -611,14 +719,15 @@ impl BuiltDist {
             Self::Registry(registry) => Some(&registry.best_wheel().index),
             Self::DirectUrl(_) => None,
             Self::Path(_) => None,
+            Self::GitPath(_) => None,
         }
     }
 
     /// Returns the [`File`] instance, if this distribution is from a registry.
-    pub fn file(&self) -> Option<&File> {
+    fn file(&self) -> Option<&File> {
         match self {
             Self::Registry(registry) => Some(&registry.best_wheel().file),
-            Self::DirectUrl(_) | Self::Path(_) => None,
+            Self::DirectUrl(_) | Self::Path(_) | Self::GitPath(_) => None,
         }
     }
 
@@ -627,34 +736,33 @@ impl BuiltDist {
             Self::Registry(wheels) => &wheels.best_wheel().filename.version,
             Self::DirectUrl(wheel) => &wheel.filename.version,
             Self::Path(wheel) => &wheel.filename.version,
+            Self::GitPath(wheel) => &wheel.filename.version,
         }
     }
 }
 
 impl SourceDist {
-    /// Returns the [`SourceDistExtension`] of the distribution, if it has one.
-    pub fn extension(&self) -> Option<SourceDistExtension> {
-        match self {
-            Self::Registry(source_dist) => Some(source_dist.ext),
-            Self::DirectUrl(source_dist) => Some(source_dist.ext),
-            Self::Path(source_dist) => Some(source_dist.ext),
-            Self::Git(_) | Self::Directory(_) => None,
-        }
-    }
-
     /// Returns the [`IndexUrl`], if the distribution is from a registry.
-    pub fn index(&self) -> Option<&IndexUrl> {
+    fn index(&self) -> Option<&IndexUrl> {
         match self {
             Self::Registry(registry) => Some(&registry.index),
-            Self::DirectUrl(_) | Self::Git(_) | Self::Path(_) | Self::Directory(_) => None,
+            Self::DirectUrl(_)
+            | Self::GitPath(_)
+            | Self::GitDirectory(_)
+            | Self::Path(_)
+            | Self::Directory(_) => None,
         }
     }
 
     /// Returns the [`File`] instance, if this dist is from a registry with simple json api support
-    pub fn file(&self) -> Option<&File> {
+    fn file(&self) -> Option<&File> {
         match self {
             Self::Registry(registry) => Some(&registry.file),
-            Self::DirectUrl(_) | Self::Git(_) | Self::Path(_) | Self::Directory(_) => None,
+            Self::DirectUrl(_)
+            | Self::GitPath(_)
+            | Self::GitDirectory(_)
+            | Self::Path(_)
+            | Self::Directory(_) => None,
         }
     }
 
@@ -662,7 +770,11 @@ impl SourceDist {
     pub fn version(&self) -> Option<&Version> {
         match self {
             Self::Registry(source_dist) => Some(&source_dist.version),
-            Self::DirectUrl(_) | Self::Git(_) | Self::Path(_) | Self::Directory(_) => None,
+            Self::DirectUrl(_)
+            | Self::GitPath(_)
+            | Self::GitDirectory(_)
+            | Self::Path(_)
+            | Self::Directory(_) => None,
         }
     }
 
@@ -682,8 +794,27 @@ impl SourceDist {
         }
     }
 
+    /// Returns `true` if the distribution is a first-party workspace member.
+    pub fn is_first_party(&self) -> bool {
+        match self {
+            Self::Directory(DirectorySourceDist {
+                first_party: FirstParty::Yes,
+                ..
+            }) => true,
+            Self::Directory(DirectorySourceDist {
+                first_party: FirstParty::No,
+                ..
+            })
+            | Self::Registry(_)
+            | Self::DirectUrl(_)
+            | Self::GitDirectory(_)
+            | Self::GitPath(_)
+            | Self::Path(_) => false,
+        }
+    }
+
     /// Returns `true` if the distribution refers to a local file or directory.
-    pub fn is_local(&self) -> bool {
+    fn is_local(&self) -> bool {
         matches!(self, Self::Directory(_) | Self::Path(_))
     }
 
@@ -697,7 +828,7 @@ impl SourceDist {
     }
 
     /// Returns the source tree of the distribution, if available.
-    pub fn source_tree(&self) -> Option<&Path> {
+    fn source_tree(&self) -> Option<&Path> {
         match self {
             Self::Directory(dist) => Some(&dist.install_path),
             _ => None,
@@ -714,7 +845,7 @@ impl RegistryBuiltDist {
 
 impl DirectUrlBuiltDist {
     /// Return the [`ParsedUrl`] for the distribution.
-    pub fn parsed_url(&self) -> ParsedUrl {
+    pub fn to_parsed_url(&self) -> ParsedUrl {
         ParsedUrl::Archive(ParsedArchiveUrl::from_source(
             (*self.location).clone(),
             None,
@@ -725,7 +856,7 @@ impl DirectUrlBuiltDist {
 
 impl PathBuiltDist {
     /// Return the [`ParsedUrl`] for the distribution.
-    pub fn parsed_url(&self) -> ParsedUrl {
+    pub fn to_parsed_url(&self) -> ParsedUrl {
         ParsedUrl::Path(ParsedPathUrl::from_source(
             self.install_path.clone(),
             DistExtension::Wheel,
@@ -736,7 +867,7 @@ impl PathBuiltDist {
 
 impl PathSourceDist {
     /// Return the [`ParsedUrl`] for the distribution.
-    pub fn parsed_url(&self) -> ParsedUrl {
+    pub fn to_parsed_url(&self) -> ParsedUrl {
         ParsedUrl::Path(ParsedPathUrl::from_source(
             self.install_path.clone(),
             DistExtension::Source(self.ext),
@@ -747,7 +878,7 @@ impl PathSourceDist {
 
 impl DirectUrlSourceDist {
     /// Return the [`ParsedUrl`] for the distribution.
-    pub fn parsed_url(&self) -> ParsedUrl {
+    pub fn to_parsed_url(&self) -> ParsedUrl {
         ParsedUrl::Archive(ParsedArchiveUrl::from_source(
             (*self.location).clone(),
             self.subdirectory.clone(),
@@ -756,19 +887,41 @@ impl DirectUrlSourceDist {
     }
 }
 
-impl GitSourceDist {
+impl GitDirectorySourceDist {
     /// Return the [`ParsedUrl`] for the distribution.
-    pub fn parsed_url(&self) -> ParsedUrl {
-        ParsedUrl::Git(ParsedGitUrl::from_source(
+    pub fn to_parsed_url(&self) -> ParsedUrl {
+        ParsedUrl::GitDirectory(ParsedGitDirectoryUrl::from_source(
             (*self.git).clone(),
             self.subdirectory.clone(),
         ))
     }
 }
 
+impl GitPathBuiltDist {
+    /// Return the [`ParsedUrl`] for the distribution.
+    pub fn to_parsed_url(&self) -> ParsedUrl {
+        ParsedUrl::GitPath(ParsedGitPathUrl::from_source(
+            (*self.git).clone(),
+            self.install_path.clone(),
+            DistExtension::Wheel,
+        ))
+    }
+}
+
+impl GitPathSourceDist {
+    /// Return the [`ParsedUrl`] for the distribution.
+    pub fn to_parsed_url(&self) -> ParsedUrl {
+        ParsedUrl::GitPath(ParsedGitPathUrl::from_source(
+            (*self.git).clone(),
+            self.install_path.clone(),
+            DistExtension::Source(self.ext),
+        ))
+    }
+}
+
 impl DirectorySourceDist {
     /// Return the [`ParsedUrl`] for the distribution.
-    pub fn parsed_url(&self) -> ParsedUrl {
+    pub fn to_parsed_url(&self) -> ParsedUrl {
         ParsedUrl::Directory(ParsedDirectoryUrl::from_source(
             self.install_path.clone(),
             self.editable,
@@ -802,6 +955,12 @@ impl Name for PathBuiltDist {
     }
 }
 
+impl Name for GitPathBuiltDist {
+    fn name(&self) -> &PackageName {
+        &self.filename.name
+    }
+}
+
 impl Name for RegistrySourceDist {
     fn name(&self) -> &PackageName {
         &self.name
@@ -814,7 +973,13 @@ impl Name for DirectUrlSourceDist {
     }
 }
 
-impl Name for GitSourceDist {
+impl Name for GitPathSourceDist {
+    fn name(&self) -> &PackageName {
+        &self.name
+    }
+}
+
+impl Name for GitDirectorySourceDist {
     fn name(&self) -> &PackageName {
         &self.name
     }
@@ -837,7 +1002,8 @@ impl Name for SourceDist {
         match self {
             Self::Registry(dist) => dist.name(),
             Self::DirectUrl(dist) => dist.name(),
-            Self::Git(dist) => dist.name(),
+            Self::GitPath(dist) => dist.name(),
+            Self::GitDirectory(dist) => dist.name(),
             Self::Path(dist) => dist.name(),
             Self::Directory(dist) => dist.name(),
         }
@@ -850,6 +1016,7 @@ impl Name for BuiltDist {
             Self::Registry(dist) => dist.name(),
             Self::DirectUrl(dist) => dist.name(),
             Self::Path(dist) => dist.name(),
+            Self::GitPath(dist) => dist.name(),
         }
     }
 }
@@ -901,9 +1068,23 @@ impl DistributionMetadata for DirectUrlBuiltDist {
     fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         VersionOrUrlRef::Url(&self.url)
     }
+
+    fn version_id(&self) -> VersionId {
+        VersionId::from_archive(self.location.as_ref().clone(), None)
+    }
 }
 
 impl DistributionMetadata for PathBuiltDist {
+    fn version_or_url(&self) -> VersionOrUrlRef<'_> {
+        VersionOrUrlRef::Url(&self.url)
+    }
+
+    fn version_id(&self) -> VersionId {
+        VersionId::from_path(self.install_path.as_ref())
+    }
+}
+
+impl DistributionMetadata for GitPathBuiltDist {
     fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         VersionOrUrlRef::Url(&self.url)
     }
@@ -919,11 +1100,32 @@ impl DistributionMetadata for DirectUrlSourceDist {
     fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         VersionOrUrlRef::Url(&self.url)
     }
+
+    fn version_id(&self) -> VersionId {
+        VersionId::from_archive(
+            self.location.as_ref().clone(),
+            self.subdirectory.clone().map(Path::into_path_buf),
+        )
+    }
 }
 
-impl DistributionMetadata for GitSourceDist {
+impl DistributionMetadata for GitPathSourceDist {
     fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         VersionOrUrlRef::Url(&self.url)
+    }
+
+    fn version_id(&self) -> VersionId {
+        VersionId::from_git(self.git.as_ref(), Some(&self.install_path))
+    }
+}
+
+impl DistributionMetadata for GitDirectorySourceDist {
+    fn version_or_url(&self) -> VersionOrUrlRef<'_> {
+        VersionOrUrlRef::Url(&self.url)
+    }
+
+    fn version_id(&self) -> VersionId {
+        VersionId::from_git(self.git.as_ref(), self.subdirectory.as_deref())
     }
 }
 
@@ -931,11 +1133,19 @@ impl DistributionMetadata for PathSourceDist {
     fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         VersionOrUrlRef::Url(&self.url)
     }
+
+    fn version_id(&self) -> VersionId {
+        VersionId::from_path(self.install_path.as_ref())
+    }
 }
 
 impl DistributionMetadata for DirectorySourceDist {
     fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         VersionOrUrlRef::Url(&self.url)
+    }
+
+    fn version_id(&self) -> VersionId {
+        VersionId::from_directory(self.install_path.as_ref())
     }
 }
 
@@ -944,9 +1154,21 @@ impl DistributionMetadata for SourceDist {
         match self {
             Self::Registry(dist) => dist.version_or_url(),
             Self::DirectUrl(dist) => dist.version_or_url(),
-            Self::Git(dist) => dist.version_or_url(),
+            Self::GitPath(dist) => dist.version_or_url(),
+            Self::GitDirectory(dist) => dist.version_or_url(),
             Self::Path(dist) => dist.version_or_url(),
             Self::Directory(dist) => dist.version_or_url(),
+        }
+    }
+
+    fn version_id(&self) -> VersionId {
+        match self {
+            Self::Registry(dist) => dist.version_id(),
+            Self::DirectUrl(dist) => dist.version_id(),
+            Self::GitPath(dist) => dist.version_id(),
+            Self::GitDirectory(dist) => dist.version_id(),
+            Self::Path(dist) => dist.version_id(),
+            Self::Directory(dist) => dist.version_id(),
         }
     }
 }
@@ -957,6 +1179,16 @@ impl DistributionMetadata for BuiltDist {
             Self::Registry(dist) => dist.version_or_url(),
             Self::DirectUrl(dist) => dist.version_or_url(),
             Self::Path(dist) => dist.version_or_url(),
+            Self::GitPath(dist) => dist.version_or_url(),
+        }
+    }
+
+    fn version_id(&self) -> VersionId {
+        match self {
+            Self::Registry(dist) => dist.version_id(),
+            Self::DirectUrl(dist) => dist.version_id(),
+            Self::Path(dist) => dist.version_id(),
+            Self::GitPath(dist) => dist.version_id(),
         }
     }
 }
@@ -966,6 +1198,13 @@ impl DistributionMetadata for Dist {
         match self {
             Self::Built(dist) => dist.version_or_url(),
             Self::Source(dist) => dist.version_or_url(),
+        }
+    }
+
+    fn version_id(&self) -> VersionId {
+        match self {
+            Self::Built(dist) => dist.version_id(),
+            Self::Source(dist) => dist.version_id(),
         }
     }
 }
@@ -983,9 +1222,9 @@ impl RemoteSource for File {
 impl RemoteSource for Url {
     fn filename(&self) -> Result<Cow<'_, str>, Error> {
         // Identify the last segment of the URL as the filename.
-        let mut path_segments = self
-            .path_segments()
-            .ok_or_else(|| Error::MissingPathSegments(self.to_string()))?;
+        let mut path_segments = self.path_segments().ok_or_else(|| {
+            Error::MissingPathSegments(DisplaySafeUrl::ref_cast(self).to_string())
+        })?;
 
         // This is guaranteed by the contract of `Url::path_segments`.
         let last = path_segments
@@ -1005,6 +1244,13 @@ impl RemoteSource for Url {
 
 impl RemoteSource for UrlString {
     fn filename(&self) -> Result<Cow<'_, str>, Error> {
+        let url = self.as_ref();
+        if memchr3(b'?', b'#', b'%', url.as_bytes()).is_none()
+            && let Some((_, filename)) = url.rsplit_once('/')
+        {
+            return Ok(Cow::Borrowed(filename));
+        }
+
         // Take the last segment, stripping any query or fragment.
         let last = self
             .base_str()
@@ -1059,7 +1305,7 @@ impl RemoteSource for DirectUrlBuiltDist {
     }
 
     fn size(&self) -> Option<u64> {
-        self.url.size()
+        self.size
     }
 }
 
@@ -1069,28 +1315,40 @@ impl RemoteSource for DirectUrlSourceDist {
     }
 
     fn size(&self) -> Option<u64> {
+        self.size
+    }
+}
+
+impl RemoteSource for GitPathSourceDist {
+    fn filename(&self) -> Result<Cow<'_, str>, Error> {
+        // The filename is the last segment of the URL, before any `@`.
+        match self.url.filename()? {
+            Cow::Borrowed(filename) if let Some((_, suffix)) = filename.rsplit_once('@') => {
+                Ok(Cow::Borrowed(suffix))
+            }
+            Cow::Owned(ref filename) if let Some((_, suffix)) = filename.rsplit_once('@') => {
+                Ok(Cow::Owned(suffix.to_owned()))
+            }
+            filename => Ok(filename),
+        }
+    }
+
+    fn size(&self) -> Option<u64> {
         self.url.size()
     }
 }
 
-impl RemoteSource for GitSourceDist {
+impl RemoteSource for GitDirectorySourceDist {
     fn filename(&self) -> Result<Cow<'_, str>, Error> {
         // The filename is the last segment of the URL, before any `@`.
         match self.url.filename()? {
-            Cow::Borrowed(filename) => {
-                if let Some((_, filename)) = filename.rsplit_once('@') {
-                    Ok(Cow::Borrowed(filename))
-                } else {
-                    Ok(Cow::Borrowed(filename))
-                }
+            Cow::Borrowed(filename) if let Some((_, suffix)) = filename.rsplit_once('@') => {
+                Ok(Cow::Borrowed(suffix))
             }
-            Cow::Owned(filename) => {
-                if let Some((_, filename)) = filename.rsplit_once('@') {
-                    Ok(Cow::Owned(filename.to_owned()))
-                } else {
-                    Ok(Cow::Owned(filename))
-                }
+            Cow::Owned(ref filename) if let Some((_, suffix)) = filename.rsplit_once('@') => {
+                Ok(Cow::Owned(suffix.to_owned()))
             }
+            filename => Ok(filename),
         }
     }
 
@@ -1100,6 +1358,16 @@ impl RemoteSource for GitSourceDist {
 }
 
 impl RemoteSource for PathBuiltDist {
+    fn filename(&self) -> Result<Cow<'_, str>, Error> {
+        self.url.filename()
+    }
+
+    fn size(&self) -> Option<u64> {
+        self.url.size()
+    }
+}
+
+impl RemoteSource for GitPathBuiltDist {
     fn filename(&self) -> Result<Cow<'_, str>, Error> {
         self.url.filename()
     }
@@ -1134,7 +1402,8 @@ impl RemoteSource for SourceDist {
         match self {
             Self::Registry(dist) => dist.filename(),
             Self::DirectUrl(dist) => dist.filename(),
-            Self::Git(dist) => dist.filename(),
+            Self::GitPath(dist) => dist.filename(),
+            Self::GitDirectory(dist) => dist.filename(),
             Self::Path(dist) => dist.filename(),
             Self::Directory(dist) => dist.filename(),
         }
@@ -1144,7 +1413,8 @@ impl RemoteSource for SourceDist {
         match self {
             Self::Registry(dist) => dist.size(),
             Self::DirectUrl(dist) => dist.size(),
-            Self::Git(dist) => dist.size(),
+            Self::GitPath(dist) => dist.size(),
+            Self::GitDirectory(dist) => dist.size(),
             Self::Path(dist) => dist.size(),
             Self::Directory(dist) => dist.size(),
         }
@@ -1157,6 +1427,7 @@ impl RemoteSource for BuiltDist {
             Self::Registry(dist) => dist.filename(),
             Self::DirectUrl(dist) => dist.filename(),
             Self::Path(dist) => dist.filename(),
+            Self::GitPath(dist) => dist.filename(),
         }
     }
 
@@ -1165,6 +1436,7 @@ impl RemoteSource for BuiltDist {
             Self::Registry(dist) => dist.size(),
             Self::DirectUrl(dist) => dist.size(),
             Self::Path(dist) => dist.size(),
+            Self::GitPath(dist) => dist.size(),
         }
     }
 }
@@ -1187,11 +1459,11 @@ impl RemoteSource for Dist {
 
 impl Identifier for DisplaySafeUrl {
     fn distribution_id(&self) -> DistributionId {
-        DistributionId::Url(uv_cache_key::CanonicalUrl::new(self))
+        DistributionId::Url(uv_cache_key::CanonicalUrl::new(self.clone()))
     }
 
     fn resource_id(&self) -> ResourceId {
-        ResourceId::Url(uv_cache_key::RepositoryUrl::new(self))
+        ResourceId::Url(uv_cache_key::RepositoryUrl::new(self.clone()))
     }
 }
 
@@ -1303,6 +1575,16 @@ impl Identifier for PathBuiltDist {
     }
 }
 
+impl Identifier for GitPathBuiltDist {
+    fn distribution_id(&self) -> DistributionId {
+        self.url.distribution_id()
+    }
+
+    fn resource_id(&self) -> ResourceId {
+        self.url.resource_id()
+    }
+}
+
 impl Identifier for PathSourceDist {
     fn distribution_id(&self) -> DistributionId {
         self.url.distribution_id()
@@ -1323,7 +1605,17 @@ impl Identifier for DirectorySourceDist {
     }
 }
 
-impl Identifier for GitSourceDist {
+impl Identifier for GitPathSourceDist {
+    fn distribution_id(&self) -> DistributionId {
+        self.url.distribution_id()
+    }
+
+    fn resource_id(&self) -> ResourceId {
+        self.url.resource_id()
+    }
+}
+
+impl Identifier for GitDirectorySourceDist {
     fn distribution_id(&self) -> DistributionId {
         self.url.distribution_id()
     }
@@ -1338,7 +1630,8 @@ impl Identifier for SourceDist {
         match self {
             Self::Registry(dist) => dist.distribution_id(),
             Self::DirectUrl(dist) => dist.distribution_id(),
-            Self::Git(dist) => dist.distribution_id(),
+            Self::GitPath(dist) => dist.distribution_id(),
+            Self::GitDirectory(dist) => dist.distribution_id(),
             Self::Path(dist) => dist.distribution_id(),
             Self::Directory(dist) => dist.distribution_id(),
         }
@@ -1348,7 +1641,8 @@ impl Identifier for SourceDist {
         match self {
             Self::Registry(dist) => dist.resource_id(),
             Self::DirectUrl(dist) => dist.resource_id(),
-            Self::Git(dist) => dist.resource_id(),
+            Self::GitPath(dist) => dist.resource_id(),
+            Self::GitDirectory(dist) => dist.resource_id(),
             Self::Path(dist) => dist.resource_id(),
             Self::Directory(dist) => dist.resource_id(),
         }
@@ -1361,6 +1655,7 @@ impl Identifier for BuiltDist {
             Self::Registry(dist) => dist.distribution_id(),
             Self::DirectUrl(dist) => dist.distribution_id(),
             Self::Path(dist) => dist.distribution_id(),
+            Self::GitPath(dist) => dist.distribution_id(),
         }
     }
 
@@ -1369,6 +1664,7 @@ impl Identifier for BuiltDist {
             Self::Registry(dist) => dist.resource_id(),
             Self::DirectUrl(dist) => dist.resource_id(),
             Self::Path(dist) => dist.resource_id(),
+            Self::GitPath(dist) => dist.resource_id(),
         }
     }
 }
@@ -1409,7 +1705,17 @@ impl Identifier for DirectSourceUrl<'_> {
     }
 }
 
-impl Identifier for GitSourceUrl<'_> {
+impl Identifier for GitDirectorySourceUrl<'_> {
+    fn distribution_id(&self) -> DistributionId {
+        self.url.distribution_id()
+    }
+
+    fn resource_id(&self) -> ResourceId {
+        self.url.resource_id()
+    }
+}
+
+impl Identifier for GitPathSourceUrl<'_> {
     fn distribution_id(&self) -> DistributionId {
         self.url.distribution_id()
     }
@@ -1443,7 +1749,8 @@ impl Identifier for SourceUrl<'_> {
     fn distribution_id(&self) -> DistributionId {
         match self {
             Self::Direct(url) => url.distribution_id(),
-            Self::Git(url) => url.distribution_id(),
+            Self::GitDirectory(url) => url.distribution_id(),
+            Self::GitPath(url) => url.distribution_id(),
             Self::Path(url) => url.distribution_id(),
             Self::Directory(url) => url.distribution_id(),
         }
@@ -1452,7 +1759,8 @@ impl Identifier for SourceUrl<'_> {
     fn resource_id(&self) -> ResourceId {
         match self {
             Self::Direct(url) => url.resource_id(),
-            Self::Git(url) => url.resource_id(),
+            Self::GitDirectory(url) => url.resource_id(),
+            Self::GitPath(url) => url.resource_id(),
             Self::Path(url) => url.resource_id(),
             Self::Directory(url) => url.resource_id(),
         }
@@ -1496,16 +1804,69 @@ mod test {
     fn remote_source() {
         for url in [
             "https://example.com/foo-0.1.0.tar.gz",
+            "https://example.com/foo%2D0.1.0.tar.gz",
             "https://example.com/foo-0.1.0.tar.gz#fragment",
             "https://example.com/foo-0.1.0.tar.gz?query",
             "https://example.com/foo-0.1.0.tar.gz?query#fragment",
+            "https://example.com/foo-0.1.0.tar.gz#fragment?query",
+            "https://example.com/foo-0.1.0.tar.gz#fragment/3?query",
+            "https://example.com/foo%2D0.1.0.tar.gz#fragment/3?query",
             "https://example.com/foo-0.1.0.tar.gz?query=1/2#fragment",
             "https://example.com/foo-0.1.0.tar.gz?query=1/2#fragment/3",
+            "https://example.com/foo%2D0.1.0.tar.gz?query=1/2#fragment/3",
         ] {
             let url = DisplaySafeUrl::parse(url).unwrap();
             assert_eq!(url.filename().unwrap(), "foo-0.1.0.tar.gz", "{url}");
             let url = UrlString::from(url.clone());
             assert_eq!(url.filename().unwrap(), "foo-0.1.0.tar.gz", "{url}");
         }
+    }
+
+    #[test]
+    fn remote_source_redacts_missing_path_segments() {
+        for (input, expected) in [
+            (
+                "mailto:ferris@example.com?X-Amz-Signature=sentinel",
+                "mailto:ferris@example.com?X-Amz-Signature=****",
+            ),
+            (
+                "ssh://user:secret@example.com?sig=sentinel",
+                "ssh://user:****@example.com?sig=****",
+            ),
+            (
+                "mailto:ferris@example.com?sig=one&X-Amz-Credential=two&X-Amz-Security-Token=three&X-Amz-Signature=four&token=kept#fragment",
+                "mailto:ferris@example.com?sig=****&X-Amz-Credential=****&X-Amz-Security-Token=****&X-Amz-Signature=****&token=kept#fragment",
+            ),
+            (
+                "mailto:ferris@example.com?x-amz%2dsignature=sentinel&safe=value",
+                "mailto:ferris@example.com?x-amz-signature=****&safe=value",
+            ),
+            (
+                "mailto:ferris@example.com?token=kept#fragment",
+                "mailto:ferris@example.com?token=kept#fragment",
+            ),
+        ] {
+            let url = url::Url::parse(input).unwrap();
+            let error = RemoteSource::filename(&url).unwrap_err();
+            let crate::Error::MissingPathSegments(payload) = &error else {
+                panic!("expected missing path segments");
+            };
+            assert_eq!(payload, expected);
+            assert_eq!(
+                error.to_string(),
+                format!("Could not extract path segments from URL: {expected}")
+            );
+            assert_eq!(
+                format!("{error:?}"),
+                format!("MissingPathSegments({expected:?})")
+            );
+            assert!(std::error::Error::source(&error).is_none());
+            assert_eq!(url.as_str(), input);
+        }
+
+        let input = "https://example.org/demo%20name.whl?sig=sentinel";
+        let url = url::Url::parse(input).unwrap();
+        assert_eq!(RemoteSource::filename(&url).unwrap(), "demo name.whl");
+        assert_eq!(url.as_str(), input);
     }
 }

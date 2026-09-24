@@ -1,0 +1,440 @@
+use anyhow::Result;
+use assert_cmd::assert::OutputAssertExt;
+use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
+
+use uv_static::EnvVars;
+use uv_test::{copy_dir_ignore, uv_snapshot};
+
+/// The workspace discovered while resolving settings is reused when the resolved cache root is
+/// unchanged, but not when constructing the resolved cache creates a new root.
+#[test]
+fn workspace_list_reuses_settings_discovery() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str("[tool.uv.workspace]\nmembers = [\"packages/*\"]\n")?;
+    let member = context.temp_dir.child("packages/member");
+    member.create_dir_all()?;
+    member
+        .child("pyproject.toml")
+        .write_str("[project]\nname = \"member\"\nversion = \"0.1.0\"\n")?;
+
+    uv_snapshot!(context.filters(), context.workspace_list()
+        .env(EnvVars::RUST_LOG, "uv_workspace=trace"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    member
+
+    ----- stderr -----
+    DEBUG Found workspace root: `[TEMP_DIR]/`
+    TRACE Discovering workspace members for: `[TEMP_DIR]/`
+    TRACE Processing workspace member: `packages/member`
+    DEBUG Adding discovered workspace member: `[TEMP_DIR]/packages/member`
+    ");
+
+    uv_snapshot!(context.filters(), context.workspace_list()
+        .arg("--no-cache")
+        .env(EnvVars::RUST_LOG, "uv_workspace=trace"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    member
+
+    ----- stderr -----
+    DEBUG Found workspace root: `[TEMP_DIR]/`
+    TRACE Discovering workspace members for: `[TEMP_DIR]/`
+    TRACE Processing workspace member: `packages/member`
+    DEBUG Adding discovered workspace member: `[TEMP_DIR]/packages/member`
+    DEBUG Found workspace root: `[TEMP_DIR]/`
+    TRACE Discovering workspace members for: `[TEMP_DIR]/`
+    TRACE Processing workspace member: `packages/member`
+    DEBUG Adding discovered workspace member: `[TEMP_DIR]/packages/member`
+    ");
+
+    Ok(())
+}
+
+/// Test basic list output for a simple workspace with one member.
+#[test]
+fn workspace_list_simple() {
+    let context = uv_test::test_context!("3.12");
+
+    // Initialize a workspace with one member
+    context.init().arg("foo").assert().success();
+
+    let workspace = context.temp_dir.child("foo");
+
+    uv_snapshot!(context.filters(), context.workspace_list().current_dir(&workspace), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    foo
+    "
+    );
+
+    uv_snapshot!(context.filters(), context.workspace_list().arg("--paths").current_dir(&workspace), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/foo
+    "
+    );
+}
+
+/// Test list output for a root workspace (workspace with a root package).
+#[test]
+fn workspace_list_root_workspace() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let workspace = context.temp_dir.child("workspace");
+
+    copy_dir_ignore(
+        context
+            .workspace_root
+            .join("test/workspaces/albatross-root-workspace"),
+        &workspace,
+    )?;
+
+    uv_snapshot!(context.filters(), context.workspace_list().current_dir(&workspace), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    albatross
+    bird-feeder
+    seeds
+    "
+    );
+
+    Ok(())
+}
+
+/// Test list output for a virtual workspace (no root package).
+#[test]
+fn workspace_list_virtual_workspace() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let workspace = context.temp_dir.child("workspace");
+
+    copy_dir_ignore(
+        context
+            .workspace_root
+            .join("test/workspaces/albatross-virtual-workspace"),
+        &workspace,
+    )?;
+
+    uv_snapshot!(context.filters(), context.workspace_list().current_dir(&workspace), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    albatross
+    bird-feeder
+    seeds
+    "
+    );
+
+    Ok(())
+}
+
+/// Test list output when run from a workspace member directory.
+#[test]
+fn workspace_list_from_member() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let workspace = context.temp_dir.child("workspace");
+
+    copy_dir_ignore(
+        context
+            .workspace_root
+            .join("test/workspaces/albatross-root-workspace"),
+        &workspace,
+    )?;
+
+    let member_dir = workspace.join("packages").join("bird-feeder");
+
+    uv_snapshot!(context.filters(), context.workspace_list().current_dir(&member_dir), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    albatross
+    bird-feeder
+    seeds
+    "
+    );
+
+    Ok(())
+}
+
+/// Test list output for a workspace with multiple packages.
+#[test]
+fn workspace_list_multiple_members() {
+    let context = uv_test::test_context!("3.12");
+
+    // Initialize workspace root
+    context.init().arg("pkg-a").assert().success();
+
+    let workspace_root = context.temp_dir.child("pkg-a");
+
+    // Add more members
+    context
+        .init()
+        .arg("pkg-b")
+        .current_dir(&workspace_root)
+        .assert()
+        .success();
+
+    context
+        .init()
+        .arg("pkg-c")
+        .current_dir(&workspace_root)
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.workspace_list().current_dir(&workspace_root), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    pkg-a
+    pkg-b
+    pkg-c
+    "
+    );
+
+    uv_snapshot!(context.filters(), context.workspace_list().arg("--paths").current_dir(&workspace_root), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/pkg-a
+    [TEMP_DIR]/pkg-a/pkg-b
+    [TEMP_DIR]/pkg-a/pkg-c
+    "
+    );
+}
+
+/// Test list output for a single project (not a workspace).
+#[test]
+fn workspace_list_single_project() {
+    let context = uv_test::test_context!("3.12");
+
+    context.init().arg("my-project").assert().success();
+
+    let project = context.temp_dir.child("my-project");
+
+    uv_snapshot!(context.filters(), context.workspace_list().current_dir(&project), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    my-project
+    "
+    );
+}
+
+/// Test list output with excluded packages.
+#[test]
+fn workspace_list_with_excluded() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let workspace = context.temp_dir.child("workspace");
+
+    copy_dir_ignore(
+        context
+            .workspace_root
+            .join("test/workspaces/albatross-project-in-excluded"),
+        &workspace,
+    )?;
+
+    uv_snapshot!(context.filters(), context.workspace_list().current_dir(&workspace), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    albatross
+    "
+    );
+
+    Ok(())
+}
+
+/// Test list error output when not in a project.
+#[test]
+fn workspace_list_no_project() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.workspace_list(), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: No `pyproject.toml` found in current directory or any parent directory
+    "
+    );
+}
+
+/// Test recursively listing PEP 723 scripts while respecting ignore rules and environment
+/// boundaries.
+#[test]
+fn workspace_list_scripts() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.init().arg("project").assert().success();
+    let project = context.temp_dir.child("project");
+
+    let script = r"# /// script
+# dependencies = []
+# ///
+";
+
+    project.child("script.py").write_str(script)?;
+    project.child("scripts/nested.py").write_str(script)?;
+    project.child(".github/hidden.py").write_str(script)?;
+
+    project
+        .child("tool")
+        .write_str(&format!("#!/usr/bin/env python\n{script}"))?;
+
+    // Extensionless files without a shebang aren't scanned, even if they're ASCII.
+    project.child("no-shebang").write_str(script)?;
+
+    // PEP 723 examples in documentation are not Python scripts.
+    project
+        .child("docs/example.md")
+        .write_str(&format!("# Example\n\n{script}\n{script}"))?;
+
+    // Regular Python modules are not scripts.
+    project
+        .child("src/project/module.py")
+        .write_str("VALUE = 1\n")?;
+
+    project.child(".gitignore").write_str("ignored/\n")?;
+    project.child("ignored/script.py").write_str(script)?;
+    project
+        .child(".ignore")
+        .write_str("ignored-by-dot-ignore.py\n")?;
+    project
+        .child("ignored-by-dot-ignore.py")
+        .write_str(script)?;
+
+    project.child(".git/script.py").write_str(script)?;
+    project.child(".venv/script.py").write_str(script)?;
+    project.child("environment/pyvenv.cfg").write_str("")?;
+    project.child("environment/script.py").write_str(script)?;
+
+    uv_snapshot!(context.filters(), context.workspace_list()
+        .arg("--scripts")
+        .current_dir(&project), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    .github/hidden.py
+    script.py
+    scripts/nested.py
+    tool
+
+    ----- stderr -----
+    warning: The `--scripts` option is experimental and may change without warning. Pass `--preview-features workspace-list-scripts` to disable this warning.
+    ");
+
+    uv_snapshot!(context.filters(), context.workspace_list()
+        .arg("--scripts")
+        .arg("--preview-features")
+        .arg("workspace-list-scripts")
+        .current_dir(&project), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    .github/hidden.py
+    script.py
+    scripts/nested.py
+    tool
+    ");
+
+    uv_snapshot!(context.filters(), context.workspace_list()
+        .arg("--scripts")
+        .arg("--paths")
+        .current_dir(&project), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    .github/hidden.py
+    script.py
+    scripts/nested.py
+    tool
+
+    ----- stderr -----
+    warning: The `--scripts` option is experimental and may change without warning. Pass `--preview-features workspace-list-scripts` to disable this warning.
+    ");
+
+    // The configured cache is excluded even when it has not been initialized with ignore files.
+    let cache = project.child("cache");
+    cache.child("script.py").write_str(script)?;
+    let context = context.with_cache_dir(cache.path());
+    uv_snapshot!(context.filters(), context.workspace_list()
+        .arg("--scripts")
+        .current_dir(&project), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    .github/hidden.py
+    script.py
+    scripts/nested.py
+    tool
+
+    ----- stderr -----
+    warning: The `--scripts` option is experimental and may change without warning. Pass `--preview-features workspace-list-scripts` to disable this warning.
+    ");
+
+    Ok(())
+}
+
+/// Script discovery should warn about invalid metadata and continue listing valid scripts.
+#[test]
+fn workspace_list_scripts_invalid_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc::indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+        "#})?;
+    context
+        .temp_dir
+        .child("scripts/valid-script.py")
+        .write_str(indoc::indoc! {r"
+            # /// script
+            # dependencies = []
+            # ///
+        "})?;
+    context
+        .temp_dir
+        .child("fixtures/invalid-script.py")
+        .write_str(indoc::indoc! {r"
+            # /// script
+            # dependencies = []
+            # ///
+
+            # /// script
+            # dependencies = []
+            # ///
+        "})?;
+
+    uv_snapshot!(context.filters(), context.workspace_list().arg("--scripts"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    scripts/valid-script.py
+
+    ----- stderr -----
+    warning: The `--scripts` option is experimental and may change without warning. Pass `--preview-features workspace-list-scripts` to disable this warning.
+    warning: Skipping invalid PEP 723 script `[TEMP_DIR]/fixtures/invalid-script.py`: The script contains multiple PEP 723 metadata blocks
+    ");
+
+    // Invalid TOML should also be skipped, including when the preview feature is enabled.
+    context
+        .temp_dir
+        .child("fixtures/invalid-script.py")
+        .write_str(indoc::indoc! {r"
+            # /// script
+            # dependencies = [
+            # ///
+        "})?;
+
+    uv_snapshot!(context.filters(), context.workspace_list()
+        .arg("--scripts")
+        .arg("--preview-features")
+        .arg("workspace-list-scripts"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    scripts/valid-script.py
+
+    ----- stderr -----
+    warning: Skipping invalid PEP 723 script `[TEMP_DIR]/fixtures/invalid-script.py`: TOML parse error at line 1, column 17
+      |
+    1 | dependencies = [
+      |                 ^
+    unclosed array, expected `]`
+    ");
+
+    Ok(())
+}

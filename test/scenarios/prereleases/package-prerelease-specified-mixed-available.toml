@@ -1,0 +1,20 @@
+name = "package-prerelease-specified-mixed-available"
+description = "An explicit pre-release specifier matches both pre-release and stable versions."
+
+[root]
+requires = ["a>=0.1.0a1"]
+
+[expected]
+satisfiable = true
+explanation = "Stable versions are preferred even when the user provides a pre-release specifier."
+
+[expected.packages]
+a = "0.3.0"
+
+[packages.a.versions."0.1.0"]
+
+[packages.a.versions."0.2.0a1"]
+
+[packages.a.versions."0.3.0"]
+
+[packages.a.versions."1.0.0a1"]

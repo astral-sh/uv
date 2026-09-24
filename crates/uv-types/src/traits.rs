@@ -12,14 +12,44 @@ use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
     CachedDist, ConfigSettings, DependencyMetadata, DistributionId, ExtraBuildRequires,
     ExtraBuildVariables, IndexCapabilities, IndexLocations, InstalledDist, IsBuildBackendError,
-    PackageConfigSettings, Requirement, Resolution, SourceDist,
+    PackageConfigSettings, Requirement, SourceDist,
 };
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_workspace::WorkspaceCache;
 
-use crate::{BuildArena, BuildIsolation};
+use crate::{BuildArena, BuildIsolation, ResolvedRequirements};
+
+/// Controls how source tree requirements influence workspace-member editability during lowering.
+#[derive(Debug, Clone, Copy, Default, Eq, PartialEq)]
+pub enum SourceTreeEditablePolicy {
+    /// Use project-style semantics when lowering workspace members.
+    ///
+    /// Explicit source-tree editable settings are ignored, preserving the existing implicit
+    /// editable default for workspace members.
+    #[default]
+    Project,
+
+    /// Use tool-style semantics when lowering workspace members.
+    ///
+    /// Explicit source-tree editable settings are preserved, while implicit workspace members
+    /// default to non-editable.
+    Tool,
+}
+
+impl SourceTreeEditablePolicy {
+    /// Return the default editable mode for workspace members lowered under this policy.
+    ///
+    /// `explicit` is the explicit editable choice on the source tree being lowered, if any. In
+    /// `Tool` mode it propagates to workspace siblings; in `Project` mode it is ignored.
+    pub fn workspace_member_editable(self, explicit: Option<bool>) -> bool {
+        match self {
+            Self::Project => true,
+            Self::Tool => explicit.unwrap_or(false),
+        }
+    }
+}
 
 ///  Avoids cyclic crate dependencies between resolver, installer and builder.
 ///
@@ -81,9 +111,8 @@ pub trait BuildContext {
     /// Return a reference to any pre-defined static metadata.
     fn dependency_metadata(&self) -> &DependencyMetadata;
 
-    /// Whether source distribution building or pre-built wheels is disabled.
+    /// Whether building source distributions or installing pre-built wheels is disabled.
     ///
-    /// This [`BuildContext::setup_build`] calls will fail if builds are disabled.
     /// This method exists to avoid fetching source distributions if we know we can't build them.
     fn build_options(&self) -> &BuildOptions;
 
@@ -98,6 +127,11 @@ pub trait BuildContext {
 
     /// Whether to incorporate `tool.uv.sources` when resolving requirements.
     fn sources(&self) -> &NoSources;
+
+    /// How source tree requirements should influence workspace-member editability.
+    fn source_tree_editable_policy(&self) -> SourceTreeEditablePolicy {
+        SourceTreeEditablePolicy::Project
+    }
 
     /// The index locations being searched.
     fn locations(&self) -> &IndexLocations;
@@ -116,13 +150,13 @@ pub trait BuildContext {
         &'a self,
         requirements: &'a [Requirement],
         build_stack: &'a BuildStack,
-    ) -> impl Future<Output = Result<Resolution, impl IsBuildBackendError>> + 'a;
+    ) -> impl Future<Output = Result<ResolvedRequirements, impl IsBuildBackendError>> + 'a;
 
     /// Install the given set of package versions into the virtual environment. The environment must
     /// use the same base Python as [`BuildContext::interpreter`]
     fn install<'a>(
         &'a self,
-        resolution: &'a Resolution,
+        requirements: &'a ResolvedRequirements,
         venv: &'a PythonEnvironment,
         build_stack: &'a BuildStack,
     ) -> impl Future<Output = Result<Vec<CachedDist>, impl IsBuildBackendError>> + 'a;
@@ -132,6 +166,9 @@ pub trait BuildContext {
     ///
     /// For PEP 517 builds, this calls `get_requires_for_build_wheel`.
     ///
+    /// Callers are responsible for enforcing [`BuildOptions`] for the source distribution itself.
+    /// Build dependencies are still resolved and installed using [`Self::build_options`].
+    ///
     /// `version_id` is for error reporting only.
     /// `dist` is for safety checks and may be null for editable builds.
     fn setup_build<'a>(
@@ -139,6 +176,7 @@ pub trait BuildContext {
         source: &'a Path,
         subdirectory: Option<&'a Path>,
         install_path: &'a Path,
+        stop_discovery_at: Option<&'a Path>,
         version_id: Option<&'a str>,
         dist: Option<&'a SourceDist>,
         sources: &'a NoSources,
@@ -190,10 +228,21 @@ pub trait SourceBuildTrait {
     ) -> impl Future<Output = Result<String, AnyErrorBuild>> + 'a;
 }
 
-/// A wrapper for [`uv_installer::SitePackages`]
+/// Provides access to installed distributions during resolution.
 pub trait InstalledPackagesProvider: Clone + Send + Sync + 'static {
     fn iter(&self) -> impl Iterator<Item = &InstalledDist>;
     fn get_packages(&self, name: &PackageName) -> Vec<&InstalledDist>;
+}
+
+impl<Provider: InstalledPackagesProvider> InstalledPackagesProvider for Option<Provider> {
+    fn iter(&self) -> impl Iterator<Item = &InstalledDist> {
+        self.as_ref().into_iter().flat_map(Provider::iter)
+    }
+
+    fn get_packages(&self, name: &PackageName) -> Vec<&InstalledDist> {
+        self.as_ref()
+            .map_or_else(Vec::new, |provider| provider.get_packages(name))
+    }
 }
 
 /// An [`InstalledPackagesProvider`] with no packages in it.
@@ -218,10 +267,10 @@ impl InstalledPackagesProvider for EmptyInstalledPackages {
 /// Resolution and installation may need to build packages, while the build frontend needs to
 /// resolve and install for the PEP 517 build environment.
 ///
-/// Usually, [`anyhow::Error`] is opaque error type of choice. In this case though, we error type
-/// that we can inspect on whether it's a build backend error with [`IsBuildBackendError`], and
+/// Usually, [`anyhow::Error`] is the opaque error type of choice. Here, the error type must also
+/// classify user failures and build backend failures through [`IsBuildBackendError`], and
 /// [`anyhow::Error`] does not allow attaching more traits. The next choice would be
-/// `Box<dyn std::error::Error + IsBuildFrontendError + Send + Sync + 'static>`, but [`thiserror`]
+/// `Box<dyn IsBuildBackendError>`, but [`thiserror`]
 /// complains about the internal `AsDynError` not being implemented when being used as `#[source]`.
 /// This struct is an otherwise transparent error wrapper that thiserror recognizes.
 pub struct AnyErrorBuild(Box<dyn IsBuildBackendError>);
@@ -254,6 +303,12 @@ impl std::error::Error for AnyErrorBuild {
     }
 }
 
+impl uv_errors::Hinted for AnyErrorBuild {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        self.0.hints()
+    }
+}
+
 impl<T: IsBuildBackendError> From<T> for AnyErrorBuild {
     fn from(err: T) -> Self {
         Self(Box::new(err))
@@ -273,11 +328,6 @@ impl Deref for AnyErrorBuild {
 pub struct BuildStack(FxHashSet<DistributionId>);
 
 impl BuildStack {
-    /// Return an empty stack.
-    pub fn empty() -> Self {
-        Self(FxHashSet::default())
-    }
-
     pub fn contains(&self, id: &DistributionId) -> bool {
         self.0.contains(id)
     }

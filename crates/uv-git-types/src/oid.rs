@@ -1,4 +1,4 @@
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::str::{self, FromStr};
 
 use thiserror::Error;
@@ -10,7 +10,7 @@ use thiserror::Error;
 ///
 /// If Git's SHA-256 support becomes more widespread in the future (in particular if GitHub ever
 /// adds support), we might need to make this an enum.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct GitOid {
     bytes: [u8; 40],
 }
@@ -29,6 +29,12 @@ impl GitOid {
     /// Return a (very) truncated representation, i.e., the first 8 characters of the SHA.
     pub fn as_tiny_str(&self) -> &str {
         &self.as_str()[..8]
+    }
+}
+
+impl Debug for GitOid {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "GitOid(\"{}\")", self.as_str())
     }
 }
 

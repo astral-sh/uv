@@ -26,10 +26,16 @@ pub(crate) async fn validate_zip(
     let client = RegistryClientBuilder::new(
         BaseClientBuilder::default()
             .read_timeout(environment.http_read_timeout)
-            .connect_timeout(environment.http_connect_timeout),
+            .connect_timeout(environment.http_connect_timeout)
+            .metadata_range_request(
+                environment
+                    .require_metadata_range_requests
+                    .unwrap_or_default()
+                    .into(),
+            ),
         cache,
     )
-    .build();
+    .build()?;
 
     let ParsedUrl::Archive(archive) = ParsedUrl::try_from(args.url.to_url())? else {
         bail!("Only archive URLs are supported");
@@ -47,7 +53,7 @@ pub(crate) async fn validate_zip(
 
     let target = tempfile::TempDir::new()?;
 
-    uv_extract::stream::unzip(args.url.to_url(), reader.compat(), target.path()).await?;
+    uv_extract::stream::unzip(reader.compat(), target).await?;
 
     Ok(())
 }

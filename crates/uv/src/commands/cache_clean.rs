@@ -4,9 +4,10 @@ use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use uv_cache::{Cache, Removal};
+use uv_cache::{Cache, RemovalAccounting};
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
+use uv_preview::{Preview, PreviewFeature};
 
 use crate::commands::reporters::{CleaningDirectoryReporter, CleaningPackageReporter};
 use crate::commands::{ExitStatus, human_readable_bytes};
@@ -18,6 +19,7 @@ pub(crate) async fn cache_clean(
     force: bool,
     cache: Cache,
     printer: Printer,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     if !cache.root().exists() {
         writeln!(
@@ -43,6 +45,13 @@ pub(crate) async fn cache_clean(
         }
     };
 
+    let removal_accounting = if preview.is_enabled(PreviewFeature::CachePhysicalSpace) {
+        RemovalAccounting::Fine
+    } else {
+        RemovalAccounting::Coarse
+    };
+    let cache = cache.with_removal_accounting(removal_accounting);
+
     let summary = if packages.is_empty() {
         writeln!(
             printer.stderr(),
@@ -59,13 +68,14 @@ pub(crate) async fn cache_clean(
             .with_context(|| format!("Failed to clear cache at: {}", root.user_display()))?
     } else {
         let reporter = CleaningPackageReporter::new(printer, Some(packages.len()));
-        let mut summary = Removal::default();
+        let mut summary = cache.removal();
 
         for package in packages {
             let removed = cache.remove(package)?;
             summary += removed;
             reporter.on_clean(package.as_str(), &summary);
         }
+        summary += cache.prune_archive_files()?;
         reporter.on_complete();
 
         summary
@@ -90,15 +100,15 @@ pub(crate) async fn cache_clean(
         }
     }
 
-    // If any, write a summary of the total byte count removed.
-    if summary.total_bytes > 0 {
-        let bytes = if summary.total_bytes < 1024 {
-            format!("{}B", summary.total_bytes)
+    // Prefer the fine-grained estimate, falling back to coarse accounting.
+    let reported_bytes = summary.fine_bytes.unwrap_or(summary.coarse_bytes);
+    if summary.num_files > 0 || summary.num_dirs > 0 {
+        let bytes = human_readable_bytes(reported_bytes);
+        if summary.fine_bytes_incomplete {
+            write!(printer.stderr(), " (at least {:.1})", bytes.green())?;
         } else {
-            let (bytes, unit) = human_readable_bytes(summary.total_bytes);
-            format!("{bytes:.1}{unit}")
-        };
-        write!(printer.stderr(), " ({})", bytes.green())?;
+            write!(printer.stderr(), " ({:.1})", bytes.green())?;
+        }
     }
 
     writeln!(printer.stderr())?;

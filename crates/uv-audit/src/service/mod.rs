@@ -1,6 +1,9 @@
 //! Vulnerability services.
 
+pub use project_status::ProjectStatusAudit;
+
 pub mod osv;
+mod project_status;
 
 /// The shape of the vulnerability service.
 #[derive(Copy, Clone, Debug)]

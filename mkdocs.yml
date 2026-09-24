@@ -59,6 +59,9 @@ markdown_extensions:
       custom_checkbox: true
   - pymdownx.highlight:
       anchor_linenums: true
+      extend_pygments_lang:
+        - name: requirements
+          lang: python
   - pymdownx.tabbed:
       alternate_style: true
 plugins:
@@ -118,6 +121,7 @@ plugins:
           - guides/integration/pre-commit.md
           - guides/integration/pytorch.md
           - guides/integration/fastapi.md
+          - guides/integration/bazel.md
           - guides/integration/azure.md
           - guides/integration/google.md
           - guides/integration/aws.md
@@ -159,6 +163,7 @@ plugins:
           - reference/storage.md
           - reference/environment.md
           - reference/installer.md
+          - reference/contributing.md
 extra_css:
   - stylesheets/extra.css
 extra_javascript:
@@ -203,6 +208,7 @@ nav:
           - Pre-commit: guides/integration/pre-commit.md
           - PyTorch: guides/integration/pytorch.md
           - FastAPI: guides/integration/fastapi.md
+          - Bazel: guides/integration/bazel.md
           - Azure Artifacts: guides/integration/azure.md
           - Google Artifact Registry: guides/integration/google.md
           - AWS CodeArtifact: guides/integration/aws.md
@@ -260,6 +266,7 @@ nav:
           - reference/troubleshooting/index.md
           - Build failures: reference/troubleshooting/build-failures.md
           - Reproducible examples: reference/troubleshooting/reproducible-examples.md
+      - Contributing: reference/contributing.md
       - Internals:
           - reference/internals/index.md
           - Resolver: reference/internals/resolver.md

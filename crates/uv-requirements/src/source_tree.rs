@@ -10,7 +10,8 @@ use uv_configuration::ExtrasSpecification;
 use uv_distribution::{DistributionDatabase, FlatRequiresDist, Reporter, RequiresDist};
 use uv_distribution_types::Requirement;
 use uv_distribution_types::{
-    BuildableSource, DirectorySourceUrl, HashGeneration, HashPolicy, Identifier, SourceUrl,
+    BuildableSource, DirectorySourceUrl, HashCollection, HashValidation, Identifier,
+    MetadataHashPolicy, SourceUrl,
 };
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
@@ -18,7 +19,7 @@ use uv_pep508::RequirementOrigin;
 use uv_pypi_types::PyProjectToml;
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{InMemoryIndex, MetadataResponse};
-use uv_types::{BuildContext, HashStrategy};
+use uv_types::{BuildContext, HashStrategy, HashVerification};
 
 #[derive(Debug, Clone)]
 pub enum SourceTree {
@@ -29,7 +30,7 @@ pub enum SourceTree {
 
 impl SourceTree {
     /// Return the [`Path`] to the file representing the source tree (e.g., the `pyproject.toml`).
-    pub fn path(&self) -> &Path {
+    fn path(&self) -> &Path {
         match self {
             Self::PyProjectToml(path, ..) => path,
             Self::SetupPy(path) => path,
@@ -38,7 +39,7 @@ impl SourceTree {
     }
 
     /// Return the [`PyProjectToml`] if this is a `pyproject.toml`-based source tree.
-    pub fn pyproject_toml(&self) -> Option<&PyProjectToml> {
+    fn pyproject_toml(&self) -> Option<&PyProjectToml> {
         match self {
             Self::PyProjectToml(.., toml) => Some(toml),
             _ => None,
@@ -49,11 +50,28 @@ impl SourceTree {
 #[derive(Debug, Clone)]
 pub struct SourceTreeResolution {
     /// The requirements sourced from the source trees.
-    pub requirements: Box<[Requirement]>,
+    requirements: Box<[Requirement]>,
     /// The names of the projects that were resolved.
-    pub project: PackageName,
+    project: PackageName,
     /// The extras used when resolving the requirements.
-    pub extras: Box<[ExtraName]>,
+    extras: Box<[ExtraName]>,
+}
+
+impl SourceTreeResolution {
+    /// Return the name of the project that was resolved.
+    pub fn project(&self) -> &PackageName {
+        &self.project
+    }
+
+    /// Return the extras used when resolving the requirements.
+    pub fn extras(&self) -> &[ExtraName] {
+        &self.extras
+    }
+
+    /// Return the requirements sourced from the source tree.
+    pub fn into_requirements(self) -> Box<[Requirement]> {
+        self.requirements
+    }
 }
 
 /// A resolver for requirements specified via source trees.
@@ -188,22 +206,33 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
 
         // Determine the hash policy. Since we don't have a package name, we perform a
         // manual match.
-        let hashes = match self.hasher {
-            HashStrategy::None => HashPolicy::None,
-            HashStrategy::Generate(mode) => HashPolicy::Generate(*mode),
-            HashStrategy::Verify(_) => HashPolicy::Generate(HashGeneration::All),
-            HashStrategy::Require(_) => {
+        let collection = match self.hasher.verification() {
+            HashVerification::Required(_) => {
                 return Err(anyhow::anyhow!(
                     "Hash-checking is not supported for local directories: {}",
                     path.user_display()
                 ));
             }
+            HashVerification::IfPresent(_) => match self.hasher.collection() {
+                HashCollection::None => HashCollection::All,
+                collection @ (HashCollection::Url | HashCollection::All) => collection,
+            },
+            HashVerification::None => self.hasher.collection(),
+        };
+        let hashes = MetadataHashPolicy {
+            collection,
+            validation: HashValidation::None,
         };
 
         // Fetch the metadata for the distribution.
         let metadata = {
             let id = source.distribution_id();
-            if self.index.distributions().register(id.clone()) {
+            if let Some(response) = self.index.distributions().register_or_wait(&id).await {
+                let MetadataResponse::Found(archive) = &*response else {
+                    panic!("Failed to find metadata for: {}", path.user_display());
+                };
+                archive.metadata.clone()
+            } else {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
                 let source = BuildableSource::Url(source);
                 let archive = self.database.build_wheel_metadata(&source, hashes).await?;
@@ -216,20 +245,10 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
                     .done(id, Arc::new(MetadataResponse::Found(archive)));
 
                 metadata
-            } else {
-                let response = self
-                    .index
-                    .distributions()
-                    .wait(&id)
-                    .await
-                    .expect("missing value for registered task");
-                let MetadataResponse::Found(archive) = &*response else {
-                    panic!("Failed to find metadata for: {}", path.user_display());
-                };
-                archive.metadata.clone()
             }
         };
 
-        Ok(RequiresDist::from(metadata))
+        // This source tree was requested as an input, so preserve its authored path spelling.
+        Ok(RequiresDist::from(metadata.with_force_relative(false)))
     }
 }

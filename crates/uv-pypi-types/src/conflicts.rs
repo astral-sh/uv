@@ -1,10 +1,12 @@
+use indexmap::IndexSet;
 use petgraph::{
     algo::toposort,
     graph::{DiGraph, NodeIndex},
 };
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 #[cfg(feature = "schemars")]
 use std::borrow::Cow;
+use std::fmt;
 use std::{collections::BTreeSet, hash::Hash, rc::Rc};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 
@@ -86,6 +88,22 @@ impl Conflicts {
         package: &PackageName,
         groups: &DependencyGroups,
     ) {
+        // Nothing to infer without a conflicting group and at least one
+        // group include.
+        if !self.0.iter().any(|set| {
+            set.iter()
+                .any(|item| matches!(item.kind(), ConflictKind::Group(_)))
+        }) {
+            return;
+        }
+        if !groups.iter().any(|(_, specifiers)| {
+            specifiers
+                .iter()
+                .any(|specifier| matches!(specifier, DependencyGroupSpecifier::IncludeGroup { .. }))
+        }) {
+            return;
+        }
+
         let mut graph = DiGraph::new();
         let mut group_node_idxs: FxHashMap<&GroupName, NodeIndex> = FxHashMap::default();
         let mut node_conflict_items: FxHashMap<NodeIndex, Rc<ConflictItem>> = FxHashMap::default();
@@ -96,7 +114,7 @@ impl Conflicts {
             FxHashMap::default();
 
         // Track all existing conflict sets to avoid duplicates.
-        let mut conflict_sets: FxHashSet<ConflictSet> = FxHashSet::default();
+        let mut conflict_sets: IndexSet<ConflictSet, FxBuildHasher> = IndexSet::default();
 
         // Add groups in directly defined conflict sets to the graph.
         let mut seen: FxHashSet<&GroupName> = FxHashSet::default();
@@ -119,6 +137,7 @@ impl Conflicts {
                 node_conflict_items.insert(node_id, item.clone());
             }
         }
+        let seeded = conflict_sets.len();
 
         // Create conflict items for remaining groups and add them to the graph.
         for group in groups.keys() {
@@ -139,10 +158,10 @@ impl Conflicts {
         for (group, specifiers) in groups {
             if let Some(includer) = group_node_idxs.get(group) {
                 for specifier in specifiers {
-                    if let DependencyGroupSpecifier::IncludeGroup { include_group } = specifier {
-                        if let Some(included) = group_node_idxs.get(include_group) {
-                            graph.add_edge(*included, *includer, ());
-                        }
+                    if let DependencyGroupSpecifier::IncludeGroup { include_group } = specifier
+                        && let Some(included) = group_node_idxs.get(include_group)
+                    {
+                        graph.add_edge(*included, *includer, ());
                     }
                 }
             }
@@ -153,7 +172,8 @@ impl Conflicts {
         };
         // Propagate canonical items through the graph and populate substitutions.
         for node in topo_nodes {
-            for neighbor_idx in graph.neighbors(node).collect::<Vec<_>>() {
+            let mut neighbors = graph.neighbors(node).detach();
+            while let Some(neighbor_idx) = neighbors.next_node(&graph) {
                 let mut neighbor_canonical_items = Vec::new();
                 if let Some(canonical_items) = graph.node_weight(node) {
                     let neighbor_item = node_conflict_items
@@ -171,7 +191,7 @@ impl Conflicts {
                 graph
                     .node_weight_mut(neighbor_idx)
                     .expect("Graph node should have weight")
-                    .extend(neighbor_canonical_items.into_iter());
+                    .extend(neighbor_canonical_items);
             }
         }
 
@@ -184,8 +204,6 @@ impl Conflicts {
             for conflict_set in conflict_sets
                 .iter()
                 .filter(|set| set.contains_item(&canonical_item))
-                .cloned()
-                .collect::<Vec<_>>()
             {
                 for sub in &subs {
                     let new_set = conflict_set
@@ -196,15 +214,11 @@ impl Conflicts {
                     }
                 }
             }
-            conflict_sets.extend(new_conflict_sets.into_iter());
+            conflict_sets.extend(new_conflict_sets);
         }
 
-        // Add all newly discovered conflict sets (excluding the originals already in self.0)
-        for set in conflict_sets {
-            if !self.0.contains(&set) {
-                self.0.push(set);
-            }
-        }
+        // Everything past the seeded originals is newly inferred.
+        self.0.extend(conflict_sets.into_iter().skip(seeded));
     }
 }
 
@@ -223,13 +237,6 @@ pub struct ConflictSet {
 }
 
 impl ConflictSet {
-    /// Create a pair of items that conflict with one another.
-    pub fn pair(item1: ConflictItem, item2: ConflictItem) -> Self {
-        Self {
-            set: BTreeSet::from_iter(vec![item1, item2]),
-        }
-    }
-
     /// Returns an iterator over all conflicting items.
     pub fn iter(&self) -> impl Iterator<Item = &'_ ConflictItem> + Clone + '_ {
         self.set.iter()
@@ -249,16 +256,12 @@ impl ConflictSet {
 
     /// Returns true if these conflicts contain any set that contains the given
     /// [`ConflictItem`].
-    pub fn contains_item(&self, conflict_item: &ConflictItem) -> bool {
+    fn contains_item(&self, conflict_item: &ConflictItem) -> bool {
         self.set.contains(conflict_item)
     }
 
     /// Replace an old [`ConflictItem`] with a new one.
-    pub fn replaced_item(
-        &self,
-        old: &ConflictItem,
-        new: ConflictItem,
-    ) -> Result<Self, ConflictError> {
+    fn replaced_item(&self, old: &ConflictItem, new: ConflictItem) -> Result<Self, ConflictError> {
         let mut new_set = self.set.clone();
         if !new_set.contains(old) {
             return Err(ConflictError::ReplaceMissingConflictItem);
@@ -283,14 +286,13 @@ impl TryFrom<Vec<ConflictItem>> for ConflictSet {
     type Error = ConflictError;
 
     fn try_from(items: Vec<ConflictItem>) -> Result<Self, ConflictError> {
-        match items.len() {
+        let set = BTreeSet::from_iter(items);
+        match set.len() {
             0 => return Err(ConflictError::ZeroItems),
             1 => return Err(ConflictError::OneItem),
             _ => {}
         }
-        Ok(Self {
-            set: BTreeSet::from_iter(items),
-        })
+        Ok(Self { set })
     }
 }
 
@@ -387,16 +389,6 @@ impl<'a> ConflictItemRef<'a> {
         self.kind
     }
 
-    /// Returns the extra name of this conflicting item.
-    pub fn extra(&self) -> Option<&'a ExtraName> {
-        self.kind.extra()
-    }
-
-    /// Returns the group name of this conflicting item.
-    pub fn group(&self) -> Option<&'a GroupName> {
-        self.kind.group()
-    }
-
     /// Converts this borrowed conflicting item to its owned variant.
     pub fn to_owned(&self) -> ConflictItem {
         ConflictItem {
@@ -447,7 +439,7 @@ pub enum ConflictKind {
 impl ConflictKind {
     /// If this conflict corresponds to an extra, then return the
     /// extra name.
-    pub fn extra(&self) -> Option<&ExtraName> {
+    fn extra(&self) -> Option<&ExtraName> {
         match self {
             Self::Extra(extra) => Some(extra),
             Self::Group(_) | Self::Project => None,
@@ -456,7 +448,7 @@ impl ConflictKind {
 
     /// If this conflict corresponds to a group, then return the
     /// group name.
-    pub fn group(&self) -> Option<&GroupName> {
+    fn group(&self) -> Option<&GroupName> {
         match self {
             Self::Group(group) => Some(group),
             Self::Extra(_) | Self::Project => None,
@@ -483,27 +475,9 @@ pub enum ConflictKindRef<'a> {
     Project,
 }
 
-impl<'a> ConflictKindRef<'a> {
-    /// If this conflict corresponds to an extra, then return the
-    /// extra name.
-    pub fn extra(&self) -> Option<&'a ExtraName> {
-        match self {
-            Self::Extra(extra) => Some(extra),
-            Self::Group(_) | Self::Project => None,
-        }
-    }
-
-    /// If this conflict corresponds to a group, then return the
-    /// group name.
-    pub fn group(&self) -> Option<&'a GroupName> {
-        match self {
-            Self::Group(group) => Some(group),
-            Self::Extra(_) | Self::Project => None,
-        }
-    }
-
+impl ConflictKindRef<'_> {
     /// Converts this borrowed conflict to its owned variant.
-    pub fn to_owned(&self) -> ConflictKind {
+    fn to_owned(self) -> ConflictKind {
         match self {
             Self::Extra(extra) => ConflictKind::Extra((*extra).clone()),
             Self::Group(group) => ConflictKind::Group((*group).clone()),
@@ -542,6 +516,33 @@ impl hashbrown::Equivalent<ConflictKind> for ConflictKindRef<'_> {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct ConflictEntry {
+    package: Option<PackageName>,
+    extra: Option<ExtraName>,
+    group: Option<GroupName>,
+}
+
+impl fmt::Display for ConflictEntry {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut parts = vec![];
+        if let Some(package) = &self.package {
+            parts.push(format!("package = \"{package}\""));
+        }
+        if let Some(extra) = &self.extra {
+            parts.push(format!("extra = \"{extra}\""));
+        }
+        if let Some(group) = &self.group {
+            parts.push(format!("group = \"{group}\""));
+        }
+        if parts.is_empty() {
+            write!(f, "{{}}")
+        } else {
+            write!(f, "{{ {} }}", parts.join(", "))
+        }
+    }
+}
+
 /// An error that occurs when the given conflicting set is invalid somehow.
 #[derive(Debug, thiserror::Error)]
 pub enum ConflictError {
@@ -556,8 +557,8 @@ pub enum ConflictError {
     /// (This is only applicable when deserializing from the lock file.
     /// When deserializing from `pyproject.toml`, the `package` field is
     /// optional.)
-    #[error("Expected `package` field in conflicting entry")]
-    MissingPackage,
+    #[error("Expected `package` field in conflicting entry: {0}")]
+    MissingPackage(ConflictEntry),
     /// An error that occurs when all of `package`, `extra` and `group` are missing.
     #[error("Expected `package`, `extra` or `group` field in conflicting entry")]
     MissingPackageAndExtraAndGroup,
@@ -582,6 +583,39 @@ pub enum ConflictError {
 pub struct SchemaConflicts(Vec<SchemaConflictSet>);
 
 impl SchemaConflicts {
+    fn to_conflicts_with_default_package(
+        &self,
+        package: Option<&PackageName>,
+    ) -> Result<Conflicts, ConflictError> {
+        let mut conflicting = Conflicts::empty();
+        for tool_uv_set in &self.0 {
+            let mut set = vec![];
+            for item in &tool_uv_set.0 {
+                let package = item
+                    .package
+                    .as_ref()
+                    .or(package)
+                    .ok_or_else(|| ConflictError::MissingPackage(ConflictEntry::from(item)))?
+                    .clone();
+                set.push(ConflictItem {
+                    package,
+                    kind: item.kind.clone(),
+                });
+            }
+            let set = ConflictSet::try_from(set)?;
+            conflicting.push(set);
+        }
+        Ok(conflicting)
+    }
+
+    /// Convert the public schema "conflicting" type to our internal fully
+    /// resolved type.
+    ///
+    /// Every conflict item must define `package` explicitly.
+    pub fn to_conflicts(&self) -> Result<Conflicts, ConflictError> {
+        self.to_conflicts_with_default_package(None)
+    }
+
     /// Convert the public schema "conflicting" type to our internal fully
     /// resolved type. Effectively, this pairs the corresponding package name
     /// with each conflict.
@@ -589,24 +623,11 @@ impl SchemaConflicts {
     /// If a conflict has an explicit package name (written by the end user),
     /// then that takes precedence over the given package name, which is only
     /// used when there is no explicit package name written.
-    pub fn to_conflicts_with_package_name(&self, package: &PackageName) -> Conflicts {
-        let mut conflicting = Conflicts::empty();
-        for tool_uv_set in &self.0 {
-            let mut set = vec![];
-            for item in &tool_uv_set.0 {
-                let package = item.package.clone().unwrap_or_else(|| package.clone());
-                set.push(ConflictItem {
-                    package: package.clone(),
-                    kind: item.kind.clone(),
-                });
-            }
-            // OK because we guarantee that
-            // `SchemaConflictingGroupList` is valid and there aren't
-            // any new errors that can occur here.
-            let set = ConflictSet::try_from(set).unwrap();
-            conflicting.push(set);
-        }
-        conflicting
+    pub fn to_conflicts_with_package_name(
+        &self,
+        package: &PackageName,
+    ) -> Result<Conflicts, ConflictError> {
+        self.to_conflicts_with_default_package(Some(package))
     }
 }
 
@@ -618,7 +639,7 @@ impl SchemaConflicts {
 /// name.
 #[derive(Debug, Default, Clone, Eq, PartialEq, serde::Serialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-pub struct SchemaConflictSet(Vec<SchemaConflictItem>);
+struct SchemaConflictSet(Vec<SchemaConflictItem>);
 
 /// Like [`ConflictItem`], but for deserialization in `pyproject.toml`.
 ///
@@ -634,7 +655,7 @@ pub struct SchemaConflictSet(Vec<SchemaConflictItem>);
     try_from = "ConflictItemWire",
     into = "ConflictItemWire"
 )]
-pub struct SchemaConflictItem {
+struct SchemaConflictItem {
     package: Option<PackageName>,
     kind: ConflictKind,
 }
@@ -664,7 +685,7 @@ impl TryFrom<Vec<SchemaConflictItem>> for SchemaConflictSet {
     type Error = ConflictError;
 
     fn try_from(items: Vec<SchemaConflictItem>) -> Result<Self, ConflictError> {
-        match items.len() {
+        match items.iter().collect::<BTreeSet<_>>().len() {
             0 => return Err(ConflictError::ZeroItems),
             1 => return Err(ConflictError::OneItem),
             _ => {}
@@ -689,12 +710,44 @@ struct ConflictItemWire {
     group: Option<GroupName>,
 }
 
+impl From<&SchemaConflictItem> for ConflictEntry {
+    fn from(item: &SchemaConflictItem) -> Self {
+        match &item.kind {
+            ConflictKind::Project => Self {
+                package: item.package.clone(),
+                extra: None,
+                group: None,
+            },
+            ConflictKind::Extra(extra) => Self {
+                package: item.package.clone(),
+                extra: Some(extra.clone()),
+                group: None,
+            },
+            ConflictKind::Group(group) => Self {
+                package: item.package.clone(),
+                extra: None,
+                group: Some(group.clone()),
+            },
+        }
+    }
+}
+
+impl From<&ConflictItemWire> for ConflictEntry {
+    fn from(item: &ConflictItemWire) -> Self {
+        Self {
+            package: item.package.clone(),
+            extra: item.extra.clone(),
+            group: item.group.clone(),
+        }
+    }
+}
+
 impl TryFrom<ConflictItemWire> for ConflictItem {
     type Error = ConflictError;
 
     fn try_from(wire: ConflictItemWire) -> Result<Self, ConflictError> {
         let Some(package) = wire.package else {
-            return Err(ConflictError::MissingPackage);
+            return Err(ConflictError::MissingPackage(ConflictEntry::from(&wire)));
         };
         match (wire.extra, wire.group) {
             (Some(_), Some(_)) => Err(ConflictError::FoundExtraAndGroup),
@@ -796,4 +849,57 @@ impl From<SchemaConflictItem> for ConflictItemWire {
 pub struct Inference {
     pub included: bool,
     pub item: ConflictItem,
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use anyhow::Result;
+    use rustc_hash::FxHashSet;
+    use uv_normalize::{GroupName, PackageName};
+
+    use super::{ConflictItem, ConflictSet, Conflicts};
+    use crate::DependencyGroups;
+
+    fn conflict_set(package: &PackageName, left: &str, right: &str) -> Result<ConflictSet> {
+        Ok(ConflictSet::try_from(vec![
+            ConflictItem::from((package.clone(), GroupName::from_str(left)?)),
+            ConflictItem::from((package.clone(), GroupName::from_str(right)?)),
+        ])?)
+    }
+
+    #[test]
+    fn expand_transitive_group_includes_preserves_original_sets() -> Result<()> {
+        let package = PackageName::from_str("project")?;
+        let original_sets = vec![
+            conflict_set(&package, "inner-a", "inner-b")?,
+            conflict_set(&package, "outer-a", "inner-b")?,
+        ];
+        let groups: DependencyGroups = serde_json::from_value(serde_json::json!({
+            "inner-a": [],
+            "inner-b": [],
+            "outer-a": [{ "include-group": "inner-a" }],
+            "outer-b": [{ "include-group": "inner-b" }],
+        }))?;
+        let mut conflicts = Conflicts(original_sets.clone());
+
+        conflicts.expand_transitive_group_includes(&package, &groups);
+
+        assert_eq!(&conflicts.0[..original_sets.len()], original_sets);
+        assert_eq!(conflicts.0.len(), 4);
+        assert_eq!(
+            conflicts.0.into_iter().collect::<FxHashSet<_>>(),
+            [
+                conflict_set(&package, "inner-a", "inner-b")?,
+                conflict_set(&package, "outer-a", "inner-b")?,
+                conflict_set(&package, "inner-a", "outer-b")?,
+                conflict_set(&package, "outer-a", "outer-b")?,
+            ]
+            .into_iter()
+            .collect::<FxHashSet<_>>(),
+        );
+
+        Ok(())
+    }
 }

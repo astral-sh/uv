@@ -1,5 +1,4 @@
-use std::fmt::Display;
-use std::fmt::Formatter;
+use std::fmt::{self, Display, Formatter};
 use std::hash::BuildHasherDefault;
 use std::sync::Arc;
 use std::sync::RwLock;
@@ -11,7 +10,7 @@ use url::Url;
 use uv_once_map::OnceMap;
 use uv_redacted::DisplaySafeUrl;
 
-use crate::credentials::{Authentication, Username};
+use crate::credentials::{Authentication, CredentialsFromUrlError, Username};
 use crate::{Credentials, Realm};
 
 type FxOnceMap<K, V> = OnceMap<K, V, BuildHasherDefault<FxHasher>>;
@@ -62,13 +61,16 @@ impl CredentialsCache {
     /// Populate the global authentication store with credentials on a URL, if there are any.
     ///
     /// Returns `true` if the store was updated.
-    pub fn store_credentials_from_url(&self, url: &DisplaySafeUrl) -> bool {
-        if let Some(credentials) = Credentials::from_url(url) {
+    pub fn store_credentials_from_url(
+        &self,
+        url: &DisplaySafeUrl,
+    ) -> Result<bool, CredentialsFromUrlError> {
+        if let Some(credentials) = Credentials::from_url(url)? {
             trace!("Caching credentials for {url}");
             self.insert(url, Arc::new(Authentication::from(credentials)));
-            true
+            Ok(true)
         } else {
-            false
+            Ok(false)
         }
     }
 
@@ -89,28 +91,27 @@ impl CredentialsCache {
         let realms = self.realms.read().unwrap();
         let given_username = username.is_some();
         let key = (realm, username);
+        let realm_username = fmt::from_fn(|f| {
+            let (realm, username) = &key;
+            if let Some(username) = username.as_deref() {
+                write!(f, "{username}@{realm}")
+            } else {
+                write!(f, "{realm}")
+            }
+        });
 
         let Some(credentials) = realms.get(&key).cloned() else {
-            trace!(
-                "No credentials in cache for realm {}",
-                RealmUsername::from(key)
-            );
+            trace!("No credentials in cache for realm {realm_username}");
             return None;
         };
 
         if given_username && credentials.password().is_none() {
             // If given a username, don't return password-less credentials
-            trace!(
-                "No password in cache for realm {}",
-                RealmUsername::from(key)
-            );
+            trace!("No password in cache for realm {realm_username}");
             return None;
         }
 
-        trace!(
-            "Found cached credentials for realm {}",
-            RealmUsername::from(key)
-        );
+        trace!("Found cached credentials for realm {realm_username}");
         Some(credentials)
     }
 
@@ -185,9 +186,7 @@ impl CredentialsCache {
 
         // If we only have a username, add a new entry or replace an existing entry if it doesn't have a password
         let existing = realms.get(&key);
-        if existing.is_none()
-            || existing.is_some_and(|credentials| credentials.password().is_none())
-        {
+        if existing.is_none_or(|credentials| credentials.password().is_none()) {
             return realms.insert(key, credentials.clone());
         }
 
@@ -223,11 +222,12 @@ impl<T> UrlTrie<T> {
     }
 
     fn get(&self, url: &Url) -> Option<&T> {
+        let segments = url.path_segments()?;
         let mut state = 0;
         let realm = Realm::from(url).to_string();
         for component in [realm.as_str()]
             .into_iter()
-            .chain(url.path_segments().unwrap().filter(|item| !item.is_empty()))
+            .chain(segments.filter(|item| !item.is_empty()))
         {
             state = self.states[state].get(component)?;
             if let Some(ref value) = self.states[state].value {
@@ -238,11 +238,15 @@ impl<T> UrlTrie<T> {
     }
 
     fn insert(&mut self, url: &Url, value: T) {
+        // Opaque URLs have no path hierarchy for prefix matching.
+        let Some(segments) = url.path_segments() else {
+            return;
+        };
         let mut state = 0;
         let realm = Realm::from(url).to_string();
         for component in [realm.as_str()]
             .into_iter()
-            .chain(url.path_segments().unwrap().filter(|item| !item.is_empty()))
+            .chain(segments.filter(|item| !item.is_empty()))
         {
             match self.states[state].index(component) {
                 Ok(i) => state = self.states[state].children[i].1,
@@ -277,28 +281,10 @@ impl<T> TrieState<T> {
     }
 }
 
-#[derive(Debug)]
-struct RealmUsername(Realm, Username);
-
-impl std::fmt::Display for RealmUsername {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let Self(realm, username) = self;
-        if let Some(username) = username.as_deref() {
-            write!(f, "{username}@{realm}")
-        } else {
-            write!(f, "{realm}")
-        }
-    }
-}
-
-impl From<(Realm, Username)> for RealmUsername {
-    fn from((realm, username): (Realm, Username)) -> Self {
-        Self(realm, username)
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use url::ParseError;
+
     use crate::Credentials;
     use crate::credentials::Password;
 
@@ -365,6 +351,27 @@ mod tests {
 
         let url = Url::parse("https://example.com/foobar").unwrap();
         assert_eq!(trie.get(&url), None);
+    }
+
+    #[test]
+    fn test_trie_opaque_url() -> Result<(), ParseError> {
+        let mut trie = UrlTrie::new();
+        let url = Url::parse("git+https:foo")?;
+        let credentials =
+            Credentials::basic(Some("username".to_string()), Some("password".to_string()));
+
+        assert_eq!(trie.get(&url), None);
+        trie.insert(&url, credentials.clone());
+        assert_eq!(trie.get(&url), None);
+
+        // Opaque URLs must not share credentials with hierarchical URLs in the same realm.
+        let base_url = Url::parse("git+https:/")?;
+        assert_eq!(trie.get(&base_url), None);
+        trie.insert(&base_url, credentials.clone());
+        assert_eq!(trie.get(&url), None);
+        assert_eq!(trie.get(&base_url), Some(&credentials));
+
+        Ok(())
     }
 
     #[test]

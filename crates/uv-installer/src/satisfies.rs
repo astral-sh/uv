@@ -21,6 +21,15 @@ use uv_pypi_types::{DirInfo, DirectUrl, VcsInfo, VcsKind};
 
 use crate::InstallationStrategy;
 
+/// Expected build settings when deciding whether to reuse an installed distribution.
+#[derive(Debug, Clone, Copy)]
+pub struct BuildSettings<'a> {
+    pub config_settings: &'a ConfigSettings,
+    pub config_settings_package: &'a PackageConfigSettings,
+    pub extra_build_requires: &'a ExtraBuildRequires,
+    pub extra_build_variables: &'a ExtraBuildVariables,
+}
+
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum RequirementSatisfaction {
     Mismatch,
@@ -40,10 +49,7 @@ impl RequirementSatisfaction {
         version: Option<&Version>,
         installation: InstallationStrategy,
         tags: &Tags,
-        config_settings: &ConfigSettings,
-        config_settings_package: &PackageConfigSettings,
-        extra_build_requires: &ExtraBuildRequires,
-        extra_build_variables: &ExtraBuildVariables,
+        build_settings: Option<BuildSettings<'_>>,
     ) -> Self {
         trace!(
             "Comparing installed with source: {:?} {:?}",
@@ -51,18 +57,25 @@ impl RequirementSatisfaction {
         );
 
         // If the distribution was built with other settings, it is out of date.
-        if distribution.build_info().is_some_and(|dist_build_info| {
-            let config_settings =
-                config_settings_for(name, config_settings, config_settings_package);
-            let extra_build_requires = extra_build_requires_for(name, extra_build_requires);
-            let extra_build_variables = extra_build_variables_for(name, extra_build_variables);
-            let build_info = BuildInfo::from_settings(
-                &config_settings,
-                extra_build_requires,
-                extra_build_variables,
-            );
-            dist_build_info != &build_info
-        }) {
+        if let Some(build_settings) = build_settings
+            && distribution.build_info().is_some_and(|dist_build_info| {
+                let config_settings = config_settings_for(
+                    name,
+                    build_settings.config_settings,
+                    build_settings.config_settings_package,
+                );
+                let extra_build_requires =
+                    extra_build_requires_for(name, build_settings.extra_build_requires);
+                let extra_build_variables =
+                    extra_build_variables_for(name, build_settings.extra_build_variables);
+                let build_info = BuildInfo::from_settings(
+                    config_settings.into_owned(),
+                    extra_build_requires.to_vec(),
+                    extra_build_variables.cloned(),
+                );
+                dist_build_info != &build_info
+            })
+        {
             debug!("Build info mismatch for {name}: {distribution}");
             return Self::OutOfDate;
         }
@@ -130,9 +143,9 @@ impl RequirementSatisfaction {
                     return Self::Mismatch;
                 }
 
-                if !CanonicalUrl::parse(installed_url)
-                    .is_ok_and(|installed_url| installed_url == CanonicalUrl::new(requested_url))
-                {
+                if !CanonicalUrl::parse(installed_url).is_ok_and(|installed_url| {
+                    installed_url == CanonicalUrl::new(requested_url.clone())
+                }) {
                     return Self::Mismatch;
                 }
 
@@ -158,7 +171,7 @@ impl RequirementSatisfaction {
                     }
                 }
             }
-            RequirementSource::Git {
+            RequirementSource::GitDirectory {
                 url: _,
                 git: requested_git,
                 subdirectory: requested_subdirectory,
@@ -178,6 +191,7 @@ impl RequirementSatisfaction {
                             git_lfs: installed_git_lfs,
                         },
                     subdirectory: installed_subdirectory,
+                    path: None,
                 } = direct_url.as_ref()
                 else {
                     return Self::Mismatch;
@@ -201,19 +215,86 @@ impl RequirementSatisfaction {
                     return Self::Mismatch;
                 }
 
-                if !RepositoryUrl::parse(installed_url).is_ok_and(|installed_url| {
-                    installed_url == RepositoryUrl::new(requested_git.repository())
-                }) {
+                if !RepositoryUrl::parse(installed_url)
+                    .is_ok_and(|installed_url| installed_url == *requested_git.repository())
+                {
                     debug!(
                         "Repository mismatch: {:?} vs. {:?}",
                         installed_url,
-                        requested_git.repository()
+                        requested_git.url()
                     );
                     return Self::Mismatch;
                 }
 
                 // TODO(charlie): It would be more consistent for us to compare the requested
                 // revisions here.
+                if installed_precise.as_deref()
+                    != requested_git.precise().as_ref().map(GitOid::as_str)
+                {
+                    debug!(
+                        "Precise mismatch: {:?} vs. {:?}",
+                        installed_precise,
+                        requested_git.precise()
+                    );
+                    return Self::OutOfDate;
+                }
+            }
+            RequirementSource::GitPath {
+                url: _,
+                git: requested_git,
+                install_path: requested_path,
+                ext: _,
+            } => {
+                let InstalledDistKind::Url(InstalledDirectUrlDist { direct_url, .. }) =
+                    &distribution.kind
+                else {
+                    return Self::Mismatch;
+                };
+                let DirectUrl::VcsUrl {
+                    url: installed_url,
+                    vcs_info:
+                        VcsInfo {
+                            vcs: VcsKind::Git,
+                            requested_revision: _,
+                            commit_id: installed_precise,
+                            git_lfs: installed_git_lfs,
+                        },
+                    subdirectory: None,
+                    path: Some(installed_path),
+                } = direct_url.as_ref()
+                else {
+                    return Self::Mismatch;
+                };
+
+                if requested_path != installed_path {
+                    debug!(
+                        "Path mismatch: {:?} vs. {:?}",
+                        installed_path, requested_path
+                    );
+                    return Self::Mismatch;
+                }
+
+                let requested_git_lfs = requested_git.lfs();
+                let installed_git_lfs = installed_git_lfs.map(GitLfs::from).unwrap_or_default();
+                if requested_git_lfs != installed_git_lfs {
+                    debug!(
+                        "Git LFS mismatch: {} (installed) vs. {} (requested)",
+                        installed_git_lfs, requested_git_lfs,
+                    );
+                    return Self::Mismatch;
+                }
+
+                if !RepositoryUrl::parse(installed_url)
+                    .is_ok_and(|installed_url| installed_url == *requested_git.repository())
+                {
+                    debug!(
+                        "Repository mismatch: {:?} vs. {:?}",
+                        installed_url,
+                        requested_git.url()
+                    );
+                    return Self::Mismatch;
+                }
+
                 if installed_precise.as_deref()
                     != requested_git.precise().as_ref().map(GitOid::as_str)
                 {

@@ -1,6 +1,6 @@
 [package]
 name = "uv-requirements-txt"
-version = "0.0.36"
+version = "0.0.85"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -19,6 +19,7 @@ workspace = true
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-distribution-types = { workspace = true }
+uv-errors = { workspace = true }
 uv-fs = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep508 = { workspace = true }

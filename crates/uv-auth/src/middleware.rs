@@ -2,24 +2,25 @@ use std::sync::{Arc, LazyLock};
 
 use anyhow::{anyhow, format_err};
 use http::{Extensions, StatusCode};
-use netrc::Netrc;
 use reqwest::{Request, Response};
-use reqwest_middleware::{ClientWithMiddleware, Error, Middleware, Next};
+use reqwest_middleware::{Error, Middleware, Next};
 use tokio::sync::Mutex;
 use tracing::{debug, trace, warn};
 
+use uv_netrc::Netrc;
 use uv_preview::{Preview, PreviewFeature};
 use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
-use uv_warnings::owo_colors::OwoColorize;
 
-use crate::credentials::Authentication;
-use crate::providers::{GcsEndpointProvider, HuggingFaceProvider, S3EndpointProvider};
-use crate::pyx::{DEFAULT_TOLERANCE_SECS, PyxTokenStore};
+use crate::providers::{
+    AzureEndpointProvider, GcsEndpointProvider, HuggingFaceProvider, S3EndpointProvider,
+};
 use crate::{
-    AccessToken, CredentialsCache, KeyringProvider,
+    CredentialsCache, KeyringProvider,
     cache::FetchUrl,
-    credentials::{Credentials, Username},
+    credentials::{
+        Authentication, AuthenticationError, Credentials, CredentialsFromUrlError, Username,
+    },
     index::{AuthPolicy, Indexes},
     realm::Realm,
 };
@@ -29,10 +30,24 @@ use crate::{Index, TextCredentialStore};
 static IS_DEPENDABOT: LazyLock<bool> =
     LazyLock::new(|| std::env::var(EnvVars::DEPENDABOT).is_ok_and(|value| value == "true"));
 
+impl From<AuthenticationError> for Error {
+    fn from(err: AuthenticationError) -> Self {
+        Self::middleware(err)
+    }
+}
+
+impl From<CredentialsFromUrlError> for Error {
+    fn from(err: CredentialsFromUrlError) -> Self {
+        Self::middleware(err)
+    }
+}
+
 /// Strategy for loading netrc files.
 enum NetrcMode {
     Automatic(LazyLock<Option<Netrc>>),
+    #[cfg(test)]
     Enabled(Netrc),
+    #[cfg(test)]
     Disabled,
 }
 
@@ -40,7 +55,7 @@ impl Default for NetrcMode {
     fn default() -> Self {
         Self::Automatic(LazyLock::new(|| match Netrc::new() {
             Ok(netrc) => Some(netrc),
-            Err(netrc::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+            Err(uv_netrc::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
                 debug!("No netrc file found");
                 None
             }
@@ -57,7 +72,9 @@ impl NetrcMode {
     fn get(&self) -> Option<&Netrc> {
         match self {
             Self::Automatic(lock) => lock.as_ref(),
+            #[cfg(test)]
             Self::Enabled(netrc) => Some(netrc),
+            #[cfg(test)]
             Self::Disabled => None,
         }
     }
@@ -66,7 +83,9 @@ impl NetrcMode {
 /// Strategy for loading text-based credential files.
 enum TextStoreMode {
     Automatic(tokio::sync::OnceCell<Option<TextCredentialStore>>),
+    #[cfg(test)]
     Enabled(TextCredentialStore),
+    #[cfg(test)]
     Disabled,
 }
 
@@ -114,19 +133,12 @@ impl TextStoreMode {
             // TODO(zanieb): Reconsider this pattern. We're just mirroring the [`NetrcMode`]
             // implementation for now.
             Self::Automatic(lock) => lock.get_or_init(Self::load_default_store).await.as_ref(),
+            #[cfg(test)]
             Self::Enabled(store) => Some(store),
+            #[cfg(test)]
             Self::Disabled => None,
         }
     }
-}
-
-#[derive(Debug, Clone)]
-enum TokenState {
-    /// The token state has not yet been initialized from the store.
-    Uninitialized,
-    /// The token state has been initialized, and the store either returned tokens or `None` if
-    /// the user has not yet authenticated.
-    Initialized(Option<AccessToken>),
 }
 
 #[derive(Clone)]
@@ -147,6 +159,15 @@ enum GcsCredentialState {
     Initialized(Option<Arc<Authentication>>),
 }
 
+#[derive(Clone)]
+enum AzureCredentialState {
+    /// The Azure credential state has not yet been initialized.
+    Uninitialized,
+    /// The Azure credential state has been initialized, with either a signer or `None` if
+    /// no Azure endpoint is configured.
+    Initialized(Option<Arc<Authentication>>),
+}
+
 /// A middleware that adds basic authentication to requests.
 ///
 /// Uses a cache to propagate credentials from previously seen requests and
@@ -162,16 +183,12 @@ pub struct AuthMiddleware {
     /// Set all endpoints as needing authentication. We never try to send an
     /// unauthenticated request, avoiding cloning an uncloneable request.
     only_authenticated: bool,
-    /// The base client to use for requests within the middleware.
-    base_client: Option<ClientWithMiddleware>,
-    /// The pyx token store to use for persistent credentials.
-    pyx_token_store: Option<PyxTokenStore>,
-    /// Tokens to use for persistent credentials.
-    pyx_token_state: Mutex<TokenState>,
     /// Cached S3 credentials to avoid running the credential helper multiple times.
     s3_credential_state: Mutex<S3CredentialState>,
     /// Cached GCS credentials to avoid running the credential helper multiple times.
     gcs_credential_state: Mutex<GcsCredentialState>,
+    /// Cached Azure credentials to avoid running the credential helper multiple times.
+    azure_credential_state: Mutex<AzureCredentialState>,
     preview: Preview,
 }
 
@@ -191,11 +208,9 @@ impl AuthMiddleware {
             cache: Arc::new(CredentialsCache::default()),
             indexes: Indexes::new(),
             only_authenticated: false,
-            base_client: None,
-            pyx_token_store: None,
-            pyx_token_state: Mutex::new(TokenState::Uninitialized),
             s3_credential_state: Mutex::new(S3CredentialState::Uninitialized),
             gcs_credential_state: Mutex::new(GcsCredentialState::Uninitialized),
+            azure_credential_state: Mutex::new(AzureCredentialState::Uninitialized),
             preview: Preview::default(),
         }
     }
@@ -204,7 +219,8 @@ impl AuthMiddleware {
     ///
     /// `None` disables authentication via netrc.
     #[must_use]
-    pub fn with_netrc(mut self, netrc: Option<Netrc>) -> Self {
+    #[cfg(test)]
+    fn with_netrc(mut self, netrc: Option<Netrc>) -> Self {
         self.netrc = if let Some(netrc) = netrc {
             NetrcMode::Enabled(netrc)
         } else {
@@ -217,7 +233,8 @@ impl AuthMiddleware {
     ///
     /// `None` disables authentication via text store.
     #[must_use]
-    pub fn with_text_store(mut self, store: Option<TextCredentialStore>) -> Self {
+    #[cfg(test)]
+    fn with_text_store(mut self, store: Option<TextCredentialStore>) -> Self {
         self.text_store = if let Some(store) = store {
             TextStoreMode::Enabled(store)
         } else {
@@ -242,7 +259,8 @@ impl AuthMiddleware {
 
     /// Configure the [`CredentialsCache`] to use.
     #[must_use]
-    pub fn with_cache(mut self, cache: CredentialsCache) -> Self {
+    #[cfg(test)]
+    fn with_cache(mut self, cache: CredentialsCache) -> Self {
         self.cache = Arc::new(cache);
         self
     }
@@ -266,20 +284,6 @@ impl AuthMiddleware {
     #[must_use]
     pub fn with_only_authenticated(mut self, only_authenticated: bool) -> Self {
         self.only_authenticated = only_authenticated;
-        self
-    }
-
-    /// Configure the [`ClientWithMiddleware`] to use for requests within the middleware.
-    #[must_use]
-    pub fn with_base_client(mut self, client: ClientWithMiddleware) -> Self {
-        self.base_client = Some(client);
-        self
-    }
-
-    /// Configure the [`PyxTokenStore`] to use for persistent credentials.
-    #[must_use]
-    pub fn with_pyx_token_store(mut self, token_store: PyxTokenStore) -> Self {
-        self.pyx_token_store = Some(token_store);
         self
     }
 
@@ -334,7 +338,7 @@ impl Middleware for AuthMiddleware {
         next: Next<'_>,
     ) -> reqwest_middleware::Result<Response> {
         // Check for credentials attached to the request already
-        let request_credentials = Credentials::from_request(&request).map(Authentication::from);
+        let request_credentials = Credentials::from_request(&request)?.map(Authentication::from);
 
         // In the middleware, existing credentials are already moved from the URL
         // to the headers so for display purposes we restore some information
@@ -369,7 +373,7 @@ impl Middleware for AuthMiddleware {
                 .cache()
                 .get_url(DisplaySafeUrl::ref_cast(request.url()), &Username::none());
             if let Some(credentials) = credentials.as_ref() {
-                request = credentials.authenticate(request).await;
+                request = credentials.authenticate(request).await?;
 
                 // If it's fully authenticated, finish the request
                 if credentials.is_authenticated() {
@@ -389,18 +393,8 @@ impl Middleware for AuthMiddleware {
             .as_ref()
             .is_some_and(|credentials| credentials.username().is_some());
 
-        // Determine whether this is a "known" URL.
-        let is_known_url = self
-            .pyx_token_store
-            .as_ref()
-            .is_some_and(|token_store| token_store.is_known_url(request.url()));
-
         let must_authenticate = self.only_authenticated
-            || (match auth_policy {
-                    AuthPolicy::Auto => is_known_url,
-                    AuthPolicy::Always => true,
-                    AuthPolicy::Never => false,
-                }
+            || (matches!(auth_policy, AuthPolicy::Always)
                 // Dependabot intercepts HTTP requests and injects credentials, which means that we
                 // cannot eagerly enforce an `AuthPolicy` as we don't know whether credentials will be
                 // added outside of uv.
@@ -470,7 +464,7 @@ impl Middleware for AuthMiddleware {
         if let Some(credentials) = credentials.as_ref() {
             if credentials.is_authenticated() {
                 trace!("Retrying request for {url} with credentials from cache {credentials:?}");
-                retry_request = credentials.authenticate(retry_request).await;
+                retry_request = credentials.authenticate(retry_request).await?;
                 return self
                     .complete_request(None, retry_request, extensions, next, auth_policy)
                     .await;
@@ -486,9 +480,9 @@ impl Middleware for AuthMiddleware {
                 index,
                 auth_policy,
             )
-            .await
+            .await?
         {
-            retry_request = credentials.authenticate(retry_request).await;
+            retry_request = credentials.authenticate(retry_request).await?;
             trace!("Retrying request for {url} with {credentials:?}");
             return self
                 .complete_request(
@@ -504,7 +498,7 @@ impl Middleware for AuthMiddleware {
         if let Some(credentials) = credentials.as_ref() {
             if !attempt_has_username {
                 trace!("Retrying request for {url} with username from cache {credentials:?}");
-                retry_request = credentials.authenticate(retry_request).await;
+                retry_request = credentials.authenticate(retry_request).await?;
                 return self
                     .complete_request(None, retry_request, extensions, next, auth_policy)
                     .await;
@@ -513,19 +507,6 @@ impl Middleware for AuthMiddleware {
 
         if let Some(response) = response {
             Ok(response)
-        } else if let Some(store) = is_known_url
-            .then_some(self.pyx_token_store.as_ref())
-            .flatten()
-        {
-            let domain = store
-                .api()
-                .domain()
-                .unwrap_or("pyx.dev")
-                .trim_start_matches("api.");
-            Err(Error::Middleware(format_err!(
-                "Run `{}` to authenticate uv with pyx",
-                format!("uv auth login {domain}").green()
-            )))
         } else {
             Err(Error::Middleware(format_err!(
                 "Missing credentials for {url}"
@@ -609,7 +590,7 @@ impl AuthMiddleware {
                 .get_realm(Realm::from(request.url()), credentials.to_username())
         };
         if let Some(credentials) = maybe_cached_credentials {
-            request = credentials.authenticate(request).await;
+            request = credentials.authenticate(request).await?;
             // Do not insert already-cached credentials
             let credentials = None;
             return self
@@ -621,7 +602,7 @@ impl AuthMiddleware {
             DisplaySafeUrl::ref_cast(request.url()),
             credentials.as_username().as_ref(),
         ) {
-            request = credentials.authenticate(request).await;
+            request = credentials.authenticate(request).await?;
             // Do not insert already-cached credentials
             None
         } else if let Some(credentials) = self
@@ -631,9 +612,9 @@ impl AuthMiddleware {
                 index,
                 auth_policy,
             )
-            .await
+            .await?
         {
-            request = credentials.authenticate(request).await;
+            request = credentials.authenticate(request).await?;
             Some(credentials)
         } else if index.is_some() {
             // If this is a known index, we fall back to checking for the realm.
@@ -641,7 +622,7 @@ impl AuthMiddleware {
                 .cache()
                 .get_realm(Realm::from(request.url()), credentials.to_username())
             {
-                request = credentials.authenticate(request).await;
+                request = credentials.authenticate(request).await?;
                 Some(credentials)
             } else {
                 Some(credentials)
@@ -664,7 +645,13 @@ impl AuthMiddleware {
         url: &DisplaySafeUrl,
         index: Option<&Index>,
         auth_policy: AuthPolicy,
-    ) -> Option<Arc<Authentication>> {
+    ) -> reqwest_middleware::Result<Option<Arc<Authentication>>> {
+        let is_s3_endpoint =
+            S3EndpointProvider::is_s3_endpoint(url, self.preview).map_err(Error::Middleware)?;
+        let is_gcs_endpoint =
+            GcsEndpointProvider::is_gcs_endpoint(url, self.preview).map_err(Error::Middleware)?;
+        let is_azure_endpoint = AzureEndpointProvider::is_azure_endpoint(url, self.preview)
+            .map_err(Error::Middleware)?;
         let username = Username::from(
             credentials.map(|credentials| credentials.username().unwrap_or_default().to_string()),
         );
@@ -676,14 +663,7 @@ impl AuthMiddleware {
         } else {
             (FetchUrl::Realm(Realm::from(&**url)), username)
         };
-        if !self.cache().fetches.register(key.clone()) {
-            let credentials = self
-                .cache()
-                .fetches
-                .wait(&key)
-                .await
-                .expect("The key must exist after register is called");
-
+        if let Some(credentials) = self.cache().fetches.register_or_wait(&key).await {
             if credentials.is_some() {
                 trace!("Using credentials from previous fetch for {}", key.0);
             } else {
@@ -693,7 +673,7 @@ impl AuthMiddleware {
                 );
             }
 
-            return credentials;
+            return Ok(credentials);
         }
 
         // Support for known providers, like Hugging Face and S3.
@@ -703,10 +683,10 @@ impl AuthMiddleware {
         {
             debug!("Found Hugging Face credentials for {url}");
             self.cache().fetches.done(key, Some(credentials.clone()));
-            return Some(credentials);
+            return Ok(Some(credentials));
         }
 
-        if S3EndpointProvider::is_s3_endpoint(url, self.preview) {
+        if is_s3_endpoint {
             let mut s3_state = self.s3_credential_state.lock().await;
 
             // If the S3 credential state is uninitialized, initialize it.
@@ -724,11 +704,11 @@ impl AuthMiddleware {
             if let Some(credentials) = credentials {
                 debug!("Found S3 credentials for {url}");
                 self.cache().fetches.done(key, Some(credentials.clone()));
-                return Some(credentials);
+                return Ok(Some(credentials));
             }
         }
 
-        if GcsEndpointProvider::is_gcs_endpoint(url, self.preview) {
+        if is_gcs_endpoint {
             let mut gcs_state = self.gcs_credential_state.lock().await;
 
             // If the GCS credential state is uninitialized, initialize it.
@@ -746,49 +726,34 @@ impl AuthMiddleware {
             if let Some(credentials) = credentials {
                 debug!("Found GCS credentials for {url}");
                 self.cache().fetches.done(key, Some(credentials.clone()));
-                return Some(credentials);
+                return Ok(Some(credentials));
             }
         }
 
-        // If this is a known URL, authenticate it via the token store.
-        let credentials = if let Some(credentials) = async {
-            let base_client = self.base_client.as_ref()?;
-            let token_store = self.pyx_token_store.as_ref()?;
-            if !token_store.is_known_url(url) {
-                return None;
-            }
+        if is_azure_endpoint {
+            let mut azure_state = self.azure_credential_state.lock().await;
 
-            let mut token_state = self.pyx_token_state.lock().await;
-
-            // If the token store is uninitialized, initialize it.
-            let token = match *token_state {
-                TokenState::Uninitialized => {
-                    trace!("Initializing token store for {url}");
-                    let generated = match token_store
-                        .access_token(base_client, DEFAULT_TOLERANCE_SECS)
-                        .await
-                    {
-                        Ok(Some(token)) => Some(token),
-                        Ok(None) => None,
-                        Err(err) => {
-                            warn!("Failed to generate access tokens: {err}");
-                            None
-                        }
-                    };
-                    *token_state = TokenState::Initialized(generated.clone());
-                    generated
+            // If the Azure credential state is uninitialized, initialize it.
+            let credentials = match &*azure_state {
+                AzureCredentialState::Uninitialized => {
+                    trace!("Initializing Azure credentials for {url}");
+                    let signer = AzureEndpointProvider::create_signer();
+                    let credentials = Arc::new(Authentication::from(signer));
+                    *azure_state = AzureCredentialState::Initialized(Some(credentials.clone()));
+                    Some(credentials)
                 }
-                TokenState::Initialized(ref tokens) => tokens.clone(),
+                AzureCredentialState::Initialized(credentials) => credentials.clone(),
             };
 
-            token.map(Credentials::from)
+            if let Some(credentials) = credentials {
+                debug!("Found Azure credentials for {url}");
+                self.cache().fetches.done(key, Some(credentials.clone()));
+                return Ok(Some(credentials));
+            }
         }
-        .await
-        {
-            debug!("Found credentials from token store for {url}");
-            Some(credentials)
+
         // Netrc support based on: <https://github.com/gribouille/netrc>.
-        } else if let Some(credentials) = self.netrc.get().and_then(|netrc| {
+        let credentials = if let Some(credentials) = self.netrc.get().and_then(|netrc| {
             debug!("Checking netrc for credentials for {url}");
             Credentials::from_netrc(
                 netrc,
@@ -907,7 +872,7 @@ impl AuthMiddleware {
         // Register the fetch for this key
         self.cache().fetches.done(key, credentials.clone());
 
-        credentials
+        Ok(credentials)
     }
 }
 
@@ -926,6 +891,7 @@ fn tracing_url(request: &Request, credentials: Option<&Authentication>) -> Displ
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
     use std::io::Write;
 
     use http::Method;
@@ -1445,11 +1411,9 @@ mod tests {
 
         let mut url = base_url.clone();
         url.set_username("other_user").unwrap();
-        assert!(
-            matches!(
-                client.get(url).send().await,
-                Err(reqwest_middleware::Error::Middleware(_))
-            ),
+        assert_matches!(
+            client.get(url).send().await,
+            Err(reqwest_middleware::Error::Middleware(_)),
             "If the username does not match, a password should not be fetched, and the middleware should fail eagerly since `authenticate = always` is not satisfied"
         );
 
@@ -2362,10 +2326,10 @@ mod tests {
             .build();
 
         // Unauthenticated requests are not allowed.
-        assert!(matches!(
+        assert_matches!(
             client.get(server.uri()).send().await,
             Err(reqwest_middleware::Error::Middleware(_))
-        ));
+        );
 
         Ok(())
     }

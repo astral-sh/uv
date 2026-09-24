@@ -9,7 +9,7 @@ pub struct Target(PathBuf);
 
 impl Target {
     /// Return the [`Scheme`] for the `--target` directory.
-    pub fn scheme(&self) -> Scheme {
+    pub(crate) fn scheme(&self) -> Scheme {
         Scheme {
             purelib: self.0.clone(),
             platlib: self.0.clone(),
@@ -20,12 +20,12 @@ impl Target {
     }
 
     /// Return an iterator over the `site-packages` directories inside the environment.
-    pub fn site_packages(&self) -> impl Iterator<Item = &Path> {
+    pub(crate) fn site_packages(&self) -> impl Iterator<Item = &Path> {
         std::iter::once(self.0.as_path())
     }
 
     /// Initialize the `--target` directory.
-    pub fn init(&self) -> std::io::Result<()> {
+    pub(crate) fn init(&self) -> std::io::Result<()> {
         fs_err::create_dir_all(&self.0)?;
         Ok(())
     }

@@ -1,0 +1,54 @@
+name = "specific-architecture"
+description = "When a dependency is only required on a specific platform (like x86_64), omit wheels that target other platforms (like aarch64)."
+
+[root]
+requires = ["a"]
+
+[expected]
+satisfiable = true
+
+[packages.a.versions."1.0.0"]
+requires = [
+  "b ; platform_machine == 'x86_64'",
+  "c ; platform_machine == 'aarch64'",
+  "d ; platform_machine == 'i686'",
+]
+
+[packages.b.versions."1.0.0"]
+wheel_tags = [
+  "cp313-cp313-manylinux2010_x86_64",
+  "cp313-cp313-manylinux2010_aarch64",
+  "cp313-cp313-manylinux2010_i686",
+  "cp313-cp313-freebsd_13_x86_64",
+  "cp313-cp313-freebsd_13_aarch64",
+  "cp313-cp313-macosx_10_9_x86_64",
+  "cp313-cp313-macosx_10_9_arm64",
+]
+sdist = false
+
+[packages.c.versions."1.0.0"]
+wheel_tags = [
+  "cp313-cp313-manylinux2010_x86_64",
+  "cp313-cp313-manylinux2010_aarch64",
+  "cp313-cp313-manylinux2010_i686",
+  "cp313-cp313-freebsd_13_x86_64",
+  "cp313-cp313-freebsd_13_aarch64",
+  "cp313-cp313-macosx_10_9_x86_64",
+  "cp313-cp313-macosx_10_9_arm64",
+]
+sdist = false
+
+[packages.d.versions."1.0.0"]
+wheel_tags = [
+  "cp313-cp313-manylinux2010_x86_64",
+  "cp313-cp313-manylinux2010_aarch64",
+  "cp313-cp313-manylinux2010_i686",
+  "cp313-cp313-freebsd_13_x86_64",
+  "cp313-cp313-freebsd_13_aarch64",
+  "cp313-cp313-macosx_10_9_x86_64",
+  "cp313-cp313-macosx_10_9_arm64",
+]
+sdist = false
+
+[resolver_options]
+universal = true

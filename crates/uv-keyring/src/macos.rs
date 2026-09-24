@@ -42,10 +42,10 @@ use security_framework::os::macos::passwords::find_generic_password;
 /// not represented here.  There's no way to use this
 /// module to get at those attributes.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MacCredential {
-    pub domain: MacKeychainDomain,
-    pub service: String,
-    pub account: String,
+struct MacCredential {
+    domain: MacKeychainDomain,
+    service: String,
+    account: String,
 }
 
 #[async_trait::async_trait]
@@ -166,7 +166,8 @@ impl MacCredential {
     /// On Mac, this is basically a no-op, because we represent any attributes
     /// other than the ones we use to find the generic credential.
     /// But at least this checks whether the underlying credential exists.
-    pub async fn get_credential(&self) -> Result<Self> {
+    #[cfg(test)]
+    async fn get_credential(&self) -> Result<Self> {
         let service = self.service.clone();
         let account = self.account.clone();
         let domain = self.domain;
@@ -190,7 +191,7 @@ impl MacCredential {
     /// This will fail if the service or user strings are empty,
     /// because empty attribute values act as wildcards in the
     /// Keychain Services API.
-    pub fn new_with_target(
+    fn new_with_target(
         target: Option<MacKeychainDomain>,
         service: &str,
         user: &str,
@@ -221,13 +222,13 @@ impl MacCredential {
 }
 
 /// The builder for Mac keychain credentials
-pub struct MacCredentialBuilder;
+struct MacCredentialBuilder;
 
 /// Returns an instance of the Mac credential builder.
 ///
 /// On Mac, with default features enabled,
 /// this is called once when an entry is first created.
-pub fn default_credential_builder() -> Box<CredentialBuilder> {
+pub(crate) fn default_credential_builder() -> Box<CredentialBuilder> {
     Box::new(MacCredentialBuilder {})
 }
 
@@ -258,7 +259,7 @@ impl CredentialBuilderApi for MacCredentialBuilder {
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 /// The four pre-defined Mac keychains.
-pub enum MacKeychainDomain {
+enum MacKeychainDomain {
     User,
     System,
     Common,
@@ -320,7 +321,7 @@ fn get_keychain(domain: MacKeychainDomain) -> Result<SecKeychain> {
 ///
 /// The macOS error code values used here are from
 /// [this reference](https://opensource.apple.com/source/libsecurity_keychain/libsecurity_keychain-78/lib/SecBase.h.auto.html)
-pub fn decode_error(err: Error) -> ErrorCode {
+fn decode_error(err: Error) -> ErrorCode {
     match err.code() {
         -25291 => ErrorCode::NoStorageAccess(Box::new(err)), // errSecNotAvailable
         -25292 => ErrorCode::NoStorageAccess(Box::new(err)), // errSecReadOnly
@@ -335,18 +336,11 @@ pub fn decode_error(err: Error) -> ErrorCode {
 #[cfg(not(miri))]
 #[cfg(test)]
 mod tests {
-    use crate::credential::CredentialPersistence;
+    use std::assert_matches;
+
     use crate::{Entry, Error, tests::generate_random_string};
 
-    use super::{MacCredential, default_credential_builder};
-
-    #[test]
-    fn test_persistence() {
-        assert!(matches!(
-            default_credential_builder().persistence(),
-            CredentialPersistence::UntilDelete
-        ));
-    }
+    use super::MacCredential;
 
     fn entry_new(service: &str, user: &str) -> Entry {
         crate::tests::entry_from_constructor(
@@ -359,13 +353,15 @@ mod tests {
     #[test]
     fn test_invalid_parameter() {
         let credential = MacCredential::new_with_target(None, "", "user");
-        assert!(
-            matches!(credential, Err(Error::Invalid(_, _))),
+        assert_matches!(
+            credential,
+            Err(Error::Invalid(_, _)),
             "Created credential with empty service"
         );
         let credential = MacCredential::new_with_target(None, "service", "");
-        assert!(
-            matches!(credential, Err(Error::Invalid(_, _))),
+        assert_matches!(
+            credential,
+            Err(Error::Invalid(_, _)),
             "Created entry with empty user"
         );
     }
@@ -421,7 +417,7 @@ mod tests {
             .delete_credential()
             .await
             .expect("Couldn't delete after get_credential");
-        assert!(matches!(entry.get_password().await, Err(Error::NoEntry)));
+        assert_matches!(entry.get_password().await, Err(Error::NoEntry));
     }
 
     #[tokio::test]
@@ -440,8 +436,9 @@ mod tests {
                 .downcast_ref()
                 .expect("credential not a MacCredential");
             if name == "unknown" {
-                assert!(
-                    matches!(mac_cred.domain, super::MacKeychainDomain::User),
+                assert_matches!(
+                    mac_cred.domain,
+                    super::MacKeychainDomain::User,
                     "wrong domain for unknown specifier"
                 );
             }

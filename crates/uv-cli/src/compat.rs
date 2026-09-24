@@ -33,9 +33,6 @@ pub struct PipCompileCompatArgs {
     max_rounds: Option<usize>,
 
     #[clap(long, hide = true)]
-    cert: Option<String>,
-
-    #[clap(long, hide = true)]
     client_cert: Option<String>,
 
     #[clap(long, hide = true)]
@@ -136,7 +133,7 @@ impl CompatArgs for PipCompileCompatArgs {
 
         if self.emit_options {
             return Err(anyhow!(
-                "pip-compile's `--emit-options` is unsupported (uv never emits options)"
+                "pip-compile's `--emit-options` is unsupported (try `--emit-build-options` instead)"
             ));
         }
 
@@ -191,9 +188,6 @@ pub struct PipSyncCompatArgs {
 
     #[clap(long, hide = true)]
     user: bool,
-
-    #[clap(long, hide = true)]
-    cert: Option<String>,
 
     #[clap(long, hide = true)]
     client_cert: Option<String>,
@@ -304,6 +298,40 @@ impl CompatArgs for VenvCompatArgs {
 
         if self.no_wheel {
             warn_user!("virtualenv's `--no-wheel` has no effect (uv omits `wheel` by default)");
+        }
+
+        Ok(())
+    }
+}
+
+/// Arguments for `pip uninstall` compatibility.
+///
+/// These represent a subset of the `pip uninstall` interface that uv supports by default.
+#[derive(Args)]
+pub struct PipUninstallCompatArgs {
+    /// Don't ask for confirmation of uninstall deletions.
+    ///
+    /// This option is for compatibility with `pip uninstall` and has no effect.
+    #[clap(short, long, hide = true)]
+    yes: bool,
+
+    #[clap(long, hide = true)]
+    disable_pip_version_check: bool,
+}
+
+impl CompatArgs for PipUninstallCompatArgs {
+    /// Validate the arguments passed for `pip uninstall` compatibility.
+    ///
+    /// This method will warn when an argument is passed that has no effect but matches uv's
+    /// behavior. If an argument is passed that does _not_ match uv's behavior, this method will
+    /// return an error.
+    fn validate(&self) -> Result<()> {
+        if self.yes {
+            warn_user!("`--yes` has no effect (uv never asks for confirmation)");
+        }
+
+        if self.disable_pip_version_check {
+            warn_user!("pip's `--disable-pip-version-check` has no effect");
         }
 
         Ok(())

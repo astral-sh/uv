@@ -2,20 +2,31 @@ use crate::metadata::DEFAULT_EXCLUDES;
 use crate::wheel::build_exclude_matcher;
 use crate::{
     BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml,
-    error_on_venv, find_roots,
+    error_on_venv, find_roots, write_directory_once, write_file_with_directories,
 };
 use flate2::Compression;
 use flate2::write::GzEncoder;
 use fs_err::File;
+use futures_lite::future::block_on;
 use globset::{Glob, GlobSet};
+use itertools::Itertools;
+use rustc_hash::FxHashSet;
 use std::io;
-use std::io::{BufReader, Cursor, Write};
+use std::io::{BufReader, Cursor, Read, Write};
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Component, Path, PathBuf};
-use tar::{EntryType, Header};
+use std::pin::Pin;
+use std::task::{Context, Poll};
+use tar_codec::{ArchiveBuilder as _, Builder, EntryMetadata, FilePayload, TarEncoder};
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+use tokio_tar::{EntryType, Header};
 use tracing::{debug, trace};
 use uv_distribution_filename::{SourceDistExtension, SourceDistFilename};
-use uv_fs::Simplified;
+use uv_fs::{Simplified, normalize_path};
 use uv_globfilter::{GlobDirFilter, PortableGlobParser};
+use uv_preview::PreviewFeature;
+use uv_pypi_types::BuildKind;
 use uv_warnings::warn_user_once;
 use walkdir::WalkDir;
 
@@ -39,8 +50,13 @@ pub fn build_source_dist(
     }
 
     let temp_file = uv_fs::tempfile_in(source_dist_directory)?;
-    let writer = TarGzWriter::new(temp_file.as_file(), &source_dist_path);
-    write_source_dist(source_tree, writer, uv_version, show_warnings)?;
+    if uv_preview::is_enabled(PreviewFeature::TarCodec) {
+        let writer = TarCodecGzWriter::new(temp_file.as_file(), &source_dist_path);
+        write_source_dist(source_tree, writer, uv_version, show_warnings)?;
+    } else {
+        let writer = TokioTarGzWriter::new(temp_file.as_file(), &source_dist_path);
+        write_source_dist(source_tree, writer, uv_version, show_warnings)?;
+    }
     temp_file
         .persist(&source_dist_path)
         .map_err(|err| Error::Persist(source_dist_path.clone(), err.error))?;
@@ -91,12 +107,9 @@ fn source_dist_matcher(
     for module_relative in modules_relative {
         // The wheel must not include any files included by the source distribution (at least until we
         // have files generated in the source dist -> wheel build step).
-        let import_path = uv_fs::normalize_path(
-            &uv_fs::relative_to(src_root.join(module_relative), source_tree)
-                .expect("module root is inside source tree"),
-        )
-        .portable_display()
-        .to_string();
+        let path = &uv_fs::relative_to(src_root.join(module_relative), source_tree)
+            .expect("module root is inside source tree");
+        let import_path = normalize_path(path).portable_display().to_string();
         includes.push(format!("{}/**", globset::escape(&import_path)));
     }
     for include in includes {
@@ -115,7 +128,7 @@ fn source_dist_matcher(
         .as_ref()
         .and_then(|readme| readme.path())
     {
-        let readme = uv_fs::normalize_path(readme);
+        let readme = normalize_path(readme);
         trace!("Including readme at: {}", readme.user_display());
         let readme = readme.portable_display().to_string();
         let glob = Glob::new(&globset::escape(&readme)).expect("escaped globset is parseable");
@@ -136,7 +149,7 @@ fn source_dist_matcher(
 
     // Include the data files
     for (name, directory) in settings.data.iter() {
-        let directory = uv_fs::normalize_path(directory);
+        let directory = normalize_path(directory);
         trace!("Including data ({}) at: {}", name, directory.user_display());
         if directory
             .components()
@@ -166,22 +179,24 @@ fn source_dist_matcher(
             .collect::<Vec<_>>()
     );
     let include_matcher =
-        GlobDirFilter::from_globs(&include_globs).map_err(|err| Error::GlobSetTooLarge {
+        GlobDirFilter::from_globs(include_globs).map_err(|err| Error::GlobSetTooLarge {
             field: "tool.uv.build-backend.source-include".to_string(),
             source: err,
         })?;
 
-    let mut excludes: Vec<String> = Vec::new();
-    if settings.default_excludes {
-        excludes.extend(DEFAULT_EXCLUDES.iter().map(ToString::to_string));
-    }
-    for exclude in settings.source_exclude {
-        // Avoid duplicate entries.
-        if !excludes.contains(&exclude) {
-            excludes.push(exclude);
-        }
-    }
-    debug!("Source dist excludes: {:?}", excludes);
+    let defaults = if settings.default_excludes {
+        DEFAULT_EXCLUDES
+    } else {
+        &[]
+    };
+    let excludes = defaults
+        .iter()
+        .copied()
+        .chain(settings.source_exclude.iter().map(String::as_str));
+    debug!(
+        "Source dist excludes: {:?}",
+        excludes.clone().unique().collect::<Vec<_>>()
+    );
     let exclude_matcher = build_exclude_matcher(excludes)?;
     if exclude_matcher.is_match("pyproject.toml") {
         return Err(Error::PyprojectTomlExcluded);
@@ -197,7 +212,7 @@ fn write_source_dist(
     show_warnings: bool,
 ) -> Result<SourceDistFilename, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
-    for warning in pyproject_toml.check_build_system(uv_version) {
+    for warning in pyproject_toml.check_build_system(uv_version, BuildKind::Sdist) {
         warn_user_once!("{warning}");
     }
     let settings = pyproject_toml
@@ -229,10 +244,45 @@ fn write_source_dist(
         metadata_email.as_bytes(),
     )?;
 
+    // Build tools need to parse `pyproject.toml` in source distributions to extract the
+    // `[build-system]` table, and if any other part of the file contains too new TOML syntax, they
+    // fail to build. This generally doesn't trigger backtracking, so the user is left if a failure
+    // when any (transitive) dependency in their dependency tree has started using a single instance
+    // of TOML 1.1. Most package managers, including pip, are implemented in Python and use stdlib's
+    // tomllib, which only support TOML 1.0 up to including Python 3.14.
+    //
+    // To work around this, we do a best-effort rewrite of `pyproject.toml` to TOML 1.0. We also
+    // add the original `pyproject.toml` as `pyproject.toml.orig` for reference.
+    let pyproject_path = source_tree.join("pyproject.toml");
+    let pyproject_contents = fs_err::read_to_string(&pyproject_path)?;
+    let mut pyproject_value: toml::Value = toml::from_str(&pyproject_contents)
+        .map_err(|err| Error::Toml(pyproject_path.clone(), err))?;
+    // See https://github.com/toml-rs/toml/issues/1088 for `to_string_pretty`.
+    normalize_toml10_datetimes(&mut pyproject_value);
+    let pyproject_rewritten =
+        toml::to_string_pretty(&pyproject_value).map_err(Error::TomlSerialize)?;
+    writer.write_bytes(
+        &Path::new(&top_level)
+            .join("pyproject.toml")
+            .portable_display()
+            .to_string(),
+        pyproject_rewritten.as_bytes(),
+    )?;
+    writer.write_file(
+        &Path::new(&top_level)
+            .join("pyproject.toml.orig")
+            .portable_display()
+            .to_string(),
+        &pyproject_path,
+    )?;
+
     let (include_matcher, exclude_matcher) =
         source_dist_matcher(source_tree, &pyproject_toml, settings, show_warnings)?;
 
     let mut files_visited = 0;
+    let mut written_directories = FxHashSet::<PathBuf>::default();
+    let top_level_directory = PathBuf::from(&top_level).join("");
+    write_directory_once(&mut writer, &mut written_directories, &top_level_directory)?;
     for entry in WalkDir::new(source_tree)
         .sort_by_file_name()
         .into_iter()
@@ -275,14 +325,29 @@ fn write_source_dist(
             continue;
         }
 
+        // `pyproject.toml` is handled separately.
+        if relative == "pyproject.toml" {
+            continue;
+        }
+        if relative == "pyproject.toml.orig" {
+            debug!("Ignoring existing `pyproject.toml.orig`");
+            continue;
+        }
+
         error_on_venv(entry.file_name(), entry.path())?;
 
-        let entry_path = Path::new(&top_level)
-            .join(relative)
-            .portable_display()
-            .to_string();
+        if entry.file_type().is_dir() {
+            continue;
+        }
+
         debug!("Adding to sdist: {}", relative.user_display());
-        writer.write_dir_entry(&entry, &entry_path)?;
+        write_file_with_directories(
+            &mut writer,
+            &mut written_directories,
+            Path::new(&top_level),
+            relative,
+            entry.path(),
+        )?;
     }
     debug!("Visited {files_visited} files for source dist build");
 
@@ -291,21 +356,117 @@ fn write_source_dist(
     Ok(filename)
 }
 
-struct TarGzWriter<W: Write> {
-    path: PathBuf,
-    tar: tar::Builder<GzEncoder<W>>,
+pub(crate) struct SyncReader<R> {
+    reader: R,
 }
 
-impl<W: Write> TarGzWriter<W> {
+impl<R> SyncReader<R> {
+    pub(crate) fn new(reader: R) -> Self {
+        Self { reader }
+    }
+}
+
+impl<R: Read + Unpin> AsyncRead for SyncReader<R> {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        _context: &mut Context<'_>,
+        buffer: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        let read = self.reader.read(buffer.initialize_unfilled())?;
+        buffer.advance(read);
+        Poll::Ready(Ok(()))
+    }
+}
+
+struct SyncWriter<W> {
+    writer: W,
+}
+
+impl<W> SyncWriter<W> {
+    fn new(writer: W) -> Self {
+        Self { writer }
+    }
+
+    fn into_inner(self) -> W {
+        self.writer
+    }
+}
+
+impl<W: Write + Unpin> AsyncWrite for SyncWriter<W> {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        _context: &mut Context<'_>,
+        buffer: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        Poll::Ready(self.writer.write(buffer))
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, _context: &mut Context<'_>) -> Poll<io::Result<()>> {
+        // Per-entry flushes change the deflate stream, even though the tar payload is identical.
+        // The encoder is finalized by `GzEncoder::finish` after the tar archive is closed.
+        Poll::Ready(Ok(()))
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<io::Result<()>> {
+        self.poll_flush(context)
+    }
+}
+
+struct TokioTarGzWriter<W: Write + Unpin + Send> {
+    path: PathBuf,
+    tar: tokio_tar::Builder<SyncWriter<GzEncoder<W>>>,
+}
+
+impl<W: Write + Unpin + Send> TokioTarGzWriter<W> {
     fn new(writer: W, path: impl Into<PathBuf>) -> Self {
         let path = path.into();
-        let enc = GzEncoder::new(writer, Compression::default());
-        let tar = tar::Builder::new(enc);
+        let gzip = GzEncoder::new(writer, Compression::default());
+        let tar = tokio_tar::Builder::new_non_terminated(SyncWriter::new(gzip));
         Self { path, tar }
     }
 }
 
-impl<W: Write> DirectoryWriter for TarGzWriter<W> {
+struct TarCodecGzWriter<W: Write + Unpin> {
+    path: PathBuf,
+    tar: Builder<TarEncoder<SyncWriter<GzEncoder<W>>>>,
+}
+
+impl<W: Write + Unpin> TarCodecGzWriter<W> {
+    fn new(writer: W, path: impl Into<PathBuf>) -> Self {
+        let path = path.into();
+        let gzip = GzEncoder::new(writer, Compression::default());
+        let tar = TarEncoder::new(SyncWriter::new(gzip)).builder();
+        Self { path, tar }
+    }
+}
+
+fn normalize_toml10_datetimes(value: &mut toml::Value) {
+    match value {
+        toml::Value::Datetime(datetime) => {
+            if let Some(time) = datetime.time.as_mut()
+                && time.second.is_none()
+            {
+                time.second = Some(0);
+            }
+        }
+        toml::Value::Array(values) => {
+            for value in values {
+                normalize_toml10_datetimes(value);
+            }
+        }
+        toml::Value::Table(values) => {
+            for (_, value) in values.iter_mut() {
+                normalize_toml10_datetimes(value);
+            }
+        }
+        toml::Value::String(_)
+        | toml::Value::Integer(_)
+        | toml::Value::Float(_)
+        | toml::Value::Boolean(_) => {}
+    }
+}
+
+impl<W: Write + Unpin + Send> DirectoryWriter for TokioTarGzWriter<W> {
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
         let mut header = Header::new_gnu();
         // Work around bug in Python's std tar module
@@ -316,9 +477,11 @@ impl<W: Write> DirectoryWriter for TarGzWriter<W> {
         // Reasonable default to avoid 0o000 permissions, the user's umask will be applied on
         // unpacking.
         header.set_mode(0o644);
-        self.tar
-            .append_data(&mut header, path, Cursor::new(bytes))
-            .map_err(|err| Error::TarWrite(self.path.clone(), err))?;
+        block_on(
+            self.tar
+                .append_data(&mut header, path, SyncReader::new(Cursor::new(bytes))),
+        )
+        .map_err(|err| Error::TarWrite(self.path.clone(), err))?;
         Ok(())
     }
 
@@ -331,27 +494,19 @@ impl<W: Write> DirectoryWriter for TarGzWriter<W> {
         header.set_entry_type(EntryType::Regular);
         // Preserve the executable bit, especially for scripts
         #[cfg(unix)]
-        let executable_bit = {
-            use std::os::unix::fs::PermissionsExt;
-            file.metadata()?.permissions().mode() & 0o111 != 0
-        };
+        let executable_bit = metadata.permissions().mode() & 0o111 != 0;
         // Windows has no executable bit
         #[cfg(not(unix))]
         let executable_bit = false;
 
-        // Set reasonable defaults to avoid 0o000 permissions, while avoiding adding the exact
-        // filesystem permissions to the archive for reproducibility. Where applicable, the
-        // operating system filters the stored permission by the user's umask when unpacking.
-        if executable_bit {
-            header.set_mode(0o755);
-        } else {
-            header.set_mode(0o644);
-        }
+        header.set_mode(if executable_bit { 0o755 } else { 0o644 });
         header.set_size(metadata.len());
         let reader = BufReader::new(File::open(file)?);
-        self.tar
-            .append_data(&mut header, path, reader)
-            .map_err(|err| Error::TarWrite(self.path.clone(), err))?;
+        block_on(
+            self.tar
+                .append_data(&mut header, path, SyncReader::new(reader)),
+        )
+        .map_err(|err| Error::TarWrite(self.path.clone(), err))?;
         Ok(())
     }
 
@@ -361,16 +516,68 @@ impl<W: Write> DirectoryWriter for TarGzWriter<W> {
         header.set_mode(0o755);
         header.set_entry_type(EntryType::Directory);
         header.set_size(0);
-        self.tar
-            .append_data(&mut header, directory, io::empty())
-            .map_err(|err| Error::TarWrite(self.path.clone(), err))?;
+        block_on(
+            self.tar
+                .append_data(&mut header, directory, SyncReader::new(io::empty())),
+        )
+        .map_err(|err| Error::TarWrite(self.path.clone(), err))?;
         Ok(())
     }
 
-    fn close(mut self, _dist_info_dir: &str) -> Result<(), Error> {
-        self.tar
+    fn close(self, _dist_info_dir: &str) -> Result<(), Error> {
+        let path = self.path;
+        let writer =
+            block_on(self.tar.into_inner()).map_err(|err| Error::TarWrite(path.clone(), err))?;
+        writer
+            .into_inner()
             .finish()
-            .map_err(|err| Error::TarWrite(self.path.clone(), err))?;
+            .map_err(|err| Error::TarWrite(path, err))?;
+        Ok(())
+    }
+}
+
+impl<W: Write + Unpin> DirectoryWriter for TarCodecGzWriter<W> {
+    fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
+        block_on(self.tar.add_file(path, bytes, EntryMetadata::default()))
+            .map_err(|err| Error::TarCodecWrite(self.path.clone(), err))?;
+        Ok(())
+    }
+
+    fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error> {
+        let metadata = fs_err::metadata(file)?;
+        // Preserve the executable bit, especially for scripts
+        #[cfg(unix)]
+        let executable_bit = metadata.permissions().mode() & 0o111 != 0;
+        // Windows has no executable bit
+        #[cfg(not(unix))]
+        let executable_bit = false;
+
+        let reader = BufReader::new(File::open(file)?);
+        let payload = FilePayload::new(metadata.len(), SyncReader::new(reader));
+        block_on(self.tar.add_file(
+            path,
+            payload,
+            EntryMetadata::default().executable(executable_bit),
+        ))
+        .map_err(|err| Error::TarCodecWrite(self.path.clone(), err))?;
+        Ok(())
+    }
+
+    fn write_directory(&mut self, directory: &str) -> Result<(), Error> {
+        block_on(self.tar.add_directory(directory))
+            .map_err(|err| Error::TarCodecWrite(self.path.clone(), err))?;
+        Ok(())
+    }
+
+    fn close(self, _dist_info_dir: &str) -> Result<(), Error> {
+        let path = self.path;
+        let encoder = block_on(self.tar.finish_into_inner())
+            .map_err(|err| Error::TarCodecWrite(path.clone(), err))?;
+        encoder
+            .into_inner()
+            .into_inner()
+            .finish()
+            .map_err(|err| Error::GzipWrite(path, err))?;
         Ok(())
     }
 }

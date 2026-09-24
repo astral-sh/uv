@@ -1,0 +1,216 @@
+[project]
+name = "poetry"
+version = "2.4.1"
+description = "Python dependency management and packaging made easy."
+requires-python = ">=3.10,<4.0"
+dependencies = [
+    "poetry-core (==2.4.0)",
+    "build (>=1.2.1,<2.0.0)",
+    "cachecontrol[filecache] (>=0.14.0,<0.15.0)",
+    "cleo (>=2.1.0,<3.0.0)",
+    "dulwich (>=0.25.0,<2)",
+    "fastjsonschema (>=2.18.0,<3.0.0)",
+    "installer (>=0.7.0,<2.0.0)",
+    "keyring (>=25.1.0,<26.0.0)",
+    # packaging uses calver, so version is unclamped
+    "packaging (>=24.2)",  # PEP 639 support was added in 24.2
+    "pkginfo (>=1.12,<2.0)",
+    "platformdirs (>=3.0.0,<5)",
+    "pyproject-hooks (>=1.0.0,<2.0.0)",
+    "requests (>=2.26,<3.0)",
+    "requests-toolbelt (>=1.0.0,<2.0.0)",
+    "shellingham (>=1.5,<2.0)",
+    "tomli (>=2.0.1,<3.0.0) ; python_version < '3.11'",
+    "tomlkit (>=0.11.4,<1.0.0)",
+    # trove-classifiers uses calver, so version is unclamped
+    "trove-classifiers (>=2022.5.19)",
+    "virtualenv (>=20.26.6)",
+    "xattr (>=1.0.0,<2.0.0) ; sys_platform == 'darwin'",
+    "findpython (>=0.6.2,<0.9.0)",
+    # pbs-installer uses calver, so version is unclamped
+    "pbs-installer[download,install] (>=2025.6.10)",
+]
+authors = [
+    { name = "Sébastien Eustace", email = "sebastien@eustace.io" }
+]
+maintainers = [
+    { name = "Arun Babu Neelicattu", email = "arun.neelicattu@gmail.com" },
+    { name = "Bjorn Neergaard", email = "bjorn@neersighted.com" },
+    { name = "Branch Vincent", email = "branchevincent@gmail.com" },
+    { name = "Randy Döring", email = "radoering.poetry@gmail.com" },
+    { name = "Steph Samson", email = "hello@stephsamson.com" },
+    { name = "finswimmer", email = "finswimmer77@gmail.com" },
+    { name = "Bartosz Sokorski", email = "b.sokorski@gmail.com" },
+]
+license = "MIT"
+readme = "README.md"
+keywords = ["packaging", "dependency", "poetry"]
+# classifiers are dynamic because we want to create Python classifiers automatically
+dynamic = [ "classifiers" ]
+
+[project.urls]
+Homepage = "https://python-poetry.org/"
+Changelog = "https://python-poetry.org/history/"
+Repository = "https://github.com/python-poetry/poetry"
+Documentation = "https://python-poetry.org/docs"
+
+[project.scripts]
+poetry = "poetry.console.application:main"
+
+
+[tool.poetry]
+requires-poetry = ">=2.0"
+classifiers = [
+    "Topic :: Software Development :: Build Tools",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+include = [{ path = "tests", format = "sdist" }]
+
+[tool.poetry.group.dev.dependencies]
+pre-commit = ">=2.10"
+
+[tool.poetry.group.test.dependencies]
+coverage = ">=7.2.0"
+deepdiff = ">=6.3"
+responses = ">=0.25.8"
+jaraco-classes = ">=3.3.1"
+pytest = ">=9.0"
+pytest-cov = ">=4.0"
+pytest-mock = ">=3.9"
+pytest-randomly = ">=3.12"
+pytest-xdist = { version = ">=3.1", extras = ["psutil"] }
+
+[tool.poetry.group.typing.dependencies]
+mypy = ">=1.8.0"
+types-requests = ">=2.28.8"
+
+# only used in github actions
+[tool.poetry.group.github-actions]
+optional = true
+[tool.poetry.group.github-actions.dependencies]
+pytest-github-actions-annotate-failures = "^0.1.7"
+
+
+[build-system]
+requires = ["poetry-core>=2.0"]
+build-backend = "poetry.core.masonry.api"
+
+
+[tool.ruff]
+extend-exclude = [
+    "docs/*",
+    # External to the project's coding standards
+    "tests/fixtures/git/*",
+    "tests/fixtures/project_with_setup*/*",
+]
+fix = true
+line-length = 88
+
+[tool.ruff.lint]
+extend-select = [
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "ERA", # flake8-eradicate/eradicate
+    "I",   # isort
+    "N",   # pep8-naming
+    "PIE", # flake8-pie
+    "PGH", # pygrep
+    "RUF", # ruff checks
+    "SIM", # flake8-simplify
+    "T20", # flake8-print
+    "TC",  # flake8-type-checking
+    "TID", # flake8-tidy-imports
+    "UP",  # pyupgrade
+]
+ignore = [
+    "B904", # use 'raise ... from err'
+    "B905", # use explicit 'strict=' parameter with 'zip()'
+]
+extend-safe-fixes = [
+    "TC",  # move import from and to TYPE_CHECKING blocks
+]
+unfixable = [
+    "ERA", # do not autoremove commented out code
+]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.isort]
+force-single-line = true
+lines-between-types = 1
+lines-after-imports = 2
+known-first-party = ["poetry"]
+known-third-party = ["poetry.core"]
+required-imports = ["from __future__ import annotations"]
+
+
+[tool.mypy]
+files = "src, tests"
+mypy_path = "src"
+namespace_packages = true
+explicit_package_bases = true
+strict = true
+enable_error_code = [
+    "ignore-without-code",
+    "redundant-expr",
+    "truthy-bool",
+]
+exclude = [
+    "tests/fixtures",
+    "tests/masonry/builders/fixtures",
+    "tests/utils/fixtures",
+]
+
+# ignores that are only required for some Python versions
+[[tool.mypy.overrides]]
+module = [
+    'poetry.repositories.installed_repository',
+]
+warn_unused_ignores = false
+
+[[tool.mypy.overrides]]
+module = [
+    'fastjsonschema.*',
+    'findpython.*',
+    'requests_toolbelt.*',
+    'shellingham.*',
+    'xattr.*',
+]
+ignore_missing_imports = true
+
+
+[tool.pytest]
+strict = true
+addopts = [ "-n", "logical", "-ra" ]
+testpaths = ["tests"]
+markers = [
+    "network: mark tests that require internet access",
+    "skip_git_mock: mark tests that should not auto-apply git_mock",
+]
+log_cli_level = "INFO"
+
+
+[tool.coverage.report]
+exclude_also = [
+    "if TYPE_CHECKING:"
+]
+
+
+[tool.repo-review]
+ignore = [
+    "PY007",
+    "PP302",
+    "PP309",
+    "GH101",
+    "GH212",
+    "PC111",
+    "PC140",
+    "PC160",
+    "PC170",
+    "PC180",
+    "PC180",
+    "PC901",
+    "MY103",
+    "RTD100",
+]

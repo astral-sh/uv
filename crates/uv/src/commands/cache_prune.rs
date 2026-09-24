@@ -4,18 +4,20 @@ use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use uv_cache::{Cache, Removal};
+use uv_cache::{Cache, RemovalAccounting};
 use uv_fs::Simplified;
+use uv_preview::{Preview, PreviewFeature};
 
 use crate::commands::{ExitStatus, human_readable_bytes};
 use crate::printer::Printer;
 
-/// Prune all unreachable objects from the cache.
+/// Prune dangling cache entries and cached environments.
 pub(crate) async fn cache_prune(
     ci: bool,
     force: bool,
     cache: Cache,
     printer: Printer,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     if !cache.root().exists() {
         writeln!(
@@ -41,13 +43,20 @@ pub(crate) async fn cache_prune(
         }
     };
 
+    let removal_accounting = if preview.is_enabled(PreviewFeature::CachePhysicalSpace) {
+        RemovalAccounting::Fine
+    } else {
+        RemovalAccounting::Coarse
+    };
+    let cache = cache.with_removal_accounting(removal_accounting);
+
     writeln!(
         printer.stderr(),
         "Pruning cache at: {}",
         cache.root().user_display().cyan()
     )?;
 
-    let mut summary = Removal::default();
+    let mut summary = cache.removal();
 
     // Prune the source distribution cache, which is tightly coupled to the builder crate.
     summary += uv_distribution::prune(&cache)
@@ -77,15 +86,15 @@ pub(crate) async fn cache_prune(
         }
     }
 
-    // If any, write a summary of the total byte count removed.
-    if summary.total_bytes > 0 {
-        let bytes = if summary.total_bytes < 1024 {
-            format!("{}B", summary.total_bytes)
+    // Prefer the fine-grained estimate, falling back to coarse accounting.
+    let reported_bytes = summary.fine_bytes.unwrap_or(summary.coarse_bytes);
+    if summary.num_files > 0 || summary.num_dirs > 0 {
+        let bytes = human_readable_bytes(reported_bytes);
+        if summary.fine_bytes_incomplete {
+            write!(printer.stderr(), " (at least {:.1})", bytes.green())?;
         } else {
-            let (bytes, unit) = human_readable_bytes(summary.total_bytes);
-            format!("{bytes:.1}{unit}")
-        };
-        write!(printer.stderr(), " ({})", bytes.green())?;
+            write!(printer.stderr(), " ({:.1})", bytes.green())?;
+        }
     }
 
     writeln!(printer.stderr())?;

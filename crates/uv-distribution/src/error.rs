@@ -3,7 +3,6 @@ use std::path::PathBuf;
 
 use owo_colors::OwoColorize;
 use tokio::task::JoinError;
-use zip::result::ZipError;
 
 use crate::metadata::MetadataError;
 use uv_cache::Error as CacheError;
@@ -37,6 +36,8 @@ impl fmt::Display for PythonVersion {
 pub enum Error {
     #[error("Building source distributions is disabled")]
     NoBuild,
+    #[error("Building source distributions for `{0}` is disabled")]
+    NoBuildPackage(PackageName),
 
     // Network error
     #[error(transparent)]
@@ -49,6 +50,8 @@ pub enum Error {
     Reqwest(#[from] WrappedReqwestError),
     #[error(transparent)]
     Client(#[from] uv_client::Error),
+    #[error(transparent)]
+    ClientBuild(#[from] uv_client::ClientBuildError),
 
     // Cache writing error
     #[error("Failed to read from the distribution cache")]
@@ -123,8 +126,6 @@ pub enum Error {
     WheelMetadata(PathBuf, #[source] Box<uv_metadata::Error>),
     #[error("Failed to read metadata from installed package `{0}`")]
     ReadInstalled(Box<InstalledDist>, #[source] InstalledDistError),
-    #[error("Failed to read zip archive from built wheel")]
-    Zip(#[from] ZipError),
     #[error("Failed to extract archive: {0}")]
     Extract(String, #[source] uv_extract::Error),
     #[error("The source distribution is missing a `PKG-INFO` file")]
@@ -132,7 +133,9 @@ pub enum Error {
     #[error("The source distribution `{}` has no subdirectory `{}`", _0, _1.display())]
     MissingSubdirectory(DisplaySafeUrl, PathBuf),
     #[error("The source distribution `{0}` is missing Git LFS artifacts.")]
-    MissingGitLfsArtifacts(DisplaySafeUrl, #[source] GitError),
+    MissingSourceDistGitLfsArtifacts(DisplaySafeUrl, #[source] GitError),
+    #[error("The wheel `{0}` is missing Git LFS artifacts.")]
+    MissingWheelGitLfsArtifacts(DisplaySafeUrl, #[source] GitError),
     #[error("Failed to extract static metadata from `PKG-INFO`")]
     PkgInfo(#[source] uv_pypi_types::MetadataError),
     #[error("The source distribution is missing a `pyproject.toml` file")]
@@ -171,6 +174,33 @@ pub enum Error {
     },
 
     #[error(
+        "Size mismatch for `{distribution}`: expected {expected} bytes, but downloaded {actual} bytes"
+    )]
+    MismatchedSize {
+        distribution: String,
+        expected: u64,
+        actual: u64,
+    },
+
+    #[error(
+        "Content-Length mismatch for `{distribution}`: expected {expected} bytes, but the server advertised {actual} bytes"
+    )]
+    MismatchedContentLength {
+        distribution: String,
+        expected: u64,
+        actual: u64,
+    },
+
+    #[error(
+        "Range response size mismatch for `{distribution}`: expected {expected} bytes from Content-Range, but received {actual} bytes"
+    )]
+    MismatchedRangeSize {
+        distribution: String,
+        expected: u64,
+        actual: u64,
+    },
+
+    #[error(
         "Hash-checking is enabled, but no hashes were provided or computed for: `{distribution}`"
     )]
     MissingHashes { distribution: String },
@@ -196,6 +226,25 @@ pub enum Error {
 
     #[error("Hash-checking is not supported for Git repositories: `{0}`")]
     HashesNotSupportedGit(String),
+
+    #[error(transparent)]
+    InstallWheelError(uv_install_wheel::Error),
+}
+
+fn is_not_found_error(mut error: &(dyn std::error::Error + 'static)) -> bool {
+    loop {
+        if error
+            .downcast_ref::<reqwest::Error>()
+            .and_then(reqwest::Error::status)
+            .is_some_and(|status| status == reqwest::StatusCode::NOT_FOUND)
+        {
+            return true;
+        }
+        let Some(source) = error.source() else {
+            return false;
+        };
+        error = source;
+    }
 }
 
 impl From<reqwest::Error> for Error {
@@ -215,7 +264,22 @@ impl From<reqwest_middleware::Error> for Error {
     }
 }
 
+impl uv_errors::Hinted for Error {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        match self {
+            Self::Build(err) => err.hints(),
+            Self::Client(err) => uv_errors::Hinted::hints(err),
+            Self::MetadataLowering(err) => err.hints(),
+            _ => uv_errors::Hints::none(),
+        }
+    }
+}
+
 impl IsBuildBackendError for Error {
+    fn is_user_failure(&self) -> bool {
+        Self::is_user_failure(self)
+    }
+
     fn is_build_backend_error(&self) -> bool {
         match self {
             Self::Build(err) => err.is_build_backend_error(),
@@ -225,6 +289,64 @@ impl IsBuildBackendError for Error {
 }
 
 impl Error {
+    /// Return whether this is an expected user-facing failure.
+    pub fn is_user_failure(&self) -> bool {
+        match self {
+            Self::NoBuild
+            | Self::NoBuildPackage(_)
+            | Self::InvalidUrl(_)
+            | Self::NonFileUrl(_)
+            | Self::WheelFilename(_)
+            | Self::WheelMetadataNameMismatch { .. }
+            | Self::WheelMetadataVersionMismatch { .. }
+            | Self::WheelFilenameNameMismatch { .. }
+            | Self::WheelFilenameVersionMismatch { .. }
+            | Self::BuiltWheelIncompatibleHostPlatform { .. }
+            | Self::BuiltWheelIncompatibleTargetPlatform { .. }
+            | Self::Metadata(_)
+            | Self::WheelMetadata(..)
+            | Self::Extract(..)
+            | Self::MissingPkgInfo
+            | Self::MissingSubdirectory(..)
+            | Self::MissingSourceDistGitLfsArtifacts(..)
+            | Self::MissingWheelGitLfsArtifacts(..)
+            | Self::PkgInfo(_)
+            | Self::MissingPyprojectToml
+            | Self::PyprojectToml(_)
+            | Self::MetadataLowering(_)
+            | Self::NotFound(_)
+            | Self::RequiresPython(..)
+            | Self::MismatchedHashes { .. }
+            | Self::MismatchedSize { .. }
+            | Self::MismatchedContentLength { .. }
+            | Self::MismatchedRangeSize { .. }
+            | Self::MissingHashes { .. }
+            | Self::MissingActualHashes { .. }
+            | Self::MissingExpectedHashes { .. }
+            | Self::HashesNotSupportedSourceTree(_)
+            | Self::HashesNotSupportedGit(_) => true,
+            Self::Build(error) => error.is_user_failure(),
+            Self::InstallWheelError(error) => error.is_user_failure(),
+            Self::Git(error) => error.is_user_failure(),
+            Self::Reqwest(error) => error.is_user_failure(),
+            Self::Client(error) => error.is_user_failure(),
+            Self::ClientBuild(error) => error.is_user_failure(),
+            Self::CacheRead(_)
+            | Self::CacheWrite(_)
+            | Self::CacheLock(_)
+            | Self::CacheDecode(_)
+            | Self::CacheEncode(_)
+            | Self::CacheWalk(_)
+            | Self::CacheInfo(_)
+            | Self::ReadInstalled(..)
+            | Self::CacheHeal(..)
+            | Self::BaseInterpreter(_)
+            | Self::Join(_)
+            | Self::HashExhaustion(_) => false,
+            Self::ReqwestMiddlewareError(error) => is_not_found_error(error.as_ref()),
+        }
+    }
+
     /// Construct a hash mismatch error.
     pub fn hash_mismatch(
         distribution: String,

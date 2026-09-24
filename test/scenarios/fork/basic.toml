@@ -1,0 +1,17 @@
+name = "fork-basic"
+description = '''
+An extremely basic test of universal resolution. In this case, the resolution
+should contain two distinct versions of `a` depending on `sys_platform`.
+'''
+
+[resolver_options]
+universal = true
+
+[expected]
+satisfiable = true
+
+[root]
+requires = ["a>=2 ; sys_platform == 'linux'", "a<2 ; sys_platform == 'darwin'"]
+
+[packages.a.versions."1.0.0"]
+[packages.a.versions."2.0.0"]

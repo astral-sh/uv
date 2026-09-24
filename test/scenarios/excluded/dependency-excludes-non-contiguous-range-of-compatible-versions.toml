@@ -1,0 +1,42 @@
+name = "dependency-excludes-non-contiguous-range-of-compatible-versions"
+description = "There is a non-contiguous range of compatible versions for the requested package `a`, but another dependency `c` excludes the range. This is the same as `dependency-excludes-range-of-compatible-versions` but some of the versions of `a` are incompatible for another reason e.g. dependency on non-existent package `d`."
+
+[root]
+requires = ["a", "b>=2.0.0,<3.0.0", "c"]
+
+[expected]
+satisfiable = false
+explanation = "Only the `2.x` versions of `a` are available since `a==1.0.0` and `a==3.0.0` require incompatible versions of `b`, but all available versions of `c` exclude that range of `a` so resolution fails."
+
+[packages.a.versions."1.0.0"]
+requires = ["b==1.0.0"]
+
+[packages.a.versions."2.0.0"]
+requires = ["b==2.0.0"]
+
+[packages.a.versions."2.1.0"]
+requires = ["b==2.0.0", "d"]
+
+[packages.a.versions."2.2.0"]
+requires = ["b==2.0.0"]
+
+[packages.a.versions."2.3.0"]
+requires = ["b==2.0.0", "d"]
+
+[packages.a.versions."2.4.0"]
+requires = ["b==2.0.0"]
+
+[packages.a.versions."3.0.0"]
+requires = ["b==3.0.0"]
+
+[packages.b.versions."1.0.0"]
+
+[packages.b.versions."2.0.0"]
+
+[packages.b.versions."3.0.0"]
+
+[packages.c.versions."1.0.0"]
+requires = ["a<2.0.0"]
+
+[packages.c.versions."2.0.0"]
+requires = ["a>=3.0.0"]

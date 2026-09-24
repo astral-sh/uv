@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::fmt::{self, Display, Formatter};
 use std::str::FromStr;
+use std::sync::Arc;
 
 use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
@@ -16,22 +17,17 @@ use uv_small_str::SmallString;
 pub enum FileConversionError {
     #[error("Failed to parse `requires-python`: `{0}`")]
     RequiresPython(String, #[source] VersionSpecifiersParseError),
-    #[error("Failed to parse URL: {0}")]
-    Url(String, #[source] url::ParseError),
-    #[error("Failed to parse filename from URL: {0}")]
-    MissingPathSegments(String),
-    #[error(transparent)]
-    Utf8(#[from] std::str::Utf8Error),
 }
 
 /// Internal analog to [`uv_pypi_types::PypiFile`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
 pub struct File {
-    pub dist_info_metadata: bool,
+    /// Hashes for separately available metadata, or an empty list when no hashes were provided.
+    pub dist_info_metadata: Option<HashDigests>,
     pub filename: SmallString,
     pub hashes: HashDigests,
-    pub requires_python: Option<VersionSpecifiers>,
+    pub requires_python: Option<Arc<VersionSpecifiers>>,
     pub size: Option<u64>,
     // N.B. We don't use a Jiff timestamp here because it's a little
     // annoying to do so with rkyv. Since we only use this field for doing
@@ -40,7 +36,6 @@ pub struct File {
     pub upload_time_utc_ms: Option<i64>,
     pub url: FileLocation,
     pub yanked: Option<Box<Yanked>>,
-    pub zstd: Option<Box<Zstd>>,
 }
 
 impl File {
@@ -50,10 +45,7 @@ impl File {
         base: &SmallString,
     ) -> Result<Self, FileConversionError> {
         Ok(Self {
-            dist_info_metadata: file
-                .core_metadata
-                .as_ref()
-                .is_some_and(CoreMetadata::is_available),
+            dist_info_metadata: Self::dist_info_metadata(file.core_metadata),
             filename: file.filename,
             hashes: HashDigests::from(file.hashes),
             requires_python: file
@@ -64,60 +56,15 @@ impl File {
             upload_time_utc_ms: file.upload_time.map(Timestamp::as_millisecond),
             url: FileLocation::new(file.url, base),
             yanked: file.yanked,
-            zstd: None,
         })
     }
 
-    pub fn try_from_pyx(
-        file: uv_pypi_types::PyxFile,
-        base: &SmallString,
-    ) -> Result<Self, FileConversionError> {
-        let filename = if let Some(filename) = file.filename {
-            filename
-        } else {
-            // Remove any query parameters or fragments from the URL to get the filename.
-            let base_url = file
-                .url
-                .as_ref()
-                .split_once('?')
-                .or_else(|| file.url.as_ref().split_once('#'))
-                .map(|(path, _)| path)
-                .unwrap_or(file.url.as_ref());
-
-            // Take the last segment, stripping any query or fragment.
-            let last = base_url
-                .split('/')
-                .next_back()
-                .ok_or_else(|| FileConversionError::MissingPathSegments(file.url.to_string()))?;
-
-            // Decode the filename, which may be percent-encoded.
-            let filename = percent_encoding::percent_decode_str(last).decode_utf8()?;
-
-            SmallString::from(filename)
-        };
-        Ok(Self {
-            filename,
-            dist_info_metadata: file
-                .core_metadata
-                .as_ref()
-                .is_some_and(CoreMetadata::is_available),
-            hashes: HashDigests::from(file.hashes),
-            requires_python: file
-                .requires_python
-                .transpose()
-                .map_err(|err| FileConversionError::RequiresPython(err.line().clone(), err))?,
-            size: file.size,
-            upload_time_utc_ms: file.upload_time.map(Timestamp::as_millisecond),
-            url: FileLocation::new(file.url, base),
-            yanked: file.yanked,
-            zstd: file
-                .zstd
-                .map(|zstd| Zstd {
-                    hashes: HashDigests::from(zstd.hashes),
-                    size: zstd.size,
-                })
-                .map(Box::new),
-        })
+    fn dist_info_metadata(metadata: Option<CoreMetadata>) -> Option<HashDigests> {
+        match metadata? {
+            CoreMetadata::Bool(false) => None,
+            CoreMetadata::Bool(true) => Some(HashDigests::empty()),
+            CoreMetadata::Hashes(hashes) => Some(HashDigests::from(hashes)),
+        }
     }
 }
 
@@ -141,6 +88,18 @@ impl FileLocation {
             Some(..) => Self::AbsoluteUrl(UrlString::new(url)),
             None => Self::RelativeUrl(base.clone(), url),
         }
+    }
+
+    /// Returns the final raw URL path component after removing any query or fragment.
+    ///
+    /// The filename is not percent-decoded.
+    pub fn raw_filename(&self) -> &str {
+        let path = match self {
+            Self::RelativeUrl(_, path) => path.as_ref(),
+            Self::AbsoluteUrl(url) => url.as_ref(),
+        };
+        let path = path.split_once(['?', '#']).map_or(path, |(path, _)| path);
+        path.rsplit_once('/').map_or(path, |(_, filename)| filename)
     }
 
     /// Convert this location to a URL.
@@ -206,7 +165,7 @@ pub struct UrlString(SmallString);
 
 impl UrlString {
     /// Create a new [`UrlString`] from a [`String`].
-    pub fn new(url: SmallString) -> Self {
+    fn new(url: SmallString) -> Self {
         Self(url)
     }
 
@@ -221,8 +180,7 @@ impl UrlString {
     /// Return the [`UrlString`] with any query parameters and fragments removed.
     pub fn base_str(&self) -> &str {
         self.as_ref()
-            .split_once('?')
-            .or_else(|| self.as_ref().split_once('#'))
+            .split_once(['?', '#'])
             .map(|(path, _)| path)
             .unwrap_or(self.as_ref())
     }
@@ -298,15 +256,28 @@ pub enum ToUrlError {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
-pub struct Zstd {
-    pub hashes: HashDigests,
-    pub size: Option<u64>,
-}
-
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
+
+    #[test]
+    fn raw_filename() {
+        let base = SmallString::from("https://example.com/simple/");
+
+        let location = FileLocation::new(
+            SmallString::from("files/example%20pkg.whl?download=1#fragment"),
+            &base,
+        );
+        assert_eq!(location.raw_filename(), "example%20pkg.whl");
+
+        let location = FileLocation::new(
+            SmallString::from("https://files.example.com/example.whl#sha256=digest"),
+            &base,
+        );
+        assert_eq!(location.raw_filename(), "example.whl");
+    }
 
     #[test]
     fn base_str() {
@@ -314,6 +285,12 @@ mod tests {
         assert_eq!(url.base_str(), "https://example.com/path");
 
         let url = UrlString("https://example.com/path#fragment".into());
+        assert_eq!(url.base_str(), "https://example.com/path");
+
+        let url = UrlString("https://example.com/path#fragment?query".into());
+        assert_eq!(url.base_str(), "https://example.com/path");
+
+        let url = UrlString("https://example.com/path#fragment/part?query".into());
         assert_eq!(url.base_str(), "https://example.com/path");
 
         let url = UrlString("https://example.com/path".into());
@@ -325,7 +302,7 @@ mod tests {
         // Borrows a URL without a fragment
         let url = UrlString("https://example.com/path".into());
         assert_eq!(&*url.without_fragment(), &url);
-        assert!(matches!(url.without_fragment(), Cow::Borrowed(_)));
+        assert_matches!(url.without_fragment(), Cow::Borrowed(_));
 
         // Removes the fragment if present on the URL
         let url = UrlString("https://example.com/path?query#fragment".into());
@@ -333,6 +310,6 @@ mod tests {
             &*url.without_fragment(),
             &UrlString("https://example.com/path?query".into())
         );
-        assert!(matches!(url.without_fragment(), Cow::Owned(_)));
+        assert_matches!(url.without_fragment(), Cow::Owned(_));
     }
 }

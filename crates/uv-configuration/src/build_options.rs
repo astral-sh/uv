@@ -1,29 +1,7 @@
-use std::fmt::{Display, Formatter};
-
 use uv_normalize::PackageName;
+pub use uv_pypi_types::BuildKind;
 
 use crate::{PackageNameSpecifier, PackageNameSpecifiers};
-
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash)]
-pub enum BuildKind {
-    /// A PEP 517 wheel build.
-    #[default]
-    Wheel,
-    /// A PEP 517 source distribution build.
-    Sdist,
-    /// A PEP 660 editable installation wheel build.
-    Editable,
-}
-
-impl Display for BuildKind {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Wheel => f.write_str("wheel"),
-            Self::Sdist => f.write_str("sdist"),
-            Self::Editable => f.write_str("editable"),
-        }
-    }
-}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum BuildOutput {
@@ -89,19 +67,8 @@ impl BuildOptions {
         }
     }
 
-    pub fn no_binary_requirement(&self, package_name: Option<&PackageName>) -> bool {
-        match package_name {
-            Some(name) => self.no_binary_package(name),
-            None => self.no_binary_all(),
-        }
-    }
-
-    pub fn no_build_all(&self) -> bool {
+    fn no_build_all(&self) -> bool {
         matches!(self.no_build, NoBuild::All)
-    }
-
-    pub fn no_binary_all(&self) -> bool {
-        matches!(self.no_binary, NoBinary::All)
     }
 
     /// Return the [`NoBuild`] strategy to use.

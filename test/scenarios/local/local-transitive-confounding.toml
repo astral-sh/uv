@@ -1,0 +1,24 @@
+name = "local-transitive-confounding"
+description = "A transitive dependency has both a non-local and local version published, but the non-local version is unusable."
+
+[root]
+requires = ["a"]
+
+[expected]
+satisfiable = true
+explanation = "The version '2.0.0+foo' satisfies the constraint '==2.0.0'."
+
+[expected.packages]
+a = "1.0.0"
+b = "2.0.0+foo"
+
+[packages.a.versions."1.0.0"]
+requires = ["b==2.0.0"]
+
+[packages.b.versions."2.0.0"]
+wheel_tags = ["py3-any-macosx_10_0_ppc64"]
+sdist = false
+
+[packages.b.versions."2.0.0+bar"]
+
+[packages.b.versions."2.0.0+foo"]

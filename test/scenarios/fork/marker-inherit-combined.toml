@@ -1,0 +1,33 @@
+name = "fork-marker-inherit-combined"
+description = '''
+In this test, we check that marker expressions which provoke a fork
+are carried through to subsequent forks. Here, the `a>=2` and `a<2`
+dependency specifications create a fork, and then the `a<2` fork leads
+to `a==1.0.0` with dependency specifications on `b>=2` and `b<2` that
+provoke yet another fork. Finally, in the `b<2` fork, a dependency on
+`c` is introduced whose marker expression is disjoint with the marker
+expression that provoked the *first* fork. Therefore, `c` should be
+entirely excluded from the resolution.
+'''
+
+[resolver_options]
+universal = true
+
+[expected]
+satisfiable = true
+
+[root]
+requires = ["a>=2 ; sys_platform == 'linux'", "a<2 ; sys_platform == 'darwin'"]
+
+[packages.a.versions."1.0.0"]
+requires = [
+  "b>=2 ; implementation_name == 'cpython'",
+  "b<2 ; implementation_name == 'pypy'",
+]
+[packages.a.versions."2.0.0"]
+
+[packages.b.versions."1.0.0"]
+requires = ["c ; sys_platform == 'linux'"]
+[packages.b.versions."2.0.0"]
+
+[packages.c.versions."1.0.0"]

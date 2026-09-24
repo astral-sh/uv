@@ -1,8 +1,8 @@
-use configparser::ini::Ini;
-use regex::Regex;
-use rustc_hash::FxHashSet;
+use configparser::ini::{Ini, IniDefault};
+use regex::regex;
 use serde::Serialize;
-use std::sync::LazyLock;
+use std::io;
+use std::path::Path;
 
 use crate::{Error, wheel};
 
@@ -20,41 +20,22 @@ impl Script {
     ///
     /// <https://packaging.python.org/en/latest/specifications/entry-points/>
     ///
-    /// Extras are supposed to be ignored, which happens if you pass None for extras
-    pub(crate) fn from_value(
-        script_name: &str,
-        value: &str,
-        extras: Option<&[String]>,
-    ) -> Result<Option<Self>, Error> {
+    /// Extras declared by an entry point are accepted but ignored.
+    pub(crate) fn from_value(script_name: &str, value: &str) -> Result<Self, Error> {
         // "Within a value, readers must accept and ignore spaces (including multiple consecutive spaces) before or after the colon,
         //  between the object reference and the left square bracket, between the extra names and the square brackets and colons delimiting them,
         //  and after the right square bracket."
         // – https://packaging.python.org/en/latest/specifications/entry-points/#file-format
-        static SCRIPT_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-            Regex::new(r"^(?P<module>[\w\d_\-.]+)\s*:\s*(?P<function>[\w\d_\-.]+)(?:\s*\[\s*(?P<extras>(?:[^,]+,?\s*)+)\])?\s*$").unwrap()
-        });
-
-        let captures = SCRIPT_REGEX
+        let captures = regex!(
+            r"^(?P<module>[\w\d_\-.]+)\s*:\s*(?P<function>[\w\d_\-.]+)(?:\s*\[\s*(?P<extras>(?:[^,]+,?\s*)+)\])?\s*$"
+        )
             .captures(value)
             .ok_or_else(|| Error::InvalidWheel(format!("invalid console script: '{value}'")))?;
-        if let Some(script_extras) = captures.name("extras") {
-            if let Some(extras) = extras {
-                let script_extras = script_extras
-                    .as_str()
-                    .split(',')
-                    .map(|extra| extra.trim().to_string())
-                    .collect::<FxHashSet<String>>();
-                if !script_extras.is_subset(&extras.iter().cloned().collect()) {
-                    return Ok(None);
-                }
-            }
-        }
-
-        Ok(Some(Self {
+        Ok(Self {
             name: script_name.to_string(),
             module: captures.name("module").unwrap().as_str().to_string(),
             function: captures.name("function").unwrap().as_str().to_string(),
-        }))
+        })
     }
 
     pub(crate) fn import_name(&self) -> &str {
@@ -64,52 +45,78 @@ impl Script {
     }
 }
 
-pub(crate) fn scripts_from_ini(
-    extras: Option<&[String]>,
-    python_minor: u8,
-    ini: String,
-) -> Result<(Vec<Script>, Vec<Script>), Error> {
-    let entry_points_mapping = Ini::new_cs()
-        .read(ini)
-        .map_err(|err| Error::InvalidWheel(format!("entry_points.txt is invalid: {err}")))?;
+/// Console and GUI scripts declared by an `entry_points.txt` metadata file.
+#[derive(Default)]
+pub(crate) struct EntryPoints {
+    pub(crate) console_scripts: Vec<Script>,
+    pub(crate) gui_scripts: Vec<Script>,
+}
 
-    // TODO: handle extras
-    let mut console_scripts = match entry_points_mapping.get("console_scripts") {
-        Some(console_scripts) => {
-            wheel::read_scripts_from_section(console_scripts, "console_scripts", extras)?
-        }
-        None => Vec::new(),
-    };
-    let gui_scripts = match entry_points_mapping.get("gui_scripts") {
-        Some(gui_scripts) => wheel::read_scripts_from_section(gui_scripts, "gui_scripts", extras)?,
-        None => Vec::new(),
-    };
-
-    // Special case to generate versioned pip launchers.
-    // https://github.com/pypa/pip/blob/3898741e29b7279e7bffe044ecfbe20f6a438b1e/src/pip/_internal/operations/install/wheel.py#L283
-    // https://github.com/astral-sh/uv/issues/1593
-    // Older pip versions have a wrong `pip3.x` launcher we have to remove, while newer pip versions
-    // (post https://github.com/pypa/pip/pull/12536) don't, ...
-    console_scripts.retain(|script| {
-        let Some((left, right)) = script.name.split_once('.') else {
-            return true;
+impl EntryPoints {
+    pub(crate) fn read(path: impl AsRef<Path>, python_minor: u8) -> Result<Self, Error> {
+        let ini = match fs_err::read_to_string(path) {
+            Ok(ini) => ini,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(Self::default()),
+            Err(err) => return Err(err.into()),
         };
-        !(left == "pip3" && right.parse::<u8>().is_ok())
-    });
-    // ... either has a `pip3` launcher we can use as template for the `pip3.x` users expect.
-    if let Some(pip_script) = console_scripts.iter().find(|script| script.name == "pip3") {
-        console_scripts.push(Script {
-            name: format!("pip3.{python_minor}"),
-            ..pip_script.clone()
-        });
+
+        Self::parse(ini, python_minor)
     }
 
-    Ok((console_scripts, gui_scripts))
+    fn parse(ini: String, python_minor: u8) -> Result<Self, Error> {
+        // Per the Entry Points specification, `entry_points.txt` is a case-sensitive
+        // INI file that only uses `=` as the field delimiter.
+        // See: <https://packaging.python.org/en/latest/specifications/entry-points/#file-format>
+        let mut ini_options = IniDefault::default();
+        ini_options.case_sensitive = true;
+        ini_options.delimiters = vec!['='];
+
+        let mut parser = Ini::new_from_defaults(ini_options);
+
+        let entry_points_mapping = parser
+            .read(ini)
+            .map_err(|err| Error::InvalidWheel(format!("entry_points.txt is invalid: {err}")))?;
+
+        let mut console_scripts = match entry_points_mapping.get("console_scripts") {
+            Some(console_scripts) => {
+                wheel::read_scripts_from_section(console_scripts, "console_scripts")?
+            }
+            None => Vec::new(),
+        };
+        let gui_scripts = match entry_points_mapping.get("gui_scripts") {
+            Some(gui_scripts) => wheel::read_scripts_from_section(gui_scripts, "gui_scripts")?,
+            None => Vec::new(),
+        };
+
+        // Special case to generate versioned pip launchers.
+        // https://github.com/pypa/pip/blob/3898741e29b7279e7bffe044ecfbe20f6a438b1e/src/pip/_internal/operations/install/wheel.py#L283
+        // https://github.com/astral-sh/uv/issues/1593
+        // Older pip versions have a wrong `pip3.x` launcher we have to remove, while newer pip versions
+        // (post https://github.com/pypa/pip/pull/12536) don't, ...
+        console_scripts.retain(|script| {
+            let Some((left, right)) = script.name.split_once('.') else {
+                return true;
+            };
+            !(left == "pip3" && right.parse::<u8>().is_ok())
+        });
+        // ... either has a `pip3` launcher we can use as template for the `pip3.x` users expect.
+        if let Some(pip_script) = console_scripts.iter().find(|script| script.name == "pip3") {
+            console_scripts.push(Script {
+                name: format!("pip3.{python_minor}"),
+                ..pip_script.clone()
+            });
+        }
+
+        Ok(Self {
+            console_scripts,
+            gui_scripts,
+        })
+    }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::script::{Script, scripts_from_ini};
+    use crate::script::{EntryPoints, Script};
 
     #[test]
     fn test_valid_script_names() {
@@ -118,7 +125,7 @@ mod test {
             "foomod:main_bar [bar,baz]",
             "pylutron_caseta.cli:lap_pair[cli]",
         ] {
-            assert!(Script::from_value("script", case, None).is_ok());
+            assert!(Script::from_value("script", case).is_ok());
         }
     }
 
@@ -131,10 +138,7 @@ mod test {
             "pylutron_caseta",      // missing function part
             "weh:",                 // invalid function
         ] {
-            assert!(
-                Script::from_value("script", case, None).is_err(),
-                "case: {case}"
-            );
+            assert!(Script::from_value("script", case).is_err(), "case: {case}");
         }
     }
 
@@ -142,9 +146,7 @@ mod test {
     fn test_split_of_import_name_from_function() {
         let entrypoint = "foomod:mod_bar.sub_foo.func_baz";
 
-        let script = Script::from_value("script", entrypoint, None)
-            .unwrap()
-            .unwrap();
+        let script = Script::from_value("script", entrypoint).unwrap();
         assert_eq!(script.function, "mod_bar.sub_foo.func_baz");
         assert_eq!(script.import_name(), "mod_bar");
     }
@@ -165,8 +167,9 @@ pip4.11 = a:b5
 memray = a:b6
 memray3.11 = a:b7
 ";
-        let (mut console_scripts, _gui_scripts) =
-            scripts_from_ini(None, 99, sample_ini.to_string()).unwrap();
+        let mut console_scripts = EntryPoints::parse(sample_ini.to_string(), 99)
+            .unwrap()
+            .console_scripts;
         console_scripts.sort();
 
         assert_eq!(
@@ -217,5 +220,15 @@ memray3.11 = a:b7
             }),
             console_scripts.get(5)
         );
+    }
+
+    #[test]
+    fn test_rejects_non_equals_entry_point_delimiters() {
+        let sample_ini = "
+[console_scripts]
+script: package.module:main
+";
+
+        assert!(EntryPoints::parse(sample_ini.to_string(), 99).is_err());
     }
 }

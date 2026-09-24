@@ -1,6 +1,9 @@
 # /// script
 # requires-python = ">=3.13"
 # dependencies = []
+# [tool.uv]
+# no-build = true
+# exclude-newer = "P7D"
 # ///
 
 import json
@@ -50,6 +53,7 @@ versioning.
 
 
 REPO_URL = "https://github.com/astral-sh/uv"
+PRETTIER_VERSION = "3.8.3"
 
 
 def main() -> None:
@@ -150,7 +154,8 @@ def main() -> None:
 
     # Format all generated READMEs once at the end
     subprocess.run(
-        ["npx", "prettier", "--write"] + [str(path) for path in generated_paths],
+        ["npx", "--yes", f"prettier@{PRETTIER_VERSION}", "--write"]
+        + [str(path) for path in generated_paths],
         check=True,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,

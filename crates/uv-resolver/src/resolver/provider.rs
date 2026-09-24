@@ -1,19 +1,22 @@
 use std::future::Future;
 use std::sync::Arc;
+pub use uv_resolver_types::MetadataResponse;
+pub(crate) use uv_resolver_types::MetadataUnavailable;
+
 use uv_client::MetadataFormat;
 use uv_configuration::BuildOptions;
-use uv_distribution::{ArchiveMetadata, DistributionDatabase, Reporter};
+use uv_distribution::{DistributionDatabase, Reporter};
 use uv_distribution_types::{
-    Dist, IndexCapabilities, IndexMetadata, IndexMetadataRef, InstalledDist, RequestedDist,
-    RequiresPython,
+    Dist, IndexCapabilities, IndexLocations, IndexMetadata, IndexMetadataRef, InstalledDist,
+    MinimumLibcVersion, RequestedDist, RequiresPython,
 };
 use uv_normalize::PackageName;
-use uv_pep440::{Version, VersionSpecifiers};
 use uv_platform_tags::Tags;
+use uv_static::EnvVars;
 use uv_types::{BuildContext, HashStrategy};
 
 use crate::ExcludeNewer;
-use crate::flat_index::FlatIndex;
+use crate::flat_index::{FlatDistributions, FlatIndex};
 use crate::version_map::VersionMap;
 use crate::yanks::AllowedYanks;
 
@@ -31,49 +34,6 @@ pub enum VersionsResponse {
     NoIndex,
     /// The package was not found in the cache and the network is not available.
     Offline,
-}
-
-#[derive(Debug)]
-pub enum MetadataResponse {
-    /// The wheel metadata was found and parsed successfully.
-    Found(ArchiveMetadata),
-    /// A non-fatal error.
-    Unavailable(MetadataUnavailable),
-    /// The distribution could not be built or downloaded, a fatal error.
-    Error(Box<RequestedDist>, Arc<uv_distribution::Error>),
-}
-
-/// Non-fatal metadata fetching error.
-///
-/// This is also the unavailability reasons for a package, while version unavailability is separate
-/// in [`UnavailableVersion`].
-#[derive(Debug, Clone)]
-pub enum MetadataUnavailable {
-    /// The wheel metadata was not found in the cache and the network is not available.
-    Offline,
-    /// The wheel metadata was found, but could not be parsed.
-    InvalidMetadata(Arc<uv_pypi_types::MetadataError>),
-    /// The wheel metadata was found, but the metadata was inconsistent.
-    InconsistentMetadata(Arc<uv_distribution::Error>),
-    /// The wheel has an invalid structure.
-    InvalidStructure(Arc<uv_metadata::Error>),
-    /// The source distribution has a `requires-python` requirement that is not met by the installed
-    /// Python version (and static metadata is not available).
-    RequiresPython(VersionSpecifiers, Version),
-}
-
-impl MetadataUnavailable {
-    /// Like [`std::error::Error::source`], but we don't want to derive the std error since our
-    /// formatting system is more custom.
-    pub(crate) fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::Offline => None,
-            Self::InvalidMetadata(err) => Some(err),
-            Self::InconsistentMetadata(err) => Some(err),
-            Self::InvalidStructure(err) => Some(err),
-            Self::RequiresPython(_, _) => None,
-        }
-    }
 }
 
 pub trait ResolverProvider {
@@ -111,14 +71,17 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext> {
     /// The [`DistributionDatabase`] used to build source distributions.
     fetcher: DistributionDatabase<'a, Context>,
     /// These are the entries from `--find-links` that act as overrides for index responses.
-    flat_index: FlatIndex,
+    flat_index: &'a FlatIndex,
     tags: Option<Tags>,
     requires_python: RequiresPython,
     allowed_yanks: AllowedYanks,
-    hasher: HashStrategy,
+    hasher: &'a HashStrategy,
     exclude_newer: ExcludeNewer,
+    available_version_cutoff: Option<jiff::Timestamp>,
+    index_locations: &'a IndexLocations,
     build_options: &'a BuildOptions,
     capabilities: &'a IndexCapabilities,
+    minimum_libc_version: Option<MinimumLibcVersion>,
 }
 
 impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
@@ -131,20 +94,40 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
         allowed_yanks: AllowedYanks,
         hasher: &'a HashStrategy,
         exclude_newer: ExcludeNewer,
+        index_locations: &'a IndexLocations,
         build_options: &'a BuildOptions,
         capabilities: &'a IndexCapabilities,
+        minimum_libc_version: Option<MinimumLibcVersion>,
     ) -> Self {
         Self {
             fetcher,
-            flat_index: flat_index.clone(),
+            flat_index,
             tags: tags.cloned(),
             requires_python: requires_python.clone(),
             allowed_yanks,
-            hasher: hasher.clone(),
+            hasher,
             exclude_newer,
+            available_version_cutoff: std::env::var(
+                EnvVars::UV_INTERNAL__TEST_AVAILABLE_VERSION_CUTOFF,
+            )
+            .ok()
+            .and_then(|value| value.parse().ok()),
+            index_locations,
             build_options,
             capabilities,
+            minimum_libc_version,
         }
+    }
+
+    fn effective_exclude_newer(
+        &self,
+        package_name: &PackageName,
+        index: &uv_distribution_types::IndexUrl,
+    ) -> Option<jiff::Timestamp> {
+        self.exclude_newer.exclude_newer_package_for_index(
+            package_name,
+            self.index_locations.exclude_newer_for(index),
+        )
     }
 }
 
@@ -169,52 +152,67 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
             .await;
 
         // If a package is pinned to an explicit index, ignore any `--find-links` entries.
-        let flat_index = index.is_none().then_some(&self.flat_index);
+        let flat_index = index.is_none().then_some(self.flat_index);
+        let flat_distributions = flat_index
+            .and_then(|flat_index| flat_index.get(package_name))
+            .map(|entries| {
+                FlatDistributions::from_entries(
+                    entries.iter().cloned(),
+                    self.tags.as_ref(),
+                    self.hasher,
+                    self.build_options,
+                    self.minimum_libc_version,
+                )
+            });
 
         match result {
             Ok(results) => Ok(VersionsResponse::Found(
                 results
                     .into_iter()
-                    .map(|(index, metadata)| match metadata {
-                        MetadataFormat::Simple(metadata) => VersionMap::from_simple_metadata(
-                            metadata,
-                            package_name,
-                            index,
-                            self.tags.as_ref(),
-                            &self.requires_python,
-                            &self.allowed_yanks,
-                            &self.hasher,
-                            Some(&self.exclude_newer),
-                            flat_index
-                                .and_then(|flat_index| flat_index.get(package_name))
-                                .cloned(),
-                            self.build_options,
-                        ),
-                        MetadataFormat::Flat(metadata) => VersionMap::from_flat_metadata(
-                            metadata,
-                            self.tags.as_ref(),
-                            &self.hasher,
-                            self.build_options,
-                        ),
+                    .map(|(index, metadata)| {
+                        let included_version_cutoff =
+                            self.effective_exclude_newer(package_name, index);
+                        let available_version_cutoff = included_version_cutoff
+                            .is_none()
+                            .then_some(self.available_version_cutoff)
+                            .flatten();
+
+                        match metadata {
+                            MetadataFormat::Simple(metadata) => VersionMap::from_simple_metadata(
+                                metadata,
+                                package_name,
+                                index.clone(),
+                                self.tags.clone(),
+                                self.requires_python.clone(),
+                                self.allowed_yanks.clone(),
+                                self.hasher.clone(),
+                                included_version_cutoff,
+                                available_version_cutoff,
+                                flat_distributions.clone(),
+                                self.build_options,
+                                self.minimum_libc_version,
+                            ),
+                            MetadataFormat::Flat(metadata) => VersionMap::from_flat_metadata(
+                                metadata,
+                                self.tags.as_ref(),
+                                self.hasher,
+                                self.build_options,
+                                self.minimum_libc_version,
+                            ),
+                        }
                     })
                     .collect(),
             )),
             Err(err) => match err.kind() {
                 uv_client::ErrorKind::RemotePackageNotFound(_) => {
-                    if let Some(flat_index) = flat_index
-                        .and_then(|flat_index| flat_index.get(package_name))
-                        .cloned()
-                    {
+                    if let Some(flat_index) = flat_distributions {
                         Ok(VersionsResponse::Found(vec![VersionMap::from(flat_index)]))
                     } else {
                         Ok(VersionsResponse::NotFound)
                     }
                 }
                 uv_client::ErrorKind::NoIndex(_) => {
-                    if let Some(flat_index) = flat_index
-                        .and_then(|flat_index| flat_index.get(package_name))
-                        .cloned()
-                    {
+                    if let Some(flat_index) = flat_distributions {
                         Ok(VersionsResponse::Found(vec![VersionMap::from(flat_index)]))
                     } else if flat_index.is_some_and(FlatIndex::offline) {
                         Ok(VersionsResponse::Offline)
@@ -223,10 +221,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                     }
                 }
                 uv_client::ErrorKind::Offline(_) => {
-                    if let Some(flat_index) = flat_index
-                        .and_then(|flat_index| flat_index.get(package_name))
-                        .cloned()
-                    {
+                    if let Some(flat_index) = flat_distributions {
                         Ok(VersionsResponse::Found(vec![VersionMap::from(flat_index)]))
                     } else {
                         Ok(VersionsResponse::Offline)
@@ -241,7 +236,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
     async fn get_or_build_wheel_metadata<'io>(&'io self, dist: &'io Dist) -> WheelMetadataResult {
         match self
             .fetcher
-            .get_or_build_wheel_metadata(dist, self.hasher.get(dist))
+            .get_or_build_wheel_metadata(dist, self.hasher.metadata_policy(dist))
             .await
         {
             Ok(metadata) => Ok(MetadataResponse::Found(metadata)),
@@ -262,6 +257,23 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                             Ok(MetadataResponse::Unavailable(
                                 MetadataUnavailable::InvalidStructure(Arc::new(err)),
                             ))
+                        }
+                        uv_client::ErrorKind::WrappedReqwestError(url, err) => {
+                            let Some(status) = err.status().filter(|status| {
+                                dist.index().is_some_and(|index| {
+                                    self.index_locations.ignores_error_code_for(index, *status)
+                                })
+                            }) else {
+                                return Err(uv_client::Error::new(
+                                    uv_client::ErrorKind::WrappedReqwestError(url, err),
+                                    retries,
+                                    duration,
+                                )
+                                .into());
+                            };
+                            Ok(MetadataResponse::Unavailable(MetadataUnavailable::Network(
+                                status,
+                            )))
                         }
                         kind => Err(uv_client::Error::new(kind, retries, duration).into()),
                     }

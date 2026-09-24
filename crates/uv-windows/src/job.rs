@@ -104,15 +104,6 @@ impl Job {
             .map_err(|e| JobError::Assign(e.code().0))
     }
 
-    /// Returns the raw job handle.
-    ///
-    /// The returned handle is owned by this `Job` and will be closed when the `Job`
-    /// is dropped. The caller must not close or otherwise invalidate this handle.
-    #[must_use]
-    pub const fn as_raw_handle(&self) -> HANDLE {
-        self.handle
-    }
-
     /// Configures the job object limits.
     #[allow(unsafe_code)]
     fn configure_limits(&self) -> Result<(), JobError> {

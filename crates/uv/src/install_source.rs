@@ -25,8 +25,8 @@ impl InstallSource {
         let formula = OsStr::new("uv");
 
         if components
-            .windows(2)
-            .any(|window| window[0] == cellar && window[1] == formula)
+            .array_windows()
+            .any(|[component, next]| component == cellar && next == formula)
         {
             return Some(Self::Homebrew);
         }

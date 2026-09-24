@@ -1,0 +1,30 @@
+name = "fork-marker-inherit-transitive"
+description = '''
+This is like `fork-marker-inherit`, but tests that the marker
+expressions that provoke a fork are carried transitively through the
+dependency graph. In this case, `a<2 -> b -> c -> d`, but where the
+last dependency on `d` requires a marker expression that is disjoint
+with the initial `a<2` dependency. Therefore, it ought to be completely
+excluded from the resolution.
+'''
+
+[resolver_options]
+universal = true
+
+[expected]
+satisfiable = true
+
+[root]
+requires = ["a>=2 ; sys_platform == 'linux'", "a<2 ; sys_platform == 'darwin'"]
+
+[packages.a.versions."1.0.0"]
+requires = ["b"]
+[packages.a.versions."2.0.0"]
+
+[packages.b.versions."1.0.0"]
+requires = ["c"]
+
+[packages.c.versions."1.0.0"]
+requires = ["d ; sys_platform == 'linux'"]
+
+[packages.d.versions."1.0.0"]

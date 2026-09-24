@@ -1,6 +1,6 @@
 [package]
 name = "uv-publish"
-version = "0.0.36"
+version = "0.0.85"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -16,12 +16,14 @@ doctest = false
 uv-auth = { workspace = true }
 uv-cache = { workspace = true }
 uv-client = { workspace = true }
+uv-errors = { workspace = true }
 uv-configuration = { workspace = true }
 uv-distribution-filename = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-extract = { workspace = true }
 uv-fs = { workspace = true }
 uv-metadata = { workspace = true }
+uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-redacted = { workspace = true }
 uv-static = { workspace = true }
@@ -41,17 +43,21 @@ reqwest-retry = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+tar-codec = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true, features = ["io"] }
 tracing = { workspace = true }
 url = { workspace = true }
-wiremock = { workspace = true }
 
 [dev-dependencies]
+uv-preview = { workspace = true, features = ["testing"] }
+
 anstream = { workspace = true }
-insta = { workspace = true }
 fastrand = { workspace = true }
+insta = { workspace = true }
+tempfile = { workspace = true }
+wiremock = { workspace = true }
 
 [features]
 # Test only feature to enable non-HTTPS URL handling

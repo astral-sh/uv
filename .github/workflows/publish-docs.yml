@@ -19,35 +19,42 @@ on:
 
 permissions: {}
 
+env:
+  ACTIONS_CACHE_MODE: none
+  CARGO_INCREMENTAL: 0
+  UV_LOCKED: 1
+
 jobs:
   mkdocs:
     environment:
       name: release
-    runs-on: ubuntu-latest
-    env:
-      VERSION: ${{ (inputs.plan != '' && fromJson(inputs.plan).announcement_tag) || inputs.ref }}
+    permissions:
+      contents: read
+      id-token: write # for the credential broker
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.ref }}
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: 3.12
-
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+          python-version: 3.14
+          cache: ""
 
       - name: "Generate reference documentation"
         run: |
           cargo dev generate-options-reference
           cargo dev generate-cli-reference
           cargo dev generate-env-vars-reference
+          cargo dev generate-preview-features-reference
 
-      - name: "Set docs display name"
+      - name: "Set docs version"
+        env:
+          version: ${{ (inputs.plan != '' && fromJson(inputs.plan).announcement_tag) || inputs.ref }}
         run: |
-          version="${VERSION}"
           # if version is missing, use 'latest'
           if [ -z "$version" ]; then
             echo "Using 'latest' as version"
@@ -57,35 +64,50 @@ jobs:
           # Use version as display name for now
           display_name="$version"
 
-          echo "DISPLAY_NAME=$display_name" >> $GITHUB_ENV
+          echo "version=$version" >> "$GITHUB_ENV"
+          echo "display_name=$display_name" >> "$GITHUB_ENV"
 
       - name: "Set branch name"
         run: |
-          version="${VERSION}"
-          display_name="${DISPLAY_NAME}"
           timestamp="$(date +%s)"
 
           # create branch_display_name from display_name by replacing all
           # characters disallowed in git branch names with hyphens
-          branch_display_name="$(echo "$display_name" | tr -c '[:alnum:]._' '-' | tr -s '-')"
+          branch_display_name="$(echo "${display_name}" | tr -c '[:alnum:]._' '-' | tr -s '-')"
 
-          echo "BRANCH_NAME=update-docs-$branch_display_name-$timestamp" >> $GITHUB_ENV
-          echo "TIMESTAMP=$timestamp" >> $GITHUB_ENV
+          echo "branch_name=update-docs-$branch_display_name-$timestamp" >> "$GITHUB_ENV"
+          echo "timestamp=$timestamp" >> "$GITHUB_ENV"
 
       - name: "Install uv"
-        uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
-          version: "0.11.3"
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
+          version: "0.12.13"
+          checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
+          enable-cache: false
 
       - name: "Build docs"
         run: uv run --only-group docs mkdocs build --strict -f mkdocs.yml
 
-      - name: "Clone docs repo"
-        run: |
-          version="${VERSION}"
-          git clone https://${ASTRAL_DOCS_PAT}@github.com/astral-sh/docs.git astral-docs
-        env:
-          ASTRAL_DOCS_PAT: ${{ secrets.ASTRAL_DOCS_PAT }}
+      - name: "Get docs token"
+        id: token
+        uses: open-security-tools/ost-simple-sts@88f85462c7e9c9e2fb2745bd5ce4ee163aec0420 # v0.0.5
+        with:
+          exchange-url: ${{ secrets.RELEASES_STS_API_URL }}/exchange
+          audience: ${{ secrets.RELEASES_STS_API_URL }}
+          repository: astral-sh/docs
+          permissions: |
+            contents: write
+            pull_requests: write
+
+      - name: "Checkout docs repo"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: astral-sh/docs
+          ref: main
+          path: astral-docs
+          token: ${{ steps.token.outputs.token }}
+          persist-credentials: false
 
       - name: "Copy docs"
         run: rm -rf astral-docs/site/uv && mkdir -p astral-docs/site && cp -r site/uv astral-docs/site/
@@ -93,26 +115,20 @@ jobs:
       - name: "Commit docs"
         working-directory: astral-docs
         run: |
-          branch_name="${BRANCH_NAME}"
+          git config user.name "astral-releases-bot[bot]"
+          git config user.email "328004183+astral-releases-bot[bot]@users.noreply.github.com"
 
-          git config user.name "astral-docs-bot"
-          git config user.email "176161322+astral-docs-bot@users.noreply.github.com"
-
-          git checkout -b $branch_name
+          git checkout -b "${branch_name}"
           git add site/uv
           git commit -m "Update uv documentation for $version"
 
       - name: "Create Pull Request"
         working-directory: astral-docs
         env:
-          GITHUB_TOKEN: ${{ secrets.ASTRAL_DOCS_PAT }}
+          GH_TOKEN: ${{ steps.token.outputs.token }}
         run: |
-          version="${VERSION}"
-          display_name="${DISPLAY_NAME}"
-          branch_name="${BRANCH_NAME}"
-
           # set the PR title
-          pull_request_title="Update uv documentation for $display_name"
+          pull_request_title="Update uv documentation for ${display_name}"
 
           # Delete any existing pull requests that are open for this version
           # by checking against pull_request_title because the new PR will
@@ -121,23 +137,25 @@ jobs:
             xargs -I {} gh pr close {}
 
           # push the branch to GitHub
-          git push origin $branch_name
+          gh auth setup-git
+          git push origin "${branch_name}"
 
           # create the PR
-          gh pr create --base main --head $branch_name \
-            --title "$pull_request_title" \
-            --body "Automated documentation update for $display_name" \
-            --label "documentation"
+          gh pr create \
+            --base=main \
+            --head="${branch_name}" \
+            --title="${pull_request_title}" \
+            --body="Automated documentation update for ${display_name}" \
+            --label="documentation"
 
       - name: "Merge Pull Request"
         if: ${{ inputs.plan != '' && !fromJson(inputs.plan).announcement_tag_is_implicit }}
         working-directory: astral-docs
         env:
-          GITHUB_TOKEN: ${{ secrets.ASTRAL_DOCS_PAT }}
+          GH_TOKEN: ${{ steps.token.outputs.token }}
         run: |
-          branch_name="${BRANCH_NAME}"
-
           # auto-merge the PR if the build was triggered by a release. Manual builds should be reviewed by a human.
           # give the PR a few seconds to be created before trying to auto-merge it
           sleep 10
-          gh pr merge --squash $branch_name
+          # Use admin to bypass required review
+          gh pr merge --squash --admin "${branch_name}"

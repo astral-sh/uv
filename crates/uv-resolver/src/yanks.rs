@@ -22,7 +22,7 @@ impl AllowedYanks {
         let mut allowed_yanks = FxHashMap::<PackageName, FxHashSet<Version>>::default();
 
         // Allow yanks for any pinned input requirements.
-        for requirement in manifest.requirements(env, dependencies) {
+        for requirement in manifest.candidate_selection_requirements(env, dependencies) {
             let RequirementSource::Registry { specifier, .. } = &requirement.source else {
                 continue;
             };
@@ -52,7 +52,7 @@ impl AllowedYanks {
     }
 
     /// Returns `true` if the package-version is allowed, even if it's marked as yanked.
-    pub fn contains(&self, package_name: &PackageName, version: &Version) -> bool {
+    pub(crate) fn contains(&self, package_name: &PackageName, version: &Version) -> bool {
         self.0
             .get(package_name)
             .is_some_and(|versions| versions.contains(version))

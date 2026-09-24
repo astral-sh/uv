@@ -137,7 +137,7 @@ pub enum CanonicalMarkerValueExtra {
 
 impl CanonicalMarkerValueExtra {
     /// Returns the [`ExtraName`] value.
-    pub fn extra(&self) -> &ExtraName {
+    pub(crate) fn extra(&self) -> &ExtraName {
         match self {
             Self::Extra(extra) => extra,
         }

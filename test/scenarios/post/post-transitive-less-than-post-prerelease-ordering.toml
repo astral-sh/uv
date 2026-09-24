@@ -1,0 +1,20 @@
+name = "post-transitive-less-than-post-prerelease-ordering"
+description = "A transitive less-than post-release constraint should include pre-releases of the base release but exclude development releases of the specified post-release."
+
+[root]
+requires = ["a"]
+
+[expected]
+satisfiable = true
+explanation = "The transitive dependency can use the base pre-release because it is before the post-release boundary."
+
+[expected.packages]
+a = "1.0.0"
+b = "1.2.3a1"
+
+[packages.a.versions."1.0.0"]
+requires = ["b<1.2.3.post1"]
+
+[packages.b.versions."1.2.3a1"]
+
+[packages.b.versions."1.2.3.post1.dev0"]

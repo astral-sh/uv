@@ -144,7 +144,7 @@ impl MarkerEnvironment {
     /// `Darwin Kernel Version 14.5.0: Wed Jul 29 02:18:53 PDT 2015;
     /// root:xnu-2782.40.9~2/RELEASE_X86_64`.
     #[inline]
-    pub fn platform_version(&self) -> &str {
+    fn platform_version(&self) -> &str {
         &self.inner.platform_version
     }
 
@@ -182,16 +182,6 @@ impl MarkerEnvironment {
 
 /// APIs for setting specific parts of a marker environment.
 impl MarkerEnvironment {
-    /// Set the name of the Python implementation for this environment.
-    ///
-    /// See also [`MarkerEnvironment::implementation_name`].
-    #[inline]
-    #[must_use]
-    pub fn with_implementation_name(mut self, value: impl Into<String>) -> Self {
-        Arc::make_mut(&mut self.inner).implementation_name = value.into();
-        self
-    }
-
     /// Set the Python implementation version for this environment.
     ///
     /// See also [`MarkerEnvironment::implementation_version`].
@@ -219,17 +209,6 @@ impl MarkerEnvironment {
     #[must_use]
     pub fn with_platform_machine(mut self, value: impl Into<String>) -> Self {
         Arc::make_mut(&mut self.inner).platform_machine = value.into();
-        self
-    }
-
-    /// Set the name of the Python implementation for this environment's
-    /// platform.
-    ///
-    /// See also [`MarkerEnvironment::platform_python_implementation`].
-    #[inline]
-    #[must_use]
-    pub fn with_platform_python_implementation(mut self, value: impl Into<String>) -> Self {
-        Arc::make_mut(&mut self.inner).platform_python_implementation = value.into();
         self
     }
 

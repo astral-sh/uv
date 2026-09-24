@@ -8,7 +8,6 @@ use fs_err as fs;
 use itertools::Itertools;
 use rustc_hash::FxHashMap;
 use tracing::{debug, instrument};
-use walkdir::WalkDir;
 
 use uv_distribution_filename::WheelFilename;
 use uv_fs::Simplified;
@@ -17,6 +16,7 @@ use uv_preview::{Preview, PreviewFeature};
 use uv_warnings::warn_user;
 
 use crate::Error;
+use crate::wheel::ValidatedWheel;
 
 pub use uv_fs::link::LinkMode;
 
@@ -43,7 +43,7 @@ impl InstallState {
     }
 
     /// Get the underlying copy locks for use with [`uv_fs::link::link_dir`] functions.
-    pub fn copy_locks(&self) -> &CopyLocks {
+    fn copy_locks(&self) -> &CopyLocks {
         &self.locks
     }
 
@@ -249,19 +249,17 @@ impl InstallState {
 }
 
 /// Extract a wheel by linking all of its files into site packages.
-///
-/// Returns the number of files extracted.
 #[instrument(skip_all)]
-pub fn link_wheel_files(
+pub(crate) fn link_wheel_files(
     link_mode: LinkMode,
     site_packages: impl AsRef<Path>,
-    wheel: impl AsRef<Path>,
+    wheel: &ValidatedWheel<'_>,
     state: &InstallState,
     filename: &WheelFilename,
-) -> Result<usize, Error> {
-    let wheel = wheel.as_ref();
+) -> Result<(), Error> {
+    let wheel = wheel.as_path();
     let site_packages = site_packages.as_ref();
-    let count = register_installed_paths(wheel, state, filename)?;
+    register_installed_paths(wheel, state, filename)?;
 
     // The `RECORD` file is modified during installation, so it needs a real
     // copy rather than a link back to the cache.
@@ -281,7 +279,7 @@ pub fn link_wheel_files(
         update_site_packages_mtime(site_packages);
     }
 
-    Ok(count)
+    Ok(())
 }
 
 /// Update the mtime of the site-packages directory to the current time.
@@ -303,23 +301,17 @@ fn update_site_packages_mtime(site_packages: &Path) {
     }
 }
 
-/// Walk the wheel directory and register all paths for conflict detection.
-///
-/// Returns the number of files (not directories) in the wheel.
+/// Register top-level wheel paths for conflict detection.
 fn register_installed_paths(
     wheel: &Path,
     state: &InstallState,
     filename: &WheelFilename,
-) -> Result<usize, Error> {
-    let mut count = 0;
-    for entry in WalkDir::new(wheel) {
+) -> Result<(), Error> {
+    for entry in fs::read_dir(wheel)? {
         let entry = entry?;
         let path = entry.path();
-        let relative = path.strip_prefix(wheel).expect("walkdir starts with root");
-        state.register_installed_path(relative, path, filename);
-        if entry.file_type().is_file() {
-            count += 1;
-        }
+        let relative = PathBuf::from(entry.file_name());
+        state.register_installed_path(&relative, &path, filename);
     }
-    Ok(count)
+    Ok(())
 }

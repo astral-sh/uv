@@ -17,6 +17,7 @@ use tracing::{debug, trace, warn};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::Concurrency;
+use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
 use uv_fs::Simplified;
 use uv_platform::{Arch, Libc};
 use uv_preview::{Preview, PreviewFeature};
@@ -25,21 +26,22 @@ use uv_python::downloads::{
     PythonDownloadRequest,
 };
 use uv_python::managed::{
-    ManagedPythonInstallation, ManagedPythonInstallations, PythonMinorVersionLink,
-    compare_build_versions, create_link_to_executable, python_executable_dir,
+    ManagedPythonInstallation, ManagedPythonInstallations, PythonExecutable,
+    PythonMinorVersionLink, compare_build_versions, create_link_to_executable,
+    python_executable_dir,
 };
 use uv_python::{
-    ImplementationName, Interpreter, PythonDownloads, PythonInstallationKey,
+    ConfigDiscovery, ImplementationName, Interpreter, PythonDownloads, PythonInstallationKey,
     PythonInstallationMinorVersionKey, PythonRequest, PythonVersionFile,
     VersionFileDiscoveryOptions, VersionFilePreference, VersionRequest,
 };
 use uv_shell::Shell;
 use uv_trampoline_builder::{Launcher, LauncherKind};
-use uv_warnings::{warn_user, write_error_chain};
+use uv_warnings::warn_user;
 
 use crate::commands::python::{ChangeEvent, ChangeEventKind};
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{ExitStatus, elapsed};
+use crate::commands::{ExitStatus, UvError, conjunction, elapsed};
 use crate::printer::Printer;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -168,6 +170,26 @@ impl std::fmt::Display for PythonUpgradeSource {
     }
 }
 
+#[derive(Debug, thiserror::Error)]
+#[error("`{command}` only accepts minor versions, got: {request}")]
+pub(crate) struct InvalidUpgradeRequestError {
+    command: PythonUpgradeSource,
+    request: String,
+    from_version_file: bool,
+}
+
+impl uv_errors::Hinted for InvalidUpgradeRequestError {
+    fn hints(&self) -> Hints<'_> {
+        if self.from_version_file {
+            Hints::from(
+                "The version request came from a `.python-version` file; change the patch version in the file to upgrade instead",
+            )
+        } else {
+            Hints::none()
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum PythonUpgrade {
     /// Python upgrades are enabled.
@@ -193,7 +215,7 @@ pub(crate) async fn install(
     client_builder: BaseClientBuilder<'_>,
     default: bool,
     python_downloads: PythonDownloads,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     compile_bytecode: bool,
     concurrency: &Concurrency,
     cache: &Cache,
@@ -238,9 +260,10 @@ pub(crate) async fn install(
         pypy_install_mirror,
         python_downloads_json_url,
         client_builder,
+        cache,
         default,
         python_downloads,
-        no_config,
+        config_discovery,
         compile_bytecode.then_some(sender),
         concurrency,
         preview,
@@ -283,7 +306,6 @@ pub(crate) async fn install(
     installer_result
 }
 
-#[expect(clippy::fn_params_excessive_bools)]
 async fn perform_install(
     project_dir: &Path,
     install_dir: Option<PathBuf>,
@@ -297,9 +319,10 @@ async fn perform_install(
     pypy_install_mirror: Option<String>,
     python_downloads_json_url: Option<String>,
     client_builder: BaseClientBuilder<'_>,
+    cache: &Cache,
     default: bool,
     python_downloads: PythonDownloads,
-    no_config: bool,
+    config_discovery: ConfigDiscovery,
     bytecode_compilation_sender: Option<mpsc::UnboundedSender<ManagedPythonInstallation>>,
     concurrency: &Concurrency,
     preview: Preview,
@@ -336,11 +359,15 @@ async fn perform_install(
     let mut is_default_install = false;
     let mut is_unspecified_upgrade = false;
     let retry_policy = client_builder.retry_policy();
+    let download_list = ManagedPythonDownloadList::new(
+        &client_builder,
+        cache,
+        python_downloads_json_url.as_deref(),
+    )
+    .await?;
     // Python downloads are performing their own retries to catch stream errors, disable the
     // default retries to avoid the middleware from performing uncontrolled retries.
-    let client = client_builder.retries(0).build();
-    let download_list =
-        ManagedPythonDownloadList::new(&client, python_downloads_json_url.as_deref()).await?;
+    let client = client_builder.retries(0).build()?;
     // TODO(zanieb): We use this variable to special-case .python-version files, but it'd be nice to
     // have generalized request source tracking instead
     let mut is_from_python_version_file = false;
@@ -367,7 +394,7 @@ async fn perform_install(
             PythonVersionFile::discover(
                 project_dir,
                 &VersionFileDiscoveryOptions::default()
-                    .with_no_config(no_config)
+                    .with_config_discovery(config_discovery)
                     .with_preference(VersionFilePreference::Versions),
             )
             .await?
@@ -439,20 +466,12 @@ async fn perform_install(
         if let Some(request) = requests.iter().find(|request| {
             request.request.includes_patch() || request.request.includes_prerelease()
         }) {
-            writeln!(
-                printer.stderr(),
-                "error: `{source}` only accepts minor versions, got: {}",
-                request.request.to_canonical_string()
-            )?;
-            if is_from_python_version_file {
-                writeln!(
-                    printer.stderr(),
-                    "\n{}{} The version request came from a `.python-version` file; change the patch version in the file to upgrade instead",
-                    "hint".bold().cyan(),
-                    ":".bold(),
-                )?;
-            }
-            return Ok(ExitStatus::Failure);
+            return Err(UvError::user(InvalidUpgradeRequestError {
+                command: source,
+                request: request.request.to_canonical_string().into_owned(),
+                from_version_file: is_from_python_version_file,
+            })
+            .into());
         }
     }
 
@@ -478,37 +497,30 @@ async fn perform_install(
 
             for installation in matching_installations {
                 changelog.existing.insert(installation.key().clone());
-                if matches!(&request.request, &PythonRequest::Any) {
-                    // Construct an install request matching the existing installation
-                    match InstallRequest::new(
-                        PythonRequest::Key(installation.into()),
-                        &download_list,
-                    ) {
-                        Ok(request) => {
-                            debug!("Will reinstall `{}`", installation.key());
-                            unsatisfied.push(Cow::Owned(request));
-                        }
-                        Err(err) => {
-                            // This shouldn't really happen, but maybe a new version of uv dropped
-                            // support for a key we previously supported
-                            warn_user!(
-                                "Failed to create reinstall request for existing installation `{}`: {err}",
-                                installation.key().green()
-                            );
-                        }
-                    }
-                } else {
-                    // TODO(zanieb): This isn't really right! But we need `--upgrade` or similar
-                    // to handle this case correctly without causing a breaking change.
 
-                    // If we have real requests, just ignore the existing installation
-                    debug!(
-                        "Ignoring match `{}` for request `{}` due to `--reinstall` flag",
-                        installation.key(),
-                        request
-                    );
+                if matches!(upgrade, PythonUpgrade::Enabled(_))
+                    && !matches!(&request.request, &PythonRequest::Any)
+                {
+                    // An upgrade must reinstall the latest patch, not every matching patch.
+                    debug!("Will reinstall the latest patch for `{}`", request);
                     unsatisfied.push(Cow::Borrowed(request));
                     break;
+                }
+
+                // Construct an install request matching the existing installation.
+                match InstallRequest::new(PythonRequest::Key(installation.into()), &download_list) {
+                    Ok(request) => {
+                        debug!("Will reinstall `{}`", installation.key());
+                        unsatisfied.push(Cow::Owned(request));
+                    }
+                    Err(err) => {
+                        // This shouldn't really happen, but maybe a new version of uv dropped
+                        // support for a key we previously supported.
+                        warn_user!(
+                            "Failed to create reinstall request for existing installation `{}`: {err}",
+                            installation.key().green()
+                        );
+                    }
                 }
             }
         }
@@ -597,6 +609,7 @@ async fn perform_install(
 
     // Download and unpack the Python versions concurrently
     let reporter = PythonDownloadReporter::new(printer, Some(downloads.len() as u64));
+    let replacements = changelog.existing.clone();
 
     let mut tasks = futures::stream::iter(&downloads)
         .map(async |download| {
@@ -608,7 +621,7 @@ async fn perform_install(
                         &retry_policy,
                         installations_dir,
                         &scratch_dir,
-                        reinstall,
+                        reinstall || replacements.contains(download.key()),
                         python_install_mirror.as_deref(),
                         pypy_install_mirror.as_deref(),
                         Some(&reporter),
@@ -912,11 +925,10 @@ async fn perform_install(
         {
             match kind {
                 InstallErrorKind::DownloadUnpack => {
-                    write_error_chain(
+                    write_error_chain_with_options(
                         err.context(format!("Failed to install {key}")).as_ref(),
-                        printer.stderr(),
-                        "error",
-                        AnsiColors::Red,
+                        &Hints::none(),
+                        ErrorOptions::default().with_stream(printer.stderr()),
                     )?;
                 }
                 InstallErrorKind::Bin => {
@@ -926,12 +938,14 @@ async fn perform_install(
                         Some(true) => ("error", AnsiColors::Red),
                     };
 
-                    write_error_chain(
+                    write_error_chain_with_options(
                         err.context(format!("Failed to install executable for {key}"))
                             .as_ref(),
-                        printer.stderr(),
-                        level,
-                        color,
+                        &Hints::none(),
+                        ErrorOptions::default()
+                            .with_level(level)
+                            .with_color(color)
+                            .with_stream(printer.stderr()),
                     )?;
                 }
                 InstallErrorKind::Registry => {
@@ -942,12 +956,14 @@ async fn perform_install(
                     };
 
                     trace!("Error trace: {err:?}");
-                    write_error_chain(
+                    write_error_chain_with_options(
                         err.context(format!("Failed to create registry entry for {key}"))
                             .as_ref(),
-                        printer.stderr(),
-                        level,
-                        color,
+                        &Hints::none(),
+                        ErrorOptions::default()
+                            .with_level(level)
+                            .with_color(color)
+                            .with_stream(printer.stderr()),
                     )?;
                 }
             }
@@ -996,6 +1012,8 @@ fn create_bin_links(
         vec![installation.key().executable_name_minor()]
     };
 
+    let mut existing_unmanaged = Vec::new();
+
     for target in targets {
         let target = bin.join(target);
         if upgrade && !target.try_exists().unwrap_or_default() {
@@ -1013,7 +1031,7 @@ fn create_bin_links(
             installation.executable(false)
         };
 
-        match create_link_to_executable(&target, &executable) {
+        match create_link_to_executable(&target, PythonExecutable::console(&executable)) {
             Ok(()) => {
                 debug!(
                     "Installed executable at `{}` for {}",
@@ -1052,7 +1070,8 @@ fn create_bin_links(
                         let valid_link = cfg!(windows)
                             || target
                                 .read_link()
-                                .and_then(|target| target.try_exists())
+                                // Resolve relative targets from the executable's directory.
+                                .and_then(|_| target.try_exists())
                                 .inspect_err(|err| {
                                     debug!("Failed to inspect executable with error: {err}");
                                 })
@@ -1071,14 +1090,8 @@ fn create_bin_links(
                                         installation.key().variant().display_suffix()
                                     );
                                 } else {
-                                    errors.push((
-                                        InstallErrorKind::Bin,
-                                        installation.key().clone(),
-                                        anyhow::anyhow!(
-                                            "Executable already exists at `{}` but is not managed by uv; use `--force` to replace it",
-                                            target.simplified_display()
-                                        ),
-                                    ));
+                                    // Defer reporting to allow grouping.
+                                    existing_unmanaged.push(target.clone());
                                 }
                                 continue;
                             }
@@ -1170,7 +1183,9 @@ fn create_bin_links(
                         .remove(&target);
                 }
 
-                if let Err(err) = create_link_to_executable(&target, &executable) {
+                if let Err(err) =
+                    create_link_to_executable(&target, PythonExecutable::console(&executable))
+                {
                     errors.push((
                         InstallErrorKind::Bin,
                         installation.key().clone(),
@@ -1202,6 +1217,33 @@ fn create_bin_links(
                 ));
             }
         }
+    }
+
+    match existing_unmanaged.as_slice() {
+        [] => {}
+        [executable] => errors.push((
+            InstallErrorKind::Bin,
+            installation.key().clone(),
+            anyhow::anyhow!(
+                "Executable already exists at `{}` but is not managed by uv; use `--force` to replace it",
+                executable.simplified_display()
+            ),
+        )),
+        executables => errors.push((
+            InstallErrorKind::Bin,
+            installation.key().clone(),
+            anyhow::anyhow!(
+                "Executables {} already exist in `{}` but are not managed by uv; use `--force` to replace them",
+                conjunction(
+                    executables
+                        .iter()
+                        .filter_map(|path| path.file_name())
+                        .map(|name| format!("`{}`", name.to_string_lossy()))
+                        .collect(),
+                ),
+                bin.simplified_display()
+            ),
+        )),
     }
 }
 

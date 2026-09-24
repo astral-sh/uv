@@ -6,11 +6,11 @@ use uv_pep508::VerbatimUrl;
 use crate::error::Error;
 use crate::{
     BuiltDist, CachedDirectUrlDist, CachedDist, CachedRegistryDist, DirectUrlBuiltDist,
-    DirectUrlSourceDist, DirectorySourceDist, Dist, DistributionId, GitSourceDist,
-    InstalledDirectUrlDist, InstalledDist, InstalledEggInfoDirectory, InstalledEggInfoFile,
-    InstalledLegacyEditable, InstalledRegistryDist, InstalledVersion, LocalDist, PackageId,
-    PathBuiltDist, PathSourceDist, RegistryBuiltWheel, RegistrySourceDist, ResourceId, SourceDist,
-    VersionId, VersionOrUrlRef,
+    DirectUrlSourceDist, DirectorySourceDist, Dist, DistributionId, GitDirectorySourceDist,
+    GitPathBuiltDist, GitPathSourceDist, InstalledDirectUrlDist, InstalledDist,
+    InstalledEggInfoDirectory, InstalledEggInfoFile, InstalledLegacyEditable,
+    InstalledRegistryDist, InstalledVersion, LocalDist, PackageId, PathBuiltDist, PathSourceDist,
+    RegistryBuiltWheel, RegistrySourceDist, ResourceId, SourceDist, VersionId, VersionOrUrlRef,
 };
 
 pub trait Name {
@@ -48,7 +48,7 @@ pub trait DistributionMetadata: Name {
     fn package_id(&self) -> PackageId {
         match self.version_or_url() {
             VersionOrUrlRef::Version(_) => PackageId::from_registry(self.name().clone()),
-            VersionOrUrlRef::Url(url) => PackageId::from_url(url),
+            VersionOrUrlRef::Url(url) => PackageId::from_url(url.raw().clone()),
         }
     }
 }
@@ -166,7 +166,19 @@ impl std::fmt::Display for Dist {
     }
 }
 
-impl std::fmt::Display for GitSourceDist {
+impl std::fmt::Display for GitPathBuiltDist {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}{}", self.name(), self.version_or_url())
+    }
+}
+
+impl std::fmt::Display for GitPathSourceDist {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}{}", self.name(), self.version_or_url())
+    }
+}
+
+impl std::fmt::Display for GitDirectorySourceDist {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}{}", self.name(), self.version_or_url())
     }

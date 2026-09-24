@@ -4,27 +4,30 @@ use std::path::PathBuf;
 use serde::Deserialize;
 use toml_edit::{Array, Item, Table, Value, value};
 
-use uv_distribution_types::Requirement;
+use uv_configuration::ExcludeDependency;
+use uv_distribution_types::{NameRequirementSpecification, Requirement};
 use uv_fs::{PortablePath, Simplified};
-use uv_normalize::PackageName;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::PythonRequest;
-use uv_settings::ToolOptions;
+use uv_settings::{ToolOptions, ToolOptionsWire};
 
 /// A tool entry.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(try_from = "ToolWire", into = "ToolWire")]
 pub struct Tool {
     /// The requirements requested by the user during installation.
+    ///
+    /// The first requirement is the tool target itself; any remaining requirements come from
+    /// `--with`.
     requirements: Vec<Requirement>,
     /// The constraints requested by the user during installation.
     constraints: Vec<Requirement>,
     /// The overrides requested by the user during installation.
     overrides: Vec<Requirement>,
     /// The excludes requested by the user during installation.
-    excludes: Vec<PackageName>,
+    excludes: Vec<ExcludeDependency>,
     /// The build constraints requested by the user during installation.
-    build_constraints: Vec<Requirement>,
+    build_constraints: Vec<NameRequirementSpecification>,
     /// The Python requested by the user during installation.
     python: Option<PythonRequest>,
     /// A mapping of entry point names to their metadata.
@@ -43,13 +46,13 @@ struct ToolWire {
     #[serde(default)]
     overrides: Vec<Requirement>,
     #[serde(default)]
-    excludes: Vec<PackageName>,
+    excludes: Vec<ExcludeDependency>,
     #[serde(default)]
-    build_constraint_dependencies: Vec<Requirement>,
+    build_constraint_dependencies: Vec<NameRequirementSpecification>,
     python: Option<PythonRequest>,
     entrypoints: Vec<ToolEntrypoint>,
     #[serde(default)]
-    options: ToolOptions,
+    options: ToolOptionsWire,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -76,7 +79,7 @@ impl From<Tool> for ToolWire {
             build_constraint_dependencies: tool.build_constraints,
             python: tool.python,
             entrypoints: tool.entrypoints,
-            options: tool.options,
+            options: tool.options.into(),
         }
     }
 }
@@ -100,7 +103,7 @@ impl TryFrom<ToolWire> for Tool {
             build_constraints: tool.build_constraint_dependencies,
             python: tool.python,
             entrypoints: tool.entrypoints,
-            options: tool.options,
+            options: tool.options.into(),
         })
     }
 }
@@ -115,26 +118,26 @@ pub struct ToolEntrypoint {
 
 impl Display for ToolEntrypoint {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        #[cfg(windows)]
-        {
-            write!(
-                f,
-                "{} ({})",
-                self.name,
-                self.install_path
-                    .simplified_display()
-                    .to_string()
-                    .replace('/', "\\")
-            )
-        }
-        #[cfg(unix)]
-        {
-            write!(
-                f,
-                "{} ({})",
-                self.name,
-                self.install_path.simplified_display()
-            )
+        cfg_select! {
+            windows => {
+                write!(
+                    f,
+                    "{} ({})",
+                    self.name,
+                    self.install_path
+                        .simplified_display()
+                        .to_string()
+                        .replace('/', "\\")
+                )
+            },
+            unix => {
+                write!(
+                    f,
+                    "{} ({})",
+                    self.name,
+                    self.install_path.simplified_display()
+                )
+            },
         }
     }
 }
@@ -172,8 +175,8 @@ impl Tool {
         requirements: Vec<Requirement>,
         constraints: Vec<Requirement>,
         overrides: Vec<Requirement>,
-        excludes: Vec<PackageName>,
-        build_constraints: Vec<Requirement>,
+        excludes: Vec<ExcludeDependency>,
+        build_constraints: Vec<NameRequirementSpecification>,
         python: Option<PythonRequest>,
         entrypoints: impl IntoIterator<Item = ToolEntrypoint>,
         options: ToolOptions,
@@ -333,8 +336,10 @@ impl Tool {
         });
 
         if self.options != ToolOptions::default() {
-            let serialized =
-                serde::Serialize::serialize(&self.options, toml_edit::ser::ValueSerializer::new())?;
+            let serialized = serde::Serialize::serialize(
+                &ToolOptionsWire::from(self.options.clone()),
+                toml_edit::ser::ValueSerializer::new(),
+            )?;
             let Value::InlineTable(serialized) = serialized else {
                 return Err(toml_edit::ser::Error::Custom(
                     "Expected an inline table".to_string(),
@@ -362,11 +367,11 @@ impl Tool {
         &self.overrides
     }
 
-    pub fn excludes(&self) -> &[PackageName] {
+    pub fn excludes(&self) -> &[ExcludeDependency] {
         &self.excludes
     }
 
-    pub fn build_constraints(&self) -> &[Requirement] {
+    pub fn build_constraints(&self) -> &[NameRequirementSpecification] {
         &self.build_constraints
     }
 
@@ -393,7 +398,7 @@ impl ToolEntrypoint {
     }
 
     /// Returns the TOML table for this entrypoint.
-    pub(crate) fn to_toml(&self) -> Table {
+    fn to_toml(&self) -> Table {
         let mut table = Table::new();
         table.insert("name", value(&self.name));
         table.insert(

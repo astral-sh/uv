@@ -2,16 +2,19 @@ use std::borrow::Cow;
 use std::collections::hash_map::Entry;
 
 use rustc_hash::{FxHashMap, FxHashSet};
+use tracing::debug;
 
 use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_cache_info::CacheInfo;
+use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     BuildInfo, BuildVariables, CachedRegistryDist, ConfigSettings, ExtraBuildRequirement,
     ExtraBuildRequires, ExtraBuildVariables, Hashed, Index, IndexLocations, IndexUrl,
-    PackageConfigSettings,
+    PackageConfigSettings, RegistryBuiltDist, RegistrySourceDist,
 };
 use uv_fs::{directories, files};
 use uv_normalize::PackageName;
+use uv_pep440::Version;
 use uv_platform_tags::Tags;
 use uv_types::HashStrategy;
 
@@ -22,11 +25,66 @@ use crate::source::{HTTP_REVISION, HttpRevisionPointer, LOCAL_REVISION, LocalRev
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct IndexEntry<'index> {
     /// The cached distribution.
-    pub dist: CachedRegistryDist,
+    dist: CachedRegistryDist,
     /// Whether the wheel was built from source (true), or downloaded from the registry directly (false).
-    pub built: bool,
+    built: bool,
     /// The index from which the wheel was downloaded.
-    pub index: &'index Index,
+    index: &'index Index,
+    /// The size of the source archive when built, or the wheel archive otherwise.
+    size: Option<u64>,
+}
+
+impl IndexEntry<'_> {
+    /// The index from which the wheel was downloaded.
+    pub fn index(&self) -> &Index {
+        self.index
+    }
+
+    /// Whether the wheel was built from source.
+    pub fn is_built(&self) -> bool {
+        self.built
+    }
+
+    /// The cached distribution.
+    pub fn dist(&self) -> &CachedRegistryDist {
+        &self.dist
+    }
+
+    fn matches_wheel(
+        &self,
+        index: &IndexUrl,
+        filename: &WheelFilename,
+        no_build: bool,
+        no_binary: bool,
+    ) -> bool {
+        self.matches_index_and_build_policy(index, no_build, no_binary)
+            && self.dist.filename == *filename
+    }
+
+    fn matches_source(
+        &self,
+        index: &IndexUrl,
+        name: &PackageName,
+        version: &Version,
+        no_build: bool,
+        no_binary: bool,
+    ) -> bool {
+        self.matches_index_and_build_policy(index, no_build, no_binary)
+            && self.dist.filename.name == *name
+            && self.dist.filename.version == *version
+    }
+
+    fn matches_index_and_build_policy(
+        &self,
+        index: &IndexUrl,
+        no_build: bool,
+        no_binary: bool,
+    ) -> bool {
+        if *self.index.url() != *index {
+            return false;
+        }
+        if self.built { !no_build } else { !no_binary }
+    }
 }
 
 /// A local index of distributions that originate from a registry, like `PyPI`.
@@ -66,6 +124,63 @@ impl<'a> RegistryWheelIndex<'a> {
             extra_build_variables,
             index: FxHashMap::default(),
         }
+    }
+
+    /// Return a cached wheel that satisfies a registry wheel requirement.
+    pub fn wheel(
+        &mut self,
+        wheel: &'a RegistryBuiltDist,
+        no_build: bool,
+        no_binary: bool,
+    ) -> Option<&CachedRegistryDist> {
+        let wheel = wheel.best_wheel();
+        self.get(&wheel.filename.name).find_map(|entry| {
+            if !entry.matches_wheel(&wheel.index, &wheel.filename, no_build, no_binary) {
+                return None;
+            }
+            if wheel.size_is_authoritative
+                && let Some(expected) = wheel.file.size
+                && (entry.built || entry.size != Some(expected))
+            {
+                debug!(
+                    "Skipping cached wheel {}: expected wheel archive size {expected}, cached archive size {:?} (built from source: {})",
+                    entry.dist.filename, entry.size, entry.built,
+                );
+                return None;
+            }
+            Some(&entry.dist)
+        })
+    }
+
+    /// Return a cached wheel that satisfies a registry source distribution requirement.
+    pub fn source(
+        &mut self,
+        source: &'a RegistrySourceDist,
+        no_build: bool,
+        no_binary: bool,
+    ) -> Option<&CachedRegistryDist> {
+        self.get(&source.name).find_map(|entry| {
+            if !entry.matches_source(
+                &source.index,
+                &source.name,
+                &source.version,
+                no_build,
+                no_binary,
+            ) {
+                return None;
+            }
+            if source.size_is_authoritative
+                && let Some(expected) = source.file.size
+                && (!entry.built || entry.size != Some(expected))
+            {
+                debug!(
+                    "Skipping cached wheel {}: expected source archive size {expected}, cached archive size {:?} (built from source: {})",
+                    entry.dist.filename, entry.size, entry.built,
+                );
+                return None;
+            }
+            Some(&entry.dist)
+        })
     }
 
     /// Return an iterator over available wheels for a given package.
@@ -134,13 +249,12 @@ impl<'a> RegistryWheelIndex<'a> {
                             {
                                 if wheel.filename.compatibility(tags).is_compatible() {
                                     // Enforce hash-checking based on the built distribution.
-                                    if wheel.satisfies(
-                                        hasher.get_package(
-                                            &wheel.filename.name,
-                                            &wheel.filename.version,
-                                        ),
-                                    ) {
+                                    if wheel.satisfies(hasher.archive_policy_for_package(
+                                        &wheel.filename.name,
+                                        &wheel.filename.version,
+                                    )) {
                                         entries.push(IndexEntry {
+                                            size: wheel.size,
                                             dist: wheel.into_registry_dist(),
                                             index,
                                             built: false,
@@ -161,13 +275,12 @@ impl<'a> RegistryWheelIndex<'a> {
                             {
                                 if wheel.filename.compatibility(tags).is_compatible() {
                                     // Enforce hash-checking based on the built distribution.
-                                    if wheel.satisfies(
-                                        hasher.get_package(
-                                            &wheel.filename.name,
-                                            &wheel.filename.version,
-                                        ),
-                                    ) {
+                                    if wheel.satisfies(hasher.archive_policy_for_package(
+                                        &wheel.filename.name,
+                                        &wheel.filename.version,
+                                    )) {
                                         entries.push(IndexEntry {
+                                            size: wheel.size,
                                             dist: wheel.into_registry_dist(),
                                             index,
                                             built: false,
@@ -227,9 +340,9 @@ impl<'a> RegistryWheelIndex<'a> {
                         config_settings_package,
                     );
                     let build_info = BuildInfo::from_settings(
-                        &config_settings,
-                        extra_build_deps,
-                        extra_build_vars,
+                        config_settings.into_owned(),
+                        extra_build_deps.to_vec(),
+                        extra_build_vars.cloned(),
                     );
                     let cache_shard = build_info
                         .cache_shard()
@@ -248,10 +361,10 @@ impl<'a> RegistryWheelIndex<'a> {
                         if let Some(wheel) = ResolvedWheel::from_built_source(wheel_dir, cache) {
                             if wheel.filename.compatibility(tags).is_compatible() {
                                 // Enforce hash-checking based on the source distribution.
-                                if revision.satisfies(
-                                    hasher
-                                        .get_package(&wheel.filename.name, &wheel.filename.version),
-                                ) {
+                                if revision.satisfies(hasher.archive_policy_for_package(
+                                    &wheel.filename.name,
+                                    &wheel.filename.version,
+                                )) {
                                     let wheel = CachedWheel::from_entry(
                                         wheel,
                                         revision.hashes().into(),
@@ -259,6 +372,7 @@ impl<'a> RegistryWheelIndex<'a> {
                                         build_info.clone(),
                                     );
                                     entries.push(IndexEntry {
+                                        size: revision.size(),
                                         dist: wheel.into_registry_dist(),
                                         index,
                                         built: true,

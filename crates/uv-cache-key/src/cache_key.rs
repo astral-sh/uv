@@ -293,13 +293,13 @@ where
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct CacheKeyHasher {
     inner: SeaHasher,
 }
 
 impl CacheKeyHasher {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             inner: SeaHasher::new(),
         }

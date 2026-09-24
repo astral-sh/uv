@@ -1,0 +1,16 @@
+name = "post-less-than-post-prerelease-ordering"
+description = "A less-than post-release constraint should include pre-releases of the base release but exclude development releases of the specified post-release."
+
+[root]
+requires = ["a<1.2.3.post1"]
+
+[expected]
+satisfiable = true
+explanation = "The base pre-release is before the post-release boundary, while the development release belongs to the specified post-release and is excluded."
+
+[expected.packages]
+a = "1.2.3a1"
+
+[packages.a.versions."1.2.3a1"]
+
+[packages.a.versions."1.2.3.post1.dev0"]

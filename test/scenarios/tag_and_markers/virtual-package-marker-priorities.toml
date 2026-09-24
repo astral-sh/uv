@@ -1,0 +1,23 @@
+name = "virtual-package-extra-priorities"
+description = "Check the prioritization for virtual marker packages"
+
+[root]
+requires_python = ">=3.12"
+requires = ["a==1; python_version >= '3.8'", "b; python_version >= '3.9'"]
+
+[expected]
+satisfiable = true
+
+[packages.a.versions."1.0.0"]
+requires = ["b==1 ; python_version >= '3.10'"]
+[packages.a.versions."2.0.0"]
+requires = ["b==1 ; python_version >= '3.10'"]
+
+[packages.b.versions."1.0.0"]
+[packages.b.versions."2.0.0"]
+
+[resolver_options]
+universal = true
+
+[environment]
+python = "3.12"

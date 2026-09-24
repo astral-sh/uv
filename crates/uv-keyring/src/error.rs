@@ -70,7 +70,7 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Try to interpret a byte vector as a password string
-pub fn decode_password(bytes: Vec<u8>) -> Result<String> {
+pub(crate) fn decode_password(bytes: Vec<u8>) -> Result<String> {
     String::from_utf8(bytes).map_err(|err| Error::BadEncoding(err.into_bytes()))
 }
 

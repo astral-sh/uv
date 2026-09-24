@@ -1,0 +1,10 @@
+name = "requires-package-does-not-exist"
+description = "The user requires any version of package `a` which does not exist."
+
+[root]
+requires = ["a"]
+
+[packages]
+
+[expected]
+satisfiable = false

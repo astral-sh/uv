@@ -1,0 +1,28 @@
+name = "fork-non-local-fork-marker-direct"
+description = '''
+This is like `non-local-fork-marker-transitive`, but the marker expressions are
+placed on sibling dependency specifications. However, the actual dependency on
+`c` is indirect, and thus, there's no fork detected by the universal resolver.
+This in turn results in an unresolvable conflict on `c`.
+'''
+
+[resolver_options]
+universal = true
+
+[expected]
+satisfiable = false
+
+[root]
+requires = [
+  "a==1.0.0 ; sys_platform == 'linux'",
+  "b==1.0.0 ; sys_platform == 'darwin'",
+]
+
+[packages.a.versions."1.0.0"]
+requires = ["c<2.0.0"]
+
+[packages.b.versions."1.0.0"]
+requires = ["c>=2.0.0"]
+
+[packages.c.versions."1.0.0"]
+[packages.c.versions."2.0.0"]

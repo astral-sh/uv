@@ -1,0 +1,14 @@
+name = "python-greater-than-current-patch"
+description = "The user requires a package which requires a Python version with a patch version greater than the current patch version"
+
+[root]
+requires = ["a==1.0.0"]
+
+[expected]
+satisfiable = false
+
+[packages.a.versions."1.0.0"]
+requires_python = ">=3.13.2"
+
+[environment]
+python = "3.13.0"

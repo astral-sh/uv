@@ -28,11 +28,6 @@ impl Service {
         &self.0
     }
 
-    /// Convert into the underlying [`DisplaySafeUrl`].
-    pub fn into_url(self) -> DisplaySafeUrl {
-        self.0
-    }
-
     /// Validate that the URL scheme is supported.
     fn check_scheme(url: &Url) -> Result<(), ServiceParseError> {
         match url.scheme() {

@@ -1,0 +1,118 @@
+[bans]
+wildcards = "deny"
+
+# NOTE: Rust as a whole simply has too many split resolutions
+# for us to enforce a single version per crate. Maybe
+# in the distant future.
+multiple-versions = "allow"
+
+# NOTE: `cargo deny` doesn't distinguish between default features that
+# are enabled on a first-party basis (in our workspace) and those that
+# are enabled transitively. As a result we can't blanket deny all
+# default features here.
+# See: https://github.com/EmbarkStudios/cargo-deny/issues/699
+#
+# For now, we work around this with our own `check-cargo-bans.py`
+# script.
+external-default-features = "allow"
+
+[bans.build]
+# Keep this list of crate names free of stale entries with
+# `scripts/check-cargo-bans.py`.
+allow-build-scripts = [
+    "anyhow",
+    "assert_cmd",
+    "aws-lc-rs",
+    "aws-lc-sys",
+    "blake3",
+    "camino",
+    "cap-primitives",
+    "cap-std",
+    "codspeed",
+    "codspeed-criterion-compat",
+    "crc32fast",
+    "crossbeam-epoch",
+    "crossbeam-utils",
+    "crunchy",
+    "erased-serde",
+    "fs-err",
+    "generic-array",
+    "getrandom",
+    "httparse",
+    "icu_normalizer_data",
+    "icu_properties_data",
+    "io-extras",
+    "io-lifetimes",
+    "jni",
+    "jni-macros",
+    "libc",
+    "libm",
+    "libmimalloc-sys",
+    "memoffset",
+    "mime_guess",
+    "nix",
+    "num-bigint-dig",
+    "num-traits",
+    "objc2",
+    "oid-registry",
+    "owo-colors",
+    "parking_lot_core",
+    "portable-atomic",
+    "portable-atomic-util",
+    "proc-macro2",
+    "procfs",
+    "quote",
+    "rayon-core",
+    "ref-cast",
+    "ring",
+    "rustix",
+    "rustls",
+    "rustversion",
+    "serde",
+    "serde_core",
+    "serde_json",
+    "slotmap",
+    "system-configuration-sys",
+    "target-lexicon",
+    "thiserror",
+    "tikv-jemalloc-sys",
+    "tiny-keccak",
+    "typeid",
+    "wasm-bindgen",
+    "wasm-bindgen-shared",
+    "windows_aarch64_gnullvm",
+    "windows_aarch64_msvc",
+    "windows_i686_gnu",
+    "windows_i686_gnullvm",
+    "windows_i686_msvc",
+    "windows_x86_64_gnu",
+    "windows_x86_64_gnullvm",
+    "windows_x86_64_msvc",
+    "zerocopy",
+    "zmij",
+    "zstd-safe",
+    "zstd-sys",
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+
+[licenses]
+confidence-threshold = 0.95
+allow = [
+    "0BSD",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",
+    "MIT",
+    "MIT-0",
+    "MPL-2.0",
+    "ISC",
+    "Unicode-3.0",
+    "Zlib",
+]
+exceptions = []

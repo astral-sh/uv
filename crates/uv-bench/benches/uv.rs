@@ -1,12 +1,310 @@
+// Don't optimize the alloc crate away due to it being otherwise unused.
+// https://github.com/rust-lang/rust/issues/64402
+extern crate uv_performance_memory_allocator;
+
+use std::env;
+use std::fmt::Write;
 use std::hint::black_box;
+use std::path::Path;
 use std::str::FromStr;
 
-use criterion::{Criterion, criterion_group, criterion_main, measurement::WallTime};
+use async_zip::base::write::ZipFileWriter;
+use async_zip::{Compression, ZipEntryBuilder};
+use criterion::{BatchSize, Criterion, criterion_group, criterion_main, measurement::WallTime};
+use flate2::write::GzEncoder;
+use futures::executor::block_on;
+use futures::io::AllowStdIo;
+use sha2::{Digest, Sha256};
+use tar_codec::{ArchiveBuilder as _, EntryMetadata, TarEncoder};
+use tokio_util::compat::FuturesAsyncWriteCompatExt;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, RegistryClientBuilder};
+use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::Requirement;
+use uv_extract::dirhash::UnhashedFile;
+use uv_install_wheel::{InstallState, Layout, LinkMode};
+use uv_preview::{MaybePreviewFeature, Preview, PreviewFeature};
+use uv_pypi_types::Scheme;
 use uv_python::PythonEnvironment;
 use uv_resolver::Manifest;
+
+const MANY_FILES_WHEEL_FILENAME: &str = "manyfiles-0.0.0-py3-none-any.whl";
+const MANY_FILES_WHEEL_FILE_COUNT: usize = 10_000;
+const MANY_FILES_SDIST_TOP_LEVEL: &str = "manyfiles-0.0.0";
+const MANY_FILES_SDIST_FILE_COUNT: usize = 10_000;
+const SHA256_BENCHMARK_SIZE: usize = 1024 * 1024;
+
+fn is_codspeed_simulation() -> bool {
+    // CodSpeed reports Simulation as `instrumentation` in current versions.
+    matches!(
+        env::var("CODSPEED_RUNNER_MODE").as_deref(),
+        Ok("instrumentation" | "simulation")
+    )
+}
+
+fn hash_sha256(c: &mut Criterion<WallTime>) {
+    let bytes = vec![0_u8; SHA256_BENCHMARK_SIZE];
+
+    c.bench_function("hash_sha256", |b| {
+        b.iter(|| black_box(Sha256::digest(black_box(&bytes))));
+    });
+}
+
+fn create_many_files_wheel() -> tempfile::NamedTempFile {
+    let archive = tempfile::NamedTempFile::new().expect("Failed to create temporary archive");
+    let mut writer = ZipFileWriter::new(Vec::new());
+    let mut record = String::new();
+    for index in 0..MANY_FILES_WHEEL_FILE_COUNT {
+        let path = format!("manyfiles/{index}.txt");
+        write_zip_entry(&mut writer, &path, b"");
+        writeln!(record, "{path},,0").expect("Writing to a string cannot fail");
+    }
+    write_zip_entry(
+        &mut writer,
+        "manyfiles-0.0.0.dist-info/METADATA",
+        b"Metadata-Version: 2.1\nName: manyfiles\nVersion: 0.0.0\n",
+    );
+    write_zip_entry(
+        &mut writer,
+        "manyfiles-0.0.0.dist-info/WHEEL",
+        b"Wheel-Version: 1.0\nGenerator: uv-bench\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+    );
+    record.push_str("manyfiles-0.0.0.dist-info/METADATA,,\n");
+    record.push_str("manyfiles-0.0.0.dist-info/WHEEL,,\n");
+    record.push_str("manyfiles-0.0.0.dist-info/RECORD,,\n");
+    write_zip_entry(
+        &mut writer,
+        "manyfiles-0.0.0.dist-info/RECORD",
+        record.as_bytes(),
+    );
+    fs_err::write(
+        archive.path(),
+        block_on(writer.close()).expect("Failed to finish ZIP archive"),
+    )
+    .expect("Failed to write temporary archive");
+    archive
+}
+
+fn create_many_files_sdist() -> tempfile::NamedTempFile {
+    let archive = tempfile::NamedTempFile::new().expect("Failed to create temporary archive");
+    let mut encoder = GzEncoder::new(archive.as_file(), flate2::Compression::default());
+    let mut writer = TarEncoder::new(AllowStdIo::new(&mut encoder).compat_write()).builder();
+    for index in 0..MANY_FILES_SDIST_FILE_COUNT {
+        write_tar_entry(
+            &mut writer,
+            &format!("{MANY_FILES_SDIST_TOP_LEVEL}/manyfiles/{index}.txt"),
+            b"",
+        );
+    }
+    write_tar_entry(
+        &mut writer,
+        &format!("{MANY_FILES_SDIST_TOP_LEVEL}/PKG-INFO"),
+        b"Metadata-Version: 2.1\nName: manyfiles\nVersion: 0.0.0\n",
+    );
+    write_tar_entry(
+        &mut writer,
+        &format!("{MANY_FILES_SDIST_TOP_LEVEL}/pyproject.toml"),
+        b"[project]\nname = \"manyfiles\"\nversion = \"0.0.0\"\n",
+    );
+    block_on(writer.finish()).expect("Failed to finish tar archive");
+    encoder.finish().expect("Failed to finish gzip archive");
+    archive
+}
+
+fn create_sdist_extraction_directory() -> tempfile::TempDir {
+    #[cfg(target_os = "linux")]
+    if let Ok(directory) = tempfile::tempdir_in("/dev/shm") {
+        return directory;
+    }
+
+    tempfile::tempdir().expect("Failed to create sdist extraction directory")
+}
+
+fn unpack_sdist_many_files(c: &mut Criterion<WallTime>) {
+    let archive = create_many_files_sdist();
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("Failed to create Tokio runtime");
+
+    uv_preview::set(Preview::from_feature_names(&[MaybePreviewFeature::Known(
+        PreviewFeature::TarCodec,
+    )]))
+    .expect("Failed to configure tar backend preview features");
+
+    c.bench_function("unpack_sdist_many_files", |b| {
+        b.iter_batched(
+            || {
+                (
+                    runtime
+                        .block_on(fs_err::tokio::File::open(archive.path()))
+                        .expect("Failed to open temporary archive"),
+                    create_sdist_extraction_directory(),
+                )
+            },
+            |(archive, extracted_sdist)| {
+                let (extracted_sdist, files) = runtime
+                    .block_on(uv_extract::stream::archive(
+                        archive,
+                        SourceDistExtension::TarGz,
+                        extracted_sdist,
+                    ))
+                    .expect("Failed to unpack sdist");
+                let source_tree = uv_extract::strip_component(extracted_sdist.path())
+                    .expect("Failed to strip top-level sdist directory");
+                black_box((files, extracted_sdist, source_tree))
+            },
+            BatchSize::PerIteration,
+        );
+    });
+
+    uv_preview::set(Preview::default())
+        .expect("Failed to restore default preview features after tar benchmark");
+    uv_preview::finalize().expect("Failed to finalize preview features");
+}
+
+fn unzip_wheel_many_files(c: &mut Criterion<WallTime>) {
+    if is_codspeed_simulation() {
+        return;
+    }
+
+    let archive = create_many_files_wheel();
+
+    c.bench_function("unzip_wheel_many_files", |b| {
+        b.iter_batched(
+            || {
+                (
+                    fs_err::File::open(archive.path()).expect("Failed to open temporary archive"),
+                    tempfile::tempdir().expect("Failed to create wheel extraction directory"),
+                )
+            },
+            |(archive, extracted_wheel)| {
+                let files = uv_extract::unzip(archive, extracted_wheel.path())
+                    .expect("Failed to extract wheel");
+                black_box((files, extracted_wheel))
+            },
+            BatchSize::SmallInput,
+        );
+    });
+}
+
+fn prepare_wheel_many_files(c: &mut Criterion<WallTime>) {
+    if is_codspeed_simulation() {
+        return;
+    }
+
+    let archive = create_many_files_wheel();
+    let filename =
+        WheelFilename::from_str(MANY_FILES_WHEEL_FILENAME).expect("Invalid wheel filename");
+
+    c.bench_function("prepare_wheel_many_files", |b| {
+        b.iter_batched(
+            || {
+                (
+                    fs_err::File::open(archive.path()).expect("Failed to open temporary archive"),
+                    tempfile::tempdir().expect("Failed to create wheel extraction directory"),
+                )
+            },
+            |(archive, extracted_wheel)| {
+                let files = prepare_wheel(archive, extracted_wheel.path(), &filename);
+                black_box((files, extracted_wheel))
+            },
+            BatchSize::SmallInput,
+        );
+    });
+}
+
+fn install_wheel_many_files(c: &mut Criterion<WallTime>) {
+    let archive = create_many_files_wheel();
+    let filename =
+        WheelFilename::from_str(MANY_FILES_WHEEL_FILENAME).expect("Invalid wheel filename");
+    let extracted_wheel = tempfile::tempdir().expect("Failed to create wheel extraction directory");
+    prepare_wheel(
+        fs_err::File::open(archive.path()).expect("Failed to open temporary archive"),
+        extracted_wheel.path(),
+        &filename,
+    );
+
+    c.bench_function("install_wheel_many_files", |b| {
+        b.iter_batched(
+            || {
+                let environment =
+                    tempfile::tempdir().expect("Failed to create installation directory");
+                let layout = layout(environment.path());
+                fs_err::create_dir_all(&layout.scheme.purelib)
+                    .expect("Failed to create site-packages directory");
+                (environment, layout)
+            },
+            |(environment, layout)| {
+                let state = InstallState::new(Preview::default());
+                uv_install_wheel::install_wheel(
+                    &layout,
+                    false,
+                    extracted_wheel.path(),
+                    &filename,
+                    None,
+                    None::<&()>,
+                    None::<&()>,
+                    Some("uv"),
+                    true,
+                    LinkMode::default(),
+                    &state,
+                )
+                .expect("Failed to install wheel");
+                state
+                    .warn_package_conflicts()
+                    .expect("Failed to check for package conflicts");
+                black_box((environment, layout))
+            },
+            BatchSize::SmallInput,
+        );
+    });
+}
+
+fn prepare_wheel(
+    archive: fs_err::File,
+    extracted_wheel: &Path,
+    filename: &WheelFilename,
+) -> Vec<UnhashedFile> {
+    let files = uv_extract::unzip(archive, extracted_wheel).expect("Failed to extract wheel");
+    uv_install_wheel::validate_and_heal_record(
+        extracted_wheel,
+        files.iter().map(|file| (file.path(), file.size())),
+        filename,
+    )
+    .expect("Failed to validate wheel");
+    files
+}
+
+fn write_zip_entry(writer: &mut ZipFileWriter<Vec<u8>>, path: &str, contents: &[u8]) {
+    let entry = ZipEntryBuilder::new(path.into(), Compression::Stored);
+    block_on(writer.write_entry_whole(entry, contents)).expect("Failed to write ZIP entry");
+}
+
+fn write_tar_entry<W: tokio::io::AsyncWrite + Unpin>(
+    writer: &mut tar_codec::Builder<TarEncoder<W>>,
+    path: &str,
+    contents: &[u8],
+) {
+    block_on(writer.add_file(path, contents, EntryMetadata::default()))
+        .expect("Failed to write tar entry");
+}
+
+fn layout(root: &Path) -> Layout {
+    let site_packages = root.join("site-packages");
+    Layout {
+        sys_executable: root.join("bin/python"),
+        python_version: (3, 11),
+        os_name: "posix".to_string(),
+        scheme: Scheme {
+            purelib: site_packages.clone(),
+            platlib: site_packages,
+            scripts: root.join("bin"),
+            data: root.to_path_buf(),
+            include: root.join("include"),
+        },
+    }
+}
 
 fn resolve_warm_jupyter(c: &mut Criterion<WallTime>) {
     let manifest = Manifest::simple(vec![Requirement::from(
@@ -47,12 +345,26 @@ fn resolve_warm_airflow(c: &mut Criterion<WallTime>) {
 //     c.bench_function("resolve_warm_airflow_universal", |b| b.iter(&run));
 // }
 
-criterion_group!(
-    uv,
-    resolve_warm_jupyter,
-    resolve_warm_jupyter_universal,
-    resolve_warm_airflow
-);
+fn criterion_with_preview() -> Criterion<WallTime> {
+    uv_preview::set(Preview::default())
+        .expect("Global preview features should not have been initialized already");
+
+    Criterion::default()
+}
+
+criterion_group! {
+    name = uv;
+    config = criterion_with_preview();
+    targets =
+        hash_sha256,
+        unpack_sdist_many_files,
+        unzip_wheel_many_files,
+        prepare_wheel_many_files,
+        install_wheel_many_files,
+        resolve_warm_jupyter,
+        resolve_warm_jupyter_universal,
+        resolve_warm_airflow
+}
 criterion_main!(uv);
 
 fn setup(manifest: Manifest, universal: bool) -> impl Fn() {
@@ -70,7 +382,9 @@ fn setup(manifest: Manifest, universal: bool) -> impl Fn() {
     let interpreter = PythonEnvironment::from_root("../../.venv", &cache)
         .unwrap()
         .into_interpreter();
-    let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache.clone()).build();
+    let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache.clone())
+        .build()
+        .expect("failed to build registry client");
 
     // Prime the cache: First run for performance the network operation, the second run primes
     // reading from the cache from the first run. If they are already primed, we only lose ~1s for
@@ -92,7 +406,8 @@ fn setup(manifest: Manifest, universal: bool) -> impl Fn() {
         BaseClientBuilder::default().connectivity(Connectivity::Offline),
         cache.clone(),
     )
-    .build();
+    .build()
+    .expect("failed to build registry client");
 
     move || {
         runtime
@@ -132,7 +447,9 @@ mod resolver {
         ExcludeNewer, FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, PythonRequirement,
         Resolver, ResolverEnvironment, ResolverOutput,
     };
-    use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
+    use uv_types::{
+        BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy,
+    };
     use uv_workspace::WorkspaceCache;
 
     static MARKERS: LazyLock<MarkerEnvironment> = LazyLock::new(|| {
@@ -161,7 +478,7 @@ mod resolver {
 
     static TAGS: LazyLock<Tags> = LazyLock::new(|| {
         Tags::from_env(
-            &PLATFORM,
+            PLATFORM.clone(),
             (3, 11),
             "cpython",
             (3, 11),
@@ -235,6 +552,7 @@ mod resolver {
             &hashes,
             exclude_newer,
             sources,
+            SourceTreeEditablePolicy::Project,
             workspace_cache,
             concurrency.clone(),
             Preview::default(),

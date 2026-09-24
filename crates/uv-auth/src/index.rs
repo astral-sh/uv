@@ -62,7 +62,7 @@ pub struct Index {
 }
 
 impl Index {
-    pub fn is_prefix_for(&self, url: &Url) -> bool {
+    fn is_prefix_for(&self, url: &Url) -> bool {
         if self.root_url.scheme() != url.scheme()
             || self.root_url.host_str() != url.host_str()
             || self.root_url.port_or_known_default() != url.port_or_known_default()
@@ -70,8 +70,24 @@ impl Index {
             return false;
         }
 
-        url.path().starts_with(self.root_url.path())
+        is_path_prefix(self.root_url.path(), url.path())
     }
+}
+
+/// Returns `true` if `prefix` is a complete path-segment prefix of `path`.
+///
+/// This rejects partial segment matches, so `/simple` matches `/simple/anyio` but not
+/// `/simpleevil`.
+pub(crate) fn is_path_prefix(prefix: &str, path: &str) -> bool {
+    if prefix == path {
+        return true;
+    }
+
+    let Some(suffix) = path.strip_prefix(prefix) else {
+        return false;
+    };
+
+    prefix.ends_with('/') || suffix.starts_with('/')
 }
 
 // TODO(john): Multiple methods in this struct need to iterate over
@@ -96,12 +112,12 @@ impl Indexes {
     }
 
     /// Get the index for a URL if one exists.
-    pub fn index_for(&self, url: &Url) -> Option<&Index> {
+    pub(crate) fn index_for(&self, url: &Url) -> Option<&Index> {
         self.find_prefix_index(url)
     }
 
     /// Get the [`AuthPolicy`] for a URL.
-    pub fn auth_policy_for(&self, url: &Url) -> AuthPolicy {
+    pub(crate) fn auth_policy_for(&self, url: &Url) -> AuthPolicy {
         self.find_prefix_index(url)
             .map(|index| index.auth_policy)
             .unwrap_or(AuthPolicy::Auto)
@@ -109,5 +125,46 @@ impl Indexes {
 
     fn find_prefix_index(&self, url: &Url) -> Option<&Index> {
         self.0.iter().find(|&index| index.is_prefix_for(url))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn index(root_url: &str, auth_policy: AuthPolicy) -> Index {
+        let root_url = DisplaySafeUrl::parse(root_url).unwrap();
+        Index {
+            url: root_url.clone(),
+            root_url,
+            auth_policy,
+        }
+    }
+
+    #[test]
+    fn test_index_path_prefix_requires_segment_boundary() {
+        let index = index("https://example.com/simple", AuthPolicy::Always);
+
+        for url in [
+            "https://example.com/simple",
+            "https://example.com/simple/",
+            "https://example.com/simple/anyio",
+        ] {
+            assert!(
+                index.is_prefix_for(&Url::parse(url).unwrap()),
+                "Failed to match URL with prefix: {url}"
+            );
+        }
+
+        for url in [
+            "https://example.com/simpleevil",
+            "https://example.com/simple-evil",
+            "https://example.com/simpl",
+        ] {
+            assert!(
+                !index.is_prefix_for(&Url::parse(url).unwrap()),
+                "Should not match URL with partial path segment: {url}"
+            );
+        }
     }
 }

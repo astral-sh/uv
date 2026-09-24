@@ -6,11 +6,18 @@ use std::str::FromStr;
 use itertools::Either;
 use rustc_hash::FxHashSet;
 
-use uv_configuration::{Constraints, DependencyGroupsWithDefaults, ExtrasSpecification};
-use uv_distribution_types::Index;
-use uv_normalize::{ExtraName, PackageName};
-use uv_pypi_types::{DependencyGroupSpecifier, LenientRequirement, VerbatimParsedUrl};
-use uv_resolver::{Installable, Lock, Package};
+use uv_configuration::{
+    BuildOptions, Constraints, DependencyGroupsWithDefaults, ExtrasSpecification,
+    ExtrasSpecificationWithDefaults, InstallOptions,
+};
+use uv_distribution_types::{Index, Resolution};
+use uv_lock::{Installable, InstallableRootKind, Lock, LockError, Package};
+use uv_normalize::{DEV_DEPENDENCIES, ExtraName, GroupName, PackageName};
+use uv_platform_tags::Tags;
+use uv_pypi_types::{
+    DependencyGroupSpecifier, DependencyGroups, LenientRequirement, ResolverMarkerEnvironment,
+    VerbatimParsedUrl,
+};
 use uv_scripts::Pep723Script;
 use uv_workspace::Workspace;
 use uv_workspace::pyproject::{Source, Sources, ToolUvSources};
@@ -91,6 +98,82 @@ impl<'lock> Installable<'lock> for InstallTarget<'lock> {
         }
     }
 
+    fn group_root(&self, groups: &DependencyGroupsWithDefaults) -> Option<&PackageName> {
+        let Self::Project {
+            name,
+            lock,
+            workspace,
+        } = self
+        else {
+            return None;
+        };
+        let root = lock.root().filter(|root| root.name() != *name)?;
+        let root_member = workspace.packages().get(root.name())?;
+        let pyproject = root_member.pyproject_toml();
+        let declared_groups = pyproject
+            .dependency_groups
+            .as_ref()
+            .into_iter()
+            .flat_map(DependencyGroups::keys);
+        let legacy_dev = pyproject
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.dev_dependencies.as_ref())
+            .is_some()
+            .then_some(&*DEV_DEPENDENCIES);
+
+        declared_groups
+            .chain(legacy_dev)
+            .any(|group| self.includes_group(Some(root.name()), group, groups))
+            .then_some(root.name())
+    }
+
+    fn includes_group(
+        &self,
+        package: Option<&PackageName>,
+        group: &GroupName,
+        groups: &DependencyGroupsWithDefaults,
+    ) -> bool {
+        if !groups.contains(group) {
+            return false;
+        }
+
+        let Self::Project {
+            workspace, name, ..
+        } = self
+        else {
+            return true;
+        };
+
+        if package == Some(*name) {
+            return true;
+        }
+
+        // Workspace-root groups must be requested explicitly when a member is selected.
+        // Defaults belong to the selected member, not to an inherited workspace root.
+        if groups.contains_because_default(group) {
+            return false;
+        }
+
+        !workspace.packages().get(*name).is_some_and(|member| {
+            let pyproject = member.pyproject_toml();
+            pyproject
+                .dependency_groups
+                .as_ref()
+                .is_some_and(|member_groups| member_groups.contains_key(group))
+                // Legacy development dependencies also define the member's `dev` group, so
+                // they take precedence over an inherited `dev` group from the workspace root.
+                || group == &*DEV_DEPENDENCIES
+                    && pyproject
+                        .tool
+                        .as_ref()
+                        .and_then(|tool| tool.uv.as_ref())
+                        .and_then(|uv| uv.dev_dependencies.as_ref())
+                        .is_some()
+        })
+    }
+
     fn project_name(&self) -> Option<&PackageName> {
         match self {
             Self::Project { name, .. } => Some(name),
@@ -113,6 +196,57 @@ impl<'lock> Installable<'lock> for InstallTarget<'lock> {
 }
 
 impl<'lock> InstallTarget<'lock> {
+    /// Convert the target's locked packages to a [`Resolution`].
+    pub(crate) fn to_resolution(
+        self,
+        marker_env: &ResolverMarkerEnvironment,
+        tags: &Tags,
+        extras: &ExtrasSpecificationWithDefaults,
+        groups: &DependencyGroupsWithDefaults,
+        build_options: &BuildOptions,
+        install_options: &InstallOptions,
+    ) -> Result<Resolution, LockError> {
+        // Package-backed project and workspace targets without conflicts can use concrete roots.
+        // Other targets need the generic path to include manifest dependencies or evaluate
+        // conflict markers from project roots.
+        let use_concrete_roots = self.lock().conflicts().is_empty()
+            && match self {
+                Self::Project { workspace, .. }
+                | Self::Projects { workspace, .. }
+                | Self::Workspace { workspace, .. } => !workspace.is_non_project(),
+                Self::NonProjectWorkspace { .. } | Self::Script { .. } => false,
+            };
+        if use_concrete_roots
+            && self.group_root(groups).is_none()
+            && let Some(roots) = self
+                .roots()
+                .map(|root_name| self.lock().find_by_name(root_name).ok().flatten())
+                .collect::<Option<Vec<_>>>()
+        {
+            return self.lock().to_resolution(
+                self.install_path(),
+                roots,
+                self.project_name(),
+                marker_env,
+                tags,
+                extras,
+                groups,
+                build_options,
+                install_options,
+            );
+        }
+
+        Installable::to_resolution(
+            &self,
+            marker_env,
+            tags,
+            extras,
+            groups,
+            build_options,
+            install_options,
+        )
+    }
+
     /// Return an iterator over the [`Index`] definitions in the target.
     pub(crate) fn indexes(self) -> impl Iterator<Item = &'lock Index> {
         match self {
@@ -284,25 +418,31 @@ impl<'lock> InstallTarget<'lock> {
                     return Ok(());
                 }
 
+                let metadata_free_lock = lock.supports_missing_package_metadata();
                 let roots = self.roots().collect::<FxHashSet<_>>();
-                let member_packages: Vec<&Package> = lock
+                // Revision 1.4 records even empty extras in the resolved dependency table. Read
+                // only the lockfile so frozen installs cannot select newly declared extras.
+                let known_extras = lock
                     .packages()
                     .iter()
                     .filter(|package| roots.contains(package.name()))
-                    .collect();
-
-                // Collect all known extras from the member packages.
-                let known_extras = member_packages
-                    .iter()
-                    .flat_map(|package| package.provides_extras().iter())
+                    .flat_map(|package| {
+                        package.provides_extras().iter().chain(
+                            metadata_free_lock
+                                .then(|| package.optional_dependencies().keys())
+                                .into_iter()
+                                .flatten(),
+                        )
+                    })
                     .collect::<FxHashSet<_>>();
 
                 for extra in extras.explicit_names() {
                     if !known_extras.contains(extra) {
                         return match self {
-                            Self::Project { .. } => {
-                                Err(ProjectError::MissingExtraProject(extra.clone()))
-                            }
+                            Self::Project { name, .. } => Err(ProjectError::MissingExtraProject(
+                                extra.clone(),
+                                name.clone(),
+                            )),
                             Self::Projects { .. } => {
                                 Err(ProjectError::MissingExtraProjects(extra.clone()))
                             }
@@ -336,47 +476,51 @@ impl<'lock> InstallTarget<'lock> {
         }
 
         match self {
-            Self::Workspace { lock, workspace } | Self::NonProjectWorkspace { lock, workspace } => {
-                let roots = self.roots().collect::<FxHashSet<_>>();
-                let member_packages: Vec<&Package> = lock
-                    .packages()
-                    .iter()
-                    .filter(|package| roots.contains(package.name()))
-                    .collect();
-
-                // Extract the dependency groups that are exclusive to the workspace root.
-                let known_groups = member_packages
-                    .iter()
-                    .flat_map(|package| package.dependency_groups().keys().map(Cow::Borrowed))
-                    .chain(
-                        workspace
-                            .workspace_dependency_groups()
-                            .ok()
-                            .into_iter()
-                            .flat_map(|dependency_groups| {
-                                dependency_groups.into_keys().map(Cow::Owned)
-                            }),
-                    )
-                    .collect::<FxHashSet<_>>();
-
-                for group in groups.explicit_names() {
-                    if !known_groups.contains(group) {
-                        return Err(ProjectError::MissingGroupProjects(group.clone()));
-                    }
-                }
+            Self::Project {
+                lock, workspace, ..
             }
-            Self::Project { lock, .. } | Self::Projects { lock, .. } => {
-                let roots = self.roots().collect::<FxHashSet<_>>();
-                let member_packages: Vec<&Package> = lock
+            | Self::Projects {
+                lock, workspace, ..
+            }
+            | Self::Workspace { lock, workspace }
+            | Self::NonProjectWorkspace { lock, workspace } => {
+                let metadata_free_lock = lock.supports_missing_package_metadata();
+                // Validate inherited root groups even when `--no-group` excludes them from
+                // installation and therefore omits the root from the selected group roots.
+                let workspace_root = matches!(self, Self::Project { .. })
+                    .then(|| lock.root())
+                    .flatten()
+                    .map(Package::name);
+                let roots = self.roots().chain(workspace_root).collect::<FxHashSet<_>>();
+                let member_groups = lock
                     .packages()
                     .iter()
                     .filter(|package| roots.contains(package.name()))
-                    .collect();
+                    .flat_map(|package| {
+                        // Revision 1.4 retains empty groups as resolved dependency table entries.
+                        // Reject groups added to the workspace after the lock was written.
+                        package
+                            .dependency_groups()
+                            .keys()
+                            .chain(
+                                metadata_free_lock
+                                    .then(|| package.resolved_dependency_groups().keys())
+                                    .into_iter()
+                                    .flatten(),
+                            )
+                            .map(Cow::Borrowed)
+                    });
 
-                // Extract the dependency groups defined in the relevant member(s).
-                let known_groups = member_packages
-                    .iter()
-                    .flat_map(|package| package.dependency_groups().keys())
+                // Groups defined directly on a non-project workspace root are not members.
+                let workspace_groups = workspace
+                    .is_non_project()
+                    .then(|| workspace.workspace_dependency_groups().ok())
+                    .flatten()
+                    .into_iter()
+                    .flat_map(|dependency_groups| dependency_groups.into_keys().map(Cow::Owned));
+
+                let known_groups = member_groups
+                    .chain(workspace_groups)
                     .collect::<FxHashSet<_>>();
 
                 for group in groups.explicit_names() {
@@ -385,10 +529,7 @@ impl<'lock> InstallTarget<'lock> {
                             Self::Project { .. } => {
                                 Err(ProjectError::MissingGroupProject(group.clone()))
                             }
-                            Self::Projects { .. } => {
-                                Err(ProjectError::MissingGroupProjects(group.clone()))
-                            }
-                            _ => unreachable!(),
+                            _ => Err(ProjectError::MissingGroupProjects(group.clone())),
                         };
                     }
                 }
@@ -432,12 +573,20 @@ impl<'lock> InstallTarget<'lock> {
                 let mut queue: VecDeque<(&PackageName, Option<&ExtraName>)> = VecDeque::new();
                 let mut seen: FxHashSet<(&PackageName, Option<&ExtraName>)> = FxHashSet::default();
 
-                for name in roots {
+                for (name, root_kind) in roots
+                    .iter()
+                    .copied()
+                    .map(|name| (name, InstallableRootKind::Production))
+                    .chain(
+                        self.group_root(groups)
+                            .map(|name| (name, InstallableRootKind::DependencyGroups)),
+                    )
+                {
                     let Some(root_package) = packages.get(name) else {
                         continue;
                     };
 
-                    if groups.prod() {
+                    if root_kind == InstallableRootKind::Production && groups.prod() {
                         // Add the root package
                         if seen.insert((name, None)) {
                             queue.push_back((name, None));
@@ -454,7 +603,7 @@ impl<'lock> InstallTarget<'lock> {
 
                     // Add activated dependency groups for the root package
                     for (group_name, dependencies) in root_package.resolved_dependency_groups() {
-                        if !groups.contains(group_name) {
+                        if !self.includes_group(Some(root_package.name()), group_name, groups) {
                             continue;
                         }
                         for dependency in dependencies {

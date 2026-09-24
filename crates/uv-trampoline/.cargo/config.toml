@@ -4,6 +4,7 @@ build-std-features = ["compiler-builtins-mem"]
 panic-abort-tests = true
 
 # Make PE binaries reproducible: replace timestamps and debug GUIDs with
-# content hashes so identical source produces identical bytes.
+# content hashes so identical source produces identical bytes, and do
+# not embed PDBs.
 [target.'cfg(windows)']
-rustflags = ["-C", "link-arg=/Brepro"]
+rustflags = ["-C", "link-arg=/Brepro", "-C", "link-arg=/DEBUG:NONE"]

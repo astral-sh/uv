@@ -5,7 +5,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use uv_cache::Refresh;
 use uv_cache_info::Timestamp;
 use uv_distribution_types::{Requirement, RequirementSource};
-use uv_normalize::PackageName;
+use uv_normalize::{GroupName, PackageName};
 
 /// Whether to reinstall packages.
 #[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
@@ -36,11 +36,6 @@ impl Reinstall {
     /// Returns `true` if no packages should be reinstalled.
     pub fn is_none(&self) -> bool {
         matches!(self, Self::None)
-    }
-
-    /// Returns `true` if all packages should be reinstalled.
-    pub fn is_all(&self) -> bool {
-        matches!(self, Self::All)
     }
 
     /// Returns `true` if the specified package should be reinstalled.
@@ -139,10 +134,13 @@ pub enum UpgradeStrategy {
     None,
 
     /// Allow package upgrades for all packages, ignoring the existing lockfile.
-    All,
+    ///
+    /// Group names are retained for validation purposes; they do not limit which packages are
+    /// upgraded.
+    All(FxHashSet<GroupName>),
 
-    /// Allow package upgrades, but only for the specified packages.
-    Packages(FxHashSet<PackageName>),
+    /// Allow package upgrades, but only for the specified packages and/or dependency groups.
+    Some(FxHashSet<PackageName>, FxHashSet<GroupName>),
 }
 
 /// Whether to allow package upgrades.
@@ -157,49 +155,48 @@ pub struct Upgrade {
 
 impl Upgrade {
     /// Create a new [`Upgrade`] with no upgrades nor constraints.
-    pub fn none() -> Self {
+    fn none() -> Self {
         Self {
             strategy: UpgradeStrategy::None,
             constraints: FxHashMap::default(),
         }
     }
 
-    /// Create a new [`Upgrade`] to consider all packages.
-    pub fn all() -> Self {
-        Self {
-            strategy: UpgradeStrategy::All,
-            constraints: FxHashMap::default(),
-        }
-    }
-
     /// Determine the upgrade selection strategy from the command-line arguments.
-    pub fn from_args(upgrade: Option<bool>, upgrade_package: Vec<Requirement>) -> Option<Self> {
+    pub fn from_args(
+        upgrade: Option<bool>,
+        upgrade_package: Vec<Requirement>,
+        upgrade_group: Vec<GroupName>,
+    ) -> Option<Self> {
+        let groups: FxHashSet<GroupName> = upgrade_group.into_iter().collect();
+
         let strategy = match upgrade {
-            Some(true) => UpgradeStrategy::All,
+            Some(true) => UpgradeStrategy::All(groups),
             Some(false) => {
-                if upgrade_package.is_empty() {
+                if upgrade_package.is_empty() && groups.is_empty() {
                     return Some(Self::none());
                 }
-                // `--no-upgrade` with `--upgrade-package` allows selecting the specified packages for upgrade.
+                // `--no-upgrade` with `--upgrade-package` allows selecting the specified packages
+                // for upgrade.
                 let packages = upgrade_package.iter().map(|req| req.name.clone()).collect();
-                UpgradeStrategy::Packages(packages)
+                UpgradeStrategy::Some(packages, groups)
             }
             None => {
-                if upgrade_package.is_empty() {
+                if upgrade_package.is_empty() && groups.is_empty() {
                     return None;
                 }
                 let packages = upgrade_package.iter().map(|req| req.name.clone()).collect();
-                UpgradeStrategy::Packages(packages)
+                UpgradeStrategy::Some(packages, groups)
             }
         };
 
         let mut constraints: FxHashMap<PackageName, Vec<Requirement>> = FxHashMap::default();
         for requirement in upgrade_package {
             // Skip any "empty" constraints.
-            if let RequirementSource::Registry { specifier, .. } = &requirement.source {
-                if specifier.is_empty() {
-                    continue;
-                }
+            if let RequirementSource::Registry { specifier, .. } = &requirement.source
+                && specifier.is_empty()
+            {
+                continue;
             }
             constraints
                 .entry(requirement.name.clone())
@@ -215,10 +212,15 @@ impl Upgrade {
 
     /// Create an [`Upgrade`] to upgrade a single package.
     pub fn package(package_name: PackageName) -> Self {
+        Self::from_packages([package_name])
+    }
+
+    /// Create an [`Upgrade`] to upgrade a set of packages.
+    pub fn from_packages(package_names: impl IntoIterator<Item = PackageName>) -> Self {
         let mut packages = FxHashSet::default();
-        packages.insert(package_name);
+        packages.extend(package_names);
         Self {
-            strategy: UpgradeStrategy::Packages(packages),
+            strategy: UpgradeStrategy::Some(packages, FxHashSet::default()),
             constraints: FxHashMap::default(),
         }
     }
@@ -230,16 +232,7 @@ impl Upgrade {
 
     /// Returns `true` if all packages should be upgraded.
     pub fn is_all(&self) -> bool {
-        matches!(self.strategy, UpgradeStrategy::All)
-    }
-
-    /// Returns `true` if the specified package should be upgraded.
-    pub fn contains(&self, package_name: &PackageName) -> bool {
-        match &self.strategy {
-            UpgradeStrategy::None => false,
-            UpgradeStrategy::All => true,
-            UpgradeStrategy::Packages(packages) => packages.contains(package_name),
-        }
+        matches!(self.strategy, UpgradeStrategy::All(_))
     }
 
     /// Returns an iterator over the constraints.
@@ -251,21 +244,57 @@ impl Upgrade {
             .flat_map(|requirements| requirements.iter())
     }
 
+    /// Returns the set of explicitly named packages to upgrade (from `--upgrade-package`).
+    pub fn packages(&self) -> Option<&FxHashSet<PackageName>> {
+        match &self.strategy {
+            UpgradeStrategy::Some(packages, _) => Some(packages),
+            _ => None,
+        }
+    }
+
+    /// Returns the set of dependency groups explicitly requested for upgrade.
+    pub fn groups(&self) -> Option<&FxHashSet<GroupName>> {
+        match &self.strategy {
+            UpgradeStrategy::All(groups) | UpgradeStrategy::Some(_, groups)
+                if !groups.is_empty() =>
+            {
+                Some(groups)
+            }
+            _ => None,
+        }
+    }
+
     /// Combine a set of [`Upgrade`] values.
     #[must_use]
     pub fn combine(self, other: Self) -> Self {
-        // For `strategy`: `other` takes precedence for an explicit `All` or `None`; otherwise, merge.
+        // For `strategy`: an explicit `All` or `None` in `self` takes precedence; otherwise,
+        // merge.
         let strategy = match (self.strategy, other.strategy) {
-            (_, UpgradeStrategy::All) => UpgradeStrategy::All,
-            (_, UpgradeStrategy::None) => UpgradeStrategy::None,
+            (UpgradeStrategy::All(mut groups), UpgradeStrategy::All(other_groups)) => {
+                groups.extend(other_groups);
+                UpgradeStrategy::All(groups)
+            }
+            (UpgradeStrategy::All(mut groups), UpgradeStrategy::Some(_, other_groups)) => {
+                groups.extend(other_groups);
+                UpgradeStrategy::All(groups)
+            }
+            (UpgradeStrategy::All(groups), UpgradeStrategy::None) => UpgradeStrategy::All(groups),
+            (UpgradeStrategy::None, _) => UpgradeStrategy::None,
+            (UpgradeStrategy::Some(_, groups), UpgradeStrategy::All(mut other_groups)) => {
+                other_groups.extend(groups);
+                UpgradeStrategy::All(other_groups)
+            }
+            (UpgradeStrategy::Some(packages, groups), UpgradeStrategy::None) => {
+                UpgradeStrategy::Some(packages, groups)
+            }
             (
-                UpgradeStrategy::Packages(mut self_packages),
-                UpgradeStrategy::Packages(other_packages),
+                UpgradeStrategy::Some(mut self_packages, mut self_groups),
+                UpgradeStrategy::Some(other_packages, other_groups),
             ) => {
                 self_packages.extend(other_packages);
-                UpgradeStrategy::Packages(self_packages)
+                self_groups.extend(other_groups);
+                UpgradeStrategy::Some(self_packages, self_groups)
             }
-            (_, UpgradeStrategy::Packages(packages)) => UpgradeStrategy::Packages(packages),
         };
 
         // For `constraints`: always merge the constraints of `self` and `other`.
@@ -289,8 +318,8 @@ impl From<Upgrade> for Refresh {
     fn from(value: Upgrade) -> Self {
         match value.strategy {
             UpgradeStrategy::None => Self::None(Timestamp::now()),
-            UpgradeStrategy::All => Self::All(Timestamp::now()),
-            UpgradeStrategy::Packages(packages) => Self::Packages(
+            UpgradeStrategy::All(_) => Self::All(Timestamp::now()),
+            UpgradeStrategy::Some(packages, _) => Self::Packages(
                 packages.into_iter().collect::<Vec<_>>(),
                 Vec::new(),
                 Timestamp::now(),

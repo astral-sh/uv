@@ -4,8 +4,9 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 use uv_auth::CredentialsCache;
+use uv_cache::Cache;
 use uv_configuration::NoSources;
-use uv_distribution_types::{GitSourceUrl, IndexLocations, Requirement};
+use uv_distribution_types::{GitDirectorySourceUrl, IndexLocations, Requirement};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pypi_types::{HashDigests, ResolutionMetadata};
@@ -53,6 +54,15 @@ pub enum MetadataError {
     IncompleteSourceGroup(PackageName, GroupName),
 }
 
+impl uv_errors::Hinted for MetadataError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        match self {
+            Self::LoweringError(_, err) | Self::GroupLoweringError(_, _, err) => err.hints(),
+            _ => uv_errors::Hints::none(),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Metadata {
     // Mandatory fields
@@ -69,7 +79,20 @@ pub struct Metadata {
 impl Metadata {
     /// Lower without considering `tool.uv` in `pyproject.toml`, used for index and other archive
     /// dependencies.
-    pub fn from_metadata23(metadata: ResolutionMetadata) -> Self {
+    pub(crate) fn from_metadata23(metadata: ResolutionMetadata) -> Self {
+        // This route handles package metadata rather than explicit user input.
+        // Write local dependency paths relative to the lockfile.
+        Self::from_resolution_metadata(metadata).with_force_relative(true)
+    }
+
+    /// Lower metadata selected from `tool.uv.dependency-metadata`.
+    pub(crate) fn from_dependency_metadata(metadata: ResolutionMetadata) -> Self {
+        // Respect the relative/absolute path preference in user-provided metadata overrides.
+        Self::from_resolution_metadata(metadata)
+    }
+
+    /// Lower package metadata without selecting an output path policy.
+    fn from_resolution_metadata(metadata: ResolutionMetadata) -> Self {
         Self {
             name: metadata.name,
             version: metadata.version,
@@ -91,7 +114,9 @@ impl Metadata {
         git_source: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
         sources: NoSources,
-        cache: &WorkspaceCache,
+        editable: bool,
+        cache: &Cache,
+        workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         // Lower the requirements.
@@ -113,7 +138,9 @@ impl Metadata {
             git_source,
             locations,
             sources,
+            editable,
             cache,
+            workspace_cache,
             credentials_cache,
         )
         .await?;
@@ -129,6 +156,22 @@ impl Metadata {
             dynamic,
         })
     }
+
+    /// Set whether local dependency sources should be represented by relative paths.
+    ///
+    /// Disabling this restores each URL's original path spelling preference.
+    #[must_use]
+    pub fn with_force_relative(mut self, force_relative: bool) -> Self {
+        for requirement in self.requires_dist.iter_mut().chain(
+            self.dependency_groups
+                .values_mut()
+                .flat_map(|requirements| requirements.iter_mut()),
+        ) {
+            requirement.set_force_relative(force_relative);
+        }
+
+        self
+    }
 }
 
 /// The metadata associated with an archive.
@@ -136,7 +179,7 @@ impl Metadata {
 pub struct ArchiveMetadata {
     /// The [`Metadata`] for the underlying distribution.
     pub metadata: Metadata,
-    /// The hashes of the source or built archive.
+    /// Hashes computed from the source or built archive.
     pub hashes: HashDigests,
 }
 
@@ -166,5 +209,5 @@ pub struct GitWorkspaceMember<'a> {
     /// The root of the checkout, which may be the root of the workspace or may be above the
     /// workspace root.
     pub fetch_root: &'a Path,
-    pub git_source: &'a GitSourceUrl<'a>,
+    pub git_source: &'a GitDirectorySourceUrl<'a>,
 }

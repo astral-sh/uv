@@ -2,9 +2,11 @@ use indexmap::IndexMap;
 use itertools::Itertools;
 use serde::{Deserialize, Deserializer};
 use std::borrow::Cow;
-use std::collections::{BTreeMap, Bound};
+use std::collections::{BTreeMap, BTreeSet, Bound};
 use std::ffi::OsStr;
+use std::fmt::Display;
 use std::fmt::Write;
+use std::iter;
 use std::path::{Path, PathBuf};
 use std::str::{self, FromStr};
 use tracing::{debug, trace, warn};
@@ -15,11 +17,16 @@ use walkdir::WalkDir;
 use uv_fs::Simplified;
 use uv_globfilter::{GlobDirFilter, PortableGlobParser};
 use uv_normalize::{ExtraName, PackageName};
-use uv_pep440::{Version, VersionSpecifiers};
+use uv_pep440::{Operator, Version, VersionSpecifiers};
 use uv_pep508::{
-    ExtraOperator, MarkerExpression, MarkerTree, MarkerValueExtra, Requirement, VersionOrUrl,
+    ExtraOperator, MarkerEnvironment, MarkerExpression, MarkerTree, MarkerValueExtra, Requirement,
+    VersionOrUrl,
 };
-use uv_pypi_types::{Keywords, Metadata23, ProjectUrls, VerbatimParsedUrl};
+use uv_pypi_types::{
+    BuildKind, Identifier, IdentifierParseError, Keywords, Metadata23, ProjectUrls,
+    VerbatimParsedUrl,
+};
+use uv_toml::deserialize_unique_map;
 
 use crate::serde_verbatim::SerdeVerbatim;
 use crate::{BuildBackendSettings, Error, error_on_venv};
@@ -29,7 +36,20 @@ pub(crate) const DEFAULT_EXCLUDES: &[&str] = &["__pycache__", "*.pyc", "*.pyo"];
 
 /// No breaking changes were introduced to the uv build backend since these releases, so we can use
 /// the fast path for them too.
-const COMPATIBLE_VERSIONS: &[&str] = &["0.9.30", "0.10.12"];
+const COMPATIBLE_VERSIONS: &[&str] = &["0.9.30", "0.10.12", "0.11.33"];
+
+fn deserialize_optional_dependencies<'de, D, V>(
+    deserializer: D,
+) -> Result<Option<BTreeMap<ExtraName, V>>, D::Error>
+where
+    D: Deserializer<'de>,
+    V: Deserialize<'de>,
+{
+    deserialize_unique_map(deserializer, |key: &ExtraName| {
+        format!("duplicate normalized extra name `{key}`")
+    })
+    .map(Some)
+}
 
 #[derive(Debug, Error)]
 pub enum ValidationError {
@@ -59,6 +79,10 @@ pub enum ValidationError {
         "Entrypoint groups must consist of letters and numbers separated by dots, invalid group: {0}"
     )]
     InvalidGroup(String),
+    #[error(
+        "Script entry point name `{0}` must include a non-dot character and consist only of letters, numbers, dots, underscores and dashes"
+    )]
+    InvalidScriptName(String),
     #[error("Use `project.scripts` instead of `project.entry-points.console_scripts`")]
     ReservedScripts,
     #[error("Use `project.gui-scripts` instead of `project.entry-points.gui_scripts`")]
@@ -71,6 +95,27 @@ pub enum ValidationError {
     LicenseFileNotUtf8(String),
     #[error("`project.classifiers` contains an invalid classifier: {0}")]
     InvalidClassifiers(String),
+    #[error("`project.import-namespaces` must not be empty")]
+    EmptyImportNamespaces,
+    #[error("`{field}` entry must not be empty")]
+    EmptyImportName { field: &'static str },
+    #[error("`{field}` entry `{value}` must end with `; private` or nothing, found `{suffix}`")]
+    InvalidImportSuffix {
+        field: &'static str,
+        value: String,
+        suffix: String,
+    },
+    #[error("`{field}` entry `{value}` has an invalid import name")]
+    InvalidImportName {
+        field: &'static str,
+        value: String,
+        #[source]
+        source: IdentifierParseError,
+    },
+    #[error(
+        "`project.import-names` and `project.import-namespaces` must not both contain `{name}`"
+    )]
+    DuplicateImportAcross { name: String },
 }
 
 /// The project is not compatible with a direct uv build.
@@ -91,9 +136,116 @@ pub enum DirectBuildIncompatibility {
     UrlRequirement,
     #[error("`uv_build{0}` is not a known compatible range")]
     IncompatibleRange(VersionSpecifiers),
+    #[error("`uv_build=={0}` does not match the running uv version")]
+    VersionMismatch(Version),
+}
+
+#[derive(Debug, Clone)]
+struct ImportEntry {
+    base: String,
+    is_private: bool,
+}
+
+impl ImportEntry {
+    /// The special case where `import-names = []` in `pyproject.toml` is converted to an empty
+    /// `Import-Name` field.
+    fn empty() -> Self {
+        Self {
+            base: String::new(),
+            is_private: false,
+        }
+    }
+}
+
+impl Display for ImportEntry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.base.is_empty() {
+            Ok(())
+        } else if self.is_private {
+            write!(f, "{}; private", self.base)
+        } else {
+            write!(f, "{}", self.base)
+        }
+    }
+}
+
+fn parse_import_names(
+    import_names: Option<&[String]>,
+) -> Result<Option<Vec<ImportEntry>>, ValidationError> {
+    let Some(import_names) = import_names else {
+        return Ok(None);
+    };
+    if import_names.is_empty() {
+        return Ok(Some(vec![ImportEntry::empty()]));
+    }
+
+    let import_names = import_names
+        .iter()
+        .map(|value| parse_import_entry(value, "project.import-names"))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(Some(import_names))
+}
+
+fn parse_import_namespaces(
+    import_namespaces: Option<&[String]>,
+) -> Result<Option<Vec<ImportEntry>>, ValidationError> {
+    let Some(import_namespaces) = import_namespaces else {
+        return Ok(None);
+    };
+    if import_namespaces.is_empty() {
+        return Err(ValidationError::EmptyImportNamespaces);
+    }
+
+    let import_namespaces = import_namespaces
+        .iter()
+        .map(|value| parse_import_entry(value, "project.import-namespaces"))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(Some(import_namespaces))
+}
+
+/// Parse `Import-Name` and `Import-Namespace` entries.
+///
+/// An import name(space) is a module path, consisting of identifiers with dots in between, and
+/// an optional `; private` suffix, e.g., `tqdm` or `foo.bar.baz ; private`.
+fn parse_import_entry(value: &str, field: &'static str) -> Result<ImportEntry, ValidationError> {
+    let (name_part, suffix_part) = match value.split_once(';') {
+        Some((name, suffix)) => (name.trim_end(), Some(suffix.trim())),
+        None => (value, None),
+    };
+
+    if name_part.is_empty() {
+        return Err(ValidationError::EmptyImportName { field });
+    }
+
+    let is_private = match suffix_part {
+        Some("private") => true,
+        Some(suffix) => {
+            return Err(ValidationError::InvalidImportSuffix {
+                field,
+                value: value.to_string(),
+                suffix: suffix.to_string(),
+            });
+        }
+        None => false,
+    };
+
+    for segment in name_part.split('.') {
+        Identifier::from_str(segment).map_err(|source| ValidationError::InvalidImportName {
+            field,
+            value: name_part.to_string(),
+            source,
+        })?;
+    }
+
+    Ok(ImportEntry {
+        base: name_part.to_string(),
+        is_private,
+    })
 }
 
 /// Check if the build backend is matching the currently running uv version.
+///
+/// Active exact pins in the backend requirement and constraints must match the running uv version.
 ///
 /// Example table compatible with uv 0.4.21:
 ///
@@ -105,6 +257,8 @@ pub enum DirectBuildIncompatibility {
 pub fn check_direct_build(
     source_tree: &Path,
     uv_version: &str,
+    marker_env: &MarkerEnvironment,
+    constraints: impl IntoIterator<Item = Requirement<VerbatimParsedUrl>>,
 ) -> Result<(), DirectBuildIncompatibility> {
     #[derive(Deserialize)]
     #[serde(rename_all = "kebab-case")]
@@ -168,15 +322,38 @@ pub fn check_direct_build(
             // We can't validate the url.
             return Err(DirectBuildIncompatibility::UrlRequirement);
         }
-        Some(VersionOrUrl::VersionSpecifier(specifier)) => {
+        Some(VersionOrUrl::VersionSpecifier(specifier))
             // If the user doesn't set an upper bound, we don't help them by not using the fast
             // path, their build may equally fail if the index version of `uv_build`, so we allow
             // missing upper bounds.
-            if !compatible.iter().any(|version| specifier.contains(version)) {
-                return Err(DirectBuildIncompatibility::IncompatibleRange(
-                    specifier.clone(),
-                ));
-            }
+            if !compatible.iter().any(|version| specifier.contains(version)) =>
+        {
+            return Err(DirectBuildIncompatibility::IncompatibleRange(
+                specifier.clone(),
+            ));
+        }
+        Some(VersionOrUrl::VersionSpecifier(_)) => {}
+    }
+
+    if !uv_requirement.evaluate_markers(marker_env, &[]) {
+        return Ok(());
+    }
+
+    let uv_version = Version::from_str(uv_version).expect("uv version is not PEP 440 compliant");
+    for requirement in iter::once((**uv_requirement).clone()).chain(
+        constraints
+            .into_iter()
+            .filter(|constraint| constraint.name == uv_requirement.name),
+    ) {
+        if requirement.evaluate_markers(marker_env, &[])
+            && let Some(VersionOrUrl::VersionSpecifier(specifiers)) = &requirement.version_or_url
+            && let Some(specifier) = specifiers.iter().find(|specifier| {
+                *specifier.operator() == Operator::Equal && !specifier.contains(&uv_version)
+            })
+        {
+            return Err(DirectBuildIncompatibility::VersionMismatch(
+                specifier.version().clone(),
+            ));
         }
     }
 
@@ -213,7 +390,7 @@ impl<'de> Deserialize<'de> for VerbatimPackageName {
     expecting = "The project table needs to follow \
     https://packaging.python.org/en/latest/guides/writing-pyproject-toml"
 )]
-pub struct PyProjectToml {
+pub(crate) struct PyProjectToml {
     /// Project metadata
     project: Project,
     /// uv-specific configuration
@@ -276,8 +453,12 @@ impl PyProjectToml {
     }
 
     /// See [`BuildSystem::check_build_system`].
-    pub fn check_build_system(&self, uv_version: &str) -> Vec<String> {
-        self.build_system.check_build_system(uv_version)
+    pub(crate) fn check_build_system(
+        &self,
+        uv_version: &str,
+        build_kind: BuildKind,
+    ) -> Vec<String> {
+        self.build_system.check_build_system(uv_version, build_kind)
     }
 
     /// Validate and convert a `pyproject.toml` to core metadata.
@@ -354,6 +535,25 @@ impl PyProjectToml {
             return Err(ValidationError::Dynamic.into());
         }
 
+        let import_names = parse_import_names(self.project.import_names.as_deref())?;
+        let import_namespaces = parse_import_namespaces(self.project.import_namespaces.as_deref())?;
+
+        if let (Some(import_names), Some(import_namespaces)) = (&import_names, &import_namespaces) {
+            let import_name_set: BTreeSet<_> = import_names
+                .iter()
+                .map(|entry| entry.base.as_str())
+                .collect();
+            if let Some(overlap) = import_namespaces
+                .iter()
+                .find(|entry| import_name_set.contains(entry.base.as_str()))
+            {
+                return Err(ValidationError::DuplicateImportAcross {
+                    name: overlap.base.clone(),
+                }
+                .into());
+            }
+        }
+
         let author = self
             .project
             .authors
@@ -416,9 +616,13 @@ impl PyProjectToml {
             .filter(|maintainer_email| !maintainer_email.is_empty());
 
         // Using PEP 639 bumps the METADATA version
-        let metadata_version = if self.project.license_files.is_some()
-            || matches!(self.project.license, Some(License::Spdx(_)))
-        {
+        let uses_pep639 = self.project.license_files.is_some()
+            || matches!(self.project.license, Some(License::Spdx(_)));
+        let uses_pep794 = import_names.is_some() || import_namespaces.is_some();
+        let metadata_version = if uses_pep794 {
+            debug!("Found import name metadata declarations, using METADATA 2.5");
+            "2.5"
+        } else if uses_pep639 {
             debug!("Found PEP 639 license declarations, using METADATA 2.4");
             "2.4"
         } else {
@@ -449,18 +653,35 @@ impl PyProjectToml {
                             .iter()
                             .flat_map(|(extra, requirements)| {
                                 requirements.iter().cloned().map(|mut requirement| {
-                                    requirement.marker.and(MarkerTree::expression(
-                                        MarkerExpression::Extra {
+                                    requirement.marker = requirement.marker.and(
+                                        MarkerTree::expression(MarkerExpression::Extra {
                                             operator: ExtraOperator::Equal,
                                             name: MarkerValueExtra::Extra(extra.clone()),
-                                        },
-                                    ));
+                                        }),
+                                    );
                                     requirement
                                 })
                             })
                     },
                 ))
                 .collect::<Vec<_>>();
+
+        let import_names = import_names
+            .map(|import_names| {
+                import_names
+                    .into_iter()
+                    .map(|entry| entry.to_string())
+                    .collect()
+            })
+            .unwrap_or_default();
+        let import_namespaces = import_namespaces
+            .map(|import_namespaces| {
+                import_namespaces
+                    .into_iter()
+                    .map(|entry| entry.to_string())
+                    .collect()
+            })
+            .unwrap_or_default();
 
         Ok(Metadata23 {
             metadata_version: metadata_version.to_string(),
@@ -491,7 +712,6 @@ impl PyProjectToml {
                 .cloned()
                 .map(Into::into)
                 .collect(),
-
             requires_dist: requires_dist.iter().map(ToString::to_string).collect(),
             provides_extra: extras.iter().map(ToString::to_string).collect(),
             // Not commonly set.
@@ -507,6 +727,8 @@ impl PyProjectToml {
             requires_external: vec![],
             project_urls,
             dynamic: vec![],
+            import_names,
+            import_namespaces,
         })
     }
 
@@ -547,13 +769,11 @@ impl PyProjectToml {
             // Track whether each user-specified glob matched so we can flag the unmatched ones.
             let mut license_globs_matched = vec![false; license_globs_parsed.len()];
 
-            let license_globs =
-                GlobDirFilter::from_globs(&license_globs_parsed).map_err(|err| {
-                    Error::GlobSetTooLarge {
-                        field: "project.license-files".to_string(),
-                        source: err,
-                    }
-                })?;
+            let license_globs = GlobDirFilter::from_globs(license_globs_parsed.clone());
+            let license_globs = license_globs.map_err(|err| Error::GlobSetTooLarge {
+                field: "project.license-files".to_string(),
+                source: err,
+            })?;
 
             for entry in WalkDir::new(root)
                 .sort_by_file_name()
@@ -718,8 +938,7 @@ impl PyProjectToml {
         if !group
             .chars()
             .next()
-            .map(|c| c.is_alphanumeric() || c == '_')
-            .unwrap_or(false)
+            .is_some_and(|c| c.is_alphanumeric() || c == '_')
             || !group
                 .chars()
                 .all(|c| c.is_alphanumeric() || c == '.' || c == '_')
@@ -729,10 +948,18 @@ impl PyProjectToml {
 
         let _ = writeln!(writer, "[{group}]");
         for (name, object_reference) in entries {
-            if !name
-                .chars()
-                .all(|c| c.is_alphanumeric() || c == '.' || c == '-' || c == '_')
+            let compliant_name = name.chars().all(|character| {
+                character.is_alphanumeric() || matches!(character, '.' | '-' | '_')
+            });
+            let dot_only_name = name.chars().all(|character| character == '.');
+
+            if matches!(group, "console_scripts" | "gui_scripts")
+                && (name.is_empty() || dot_only_name || !compliant_name)
             {
+                return Err(ValidationError::InvalidScriptName(name.clone()));
+            }
+
+            if !compliant_name {
                 warn!(
                     "Entrypoint names should consist of letters, numbers, dots, underscores and \
                     dashes; non-compliant name: {name}"
@@ -803,7 +1030,16 @@ struct Project {
     /// The dependencies of the project.
     dependencies: Option<Vec<Requirement>>,
     /// The optional dependencies of the project.
+    #[serde(default, deserialize_with = "deserialize_optional_dependencies")]
     optional_dependencies: Option<BTreeMap<ExtraName, Vec<Requirement>>>,
+    /// Import names exclusively provided by the project.
+    ///
+    /// From PEP 794.
+    import_names: Option<Vec<String>>,
+    /// Import namespaces provided by the project.
+    ///
+    /// From PEP 794.
+    import_namespaces: Option<Vec<String>>,
     /// Specifies which fields listed by PEP 621 were intentionally unspecified so another tool
     /// can/will provide such metadata dynamically.
     ///
@@ -975,7 +1211,7 @@ impl BuildSystem {
     /// requires = ["uv_build>=0.4.15,<0.5.0"]
     /// build-backend = "uv_build"
     /// ```
-    pub(crate) fn check_build_system(&self, uv_version: &str) -> Vec<String> {
+    fn check_build_system(&self, uv_version: &str, build_kind: BuildKind) -> Vec<String> {
         let mut warnings = Vec::new();
         if self.build_backend.as_deref() != Some("uv_build") {
             warnings.push(format!(
@@ -986,9 +1222,6 @@ impl BuildSystem {
 
         let uv_version =
             Version::from_str(uv_version).expect("uv's own version is not PEP 440 compliant");
-        let next_minor = uv_version.release().get(1).copied().unwrap_or_default() + 1;
-        let next_breaking = Version::new([0, next_minor]);
-
         let [uv_requirement] = &self.requires.as_slice() else {
             warnings.push(format!(
                 "Expected `build-system.requires` to contain only `uv_build`, found `{}`",
@@ -1018,18 +1251,19 @@ impl BuildSystem {
                 if !specifier.contains(&uv_version) {
                     // This is allowed to happen when testing prereleases, but we should still warn.
                     warnings.push(format!(
-                        r#"`build_system.requires = ["{uv_requirement}"]` does not contain the
-                        current uv version {uv_version}"#,
+                        "`build_system.requires = [\"{uv_requirement}\"]` does not contain the \
+                        current uv version {uv_version}",
                     ));
                 }
                 Ranges::from(specifier.clone())
                     .bounding_range()
-                    .map(|bounding_range| bounding_range.1 != Bound::Unbounded)
-                    .unwrap_or(false)
+                    .is_some_and(|bounding_range| bounding_range.1 != Bound::Unbounded)
             }
         };
 
-        if !bounded {
+        if matches!(build_kind, BuildKind::Sdist) && !bounded {
+            let next_minor = uv_version.release().get(1).copied().unwrap_or_default() + 1;
+            let next_breaking = Version::new([0, next_minor]);
             warnings.push(format!(
                 "`build_system.requires = [\"{}\"]` is missing an \
                 upper bound on the `uv_build` version such as `<{next_breaking}`. \
@@ -1052,6 +1286,7 @@ mod tests {
     use insta::assert_snapshot;
     use std::iter;
     use tempfile::TempDir;
+    use uv_pep508::MarkerEnvironmentBuilder;
 
     fn extend_project(payload: &str) -> String {
         formatdoc! {r#"
@@ -1218,6 +1453,114 @@ mod tests {
 
         [bar_group]
         foo-bar = foo:bar
+        ");
+    }
+
+    #[test]
+    fn import_names_metadata() {
+        let temp_dir = TempDir::new().unwrap();
+        let contents = extend_project(indoc! {r#"
+            import-names = ["spam", "spam.eggs ; private", "mod.tools.cli"]
+            import-namespaces = ["mod", "mod.tools"]
+        "#});
+        let pyproject_toml: PyProjectToml = toml::from_str(&contents).unwrap();
+        let metadata = pyproject_toml.to_metadata(temp_dir.path()).unwrap();
+
+        assert_snapshot!(metadata.core_metadata_format(), @"
+        Metadata-Version: 2.5
+        Name: hello-world
+        Version: 0.1.0
+        Import-Name: spam
+        Import-Name: spam.eggs; private
+        Import-Name: mod.tools.cli
+        Import-Namespace: mod
+        Import-Namespace: mod.tools
+        ");
+    }
+
+    #[test]
+    fn import_names_empty_list() {
+        let temp_dir = TempDir::new().unwrap();
+        let contents = extend_project(indoc! {r"
+            import-names = []
+        "});
+        let pyproject_toml: PyProjectToml = toml::from_str(&contents).unwrap();
+        let metadata = pyproject_toml.to_metadata(temp_dir.path()).unwrap();
+
+        assert_snapshot!(metadata.core_metadata_format(), @"
+        Metadata-Version: 2.5
+        Name: hello-world
+        Version: 0.1.0
+        Import-Name:
+        ");
+    }
+
+    #[test]
+    fn import_names_empty_string() {
+        let temp_dir = TempDir::new().unwrap();
+        let contents = extend_project(indoc! {r#"
+            import-names = [""]
+        "#});
+        let pyproject_toml: PyProjectToml = toml::from_str(&contents).unwrap();
+        let err = pyproject_toml
+            .to_metadata(temp_dir.path())
+            .map(|_| ())
+            .unwrap_err();
+        assert_snapshot!(format_err(err), @"
+        Invalid project metadata
+          Caused by: `project.import-names` entry must not be empty
+        ");
+    }
+
+    #[test]
+    fn import_namespaces_empty_string() {
+        let temp_dir = TempDir::new().unwrap();
+        let contents = extend_project(indoc! {r#"
+            import-namespaces = [""]
+        "#});
+        let pyproject_toml: PyProjectToml = toml::from_str(&contents).unwrap();
+        let err = pyproject_toml
+            .to_metadata(temp_dir.path())
+            .map(|_| ())
+            .unwrap_err();
+        assert_snapshot!(format_err(err), @"
+        Invalid project metadata
+          Caused by: `project.import-namespaces` entry must not be empty
+        ");
+    }
+
+    #[test]
+    fn import_names_dotted_without_prefix() {
+        let temp_dir = TempDir::new().unwrap();
+        let contents = extend_project(indoc! {r#"
+            import-names = ["spam.eggs"]
+        "#});
+        let pyproject_toml: PyProjectToml = toml::from_str(&contents).unwrap();
+        let metadata = pyproject_toml.to_metadata(temp_dir.path()).unwrap();
+
+        assert_snapshot!(metadata.core_metadata_format(), @"
+        Metadata-Version: 2.5
+        Name: hello-world
+        Version: 0.1.0
+        Import-Name: spam.eggs
+        ");
+    }
+
+    #[test]
+    fn import_names_overlap() {
+        let temp_dir = TempDir::new().unwrap();
+        let contents = extend_project(indoc! {r#"
+            import-names = ["spam"]
+            import-namespaces = ["spam"]
+        "#});
+        let pyproject_toml: PyProjectToml = toml::from_str(&contents).unwrap();
+        let err = pyproject_toml
+            .to_metadata(temp_dir.path())
+            .map(|_| ())
+            .unwrap_err();
+        assert_snapshot!(format_err(err), @"
+        Invalid project metadata
+          Caused by: `project.import-names` and `project.import-namespaces` must not both contain `spam`
         ");
     }
 
@@ -1418,7 +1761,9 @@ mod tests {
         let contents = extend_project("");
         let pyproject_toml: PyProjectToml = toml::from_str(&contents).unwrap();
         assert_snapshot!(
-            pyproject_toml.check_build_system("0.4.15+test").join("\n"),
+            pyproject_toml
+                .check_build_system("0.4.15+test", BuildKind::Wheel)
+                .join("\n"),
             @""
         );
     }
@@ -1436,7 +1781,21 @@ mod tests {
         "#};
         let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         assert_snapshot!(
-            pyproject_toml.check_build_system("0.4.15+test").join("\n"),
+            pyproject_toml
+                .check_build_system("0.4.15+test", BuildKind::Wheel)
+                .join("\n"),
+            @""
+        );
+        assert_snapshot!(
+            pyproject_toml
+                .check_build_system("0.4.15+test", BuildKind::Editable)
+                .join("\n"),
+            @""
+        );
+        assert_snapshot!(
+            pyproject_toml
+                .check_build_system("0.4.15+test", BuildKind::Sdist)
+                .join("\n"),
             @r#"`build_system.requires = ["uv_build"]` is missing an upper bound on the `uv_build` version such as `<0.5`. Without bounding the `uv_build` version, the source distribution will break when a future, breaking version of `uv_build` is released."#
         );
     }
@@ -1454,7 +1813,9 @@ mod tests {
         "#};
         let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         assert_snapshot!(
-            pyproject_toml.check_build_system("0.4.15+test").join("\n"),
+            pyproject_toml
+                .check_build_system("0.4.15+test", BuildKind::Wheel)
+                .join("\n"),
             @"Expected `build-system.requires` to contain only `uv_build`, found `uv-build>=0.4.15,<0.5.0`, `wheel`"
         );
     }
@@ -1472,7 +1833,9 @@ mod tests {
         "#};
         let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         assert_snapshot!(
-            pyproject_toml.check_build_system("0.4.15+test").join("\n"),
+            pyproject_toml
+                .check_build_system("0.4.15+test", BuildKind::Wheel)
+                .join("\n"),
             @"Expected `build-system.requires` to be `uv_build`, found `setuptools`"
         );
     }
@@ -1490,7 +1853,9 @@ mod tests {
         "#};
         let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         assert_snapshot!(
-            pyproject_toml.check_build_system("0.4.15+test").join("\n"),
+            pyproject_toml
+                .check_build_system("0.4.15+test", BuildKind::Wheel)
+                .join("\n"),
             @r#"`build_system.build-backend` was expected to be `"uv_build"`, not `"setuptools"`"#
         );
     }
@@ -1509,6 +1874,24 @@ mod tests {
         Name: hello-world
         Version: 0.1.0
         ");
+    }
+
+    #[test]
+    fn reject_colliding_optional_dependency_names() {
+        let contents = extend_project(indoc! {r#"
+            [project.optional-dependencies]
+            foo-bar = ["anyio"]
+            foo_bar = ["iniconfig"]
+        "#});
+
+        let err = toml::from_str::<PyProjectToml>(&contents).unwrap_err();
+        assert_snapshot!(err.to_string(), @r#"
+        TOML parse error at line 4, column 1
+          |
+        4 | [project.optional-dependencies]
+          | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        duplicate normalized extra name `foo-bar`
+        "#);
     }
 
     #[test]
@@ -1713,6 +2096,23 @@ mod tests {
         assert_snapshot!(script_error(&contents), @"Use `project.gui-scripts` instead of `project.entry-points.gui_scripts`");
     }
 
+    fn marker_environment() -> MarkerEnvironment {
+        MarkerEnvironment::try_from(MarkerEnvironmentBuilder {
+            implementation_name: "cpython",
+            implementation_version: "3.12.0",
+            os_name: "posix",
+            platform_machine: "x86_64",
+            platform_python_implementation: "CPython",
+            platform_release: "6.8.0",
+            platform_system: "Linux",
+            platform_version: "1",
+            python_full_version: "3.12.0",
+            python_version: "3.12",
+            sys_platform: "linux",
+        })
+        .expect("valid marker environment")
+    }
+
     #[test]
     fn check_direct_build_ok() {
         let temp_dir = TempDir::new().unwrap();
@@ -1729,7 +2129,7 @@ mod tests {
             "#},
         )
         .unwrap();
-        check_direct_build(temp_dir.path(), "0.10.0").unwrap();
+        check_direct_build(temp_dir.path(), "0.10.0", &marker_environment(), []).unwrap();
     }
 
     #[test]
@@ -1741,7 +2141,7 @@ mod tests {
         )
         .unwrap();
         assert_snapshot!(
-            check_direct_build(temp_dir.path(), "0.10.0").unwrap_err(),
+            check_direct_build(temp_dir.path(), "0.10.0", &marker_environment(), []).unwrap_err(),
             @r#"
             its `pyproject.toml` failed to parse: TOML parse error at line 1, column 9
               |
@@ -1769,7 +2169,7 @@ mod tests {
         )
         .unwrap();
         assert_snapshot!(
-            check_direct_build(temp_dir.path(), "0.10.0").unwrap_err(),
+            check_direct_build(temp_dir.path(), "0.10.0", &marker_environment(), []).unwrap_err(),
             @"`build_system.build-backend` is not `uv_build`, but `setuptools`"
         );
     }
@@ -1791,7 +2191,7 @@ mod tests {
         )
         .unwrap();
         assert_snapshot!(
-            check_direct_build(temp_dir.path(), "0.10.0").unwrap_err(),
+            check_direct_build(temp_dir.path(), "0.10.0", &marker_environment(), []).unwrap_err(),
             @"`build-system.requires` is not exactly `uv_build`, but `uv-build>=0.10.0,<0.11`, `wheel`"
         );
     }
@@ -1813,7 +2213,7 @@ mod tests {
         )
         .unwrap();
         assert_snapshot!(
-            check_direct_build(temp_dir.path(), "0.10.0").unwrap_err(),
+            check_direct_build(temp_dir.path(), "0.10.0", &marker_environment(), []).unwrap_err(),
             @"`build-system.requires` is not `uv_build`, but `setuptools`"
         );
     }
@@ -1835,7 +2235,7 @@ mod tests {
         )
         .unwrap();
         assert_snapshot!(
-            check_direct_build(temp_dir.path(), "0.10.0").unwrap_err(),
+            check_direct_build(temp_dir.path(), "0.10.0", &marker_environment(), []).unwrap_err(),
             @"`build_system.requires` uses a URL requirement"
         );
     }
@@ -1857,8 +2257,34 @@ mod tests {
         )
         .unwrap();
         assert_snapshot!(
-            check_direct_build(temp_dir.path(), "0.10.0").unwrap_err(),
+            check_direct_build(temp_dir.path(), "0.10.0", &marker_environment(), []).unwrap_err(),
             @"`uv_build>=0.5.0, <0.6` is not a known compatible range"
+        );
+    }
+
+    #[test]
+    fn update_compatibility_for_breaking_release() {
+        // Handle the case where we made a breaking change to the build backend.
+        // Feel free to update the heuristic if it doesn't suit the current compatibility rules
+        // anymore.
+        if COMPATIBLE_VERSIONS.is_empty() {
+            return;
+        }
+
+        let current_version = Version::from_str(uv_version::version()).unwrap();
+        // Versions are ordered from oldest to latest
+        let last_compatible =
+            Version::from_str(COMPATIBLE_VERSIONS[COMPATIBLE_VERSIONS.len() - 1]).unwrap();
+        // uv is versioned as `0.<minor>.<patch>`, so a breaking release bumps the minor segment.
+        // The list is kept one minor behind the current release, so if the newest compatible
+        // version isn't the immediately preceding minor, we likely missed updating the list on a
+        // breaking release.
+        assert!(
+            last_compatible.release()[1] + 1 == current_version.release()[1],
+            "Please update the list of compatible versions for the uv build backend: \
+            If there was no breaking change in uv-build, add the last release before the \
+            breaking release to `COMPATIBLE_VERSIONS`, otherwise reset `COMPATIBLE_VERSIONS` \
+            to an empty list"
         );
     }
 }

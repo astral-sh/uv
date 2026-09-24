@@ -86,32 +86,14 @@ impl DependencyGroups {
     }
 
     /// Create from raw CLI args
-    #[expect(clippy::fn_params_excessive_bools)]
     pub fn from_args(
-        dev: bool,
-        no_dev: bool,
-        only_dev: bool,
+        dev_mode: Option<DevMode>,
         group: Vec<GroupName>,
         no_group: Vec<GroupName>,
         no_default_groups: bool,
         only_group: Vec<GroupName>,
         all_groups: bool,
     ) -> Self {
-        // Lower the --dev flags into a single dev mode.
-        //
-        // In theory only one of these 3 flags should be set (enforced by CLI),
-        // but we explicitly allow `--dev` and `--only-dev` to both be set,
-        // and "saturate" that to `--only-dev`.
-        let dev_mode = if only_dev {
-            Some(DevMode::Only)
-        } else if no_dev {
-            Some(DevMode::Exclude)
-        } else if dev {
-            Some(DevMode::Include)
-        } else {
-            None
-        };
-
         Self::from_history(DependencyGroupsHistory {
             dev_mode,
             group,
@@ -136,6 +118,14 @@ impl DependencyGroups {
     pub fn from_group(group: GroupName) -> Self {
         Self::from_history(DependencyGroupsHistory {
             group: vec![group],
+            ..Default::default()
+        })
+    }
+
+    /// Helper to make a spec from just --all-groups.
+    pub fn from_all_groups() -> Self {
+        Self::from_history(DependencyGroupsHistory {
+            all_groups: true,
             ..Default::default()
         })
     }
@@ -181,11 +171,6 @@ impl DependencyGroupsInner {
         !self.exclude.contains(group) && self.include.contains(group)
     }
 
-    /// Iterate over all groups that we think should exist.
-    pub fn desugarred_names(&self) -> impl Iterator<Item = &GroupName> {
-        self.include.names().chain(&self.exclude)
-    }
-
     /// Returns an iterator over all groups that are included in the specification,
     /// assuming `all_names` is an iterator over all groups.
     pub fn group_names<'a, Names>(
@@ -220,11 +205,6 @@ impl DependencyGroupsInner {
         group.iter().chain(no_group).chain(only_group)
     }
 
-    /// Returns `true` if the specification will have no effect.
-    pub fn is_empty(&self) -> bool {
-        self.prod() && self.exclude.is_empty() && self.include.is_empty()
-    }
-
     /// Get the raw history for diagnostics
     pub fn history(&self) -> &DependencyGroupsHistory {
         &self.history
@@ -234,13 +214,13 @@ impl DependencyGroupsInner {
 /// Context about a [`DependencyGroups`][] that we've preserved for diagnostics
 #[derive(Debug, Default, Clone)]
 pub struct DependencyGroupsHistory {
-    pub dev_mode: Option<DevMode>,
-    pub group: Vec<GroupName>,
-    pub only_group: Vec<GroupName>,
-    pub no_group: Vec<GroupName>,
-    pub all_groups: bool,
-    pub no_default_groups: bool,
-    pub defaults: DefaultGroups,
+    dev_mode: Option<DevMode>,
+    group: Vec<GroupName>,
+    only_group: Vec<GroupName>,
+    no_group: Vec<GroupName>,
+    all_groups: bool,
+    no_default_groups: bool,
+    defaults: DefaultGroups,
 }
 
 impl DependencyGroupsHistory {
@@ -340,8 +320,24 @@ pub enum DevMode {
 }
 
 impl DevMode {
+    /// Determine the development dependency mode from the command-line arguments.
+    pub fn from_args(dev: bool, no_dev: bool, only_dev: bool) -> Option<Self> {
+        // In theory only one of these 3 flags should be set (enforced by CLI),
+        // but we explicitly allow `--dev` and `--only-dev` to both be set,
+        // and "saturate" that to `--only-dev`.
+        if only_dev {
+            Some(Self::Only)
+        } else if no_dev {
+            Some(Self::Exclude)
+        } else if dev {
+            Some(Self::Include)
+        } else {
+            None
+        }
+    }
+
     /// Returns the flag that was used to request development dependencies.
-    pub fn as_flag(&self) -> &'static str {
+    fn as_flag(self) -> &'static str {
         match self {
             Self::Exclude => "--no-dev",
             Self::Include => "--dev",
@@ -360,28 +356,10 @@ pub enum IncludeGroups {
 
 impl IncludeGroups {
     /// Returns `true` if the specification includes the given group.
-    pub fn contains(&self, group: &GroupName) -> bool {
+    fn contains(&self, group: &GroupName) -> bool {
         match self {
             Self::Some(groups) => groups.contains(group),
             Self::All => true,
-        }
-    }
-
-    /// Returns `true` if the specification will have no effect.
-    pub fn is_empty(&self) -> bool {
-        match self {
-            Self::Some(groups) => groups.is_empty(),
-            // Although technically this is a noop if they have no groups,
-            // conceptually they're *trying* to have an effect, so treat it as one.
-            Self::All => false,
-        }
-    }
-
-    /// Iterate over all groups referenced in the [`IncludeGroups`].
-    pub fn names(&self) -> std::slice::Iter<'_, GroupName> {
-        match self {
-            Self::Some(groups) => groups.iter(),
-            Self::All => [].iter(),
         }
     }
 }

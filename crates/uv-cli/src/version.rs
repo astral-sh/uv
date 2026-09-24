@@ -26,7 +26,7 @@ pub struct SelfVersionInfo {
     version: String,
     /// Information about the git commit we may have been built from.
     ///
-    /// `None` if not built from a git repo or if retrieval failed.
+    /// `None` if Git metadata was disabled, unavailable, or retrieval failed.
     commit_info: Option<CommitInfo>,
     /// The target triple for which uv was built (e.g., `x86_64-unknown-linux-gnu`).
     target_triple: String,
@@ -53,6 +53,13 @@ impl ProjectVersionInfo {
             version: version.to_string(),
             commit_info: None,
         }
+    }
+}
+
+impl SelfVersionInfo {
+    /// Returns just the version string (e.g., "0.5.1"), without commit info or target triple.
+    pub fn version(&self) -> &str {
+        &self.version
     }
 }
 

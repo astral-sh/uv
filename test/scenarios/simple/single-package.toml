@@ -1,0 +1,16 @@
+name = "single-package"
+description = "A single package with two stable versions."
+
+[root]
+requires = ["a"]
+
+[expected]
+satisfiable = true
+explanation = "The latest version of 'a' should be selected."
+
+[expected.packages]
+a = "2.0.0"
+
+[packages.a.versions."1.0.0"]
+
+[packages.a.versions."2.0.0"]

@@ -1,0 +1,16 @@
+name = "extra-incompatible-with-root"
+description = "Optional dependencies are requested for the package, but the extra is not compatible with other requested versions."
+
+[root]
+requires = ["a[extra]", "b==2.0.0"]
+
+[expected]
+explanation = "Because the user requested `b==2.0.0` but the requested extra requires `b==1.0.0`, the dependencies cannot be satisfied."
+satisfiable = false
+
+[packages.b.versions."1.0.0"]
+
+[packages.b.versions."2.0.0"]
+
+[packages.a.versions."1.0.0".extras]
+extra = ["b==1.0.0"]

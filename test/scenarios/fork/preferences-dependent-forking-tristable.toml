@@ -1,0 +1,86 @@
+name = "preferences-dependent-forking-tristable"
+description = '''
+This test case is like "preferences-dependent-forking-bistable", but with three
+states instead of two. The first two locks are in a different state, then we
+enter the tristable state.
+
+It's not polished, but it's useful to have something with a higher period
+than 2 in our test suite.
+'''
+
+[resolver_options]
+universal = true
+
+[expected]
+satisfiable = true
+
+[root]
+requires = ["cleaver", "foo", "bar"]
+
+[packages.cleaver.versions."2.0.0"]
+requires = [
+  "unrelated-dep==1; sys_platform == 'linux'",
+  "unrelated-dep==2; sys_platform != 'linux'",
+  "a",
+  "b",
+]
+
+[packages.a.versions."1.0.0"]
+requires = ["unrelated-dep3==1; os_name == 'posix'"]
+
+[packages.b.versions."1.0.0"]
+requires = ["unrelated-dep3==2; os_name != 'posix'"]
+
+[packages.reject-cleaver-2.versions."1.0.0"]
+requires = ["unrelated-dep3==3"]
+
+[packages.unrelated-dep.versions."1.0.0"]
+[packages.unrelated-dep.versions."2.0.0"]
+[packages.unrelated-dep.versions."3.0.0"]
+
+[packages.unrelated-dep3.versions."1.0.0"]
+[packages.unrelated-dep3.versions."2.0.0"]
+[packages.unrelated-dep3.versions."3.0.0"]
+
+[packages.cleaver.versions."1.0.0"]
+requires = [
+  "foo==1; sys_platform == 'linux'",
+  "bar==1; sys_platform != 'linux'",
+]
+
+[packages.foo.versions."1.0.0"]
+requires = [
+  "c!=3; sys_platform == 'linux'",
+  "c!=2; sys_platform != 'linux'",
+  "reject-cleaver-1",
+]
+[packages.foo.versions."2.0.0"]
+[packages.bar.versions."1.0.0"]
+requires = [
+  "c!=3; sys_platform == 'linux'",
+  "d; sys_platform != 'linux'",
+  "reject-cleaver-1",
+]
+[packages.bar.versions."2.0.0"]
+
+[packages.reject-cleaver-1.versions."1.0.0"]
+requires = [
+  "unrelated-dep2==1; sys_platform == 'linux'",
+  "unrelated-dep2==2; sys_platform != 'linux'",
+]
+
+[packages.unrelated-dep2.versions."1.0.0"]
+[packages.unrelated-dep2.versions."2.0.0"]
+[packages.unrelated-dep2.versions."3.0.0"]
+
+[packages.c.versions."1.0.0"]
+requires = [
+  "unrelated-dep2==1; os_name == 'posix'",
+  "unrelated-dep2==2; os_name != 'posix'",
+  "reject-cleaver-1",
+]
+[packages.c.versions."2.0.0"]
+[packages.c.versions."3.0.0"]
+
+[packages.d.versions."1.0.0"]
+requires = ["c!=2"]

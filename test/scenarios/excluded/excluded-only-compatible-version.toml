@@ -1,0 +1,24 @@
+name = "excluded-only-compatible-version"
+description = "Only one version of the requested package `a` is compatible, but the user has banned that version."
+
+[root]
+requires = ["a!=2.0.0", "b>=2.0.0,<3.0.0"]
+
+[expected]
+satisfiable = false
+explanation = "Only `a==1.2.0` is available since `a==1.0.0` and `a==3.0.0` require incompatible versions of `b`. The user has excluded that version of `a` so resolution fails."
+
+[packages.a.versions."1.0.0"]
+requires = ["b==1.0.0"]
+
+[packages.a.versions."2.0.0"]
+requires = ["b==2.0.0"]
+
+[packages.a.versions."3.0.0"]
+requires = ["b==3.0.0"]
+
+[packages.b.versions."1.0.0"]
+
+[packages.b.versions."2.0.0"]
+
+[packages.b.versions."3.0.0"]

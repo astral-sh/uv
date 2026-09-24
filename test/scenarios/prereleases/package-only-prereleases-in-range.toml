@@ -1,0 +1,16 @@
+name = "package-only-prereleases-in-range"
+description = "The user requires a version of package `a` which only matches prerelease versions but they did not include a prerelease specifier."
+
+[root]
+requires = ["a>0.1.0"]
+
+[expected]
+satisfiable = true
+explanation = "Since no stable version of `a` matches the requested range, the matching pre-release is selected."
+
+[expected.packages]
+a = "1.0.0a1"
+
+[packages.a.versions."0.1.0"]
+
+[packages.a.versions."1.0.0a1"]

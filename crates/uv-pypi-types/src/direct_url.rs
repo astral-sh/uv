@@ -1,8 +1,10 @@
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
+
+use crate::{HashAlgorithm, Hashes};
 
 /// Metadata for a distribution that was installed via a direct URL.
 ///
@@ -43,6 +45,8 @@ pub enum DirectUrl {
         vcs_info: VcsInfo,
         #[serde(skip_serializing_if = "Option::is_none")]
         subdirectory: Option<Box<Path>>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        path: Option<PathBuf>,
     },
 }
 
@@ -57,9 +61,9 @@ pub struct DirInfo {
 #[serde(rename_all = "snake_case")]
 pub struct ArchiveInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub hash: Option<String>,
+    pub(crate) hash: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub hashes: Option<BTreeMap<String, String>>,
+    pub(crate) hashes: Option<BTreeMap<String, String>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -113,11 +117,32 @@ impl TryFrom<&DirectUrl> for DisplaySafeUrl {
             DirectUrl::ArchiveUrl {
                 url,
                 subdirectory,
-                archive_info: _,
+                archive_info,
             } => {
                 let mut url = Self::parse(url)?;
+                let mut fragments = Vec::new();
                 if let Some(subdirectory) = subdirectory {
-                    url.set_fragment(Some(&format!("subdirectory={}", subdirectory.display())));
+                    fragments.push(format!("subdirectory={}", subdirectory.display()));
+                }
+                if let Some(hash) = archive_info
+                    .hashes
+                    .as_ref()
+                    .and_then(|hashes| {
+                        HashAlgorithm::preferred().find_map(|algorithm| {
+                            hashes
+                                .get(algorithm.as_str())
+                                .map(|digest| format!("{algorithm}={digest}"))
+                        })
+                    })
+                    .or_else(|| {
+                        let hash = archive_info.hash.as_ref()?;
+                        Hashes::parse_fragment(hash).is_ok().then(|| hash.clone())
+                    })
+                {
+                    fragments.push(hash);
+                }
+                if !fragments.is_empty() {
+                    url.set_fragment(Some(&fragments.join("&")));
                 }
                 Ok(url)
             }
@@ -125,6 +150,7 @@ impl TryFrom<&DirectUrl> for DisplaySafeUrl {
                 url,
                 vcs_info,
                 subdirectory,
+                path,
             } => {
                 let mut url = Self::parse(&format!("{}+{}", vcs_info.vcs, url))?;
                 if let Some(commit_id) = &vcs_info.commit_id {
@@ -141,6 +167,9 @@ impl TryFrom<&DirectUrl> for DisplaySafeUrl {
                 // Displays nicely that lfs was used
                 if let Some(true) = vcs_info.git_lfs {
                     frags.push("lfs=true".to_string());
+                }
+                if let Some(path) = path {
+                    frags.push(format!("path={}", path.display()));
                 }
                 if !frags.is_empty() {
                     url.set_fragment(Some(&frags.join("&")));

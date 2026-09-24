@@ -6,7 +6,8 @@ use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::Version;
 use uv_python::PythonRequest;
 
-mod common;
+pub(crate) mod audit;
+pub(crate) mod common;
 pub(crate) mod dir;
 pub(crate) mod install;
 pub(crate) mod list;
@@ -36,7 +37,7 @@ pub(crate) enum ToolRequest<'a> {
 
 impl<'a> ToolRequest<'a> {
     /// Parse a tool request into an executable name and a target.
-    pub(crate) fn parse(command: &'a str, from: Option<&'a str>) -> anyhow::Result<Self> {
+    fn parse(command: &'a str, from: Option<&'a str>) -> anyhow::Result<Self> {
         // If --from is used, the command could be an arbitrary binary in the PATH (e.g. `bash`),
         // and we don't try to parse it.
         let (component_to_parse, executable) = match from {
@@ -63,7 +64,7 @@ impl<'a> ToolRequest<'a> {
     }
 
     /// Returns `true` if the target is `latest`.
-    pub(crate) fn is_latest(&self) -> bool {
+    fn is_latest(&self) -> bool {
         matches!(
             self,
             Self::Package {
@@ -86,7 +87,7 @@ pub(crate) enum Target<'a> {
 
 impl<'a> Target<'a> {
     /// Parse a target into a command name and a requirement.
-    pub(crate) fn parse(target: &'a str) -> Self {
+    fn parse(target: &'a str) -> Self {
         // e.g. `ruff`, no special handling
         let Some((name, version)) = target.split_once('@') else {
             return Self::Unspecified(target);
@@ -132,14 +133,13 @@ impl<'a> Target<'a> {
             // e.g., `ruff@latest`
             "latest" => Self::Latest(executable, name, extras),
             // e.g., `ruff@0.6.0`
+            version if let Ok(version) = Version::from_str(version) => {
+                Self::Version(executable, name, extras, version)
+            }
             version => {
-                if let Ok(version) = Version::from_str(version) {
-                    Self::Version(executable, name, extras, version)
-                } else {
-                    // e.g. `ruff@invalid`, warn and treat the whole thing as the command
-                    debug!("Ignoring invalid version request `{version}` in command");
-                    Self::Unspecified(target)
-                }
+                // e.g. `ruff@invalid`, warn and treat the whole thing as the command
+                debug!("Ignoring invalid version request `{version}` in command");
+                Self::Unspecified(target)
             }
         }
     }

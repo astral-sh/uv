@@ -1,0 +1,120 @@
+name: "Load Codex thread"
+description: "Restore and verify a root Codex thread from a previous workflow run."
+
+inputs:
+  repository:
+    description: "The repository containing the retained Codex thread."
+    default: "astral-sh/uv"
+    required: false
+  run-id:
+    description: "The workflow run containing the retained thread artifact."
+    required: true
+  artifact-id:
+    description: "The immutable ID of the artifact containing Codex session rollouts."
+    required: true
+  github-token:
+    description: "A token with read access to workflow artifacts."
+    required: true
+  path:
+    description: "A destination inside the workspace or runner temporary directory."
+    required: true
+
+outputs:
+  path:
+    description: "The absolute destination containing the retained Codex thread."
+    value: ${{ steps.source.outputs.path }}
+  session-id:
+    description: "The verified root Codex session identifier."
+    value: ${{ steps.validate.outputs.session-id }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: "Validate Codex thread source"
+      id: source
+      shell: bash
+      env:
+        ARTIFACT_ID: ${{ inputs.artifact-id }}
+        DIRECTORY: ${{ inputs.path }}
+        REPOSITORY: ${{ inputs.repository }}
+        RUN_ID: ${{ inputs.run-id }}
+      run: |
+        if ! [[ "$RUN_ID" =~ ^[1-9][0-9]*$ ]] ||
+          ! [[ "$REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] ||
+          ! [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]] ||
+          ! [[ "$DIRECTORY" =~ ^[A-Za-z0-9_./-]+$ ]]; then
+          echo "The Codex thread source or destination is invalid." >&2
+          exit 1
+        fi
+
+        resolve_path() {
+          python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$1"
+        }
+        directory="$(resolve_path "$DIRECTORY")"
+        runner_temp="$(resolve_path "$RUNNER_TEMP")"
+        workspace="$(resolve_path "$GITHUB_WORKSPACE")"
+        case "$directory" in
+          "$runner_temp"/*|"$workspace"/*) ;;
+          *)
+            echo "The Codex thread destination must be inside the runner or workspace." >&2
+            exit 1
+            ;;
+        esac
+
+        if [ -e "$directory" ]; then
+          echo "The Codex thread destination already exists." >&2
+          exit 1
+        fi
+
+        printf 'path=%s\n' "$directory" >> "$GITHUB_OUTPUT"
+
+    - name: "Download Codex thread"
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      with:
+        github-token: ${{ inputs.github-token }}
+        repository: ${{ inputs.repository }}
+        run-id: ${{ inputs.run-id }}
+        artifact-ids: ${{ inputs.artifact-id }}
+        path: ${{ steps.source.outputs.path }}
+
+    - name: "Validate root Codex session"
+      id: validate
+      shell: bash
+      env:
+        DIRECTORY: ${{ steps.source.outputs.path }}
+      run: |
+        while IFS= read -r -d '' compressed_rollout; do
+          zstd --decompress --stdout "$compressed_rollout" > "${compressed_rollout%.zst}"
+        done < <(find "$DIRECTORY" -type f -name '*.jsonl.zst' -print0)
+
+        root_sessions=0
+        root_session_id=
+        while IFS= read -r -d '' rollout; do
+          metadata="$(head -n 1 "$rollout")"
+          if ! jq --exit-status '
+            .type == "session_meta"
+            and (.payload | type == "object")
+            and (.payload.id | type == "string")
+          ' <<< "$metadata" > /dev/null; then
+            echo "The artifact contains an invalid Codex session." >&2
+            exit 1
+          fi
+
+          if jq --exit-status '.payload.source == "exec"' <<< "$metadata" > /dev/null; then
+            root_sessions=$((root_sessions + 1))
+            root_session_id="$(jq --raw-output '.payload.id' <<< "$metadata")"
+            session_workspace="$(jq --raw-output '.payload.cwd' <<< "$metadata")"
+            if ! [[ "$root_session_id" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] ||
+              [ "$session_workspace" != "$GITHUB_WORKSPACE" ]; then
+              echo "The Codex session does not match the trusted workspace." >&2
+              exit 1
+            fi
+          fi
+        done < <(find "$DIRECTORY" -type f -name '*.jsonl' -print0)
+
+        if [ "$root_sessions" -ne 1 ]; then
+          echo "The artifact must contain exactly one root Codex session." >&2
+          exit 1
+        fi
+
+        printf 'session-id=%s\n' "$root_session_id" >> "$GITHUB_OUTPUT"

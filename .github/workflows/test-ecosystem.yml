@@ -5,13 +5,17 @@ on:
         required: true
         type: string
 
-permissions: {}
+permissions:
+  contents: read
+
+env:
+  UV_LOCKED: 1
 
 jobs:
   ecosystem-test:
     name: "${{ matrix.repo }}"
     timeout-minutes: 10
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     strategy:
       matrix:
         include:
@@ -35,13 +39,13 @@ jobs:
             python: "3.12"
       fail-fast: false
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ matrix.repo }}
           ref: ${{ matrix.ref }}
           persist-credentials: false
 
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python }}
 
@@ -54,6 +58,9 @@ jobs:
         run: chmod +x ./uv
 
       - name: "Test"
+        env:
+          # These commands intentionally create and upgrade ecosystem lockfiles.
+          UV_LOCKED: 0
         run: |
           echo '${{ toJSON(matrix.commands) }}' | jq -r '.[]' | while read cmd; do
             echo "+ $cmd" >&2

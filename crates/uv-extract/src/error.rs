@@ -1,15 +1,27 @@
 use std::{ffi::OsString, path::PathBuf};
 
+use crate::validate_archive_member_name;
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("I/O operation failed during extraction")]
     Io(#[source] std::io::Error),
-    #[error("Invalid zip file")]
-    Zip(#[from] zip::result::ZipError),
     #[error("Invalid zip file structure")]
-    AsyncZip(#[from] async_zip::error::ZipError),
+    AsyncZip(#[source] async_zip::error::ZipError),
     #[error("Invalid tar file")]
-    Tar(#[from] tokio_tar::TarError),
+    Tar(
+        #[source]
+        #[from]
+        tokio_tar::TarError,
+    ),
+    #[error("Invalid tar file")]
+    TarCodec(
+        #[source]
+        #[from]
+        tar_codec::ExtractError<tar_codec::DecodeError>,
+    ),
+    #[error(transparent)]
+    DirectoryHash(#[from] crate::dirhash::DirhashError),
     #[error(
         "The top-level of the archive must only contain a list directory, but it contains: {0:?}"
     )]
@@ -40,6 +52,8 @@ pub enum Error {
     },
     #[error("ZIP file contains multiple entries with different contents for: {}", path.display())]
     DuplicateLocalFileHeader { path: PathBuf },
+    #[error("ZIP file contains multiple entries for the same output path: {}", path.display())]
+    DuplicateOutputPath { path: PathBuf },
     #[error("ZIP file contains a local file header without a corresponding central-directory record entry for: {} ({offset})", path.display())]
     MissingCentralDirectoryEntry { path: PathBuf, offset: u64 },
     #[error("ZIP file contains an end-of-central-directory record entry, but no local file header for: {} ({offset}", path.display())]
@@ -50,6 +64,8 @@ pub enum Error {
         local_path: PathBuf,
         central_directory_path: PathBuf,
     },
+    #[error("ZIP file uses conflicting entry types for the local file header and central-directory record for: {} ({offset})", path.display())]
+    ConflictingEntryTypes { path: PathBuf, offset: u64 },
     #[error("ZIP file uses conflicting checksums for the local file header and central-directory record (got {local_crc32}, expected {central_directory_crc32}) for: {} ({offset})", path.display())]
     ConflictingChecksums {
         path: PathBuf,
@@ -93,32 +109,54 @@ pub enum Error {
     EmptyFilename,
     #[error("Archive contains unacceptable filename: {filename}")]
     UnacceptableFilename { filename: String },
+    #[error(
+        "Archive contains a file with an unsupported compression method; files must be compressed with 'stored', 'DEFLATE', or 'zstd'"
+    )]
+    UnsupportedCompression,
+}
+
+impl From<async_zip::error::ZipError> for Error {
+    fn from(err: async_zip::error::ZipError) -> Self {
+        match err {
+            async_zip::error::ZipError::CompressionNotSupported(_) => Self::UnsupportedCompression,
+            async_zip::error::ZipError::FileNameContainsNul { filename } => {
+                let filename = String::from_utf8_lossy(&filename);
+                validate_archive_member_name(&filename)
+                    .expect_err("a filename containing an embedded NUL must be rejected")
+            }
+            error => Self::AsyncZip(error),
+        }
+    }
 }
 
 impl Error {
-    /// When reading from an archive, the error can either be an IO error from the underlying
-    /// operating system, or an error with the archive. Both get wrapper into an IO error through
-    /// e.g., `io::copy`. This method extracts zip and tar errors, to distinguish them from invalid
-    /// archives.
-    pub(crate) fn io_or_compression(err: std::io::Error) -> Self {
+    /// When reading from a ZIP archive, the error can either be an I/O error from the underlying
+    /// operating system, or an error with the archive. Both get wrapped into an I/O error through
+    /// e.g., `io::copy`. This method extracts ZIP errors to distinguish them from invalid archives.
+    pub(crate) fn io_or_zip(err: std::io::Error) -> Self {
         if err.kind() != std::io::ErrorKind::Other {
             return Self::Io(err);
         }
 
-        let err = match err.downcast::<tokio_tar::TarError>() {
-            Ok(tar_err) => return Self::Tar(tar_err),
-            Err(err) => err,
-        };
         let err = match err.downcast::<async_zip::error::ZipError>() {
-            Ok(zip_err) => return Self::AsyncZip(zip_err),
+            Ok(zip_err) => return Self::from(zip_err),
             Err(err) => err,
         };
-        let err = match err.downcast::<zip::result::ZipError>() {
-            Ok(zip_err) => return Self::Zip(zip_err),
-            Err(err) => err,
-        };
-
         Self::Io(err)
+    }
+
+    /// When reading a tar archive, the error can either be an I/O error from the underlying
+    /// reader or an error with the archive. Both get wrapped into an I/O error through operations
+    /// such as `io::copy`. This method extracts tar errors to distinguish them from I/O errors.
+    pub(crate) fn io_or_tar(err: std::io::Error) -> Self {
+        if err.kind() != std::io::ErrorKind::Other {
+            return Self::Io(err);
+        }
+
+        match err.downcast::<tokio_tar::TarError>() {
+            Ok(tar_err) => Self::Tar(tar_err),
+            Err(err) => Self::Io(err),
+        }
     }
 
     /// Returns `true` if the error is due to the server not supporting HTTP streaming. Most
@@ -133,16 +171,27 @@ impl Error {
 
     /// Returns `true` if the error is due to HTTP streaming request failed.
     pub fn is_http_streaming_failed(&self) -> bool {
-        match self {
-            Self::AsyncZip(async_zip::error::ZipError::UpstreamReadError(_)) => true,
-            Self::Io(err) => {
-                if let Some(inner) = err.get_ref() {
-                    inner.downcast_ref::<reqwest::Error>().is_some()
-                } else {
-                    false
-                }
+        fn contains_reqwest_error(error: &(dyn std::error::Error + 'static)) -> bool {
+            if error.downcast_ref::<reqwest::Error>().is_some() {
+                return true;
             }
-            _ => false,
+            // `std::io::Error::source` forwards to the source of its custom error and can skip the
+            // custom error itself, so inspect `get_ref` before following the standard chain.
+            if let Some(error) = error.downcast_ref::<std::io::Error>()
+                && let Some(inner) = error.get_ref()
+                && contains_reqwest_error(inner)
+            {
+                return true;
+            }
+            error.source().is_some_and(contains_reqwest_error)
         }
+
+        if matches!(
+            self,
+            Self::AsyncZip(async_zip::error::ZipError::UpstreamReadError(_))
+        ) {
+            return true;
+        }
+        contains_reqwest_error(self)
     }
 }

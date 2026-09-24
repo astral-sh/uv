@@ -5,6 +5,7 @@ use petgraph::visit::EdgeRef;
 use petgraph::{Directed, Direction, Graph};
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
+use uv_configuration::AnnotationStyle;
 use uv_distribution_types::{DistributionMetadata, Name, SourceAnnotation, SourceAnnotations};
 use uv_normalize::PackageName;
 use uv_pep508::MarkerTree;
@@ -117,19 +118,44 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                 }
             }
 
-            for requirement in self
-                .resolution
-                .overrides
-                .requirements()
-                .filter(|requirement| {
-                    requirement.evaluate_markers(self.env.marker_environment(), &[])
-                })
+            for requirement in
+                self.resolution
+                    .overrides
+                    .global_requirements()
+                    .filter(|requirement| {
+                        requirement.evaluate_markers(self.env.marker_environment(), &[])
+                    })
             {
                 if let Some(origin) = &requirement.origin {
                     sources.add(
                         &requirement.name,
                         SourceAnnotation::Override(origin.clone()),
                     );
+                }
+            }
+
+            for edge in self.resolution.graph.edge_references() {
+                let (ResolutionGraphNode::Dist(parent), ResolutionGraphNode::Dist(dependency)) = (
+                    self.resolution.graph.node_weight(edge.source()).unwrap(),
+                    self.resolution.graph.node_weight(edge.target()).unwrap(),
+                ) else {
+                    continue;
+                };
+                for requirement in self
+                    .resolution
+                    .overrides
+                    .scoped_requirements_for(&parent.name, &parent.version)
+                    .filter(|requirement| requirement.name == dependency.name)
+                    .filter(|requirement| {
+                        requirement.evaluate_markers(self.env.marker_environment(), &[])
+                    })
+                {
+                    if let Some(origin) = &requirement.origin {
+                        sources.add(
+                            &requirement.name,
+                            SourceAnnotation::Override(origin.clone()),
+                        );
+                    }
                 }
             }
 
@@ -299,20 +325,6 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
     }
 }
 
-/// Indicate the style of annotation comments, used to indicate the dependencies that requested each
-/// package.
-#[derive(Debug, Default, Copy, Clone, PartialEq, serde::Deserialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
-#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-pub enum AnnotationStyle {
-    /// Render the annotations on a single, comma-separated line.
-    Line,
-    /// Render each annotation on its own line.
-    #[default]
-    Split,
-}
-
 /// We don't need the edge markers anymore since we switched to propagated markers.
 type IntermediatePetGraph<'dist> = Graph<DisplayResolutionGraphNode<'dist>, (), Directed>;
 
@@ -409,7 +421,7 @@ fn strip_extras<'dist>(graph: &IntermediatePetGraph<'dist>) -> RequirementsTxtGr
                 // foo==1.0.0; sys_platform != 'linux'
                 // ```
                 // In this case, we want to write `foo==1.0.0; sys_platform == 'linux' or sys_platform == 'windows'`
-                node.markers.or(dist.markers);
+                node.markers = node.markers.or(dist.markers);
             }
             std::collections::hash_map::Entry::Vacant(entry) => {
                 let index = next.add_node(dist.clone());

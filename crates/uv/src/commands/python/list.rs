@@ -3,7 +3,6 @@ use std::collections::BTreeSet;
 use std::fmt::Write;
 use uv_cli::PythonListFormat;
 use uv_pep440::Version;
-use uv_preview::Preview;
 
 use anyhow::Result;
 use itertools::Either;
@@ -16,8 +15,8 @@ use uv_python::downloads::{
     Error as PythonDownloadError, ManagedPythonDownloadList, PythonDownloadRequest,
 };
 use uv_python::{
-    DiscoveryError, EnvironmentPreference, PythonDownloads, PythonInstallation, PythonNotFound,
-    PythonPreference, PythonRequest, PythonSource, find_python_installations,
+    EnvironmentPreference, PythonDownloads, PythonPreference, PythonRequest, PythonSource,
+    find_all_python_installations,
 };
 
 use crate::commands::ExitStatus;
@@ -72,7 +71,6 @@ pub(crate) async fn list(
     client_builder: &BaseClientBuilder<'_>,
     cache: &Cache,
     printer: Printer,
-    preview: Preview,
 ) -> Result<ExitStatus> {
     let request = request.as_deref().map(PythonRequest::parse);
     let base_download_request = if python_preference == PythonPreference::OnlySystem {
@@ -82,15 +80,13 @@ pub(crate) async fn list(
         PythonDownloadRequest::from_request(request.as_ref().unwrap_or(&PythonRequest::Any))
     };
 
-    let client = client_builder.build();
-    let download_list =
-        ManagedPythonDownloadList::new(&client, python_downloads_json_url.as_deref()).await?;
-    let mut output = BTreeSet::new();
-    if let Some(base_download_request) = base_download_request {
-        // Check before the move since `base_download_request` is consumed below
-        let show_debug = all_variants || base_download_request.allows_debug();
+    let show_debug = all_variants
+        || base_download_request
+            .as_ref()
+            .is_some_and(PythonDownloadRequest::allows_debug);
 
-        let download_request = match kinds {
+    let download_request = if let Some(base_download_request) = base_download_request {
+        match kinds {
             PythonListKinds::Installed => None,
             PythonListKinds::Downloads => Some(if all_platforms {
                 base_download_request
@@ -115,13 +111,22 @@ pub(crate) async fn list(
             }
         }
         // Include pre-release versions
-        .map(|request| request.with_prereleases(true));
+        .map(|request| request.with_prereleases(true))
+    } else {
+        None
+    };
 
-        let downloads = download_request
-            .as_ref()
-            .map(|request| download_list.iter_matching(request))
-            .into_iter()
-            .flatten()
+    let mut output = BTreeSet::new();
+    if let Some(download_request) = download_request {
+        let download_list = ManagedPythonDownloadList::new(
+            client_builder,
+            cache,
+            python_downloads_json_url.as_deref(),
+        )
+        .await?;
+
+        let downloads = download_list
+            .iter_matching(&download_request)
             .filter(|download| show_debug || !download.key().variant().is_debug());
 
         for download in downloads {
@@ -142,41 +147,31 @@ pub(crate) async fn list(
         }
     }
 
-    let installed =
-        match kinds {
-            PythonListKinds::Installed | PythonListKinds::Default => {
-                // While usually [`PythonPreference::OnlyManaged`] means we can skip searching the `PATH`,
-                // in `uv python list` we want to enumerate links to managed Python interpreters for inspection.
-                // Consequently, we widen the preference here and perform post-filtering.
-                let discovery_preference = if python_preference == PythonPreference::OnlyManaged {
-                    PythonPreference::Managed
-                } else {
-                    python_preference
-                };
-                Some(find_python_installations(
+    let installed = match kinds {
+        PythonListKinds::Installed | PythonListKinds::Default => {
+            // While usually [`PythonPreference::OnlyManaged`] means we can skip searching the
+            // `PATH`, in `uv python list` we want to enumerate links to managed Python
+            // interpreters for inspection. Consequently, we widen the preference here and
+            // perform post-filtering.
+            let discovery_preference = if python_preference == PythonPreference::OnlyManaged {
+                PythonPreference::Managed
+            } else {
+                python_preference
+            };
+            let mut installations = find_all_python_installations(
                 request.as_ref().unwrap_or(&PythonRequest::Any),
                 EnvironmentPreference::OnlySystem,
                 discovery_preference,
                 cache,
-                preview,
-            )
-            // Raise discovery errors if critical
-            .filter(|result| {
-                result
-                    .as_ref()
-                    .err()
-                    .is_none_or(DiscoveryError::is_critical)
-            })
-            .collect::<Result<Vec<Result<PythonInstallation, PythonNotFound>>, DiscoveryError>>()?
-            .into_iter()
-            // Drop any "missing" installations
-            .filter_map(Result::ok)
-            // Apply the `PythonPreference` to discovered interpreters, since we may have
-            // expanded it above
-            .filter(|installation| python_preference.allows_installation(installation)))
-            }
-            PythonListKinds::Downloads => None,
-        };
+            )?;
+            // Apply the original `PythonPreference` to discovered interpreters, since we may
+            // have expanded it above.
+            installations
+                .retain(|installation| python_preference.allows_installation(installation));
+            Some(installations)
+        }
+        PythonListKinds::Downloads => None,
+    };
 
     if let Some(installed) = installed {
         for installation in installed {

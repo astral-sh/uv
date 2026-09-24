@@ -1,0 +1,26 @@
+name = "fork-strategy-environments"
+description = '''
+This test checks which version is selected when `environments` forks are solved
+in a different order. Both versions of `a` work on every supported Python
+version, so the fork that is solved first decides whether the other fork reuses
+its version or picks its own.
+'''
+
+[testgen]
+disable = true
+
+[resolver_options]
+universal = true
+
+[expected]
+satisfiable = true
+
+[root]
+requires_python = ">=3.11,<3.13"
+requires = ["a"]
+
+[packages.a.versions."1.0.0"]
+requires_python = ">=3.11"
+
+[packages.a.versions."2.0.0"]
+requires_python = ">=3.11"

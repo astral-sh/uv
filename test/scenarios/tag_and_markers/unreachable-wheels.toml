@@ -1,0 +1,39 @@
+name = "unreachable-wheels"
+description = "Check that we only include wheels that match the platform markers"
+
+[root]
+requires = [
+  "a==1.0.0; sys_platform == 'win32'",
+  "b==1.0.0; sys_platform == 'linux'",
+  "c==1.0.0; sys_platform == 'darwin'",
+]
+
+[expected]
+satisfiable = true
+
+[packages.a.versions."1.0.0"]
+wheel_tags = [
+  "cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64",
+  "cp312-cp312-musllinux_1_1_armv7l",
+  "cp312-cp312-win_amd64",
+  "cp312-cp312-macosx_14_0_x86_64",
+]
+
+[packages.b.versions."1.0.0"]
+wheel_tags = [
+  "cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64",
+  "cp312-cp312-musllinux_1_1_armv7l",
+  "cp312-cp312-win_amd64",
+  "cp312-cp312-macosx_14_0_x86_64",
+]
+
+[packages.c.versions."1.0.0"]
+wheel_tags = [
+  "cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64",
+  "cp312-cp312-musllinux_1_1_armv7l",
+  "cp312-cp312-win_amd64",
+  "cp312-cp312-macosx_14_0_x86_64",
+]
+
+[resolver_options]
+universal = true
