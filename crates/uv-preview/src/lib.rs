@@ -316,6 +316,8 @@ pub enum PreviewFeature {
     /// Stores a `uv.lock` alongside each installed tool and reuses it for reproducible installations,
     /// upgrades, and audits.
     ToolInstallLocks,
+    /// Includes locks in built distributions and allows installing tools from their packaged locks.
+    LockedTools,
     /// Allows using `uv workspace list --scripts`.
     WorkspaceListScripts,
     /// Stops installing the `_virtualenv.py` / `_virtualenv.pth` distutils configuration monkeypatch

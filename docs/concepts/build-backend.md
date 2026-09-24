@@ -59,6 +59,27 @@ with the `uv_build` requirement. If it's not compatible, a compatible version of
 package will be used. Other build frontends, such as `python -m build`, will always use the
 `uv_build` package, typically choosing the latest compatible version.
 
+## Including a lockfile
+
+With the `locked-tools` [preview feature](preview.md), the uv build backend exports runtime
+dependencies from an existing `uv.lock` to `pylock.toml` in the wheel's `.dist-info` directory. The
+source distribution includes `uv.lock` so that building a wheel from it produces the same lock. The
+project itself and development dependencies are omitted from `pylock.toml`.
+
+By default, this happens only when `uv.lock` exists and every dependency in it comes from PyPI. To
+include a lock with other sources, set:
+
+```toml
+[tool.uv.build-backend]
+export-lock = true
+```
+
+Set `export-lock = false` to disable export. The `UV_BUILD_BACKEND_EXPORT_LOCK` environment variable
+overrides this setting. Explicitly enabling export requires the preview feature and an existing
+lockfile. Builds do not create or update the lockfile; run `uv lock` before building.
+
+For other build frontends, enable the preview feature with `UV_PREVIEW_FEATURES=locked-tools`.
+
 ## Modules
 
 Python packages are expected to contain one or more Python modules, which are directories containing

@@ -91,9 +91,13 @@ fn source_dist_matcher(
 ) -> Result<(GlobDirFilter, GlobSet), Error> {
     // File and directories to include in the source directory
     let mut include_globs = Vec::new();
+    let export_lock = crate::lock::export_lock(source_tree, pyproject_toml)?.is_some();
     let mut includes: Vec<String> = settings.source_include;
     // pyproject.toml is always included.
     includes.push(globset::escape("pyproject.toml"));
+    if export_lock {
+        includes.push(globset::escape("uv.lock"));
+    }
 
     // Check that the source tree contains a module.
     let (src_root, modules_relative) = find_roots(
@@ -200,6 +204,11 @@ fn source_dist_matcher(
     let exclude_matcher = build_exclude_matcher(excludes)?;
     if exclude_matcher.is_match("pyproject.toml") {
         return Err(Error::PyprojectTomlExcluded);
+    }
+    if export_lock && exclude_matcher.is_match("uv.lock") {
+        return Err(Error::InvalidBuildLock(
+            "`uv.lock` must not be excluded when exporting locks".to_string(),
+        ));
     }
     Ok((include_matcher, exclude_matcher))
 }

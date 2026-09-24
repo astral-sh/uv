@@ -7,6 +7,11 @@ pub struct EnvVars;
 
 #[attribute_env_vars_metadata]
 impl EnvVars {
+    /// Override `tool.uv.build-backend.export-lock` when using the `uv_build` backend.
+    /// Requires the `locked-tools` preview feature.
+    #[attr_added_in("next release")]
+    pub const UV_BUILD_BACKEND_EXPORT_LOCK: &'static str = "UV_BUILD_BACKEND_EXPORT_LOCK";
+
     /// The path to the binary that was used to invoke uv.
     ///
     /// This is propagated to all subprocesses spawned by uv.

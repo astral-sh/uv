@@ -20,6 +20,8 @@ uv-cache = { workspace = true }
 uv-cache-info = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-fs = { workspace = true }
+uv-macros = { workspace = true }
+uv-options-metadata = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
@@ -58,3 +60,7 @@ schemars = [
   "uv-pep508/schemars",
   "uv-redacted/schemars",
 ]
+
+[package.metadata.cargo-shear]
+# Imported by the `OptionsMetadata` derive macro.
+ignored = ["uv-options-metadata"]

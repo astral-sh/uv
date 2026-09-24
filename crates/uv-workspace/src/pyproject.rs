@@ -19,7 +19,7 @@ use serde::de::SeqAccess;
 use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 use tracing::instrument;
-use uv_build_backend::BuildBackendSettings;
+use uv_configuration::build_backend::BuildBackendSettings;
 use uv_configuration::{ExcludeDependency, GitLfsSetting, Override};
 use uv_distribution_types::{
     Index, IndexName, MinimumLibcVersion, NameRequirementSpecification, RequirementSource,

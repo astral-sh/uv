@@ -42,6 +42,87 @@ const BUILT_BY_UV_TEST_SCRIPT: &str = indoc! {r#"
     print(f"Area of a circle with r=2: {area(2)}")
 "#};
 
+#[test]
+fn export_lock_configuration() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("src/locked_tool/__init__.py")
+        .touch()?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "locked-tool"
+        version = "1.0.0"
+        [build-system]
+        requires = ["uv_build>=0.5.15,<2"]
+        build-backend = "uv_build"
+        [tool.uv.build-backend]
+        export-lock = true
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.build_backend()
+        .arg("build-wheel").arg(context.temp_dir.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Exporting locks requires the `locked-tools` preview feature
+    ");
+
+    uv_snapshot!(context.filters(), context.build_backend()
+        .arg("--preview-features").arg("locked-tools")
+        .arg("build-wheel").arg(context.temp_dir.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Cannot export a lock: `uv.lock` was not found; run `uv lock` before building
+    ");
+
+    // An environment override can disable export, even when the setting enables it.
+    uv_snapshot!(context.filters(), context.build_backend()
+        .env(EnvVars::UV_BUILD_BACKEND_EXPORT_LOCK, "false")
+        .arg("--preview-features").arg("locked-tools")
+        .arg("build-wheel").arg(context.temp_dir.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    locked_tool-1.0.0-py3-none-any.whl
+    ");
+
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        requires-python = ">=3.12"
+        [[package]]
+        name = "locked-tool"
+        version = "1.0.0"
+        source = { editable = "." }
+    "#})?;
+    context.temp_dir.child("pyproject.toml").write_str(
+        &fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?
+            .replace("export-lock = true", "export-lock = false"),
+    )?;
+    uv_snapshot!(context.filters(), context.build_backend()
+        .env(EnvVars::UV_BUILD_BACKEND_EXPORT_LOCK, "true")
+        .arg("--preview-features").arg("locked-tools")
+        .arg("build-wheel").arg(context.temp_dir.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    locked_tool-1.0.0-py3-none-any.whl
+    ");
+    uv_snapshot!(context.python_command().arg("-c").arg(indoc! {r#"
+        import zipfile
+        with zipfile.ZipFile("locked_tool-1.0.0-py3-none-any.whl") as wheel:
+            print(wheel.read("locked_tool-1.0.0.dist-info/pylock.toml").decode(), end="")
+    "#}), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12"
+    packages = []
+    "#);
+    Ok(())
+}
+
 fn unpack_tar_gz(source_dist_path: &Path, target: &Path) -> Result<()> {
     let sdist_reader = BufReader::new(File::open(source_dist_path)?);
     let source_dist = TarArchive::new(AllowStdIo::new(GzDecoder::new(sdist_reader)).compat());
