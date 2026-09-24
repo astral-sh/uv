@@ -64,29 +64,11 @@ impl Display for UrlWithCredentials {
 ///
 /// Use for installed direct URL metadata, where query parameters identify the source. The generic
 /// SSH `git` username is retained. Display and debug output remain redacted.
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, RefCast)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "schemars", schemars(transparent))]
 #[serde(transparent)]
-#[repr(transparent)]
 pub struct UrlWithoutUserInfo(DisplaySafeUrl);
-
-impl UrlWithoutUserInfo {
-    /// Borrow a URL with this persistence policy.
-    pub fn ref_cast(url: &DisplaySafeUrl) -> &Self {
-        RefCast::ref_cast(url)
-    }
-
-    /// Return the original URL for requests and source comparisons.
-    pub fn as_url(&self) -> &DisplaySafeUrl {
-        &self.0
-    }
-
-    /// Return the original URL for requests and source comparisons.
-    pub fn into_url(self) -> DisplaySafeUrl {
-        self.0
-    }
-}
 
 impl From<DisplaySafeUrl> for UrlWithoutUserInfo {
     fn from(url: DisplaySafeUrl) -> Self {
@@ -196,9 +178,10 @@ mod tests {
         let url = DisplaySafeUrl::parse(
             "https://user:password@example.com/package.whl?st=2026-09-15T16:34:14Z&Si%67=abc%2Bdef%3D&keep=%2f&keep=a+b&X-Amz-Security-Token=token",
         )?;
+        let without_userinfo = UrlWithoutUserInfo::from(url.clone());
         let policies = Policies {
             with_credentials: UrlWithCredentials::ref_cast(&url),
-            without_userinfo: UrlWithoutUserInfo::ref_cast(&url),
+            without_userinfo: &without_userinfo,
             without_sensitive_parts: UrlWithoutSensitiveParts::ref_cast(&url),
         };
         insta::assert_snapshot!(serde_json::to_string_pretty(&policies)?, @r#"
@@ -216,8 +199,8 @@ mod tests {
             &url
         );
         assert_eq!(
-            serde_json::from_str::<UrlWithoutUserInfo>(&serialized)?.as_url(),
-            &url
+            serde_json::from_str::<UrlWithoutUserInfo>(&serialized)?.as_ref(),
+            url.as_str()
         );
         assert_eq!(
             serde_json::from_str::<UrlWithoutSensitiveParts>(&serialized)?.as_url(),
