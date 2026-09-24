@@ -115,23 +115,6 @@ impl Interpreter {
         }
     }
 
-    /// Cache the metadata for this environment's Python without querying it.
-    ///
-    /// The executable created for this environment is also used by virtual environment discovery.
-    pub fn cache_virtualenv(&self, cache: &Cache) -> Result<(), Error> {
-        // Launcher overrides can change `sys.executable` and `sys.prefix`, while
-        // `sys._base_executable` isn't affected. Instead of trying to stitch together this edge
-        // case, query the actual metadata on the next run.
-        if env::var_os(EnvVars::PYTHONEXECUTABLE).is_some()
-            || env::var_os(EnvVars::PYVENV_LAUNCHER).is_some()
-        {
-            return Ok(());
-        }
-
-        let info = InterpreterInfo::from_virtualenv(self)?;
-        info.cache(cache)
-    }
-
     /// Return a new [`Interpreter`] with the given virtual environment root.
     #[must_use]
     pub fn with_virtualenv(self, virtualenv: VirtualEnvironment) -> Self {
@@ -994,7 +977,7 @@ pub enum InterpreterInfoError {
 
 #[expect(clippy::struct_excessive_bools)]
 #[derive(Debug, Deserialize, Serialize, Clone)]
-struct InterpreterInfo {
+pub(crate) struct InterpreterInfo {
     platform: Platform,
     markers: MarkerEnvironment,
     scheme: Scheme,
@@ -1017,7 +1000,7 @@ struct InterpreterInfo {
 
 impl InterpreterInfo {
     /// Build metadata for virtual environment discovery without querying Python or using the cache.
-    fn from_virtualenv(interpreter: &Interpreter) -> Result<Self, Error> {
+    pub(crate) fn from_virtualenv(interpreter: &Interpreter) -> Result<Self, Error> {
         let mut scheme = interpreter.scheme.clone();
         // Joining the empty relative data path adds a trailing separator that sysconfig omits.
         scheme.data = scheme.data.components().collect();
@@ -1045,7 +1028,7 @@ impl InterpreterInfo {
     }
 
     /// Cache already prepared metadata for this executable.
-    fn cache(&self, cache: &Cache) -> Result<(), Error> {
+    pub(crate) fn cache(&self, cache: &Cache) -> Result<(), Error> {
         let absolute = std::path::absolute(&self.sys_executable)?;
         let canonical = canonicalize_executable(&absolute)?;
         let cache_entry = Self::cache_entry(&absolute, &canonical, cache);

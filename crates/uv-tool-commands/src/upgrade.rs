@@ -423,7 +423,7 @@ async fn upgrade_tool(
 
         if requested_interpreter.is_some() {
             let environment =
-                installed_tools.create_environment(name, target_interpreter.clone())?;
+                installed_tools.create_environment(name, target_interpreter.clone(), cache)?;
             let environment = sync_environment(
                 environment,
                 &resolution,
@@ -536,7 +536,7 @@ async fn upgrade_tool(
             preview,
         )
         .await?;
-        let environment = installed_tools.create_environment(name, interpreter.clone())?;
+        let environment = installed_tools.create_environment(name, interpreter.clone(), cache)?;
         let environment = sync_environment(
             environment,
             &resolution.into(),

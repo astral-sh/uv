@@ -1056,13 +1056,11 @@ impl ProjectEnvironment {
                     uv_virtualenv::Seed::Disabled,
                     upgradeable,
                 )?;
+                environment.cache_virtualenv(false, cache)?;
 
                 if centralized {
                     update_project_environment_link(&environment, target, link_error_reporting);
                 }
-
-                // Cache the new environment's metadata without querying Python on the next invocation.
-                environment.interpreter().cache_virtualenv(cache)?;
 
                 if replace_environment {
                     Ok(Self::Replaced(environment))
@@ -1252,9 +1250,7 @@ impl ScriptEnvironment {
                     uv_virtualenv::Seed::Disabled,
                     upgradeable,
                 )?;
-
-                // Cache the new environment's metadata without querying Python on the next invocation.
-                environment.interpreter().cache_virtualenv(cache)?;
+                environment.cache_virtualenv(false, cache)?;
 
                 Ok(if replaced {
                     Self::Replaced(environment)
