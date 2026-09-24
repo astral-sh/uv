@@ -3,6 +3,39 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.12.19
+
+Released on 2026-09-24.
+
+### Python
+
+- Add PyPy 3.11.16 and 3.12.14 ([#21847](https://github.com/astral-sh/uv/pull/21847))
+- Update GraalPy 3.13.0 to build 25.4.4 ([#21847](https://github.com/astral-sh/uv/pull/21847))
+
+### Enhancements
+
+- Format upload URLs with backticks in `uv publish` errors ([#21934](https://github.com/astral-sh/uv/pull/21934))
+
+### Preview features
+
+- Run build-backend hooks with lazy imports on CPython 3.15 and later using the `build-lazy-imports` preview feature ([#21967](https://github.com/astral-sh/uv/pull/21967))
+- Omit unused resolution settings from `uv.lock` and ignore changes to them when checking lockfile freshness with the `resolution-inputs` preview feature ([#21913](https://github.com/astral-sh/uv/pull/21913))
+
+### Bug fixes
+
+- Preserve signed and encoded query parameters in direct-URL metadata to avoid reinstalling unchanged packages ([#21971](https://github.com/astral-sh/uv/pull/21971))
+- Recognize `1.0.0` as satisfying `===1` during installed-package checks, matching resolution ([#21931](https://github.com/astral-sh/uv/pull/21931))
+- Avoid collisions between Git checkout readiness markers and `.ok` files in dependencies ([#21891](https://github.com/astral-sh/uv/pull/21891))
+- Preserve always-false `python_version` markers when parsing their serialized form ([#21939](https://github.com/astral-sh/uv/pull/21939))
+
+### Rust API
+
+- Restore the public `FlatDistributions` export and its `BTreeMap` conversion for downstream resolvers ([#21965](https://github.com/astral-sh/uv/pull/21965))
+
+### Documentation
+
+- Make individual preview-feature reference entries linkable by name ([#21950](https://github.com/astral-sh/uv/pull/21950))
+
 ## 0.12.18
 
 Released on 2026-09-22.
