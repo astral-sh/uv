@@ -6656,11 +6656,11 @@ fn tool_install_with_build_hashes() -> Result<()> {
     let bin_dir = context.temp_dir.child("bin");
     let project = context.temp_dir.child("project");
     let constraints = context.temp_dir.child("constraints.txt");
-    // The last nonempty hash declaration for a registry version takes precedence.
-    let incorrect_hash = "0".repeat(64);
-    constraints.write_str(&format!(
-        "build-dependency==1.0.0 --hash=sha256:{incorrect_hash}\nbuild-dependency==1 --hash=sha256:{hash}\n"
-    ))?;
+    // Both declarations must allow the build dependency's hash.
+    constraints.write_str(&formatdoc! {"
+        build-dependency==1.0.0 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000 --hash=sha256:{hash}
+        build-dependency==1 --hash=sha256:{hash}
+    "})?;
 
     let install = || {
         let mut command = context.tool_install();
@@ -6686,7 +6686,7 @@ fn tool_install_with_build_hashes() -> Result<()> {
         [tool]
         requirements = [{ name = "hash-tool", directory = "[TEMP_DIR]/project" }]
         build-constraint-dependencies = [
-            { name = "build-dependency", specifier = "==1", hashes = ["sha256:0000000000000000000000000000000000000000000000000000000000000000"] },
+            { name = "build-dependency", specifier = "==1", hashes = ["sha256:0000000000000000000000000000000000000000000000000000000000000000", "sha256:[BUILD_HASH]"] },
             { name = "build-dependency", specifier = "==1", hashes = ["sha256:[BUILD_HASH]"] },
         ]
         entrypoints = [
@@ -6700,11 +6700,31 @@ fn tool_install_with_build_hashes() -> Result<()> {
         "#);
     });
 
-    // Reversing the declarations must change the hash that is checked.
+    // Reversing the declarations allows the same build dependency.
     fs_err::remove_file(project.child("backend-executed"))?;
-    constraints.write_str(&format!(
-        "build-dependency==1 --hash=sha256:{hash}\nbuild-dependency==1.0.0 --hash=sha256:{incorrect_hash}\n"
-    ))?;
+    constraints.write_str(&formatdoc! {"
+        build-dependency==1 --hash=sha256:{hash}
+        build-dependency==1.0.0 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000 --hash=sha256:{hash}
+    "})?;
+    uv_snapshot!(context.filters(), install(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ hash-tool==1.0.0 (from file://[TEMP_DIR]/project)
+    Installed 1 executable: hash-tool
+    ");
+    project
+        .child("backend-executed")
+        .assert(predicate::path::exists());
+    fs_err::remove_file(project.child("backend-executed"))?;
+
+    // The supplied hash is checked even when it isn't required.
+    constraints.write_str(indoc! {"
+        build-dependency==1.0.0 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000
+    "})?;
     uv_snapshot!(context.filters(), install().arg("--reinstall"), @"
     exit_code: 1 (failure)
     ----- stderr -----
@@ -6789,10 +6809,9 @@ fn tool_install_with_build_hashes() -> Result<()> {
 
     // Unpinned hashes are ignored in verification mode, including when saved in a tool receipt.
     fs_err::remove_file(project.child("backend-executed"))?;
-    constraints.write_str(&format!(
-        "build-dependency>=1.0.0 --hash=sha256:{}\n",
-        "0".repeat(64)
-    ))?;
+    constraints.write_str(indoc! {"
+        build-dependency>=1.0.0 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000
+    "})?;
     install().arg("--reinstall").assert().success();
     project
         .child("backend-executed")
@@ -6834,11 +6853,11 @@ fn tool_install_lock_with_build_hashes() -> Result<()> {
     let bin_dir = context.temp_dir.child("bin");
     let project = context.temp_dir.child("project");
     let constraints = context.temp_dir.child("constraints.txt");
-    // The last nonempty hash declaration for a registry version takes precedence.
-    let incorrect_hash = "0".repeat(64);
-    constraints.write_str(&format!(
-        "build-dependency==1.0.0 --hash=sha256:{incorrect_hash}\nbuild-dependency==1 --hash=sha256:{hash}\n"
-    ))?;
+    // Both declarations must allow the build dependency's hash.
+    constraints.write_str(&formatdoc! {"
+        build-dependency==1.0.0 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000 --hash=sha256:{hash}
+        build-dependency==1 --hash=sha256:{hash}
+    "})?;
 
     let install = || {
         let mut command = context.tool_install();
@@ -6864,7 +6883,7 @@ fn tool_install_lock_with_build_hashes() -> Result<()> {
         [tool]
         requirements = [{ name = "hash-tool", directory = "[TEMP_DIR]/project" }]
         build-constraint-dependencies = [
-            { name = "build-dependency", specifier = "==1", hashes = ["sha256:0000000000000000000000000000000000000000000000000000000000000000"] },
+            { name = "build-dependency", specifier = "==1", hashes = ["sha256:0000000000000000000000000000000000000000000000000000000000000000", "sha256:[BUILD_HASH]"] },
             { name = "build-dependency", specifier = "==1", hashes = ["sha256:[BUILD_HASH]"] },
         ]
         entrypoints = [
@@ -6878,11 +6897,30 @@ fn tool_install_lock_with_build_hashes() -> Result<()> {
         "#);
     });
 
-    // Reversing the declarations must change the hash that is checked.
+    // Reversing the declarations allows the same build dependency.
     fs_err::remove_file(project.child("backend-executed"))?;
-    constraints.write_str(&format!(
-        "build-dependency==1 --hash=sha256:{hash}\nbuild-dependency==1.0.0 --hash=sha256:{incorrect_hash}\n"
-    ))?;
+    constraints.write_str(&formatdoc! {"
+        build-dependency==1 --hash=sha256:{hash}
+        build-dependency==1.0.0 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000 --hash=sha256:{hash}
+    "})?;
+    uv_snapshot!(context.filters(), install(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ hash-tool==1.0.0 (from file://[TEMP_DIR]/project)
+    Installed 1 executable: hash-tool
+    ");
+    project
+        .child("backend-executed")
+        .assert(predicate::path::exists());
+    fs_err::remove_file(project.child("backend-executed"))?;
+
+    // The supplied hash is checked even when it isn't required.
+    constraints.write_str(indoc! {"
+        build-dependency==1.0.0 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000
+    "})?;
     uv_snapshot!(context.filters(), install().arg("--reinstall"), @"
     exit_code: 1 (failure)
     ----- stderr -----
@@ -6961,10 +6999,9 @@ fn tool_install_lock_with_build_hashes() -> Result<()> {
 
     // Unpinned hashes are ignored in verification mode, including when saved in a tool receipt.
     fs_err::remove_file(project.child("backend-executed"))?;
-    constraints.write_str(&format!(
-        "build-dependency>=1.0.0 --hash=sha256:{}\n",
-        "0".repeat(64)
-    ))?;
+    constraints.write_str(indoc! {"
+        build-dependency>=1.0.0 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000
+    "})?;
     install().arg("--reinstall").assert().success();
     project
         .child("backend-executed")

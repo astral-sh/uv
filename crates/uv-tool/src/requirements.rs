@@ -1,7 +1,7 @@
 //! Normalize tool inputs for resolution and receipt comparison.
 //!
 //! Each collection retains the declarations that affect its behavior: false overrides suppress
-//! dependencies, standalone pins permit yanked versions, and build hashes depend on input order.
+//! dependencies, standalone pins permit yanked versions, and build hashes restrict allowed artifacts.
 
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
@@ -134,7 +134,7 @@ impl Deref for NormalizedExcludes {
     }
 }
 
-/// Build constraints with hash-bearing declarations kept in their original order.
+/// Build constraints with equivalent hashless declarations combined and hashes retained.
 #[derive(Debug, Clone, Eq)]
 pub struct NormalizedBuildConstraints(Vec<NameRequirementSpecification>);
 
@@ -145,10 +145,10 @@ impl NormalizedBuildConstraints {
 }
 
 impl From<Vec<NameRequirementSpecification>> for NormalizedBuildConstraints {
-    /// Normalize hashless registry declarations between hash-bearing declarations.
+    /// Normalize hashless registry declarations and sort hash-bearing declarations.
     ///
-    /// Later hashes for the same registry version take precedence. URL fragments can also carry
-    /// hashes, so non-registry declarations retain their positions.
+    /// Hash-bearing declarations remain separate so hash validation can intersect their allowed
+    /// artifacts. URL fragments can also carry hashes, so only hashless registry entries combine.
     ///
     /// Bare constraints remain because hash validation checks for unpinned declarations.
     fn from(constraints: Vec<NameRequirementSpecification>) -> Self {
@@ -165,11 +165,6 @@ impl From<Vec<NameRequirementSpecification>> for NormalizedBuildConstraints {
                 unhashed.push(constraint.requirement);
                 continue;
             }
-            normalized.extend(
-                normalize(mem::take(&mut unhashed))
-                    .into_iter()
-                    .map(NameRequirementSpecification::from),
-            );
             if let RequirementSource::Registry { specifier, .. } =
                 &mut constraint.requirement.source
             {
@@ -185,6 +180,10 @@ impl From<Vec<NameRequirementSpecification>> for NormalizedBuildConstraints {
                 .into_iter()
                 .map(NameRequirementSpecification::from),
         );
+        normalized.sort_by(|left, right| {
+            compare_requirements(&left.requirement, &right.requirement)
+                .then_with(|| left.hashes.cmp(&right.hashes))
+        });
         normalized.dedup_by(|left, right| {
             left.hashes == right.hashes
                 && RequirementsKey::new(left.requirement.clone())
