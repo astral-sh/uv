@@ -249,7 +249,7 @@ impl CachedEnvironment {
         .await
     }
 
-    async fn from_resolution(
+    pub(crate) async fn from_resolution(
         resolution: &Resolution,
         hash_strategy: HashStrategy,
         build_constraints: Constraints,
@@ -378,7 +378,7 @@ impl CachedEnvironment {
     ///
     /// When caching, always use the base interpreter, rather than that of the virtual
     /// environment.
-    pub(super) fn base_interpreter(
+    pub(crate) fn base_interpreter(
         interpreter: &Interpreter,
         cache: &Cache,
     ) -> Result<Interpreter, uv_python::Error> {

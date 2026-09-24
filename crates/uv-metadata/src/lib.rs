@@ -154,7 +154,7 @@ pub fn read_archive_metadata(
 /// Find the `.dist-info` directory in an unzipped wheel.
 ///
 /// See: <https://github.com/PyO3/python-pkginfo-rs>
-fn find_flat_dist_info(
+pub fn find_flat_dist_info(
     filename: &WheelFilename,
     path: impl AsRef<Path>,
 ) -> Result<DistInfoStem<'static>, Error> {

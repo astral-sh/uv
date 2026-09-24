@@ -5853,6 +5853,7 @@ dependencies = [
  "uv-installer",
  "uv-lock",
  "uv-logging",
+ "uv-metadata",
  "uv-normalize",
  "uv-pep440",
  "uv-pep508",

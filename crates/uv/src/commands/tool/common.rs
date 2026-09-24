@@ -731,6 +731,7 @@ pub(crate) async fn refine_interpreter(
 ///
 /// Adds a receipt for the tool.
 pub(crate) fn finalize_tool_install(
+    locked: bool,
     environment: &PythonEnvironment,
     name: &PackageName,
     entrypoints: &[PackageName],
@@ -942,7 +943,7 @@ pub(crate) fn finalize_tool_install(
         options.clone(),
     );
     ToolLock::write(&installed_tools.tool_dir(name), lock)?;
-    installed_tools.add_tool_receipt(name, tool)?;
+    installed_tools.add_tool_receipt(name, tool.with_locked(locked))?;
 
     warn_out_of_path(&executable_directory);
 

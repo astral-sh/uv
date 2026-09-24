@@ -16,7 +16,9 @@ use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
-use uv_configuration::{Concurrency, Constraints, DependencyMode, GitLfsSetting, TargetTriple};
+use uv_configuration::{
+    Concurrency, Constraints, DependencyMode, GitLfsSetting, HashCheckingMode, TargetTriple,
+};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::InstalledDist;
 use uv_distribution_types::{
@@ -38,6 +40,7 @@ use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_shell::WindowsRunnable;
 use uv_static::EnvVars;
 use uv_tool::{InstalledTools, entrypoint_paths};
+use uv_types::HashStrategy;
 use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
 
@@ -55,7 +58,7 @@ use crate::commands::project::{
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::{ToolPython, matching_packages, refine_interpreter};
-use crate::commands::tool::{Target, ToolRequest};
+use crate::commands::tool::{Target, ToolLockMode, ToolRequest};
 use crate::commands::{UvError, project::environment::CachedEnvironment, read_env_files};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -143,6 +146,7 @@ fn find_verbose_flag(args: &[std::ffi::OsString]) -> Option<&str> {
 /// Run a command.
 #[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn run(
+    lock_mode: ToolLockMode,
     command: Option<ExternalCommand>,
     from: Option<String>,
     with: &[RequirementsSource],
@@ -192,6 +196,8 @@ pub(crate) async fn run(
             Err(_) => true,
         }
     }
+
+    super::locked::check_preview(lock_mode.is_locked(), preview)?;
 
     if settings.resolver.torch_backend.is_some() {
         warn_user_once!(
@@ -294,6 +300,11 @@ pub(crate) async fn run(
     }
 
     let request = ToolRequest::parse(target, from.as_deref())?;
+    if lock_mode.is_locked()
+        && let ToolRequest::Python { .. } = request
+    {
+        bail!("`--locked` requires a tool package with a bundled lock, not a Python interpreter");
+    }
 
     // If the user passed, e.g., `ruff@latest`, refresh the cache.
     let cache = if request.is_latest() {
@@ -304,6 +315,7 @@ pub(crate) async fn run(
 
     // Get or create a compatible environment in which to execute the tool.
     let result = Box::pin(get_or_create_environment(
+        lock_mode,
         &request,
         with,
         constraints,
@@ -736,6 +748,7 @@ impl std::fmt::Display for ToolRequirement {
 /// If the target tool is already installed in a compatible environment, returns that
 /// [`PythonEnvironment`]. Otherwise, gets or creates a [`CachedEnvironment`].
 async fn get_or_create_environment(
+    lock_mode: ToolLockMode,
     request: &ToolRequest<'_>,
     with: &[RequirementsSource],
     constraints: &[RequirementsSource],
@@ -759,6 +772,7 @@ async fn get_or_create_environment(
     printer: Printer,
     preview: Preview,
 ) -> Result<(ToolRequirement, PythonEnvironment), ProjectError> {
+    let locked = lock_mode.is_locked();
     let reporter = PythonDownloadReporter::single(printer);
 
     // Initialize any shared state.
@@ -1077,7 +1091,7 @@ async fn get_or_create_environment(
     .await?;
 
     // Check if the tool is already installed in a compatible environment.
-    if !isolated && !request.is_latest() {
+    if !locked && !isolated && !request.is_latest() {
         let installed_tools = InstalledTools::from_settings()?.init()?;
         let _lock = installed_tools.lock().await?;
 
@@ -1153,7 +1167,7 @@ async fn get_or_create_environment(
     }
 
     // Create a `RequirementsSpecification` from the resolved requirements, to avoid re-resolving.
-    let spec = EnvironmentSpecification::from(RequirementsSpecification {
+    let spec = RequirementsSpecification {
         requirements: requirements
             .into_iter()
             .map(UnresolvedRequirementSpecification::from)
@@ -1168,7 +1182,47 @@ async fn get_or_create_environment(
             .map(UnresolvedRequirementSpecification::from)
             .collect(),
         ..spec
-    });
+    };
+    if locked {
+        let interpreter = CachedEnvironment::base_interpreter(&interpreter, cache)?;
+        let resolution = super::locked::resolve(
+            spec,
+            &interpreter,
+            python_platform.as_ref(),
+            &build_constraints,
+            &settings.resolver,
+            client_builder,
+            &state,
+            concurrency,
+            cache,
+            workspace_cache,
+            printer,
+            preview,
+        )
+        .await?;
+        let environment = CachedEnvironment::from_resolution(
+            &resolution,
+            HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?,
+            build_constraints,
+            &interpreter,
+            settings,
+            client_builder,
+            &state,
+            if show_resolution {
+                Box::new(DefaultInstallLogger)
+            } else {
+                Box::new(SummaryInstallLogger)
+            },
+            installer_metadata,
+            concurrency,
+            cache,
+            printer,
+            preview,
+        )
+        .await?;
+        return Ok((from, environment.into()));
+    }
+    let spec = EnvironmentSpecification::from(spec);
 
     // TODO(zanieb): When implementing project-level tools, discover the project and check if it has the tool.
     // TODO(zanieb): Determine if we should layer on top of the project environment if it is present.
