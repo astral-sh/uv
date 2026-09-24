@@ -39,6 +39,7 @@ pub enum DisplaySafeUrlError {
 ///
 /// To serialize a URL, choose either [`PersistSafeUrl`] or
 /// [`CredentialPersistingUrl`] according to the required persistence policy.
+/// Deserialization applies the same ambiguity checks as [`DisplaySafeUrl::parse`].
 ///
 /// ```compile_fail
 /// use uv_redacted::DisplaySafeUrl;
@@ -74,7 +75,7 @@ pub enum DisplaySafeUrlError {
 /// assert_eq!(url.username(), "");
 /// assert_eq!(url.password(), None);
 /// ```
-#[derive(Clone, Eq, PartialEq, PartialOrd, Ord, Hash, Deserialize, RefCast)]
+#[derive(Clone, Eq, PartialEq, PartialOrd, Ord, Hash, RefCast)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "schemars", schemars(transparent))]
 #[repr(transparent)]
@@ -170,6 +171,14 @@ impl DisplaySafeUrl {
     /// introduce an ambiguous URL, such as URLs being read from a request.
     pub fn from_url(url: Url) -> Self {
         Self(url)
+    }
+
+    /// Deserialize a URL without the ambiguity checks applied to human input.
+    pub fn deserialize_from_url<'de, D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Url::deserialize(deserializer).map(Self::from_url)
     }
 
     /// Cast a `&Url` to a `&DisplaySafeUrl` using ref-cast.
@@ -313,6 +322,16 @@ impl FromStr for DisplaySafeUrl {
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         Self::parse(input)
+    }
+}
+
+impl<'de> Deserialize<'de> for DisplaySafeUrl {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let input = String::deserialize(deserializer)?;
+        Self::parse(&input).map_err(serde::de::Error::custom)
     }
 }
 
@@ -739,6 +758,32 @@ mod tests {
                 DisplaySafeUrlError::AmbiguousAuthority("https:***".to_owned()),
             );
         }
+    }
+
+    #[test]
+    fn deserialize_human_input() -> Result<(), Box<dyn std::error::Error>> {
+        for input in [
+            "https://user:password@example.com/simple?sig=signature",
+            "https://user%2Fname:password@example.com/simple",
+            "https://user:password@example.com/path:with@revision",
+        ] {
+            let deserializer =
+                serde::de::value::StrDeserializer::<serde::de::value::Error>::new(input);
+            assert_eq!(
+                DisplaySafeUrl::deserialize(deserializer)?,
+                DisplaySafeUrl::parse(input)?
+            );
+        }
+
+        let input = "https://user/name:password@domain/a/b/c?sig=sign@ature";
+        let deserializer = serde::de::value::StrDeserializer::<serde::de::value::Error>::new(input);
+        assert_eq!(
+            DisplaySafeUrl::deserialize(deserializer)
+                .expect_err("ambiguous URL")
+                .to_string(),
+            "ambiguous user/pass authority in URL (not percent-encoded?): https:***",
+        );
+        Ok(())
     }
 
     #[test]
