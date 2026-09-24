@@ -42,7 +42,7 @@ use windows::Win32::Foundation::{APPMODEL_ERROR_NO_PACKAGE, ERROR_CANT_ACCESS_FI
 
 /// A Python executable and its associated platform markers.
 #[expect(clippy::struct_excessive_bools)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Interpreter {
     platform: Platform,
     markers: Box<MarkerEnvironment>,
