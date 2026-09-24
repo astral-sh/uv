@@ -123,6 +123,70 @@ fn export_lock_configuration() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn export_lock_artifacts() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("src/locked_tool/__init__.py")
+        .touch()?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "locked-tool"
+        version = "1.0.0"
+        dependencies = ["dependency"]
+        [build-system]
+        requires = ["uv_build>=0.5.15,<2"]
+        build-backend = "uv_build"
+        [tool.uv.build-backend]
+        export-lock = true
+    "#})?;
+    let lock = indoc! {r#"
+        version = 1
+        requires-python = ">=3.12"
+        [[package]]
+        name = "locked-tool"
+        version = "1.0.0"
+        source = { editable = "." }
+        dependencies = [{ name = "dependency" }]
+        [[package]]
+        name = "dependency"
+        version = "1.0.0"
+    "#};
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&formatdoc! {r#"
+        {lock}
+        source = {{ registry = "https://example.com/simple" }}
+        wheels = [{{ url = "https://example.com/dependency-1.0.0-py3-none-any.whl" }}]
+    "#})?;
+    uv_snapshot!(context.filters(), context.build_backend()
+        .args(["--preview-features", "locked-tools", "build-wheel"])
+        .arg(context.temp_dir.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Cannot export a lock with missing artifact hashes; regenerate `uv.lock` with artifact hashes before building
+    ");
+
+    context.temp_dir.child("uv.lock").write_str(&formatdoc! {r#"
+        {lock}
+        source = {{ path = "../wheels/dependency-1.0.0-py3-none-any.whl" }}
+        wheels = [{{ filename = "dependency-1.0.0-py3-none-any.whl", hash = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" }}]
+    "#})?;
+    uv_snapshot!(context.filters(), context.build_backend()
+        .args(["--preview-features", "locked-tools", "build-wheel"])
+        .arg(context.temp_dir.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Cannot export a lock with relative dependency paths; use remote sources or absolute paths before building
+    ");
+    Ok(())
+}
+
 fn unpack_tar_gz(source_dist_path: &Path, target: &Path) -> Result<()> {
     let sdist_reader = BufReader::new(File::open(source_dist_path)?);
     let source_dist = TarArchive::new(AllowStdIo::new(GzDecoder::new(sdist_reader)).compat());

@@ -1071,6 +1071,31 @@ impl<'lock> PylockToml {
         })
     }
 
+    /// Returns `true` if any source location is relative to the lockfile's directory.
+    pub fn has_relative_paths(&self) -> bool {
+        self.packages.iter().any(|package| {
+            [
+                package.directory.as_ref().map(|directory| &directory.path),
+                package.vcs.as_ref().and_then(|vcs| vcs.path.as_ref()),
+                package
+                    .archive
+                    .as_ref()
+                    .and_then(|archive| archive.path.as_ref()),
+                package.sdist.as_ref().and_then(|sdist| sdist.path.as_ref()),
+            ]
+            .into_iter()
+            .flatten()
+            .chain(
+                package
+                    .wheels
+                    .iter()
+                    .flatten()
+                    .filter_map(|wheel| wheel.path.as_ref()),
+            )
+            .any(|path| path.as_ref().is_relative())
+        })
+    }
+
     /// Return hash destinations and source URLs for distribution files without hashes.
     ///
     /// Relative paths are resolved against `install_path`.

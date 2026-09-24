@@ -79,6 +79,18 @@ pub(crate) fn export_lock(root: &Path, pyproject: &PyProjectToml) -> Result<Opti
         None,
         &install_options,
     )?;
+    if pylock.has_missing_hashes() {
+        return Err(Error::InvalidBuildLock(
+            "Cannot export a lock with missing artifact hashes; regenerate `uv.lock` with artifact hashes before building"
+                .to_string(),
+        ));
+    }
+    if pylock.has_relative_paths() {
+        return Err(Error::InvalidBuildLock(
+            "Cannot export a lock with relative dependency paths; use remote sources or absolute paths before building"
+                .to_string(),
+        ));
+    }
     Ok(Some(pylock.to_toml()?))
 }
 

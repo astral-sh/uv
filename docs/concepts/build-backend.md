@@ -76,7 +76,13 @@ export-lock = true
 
 Set `export-lock = false` to disable export. The `UV_BUILD_BACKEND_EXPORT_LOCK` environment variable
 overrides this setting. Explicitly enabling export requires the preview feature and an existing
-lockfile. Builds do not create or update the lockfile; run `uv lock` before building.
+lockfile. Builds do not create or update the lockfile, or check it against changed dependency
+declarations. Run `uv lock` after changing dependencies and before building.
+
+Export requires hashes for all dependency artifacts and rejects relative dependency paths, whose
+base would change inside the wheel. Private indexes, remote URLs, Git sources, and absolute local
+paths can be included with explicit export enabled. Absolute paths remain specific to the build
+machine.
 
 For other build frontends, enable the preview feature with `UV_PREVIEW_FEATURES=locked-tools`.
 
