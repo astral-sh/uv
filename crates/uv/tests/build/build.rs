@@ -6,7 +6,7 @@ use assert_fs::prelude::*;
 use async_zip::base::read::mem::ZipFileReader;
 use futures::executor::block_on;
 use indoc::{formatdoc, indoc};
-use insta::{allow_duplicates, assert_snapshot};
+use insta::assert_snapshot;
 use predicates::prelude::predicate;
 use sha2::{Digest, Sha256};
 use std::env::current_dir;
@@ -156,85 +156,149 @@ fn build_basic() -> Result<()> {
     Ok(())
 }
 
-/// Global lazy imports are opt-in and apply only to supported build interpreters.
+/// Global lazy imports are opt-in on supported build interpreters.
 #[test]
 fn build_lazy_imports() -> Result<()> {
-    for (python, expected) in [("3.12", "eager"), ("3.15", "lazy")] {
-        let context = uv_test::test_context!(python);
-        let project = context.temp_dir.child("project");
-        project.child("pyproject.toml").write_str(indoc! {r#"
-            [project]
-            name = "project"
-            version = "0.1.0"
+    let context = uv_test::test_context!("3.15");
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
 
-            [build-system]
-            requires = []
-            build-backend = "backend"
-            backend-path = ["."]
-        "#})?;
-        project.child("unused_module.py").write_str("VALUE = 1\n")?;
-        project.child("backend.py").write_str(indoc! {r#"
-            import sys
-            import unused_module
+        [build-system]
+        requires = []
+        build-backend = "backend"
+        backend-path = ["."]
+    "#})?;
+    project.child("unused_module.py").write_str("VALUE = 1\n")?;
+    project.child("backend.py").write_str(indoc! {r#"
+        import sys
+        import unused_module
 
-            def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-                import pathlib
-                import zipfile
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            import pathlib
+            import zipfile
 
-                pathlib.Path("mode").write_text(
-                    "eager" if "unused_module" in sys.modules else "lazy"
-                )
-                name = "project-0.1.0-py3-none-any.whl"
-                with zipfile.ZipFile(pathlib.Path(wheel_directory) / name, "w") as wheel:
-                    wheel.writestr("project-0.1.0.dist-info/METADATA", "Metadata-Version: 2.3\nName: project\nVersion: 0.1.0\n")
-                    wheel.writestr("project-0.1.0.dist-info/WHEEL", "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n")
-                    wheel.writestr("project-0.1.0.dist-info/RECORD", "")
-                return name
-        "#})?;
+            pathlib.Path("mode").write_text(
+                "eager" if "unused_module" in sys.modules else "lazy"
+            )
+            name = "project-0.1.0-py3-none-any.whl"
+            with zipfile.ZipFile(pathlib.Path(wheel_directory) / name, "w") as wheel:
+                wheel.writestr("project-0.1.0.dist-info/METADATA", "Metadata-Version: 2.3\nName: project\nVersion: 0.1.0\n")
+                wheel.writestr("project-0.1.0.dist-info/WHEEL", "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n")
+                wheel.writestr("project-0.1.0.dist-info/RECORD", "")
+            return name
+    "#})?;
 
-        allow_duplicates! {
-            uv_snapshot!(context.filters(), context.build().arg("--wheel").arg("project").env("PYTHON_LAZY_IMPORTS", "normal"), @"
-            exit_code: 0 (success)
-            ----- stderr -----
-            Building wheel...
-            Successfully built project/dist/project-0.1.0-py3-none-any.whl
-            ");
-        }
-        project.child("mode").assert("eager");
+    uv_snapshot!(context.filters(), context.build().arg("--wheel").arg("project").env("PYTHON_LAZY_IMPORTS", "normal"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building wheel...
+    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    ");
+    project.child("mode").assert("eager");
 
-        allow_duplicates! {
-            uv_snapshot!(context.filters(), context.build().arg("--wheel").arg("project").arg("--preview-features").arg("build-lazy-imports").env("PYTHON_LAZY_IMPORTS", "normal"), @"
-            exit_code: 0 (success)
-            ----- stderr -----
-            Building wheel...
-            Successfully built project/dist/project-0.1.0-py3-none-any.whl
-            ");
-        }
-        project.child("mode").assert(expected);
+    uv_snapshot!(context.filters(), context.build().arg("--wheel").arg("project").arg("--preview-features").arg("build-lazy-imports").env("PYTHON_LAZY_IMPORTS", "normal"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building wheel...
+    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    ");
+    project.child("mode").assert("lazy");
 
-        context.temp_dir.child("uv.toml").write_str(indoc! {r#"
-            preview-features = ["build-lazy-imports"]
-        "#})?;
-        allow_duplicates! {
-            uv_snapshot!(context.filters(), context.build().arg("--wheel").arg("project").env("PYTHON_LAZY_IMPORTS", "normal"), @"
-            exit_code: 0 (success)
-            ----- stderr -----
-            Building wheel...
-            Successfully built project/dist/project-0.1.0-py3-none-any.whl
-            ");
-        }
-        project.child("mode").assert(expected);
+    context.temp_dir.child("uv.toml").write_str(indoc! {r#"
+        preview-features = ["build-lazy-imports"]
+    "#})?;
+    uv_snapshot!(context.filters(), context.build().arg("--wheel").arg("project").env("PYTHON_LAZY_IMPORTS", "normal"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building wheel...
+    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    ");
+    project.child("mode").assert("lazy");
 
-        allow_duplicates! {
-            uv_snapshot!(context.filters(), context.build().arg("--wheel").arg("project").arg("--no-preview").env("PYTHON_LAZY_IMPORTS", "normal"), @"
-            exit_code: 0 (success)
-            ----- stderr -----
-            Building wheel...
-            Successfully built project/dist/project-0.1.0-py3-none-any.whl
-            ");
-        }
-        project.child("mode").assert("eager");
-    }
+    uv_snapshot!(context.filters(), context.build().arg("--wheel").arg("project").arg("--no-preview").env("PYTHON_LAZY_IMPORTS", "normal"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building wheel...
+    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    ");
+    project.child("mode").assert("eager");
+
+    Ok(())
+}
+
+/// Global lazy imports remain disabled on unsupported build interpreters.
+#[test]
+fn build_lazy_imports_unsupported_python() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+
+        [build-system]
+        requires = []
+        build-backend = "backend"
+        backend-path = ["."]
+    "#})?;
+    project.child("unused_module.py").write_str("VALUE = 1\n")?;
+    project.child("backend.py").write_str(indoc! {r#"
+        import sys
+        import unused_module
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            import pathlib
+            import zipfile
+
+            pathlib.Path("mode").write_text(
+                "eager" if "unused_module" in sys.modules else "lazy"
+            )
+            name = "project-0.1.0-py3-none-any.whl"
+            with zipfile.ZipFile(pathlib.Path(wheel_directory) / name, "w") as wheel:
+                wheel.writestr("project-0.1.0.dist-info/METADATA", "Metadata-Version: 2.3\nName: project\nVersion: 0.1.0\n")
+                wheel.writestr("project-0.1.0.dist-info/WHEEL", "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n")
+                wheel.writestr("project-0.1.0.dist-info/RECORD", "")
+            return name
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.build().arg("--wheel").arg("project").env("PYTHON_LAZY_IMPORTS", "normal"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building wheel...
+    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    ");
+    project.child("mode").assert("eager");
+
+    uv_snapshot!(context.filters(), context.build().arg("--wheel").arg("project").arg("--preview-features").arg("build-lazy-imports").env("PYTHON_LAZY_IMPORTS", "normal"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building wheel...
+    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    ");
+    project.child("mode").assert("eager");
+
+    context.temp_dir.child("uv.toml").write_str(indoc! {r#"
+        preview-features = ["build-lazy-imports"]
+    "#})?;
+    uv_snapshot!(context.filters(), context.build().arg("--wheel").arg("project").env("PYTHON_LAZY_IMPORTS", "normal"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building wheel...
+    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    ");
+    project.child("mode").assert("eager");
+
+    uv_snapshot!(context.filters(), context.build().arg("--wheel").arg("project").arg("--no-preview").env("PYTHON_LAZY_IMPORTS", "normal"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Building wheel...
+    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    ");
+    project.child("mode").assert("eager");
+
     Ok(())
 }
 
