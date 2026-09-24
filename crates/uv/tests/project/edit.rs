@@ -10721,7 +10721,7 @@ async fn add_index_credentials() -> Result<()> {
     "#})?;
 
     // Provide credentials for the index via the environment variable.
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").env(EnvVars::UV_DEFAULT_INDEX, proxy.authenticated_url("public", "heron", "/basic-auth/simple")), @"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").env(EnvVars::UV_DEFAULT_INDEX, proxy.authenticated_url("public", "heron", "/basic-auth/simple?keep=%2f&Si%67=secret&keep=a+b")), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -10746,7 +10746,7 @@ async fn add_index_credentials() -> Result<()> {
         ]
 
         [[tool.uv.index]]
-        url = "http://[LOCALHOST]/basic-auth/simple"
+        url = "http://[LOCALHOST]/basic-auth/simple?keep=%2f&keep=a+b"
         default = true
         "#
         );
@@ -10769,7 +10769,7 @@ async fn add_index_credentials() -> Result<()> {
         [[package]]
         name = "iniconfig"
         version = "2.0.0"
-        source = { registry = "http://[LOCALHOST]/basic-auth/simple" }
+        source = { registry = "http://[LOCALHOST]/basic-auth/simple?keep=%2f&keep=a+b" }
         sdist = { url = "http://[LOCALHOST]/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
             { url = "http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
@@ -10788,6 +10788,14 @@ async fn add_index_credentials() -> Result<()> {
         "#
         );
     });
+
+    // A credentialed index must still match its persisted reference.
+    uv_snapshot!(context.filters(), context.sync().arg("--locked").env(EnvVars::UV_DEFAULT_INDEX, proxy.authenticated_url("public", "heron", "/basic-auth/simple?keep=%2f&Si%67=rotated&keep=a+b")), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Checked 1 package in [TIME]
+    ");
 
     Ok(())
 }

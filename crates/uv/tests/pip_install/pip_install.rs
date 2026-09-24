@@ -11830,6 +11830,25 @@ fn direct_url_json_query() -> Result<()> {
     Checked 1 package in [TIME]
     ");
 
+    // Ordinary query parameters are part of the source identity.
+    requirements_txt.write_str(
+        &fs_err::read_to_string(requirements_txt.path())?
+            .replace("st=2026-09-15T16:34:14Z", "st=2026-09-16T16:34:14Z"),
+    )?;
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--dry-run"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Would download 1 package
+    Would uninstall 1 package
+    Would install 1 package
+     - six==1.17.0 (from https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl?st=2026-09-15T16%3A34%3A14Z&sig=****)
+     + six @ https://username:****@files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl?st=2026-09-16T16%3A34%3A14Z&sig=****
+    ");
+
     Ok(())
 }
 

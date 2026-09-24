@@ -1,11 +1,15 @@
 use ref_cast::RefCast;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::borrow::Cow;
 use std::fmt::{Debug, Display};
 use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 use thiserror::Error;
 use url::Url;
+
+pub use persistence::{UrlWithCredentials, UrlWithoutSensitiveParts, UrlWithoutUserInfo};
+
+mod persistence;
 
 const SENSITIVE_QUERY_PARAMETERS: &[&str] = &[
     "sig",
@@ -33,6 +37,11 @@ pub enum DisplaySafeUrlError {
 /// secrets by default when the URL is displayed or logged. This helps prevent accidental
 /// exposure of sensitive information in logs and debug output.
 ///
+/// Persistence requires an explicit policy: use [`UrlWithCredentials`], [`UrlWithoutUserInfo`],
+/// or [`UrlWithoutSensitiveParts`]. Display output is unsuitable for persistence because it
+/// replaces sensitive values with placeholders. Internal caches can use [`Self::serialize_internal`]
+/// for lossless encoding.
+///
 /// # Examples
 ///
 /// ```
@@ -56,11 +65,11 @@ pub enum DisplaySafeUrlError {
 /// assert_eq!(url.password(), Some("new_password"));
 ///
 /// // It is also possible to remove the credentials entirely
-/// url.remove_credentials();
+/// url.remove_userinfo();
 /// assert_eq!(url.username(), "");
 /// assert_eq!(url.password(), None);
 /// ```
-#[derive(Clone, Eq, PartialEq, PartialOrd, Ord, Hash, Serialize, Deserialize, RefCast)]
+#[derive(Clone, Eq, PartialEq, PartialOrd, Ord, Hash, Deserialize, RefCast)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "schemars", schemars(transparent))]
 #[repr(transparent)]
@@ -194,10 +203,11 @@ impl DisplaySafeUrl {
         Ok(Self(Url::from_file_path(path)?))
     }
 
-    /// Remove the credentials from a URL, allowing the generic `git` username (without a password)
+    /// Remove userinfo from a URL, allowing the generic `git` username (without a password)
     /// in SSH URLs, as in, `ssh://git@github.com/...`.
+    /// Query parameters, including credentials, are retained.
     #[inline]
-    pub fn remove_credentials(&mut self) {
+    pub fn remove_userinfo(&mut self) {
         // For URLs that use the `git` convention (i.e., `ssh://git@github.com/...`), avoid dropping the
         // username.
         if is_ssh_git_username(&self.0) {
@@ -207,8 +217,8 @@ impl DisplaySafeUrl {
         let _ = self.0.set_password(None);
     }
 
-    /// Returns the URL with any credentials removed.
-    pub fn without_credentials(&self) -> Cow<'_, Url> {
+    /// Return the URL without sensitive userinfo, retaining all query parameters.
+    pub fn without_userinfo(&self) -> Cow<'_, Url> {
         if self.0.password().is_none() && self.0.username() == "" {
             return Cow::Borrowed(&self.0);
         }
@@ -223,6 +233,32 @@ impl DisplaySafeUrl {
         let _ = url.set_username("");
         let _ = url.set_password(None);
         Cow::Owned(url)
+    }
+
+    /// Return the URL without sensitive userinfo or recognized credential query parameters.
+    ///
+    /// Other query parameters retain their encoding and order. The result may no longer be
+    /// usable for authentication; requests must use the original URL.
+    pub fn without_sensitive_parts(&self) -> Cow<'_, Url> {
+        let mut url = self.without_userinfo();
+        if self
+            .0
+            .query_pairs()
+            .any(|(key, _)| is_sensitive_query_parameter(&key))
+            && let Some(query) = self.0.query()
+        {
+            let query = query
+                .split('&')
+                .filter(|pair| {
+                    !url::form_urlencoded::parse(pair.as_bytes())
+                        .any(|(key, _)| is_sensitive_query_parameter(&key))
+                })
+                .collect::<Vec<_>>()
+                .join("&");
+            url.to_mut()
+                .set_query((!query.is_empty()).then_some(query.as_str()));
+        }
+        url
     }
 
     /// Returns [`Display`] implementation that doesn't mask credentials.
@@ -463,10 +499,10 @@ mod tests {
     }
 
     #[test]
-    fn remove_credentials() {
+    fn remove_userinfo() {
         let url_str = "https://user:pass@pypi-proxy.fly.dev/basic-auth/simple";
         let mut log_safe_url = DisplaySafeUrl::parse(url_str).unwrap();
-        log_safe_url.remove_credentials();
+        log_safe_url.remove_userinfo();
         assert_eq!(log_safe_url.username(), "");
         assert!(log_safe_url.password().is_none());
         assert_eq!(
@@ -479,14 +515,14 @@ mod tests {
     fn preserve_ssh_git_username_on_remove_credentials() {
         let ssh_str = "ssh://git@pypi-proxy.fly.dev/basic-auth/simple";
         let mut ssh_url = DisplaySafeUrl::parse(ssh_str).unwrap();
-        ssh_url.remove_credentials();
+        ssh_url.remove_userinfo();
         assert_eq!(ssh_url.username(), "git");
         assert!(ssh_url.password().is_none());
         assert_eq!(ssh_url.to_string(), ssh_str);
         // Test again for `git+ssh` scheme
         let git_ssh_str = "git+ssh://git@pypi-proxy.fly.dev/basic-auth/simple";
         let mut git_shh_url = DisplaySafeUrl::parse(git_ssh_str).unwrap();
-        git_shh_url.remove_credentials();
+        git_shh_url.remove_userinfo();
         assert_eq!(git_shh_url.username(), "git");
         assert!(git_shh_url.password().is_none());
         assert_eq!(git_shh_url.to_string(), git_ssh_str);

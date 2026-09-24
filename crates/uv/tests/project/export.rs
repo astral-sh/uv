@@ -5361,7 +5361,7 @@ async fn pep_751_https_credentials() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let proxy = crate::pypi_proxy::start().await;
 
-    let file_url = proxy.authenticated_url("public", "heron", "/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl");
+    let file_url = proxy.authenticated_url("public", "heron", "/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl?st=2026-09-15T16:34:14Z&sig=abc%2Bdef%3D&keep=%2f&keep=a+b");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(&formatdoc! {r#"
         [project]
@@ -5386,7 +5386,7 @@ async fn pep_751_https_credentials() -> Result<()> {
     [[packages]]
     name = "iniconfig"
     version = "2.0.0"
-    archive = { url = "http://public:heron@[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hashes = { sha256 = "b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" } }
+    archive = { url = "http://public:heron@[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl?st=2026-09-15T16:34:14Z&sig=abc%2Bdef%3D&keep=%2f&keep=a+b", hashes = { sha256 = "b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" } }
 
     ----- stderr -----
     Resolved 2 packages in [TIME]

@@ -13,7 +13,9 @@ use uv_pep440::VersionSpecifiers;
 use uv_pep508::{
     MarkerEnvironment, MarkerTree, RequirementOrigin, VerbatimUrl, VersionOrUrl, marker,
 };
-use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
+use uv_redacted::{
+    DisplaySafeUrl, DisplaySafeUrlError, UrlWithCredentials, UrlWithoutSensitiveParts,
+};
 
 use crate::{IndexMetadata, IndexUrl};
 
@@ -921,7 +923,7 @@ enum RequirementSourceWire {
     Git { git: String },
     /// Ex) `source = { url = "<https://example.org/foo-1.0.zip>" }`
     Direct {
-        url: DisplaySafeUrl,
+        url: UrlWithCredentials,
         subdirectory: Option<PortablePathBuf>,
     },
     /// Ex) `source = { path = "/home/ferris/iniconfig-2.0.0-py3-none-any.whl" }`
@@ -936,7 +938,7 @@ enum RequirementSourceWire {
     Registry {
         #[serde(skip_serializing_if = "VersionSpecifiers::is_empty", default)]
         specifier: VersionSpecifiers,
-        index: Option<DisplaySafeUrl>,
+        index: Option<UrlWithoutSensitiveParts>,
         conflict: Option<ConflictItem>,
     },
 }
@@ -949,10 +951,7 @@ impl From<RequirementSource> for RequirementSourceWire {
                 index,
                 conflict,
             } => {
-                let index = index.map(|index| index.url.into_url()).map(|mut index| {
-                    index.remove_credentials();
-                    index
-                });
+                let index = index.map(|index| index.url.into_url().into());
                 Self::Registry {
                     specifier,
                     index,
@@ -965,7 +964,7 @@ impl From<RequirementSource> for RequirementSourceWire {
                 ext: _,
                 url: _,
             } => Self::Direct {
-                url: location,
+                url: location.into(),
                 subdirectory: subdirectory.map(PortablePathBuf::from),
             },
             RequirementSource::GitDirectory {
@@ -976,7 +975,7 @@ impl From<RequirementSource> for RequirementSourceWire {
                 let mut url = git.url().clone();
 
                 // Remove the credentials.
-                url.remove_credentials();
+                url.remove_userinfo();
 
                 // Clear out any existing state.
                 url.set_fragment(None);
@@ -1032,7 +1031,7 @@ impl From<RequirementSource> for RequirementSourceWire {
                 let mut url = git.url().clone();
 
                 // Remove the credentials.
-                url.remove_credentials();
+                url.remove_userinfo();
 
                 // Clear out any existing state.
                 url.set_fragment(None);
@@ -1115,8 +1114,9 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 conflict,
             } => Ok(Self::Registry {
                 specifier,
-                index: index
-                    .map(|index| IndexMetadata::from(IndexUrl::from(VerbatimUrl::from_url(index)))),
+                index: index.map(|index| {
+                    IndexMetadata::from(IndexUrl::from(VerbatimUrl::from_url(index.into_url())))
+                }),
                 conflict,
             }),
             RequirementSourceWire::Git { git } => {
@@ -1149,7 +1149,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 repository.set_query(None);
 
                 // Remove the credentials.
-                repository.remove_credentials();
+                repository.remove_userinfo();
 
                 // Create a PEP 508-compatible URL.
                 let mut url = DisplaySafeUrl::parse(&format!("git+{repository}"))?;
@@ -1192,6 +1192,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 }
             }
             RequirementSourceWire::Direct { url, subdirectory } => {
+                let url = url.into_url();
                 let location = url.clone();
 
                 // Create a PEP 508-compatible URL.

@@ -1198,10 +1198,10 @@ pub(super) fn store_credentials_from_target(
     for source in target.sources() {
         match source {
             Source::Git { git, .. } => {
-                uv_git::store_credentials_from_url(git)?;
+                uv_git::store_credentials_from_url(git.as_url())?;
             }
             Source::Url { url, .. } => {
-                client_builder.store_credentials_from_url(url)?;
+                client_builder.store_credentials_from_url(url.as_url())?;
             }
             _ => {}
         }

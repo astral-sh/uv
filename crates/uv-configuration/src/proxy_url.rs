@@ -7,7 +7,7 @@ use reqwest::Proxy;
 use serde::{Deserialize, Deserializer, Serialize};
 use url::Url;
 
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::{DisplaySafeUrl, UrlWithoutSensitiveParts};
 
 /// A proxy URL with a supported scheme and a host.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -119,7 +119,7 @@ impl Serialize for ProxyUrl {
     where
         S: serde::ser::Serializer,
     {
-        serializer.serialize_str(self.as_url().as_str())
+        UrlWithoutSensitiveParts::ref_cast(self.as_url()).serialize(serializer)
     }
 }
 
