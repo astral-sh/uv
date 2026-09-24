@@ -21,6 +21,7 @@ permissions: {}
 
 env:
   ACTIONS_CACHE_MODE: none
+  CARGO_INCREMENTAL: 0
   UV_LOCKED: 1
 
 jobs:
