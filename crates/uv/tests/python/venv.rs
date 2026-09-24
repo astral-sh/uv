@@ -122,7 +122,7 @@ fn create_venv_caches_interpreter() -> Result<()> {
             .context("Fresh interpreter cache is locked")?;
         let queried = PythonEnvironment::from_root(root.path(), &fresh_cache)?;
         assert!(startup_marker.is_file());
-        assert_eq!(format!("{cached:?}"), format!("{queried:?}"));
+        assert_eq!(cached, queried);
     }
 
     Ok(())

@@ -21,10 +21,10 @@ use crate::{
 };
 
 /// A Python environment, consisting of a Python [`Interpreter`] and its associated paths.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct PythonEnvironment(Arc<PythonEnvironmentShared>);
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 struct PythonEnvironmentShared {
     root: PathBuf,
     interpreter: Interpreter,

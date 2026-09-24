@@ -524,7 +524,7 @@ fn workspace_metadata_script_sync_caches_interpreter() -> Result<()> {
     assert!(!startup_marker.exists());
     let queried = PythonEnvironment::from_root(root, &fresh_cache)?;
     assert!(startup_marker.is_file());
-    assert_eq!(format!("{cached:?}"), format!("{queried:?}"));
+    assert_eq!(cached, queried);
 
     Ok(())
 }
