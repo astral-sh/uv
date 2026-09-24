@@ -1,6 +1,6 @@
 pub use error::{ErrorTree, NoSolutionError, NoSolutionHeader, ResolveError};
 pub use exclusions::Exclusions;
-pub use flat_index::FlatIndex;
+pub use flat_index::{FlatDistributions, FlatIndex};
 pub use manifest::Manifest;
 pub use preferences::{Preference, PreferenceError, Preferences};
 pub use pubgrub::PubGrubHint;
