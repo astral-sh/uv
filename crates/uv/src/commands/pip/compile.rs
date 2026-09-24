@@ -59,6 +59,7 @@ use crate::commands::locked_requirements::{
 };
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::{operations, resolution_markers, resolution_tags};
+use crate::commands::pylock::generate_missing_hashes;
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, OutputWriter, UvError};
 use crate::printer::Printer;
@@ -638,8 +639,11 @@ pub(crate) async fn pip_compile(
         PipCompileFormat::RequirementsTxt => {
             if include_marker_expression {
                 if let Some(marker_env) = resolver_env.marker_environment() {
-                    let relevant_markers =
-                        resolution.marker_tree(top_level_index.distributions(), marker_env)?;
+                    let relevant_markers = uv_resolver::resolution_marker_tree(
+                        &resolution,
+                        top_level_index.distributions(),
+                        marker_env,
+                    )?;
                     if let Some(relevant_markers) = relevant_markers.contents() {
                         writeln!(
                             writer,
@@ -773,8 +777,7 @@ pub(crate) async fn pip_compile(
 
             // Registries don't always provide hashes, but `packages.*.hashes` is a required
             // key in PEP 751, so we have to download and hash files with missing hashes.
-            export
-                .generate_missing_hashes(&client, concurrency.downloads, install_path)
+            generate_missing_hashes(&mut export, &client, concurrency.downloads, install_path)
                 .await?;
 
             write!(writer, "{}", export.to_toml()?)?;

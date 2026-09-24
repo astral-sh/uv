@@ -23,7 +23,7 @@ use uv_distribution_types::{
 };
 use uv_git::ResolvedRepositoryReference;
 use uv_git_types::GitOid;
-use uv_lock::{Lock, Package, ResolverManifest, SatisfiesResult};
+use uv_lock::{Lock, Package, ResolverManifest, SatisfiesResult, WorkspaceMemberKind};
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::Version;
 use uv_preview::{Preview, PreviewFeature};
@@ -47,6 +47,8 @@ use uv_workspace::{
     DiscoveryOptions, Editability, VirtualProject, WorkspaceCache, WorkspaceMember,
 };
 
+use self::metadata::MetadataProvider;
+
 use crate::commands::locked_requirements::{LockedRequirements, read_lock_requirements};
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
 use crate::commands::project::lock_target::{LockTarget, find_lock_format_error};
@@ -59,6 +61,8 @@ use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{ExitStatus, ScriptPath, UvError, pip};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, LockedSource, ResolverSettings};
+
+mod metadata;
 
 /// The result of running a lock operation.
 #[derive(Debug, Clone)]
@@ -1413,9 +1417,21 @@ impl ValidatedLock {
         match lock
             .satisfies(
                 install_path,
-                packages,
+                &packages
+                    .iter()
+                    .map(|(name, member)| {
+                        let required = required_members.get(name);
+                        let kind = if !member.pyproject_toml().is_package(required.is_none()) {
+                            WorkspaceMemberKind::Virtual
+                        } else if required.copied().flatten().unwrap_or(true) {
+                            WorkspaceMemberKind::Editable
+                        } else {
+                            WorkspaceMemberKind::Directory
+                        };
+                        (name.clone(), kind)
+                    })
+                    .collect(),
                 members,
-                required_members,
                 requirements,
                 constraints,
                 overrides,
@@ -1427,9 +1443,11 @@ impl ValidatedLock {
                 interpreter.tags()?,
                 interpreter.markers(),
                 &options.build_options,
-                hasher,
-                index.distributions(),
-                database,
+                &MetadataProvider {
+                    hasher,
+                    index: index.distributions(),
+                    database,
+                },
                 preview.is_enabled(PreviewFeature::LockWithoutMetadata),
             )
             .await?

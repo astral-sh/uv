@@ -16,13 +16,9 @@ use crate::providers::{
     AzureEndpointProvider, GcsEndpointProvider, HuggingFaceProvider, S3EndpointProvider,
 };
 use crate::{
-    CredentialsCache, KeyringProvider,
+    AuthPolicy, CredentialsCache, Indexes, KeyringProvider, Realm,
     cache::FetchUrl,
-    credentials::{
-        Authentication, AuthenticationError, Credentials, CredentialsFromUrlError, Username,
-    },
-    index::{AuthPolicy, Indexes},
-    realm::Realm,
+    credentials::{Authentication, AuthenticationError, Credentials, CredentialsExt, Username},
 };
 use crate::{Index, TextCredentialStore};
 
@@ -32,12 +28,6 @@ static IS_DEPENDABOT: LazyLock<bool> =
 
 impl From<AuthenticationError> for Error {
     fn from(err: AuthenticationError) -> Self {
-        Self::middleware(err)
-    }
-}
-
-impl From<CredentialsFromUrlError> for Error {
-    fn from(err: CredentialsFromUrlError) -> Self {
         Self::middleware(err)
     }
 }
@@ -338,7 +328,9 @@ impl Middleware for AuthMiddleware {
         next: Next<'_>,
     ) -> reqwest_middleware::Result<Response> {
         // Check for credentials attached to the request already
-        let request_credentials = Credentials::from_request(&request)?.map(Authentication::from);
+        let request_credentials = Credentials::from_request(&request)
+            .map_err(Error::middleware)?
+            .map(Authentication::from);
 
         // In the middleware, existing credentials are already moved from the URL
         // to the headers so for display purposes we restore some information

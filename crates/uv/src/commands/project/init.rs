@@ -12,9 +12,7 @@ use tracing::{debug, trace, warn};
 use uv_cache::Cache;
 use uv_cli::AuthorFrom;
 use uv_client::BaseClientBuilder;
-use uv_configuration::{
-    DependencyGroupsWithDefaults, ProjectBuildBackend, VersionControlError, VersionControlSystem,
-};
+use uv_configuration::{DependencyGroupsWithDefaults, ProjectBuildBackend, VersionControlSystem};
 use uv_distribution_types::RequiresPython;
 use uv_fs::{CWD, Simplified};
 use uv_git::GIT;
@@ -36,6 +34,7 @@ use uv_workspace::{
 };
 
 use crate::commands::ExitStatus;
+use crate::commands::project::init_vcs::{VersionControlError, init_version_control};
 use crate::commands::project::{find_requires_python, init_script_python_requirement};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
@@ -1261,7 +1260,7 @@ fn init_vcs(path: &Path, vcs: Option<VersionControlSystem>) -> Result<()> {
     };
 
     // Attempt to initialize the VCS.
-    match vcs.init(path) {
+    match init_version_control(vcs, path) {
         Ok(()) => Ok(()),
         // If the VCS isn't installed, only raise an error if a VCS was explicitly specified.
         Err(err @ VersionControlError::GitNotInstalled) if implicit => {

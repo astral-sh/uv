@@ -78,7 +78,7 @@ impl Index {
 ///
 /// This rejects partial segment matches, so `/simple` matches `/simple/anyio` but not
 /// `/simpleevil`.
-pub(crate) fn is_path_prefix(prefix: &str, path: &str) -> bool {
+pub fn is_path_prefix(prefix: &str, path: &str) -> bool {
     if prefix == path {
         return true;
     }
@@ -112,12 +112,12 @@ impl Indexes {
     }
 
     /// Get the index for a URL if one exists.
-    pub(crate) fn index_for(&self, url: &Url) -> Option<&Index> {
+    pub fn index_for(&self, url: &Url) -> Option<&Index> {
         self.find_prefix_index(url)
     }
 
     /// Get the [`AuthPolicy`] for a URL.
-    pub(crate) fn auth_policy_for(&self, url: &Url) -> AuthPolicy {
+    pub fn auth_policy_for(&self, url: &Url) -> AuthPolicy {
         self.find_prefix_index(url)
             .map(|index| index.auth_policy)
             .unwrap_or(AuthPolicy::Auto)

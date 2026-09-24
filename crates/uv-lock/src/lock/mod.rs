@@ -9,7 +9,6 @@ use std::path::{Path, PathBuf};
 use std::slice;
 use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
-use uv_distribution_types::RequirementScope;
 
 use itertools::Itertools;
 use jiff::Timestamp;
@@ -23,29 +22,28 @@ use url::Url;
 use uv_cache_key::RepositoryUrl;
 use uv_configuration::{
     BuildOptions, Constraints, DependencyGroupsWithDefaults, ExcludeDependency, ExcludeNewer,
-    ExcludeNewerPackage, Excludes, ExtrasSpecificationWithDefaults, ForkStrategy, InstallTarget,
-    Override, Overrides, PackageOverride, Prerelease, PrereleaseMode, PrereleasePackage,
-    ResolutionMode, ScopedOverrideSourceError,
-};
-use uv_distribution::{
-    DistributionDatabase, FlatRequiresDist, Metadata as DistributionMetadata, RequiresDist,
+    ExcludeNewerPackage, Excludes, ExtrasSpecificationWithDefaults, ForkStrategy, HashStrategy,
+    InstallTarget, Override, Overrides, PackageOverride, Prerelease, PrereleaseMode,
+    PrereleasePackage, ResolutionMode, ScopedOverrideSourceError,
 };
 use uv_distribution_filename::{
     BuildTag, DistExtension, ExtensionError, SourceDistExtension, WheelFilename,
 };
 use uv_distribution_types::{
-    ArchiveHashPolicy, BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist,
-    DirectorySourceDist, Dist, ExcludeNewerOverride, ExcludeNewerSpan, ExcludeNewerValue,
-    FileLocation, FirstParty, GitDirectorySourceDist, GitPathBuiltDist, GitPathSourceDist,
-    HashValidation, Identifier, IndexLocations, IndexMetadata, IndexUrl, MetadataHashPolicy,
-    MinimumLibcVersion, Name, NameRequirementSpecification, PYPI_URL, PathBuiltDist,
-    PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource,
-    Requirement, RequirementSource, RequiresPython, ResolvedDist, SimplifiedMarkerTree,
+    BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
+    Dist, ExcludeNewerOverride, ExcludeNewerSpan, ExcludeNewerValue, FileLocation, FirstParty,
+    FlatRequiresDist, GitDirectorySourceDist, GitPathBuiltDist, GitPathSourceDist, HashValidation,
+    IndexLocations, IndexMetadata, IndexUrl, Metadata as DistributionMetadata, MinimumLibcVersion,
+    Name, NameRequirementSpecification, PYPI_URL, PathBuiltDist, PathSourceDist, RegistryBuiltDist,
+    RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Requirement, RequirementScope,
+    RequirementSource, RequiresDist, RequiresPython, ResolvedDist, SimplifiedMarkerTree,
     StaticMetadata, ToUrlError, UrlString, VersionId,
 };
 use uv_fs::{PortablePath, PortablePathBuf, Simplified, normalize_path, try_relative_to_if};
-use uv_git::{RepositoryReference, ResolvedRepositoryReference};
-use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
+use uv_git_types::{
+    GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError, RepositoryReference,
+    ResolvedRepositoryReference,
+};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::{
@@ -61,13 +59,12 @@ use uv_pypi_types::{
 };
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_resolver_types::{
-    AnnotatedDist, ConflictMarker, DistributionMetadataIndex, MetadataResponse,
-    ResolutionGraphNode, ResolverOutput, UniversalMarker,
+    AnnotatedDist, ConflictMarker, ResolutionGraphNode, ResolverOutput, UniversalMarker,
 };
 use uv_small_str::SmallString;
-use uv_types::{BuildContext, HashStrategy};
 use uv_warnings::warn_user_once;
-use uv_workspace::{Editability, WorkspaceMember};
+
+use crate::metadata::LockMetadataProvider;
 
 pub use crate::lock::deserialize::Error as CanonicalLockError;
 pub use crate::lock::export::RequirementsTxtExport;
@@ -3993,12 +3990,11 @@ impl Lock {
 
     /// Check whether the lock matches the project structure, requirements and configuration.
     #[instrument(skip_all)]
-    pub async fn satisfies<Context: BuildContext>(
+    pub async fn satisfies<Provider: LockMetadataProvider>(
         &self,
         root: &Path,
-        packages: &BTreeMap<PackageName, WorkspaceMember>,
+        packages: &BTreeMap<PackageName, WorkspaceMemberKind>,
         members: &[PackageName],
-        required_members: &BTreeMap<PackageName, Editability>,
         requirements: &[Requirement],
         constraints: &[Requirement],
         overrides: &[Override<Requirement>],
@@ -4010,9 +4006,7 @@ impl Lock {
         tags: &Tags,
         markers: &MarkerEnvironment,
         build_options: &BuildOptions,
-        hasher: &HashStrategy,
-        index: &DistributionMetadataIndex,
-        database: &DistributionDatabase<'_, Context>,
+        metadata_provider: &Provider,
         allow_missing_package_metadata: bool,
     ) -> Result<SatisfiesResult<'_>, LockError> {
         let allow_missing_package_metadata =
@@ -4038,13 +4032,11 @@ impl Lock {
         for (name, member) in packages {
             let source = self.find_by_name(name).ok().flatten();
 
-            // Determine whether the member was required by any other member.
-            let value = required_members.get(name);
-            let is_required_member = value.is_some();
-            let editability = value.copied().flatten();
-
-            // Verify that the member is virtual (or not).
-            let expected_virtual = !member.pyproject_toml().is_package(!is_required_member);
+            let (expected_virtual, expected_editable) = match member {
+                WorkspaceMemberKind::Virtual => (true, false),
+                WorkspaceMemberKind::Editable => (false, true),
+                WorkspaceMemberKind::Directory => (false, false),
+            };
             let actual_virtual =
                 source.map(|package| matches!(package.id.source, Source::Virtual(..)));
             if actual_virtual != Some(expected_virtual) {
@@ -4055,11 +4047,6 @@ impl Lock {
             }
 
             // Verify that the member is editable (or not).
-            let expected_editable = if expected_virtual {
-                false
-            } else {
-                editability.unwrap_or(true)
-            };
             let actual_editable =
                 source.map(|package| matches!(package.id.source, Source::Editable(..)));
             if actual_editable != Some(expected_editable) {
@@ -4280,9 +4267,7 @@ impl Lock {
                 tags,
                 markers,
                 build_options,
-                hasher,
-                index,
-                database,
+                metadata_provider,
                 &mut source_tree_metadata,
             ))
             .await?
@@ -4465,9 +4450,7 @@ impl Lock {
             // Validating a direct URL package requires retrieving metadata from the remote
             // artifact. In offline mode, preserve the metadata captured in the lockfile rather
             // than requiring that artifact to already be present in the cache.
-            if matches!(&package.id.source, Source::Direct(..))
-                && database.client().unmanaged.connectivity().is_offline()
-            {
+            if matches!(&package.id.source, Source::Direct(..)) && metadata_provider.is_offline() {
                 trace!(
                     "Skipping metadata validation for `{}` because its direct URL cannot be refreshed while offline",
                     package.id
@@ -4486,7 +4469,7 @@ impl Lock {
                         source_tree,
                         root,
                         package,
-                        database,
+                        metadata_provider,
                         &mut source_tree_metadata,
                     )
                     .await?
@@ -4553,9 +4536,7 @@ impl Lock {
                         tags,
                         markers,
                         build_options,
-                        hasher,
-                        index,
-                        database,
+                        metadata_provider,
                     )
                     .await?;
 
@@ -4626,7 +4607,7 @@ impl Lock {
                         source_tree,
                         root,
                         package,
-                        database,
+                        metadata_provider,
                         &mut source_tree_metadata,
                     )
                     .await?
@@ -4700,9 +4681,7 @@ impl Lock {
                         tags,
                         markers,
                         build_options,
-                        hasher,
-                        index,
-                        database,
+                        metadata_provider,
                     )
                     .await?;
 
@@ -4944,7 +4923,7 @@ impl Lock {
     }
 
     /// Extend package reachability through refreshed, source-authorized locked edges.
-    async fn extend_dependency_source_reachability<'lock, Context: BuildContext>(
+    async fn extend_dependency_source_reachability<'lock, Provider: LockMetadataProvider>(
         &'lock self,
         reachability: &mut DependencySourceReachability<'lock>,
         source_requirements: &BTreeSet<Requirement>,
@@ -4955,9 +4934,7 @@ impl Lock {
         tags: &Tags,
         markers: &MarkerEnvironment,
         build_options: &BuildOptions,
-        hasher: &HashStrategy,
-        index: &DistributionMetadataIndex,
-        database: &DistributionDatabase<'_, Context>,
+        metadata_provider: &Provider,
         source_tree_metadata: &mut FxHashMap<PackageId, Option<SourceTreeRequiresDist>>,
     ) -> Result<DependencySourceChanges<'lock>, LockError> {
         let mut changes = DependencySourceChanges::default();
@@ -4987,7 +4964,7 @@ impl Lock {
                     source_tree,
                     root,
                     package,
-                    database,
+                    metadata_provider,
                     source_tree_metadata,
                 )
                 .await?;
@@ -5007,9 +4984,7 @@ impl Lock {
                         tags,
                         markers,
                         build_options,
-                        hasher,
-                        index,
-                        database,
+                        metadata_provider,
                     )
                     .await?;
                     let metadata = SourceTreeRequiresDist {
@@ -5271,7 +5246,7 @@ impl Lock {
     }
 
     /// Collect reachable direct sources without trusting stale locked edges.
-    async fn collect_dependency_sources<Context: BuildContext>(
+    async fn collect_dependency_sources<Provider: LockMetadataProvider>(
         &self,
         mut source_requirements: BTreeSet<Requirement>,
         root_requirements: &[Cow<'_, Requirement>],
@@ -5282,9 +5257,7 @@ impl Lock {
         tags: &Tags,
         markers: &MarkerEnvironment,
         build_options: &BuildOptions,
-        hasher: &HashStrategy,
-        index: &DistributionMetadataIndex,
-        database: &DistributionDatabase<'_, Context>,
+        metadata_provider: &Provider,
         source_tree_metadata: &mut FxHashMap<PackageId, Option<SourceTreeRequiresDist>>,
     ) -> Result<DependencySources<'_>, LockError> {
         // Global URL overrides authorize sources and replace competing URL constraints.
@@ -5383,9 +5356,7 @@ impl Lock {
             tags,
             markers,
             build_options,
-            hasher,
-            index,
-            database,
+            metadata_provider,
             source_tree_metadata,
         )
         .await?;
@@ -5506,9 +5477,7 @@ impl Lock {
                         tags,
                         markers,
                         build_options,
-                        hasher,
-                        index,
-                        database,
+                        metadata_provider,
                         source_tree_metadata,
                     )
                     .await?;
@@ -5587,7 +5556,7 @@ impl Lock {
                     source_tree,
                     root,
                     package,
-                    database,
+                    metadata_provider,
                     source_tree_metadata,
                 )
                 .await?
@@ -5608,9 +5577,7 @@ impl Lock {
                     tags,
                     markers,
                     build_options,
-                    hasher,
-                    index,
-                    database,
+                    metadata_provider,
                 )
                 .await?;
                 (
@@ -5661,15 +5628,13 @@ impl Lock {
     }
 
     /// Read the current metadata for a locked package, reusing the resolver's in-memory cache.
-    async fn package_metadata<Context: BuildContext>(
+    async fn package_metadata<Provider: LockMetadataProvider>(
         package: &Package,
         root: &Path,
         tags: &Tags,
         markers: &MarkerEnvironment,
         build_options: &BuildOptions,
-        hasher: &HashStrategy,
-        index: &DistributionMetadataIndex,
-        database: &DistributionDatabase<'_, Context>,
+        metadata_provider: &Provider,
     ) -> Result<DistributionMetadata, LockError> {
         let HashedDist { dist, hashes } = package.to_dist(
             root,
@@ -5687,44 +5652,23 @@ impl Lock {
             }
             _ => None,
         };
-        let id = dist.distribution_id();
-        if let Some(archive) = index.get(&id).as_deref().and_then(|response| {
-            if let MetadataResponse::Found(archive, ..) = response {
-                Some(archive)
-            } else {
-                None
-            }
-        }) && locked_hashes.is_none_or(|validation| {
-            ArchiveHashPolicy::from(validation).matches(archive.hashes.as_slice())
-        }) {
-            return Ok(archive.metadata.clone());
-        }
-
-        let metadata_hashes = if let Some(validation) = locked_hashes {
-            MetadataHashPolicy {
-                collection: hasher.collection(),
-                validation,
-            }
-        } else {
-            hasher.metadata_policy(&dist)
-        };
-        let archive = database
-            .get_or_build_wheel_metadata(&dist, metadata_hashes)
+        metadata_provider
+            .metadata(&dist, locked_hashes)
             .await
-            .map_err(|err| LockErrorKind::Resolution {
-                id: package.id.clone(),
-                err,
-            })?;
-        let metadata = archive.metadata.clone();
-        index.done(id, Arc::new(MetadataResponse::Found(archive)));
-        Ok(metadata)
+            .map_err(|err| {
+                LockErrorKind::Resolution {
+                    id: package.id.clone(),
+                    err: Box::new(err),
+                }
+                .into()
+            })
     }
 
-    async fn source_tree_requires_dist<Context: BuildContext>(
+    async fn source_tree_requires_dist<Provider: LockMetadataProvider>(
         source_tree: &Path,
         root: &Path,
         package: &Package,
-        database: &DistributionDatabase<'_, Context>,
+        metadata_provider: &Provider,
     ) -> Result<Option<SourceTreeRequiresDist>, LockError> {
         let parent = root.join(source_tree);
         let path = parent.join("pyproject.toml");
@@ -5753,12 +5697,12 @@ impl Lock {
                         .into());
                     }
                 };
-                let metadata = database
+                let metadata = metadata_provider
                     .requires_dist(&parent, &pyproject_toml)
                     .await
                     .map_err(|err| LockErrorKind::Resolution {
                         id: package.id.clone(),
-                        err,
+                        err: Box::new(err),
                     })?;
                 Ok(metadata.map(|metadata| SourceTreeRequiresDist {
                     version,
@@ -5772,11 +5716,11 @@ impl Lock {
     }
 
     /// Read source-tree metadata once for each package during lock validation.
-    async fn source_tree_requires_dist_cached<Context: BuildContext>(
+    async fn source_tree_requires_dist_cached<Provider: LockMetadataProvider>(
         source_tree: &Path,
         root: &Path,
         package: &Package,
-        database: &DistributionDatabase<'_, Context>,
+        metadata_provider: &Provider,
         cache: &mut FxHashMap<PackageId, Option<SourceTreeRequiresDist>>,
     ) -> Result<Option<SourceTreeRequiresDist>, LockError> {
         if let Some(metadata) = cache.get(&package.id) {
@@ -5784,7 +5728,7 @@ impl Lock {
         }
 
         let metadata =
-            Self::source_tree_requires_dist(source_tree, root, package, database).await?;
+            Self::source_tree_requires_dist(source_tree, root, package, metadata_provider).await?;
         cache.insert(package.id.clone(), metadata.clone());
         Ok(metadata)
     }
@@ -10020,7 +9964,7 @@ enum LockErrorKind {
         id: PackageId,
         /// The inner error we forward.
         #[source]
-        err: uv_distribution::Error,
+        err: Box<dyn Error + Send + Sync>,
     },
     /// A package has inconsistent versions in a single entry
     // Using name instead of id since the version in the id is part of the conflict.
@@ -10438,9 +10382,17 @@ pub(crate) fn is_wheel_unreachable(
     )
 }
 
+/// The expected source kind of a workspace member in a lockfile.
+#[derive(Debug, Clone, Copy)]
+pub enum WorkspaceMemberKind {
+    Virtual,
+    Editable,
+    Directory,
+}
+
 #[cfg(test)]
 mod tests {
-    use uv_distribution_types::HashCollection;
+    use uv_distribution_types::{ArchiveHashPolicy, HashCollection};
     use uv_pep440::VersionSpecifiers;
     use uv_pep508::MarkerEnvironmentBuilder;
     use uv_warnings::anstream;

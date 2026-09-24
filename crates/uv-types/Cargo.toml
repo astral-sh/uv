@@ -25,15 +25,12 @@ uv-git = { workspace = true }
 uv-normalize = { workspace = true }
 uv-once-map = { workspace = true }
 uv-pep440 = { workspace = true }
-uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }
-uv-redacted = { workspace = true }
 uv-workspace = { workspace = true }
 
 anyhow = { workspace = true }
 papaya = { workspace = true }
 rustc-hash = { workspace = true }
-thiserror = { workspace = true }
 
 [features]
 default = []

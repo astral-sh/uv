@@ -8,6 +8,8 @@
 // for now. ---AG
 #![expect(clippy::redundant_closure_for_method_calls)]
 
+use crate::metadata::{lower_metadata, lower_requires_dist};
+
 use std::borrow::Cow;
 use std::ops::Bound;
 use std::path::Path;
@@ -1507,7 +1509,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let dynamic = match StaticMetadata::read(source, resource.install_path, None).await? {
             StaticMetadata::Some(metadata) => {
                 return Ok(ArchiveMetadata::from(
-                    Metadata::from_workspace(
+                    lower_metadata(
                         metadata,
                         resource.install_path,
                         None,
@@ -1563,7 +1565,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         metadata.into()
                     };
                     return Ok(ArchiveMetadata::from(
-                        Metadata::from_workspace(
+                        lower_metadata(
                             metadata,
                             resource.install_path,
                             None,
@@ -1615,7 +1617,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             };
 
             return Ok(ArchiveMetadata::from(
-                Metadata::from_workspace(
+                lower_metadata(
                     metadata,
                     resource.install_path,
                     None,
@@ -1682,7 +1684,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         };
 
         Ok(ArchiveMetadata::from(
-            Metadata::from_workspace(
+            lower_metadata(
                 metadata,
                 resource.install_path,
                 None,
@@ -1760,7 +1762,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         match uv_pypi_types::RequiresDist::from_pyproject_toml(pyproject_toml.clone()) {
             Ok(requires_dist) => {
                 debug!("Found static `requires-dist` for: {}", path.display());
-                let requires_dist = RequiresDist::from_project_maybe_workspace(
+                let requires_dist = lower_requires_dist(
                     requires_dist,
                     path,
                     None,
@@ -2371,7 +2373,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             match StaticMetadata::read(source, fetch.path(), resource.subdirectory).await? {
                 StaticMetadata::Some(metadata) => {
                     return Ok(ArchiveMetadata::from(
-                        Metadata::from_workspace(
+                        lower_metadata(
                             metadata,
                             &path,
                             Some(&git_member),
@@ -2409,7 +2411,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                             git_source: resource,
                         };
                         return Ok(ArchiveMetadata::from(
-                            Metadata::from_workspace(
+                            lower_metadata(
                                 metadata.into(),
                                 &path,
                                 Some(&git_member),
@@ -2466,7 +2468,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .map_err(Error::CacheWrite)?;
 
             return Ok(ArchiveMetadata::from(
-                Metadata::from_workspace(
+                lower_metadata(
                     metadata,
                     &path,
                     Some(&git_member),
@@ -2535,7 +2537,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheWrite)?;
 
         Ok(ArchiveMetadata::from(
-            Metadata::from_workspace(
+            lower_metadata(
                 metadata,
                 fetch.path(),
                 Some(&git_member),

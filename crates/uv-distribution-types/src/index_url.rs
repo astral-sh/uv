@@ -10,7 +10,7 @@ use itertools::Either;
 use rustc_hash::{FxHashMap, FxHashSet};
 use thiserror::Error;
 use url::{ParseError, Url};
-use uv_auth::RealmRef;
+use uv_auth_types::RealmRef;
 use uv_cache_key::CanonicalUrl;
 use uv_pep508::{Scheme, VerbatimUrl, VerbatimUrlError, split_scheme};
 use uv_pypi_types::HashAlgorithm;
@@ -519,7 +519,7 @@ impl<'a> IndexLocations {
     }
 }
 
-impl From<&IndexLocations> for uv_auth::Indexes {
+impl From<&IndexLocations> for uv_auth_types::Indexes {
     fn from(index_locations: &IndexLocations) -> Self {
         Self::from_indexes(index_locations.allowed_indexes().into_iter().map(|index| {
             let mut url = index.url().url().clone();
@@ -528,7 +528,7 @@ impl From<&IndexLocations> for uv_auth::Indexes {
             let mut root_url = index.url().root().unwrap_or_else(|| url.clone());
             root_url.set_username("").ok();
             root_url.set_password(None).ok();
-            uv_auth::Index {
+            uv_auth_types::Index {
                 url,
                 root_url,
                 auth_policy: index.authenticate,
@@ -801,7 +801,7 @@ mod tests {
                 origin: None,
                 format: IndexFormat::Simple,
                 publish_url: None,
-                authenticate: uv_auth::AuthPolicy::default(),
+                authenticate: uv_auth_types::AuthPolicy::default(),
                 ignore_error_codes: None,
                 hash_algorithm: None,
                 exclude_newer: None,
@@ -815,7 +815,7 @@ mod tests {
                 origin: None,
                 format: IndexFormat::Simple,
                 publish_url: None,
-                authenticate: uv_auth::AuthPolicy::default(),
+                authenticate: uv_auth_types::AuthPolicy::default(),
                 ignore_error_codes: None,
                 hash_algorithm: None,
                 exclude_newer: None,
@@ -855,7 +855,7 @@ mod tests {
             origin: None,
             format: IndexFormat::Simple,
             publish_url: None,
-            authenticate: uv_auth::AuthPolicy::default(),
+            authenticate: uv_auth_types::AuthPolicy::default(),
             ignore_error_codes: None,
             hash_algorithm: None,
             exclude_newer: None,
@@ -892,7 +892,7 @@ mod tests {
             origin: None,
             format: IndexFormat::Simple,
             publish_url: None,
-            authenticate: uv_auth::AuthPolicy::default(),
+            authenticate: uv_auth_types::AuthPolicy::default(),
             ignore_error_codes: None,
             hash_algorithm: None,
             exclude_newer: None,
@@ -924,7 +924,7 @@ mod tests {
             origin: None,
             format: IndexFormat::Simple,
             publish_url: None,
-            authenticate: uv_auth::AuthPolicy::default(),
+            authenticate: uv_auth_types::AuthPolicy::default(),
             ignore_error_codes: None,
             hash_algorithm: None,
             exclude_newer: None,

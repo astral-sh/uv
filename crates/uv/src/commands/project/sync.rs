@@ -56,6 +56,7 @@ use crate::commands::project::{
     ProjectError, ScriptEnvironment, UniversalState, detect_conflicts, script_extra_build_requires,
     script_specification, update_environment,
 };
+use crate::commands::reporters::python_report;
 use crate::commands::{ExitStatus, UvError};
 use crate::printer::Printer;
 use crate::settings::{
@@ -1417,7 +1418,7 @@ struct EnvironmentReport {
 impl From<&PythonEnvironment> for EnvironmentReport {
     fn from(env: &PythonEnvironment) -> Self {
         Self {
-            python: PythonReport::from(env.interpreter()),
+            python: python_report(env.interpreter()),
             path: env.root().into(),
         }
     }

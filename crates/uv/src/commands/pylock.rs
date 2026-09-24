@@ -4,13 +4,15 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
+use futures::{StreamExt, TryStreamExt};
 use tracing::info_span;
 
-use uv_client::BaseClientBuilder;
+use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{BuildOptions, HashCheckingMode, RequirementsInput, TargetTriple};
 use uv_distribution_types::Resolution;
 use uv_lock::PylockToml;
 use uv_normalize::{ExtraName, GroupName};
+use uv_pypi_types::Hashes;
 use uv_python::{Interpreter, PythonVersion};
 use uv_types::HashStrategy;
 
@@ -101,4 +103,29 @@ pub(crate) fn resolve_pylock_toml(
     };
 
     Ok((resolution, hasher))
+}
+
+/// Complete PEP 751's required hashes before exporting a lockfile.
+pub(crate) async fn generate_missing_hashes(
+    lock: &mut PylockToml,
+    client: &RegistryClient,
+    concurrency: usize,
+    install_path: &Path,
+) -> anyhow::Result<()> {
+    let jobs = lock.missing_hashes(install_path)?;
+    // Fetch and hash the files.
+    let hashed = futures::stream::iter(jobs)
+        .map(|(destination, source)| async move {
+            let hashes = Hashes::from(client.hash_file(&source).await?);
+            Ok::<_, uv_client::FileHashError>((destination, hashes))
+        })
+        .buffer_unordered(concurrency)
+        .try_collect::<Vec<_>>()
+        .await?;
+
+    for (destination, hashes) in hashed {
+        *destination = hashes;
+    }
+
+    Ok(())
 }

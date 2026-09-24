@@ -9,8 +9,6 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::{MarkerTree, StringVersion};
 use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts, HashDigest, ModuleName};
-use uv_python::{Interpreter, LenientImplementationName, PythonEnvironment};
-use uv_workspace::Workspace;
 
 use crate::lock::{
     Dependency, DirectSource, Package, PackageId, RegistrySource, Source, SourceDist,
@@ -126,20 +124,19 @@ pub struct PythonReport {
     /// Full Python version.
     version: StringVersion,
     /// Python implementation name.
-    implementation: LenientImplementationName,
-}
-
-impl From<&Interpreter> for PythonReport {
-    fn from(interpreter: &Interpreter) -> Self {
-        Self {
-            path: PortablePathBuf::from(interpreter.sys_executable()),
-            version: interpreter.python_full_version().clone(),
-            implementation: LenientImplementationName::from(interpreter.implementation_name()),
-        }
-    }
+    implementation: String,
 }
 
 impl PythonReport {
+    /// Describe an interpreter using its executable, full version and normalized implementation name.
+    pub fn new(path: PortablePathBuf, version: StringVersion, implementation: String) -> Self {
+        Self {
+            path,
+            version,
+            implementation,
+        }
+    }
+
     /// Return the path to the Python executable.
     pub fn path(&self) -> &Path {
         self.path.as_ref()
@@ -535,7 +532,7 @@ fn root_dependencies<'lock>(
 /// by propagating markers from the metadata graph's entry points.
 fn metadata_reachability(
     workspace_root: &PortablePathBuf,
-    workspace: Option<&Workspace>,
+    workspace: Option<&BTreeMap<&PackageName, &Path>>,
     lock: &Lock,
 ) -> BTreeMap<MetadataNodeIdFlat, MarkerTree> {
     let mut reachability = BTreeMap::new();
@@ -546,7 +543,7 @@ fn metadata_reachability(
         for package in lock
             .packages()
             .iter()
-            .filter(|package| workspace.packages().contains_key(package.name()))
+            .filter(|package| workspace.contains_key(package.name()))
         {
             add_metadata_reachability(
                 workspace_root,
@@ -1258,13 +1255,12 @@ impl MetadataConflictKind {
 
 impl Metadata {
     /// Construct [`Metadata`] for a workspace from a uv lockfile.
-    pub fn from_lock(workspace: &Workspace, lock: &Lock) -> Result<Self, MetadataError> {
-        Ok(Self::from_lock_target(
-            workspace.install_path(),
-            Some(workspace),
-            None,
-            lock,
-        ))
+    pub fn from_lock(
+        root: &Path,
+        packages: &BTreeMap<&PackageName, &Path>,
+        lock: &Lock,
+    ) -> Result<Self, MetadataError> {
+        Ok(Self::from_lock_target(root, Some(packages), None, lock))
     }
 
     /// Construct [`Metadata`] for a script from a uv lockfile.
@@ -1280,7 +1276,7 @@ impl Metadata {
 
     fn from_lock_target(
         workspace_root: &Path,
-        workspace: Option<&Workspace>,
+        workspace: Option<&BTreeMap<&PackageName, &Path>>,
         script_path: Option<&Path>,
         lock: &Lock,
     ) -> Self {
@@ -1359,14 +1355,11 @@ impl Metadata {
 
             // Register this package if it appears to be a workspace member
             if let Some(workspace_package) =
-                workspace.and_then(|workspace| workspace.packages().get(lock_package.name()))
+                workspace.and_then(|workspace| workspace.get(lock_package.name()))
             {
                 let member = MetadataWorkspaceMember {
                     name: lock_package.name().clone(),
-                    path: normalize_workspace_relative_path(
-                        &workspace_root,
-                        workspace_package.root().as_path(),
-                    ),
+                    path: normalize_workspace_relative_path(&workspace_root, workspace_package),
                     id: meta_package.id.to_flat(),
                 };
                 members.push(member);
@@ -1447,10 +1440,10 @@ impl Metadata {
     }
 
     #[must_use]
-    pub fn with_environment(mut self, environment: &PythonEnvironment) -> Self {
+    pub fn with_environment(mut self, root: &Path, python: PythonReport) -> Self {
         self.environment = Some(MetadataEnvironment {
-            root: PortablePathBuf::from(environment.root()),
-            python: PythonReport::from(environment.interpreter()),
+            root: PortablePathBuf::from(root),
+            python,
         });
         self
     }

@@ -11,7 +11,7 @@ use uv_client::BaseClientBuilder;
 use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroupsWithDefaults, DryRun, Upgrade,
 };
-use uv_distribution::{ArchiveMetadata, Metadata};
+use uv_distribution::{ArchiveMetadata, lower_metadata};
 use uv_distribution_types::{Identifier, RequiresPython};
 use uv_lock::implicit_constraints_marker;
 use uv_normalize::PackageName;
@@ -348,7 +348,7 @@ pub(crate) async fn upgrade(
         bail!("`uv upgrade` does not support projects with dynamic versions yet");
     }
     let metadata = ResolutionMetadata::parse_pyproject_toml(pyproject, None)?;
-    let metadata = Metadata::from_workspace(
+    let metadata = lower_metadata(
         metadata,
         project.project_root(),
         None,

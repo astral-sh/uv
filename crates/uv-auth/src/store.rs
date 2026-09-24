@@ -5,6 +5,8 @@ use fs_err as fs;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use uv_auth_types::Realm;
+use uv_auth_types::is_path_prefix;
 use uv_fs::{LockedFile, LockedFileError, LockedFileMode};
 use uv_preview::{Preview, PreviewFeature};
 use uv_redacted::DisplaySafeUrl;
@@ -13,8 +15,6 @@ use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
 
 use crate::credentials::{Password, Token, Username};
-use crate::index::is_path_prefix;
-use crate::realm::Realm;
 use crate::service::Service;
 use crate::{Credentials, KeyringProvider};
 

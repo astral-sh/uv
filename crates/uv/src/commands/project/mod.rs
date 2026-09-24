@@ -75,6 +75,7 @@ pub(crate) mod environment;
 pub(crate) mod export;
 pub(crate) mod format;
 pub(crate) mod init;
+mod init_vcs;
 pub(crate) mod install_target;
 pub(crate) mod lock;
 pub(crate) mod lock_target;

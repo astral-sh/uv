@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf, absolute};
 use std::str::FromStr;
 use std::sync::Arc;
 
-use futures::{StreamExt, TryStreamExt};
 use jiff::Timestamp;
 use jiff::civil::{Date, DateTime, Time};
 use jiff::tz::{Offset, TimeZone};
@@ -15,7 +14,6 @@ use toml::Table as TomlTable;
 use toml_edit::{Array, ArrayOfTables, Item, Table, Value, value};
 use url::Url;
 
-use uv_client::{FileHashError, RegistryClient};
 use uv_configuration::{
     BuildOptions, DependencyGroupsWithDefaults, EditableMode, ExtrasSpecificationWithDefaults,
     InstallOptions,
@@ -31,18 +29,19 @@ use uv_distribution_types::{
     RequiresPython, Resolution, ResolvedDist, SourceDist, ToUrlError, UrlString,
 };
 use uv_fs::{PortablePathBuf, normalize_path, try_relative_to_if};
-use uv_git::{RepositoryReference, ResolvedRepositoryReference};
-use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
+use uv_git_types::{
+    GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError, RepositoryReference,
+    ResolvedRepositoryReference,
+};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, MarkerTree, VerbatimUrl};
 use uv_platform_tags::{TagCompatibility, TagPriority, Tags};
 use uv_pypi_types::{HashDigests, Hashes, ParsedGitDirectoryUrl, VcsKind};
 use uv_redacted::DisplaySafeUrl;
+use uv_resolver_types::ResolverOutput;
 use uv_small_str::SmallString;
 use uv_warnings::warn_user_once;
-
-use uv_resolver_types::ResolverOutput;
 
 use crate::lock::export::ExportableRequirements;
 use crate::lock::{Source, WheelTagHint, is_wheel_unreachable};
@@ -131,8 +130,6 @@ pub enum PylockTomlErrorKind {
     VcsMissingPathUrl(PackageName),
     #[error("`{1}` entry for `{0}` has no hashes and no URL or path to compute them")]
     MissingHashes(PackageName, &'static str),
-    #[error(transparent)]
-    FileHash(#[from] FileHashError),
     #[error("URL must end in a valid wheel filename: `{0}`")]
     UrlMissingFilename(DisplaySafeUrl),
     #[error("Invalid artifact URL: `{0}`")]
@@ -1074,18 +1071,13 @@ impl<'lock> PylockToml {
         })
     }
 
-    /// Download and hash all distribution files that are missing hashes, e.g., because the
-    /// registry didn't provide them, since `packages.*.hashes` is a required key in PEP 751.
+    /// Return hash destinations and source URLs for distribution files without hashes.
     ///
-    /// Local files are read from disk, with relative paths resolved against `install_path`.
-    pub async fn generate_missing_hashes(
+    /// Relative paths are resolved against `install_path`.
+    pub fn missing_hashes(
         &mut self,
-        client: &RegistryClient,
-        concurrency: usize,
         install_path: &Path,
-    ) -> Result<(), PylockTomlErrorKind> {
-        // TODO(tk): Maybe make hash completion part of the export API so callers cannot accidentally skip it.
-
+    ) -> Result<Vec<(&mut Hashes, DisplaySafeUrl)>, PylockTomlErrorKind> {
         // Collect the files that are missing hashes.
         let mut jobs = Vec::new();
         for package in &mut self.packages {
@@ -1127,21 +1119,7 @@ impl<'lock> PylockToml {
             }
         }
 
-        // Fetch and hash the files.
-        let hashed = futures::stream::iter(jobs)
-            .map(|(destination, source)| async move {
-                let hashes = Hashes::from(client.hash_file(&source).await?);
-                Ok::<_, PylockTomlErrorKind>((destination, hashes))
-            })
-            .buffer_unordered(concurrency)
-            .try_collect::<Vec<_>>()
-            .await?;
-
-        for (destination, hashes) in hashed {
-            *destination = hashes;
-        }
-
-        Ok(())
+        Ok(jobs)
     }
 
     /// Returns the TOML representation of this lockfile.

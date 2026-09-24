@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize, Serializer};
 use thiserror::Error;
 use url::Url;
 
-use uv_auth::{AuthPolicy, Credentials, CredentialsFromUrlError};
+use uv_auth_types::{AuthPolicy, Credentials, CredentialsFromUrlError};
 use uv_pypi_types::HashAlgorithm;
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
