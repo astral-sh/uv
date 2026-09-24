@@ -130,8 +130,7 @@ fn digest_size<const BYTES: usize>(group: &mut BenchmarkGroup<'_, WallTime>, bat
 }
 
 fn digest(criterion: &mut Criterion<WallTime>) {
-    // CodSpeed simulation measures one closure invocation. Batch calls to amortize fixed costs,
-    // and include the batch size in the group name because times describe the whole batch.
+    // Batch these short operations to amortize fixed per-measurement costs.
     let batch_size = 500;
     let mut group = criterion.benchmark_group(format!("digest_batch_{batch_size}"));
 
