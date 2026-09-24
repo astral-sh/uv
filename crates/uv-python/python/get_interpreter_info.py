@@ -693,6 +693,16 @@ def main() -> None:
         # to avoid having this now-deleted path around.
         "sys_path": sys.path[1:],
         "site_packages": site.getsitepackages(),
+        # Keep the base installation's paths even when this interpreter is a venv that excludes
+        # system site packages. Version symlinks can give the same directory multiple spellings.
+        "base_site_packages": list(
+            dict.fromkeys(
+                os.path.realpath(path)
+                for path in site.getsitepackages(
+                    [sys.base_prefix, sys.base_exec_prefix]
+                )
+            )
+        ),
         "stdlib": sysconfig.get_path("stdlib"),
         "extension_suffixes": importlib.machinery.EXTENSION_SUFFIXES,
         # Prior to the introduction of `sysconfig` patching, python-build-standalone installations would always use

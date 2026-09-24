@@ -893,6 +893,7 @@ mod tests {
             "sys_executable": "{EXECUTABLE}",
             "sys_path": [],
             "site_packages": [],
+            "base_site_packages": [],
             "stdlib": "/python/lib/python3.12",
             "extension_suffixes": [".cpython-312-x86_64-linux-gnu.so", ".abi3.so", ".so"],
             "scheme": {

@@ -1,14 +1,20 @@
 use std::path::PathBuf;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use indoc::indoc;
+use itertools::Itertools;
 use predicates::prelude::*;
+use uv_cache::Cache;
 use uv_cache_key::cache_digest;
 use uv_fs::{LockedFile, LockedFileMode};
-use uv_python::{PYTHON_VERSION_FILENAME, PYTHON_VERSIONS_FILENAME};
+use uv_preview::test::with_features;
+use uv_python::{
+    Interpreter, PYTHON_VERSION_FILENAME, PYTHON_VERSIONS_FILENAME, PythonEnvironment,
+};
 use uv_static::EnvVars;
+use uv_virtualenv::{OnExisting, Prompt, RemovalReason, Seed};
 
 #[cfg(unix)]
 use fs_err::os::unix::fs::symlink;
@@ -69,6 +75,50 @@ fn create_venv() {
     );
 
     context.venv.assert(predicates::path::is_dir());
+}
+
+#[test]
+fn create_venv_inherits_base_site_packages() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let _features = with_features(&[]);
+    let cache = Cache::from_path(context.cache_dir.path().to_path_buf())
+        .init_no_wait()?
+        .context("Interpreter cache is locked")?;
+    let parent = PythonEnvironment::from_root(context.venv.path(), &cache)?;
+    let base = Interpreter::query(parent.interpreter().to_base_python()?, &cache)?;
+    let root = context.temp_dir.child("child-venv");
+
+    let runtime_paths = |environment: &PythonEnvironment| -> Result<Vec<PathBuf>> {
+        let paths = environment
+            .interpreter()
+            .runtime_site_packages()
+            .iter()
+            .map(fs_err::canonicalize)
+            .collect::<std::io::Result<Vec<_>>>()?;
+        // Version symlinks can make Python list the same system directory more than once.
+        Ok(paths.into_iter().unique().collect())
+    };
+
+    for interpreter in [base, parent.into_interpreter()] {
+        for system_site_packages in [false, true] {
+            let inferred = uv_virtualenv::create_venv(
+                root.path(),
+                interpreter.clone(),
+                Prompt::None,
+                system_site_packages,
+                OnExisting::Remove(RemovalReason::TemporaryEnvironment),
+                false,
+                Seed::Disabled,
+                false,
+            )?;
+            let fresh_cache = Cache::temp()?
+                .init_no_wait()?
+                .context("Fresh interpreter cache is locked")?;
+            let queried = PythonEnvironment::from_root(root.path(), &fresh_cache)?;
+            assert_eq!(runtime_paths(&inferred)?, runtime_paths(&queried)?);
+        }
+    }
+    Ok(())
 }
 
 #[test]

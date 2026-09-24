@@ -378,6 +378,9 @@ mod tests {
                     "site_packages": [
                         "/home/ferris/.pyenv/versions/{FULL_VERSION}/lib/python{VERSION}/site-packages"
                     ],
+                    "base_site_packages": [
+                        "/home/ferris/.pyenv/versions/{FULL_VERSION}/lib/python{VERSION}/site-packages"
+                    ],
                     "stdlib": "/home/ferris/.pyenv/versions/{FULL_VERSION}/lib/python{VERSION}",
                     "extension_suffixes": [".cpython-{VERSION}-x86_64-linux-gnu.so", ".abi3.so", ".so"],
                     "scheme": {
@@ -472,6 +475,9 @@ mod tests {
                         "/lib/python{VERSION}/site-packages"
                     ],
                     "site_packages": [
+                        "/lib/python{VERSION}/site-packages"
+                    ],
+                    "base_site_packages": [
                         "/lib/python{VERSION}/site-packages"
                     ],
                     "stdlib": "//lib/python{VERSION}",

@@ -26,6 +26,9 @@ pub struct VirtualEnvironment {
     /// The path to the base executable for the environment, within the `home` directory.
     pub base_executable: PathBuf,
 
+    /// Whether to include the base installation's site-packages directories.
+    pub system_site_packages: bool,
+
     /// The [`Scheme`] paths for the virtualenv, as returned by (e.g.) `sysconfig.get_paths()`.
     pub scheme: Scheme,
 }

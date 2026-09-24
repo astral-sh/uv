@@ -54,6 +54,8 @@ pub struct Interpreter {
     sys_base_executable: Option<PathBuf>,
     sys_executable: PathBuf,
     site_packages: Vec<PathBuf>,
+    /// The base installation's site-packages paths, with symlink aliases resolved.
+    base_site_packages: Vec<PathBuf>,
     stdlib: PathBuf,
     extension_suffixes: Vec<Box<str>>,
     standalone: bool,
@@ -92,6 +94,7 @@ impl Interpreter {
             sys_base_executable: info.sys_base_executable,
             sys_executable: info.sys_executable,
             site_packages: info.site_packages,
+            base_site_packages: info.base_site_packages,
             stdlib: info.stdlib,
             extension_suffixes: info.extension_suffixes,
             standalone: info.standalone,
@@ -135,8 +138,7 @@ impl Interpreter {
     /// Return a new [`Interpreter`] with the given virtual environment root.
     #[must_use]
     pub fn with_virtualenv(self, virtualenv: VirtualEnvironment) -> Self {
-        // Match `site.getsitepackages()` for the new environment instead of retaining the
-        // parent interpreter's site-packages paths.
+        // Put the new environment's local site-packages paths ahead of any system site packages.
         // Note: This is not `sys.path`, but a distinct list.
         let mut site_packages = if self.markers.os_name() == "nt" {
             vec![virtualenv.root.clone(), virtualenv.scheme.purelib.clone()]
@@ -159,6 +161,13 @@ impl Interpreter {
                     if !site_packages.contains(&path) {
                         site_packages.push(path);
                     }
+                }
+            }
+        }
+        if virtualenv.system_site_packages {
+            for path in &self.base_site_packages {
+                if !site_packages.contains(path) {
+                    site_packages.push(path.clone());
                 }
             }
         }
@@ -1007,6 +1016,7 @@ struct InterpreterInfo {
     sys_executable: PathBuf,
     sys_path: Vec<PathBuf>,
     site_packages: Vec<PathBuf>,
+    base_site_packages: Vec<PathBuf>,
     stdlib: PathBuf,
     extension_suffixes: Vec<Box<str>>,
     standalone: bool,
@@ -1035,6 +1045,7 @@ impl InterpreterInfo {
             sys_base_executable: interpreter.sys_base_executable.clone(),
             sys_executable: std::path::absolute(interpreter.sys_executable())?,
             site_packages: interpreter.site_packages.clone(),
+            base_site_packages: interpreter.base_site_packages.clone(),
             stdlib: interpreter.stdlib.clone(),
             extension_suffixes: interpreter.extension_suffixes.clone(),
             standalone: interpreter.standalone,
@@ -1493,6 +1504,9 @@ mod tests {
                 "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/site-packages"
             ],
             "site_packages": [
+                "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/site-packages"
+            ],
+            "base_site_packages": [
                 "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/site-packages"
             ],
             "stdlib": "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12",
