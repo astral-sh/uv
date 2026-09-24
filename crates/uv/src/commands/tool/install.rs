@@ -49,13 +49,14 @@ use crate::commands::tool::common::{
     ToolLock, ToolPython, finalize_tool_install, refine_interpreter, remove_entrypoints,
     tool_environment_spec,
 };
-use crate::commands::tool::{Target, ToolRequest};
+use crate::commands::tool::{Target, ToolLockMode, ToolRequest};
 use crate::commands::{UvError, reporters::PythonDownloadReporter};
 use crate::printer::Printer;
 use crate::settings::{ResolverInstallerSettings, ResolverSettings};
 
 /// Install a tool.
 pub(crate) async fn install(
+    lock_mode: ToolLockMode,
     package: String,
     editable: bool,
     from: Option<String>,
@@ -84,7 +85,9 @@ pub(crate) async fn install(
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
-    let tool_locks = preview.is_enabled(PreviewFeature::ToolInstallLocks);
+    let locked = lock_mode.is_locked();
+    super::locked::check_preview(locked, preview)?;
+    let tool_locks = !locked && preview.is_enabled(PreviewFeature::ToolInstallLocks);
     if settings.resolver.torch_backend.is_some() {
         warn_user_once!(
             "The `--torch-backend` option is experimental and may change without warning."
@@ -576,7 +579,8 @@ pub(crate) async fn install(
         !request.is_latest() && settings.reinstall.is_none() && settings.resolver.upgrade.is_none()
     }) {
         if let Some(tool_receipt) = existing_tool_receipt.as_ref() {
-            if !tool_locks
+            if !locked
+                && !tool_locks
                 && requirements == tool_receipt.requirements()
                 && receipt_constraints == tool_receipt.constraints()
                 && receipt_overrides == tool_receipt.overrides()
@@ -693,7 +697,61 @@ pub(crate) async fn install(
     // This lets us confirm the environment is valid before removing an existing install. However,
     // entrypoints always contain an absolute path to the relevant Python interpreter, which would
     // be invalidated by moving the environment.
-    let (environment, tool_lock) = if let Some(environment) = existing_environment {
+    let (environment, tool_lock) = if locked {
+        let new_environment = existing_environment.is_none();
+        let interpreter = existing_environment
+            .as_ref()
+            .map_or(&interpreter, |environment| {
+                environment.environment().interpreter()
+            });
+        let resolution = super::locked::resolve(
+            spec,
+            interpreter,
+            python_platform.as_ref(),
+            &build_constraints,
+            &settings.resolver,
+            &client_builder,
+            &state,
+            &concurrency,
+            &cache,
+            workspace_cache,
+            printer,
+            preview,
+        )
+        .await?;
+        let hash_strategy = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?;
+        let environment = if let Some(environment) = existing_environment {
+            environment.into_environment()
+        } else {
+            installed_tools.create_environment(package_name, interpreter.clone())?
+        };
+        let environment = sync_environment(
+            environment,
+            &resolution,
+            hash_strategy,
+            Modifications::Exact,
+            build_constraints.clone(),
+            (&settings).into(),
+            &client_builder,
+            &state,
+            Box::new(DefaultInstallLogger),
+            installer_metadata,
+            &concurrency,
+            &cache,
+            printer,
+            preview,
+        )
+        .await
+        .inspect_err(|_| {
+            if new_environment {
+                let _ = installed_tools.remove_environment(package_name);
+            }
+        })?;
+        if let Some(receipt) = existing_tool_receipt.as_ref() {
+            remove_entrypoints(receipt);
+        }
+        (environment, None)
+    } else if let Some(environment) = existing_environment {
         let environment = environment.into_environment();
         let (environment, tool_lock) = if tool_locks {
             let site_packages = SitePackages::from_environment(&environment)?;
@@ -1053,6 +1111,7 @@ pub(crate) async fn install(
     };
 
     finalize_tool_install(
+        locked,
         &environment,
         package_name,
         entrypoints,

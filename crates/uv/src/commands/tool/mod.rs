@@ -11,10 +11,30 @@ pub(crate) mod common;
 pub(crate) mod dir;
 pub(crate) mod install;
 pub(crate) mod list;
+mod locked;
 pub(crate) mod run;
 pub(crate) mod uninstall;
 pub(crate) mod update_shell;
 pub(crate) mod upgrade;
+
+/// Whether dependencies are resolved normally or supplied by the tool's packaged lock.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ToolLockMode {
+    Resolve,
+    Locked,
+}
+
+impl From<bool> for ToolLockMode {
+    fn from(locked: bool) -> Self {
+        if locked { Self::Locked } else { Self::Resolve }
+    }
+}
+
+impl ToolLockMode {
+    fn is_locked(self) -> bool {
+        self == Self::Locked
+    }
+}
 
 /// A request to run or install a tool (e.g., `uvx ruff@latest`).
 #[derive(Debug, Clone, PartialEq, Eq)]

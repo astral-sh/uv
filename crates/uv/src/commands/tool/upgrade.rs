@@ -36,6 +36,7 @@ use crate::commands::project::{
     update_environment,
 };
 use crate::commands::reporters::PythonDownloadReporter;
+use crate::commands::tool::ToolLockMode;
 use crate::commands::tool::common::{ToolLock, remove_entrypoints, tool_environment_spec};
 use crate::commands::{ExitStatus, conjunction, tool::common::finalize_tool_install};
 use crate::printer::Printer;
@@ -43,6 +44,7 @@ use crate::settings::ResolverInstallerSettings;
 
 /// Upgrade a tool.
 pub(crate) async fn upgrade(
+    lock_mode: ToolLockMode,
     names: Vec<String>,
     python: Option<String>,
     python_platform: Option<TargetTriple>,
@@ -59,6 +61,7 @@ pub(crate) async fn upgrade(
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
+    super::locked::check_preview(lock_mode.is_locked(), preview)?;
     let installed_tools = InstalledTools::from_settings()?.init()?;
     let _lock = installed_tools.lock().await?;
 
@@ -131,6 +134,7 @@ pub(crate) async fn upgrade(
     for (name, constraints) in &names {
         debug!("Upgrading tool: `{name}`");
         let result = Box::pin(upgrade_tool(
+            lock_mode,
             name,
             constraints,
             interpreter.as_ref(),
@@ -264,6 +268,7 @@ struct UpgradeReport {
 
 /// Upgrade a specific tool.
 async fn upgrade_tool(
+    lock_mode: ToolLockMode,
     name: &PackageName,
     constraints: &[Requirement],
     interpreter: Option<&Interpreter>,
@@ -300,6 +305,9 @@ async fn upgrade_tool(
             ));
         }
     };
+
+    let locked = lock_mode.is_locked() || existing_tool_receipt.locked();
+    super::locked::check_preview(locked, preview)?;
 
     let environment = match installed_tools.get_environment(name, cache) {
         Ok(Some(environment)) => environment,
@@ -381,40 +389,60 @@ async fn upgrade_tool(
     let tool_dir = installed_tools.tool_dir(name);
     // TODO(zanieb): When updating an existing environment, build it in the cache directory then
     // copy it into the tool directory.
-    let (environment, outcome, tool_lock) = if tool_locks {
+    let (environment, outcome, tool_lock) = if locked || tool_locks {
         let target_interpreter =
             requested_interpreter.unwrap_or_else(|| environment.environment().interpreter());
         let site_packages = SitePackages::from_environment(environment.environment())?;
-        let universal_resolution = resolve_environment(
-            tool_environment_spec(spec, None, Some(&site_packages)),
-            EnvironmentResolution::Universal,
-            target_interpreter,
-            python_platform,
-            SourceTreeEditablePolicy::Tool,
-            build_constraints.clone(),
-            &settings.resolver,
-            client_builder,
-            &state,
-            Box::new(SummaryResolveLogger),
-            concurrency,
-            cache,
-            workspace_cache,
-            printer,
-            preview,
-        )
-        .await?;
-        let tool_lock = ToolLock::from_resolution(
-            &tool_dir,
-            &universal_resolution,
-            &lock_manifest,
-            &settings.resolver.index_locations,
-        )?;
-        let resolution = tool_lock.to_resolution(
-            Some(name),
-            target_interpreter,
-            python_platform,
-            &settings.resolver.build_options,
-        )?;
+        let (resolution, tool_lock) = if locked {
+            let resolution = super::locked::resolve(
+                spec,
+                target_interpreter,
+                python_platform,
+                &build_constraints,
+                &settings.resolver,
+                client_builder,
+                &state,
+                concurrency,
+                cache,
+                workspace_cache,
+                printer,
+                preview,
+            )
+            .await?;
+            (resolution, None)
+        } else {
+            let universal_resolution = resolve_environment(
+                tool_environment_spec(spec, None, Some(&site_packages)),
+                EnvironmentResolution::Universal,
+                target_interpreter,
+                python_platform,
+                SourceTreeEditablePolicy::Tool,
+                build_constraints.clone(),
+                &settings.resolver,
+                client_builder,
+                &state,
+                Box::new(SummaryResolveLogger),
+                concurrency,
+                cache,
+                workspace_cache,
+                printer,
+                preview,
+            )
+            .await?;
+            let tool_lock = ToolLock::from_resolution(
+                &tool_dir,
+                &universal_resolution,
+                &lock_manifest,
+                &settings.resolver.index_locations,
+            )?;
+            let resolution = tool_lock.to_resolution(
+                Some(name),
+                target_interpreter,
+                python_platform,
+                &settings.resolver.build_options,
+            )?;
+            (resolution, Some(tool_lock))
+        };
         let hash_strategy = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?;
 
         if requested_interpreter.is_some() {
@@ -437,11 +465,7 @@ async fn upgrade_tool(
                 preview,
             )
             .await?;
-            (
-                environment,
-                UpgradeOutcome::UpgradeEnvironment,
-                Some(tool_lock),
-            )
+            (environment, UpgradeOutcome::UpgradeEnvironment, tool_lock)
         } else {
             // Otherwise, upgrade the existing environment.
             let ResolverInstallerSettings {
@@ -511,7 +535,7 @@ async fn upgrade_tool(
                 )
                 .await?
             };
-            (environment, outcome, Some(tool_lock))
+            (environment, outcome, tool_lock)
         }
     } else if let Some(interpreter) = requested_interpreter {
         let resolution = resolve_environment(
@@ -606,6 +630,7 @@ async fn upgrade_tool(
 
         // If we modified the target tool, reinstall the entrypoints.
         finalize_tool_install(
+            locked,
             &environment,
             name,
             &entrypoints,
@@ -621,13 +646,14 @@ async fn upgrade_tool(
             tool_lock.as_ref(),
             printer,
         )?;
-    } else if tool_locks {
+    } else if locked || tool_locks {
         ToolLock::write(&tool_dir, tool_lock.as_ref())?;
         installed_tools.add_tool_receipt(
             name,
             existing_tool_receipt
                 .clone()
-                .with_options(ToolOptions::from(options)),
+                .with_options(ToolOptions::from(options))
+                .with_locked(locked),
         )?;
     }
 
