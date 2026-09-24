@@ -308,19 +308,22 @@ pub(crate) async fn run_to_completion(
             // wait status to an ordinary exit code. Preserve that diagnostic so a signal exit can
             // still be distinguished from a process that exits normally with the same code.
             if let Some(signal) = status.signal() {
-                let mut stderr = printer.stderr_important();
-                let core_dumped = if status.core_dumped() {
-                    " (core dumped)"
-                } else {
-                    ""
-                };
-                if let Ok(signal_name) = nix::sys::signal::Signal::try_from(signal) {
-                    writeln!(
-                        stderr,
-                        "Command terminated by signal {signal_name}{core_dumped}"
-                    )?;
-                } else {
-                    writeln!(stderr, "Command terminated by signal {signal}{core_dumped}")?;
+                if signal != libc::SIGINT && signal != libc::SIGPIPE {
+                    let mut stderr = printer.stderr_important();
+                    let core_dumped = if status.core_dumped() {
+                        " (core dumped)"
+                    } else {
+                        ""
+                    };
+                    if let Ok(signal_name) = nix::sys::signal::Signal::try_from(signal) {
+                        let _ = writeln!(
+                            stderr,
+                            "Command terminated by signal {signal_name}{core_dumped}"
+                        );
+                    } else {
+                        let _ =
+                            writeln!(stderr, "Command terminated by signal {signal}{core_dumped}");
+                    }
                 }
 
                 // Following https://tldp.org/LDP/abs/html/exitcodes.html, a fatal signal n gets the
