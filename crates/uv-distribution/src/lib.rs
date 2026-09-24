@@ -6,8 +6,9 @@ pub use index::{BuiltWheelIndex, RegistryWheelIndex};
 pub use metadata::{
     ArchiveMetadata, BuildRequires, FlatRequiresDist, LoweredExtraBuildDependencies,
     LoweredRequirement, LoweringError, Metadata, MetadataError, RequiresDist,
-    SourcedDependencyGroups,
+    SourcedDependencyGroups, lower_metadata,
 };
+pub use metadata_response::{DistributionMetadataIndex, MetadataResponse, MetadataUnavailable};
 pub use reporter::Reporter;
 pub use source::{StaticMetadataDatabase, prune};
 
@@ -20,5 +21,6 @@ mod first_party;
 mod hash;
 mod index;
 mod metadata;
+mod metadata_response;
 mod reporter;
 mod source;

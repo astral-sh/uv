@@ -1,6 +1,7 @@
 pub use crate::github::GitHubRepository;
 pub use crate::oid::{GitOid, OidParseError};
 pub use crate::reference::GitReference;
+pub use crate::repository::{RepositoryReference, ResolvedRepositoryReference};
 use std::cmp::Ordering;
 use std::sync::LazyLock;
 
@@ -13,6 +14,7 @@ use uv_static::EnvVars;
 mod github;
 mod oid;
 mod reference;
+mod repository;
 
 /// Initialize [`GitLfs`] mode from `UV_GIT_LFS` environment.
 static UV_GIT_LFS: LazyLock<GitLfs> = LazyLock::new(|| {

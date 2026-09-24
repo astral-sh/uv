@@ -5,7 +5,9 @@ pub use manifest::Manifest;
 pub use preferences::{Preference, PreferenceError, Preferences};
 pub use pubgrub::PubGrubHint;
 pub use python_requirement::PythonRequirement;
-pub use resolution::{ConflictingDistributionError, DisplayResolutionGraph, ResolverOutput};
+pub use resolution::{
+    ConflictingDistributionError, DisplayResolutionGraph, ResolverOutput, resolution_marker_tree,
+};
 pub use resolver::{
     DefaultResolverProvider, InMemoryIndex, MetadataResponse, PackageVersionsResult,
     Reporter as ResolverReporter, Resolver, ResolverEnvironment, ResolverProvider,

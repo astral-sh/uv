@@ -2,10 +2,10 @@ use std::hash::BuildHasherDefault;
 use std::sync::Arc;
 
 use rustc_hash::FxHasher;
+use uv_distribution::DistributionMetadataIndex;
 use uv_distribution_types::IndexUrl;
 use uv_normalize::PackageName;
 use uv_once_map::{RegisteredEntry, RegisteredOnceMap};
-use uv_resolver_types::DistributionMetadataIndex;
 
 use crate::resolver::provider::VersionsResponse;
 

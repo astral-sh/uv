@@ -8,14 +8,14 @@ use reqsign::google::DefaultSigner as GcsDefaultSigner;
 use tracing::debug;
 use url::{ParseError, Url};
 
+use uv_auth_types::is_path_prefix;
+use uv_auth_types::{Realm, RealmRef};
 use uv_preview::{Preview, PreviewFeature};
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 
 use crate::Credentials;
 use crate::credentials::Token;
-use crate::index::is_path_prefix;
-use crate::realm::{Realm, RealmRef};
 
 /// The [`Realm`] for the Hugging Face platform.
 static HUGGING_FACE_REALM: LazyLock<Realm> = LazyLock::new(|| {

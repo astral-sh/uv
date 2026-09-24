@@ -401,7 +401,7 @@ async fn gather_credentials(
 
     // If applicable, fetch the password from the keyring eagerly to avoid user confusion about
     // missing keyring entries later.
-    if let Some(provider) = keyring_provider.to_provider() {
+    if let Some(provider) = uv_client::keyring_provider(keyring_provider) {
         if password.is_none() {
             if let Some(username) = &username {
                 debug!("Fetching password from keyring");

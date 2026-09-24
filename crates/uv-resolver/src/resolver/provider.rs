@@ -1,7 +1,7 @@
 use std::future::Future;
 use std::sync::Arc;
-pub use uv_resolver_types::MetadataResponse;
-pub(crate) use uv_resolver_types::MetadataUnavailable;
+pub use uv_distribution::MetadataResponse;
+pub(crate) use uv_distribution::MetadataUnavailable;
 
 use uv_client::MetadataFormat;
 use uv_configuration::BuildOptions;

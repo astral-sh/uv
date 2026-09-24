@@ -1,214 +1,151 @@
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::BTreeMap;
 use std::path::Path;
-use std::slice;
-
-use rustc_hash::FxHashSet;
 
 use uv_auth::CredentialsCache;
 use uv_cache::Cache;
 use uv_configuration::NoSources;
 use uv_distribution_types::{IndexLocations, Requirement};
-use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep508::MarkerTree;
+use uv_normalize::PackageName;
 use uv_workspace::dependency_groups::FlatDependencyGroups;
 use uv_workspace::pyproject::{Sources, ToolUvSources};
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, ProjectWorkspace, WorkspaceCache};
 
-use crate::Metadata;
+use crate::RequiresDist;
 use crate::metadata::{GitWorkspaceMember, LoweredRequirement, MetadataError};
 
-#[derive(Debug, Clone)]
-pub struct RequiresDist {
-    pub name: PackageName,
-    pub requires_dist: Box<[Requirement]>,
-    pub provides_extra: Box<[ExtraName]>,
-    pub dependency_groups: BTreeMap<GroupName, Box<[Requirement]>>,
-    pub dynamic: bool,
+/// Lower by considering `tool.uv` in `pyproject.toml` if present, used for Git and directory
+/// dependencies.
+pub(crate) async fn lower_requires_dist(
+    metadata: uv_pypi_types::RequiresDist,
+    install_path: &Path,
+    git_member: Option<&GitWorkspaceMember<'_>>,
+    locations: &IndexLocations,
+    sources: NoSources,
+    editable: bool,
+    cache: &Cache,
+    workspace_cache: &WorkspaceCache,
+    credentials_cache: &CredentialsCache,
+) -> Result<RequiresDist, MetadataError> {
+    let discovery = DiscoveryOptions {
+        stop_discovery_at: git_member.map(|git_member| {
+            git_member
+                .fetch_root
+                .parent()
+                .expect("git checkout has a parent")
+                .to_path_buf()
+        }),
+        members: if sources.is_none() {
+            MemberDiscovery::default()
+        } else {
+            MemberDiscovery::None
+        },
+    };
+    let Some(project_workspace) =
+        ProjectWorkspace::from_maybe_project_root(install_path, &discovery, cache, workspace_cache)
+            .await?
+    else {
+        return from_metadata23_with_source_context(metadata, git_member);
+    };
+
+    from_project_workspace(
+        metadata,
+        &project_workspace,
+        git_member,
+        locations,
+        &sources,
+        editable,
+        cache,
+        workspace_cache,
+        credentials_cache,
+    )
+    .await
 }
 
-impl RequiresDist {
-    /// Lower by considering `tool.uv` in `pyproject.toml` if present, used for Git and directory
-    /// dependencies.
-    pub(crate) async fn from_project_maybe_workspace(
-        metadata: uv_pypi_types::RequiresDist,
-        install_path: &Path,
-        git_member: Option<&GitWorkspaceMember<'_>>,
-        locations: &IndexLocations,
-        sources: NoSources,
-        editable: bool,
-        cache: &Cache,
-        workspace_cache: &WorkspaceCache,
-        credentials_cache: &CredentialsCache,
-    ) -> Result<Self, MetadataError> {
-        let discovery = DiscoveryOptions {
-            stop_discovery_at: git_member.map(|git_member| {
-                git_member
-                    .fetch_root
-                    .parent()
-                    .expect("git checkout has a parent")
-                    .to_path_buf()
-            }),
-            members: if sources.is_none() {
-                MemberDiscovery::default()
-            } else {
-                MemberDiscovery::None
-            },
-        };
-        let Some(project_workspace) = ProjectWorkspace::from_maybe_project_root(
-            install_path,
-            &discovery,
-            cache,
-            workspace_cache,
-        )
-        .await?
-        else {
-            return Self::from_metadata23_with_source_context(metadata, git_member);
-        };
-
-        Self::from_project_workspace(
-            metadata,
-            &project_workspace,
-            git_member,
-            locations,
-            &sources,
-            editable,
-            cache,
-            workspace_cache,
-            credentials_cache,
-        )
-        .await
-    }
-
-    fn from_metadata23_with_source_context(
-        metadata: uv_pypi_types::RequiresDist,
-        git_member: Option<&GitWorkspaceMember<'_>>,
-    ) -> Result<Self, MetadataError> {
-        let requires_dist = Box::into_iter(metadata.requires_dist)
-            .map(|requirement| {
-                let requirement_name = requirement.name.clone();
-                LoweredRequirement::preserve_git_source(requirement, git_member)
-                    .map(LoweredRequirement::into_inner)
-                    .map_err(|err| MetadataError::LoweringError(requirement_name, Box::new(err)))
-            })
-            .collect::<Result<Box<_>, _>>()?;
-
-        Ok(Self {
-            name: metadata.name,
-            requires_dist,
-            provides_extra: metadata.provides_extra,
-            dependency_groups: BTreeMap::default(),
-            dynamic: metadata.dynamic,
+fn from_metadata23_with_source_context(
+    metadata: uv_pypi_types::RequiresDist,
+    git_member: Option<&GitWorkspaceMember<'_>>,
+) -> Result<RequiresDist, MetadataError> {
+    let requires_dist = Box::into_iter(metadata.requires_dist)
+        .map(|requirement| {
+            let requirement_name = requirement.name.clone();
+            LoweredRequirement::preserve_git_source(requirement, git_member)
+                .map(LoweredRequirement::into_inner)
+                .map_err(|err| MetadataError::LoweringError(requirement_name, Box::new(err)))
         })
-    }
+        .collect::<Result<Box<_>, _>>()?;
 
-    async fn from_project_workspace(
-        metadata: uv_pypi_types::RequiresDist,
-        project_workspace: &ProjectWorkspace,
-        git_member: Option<&GitWorkspaceMember<'_>>,
-        locations: &IndexLocations,
-        no_sources: &NoSources,
-        editable: bool,
-        cache: &Cache,
-        workspace_cache: &WorkspaceCache,
-        credentials_cache: &CredentialsCache,
-    ) -> Result<Self, MetadataError> {
-        // Collect any `tool.uv.index` entries.
-        let empty = vec![];
-        let project_indexes = project_workspace
-            .current_project()
-            .pyproject_toml()
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.index.as_deref())
-            .unwrap_or(&empty);
+    Ok(RequiresDist {
+        name: metadata.name,
+        requires_dist,
+        provides_extra: metadata.provides_extra,
+        dependency_groups: BTreeMap::default(),
+        dynamic: metadata.dynamic,
+    })
+}
 
-        // Collect any `tool.uv.sources` and `tool.uv.dev_dependencies` from `pyproject.toml`.
-        let empty = BTreeMap::default();
-        let project_sources = project_workspace
-            .current_project()
-            .pyproject_toml()
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.sources.as_ref())
-            .map(ToolUvSources::inner)
-            .unwrap_or(&empty);
+async fn from_project_workspace(
+    metadata: uv_pypi_types::RequiresDist,
+    project_workspace: &ProjectWorkspace,
+    git_member: Option<&GitWorkspaceMember<'_>>,
+    locations: &IndexLocations,
+    no_sources: &NoSources,
+    editable: bool,
+    cache: &Cache,
+    workspace_cache: &WorkspaceCache,
+    credentials_cache: &CredentialsCache,
+) -> Result<RequiresDist, MetadataError> {
+    // Collect any `tool.uv.index` entries.
+    let empty = vec![];
+    let project_indexes = project_workspace
+        .current_project()
+        .pyproject_toml()
+        .tool
+        .as_ref()
+        .and_then(|tool| tool.uv.as_ref())
+        .and_then(|uv| uv.index.as_deref())
+        .unwrap_or(&empty);
 
-        let dependency_groups = FlatDependencyGroups::from_pyproject_toml(
-            project_workspace.current_project().root(),
-            project_workspace.current_project().pyproject_toml(),
-        )?;
+    // Collect any `tool.uv.sources` and `tool.uv.dev_dependencies` from `pyproject.toml`.
+    let empty = BTreeMap::default();
+    let project_sources = project_workspace
+        .current_project()
+        .pyproject_toml()
+        .tool
+        .as_ref()
+        .and_then(|tool| tool.uv.as_ref())
+        .and_then(|uv| uv.sources.as_ref())
+        .map(ToolUvSources::inner)
+        .unwrap_or(&empty);
 
-        // Now that we've resolved the dependency groups, we can validate that each source references
-        // a valid extra or group, if present.
-        Self::validate_sources(project_sources, &metadata, &dependency_groups)?;
+    let dependency_groups = FlatDependencyGroups::from_pyproject_toml(
+        project_workspace.current_project().root(),
+        project_workspace.current_project().pyproject_toml(),
+    )?;
 
-        // Lower the dependency groups.
-        let mut lowered_dependency_groups = BTreeMap::new();
-        for (name, flat_group) in dependency_groups {
-            let mut requirements = Vec::new();
-            for requirement in flat_group.requirements {
-                if no_sources.for_package(&requirement.name) {
-                    requirements.push(Requirement::from(requirement));
-                    continue;
-                }
+    // Now that we've resolved the dependency groups, we can validate that each source references
+    // a valid extra or group, if present.
+    validate_sources(project_sources, &metadata, &dependency_groups)?;
 
-                let requirement_name = requirement.name.clone();
-                requirements.extend(
-                    LoweredRequirement::from_requirement(
-                        requirement,
-                        Some(&metadata.name),
-                        project_workspace.project_root(),
-                        project_sources,
-                        project_indexes,
-                        None,
-                        Some(&name),
-                        locations,
-                        project_workspace.workspace(),
-                        git_member,
-                        editable,
-                        cache,
-                        workspace_cache,
-                        credentials_cache,
-                    )
-                    .await
-                    .map(|requirement| {
-                        requirement
-                            .map(LoweredRequirement::into_inner)
-                            .map_err(|err| {
-                                MetadataError::GroupLoweringError(
-                                    name.clone(),
-                                    requirement_name.clone(),
-                                    Box::new(err),
-                                )
-                            })
-                    })
-                    .collect::<Result<Vec<_>, _>>()?,
-                );
-            }
-            lowered_dependency_groups.insert(name, requirements.into_boxed_slice());
-        }
-
-        // Lower the requirements.
-        let mut requires_dist = Vec::new();
-        for requirement in Box::into_iter(metadata.requires_dist) {
+    // Lower the dependency groups.
+    let mut lowered_dependency_groups = BTreeMap::new();
+    for (name, flat_group) in dependency_groups {
+        let mut requirements = Vec::new();
+        for requirement in flat_group.requirements {
             if no_sources.for_package(&requirement.name) {
-                requires_dist.push(Requirement::from(requirement));
+                requirements.push(Requirement::from(requirement));
                 continue;
             }
 
             let requirement_name = requirement.name.clone();
-            let extra = requirement.marker.top_level_extra_name();
-            requires_dist.extend(
+            requirements.extend(
                 LoweredRequirement::from_requirement(
                     requirement,
                     Some(&metadata.name),
                     project_workspace.project_root(),
                     project_sources,
                     project_indexes,
-                    extra.as_deref(),
                     None,
+                    Some(&name),
                     locations,
                     project_workspace.workspace(),
                     git_member,
@@ -222,242 +159,130 @@ impl RequiresDist {
                     requirement
                         .map(LoweredRequirement::into_inner)
                         .map_err(|err| {
-                            MetadataError::LoweringError(requirement_name.clone(), Box::new(err))
+                            MetadataError::GroupLoweringError(
+                                name.clone(),
+                                requirement_name.clone(),
+                                Box::new(err),
+                            )
                         })
                 })
                 .collect::<Result<Vec<_>, _>>()?,
             );
         }
-
-        Ok(Self {
-            name: metadata.name,
-            requires_dist: requires_dist.into_boxed_slice(),
-            dependency_groups: lowered_dependency_groups,
-            provides_extra: metadata.provides_extra,
-            dynamic: metadata.dynamic,
-        })
+        lowered_dependency_groups.insert(name, requirements.into_boxed_slice());
     }
 
-    /// Validate the sources for a given [`uv_pypi_types::RequiresDist`].
-    ///
-    /// If a source is requested with an `extra` or `group`, ensure that the relevant dependency is
-    /// present in the relevant `project.optional-dependencies` or `dependency-groups` section.
-    fn validate_sources(
-        sources: &BTreeMap<PackageName, Sources>,
-        metadata: &uv_pypi_types::RequiresDist,
-        dependency_groups: &FlatDependencyGroups,
-    ) -> Result<(), MetadataError> {
-        for (name, sources) in sources {
-            for source in sources.iter() {
-                if let Some(extra) = source.extra() {
-                    // If the extra doesn't exist at all, error.
-                    if !metadata.provides_extra.contains(extra) {
-                        return Err(MetadataError::MissingSourceExtra(
-                            name.clone(),
-                            extra.clone(),
-                        ));
-                    }
-
-                    // If there is no such requirement with the extra, error.
-                    if !metadata.requires_dist.iter().any(|requirement| {
-                        requirement.name == *name
-                            && requirement.marker.top_level_extra_name().as_deref() == Some(extra)
-                    }) {
-                        return Err(MetadataError::IncompleteSourceExtra(
-                            name.clone(),
-                            extra.clone(),
-                        ));
-                    }
-                }
-
-                if let Some(group) = source.group() {
-                    // If the group doesn't exist at all, error.
-                    let Some(flat_group) = dependency_groups.get(group) else {
-                        return Err(MetadataError::MissingSourceGroup(
-                            name.clone(),
-                            group.clone(),
-                        ));
-                    };
-
-                    // If there is no such requirement with the group, error.
-                    if !flat_group
-                        .requirements
-                        .iter()
-                        .any(|requirement| requirement.name == *name)
-                    {
-                        return Err(MetadataError::IncompleteSourceGroup(
-                            name.clone(),
-                            group.clone(),
-                        ));
-                    }
-                }
-            }
+    // Lower the requirements.
+    let mut requires_dist = Vec::new();
+    for requirement in Box::into_iter(metadata.requires_dist) {
+        if no_sources.for_package(&requirement.name) {
+            requires_dist.push(Requirement::from(requirement));
+            continue;
         }
 
-        Ok(())
+        let requirement_name = requirement.name.clone();
+        let extra = requirement.marker.top_level_extra_name();
+        requires_dist.extend(
+            LoweredRequirement::from_requirement(
+                requirement,
+                Some(&metadata.name),
+                project_workspace.project_root(),
+                project_sources,
+                project_indexes,
+                extra.as_deref(),
+                None,
+                locations,
+                project_workspace.workspace(),
+                git_member,
+                editable,
+                cache,
+                workspace_cache,
+                credentials_cache,
+            )
+            .await
+            .map(|requirement| {
+                requirement
+                    .map(LoweredRequirement::into_inner)
+                    .map_err(|err| {
+                        MetadataError::LoweringError(requirement_name.clone(), Box::new(err))
+                    })
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+        );
     }
+
+    Ok(RequiresDist {
+        name: metadata.name,
+        requires_dist: requires_dist.into_boxed_slice(),
+        dependency_groups: lowered_dependency_groups,
+        provides_extra: metadata.provides_extra,
+        dynamic: metadata.dynamic,
+    })
 }
 
-impl From<Metadata> for RequiresDist {
-    fn from(metadata: Metadata) -> Self {
-        Self {
-            name: metadata.name,
-            requires_dist: metadata.requires_dist,
-            provides_extra: metadata.provides_extra,
-            dependency_groups: metadata.dependency_groups,
-            dynamic: metadata.dynamic,
-        }
-    }
-}
+/// Validate the sources for a given [`uv_pypi_types::RequiresDist`].
+///
+/// If a source is requested with an `extra` or `group`, ensure that the relevant dependency is
+/// present in the relevant `project.optional-dependencies` or `dependency-groups` section.
+fn validate_sources(
+    sources: &BTreeMap<PackageName, Sources>,
+    metadata: &uv_pypi_types::RequiresDist,
+    dependency_groups: &FlatDependencyGroups,
+) -> Result<(), MetadataError> {
+    for (name, sources) in sources {
+        for source in sources.iter() {
+            if let Some(extra) = source.extra() {
+                // If the extra doesn't exist at all, error.
+                if !metadata.provides_extra.contains(extra) {
+                    return Err(MetadataError::MissingSourceExtra(
+                        name.clone(),
+                        extra.clone(),
+                    ));
+                }
 
-/// Like [`uv_pypi_types::RequiresDist`], but with any recursive (or self-referential) dependencies
-/// resolved.
-///
-/// For example, given:
-/// ```toml
-/// [project]
-/// name = "example"
-/// version = "0.1.0"
-/// requires-python = ">=3.13.0"
-/// dependencies = []
-///
-/// [project.optional-dependencies]
-/// all = [
-///     "example[async]",
-/// ]
-/// async = [
-///     "fastapi",
-/// ]
-/// ```
-///
-/// A build backend could return:
-/// ```txt
-/// Metadata-Version: 2.2
-/// Name: example
-/// Version: 0.1.0
-/// Requires-Python: >=3.13.0
-/// Provides-Extra: all
-/// Requires-Dist: example[async]; extra == "all"
-/// Provides-Extra: async
-/// Requires-Dist: fastapi; extra == "async"
-/// ```
-///
-/// Or:
-/// ```txt
-/// Metadata-Version: 2.4
-/// Name: example
-/// Version: 0.1.0
-/// Requires-Python: >=3.13.0
-/// Provides-Extra: all
-/// Requires-Dist: fastapi; extra == 'all'
-/// Provides-Extra: async
-/// Requires-Dist: fastapi; extra == 'async'
-/// ```
-///
-/// The [`FlatRequiresDist`] struct is used to flatten out the recursive dependencies, i.e., convert
-/// from the former to the latter.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FlatRequiresDist(Box<[Requirement]>);
-
-impl FlatRequiresDist {
-    /// Flatten a set of requirements, resolving any self-references.
-    pub fn from_requirements(requirements: Box<[Requirement]>, name: &PackageName) -> Self {
-        // If there are no self-references, we can return early.
-        if requirements.iter().all(|req| req.name != *name) {
-            return Self(requirements);
-        }
-
-        // Transitively process all extras that are recursively included.
-        let mut flattened = requirements.to_vec();
-        let mut seen = FxHashSet::<(ExtraName, MarkerTree)>::default();
-        let mut queue: VecDeque<_> = flattened
-            .iter()
-            .filter(|req| req.name == *name)
-            .flat_map(|req| req.extras.iter().cloned().map(|extra| (extra, req.marker)))
-            .collect();
-        while let Some((extra, marker)) = queue.pop_front() {
-            if !seen.insert((extra.clone(), marker)) {
-                continue;
+                // If there is no such requirement with the extra, error.
+                if !metadata.requires_dist.iter().any(|requirement| {
+                    requirement.name == *name
+                        && requirement.marker.top_level_extra_name().as_deref() == Some(extra)
+                }) {
+                    return Err(MetadataError::IncompleteSourceExtra(
+                        name.clone(),
+                        extra.clone(),
+                    ));
+                }
             }
 
-            // Find the optional portion of each requirement for this extra. A requirement can
-            // also apply in production, as in `sys_platform == 'win32' or extra == 'base'`.
-            for requirement in &requirements {
-                let production_marker = requirement.marker.simplify_not_extras_with(|_| true);
-                let extra_marker = requirement
-                    .marker
-                    .simplify_extras(slice::from_ref(&extra))
-                    .simplify_not_extras_with(|candidate| candidate != &extra)
-                    .and(production_marker.negate());
-                let marker = marker.and(extra_marker);
-                if marker.is_false() {
-                    continue;
-                }
-                let requirement = Requirement {
-                    name: requirement.name.clone(),
-                    extras: requirement.extras.clone(),
-                    groups: requirement.groups.clone(),
-                    source: requirement.source.clone(),
-                    scope: requirement.scope.clone(),
-                    origin: requirement.origin.clone(),
-                    marker,
+            if let Some(group) = source.group() {
+                // If the group doesn't exist at all, error.
+                let Some(flat_group) = dependency_groups.get(group) else {
+                    return Err(MetadataError::MissingSourceGroup(
+                        name.clone(),
+                        group.clone(),
+                    ));
                 };
-                if requirement.name == *name {
-                    // Add each transitively included extra.
-                    queue.extend(
-                        requirement
-                            .extras
-                            .iter()
-                            .cloned()
-                            .map(|extra| (extra, requirement.marker)),
-                    );
+
+                // If there is no such requirement with the group, error.
+                if !flat_group
+                    .requirements
+                    .iter()
+                    .any(|requirement| requirement.name == *name)
+                {
+                    return Err(MetadataError::IncompleteSourceGroup(
+                        name.clone(),
+                        group.clone(),
+                    ));
                 }
-
-                // Retain the requirement, including any recursively reached self-constraint.
-                flattened.push(requirement);
             }
         }
-
-        // Retain any self-constraints for that extra, e.g., if `project[foo]` includes
-        // `project[bar]>1.0`, as a dependency, we need to propagate `project>1.0`, in addition to
-        // transitively expanding `project[bar]`.
-        let mut self_constraints = vec![];
-        for req in &flattened {
-            if req.name == *name && !req.source.is_empty() {
-                self_constraints.push(Requirement {
-                    name: req.name.clone(),
-                    extras: Box::new([]),
-                    groups: req.groups.clone(),
-                    source: req.source.clone(),
-                    scope: req.scope.clone(),
-                    origin: req.origin.clone(),
-                    marker: req.marker,
-                });
-            }
-        }
-
-        // Drop all the self-references now that we've flattened them out.
-        flattened.retain(|req| req.name != *name);
-        flattened.extend(self_constraints);
-
-        Self(flattened.into_boxed_slice())
     }
-}
 
-impl IntoIterator for FlatRequiresDist {
-    type Item = Requirement;
-    type IntoIter = <Box<[Requirement]> as IntoIterator>::IntoIter;
-
-    fn into_iter(self) -> Self::IntoIter {
-        Box::into_iter(self.0)
-    }
+    Ok(())
 }
 
 #[cfg(test)]
 mod test {
     use std::fmt::Write;
     use std::path::Path;
-    use std::str::FromStr;
 
     use indoc::indoc;
     use insta::assert_snapshot;
@@ -467,12 +292,9 @@ mod test {
     use uv_cache::Cache;
     use uv_configuration::NoSources;
     use uv_distribution_types::IndexLocations;
-    use uv_normalize::PackageName;
-    use uv_pep508::Requirement;
     use uv_workspace::{DiscoveryOptions, ProjectWorkspace, WorkspaceCache};
 
     use crate::RequiresDist;
-    use crate::metadata::requires_dist::FlatRequiresDist;
 
     async fn requires_dist_from_pyproject_toml(
         temp_dir: &Path,
@@ -494,7 +316,7 @@ mod test {
         .await?;
         let pyproject_toml = uv_pypi_types::PyProjectToml::from_toml(contents, "pyproject.toml")?;
         let requires_dist = uv_pypi_types::RequiresDist::from_pyproject_toml(pyproject_toml)?;
-        Ok(RequiresDist::from_project_workspace(
+        Ok(super::from_project_workspace(
             requires_dist,
             &project_workspace,
             None,
@@ -764,143 +586,5 @@ mod test {
         "};
 
         assert_snapshot!(format_err(input).await, @"error: No `project` table found in: [PATH]/pyproject.toml");
-    }
-
-    #[test]
-    fn test_flat_requires_dist_noop() {
-        let name = PackageName::from_str("pkg").unwrap();
-        let requirements = [
-            Requirement::from_str("requests>=2.0.0").unwrap().into(),
-            Requirement::from_str("pytest; extra == 'test'")
-                .unwrap()
-                .into(),
-            Requirement::from_str("black; extra == 'dev'")
-                .unwrap()
-                .into(),
-        ];
-
-        let expected = FlatRequiresDist(
-            [
-                Requirement::from_str("requests>=2.0.0").unwrap().into(),
-                Requirement::from_str("pytest; extra == 'test'")
-                    .unwrap()
-                    .into(),
-                Requirement::from_str("black; extra == 'dev'")
-                    .unwrap()
-                    .into(),
-            ]
-            .into(),
-        );
-
-        let actual = FlatRequiresDist::from_requirements(requirements.into(), &name);
-
-        assert_eq!(actual, expected);
-    }
-
-    #[test]
-    fn test_flat_requires_dist_basic() {
-        let name = PackageName::from_str("pkg").unwrap();
-        let requirements = [
-            Requirement::from_str("requests>=2.0.0").unwrap().into(),
-            Requirement::from_str("pytest; extra == 'test'")
-                .unwrap()
-                .into(),
-            Requirement::from_str("pkg[dev]; extra == 'test'")
-                .unwrap()
-                .into(),
-            Requirement::from_str("black; extra == 'dev'")
-                .unwrap()
-                .into(),
-        ];
-
-        let expected = FlatRequiresDist(
-            [
-                Requirement::from_str("requests>=2.0.0").unwrap().into(),
-                Requirement::from_str("pytest; extra == 'test'")
-                    .unwrap()
-                    .into(),
-                Requirement::from_str("black; extra == 'dev'")
-                    .unwrap()
-                    .into(),
-                Requirement::from_str("black; extra == 'test'")
-                    .unwrap()
-                    .into(),
-            ]
-            .into(),
-        );
-
-        let actual = FlatRequiresDist::from_requirements(requirements.into(), &name);
-
-        assert_eq!(actual, expected);
-    }
-
-    #[test]
-    fn test_flat_requires_dist_with_markers() {
-        let name = PackageName::from_str("pkg").unwrap();
-        let requirements = vec![
-            Requirement::from_str("requests>=2.0.0").unwrap().into(),
-            Requirement::from_str("pytest; extra == 'test'")
-                .unwrap()
-                .into(),
-            Requirement::from_str("pkg[dev]; extra == 'test' and sys_platform == 'win32'")
-                .unwrap()
-                .into(),
-            Requirement::from_str("black; extra == 'dev' and sys_platform == 'win32'")
-                .unwrap()
-                .into(),
-        ];
-
-        let expected = FlatRequiresDist(
-            [
-                Requirement::from_str("requests>=2.0.0").unwrap().into(),
-                Requirement::from_str("pytest; extra == 'test'")
-                    .unwrap()
-                    .into(),
-                Requirement::from_str("black; extra == 'dev' and sys_platform == 'win32'")
-                    .unwrap()
-                    .into(),
-                Requirement::from_str("black; extra == 'test' and sys_platform == 'win32'")
-                    .unwrap()
-                    .into(),
-            ]
-            .into(),
-        );
-
-        let actual = FlatRequiresDist::from_requirements(requirements.into(), &name);
-
-        assert_eq!(actual, expected);
-    }
-
-    #[test]
-    fn test_flat_requires_dist_self_constraint() {
-        let name = PackageName::from_str("pkg").unwrap();
-        let requirements = [
-            Requirement::from_str("requests>=2.0.0").unwrap().into(),
-            Requirement::from_str("pytest; extra == 'test'")
-                .unwrap()
-                .into(),
-            Requirement::from_str("black; extra == 'dev'")
-                .unwrap()
-                .into(),
-            Requirement::from_str("pkg[async]==1.0.0").unwrap().into(),
-        ];
-
-        let expected = FlatRequiresDist(
-            [
-                Requirement::from_str("requests>=2.0.0").unwrap().into(),
-                Requirement::from_str("pytest; extra == 'test'")
-                    .unwrap()
-                    .into(),
-                Requirement::from_str("black; extra == 'dev'")
-                    .unwrap()
-                    .into(),
-                Requirement::from_str("pkg==1.0.0").unwrap().into(),
-            ]
-            .into(),
-        );
-
-        let actual = FlatRequiresDist::from_requirements(requirements.into(), &name);
-
-        assert_eq!(actual, expected);
     }
 }

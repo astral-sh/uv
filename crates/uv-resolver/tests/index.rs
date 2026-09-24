@@ -1,9 +1,9 @@
 use std::error::Error;
 use std::sync::Arc;
 
+use uv_distribution::{MetadataResponse, MetadataUnavailable};
 use uv_distribution_types::DistributionId;
 use uv_resolver::InMemoryIndex;
-use uv_resolver_types::{MetadataResponse, MetadataUnavailable};
 
 #[test]
 fn invalidation_requires_exclusive_index() -> Result<(), Box<dyn Error>> {

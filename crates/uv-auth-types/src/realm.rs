@@ -90,7 +90,7 @@ pub struct RealmRef<'a> {
 
 impl RealmRef<'_> {
     /// Returns true if this realm is a subdomain of the other realm.
-    pub(crate) fn is_subdomain_of(&self, other: Self) -> bool {
+    pub fn is_subdomain_of(&self, other: Self) -> bool {
         other.scheme == self.scheme
             && other.port == self.port
             && other.host.is_some_and(|other_host| {

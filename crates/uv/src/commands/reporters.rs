@@ -16,9 +16,10 @@ use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
     BuildableSource, CachedDist, DistributionMetadata, Name, SourceDist, VersionOrUrlRef,
 };
+use uv_lock::PythonReport;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_python::PythonInstallationKey;
+use uv_python::{Interpreter, LenientImplementationName, PythonInstallationKey};
 use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 
@@ -946,4 +947,14 @@ impl uv_bin_install::Reporter for BinaryDownloadReporter {
     fn on_download_complete(&self, id: usize) {
         self.reporter.on_request_complete(Direction::Download, id);
     }
+}
+
+/// Describe the interpreter used by a command's environment.
+pub(crate) fn python_report(interpreter: &Interpreter) -> PythonReport {
+    let implementation = LenientImplementationName::from(interpreter.implementation_name());
+    PythonReport::new(
+        interpreter.sys_executable().into(),
+        interpreter.python_full_version().clone(),
+        <&str>::from(&implementation).to_owned(),
+    )
 }

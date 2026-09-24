@@ -22,9 +22,9 @@ use url::ParseError;
 use url::Url;
 
 use uv_auth::{
-    AuthMiddleware, Credentials, CredentialsCache, CredentialsFromUrlError, Indexes, RealmRef,
+    AuthMiddleware, Credentials, CredentialsCache, CredentialsFromUrlError, Indexes,
+    KeyringProvider, RealmRef,
 };
-use uv_configuration::ProxyUrlKind;
 use uv_configuration::{Concurrency, KeyringProviderType, ProxyUrl, TrustedHost};
 use uv_distribution_types::IndexCredentialsError;
 use uv_git::GitHttpSettings;
@@ -42,6 +42,14 @@ use crate::linehaul::LineHaul;
 use crate::middleware::{AzureStorageMiddleware, OfflineMiddleware};
 use crate::tls::{Certificates, read_identity};
 use crate::{Connectivity, MetadataRangeRequest, RetriableError, RetryState, UvRetryableStrategy};
+
+/// Construct the configured credential lookup provider.
+pub fn keyring_provider(provider: KeyringProviderType) -> Option<KeyringProvider> {
+    match provider {
+        KeyringProviderType::Disabled => None,
+        KeyringProviderType::Subprocess => Some(KeyringProvider::subprocess()),
+    }
+}
 
 pub const DEFAULT_RETRIES: u32 = 3;
 
@@ -660,16 +668,12 @@ impl<'a> BaseClientBuilder<'a> {
             .and_then(|no_proxy| NoProxy::from_string(&no_proxy.join(",")));
 
         if let Some(http_proxy) = &self.http_proxy {
-            let proxy = http_proxy
-                .as_proxy(ProxyUrlKind::Http)?
-                .no_proxy(no_proxy.clone());
+            let proxy = Proxy::http(http_proxy.as_url().as_str())?.no_proxy(no_proxy.clone());
             client_builder = client_builder.proxy(proxy);
         }
 
         if let Some(https_proxy) = &self.https_proxy {
-            let proxy = https_proxy
-                .as_proxy(ProxyUrlKind::Https)?
-                .no_proxy(no_proxy);
+            let proxy = Proxy::https(https_proxy.as_url().as_str())?.no_proxy(no_proxy);
             client_builder = client_builder.proxy(proxy);
         }
 
@@ -708,7 +712,7 @@ impl<'a> BaseClientBuilder<'a> {
                         let auth_middleware = AuthMiddleware::new()
                             .with_cache_arc(self.credentials_cache.clone())
                             .with_indexes(self.indexes.clone())
-                            .with_keyring(self.keyring.to_provider())
+                            .with_keyring(keyring_provider(self.keyring))
                             .with_preview(self.preview);
                         client = client.with(auth_middleware);
                     }
@@ -716,7 +720,7 @@ impl<'a> BaseClientBuilder<'a> {
                         let auth_middleware = AuthMiddleware::new()
                             .with_cache_arc(self.credentials_cache.clone())
                             .with_indexes(self.indexes.clone())
-                            .with_keyring(self.keyring.to_provider())
+                            .with_keyring(keyring_provider(self.keyring))
                             .with_preview(self.preview)
                             .with_only_authenticated(true);
                         client = client.with(auth_middleware);
