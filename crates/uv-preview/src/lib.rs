@@ -344,6 +344,9 @@ pub enum PreviewFeature {
     MinimumLibcVersion,
     /// Checks build dependencies before nonisolated builds with `uv build`.
     BuildDependencyCheck,
+    /// Enables lazy imports in build backend invocations on CPython 3.15 and later.
+    /// This can affect import-time side effects in third-party build backends.
+    BuildLazyImports,
 }
 
 impl Display for PreviewFeature {
