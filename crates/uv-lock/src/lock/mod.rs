@@ -74,12 +74,14 @@ pub use crate::lock::export::RequirementsTxtExport;
 pub use crate::lock::export::{
     Metadata, PylockToml, PylockTomlError, PylockTomlErrorKind, PythonReport, cyclonedx_json,
 };
+use crate::lock::inputs::ManifestFilter;
 pub use crate::lock::installable::{Installable, InstallableRootKind};
 pub use crate::lock::map::PackageMap;
 pub use crate::lock::tree::{TreeDisplay, TreeJsonTarget};
 
 mod deserialize;
 pub(crate) mod export;
+mod inputs;
 mod installable;
 mod map;
 mod serialize;
@@ -2816,6 +2818,16 @@ impl Lock {
         self
     }
 
+    /// Retain cutoffs for locked packages and names whose cutoffs are already stored in the lock.
+    pub fn filter_exclude_newer(&self, exclude_newer: ExcludeNewer) -> ExcludeNewer {
+        exclude_newer.filter_packages(
+            self.packages
+                .iter()
+                .map(Package::name)
+                .chain(self.options.exclude_newer.package.keys()),
+        )
+    }
+
     /// Returns `true` if this [`Lock`] includes `provides-extra` metadata.
     pub fn supports_provides_extra(&self) -> bool {
         // `provides-extra` was added in Version 1 Revision 1.
@@ -4089,10 +4101,13 @@ impl Lock {
             }
         }
 
+        let filter = ManifestFilter::from_lock(self);
+
         // Validate that the lockfile was generated with the same constraints.
         let normalized_constraints = {
             let expected: BTreeSet<_> = constraints
                 .iter()
+                .filter(|entry| filter.includes_constraint(entry))
                 .cloned()
                 .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
                 .collect::<Result<_, _>>()?;
@@ -4132,6 +4147,7 @@ impl Lock {
             };
             let expected: BTreeSet<_> = overrides
                 .iter()
+                .filter(|entry| filter.includes_override(entry))
                 .cloned()
                 .map(normalize)
                 .collect::<Result<_, _>>()?;
@@ -4150,7 +4166,11 @@ impl Lock {
 
         // Validate that the lockfile was generated with the same excludes.
         {
-            let expected: BTreeSet<_> = excludes.iter().cloned().collect();
+            let expected = excludes
+                .iter()
+                .filter(|entry| filter.includes_exclusion(entry))
+                .cloned()
+                .collect();
             let actual: BTreeSet<_> = self.manifest.excludes.iter().cloned().collect();
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedExcludes(expected, actual));
@@ -4237,6 +4257,7 @@ impl Lock {
         {
             let expected = dependency_metadata
                 .values()
+                .filter(|entry| filter.includes_metadata(entry))
                 .cloned()
                 .collect::<BTreeSet<_>>();
             let actual = &self.manifest.dependency_metadata;

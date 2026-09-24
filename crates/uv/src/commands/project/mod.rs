@@ -2724,6 +2724,7 @@ pub(crate) async fn resolve_environment(
         &resolve_dispatch,
         concurrency,
         options,
+        None,
         logger,
         printer,
     )
@@ -3121,6 +3122,7 @@ pub(crate) async fn update_environment(
         &build_dispatch,
         concurrency,
         options,
+        None,
         resolve,
         printer,
     )

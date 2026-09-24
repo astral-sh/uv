@@ -7,7 +7,7 @@ use tracing::trace;
 
 use uv_configuration::{Constraints, Excludes, Overrides};
 use uv_distribution::{DistributionDatabase, Reporter};
-use uv_distribution_types::{DependencyMetadata, Dist, Identifier, Requirement, RequirementSource};
+use uv_distribution_types::{Dist, Identifier, Requirement, RequirementSource};
 use uv_resolver::{InMemoryIndex, MetadataResponse, ResolverEnvironment};
 use uv_types::{BuildContext, HashStrategy, HashVerification, RequestedRequirements};
 
@@ -38,8 +38,6 @@ pub struct LookaheadResolver<'a, Context: BuildContext> {
     overrides: &'a Overrides,
     /// The dependency exclusions for the project.
     excludes: &'a Excludes,
-    /// The metadata explicitly provided by the user.
-    dependency_metadata: &'a DependencyMetadata,
     /// The required hashes for the project.
     hasher: &'a HashStrategy,
     /// The in-memory index for resolving dependencies.
@@ -55,7 +53,6 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         constraints: &'a Constraints,
         overrides: &'a Overrides,
         excludes: &'a Excludes,
-        dependency_metadata: &'a DependencyMetadata,
         hasher: &'a HashStrategy,
         index: &'a InMemoryIndex,
         database: DistributionDatabase<'a, Context>,
@@ -65,7 +62,6 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             constraints,
             overrides,
             excludes,
-            dependency_metadata,
             hasher,
             index,
             database,
@@ -121,8 +117,8 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                     // Read its hashes directly; the lookahead requirements may come from the archive.
                     let trusted_requirements =
                         if matches!(hasher.verification(), HashVerification::Required(_)) {
-                            self.dependency_metadata
-                                .get(lookahead.package(), Some(lookahead.version()))
+                            self.database
+                                .dependency_metadata(lookahead.package(), Some(lookahead.version()))
                                 .map(|metadata| {
                                     Box::into_iter(metadata.requires_dist)
                                         .map(Requirement::from)
@@ -190,6 +186,8 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         } else {
             false
         };
+
+        self.database.record_metadata(&dist);
 
         // Fetch the metadata for the distribution.
         let metadata = {

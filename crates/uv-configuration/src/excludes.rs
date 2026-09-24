@@ -3,6 +3,7 @@ use std::str::FromStr;
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde::de::Error;
 
+use uv_distribution_types::ResolutionRecorder;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 
@@ -33,6 +34,13 @@ pub struct PackageExclusionTarget {
     version: Option<Version>,
 }
 
+impl PackageExclusion {
+    /// Return the parent package selected by this exclusion.
+    pub fn package(&self) -> &PackageName {
+        &self.package.name
+    }
+}
+
 /// An exclusion, either global or scoped to a specific package version.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema), schemars(untagged))]
@@ -61,6 +69,7 @@ impl<'de> serde::Deserialize<'de> for ExcludeDependency {
 /// A set of packages to exclude from resolution.
 #[derive(Debug, Default, Clone)]
 pub struct Excludes {
+    recorder: Option<ResolutionRecorder>,
     global: FxHashSet<PackageName>,
     scoped: FxHashMap<PackageName, Vec<ScopedExclusions>>,
 }
@@ -72,6 +81,13 @@ struct ScopedExclusions {
 }
 
 impl Excludes {
+    /// Record which settings are consulted while resolving runtime dependencies.
+    #[must_use]
+    pub fn with_recorder(mut self, recorder: Option<ResolutionRecorder>) -> Self {
+        self.recorder = recorder;
+        self
+    }
+
     /// Create an indexed set of exclusions.
     pub fn from_entries(entries: impl IntoIterator<Item = ExcludeDependency>) -> Self {
         let mut excludes = Self::default();
@@ -101,6 +117,9 @@ impl Excludes {
 
     /// Check if a package is excluded.
     pub fn contains(&self, name: &PackageName) -> bool {
+        if let Some(recorder) = &self.recorder {
+            recorder.exclusion(name);
+        }
         self.global.contains(name)
     }
 
@@ -163,6 +182,9 @@ impl Excludes {
     ) -> bool {
         self.contains(dependency)
             || package.is_some_and(|(package, version)| {
+                if let Some(recorder) = &self.recorder {
+                    recorder.scoped_exclusion(package);
+                }
                 self.scoped.get(package).is_some_and(|entries| {
                     entries
                         .iter()

@@ -23,8 +23,8 @@ use uv_distribution_types::{
     CachedDist, ConfigSettings, DependencyMetadata, Diagnostic, Dist, ExtraBuildRequires,
     ExtraBuildVariables, IndexLocations, InstalledDist, InstalledVersion, LocalDist,
     NameRequirementSpecification, PackageConfigSettings, Requirement, RequirementScope,
-    ResolutionDiagnostic, UnresolvedRequirement, UnresolvedRequirementSpecification,
-    VersionOrUrlRef,
+    ResolutionDiagnostic, ResolutionRecorder, UnresolvedRequirement,
+    UnresolvedRequirementSpecification, VersionOrUrlRef,
 };
 use uv_distribution_types::{
     DerivationChain, DistributionMetadata, InstalledMetadata, Name, Resolution,
@@ -129,6 +129,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     build_dispatch: &BuildDispatch<'_>,
     concurrency: &Concurrency,
     options: Options,
+    recorder: Option<ResolutionRecorder>,
     logger: Box<dyn ResolveLogger>,
     printer: Printer,
 ) -> Result<(ResolverOutput, HashStrategy), Error> {
@@ -159,7 +160,8 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                         client,
                         build_dispatch,
                         concurrency.downloads_semaphore.clone(),
-                    ),
+                    )
+                    .with_recorder(recorder.clone()),
                 )
                 .with_reporter(Arc::new(ResolverReporter::from(printer)))
                 .resolve(unnamed.into_iter())
@@ -177,7 +179,8 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                     client,
                     build_dispatch,
                     concurrency.downloads_semaphore.clone(),
-                ),
+                )
+                .with_recorder(recorder.clone()),
             )
             .with_reporter(Arc::new(ResolverReporter::from(printer)))
             .resolve(source_trees.iter())
@@ -306,7 +309,8 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                         client,
                         build_dispatch,
                         concurrency.downloads_semaphore.clone(),
-                    ),
+                    )
+                    .with_recorder(recorder.clone()),
                 )
                 .with_reporter(Arc::new(ResolverReporter::from(printer)))
                 .resolve(unnamed.into_iter())
@@ -337,19 +341,22 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     // Determine any lookahead requirements.
     let lookaheads = match options.dependency_mode {
         DependencyMode::Transitive => {
+            let constraints = constraints.clone().with_recorder(recorder.clone());
+            let overrides = overrides.clone().with_recorder(recorder.clone());
+            let excludes = excludes.clone().with_recorder(recorder.clone());
             let (lookaheads, updated_hasher) = LookaheadResolver::new(
                 &requirements,
                 &constraints,
                 &overrides,
                 &excludes,
-                build_dispatch.dependency_metadata(),
                 &hasher,
                 index,
                 DistributionDatabase::new(
                     client,
                     build_dispatch,
                     concurrency.downloads_semaphore.clone(),
-                ),
+                )
+                .with_recorder(recorder.clone()),
             )
             .with_reporter(Arc::new(ResolverReporter::from(printer)))
             .resolve(&resolver_env)
@@ -374,7 +381,8 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         workspace_members,
         exclusions,
         lookaheads,
-    );
+    )
+    .with_recorder(recorder.clone());
 
     // Resolve the dependencies.
     let resolution = {
@@ -403,7 +411,8 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 client,
                 build_dispatch,
                 concurrency.downloads_semaphore.clone(),
-            ),
+            )
+            .with_recorder(recorder.clone()),
         )?
         .with_reporter(Arc::new(reporter));
 

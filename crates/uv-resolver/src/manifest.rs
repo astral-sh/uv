@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use either::Either;
 
 use uv_configuration::{Constraints, Excludes, Overrides};
-use uv_distribution_types::Requirement;
+use uv_distribution_types::{Requirement, ResolutionRecorder};
 use uv_normalize::PackageName;
 use uv_types::RequestedRequirements;
 
@@ -14,6 +14,9 @@ use crate::{DependencyMode, Exclusions, ResolverEnvironment};
 /// A manifest of requirements, constraints, and preferences.
 #[derive(Clone, Debug)]
 pub struct Manifest {
+    /// Records which settings are consulted after package selection rules are initialized.
+    pub(super) recorder: Option<ResolutionRecorder>,
+
     /// The direct requirements for the project.
     pub(super) requirements: Vec<Requirement>,
 
@@ -54,6 +57,13 @@ pub struct Manifest {
 }
 
 impl Manifest {
+    /// Record which settings are consulted during resolution, excluding package selection setup.
+    #[must_use]
+    pub fn with_recorder(mut self, recorder: Option<ResolutionRecorder>) -> Self {
+        self.recorder = recorder;
+        self
+    }
+
     pub fn new(
         requirements: Vec<Requirement>,
         constraints: Constraints,
@@ -66,6 +76,7 @@ impl Manifest {
         lookaheads: Vec<RequestedRequirements>,
     ) -> Self {
         Self {
+            recorder: None,
             requirements,
             constraints,
             overrides,
@@ -81,6 +92,7 @@ impl Manifest {
 
     pub fn simple(requirements: Vec<Requirement>) -> Self {
         Self {
+            recorder: None,
             requirements,
             constraints: Constraints::default(),
             overrides: Overrides::default(),

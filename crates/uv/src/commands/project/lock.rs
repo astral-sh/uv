@@ -19,7 +19,7 @@ use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
     DependencyMetadata, HashCollection, IndexLocations, NameRequirementSpecification, Requirement,
-    RequiresPython, UnresolvedRequirementSpecification,
+    RequiresPython, ResolutionRecorder, UnresolvedRequirementSpecification,
 };
 use uv_git::ResolvedRepositoryReference;
 use uv_git_types::GitOid;
@@ -996,11 +996,17 @@ async fn do_lock(
         // The lockfile did not contain enough information to obtain a resolution, fallback
         // to a fresh resolve.
         _ => {
+            let recorder = if preview.is_enabled(PreviewFeature::ResolutionInputs) {
+                Some(ResolutionRecorder::default())
+            } else {
+                None
+            };
             let database = DistributionDatabase::new(
                 &client,
                 &build_dispatch,
                 concurrency.downloads_semaphore.clone(),
-            );
+            )
+            .with_recorder(recorder.clone());
 
             // Determine whether we can reuse the existing package versions.
             let versions_lock = existing_lock.as_ref().and_then(|lock| match &lock {
@@ -1100,6 +1106,7 @@ async fn do_lock(
                 &build_dispatch,
                 concurrency,
                 options,
+                recorder.clone(),
                 Box::new(SummaryResolveLogger),
                 printer,
             )
@@ -1135,7 +1142,9 @@ async fn do_lock(
             .with_conflicts(conflicts)
             .with_required_environments(lock_required_environments.into_markers());
 
-            let lock = if preview.is_enabled(PreviewFeature::MissingExcludeNewerPackageLock) {
+            let lock = if let Some(recorder) = recorder {
+                lock.prune_unused(recorder.take())
+            } else if preview.is_enabled(PreviewFeature::MissingExcludeNewerPackageLock) {
                 lock.without_unused_exclude_newer_packages()
             } else {
                 lock
@@ -1222,18 +1231,10 @@ impl ValidatedLock {
             );
             return Ok(Self::Unusable(lock));
         }
-        // Ignore package-specific settings that cannot affect the existing resolution. If the
-        // package is added to the requirements, the requirement checks below will invalidate the
-        // lockfile instead.
-        let locked_exclude_newer = lock
-            .exclude_newer()
-            .clone()
-            .filter_packages(lock.packages().iter().map(Package::name));
-        let exclude_newer = options
-            .exclude_newer
-            .clone()
-            .filter_packages(lock.packages().iter().map(Package::name));
-        if let Some(change) = locked_exclude_newer.compare(&exclude_newer) {
+        // Stored cutoffs can belong to packages considered during backtracking. New cutoffs for
+        // packages outside the lock take effect when another change triggers resolution.
+        let exclude_newer = lock.filter_exclude_newer(options.exclude_newer.clone());
+        if let Some(change) = lock.exclude_newer().compare(&exclude_newer) {
             // If a relative value is used, we won't invalidate on every tick of the clock unless
             // the span duration changed or some other operation causes a new resolution
             if !change.is_relative_timestamp_change() {

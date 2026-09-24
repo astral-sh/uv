@@ -81,6 +81,8 @@ impl<'a, Context: BuildContext> ExtrasResolver<'a, Context> {
             return Ok(requirement);
         };
 
+        database.record_metadata(&dist);
+
         // Fetch the metadata for the distribution.
         let metadata = {
             let id = dist.distribution_id();

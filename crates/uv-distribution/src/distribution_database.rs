@@ -26,16 +26,18 @@ use uv_client::{
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     ArchiveHashPolicy, BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, HashCollection,
-    HashValidation, Hashed, IndexUrl, InstalledDist, MetadataHashPolicy, Name, SourceDist,
-    SourceUrl, parse_url_hashes,
+    HashValidation, Hashed, IndexUrl, InstalledDist, MetadataHashPolicy, Name, ResolutionRecorder,
+    SourceDist, SourceUrl, parse_url_hashes,
 };
 use uv_extract::dirhash::{DirectoryDigest, HashedFile};
 use uv_extract::hash::Hasher;
 use uv_fs::{LockedFile, write_atomic};
 use uv_git::{GIT_LFS, GitError};
+use uv_normalize::PackageName;
+use uv_pep440::Version;
 use uv_platform_tags::Tags;
 use uv_preview::PreviewFeature;
-use uv_pypi_types::{HashDigest, HashDigests, PyProjectToml};
+use uv_pypi_types::{HashDigest, HashDigests, PyProjectToml, ResolutionMetadata};
 use uv_python::PythonVariant;
 use uv_redacted::DisplaySafeUrl;
 use uv_threads::initialize_rayon_once;
@@ -63,6 +65,7 @@ use crate::{Error, LocalWheel, Reporter, RequiresDist};
 /// operation especially, as well as respecting concurrency limits.
 pub struct DistributionDatabase<'a, Context: BuildContext> {
     build_context: &'a Context,
+    recorder: Option<ResolutionRecorder>,
     builder: SourceDistributionBuilder<'a, Context>,
     client: ManagedClient<'a>,
     reporter: Option<Arc<dyn Reporter>>,
@@ -81,12 +84,39 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let content_addressed_cache = uv_preview::is_enabled(PreviewFeature::ContentAddressedCache)
             && !uv_extract::insecure_no_validate();
         Self {
+            recorder: None,
             build_context,
             builder: SourceDistributionBuilder::new(build_context),
             client: ManagedClient::new(client, downloads_semaphore),
             reporter: None,
             content_addressed_cache,
         }
+    }
+
+    /// Record which static metadata entries are consulted while resolving runtime dependencies.
+    #[must_use]
+    pub fn with_recorder(mut self, recorder: Option<ResolutionRecorder>) -> Self {
+        self.recorder = recorder;
+        self
+    }
+
+    /// Record a metadata lookup before reading an in-memory cache.
+    pub fn record_metadata(&self, dist: &Dist) {
+        if let Some(recorder) = &self.recorder {
+            recorder.dependency_metadata(dist.name());
+        }
+    }
+
+    /// Look up user-provided metadata, recording misses as well as matches.
+    pub fn dependency_metadata(
+        &self,
+        name: &PackageName,
+        version: Option<&Version>,
+    ) -> Option<ResolutionMetadata> {
+        if let Some(recorder) = &self.recorder {
+            recorder.dependency_metadata(name);
+        }
+        self.build_context.dependency_metadata().get(name, version)
     }
 
     /// Set the build stack to use for the [`DistributionDatabase`].
@@ -196,11 +226,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         dist: &InstalledDist,
     ) -> Result<ArchiveMetadata, Error> {
         // If the metadata was provided by the user directly, prefer it.
-        if let Some(metadata) = self
-            .build_context
-            .dependency_metadata()
-            .get(dist.name(), Some(dist.version()))
-        {
+        if let Some(metadata) = self.dependency_metadata(dist.name(), Some(dist.version())) {
             return Ok(Metadata::from_dependency_metadata(metadata).into());
         }
 
@@ -592,10 +618,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         if hash_policy == ArchiveHashPolicy::Generate {
             let wheel = self.get_wheel(dist, hash_policy).await?;
             // If the metadata was provided by the user directly, prefer it.
-            let metadata = if let Some(metadata) = self
-                .build_context
-                .dependency_metadata()
-                .get(dist.name(), Some(dist.version()))
+            let metadata = if let Some(metadata) =
+                self.dependency_metadata(dist.name(), Some(dist.version()))
             {
                 Metadata::from_dependency_metadata(metadata)
             } else {
@@ -606,11 +630,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         }
 
         // If the metadata was provided by the user directly, prefer it.
-        if let Some(metadata) = self
-            .build_context
-            .dependency_metadata()
-            .get(dist.name(), Some(dist.version()))
-        {
+        if let Some(metadata) = self.dependency_metadata(dist.name(), Some(dist.version())) {
             return Ok(Metadata::from_dependency_metadata(metadata).into());
         }
 
@@ -663,11 +683,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     ) -> Result<ArchiveMetadata, Error> {
         // If the metadata was provided by the user directly, prefer it.
         if let Some(dist) = source.as_dist() {
-            if let Some(metadata) = self
-                .build_context
-                .dependency_metadata()
-                .get(dist.name(), dist.version())
-            {
+            if let Some(metadata) = self.dependency_metadata(dist.name(), dist.version()) {
                 // If we skipped the build, we should still resolve any Git dependencies to precise
                 // commits.
                 self.builder.resolve_revision(source, &self.client).await?;

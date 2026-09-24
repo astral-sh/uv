@@ -460,6 +460,7 @@ pub(crate) async fn pip_sync(
             &build_dispatch,
             &concurrency,
             options,
+            None,
             Box::new(DefaultResolveLogger),
             printer,
         )

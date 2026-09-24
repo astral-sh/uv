@@ -3,13 +3,16 @@ use std::borrow::Cow;
 use either::Either;
 use rustc_hash::FxHashMap;
 
-use uv_distribution_types::{NameRequirementSpecification, Requirement, RequirementSource};
+use uv_distribution_types::{
+    NameRequirementSpecification, Requirement, RequirementSource, ResolutionRecorder,
+};
 use uv_normalize::PackageName;
 use uv_pep508::MarkerTree;
 
 /// A set of constraints for a set of requirements.
 #[derive(Debug, Default, Clone)]
 pub struct Constraints {
+    recorder: Option<ResolutionRecorder>,
     /// Original declarations, including hashes, for hash verification.
     specifications: Vec<NameRequirementSpecification>,
     /// Constraints grouped by package name.
@@ -17,6 +20,13 @@ pub struct Constraints {
 }
 
 impl Constraints {
+    /// Record which settings are consulted while resolving runtime dependencies.
+    #[must_use]
+    pub fn with_recorder(mut self, recorder: Option<ResolutionRecorder>) -> Self {
+        self.recorder = recorder;
+        self
+    }
+
     /// Create a new set of constraints from a set of requirements.
     pub fn from_requirements(requirements: impl Iterator<Item = Requirement>) -> Self {
         Self::from_specifications(requirements.map(NameRequirementSpecification::from))
@@ -47,6 +57,7 @@ impl Constraints {
                 });
         }
         Self {
+            recorder: None,
             specifications,
             requirements: constraints,
         }
@@ -64,6 +75,9 @@ impl Constraints {
 
     /// Get the constraints for a package.
     pub fn get(&self, name: &PackageName) -> Option<&Vec<Requirement>> {
+        if let Some(recorder) = &self.recorder {
+            recorder.constraint(name);
+        }
         self.requirements.get(name)
     }
 
