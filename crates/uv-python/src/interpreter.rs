@@ -121,17 +121,17 @@ impl Interpreter {
         // Match `site.getsitepackages()` for the new environment instead of retaining the
         // parent interpreter's site-packages paths.
         // Note: This is not `sys.path`, but a distinct list.
-        let mut site_packages = if self.markers.os_name() == "nt" {
-            vec![virtualenv.root.clone(), virtualenv.scheme.purelib.clone()]
-        } else if virtualenv.scheme.platlib == virtualenv.scheme.purelib {
-            vec![virtualenv.scheme.purelib.clone()]
+        let mut site_packages = Vec::new();
+        if self.markers.os_name() == "nt" {
+            site_packages.push(virtualenv.root.clone());
+            site_packages.push(virtualenv.scheme.purelib.clone());
         } else {
-            vec![
-                virtualenv.scheme.platlib.clone(),
-                virtualenv.scheme.purelib.clone(),
-            ]
-        };
-        if self.markers.os_name() != "nt" {
+            if virtualenv.scheme.platlib == virtualenv.scheme.purelib {
+                site_packages.push(virtualenv.scheme.purelib.clone());
+            } else {
+                site_packages.push(virtualenv.scheme.platlib.clone());
+                site_packages.push(virtualenv.scheme.purelib.clone());
+            }
             // Some distributions add import paths that are not part of the installation scheme,
             // e.g., Debian's `dist-packages`. Build those paths as relative to the new environment,
             // excluding paths outside the parent's prefix (such as an existing venv's system site

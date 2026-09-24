@@ -380,7 +380,7 @@ impl PythonEnvironment {
 
         // TODO: Handle system-site-packages correctly.
         // We should infer the site packages path from the base interpreter,
-        // but first, we need to fix cache invalidation when it changes.
+        // but for that, we first need to fix cache invalidation when it changes.
         // https://github.com/astral-sh/uv/issues/18510
         if system_site_packages {
             return Ok(());
