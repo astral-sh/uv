@@ -3,6 +3,42 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.12.19
+
+Released on 2026-09-24.
+
+### Enhancements
+
+- Add missing backticks in uv publish error ([#21934](https://github.com/astral-sh/uv/pull/21934))
+- Omit unused runtime settings from lockfiles ([#21913](https://github.com/astral-sh/uv/pull/21913))
+
+### Preview features
+
+- Add a preview feature for lazy build backend imports ([#21967](https://github.com/astral-sh/uv/pull/21967))
+
+### Bug fixes
+
+- Align arbitrary equality satisfaction with resolution ([#21931](https://github.com/astral-sh/uv/pull/21931))
+- Round-trip always-false environment markers ([#21939](https://github.com/astral-sh/uv/pull/21939))
+- Store Git checkout markers outside working trees ([#21891](https://github.com/astral-sh/uv/pull/21891))
+
+### Rust API
+
+- Restore `FlatDistributions` for downstream resolvers ([#21965](https://github.com/astral-sh/uv/pull/21965))
+
+### Documentation
+
+- Make preview feature references linkable ([#21950](https://github.com/astral-sh/uv/pull/21950))
+
+### Other changes
+
+- Disable incremental compilation when publishing docs ([#21955](https://github.com/astral-sh/uv/pull/21955))
+- Preserve query parameters in direct URL metadata ([#21971](https://github.com/astral-sh/uv/pull/21971))
+- Sync latest Python releases ([#21847](https://github.com/astral-sh/uv/pull/21847))
+- Use Astra for PR security reviews ([#21959](https://github.com/astral-sh/uv/pull/21959))
+- fixup handling of branch/version names in publish-docs workflow ([#21947](https://github.com/astral-sh/uv/pull/21947))
+- publish to astral-sh/versions via OIDC ([#21953](https://github.com/astral-sh/uv/pull/21953))
+
 ## 0.12.18
 
 Released on 2026-09-22.

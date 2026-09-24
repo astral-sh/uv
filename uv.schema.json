@@ -1883,6 +1883,7 @@
             "artifact-hash-filtering",
             "content-addressed-cache",
             "missing-exclude-newer-package-lock",
+            "resolution-inputs",
             "batch-export",
             "minimum-libc-version",
             "build-dependency-check",
