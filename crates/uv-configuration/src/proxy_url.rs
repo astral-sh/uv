@@ -5,9 +5,8 @@ use std::str::FromStr;
 
 use reqwest::Proxy;
 use serde::{Deserialize, Deserializer, Serialize};
-use url::Url;
 
-use uv_redacted::{DisplaySafeUrl, UrlWithoutSensitiveParts};
+use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError, UrlWithoutSensitiveParts};
 
 /// A proxy URL with a supported scheme and a host.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -38,7 +37,7 @@ impl ProxyUrl {
 #[derive(Debug, thiserror::Error)]
 pub enum ProxyUrlError {
     #[error("invalid proxy URL: {0}")]
-    InvalidUrl(#[from] url::ParseError),
+    InvalidUrl(#[from] DisplaySafeUrlError),
     #[error(
         "invalid proxy URL scheme `{scheme}` in `{url}`: expected http, https, socks5, or socks5h"
     )]
@@ -59,11 +58,11 @@ impl FromStr for ProxyUrl {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         fn try_with_http_scheme(s: &str) -> Result<ProxyUrl, ProxyUrlError> {
             let with_scheme = format!("http://{s}");
-            let url = Url::parse(&with_scheme)?;
+            let url = DisplaySafeUrl::parse(&with_scheme)?;
             ProxyUrl::try_from(url)
         }
 
-        match Url::parse(s) {
+        match DisplaySafeUrl::parse(s) {
             Ok(url) => match Self::try_from(url) {
                 Ok(proxy) => Ok(proxy),
                 Err(ProxyUrlError::InvalidScheme { .. }) if lacks_scheme(s) => {
@@ -71,22 +70,28 @@ impl FromStr for ProxyUrl {
                 }
                 Err(e) => Err(e),
             },
-            Err(url::ParseError::RelativeUrlWithoutBase) => try_with_http_scheme(s),
+            Err(DisplaySafeUrlError::Url(url::ParseError::RelativeUrlWithoutBase)) => {
+                try_with_http_scheme(s)
+            }
+            Err(DisplaySafeUrlError::AmbiguousAuthority(_)) if lacks_scheme(s) => {
+                try_with_http_scheme(s)
+            }
             Err(err) => Err(ProxyUrlError::InvalidUrl(err)),
         }
     }
 }
 
-impl TryFrom<Url> for ProxyUrl {
+impl TryFrom<DisplaySafeUrl> for ProxyUrl {
     type Error = ProxyUrlError;
 
-    fn try_from(url: Url) -> Result<Self, Self::Error> {
-        let url = DisplaySafeUrl::from_url(url);
+    fn try_from(url: DisplaySafeUrl) -> Result<Self, Self::Error> {
         match url.scheme() {
             "http" | "https" | "socks5" | "socks5h" => {
                 // Reqwest can reinterpret a hostless SOCKS URL as an HTTP proxy.
                 if !url.has_host() {
-                    return Err(ProxyUrlError::InvalidUrl(url::ParseError::EmptyHost));
+                    return Err(ProxyUrlError::InvalidUrl(DisplaySafeUrlError::Url(
+                        url::ParseError::EmptyHost,
+                    )));
                 }
                 Ok(Self(url))
             }
@@ -141,6 +146,8 @@ impl schemars::JsonSchema for ProxyUrl {
 #[cfg(test)]
 mod tests {
     use std::assert_matches;
+
+    use url::Url;
 
     use super::*;
 
@@ -235,10 +242,12 @@ mod tests {
     #[test]
     fn proxy_url_without_host() -> Result<(), ProxyUrlError> {
         for input in ["socks5h:///proxy", "socks5:foo"] {
-            let url = Url::parse(input)?;
+            let url = DisplaySafeUrl::parse(input)?;
             assert_matches!(
                 ProxyUrl::try_from(url),
-                Err(ProxyUrlError::InvalidUrl(url::ParseError::EmptyHost))
+                Err(ProxyUrlError::InvalidUrl(DisplaySafeUrlError::Url(
+                    url::ParseError::EmptyHost
+                )))
             );
         }
         Ok(())
@@ -257,5 +266,24 @@ mod tests {
             result.unwrap_err().to_string(),
             @"invalid proxy URL: invalid international domain name"
         );
+    }
+
+    #[test]
+    fn proxy_url_credentials() -> Result<(), Box<dyn std::error::Error>> {
+        let url: ProxyUrl = serde_json::from_str(
+            r#""http://user:password@proxy.example.com:8080/?sig=signature&keep=value""#,
+        )?;
+        assert_eq!(url.as_url().username(), "user");
+        assert_eq!(url.as_url().password(), Some("password"));
+        insta::assert_snapshot!(serde_json::to_string(&url)?, @r#""http://proxy.example.com:8080/?keep=value""#);
+
+        let scheme_less: ProxyUrl = "user:pass:word@proxy.example.com:8080".parse()?;
+        assert_eq!(scheme_less.as_url().password(), Some("pass%3Aword"));
+
+        let error = "http://user/name:password@proxy.example.com?sig=sign@ature"
+            .parse::<ProxyUrl>()
+            .expect_err("ambiguous URL");
+        insta::assert_snapshot!(error, @"invalid proxy URL: ambiguous user/pass authority in URL (not percent-encoded?): http:***@proxy.example.com");
+        Ok(())
     }
 }

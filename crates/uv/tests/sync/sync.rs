@@ -16248,6 +16248,36 @@ fn sync_fails_ambiguous_url() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn sync_fails_ambiguous_source_url() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio"]
+
+        [tool.uv.sources]
+        anyio = { url = "https://user/name:password@domain/anyio-3.7.0.tar.gz" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to parse: `pyproject.toml`
+      cause: TOML parse error at line 9, column 25
+               |
+             9 |         anyio = { url = "https://user/name:password@domain/anyio-3.7.0.tar.gz" }
+               |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+             ambiguous user/pass authority in URL (not percent-encoded?): https:***@domain/anyio-3.7.0.tar.gz
+    "#);
+
+    Ok(())
+}
+
 /// Test that when a local directory dependency's version changes, the planner reinstalls it
 /// even if the source directory content (cache info) hasn't changed.
 ///
