@@ -135,6 +135,11 @@ defaults.
 
 The `--no-dev` flag can be used to exclude the `dev` group.
 
+Dependency group selection options, including `--no-dev`, control which packages are selected when
+uv synchronizes the project environment. When `--no-sync` is used, uv skips package synchronization.
+It may still create a project or isolated environment if needed, but it does not install packages
+selected by these options. Packages already present in a reused environment remain importable.
+
 The `--only-dev` flag can be used to install the `dev` group _without_ the project and its
 dependencies.
 

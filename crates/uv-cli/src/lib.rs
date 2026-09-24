@@ -7052,7 +7052,6 @@ pub struct ProjectDependencyGroupsArgs<const CHECKS_CONFLICTS: bool = false> {
     ///
     /// This option is an alias of `--no-group dev`.
     /// See `--no-default-groups` to disable all default groups instead.
-    ///
     /// This option is only available when running in a project.
     #[arg(long, overrides_with("dev"), value_parser = clap::builder::BoolishValueParser::new())]
     pub no_dev: bool,
