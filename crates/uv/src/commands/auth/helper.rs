@@ -15,6 +15,8 @@ use uv_warnings::warn_user;
 /// Request format for the Bazel credential helper protocol.
 #[derive(Debug, Deserialize)]
 struct BazelCredentialRequest {
+    // Bazel has already constructed the request URL.
+    #[serde(deserialize_with = "DisplaySafeUrl::deserialize_from_url")]
     uri: DisplaySafeUrl,
 }
 
@@ -113,4 +115,21 @@ pub(crate) async fn helper(preview: Preview, printer: Printer) -> Result<ExitSta
     .context("Failed to serialize response as JSON")?;
     writeln!(printer.stdout_important(), "{response}")?;
     Ok(ExitStatus::Success)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::BazelCredentialRequest;
+
+    #[test]
+    fn credential_request_url() -> anyhow::Result<()> {
+        let request = BazelCredentialRequest::from_str(
+            r#"{"uri":"https://example.com/package:version@revision?sig=signature"}"#,
+        )?;
+        assert_eq!(
+            request.uri.as_str(),
+            "https://example.com/package:version@revision?sig=signature"
+        );
+        Ok(())
+    }
 }

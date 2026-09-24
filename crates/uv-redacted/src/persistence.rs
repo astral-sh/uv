@@ -193,8 +193,10 @@ mod tests {
     #[test]
     fn persistence_deserializes_protocol_urls() -> Result<(), Box<dyn Error>> {
         let input = "https://example.com/files/project:build@nightly?sig=abc%2Bdef%3D";
-        let url: CredentialPersistingUrl = serde_json::from_str(&serde_json::to_string(input)?)?;
+        let serialized = serde_json::to_string(input)?;
+        let url: CredentialPersistingUrl = serde_json::from_str(&serialized)?;
         assert_eq!(url.into_url().as_str(), input);
+        assert!(serde_json::from_str::<DisplaySafeUrl>(&serialized).is_err());
         Ok(())
     }
 }
