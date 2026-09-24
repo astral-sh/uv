@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use rustc_hash::FxHashMap;
 
-use uv_configuration::{Constraints, HashCheckingMode};
+use crate::{Constraints, HashCheckingMode};
 use uv_distribution_types::{
     ArchiveHashPolicy, DistributionMetadata, HashCollection, HashValidation, MetadataHashPolicy,
     Name, Requirement, RequirementSource, Resolution, UnresolvedRequirement, VersionId,
@@ -705,8 +705,8 @@ mod tests {
     use std::str::FromStr;
     use std::sync::Arc;
 
+    use crate::HashCheckingMode;
     use rustc_hash::FxHashMap;
-    use uv_configuration::HashCheckingMode;
     use uv_distribution_filename::DistExtension;
     use uv_distribution_types::{
         ArchiveHashPolicy, HashCollection, HashValidation, MetadataHashPolicy, Requirement,

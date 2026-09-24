@@ -22,6 +22,7 @@ use crate::commands::project::{
     LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectError,
     ProjectInterpreter, ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
 };
+use crate::commands::reporters::python_report;
 use crate::commands::{ExitStatus, UvError};
 use crate::printer::{Printer, Stdout};
 use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
@@ -245,7 +246,7 @@ pub(crate) async fn metadata(
                 .await
                 .context("Failed to collect module owners")?;
                 export = export
-                    .with_environment(&environment)
+                    .with_environment(environment.root(), python_report(environment.interpreter()))
                     .with_module_owners(module_owners);
             }
 
@@ -265,9 +266,15 @@ fn metadata_for_target(target: InstallTarget<'_>) -> Result<Metadata> {
             workspace, lock, ..
         }
         | InstallTarget::Workspace { workspace, lock }
-        | InstallTarget::NonProjectWorkspace { workspace, lock } => {
-            Ok(Metadata::from_lock(workspace, lock)?)
-        }
+        | InstallTarget::NonProjectWorkspace { workspace, lock } => Ok(Metadata::from_lock(
+            workspace.install_path(),
+            &workspace
+                .packages()
+                .iter()
+                .map(|(name, member)| (name, member.root().as_path()))
+                .collect(),
+            lock,
+        )?),
         InstallTarget::Script { script, lock } => Ok(Metadata::from_script(&script.path, lock)?),
     }
 }

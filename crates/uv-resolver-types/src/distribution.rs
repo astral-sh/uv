@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use uv_distribution::Metadata;
+use uv_distribution_types::Metadata;
 use uv_distribution_types::{
     BuiltDist, Dist, DistributionMetadata, IndexUrl, Name, ResolvedDist, SourceDist,
     VersionOrUrlRef,

@@ -19,6 +19,7 @@ license = "MIT OR Apache-2.0"
 uv = { version = "0.12.18", path = "crates/uv", default-features = false }
 uv-audit = { version = "0.0.85", path = "crates/uv-audit" }
 uv-auth = { version = "0.0.85", path = "crates/uv-auth" }
+uv-auth-types = { version = "0.0.85", path = "crates/uv-auth-types" }
 uv-bin-install = { version = "0.0.85", path = "crates/uv-bin-install" }
 uv-build-backend = { version = "0.0.85", path = "crates/uv-build-backend" }
 uv-build-frontend = { version = "0.0.85", path = "crates/uv-build-frontend" }

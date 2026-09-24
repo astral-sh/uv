@@ -3,7 +3,6 @@ use std::borrow::Cow;
 use std::fmt::{self, Display, Formatter};
 use std::str::FromStr;
 
-use reqwest::Proxy;
 use serde::{Deserialize, Deserializer, Serialize};
 use url::Url;
 
@@ -13,25 +12,10 @@ use uv_redacted::DisplaySafeUrl;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ProxyUrl(DisplaySafeUrl);
 
-/// Mapping to [`reqwest::proxy::Intercept`] kinds which are not public API.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ProxyUrlKind {
-    Http,
-    Https,
-}
-
 impl ProxyUrl {
     /// Returns a reference to the underlying URL.
-    fn as_url(&self) -> &DisplaySafeUrl {
+    pub fn as_url(&self) -> &DisplaySafeUrl {
         &self.0
-    }
-
-    /// Constructs a [`reqwest::Proxy`] from this [`ProxyUrl`] for the given [`ProxyUrlKind`].
-    pub fn as_proxy(&self, kind: ProxyUrlKind) -> Result<Proxy, reqwest::Error> {
-        match kind {
-            ProxyUrlKind::Http => Proxy::http(self.0.as_str()),
-            ProxyUrlKind::Https => Proxy::https(self.0.as_str()),
-        }
     }
 }
 

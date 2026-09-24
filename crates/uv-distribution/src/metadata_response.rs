@@ -1,8 +1,8 @@
+use crate::ArchiveMetadata;
 use reqwest::StatusCode;
 use rustc_hash::FxHasher;
 use std::hash::BuildHasherDefault;
 use std::sync::Arc;
-use uv_distribution::ArchiveMetadata;
 use uv_distribution_types::{DistributionId, RequestedDist};
 use uv_once_map::RegisteredOnceMap;
 use uv_pep440::{Version, VersionSpecifiers};
@@ -18,13 +18,12 @@ pub enum MetadataResponse {
     /// A non-fatal error.
     Unavailable(MetadataUnavailable),
     /// The distribution could not be built or downloaded, a fatal error.
-    Error(Box<RequestedDist>, Arc<uv_distribution::Error>),
+    Error(Box<RequestedDist>, Arc<crate::Error>),
 }
 
 /// Non-fatal metadata fetching error.
 ///
-/// This is also the unavailability reasons for a package, while version unavailability is separate
-/// in [`UnavailableVersion`].
+/// Describes why metadata could not be retrieved for a distribution.
 #[derive(Debug, Clone)]
 pub enum MetadataUnavailable {
     /// The wheel metadata was not found in the cache and the network is not available.
@@ -32,7 +31,7 @@ pub enum MetadataUnavailable {
     /// The wheel metadata was found, but could not be parsed.
     InvalidMetadata(Arc<uv_pypi_types::MetadataError>),
     /// The wheel metadata was found, but the metadata was inconsistent.
-    InconsistentMetadata(Arc<uv_distribution::Error>),
+    InconsistentMetadata(Arc<crate::Error>),
     /// The wheel has an invalid structure.
     InvalidStructure(Arc<uv_metadata::Error>),
     /// The source distribution has a `requires-python` requirement that is not met by the installed

@@ -1,5 +1,5 @@
 [package]
-name = "uv-resolver-types"
+name = "uv-auth-types"
 version = "0.0.85"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
@@ -16,15 +16,16 @@ doctest = false
 workspace = true
 
 [dependencies]
-uv-configuration = { workspace = true }
-uv-distribution-types = { workspace = true }
-uv-normalize = { workspace = true }
-uv-pep440 = { workspace = true }
-uv-pep508 = { workspace = true }
-uv-pypi-types = { workspace = true }
-uv-torch = { workspace = true }
+uv-netrc = { workspace = true }
+uv-redacted = { workspace = true }
+uv-small-str = { workspace = true }
+uv-static = { workspace = true }
 
-itertools = { workspace = true }
-petgraph = { workspace = true }
+base64 = { workspace = true }
+http = { workspace = true }
+percent-encoding = { workspace = true }
 rustc-hash = { workspace = true }
+schemars = { workspace = true, optional = true }
+serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
+url = { workspace = true }

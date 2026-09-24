@@ -35,6 +35,7 @@ use crate::commands::project::{
     ProjectEnvironmentPolicy, ProjectInterpreter, ScriptInterpreter, UniversalState,
     WorkspacePython, detect_conflicts,
 };
+use crate::commands::pylock::generate_missing_hashes;
 use crate::commands::{ExitStatus, OutputWriter, UvError};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
@@ -649,9 +650,13 @@ async fn render_export<'output>(
                 let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
                     .index_locations(settings.index_locations.clone())
                     .build()?;
-                export
-                    .generate_missing_hashes(&client, concurrency.downloads, target.install_path())
-                    .await?;
+                generate_missing_hashes(
+                    &mut export,
+                    &client,
+                    concurrency.downloads,
+                    target.install_path(),
+                )
+                .await?;
             }
 
             if include_header {
