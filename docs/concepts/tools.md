@@ -177,7 +177,11 @@ $ uv tool upgrade --preview-features locked-tools --locked example-tool
 uv selects a compatible version of the tool before reading its lock. Versions incompatible with the
 selected Python or platform can be skipped. Once a compatible wheel is selected, a missing or
 unusable lock is an error; uv does not resolve different dependency versions or try an older tool
-release to find a usable lock. Artifact hashes are required and checked against the lock.
+release to find a usable lock. Artifact hashes are required and checked against the lock. Every
+dependency must use wheel or source distribution URLs listed by PyPI for its locked name and
+version. uv verifies these URLs against PyPI before accessing dependency artifacts, including files
+for other platforms or extras. Local paths, VCS sources, and direct archives are not supported.
+Offline installation requires cached PyPI metadata; `--no-index` prevents this verification.
 
 Installed tools remember `--locked`, so subsequent upgrades continue using packaged locks and
 require the preview feature. Reinstall a tool with `--reinstall` and without `--locked` to return to

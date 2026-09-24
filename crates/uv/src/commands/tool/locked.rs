@@ -1,21 +1,27 @@
 //! Select a tool before reading its packaged lock, without resolving its dependencies.
 
+use std::collections::HashSet;
 use std::io;
 
 use anyhow::{Context, bail};
+use futures::{StreamExt, TryStreamExt};
 
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_client::{
+    BaseClientBuilder, MetadataFormat, RegistryClient, RegistryClientBuilder, VersionFiles,
+};
 use uv_configuration::{Concurrency, Constraints, HashCheckingMode, TargetTriple};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
-    CachedDist, Edge, Hashed, Name, NameRequirementSpecification, Node, RequirementSource,
-    Resolution, ResolvedDist, UnresolvedRequirement,
+    CachedDist, Edge, Hashed, IndexCapabilities, IndexMetadataRef, IndexUrl, Name,
+    NameRequirementSpecification, Node, PYPI_URL, RequirementSource, Resolution, ResolvedDist,
+    UnresolvedRequirement,
 };
 use uv_lock::PylockToml;
 use uv_metadata::{find_flat_dist_info, read_flat_wheel_metadata};
-use uv_pep440::VersionSpecifier;
+use uv_pep440::{Version, VersionSpecifier};
+use uv_pep508::VerbatimUrl;
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_requirements::RequirementsSpecification;
@@ -248,6 +254,11 @@ pub(super) async fn resolve(
     groups.extend(requirement.groups.iter().cloned());
     groups.sort_unstable();
     groups.dedup();
+    validate_artifact_urls(&lock, &client, concurrency)
+        .await
+        .with_context(|| {
+            format!("The packaged lock for `{selected_dist}` contains unverified artifacts")
+        })?;
     let (dependencies, _) = resolve_pylock_toml(
         lock,
         &dist_info,
@@ -284,4 +295,78 @@ pub(super) async fn resolve(
         }
     }
     Ok(Resolution::new(graph))
+}
+
+/// Check the entire packaged lock against PyPI before any dependency artifacts are accessed.
+async fn validate_artifact_urls(
+    lock: &PylockToml,
+    client: &RegistryClient,
+    concurrency: &Concurrency,
+) -> anyhow::Result<()> {
+    let capabilities = IndexCapabilities::default();
+    let index = IndexUrl::from(VerbatimUrl::from_url(PYPI_URL.clone()));
+    futures::stream::iter(&lock.packages)
+        .map(async |package| {
+            let version = package.version.as_ref().with_context(|| {
+                format!(
+                    "`{}` must have a version to verify its files on PyPI",
+                    package.name
+                )
+            })?;
+            let urls = package.registry_artifact_urls().with_context(|| {
+                format!(
+                    "`{}=={version}` must use wheel or source distribution URLs from PyPI",
+                    package.name
+                )
+            })?;
+
+            // Neither the lock's index field nor a user-configured index is authoritative for PyPI.
+            let metadata = client
+                .simple_detail(
+                    &package.name,
+                    Some(IndexMetadataRef::from(&index)),
+                    &capabilities,
+                    &concurrency.downloads_semaphore,
+                )
+                .await?;
+            let mut expected_urls = HashSet::new();
+            for (_, metadata) in metadata {
+                match metadata {
+                    MetadataFormat::Simple(metadata) => {
+                        for datum in metadata.iter() {
+                            if rkyv::deserialize::<Version, rkyv::rancor::Error>(&datum.version)?
+                                != *version
+                            {
+                                continue;
+                            }
+                            let files = rkyv::deserialize::<VersionFiles, rkyv::rancor::Error>(
+                                &datum.files,
+                            )?;
+                            for (_, file) in files.all(&package.name) {
+                                let mut url = file.url.to_url()?;
+                                url.set_fragment(None);
+                                expected_urls.insert(url);
+                            }
+                        }
+                    }
+                    MetadataFormat::Flat(_) => bail!("Expected Simple API metadata from PyPI"),
+                }
+            }
+            for url in urls {
+                let mut location = url.clone();
+                // Simple API HTML links may include a hash fragment, which is not sent to the server.
+                location.set_fragment(None);
+                if !expected_urls.contains(&location) {
+                    bail!(
+                        "URL for `{}=={version}` is not listed by PyPI: {url}",
+                        package.name,
+                    );
+                }
+            }
+            Ok::<_, anyhow::Error>(())
+        })
+        .buffer_unordered(concurrency.downloads)
+        .try_collect::<Vec<_>>()
+        .await?;
+    Ok(())
 }
