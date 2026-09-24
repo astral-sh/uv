@@ -7,7 +7,7 @@ use std::str::FromStr;
 use thiserror::Error;
 use url::Url;
 
-pub use persistence::PersistSafeUrl;
+pub use persistence::{CredentialPersistingUrl, PersistSafeUrl};
 
 mod persistence;
 

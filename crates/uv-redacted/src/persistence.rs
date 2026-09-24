@@ -6,6 +6,73 @@ use url::Url;
 
 use crate::DisplaySafeUrl;
 
+/// A URL that retains credentials when serialized.
+///
+/// The full parsed URL is retained in memory. Display and debug output use
+/// [`DisplaySafeUrl`]'s redaction. Serialization preserves the entire normalized
+/// URL, including its username, password, and query. Deserialization uses [`Url`]
+/// parsing without the ambiguity checks applied to human input.
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, RefCast)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(feature = "schemars", schemars(transparent))]
+#[repr(transparent)]
+pub struct CredentialPersistingUrl(DisplaySafeUrl);
+
+impl CredentialPersistingUrl {
+    /// Borrow a [`DisplaySafeUrl`] as a [`CredentialPersistingUrl`].
+    pub fn ref_cast(url: &DisplaySafeUrl) -> &Self {
+        RefCast::ref_cast(url)
+    }
+
+    /// Borrow the underlying [`DisplaySafeUrl`].
+    pub fn as_url(&self) -> &DisplaySafeUrl {
+        &self.0
+    }
+
+    /// Return the underlying [`DisplaySafeUrl`].
+    pub fn into_url(self) -> DisplaySafeUrl {
+        self.0
+    }
+}
+
+impl From<DisplaySafeUrl> for CredentialPersistingUrl {
+    fn from(url: DisplaySafeUrl) -> Self {
+        Self(url)
+    }
+}
+
+impl Serialize for CredentialPersistingUrl {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(self.0.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for CredentialPersistingUrl {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Url::deserialize(deserializer)
+            .map(DisplaySafeUrl::from_url)
+            .map(Self)
+    }
+}
+
+impl Debug for CredentialPersistingUrl {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(&self.0, formatter)
+    }
+}
+
+impl Display for CredentialPersistingUrl {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.0, formatter)
+    }
+}
+
 /// A URL that removes sensitive userinfo when serialized.
 ///
 /// The full parsed URL is retained in memory. Display and debug output use
@@ -81,8 +148,21 @@ mod tests {
 
     use insta::assert_snapshot;
 
-    use super::PersistSafeUrl;
+    use super::{CredentialPersistingUrl, PersistSafeUrl};
     use crate::DisplaySafeUrl;
+
+    #[test]
+    fn credential_persistence_round_trip() -> Result<(), Box<dyn Error>> {
+        let input = "https://user:password@example.com/files/project:build@nightly?sig=abc%2Bdef%3D&other=a+b";
+        let url: CredentialPersistingUrl = serde_json::from_str(&serde_json::to_string(input)?)?;
+
+        assert_snapshot!(serde_json::to_string(&url)?, @r#""https://user:password@example.com/files/project:build@nightly?sig=abc%2Bdef%3D&other=a+b""#);
+        assert_eq!(url.as_url().as_str(), input);
+        assert_eq!(url.to_string(), url.as_url().to_string());
+        assert_eq!(format!("{url:?}"), format!("{:?}", url.as_url()));
+
+        Ok(())
+    }
 
     #[test]
     fn persistence_removes_userinfo_and_preserves_query() -> Result<(), Box<dyn Error>> {
@@ -102,6 +182,14 @@ mod tests {
     fn persistence_retains_git_username() -> Result<(), Box<dyn Error>> {
         let url = DisplaySafeUrl::parse("ssh://git@github.com/astral-sh/uv")?;
         assert_snapshot!(serde_json::to_string(PersistSafeUrl::ref_cast(&url))?, @r#""ssh://git@github.com/astral-sh/uv""#);
+        Ok(())
+    }
+
+    #[test]
+    fn persistence_deserializes_protocol_urls() -> Result<(), Box<dyn Error>> {
+        let input = "https://example.com/files/project:build@nightly?sig=abc%2Bdef%3D";
+        let url: CredentialPersistingUrl = serde_json::from_str(&serde_json::to_string(input)?)?;
+        assert_eq!(url.into_url().as_str(), input);
         Ok(())
     }
 }
