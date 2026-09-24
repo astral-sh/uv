@@ -8964,7 +8964,7 @@ fn require_hashes_constraint() -> Result<()> {
         .arg(constraints_txt.path()), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirements must have a hash, but there were no overlapping hashes between the requirements and constraints for: anyio==4.0.0
+    error: Conflicting hashes for `anyio==4.0.0`: no hash is allowed by all requirements and constraints
     "
     );
 
