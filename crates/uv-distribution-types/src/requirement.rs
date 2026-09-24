@@ -13,7 +13,7 @@ use uv_pep440::VersionSpecifiers;
 use uv_pep508::{
     MarkerEnvironment, MarkerTree, RequirementOrigin, VerbatimUrl, VersionOrUrl, marker,
 };
-use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
+use uv_redacted::{CredentialPersistingUrl, DisplaySafeUrl, DisplaySafeUrlError};
 
 use crate::{IndexMetadata, IndexUrl};
 
@@ -921,7 +921,7 @@ enum RequirementSourceWire {
     Git { git: String },
     /// Ex) `source = { url = "<https://example.org/foo-1.0.zip>" }`
     Direct {
-        url: DisplaySafeUrl,
+        url: CredentialPersistingUrl,
         subdirectory: Option<PortablePathBuf>,
     },
     /// Ex) `source = { path = "/home/ferris/iniconfig-2.0.0-py3-none-any.whl" }`
@@ -965,7 +965,7 @@ impl From<RequirementSource> for RequirementSourceWire {
                 ext: _,
                 url: _,
             } => Self::Direct {
-                url: location,
+                url: location.into(),
                 subdirectory: subdirectory.map(PortablePathBuf::from),
             },
             RequirementSource::GitDirectory {
@@ -1192,6 +1192,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 }
             }
             RequirementSourceWire::Direct { url, subdirectory } => {
+                let url = url.into_url();
                 let location = url.clone();
 
                 // Create a PEP 508-compatible URL.
