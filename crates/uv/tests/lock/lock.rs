@@ -2529,6 +2529,90 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
     Ok(())
 }
 
+/// Relocking retains a local wheel's hash for installation unless explicitly upgraded.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_wheel_path_relock_hash_mismatch() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let name = "demo-pkg".parse()?;
+    let version = "1.0.0".parse()?;
+    let [(filename, trusted), (_, replacement)] = ["original", "replacement"].map(|contents| {
+        generate_wheel_with_files(
+            &name,
+            &version,
+            &[],
+            &BTreeMap::new(),
+            None,
+            "py3-none-any",
+            &[("demo_pkg/data.txt", contents)],
+        )
+    });
+    let archive = context.temp_dir.child(&filename);
+    let trusted_digest = hex::encode(Sha256::digest(&trusted));
+    let replacement_digest = hex::encode(Sha256::digest(&replacement));
+    let context = context
+        .with_filter((trusted_digest.clone(), "[TRUSTED_HASH]"))
+        .with_filter((replacement_digest.clone(), "[REPLACEMENT_HASH]"));
+    archive.write_binary(&trusted)?;
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo-pkg"]
+
+        [tool.uv.sources]
+        demo-pkg = {{ path = "{filename}" }}
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    let locked = context.read("uv.lock");
+
+    archive.write_binary(&replacement)?;
+    pyproject.write_str(&context.read("pyproject.toml").replace(">=3.12", ">=3.12.1"))?;
+    uv_snapshot!(context.filters(), context.lock().arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    let locked = locked.replace(">=3.12", ">=3.12.1");
+    assert_eq!(context.read("uv.lock"), locked);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-cache"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to read `demo-pkg @ file://[TEMP_DIR]/demo_pkg-1.0.0-py3-none-any.whl`
+      cause: Hash mismatch for `demo-pkg @ file://[TEMP_DIR]/demo_pkg-1.0.0-py3-none-any.whl`
+
+             Expected:
+               sha256:[TRUSTED_HASH]
+
+             Computed:
+               sha256:[REPLACEMENT_HASH]
+
+    hint: `demo-pkg` (v1.0.0) was included because `project` (v0.1.0) depends on `demo-pkg`
+    ");
+    assert_eq!(context.read("uv.lock"), locked);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--upgrade-package").arg("demo-pkg").arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + demo-pkg==1.0.0 (from file://[TEMP_DIR]/demo_pkg-1.0.0-py3-none-any.whl)
+    ");
+    assert_eq!(
+        context.read("uv.lock"),
+        locked.replace(&trusted_digest, &replacement_digest)
+    );
+    Ok(())
+}
+
 /// Unrelated project changes retain direct archive hashes until an explicit upgrade releases them.
 #[cfg(feature = "test-universal")]
 #[tokio::test]

@@ -3125,7 +3125,7 @@ impl Lock {
     }
 
     /// Returns the dependency groups that were used to generate this lock.
-    pub fn dependency_groups(&self) -> &BTreeMap<GroupName, BTreeSet<Requirement>> {
+    fn dependency_groups(&self) -> &BTreeMap<GroupName, BTreeSet<Requirement>> {
         &self.manifest.dependency_groups
     }
 

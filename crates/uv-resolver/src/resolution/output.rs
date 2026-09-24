@@ -321,7 +321,16 @@ fn get_hashes(
         }
     }
 
-    // 2. Reuse a direct URL's declared hash when collecting hashes without validation.
+    // 2. Preserve trusted hashes for this URL or path. Wheel metadata lookup does not always
+    // hash the archive, so installation still needs the original hashes to verify its contents.
+    if let Some(url) = url {
+        let policy = hasher.archive_policy_for_url(&url.verbatim);
+        if !policy.digests().is_empty() {
+            return HashDigests::from(policy.digests());
+        }
+    }
+
+    // 3. Reuse a direct URL's declared hash when collecting hashes without validation.
     if let Some(url) = url
         && let ParsedUrl::Archive(_) = &url.parsed_url
         && hasher.collection() != HashCollection::None
@@ -333,7 +342,7 @@ fn get_hashes(
         return hashes;
     }
 
-    // 3. Look for hashes computed for the specific wheel or source distribution.
+    // 4. Look for hashes computed for the specific wheel or source distribution.
     if let Some(metadata_response) = in_memory.distributions().get(metadata_id) {
         if let MetadataResponse::Found(ref archive) = *metadata_response {
             let mut digests = archive.hashes.clone();
@@ -344,7 +353,7 @@ fn get_hashes(
         }
     }
 
-    // 4. Look for hashes from the registry, which are served at the package level.
+    // 5. Look for hashes from the registry, which are served at the package level.
     if url.is_none() {
         // Query the implicit and explicit indexes (lazily) for the hashes.
         let implicit_response = in_memory.implicit().get(name);
