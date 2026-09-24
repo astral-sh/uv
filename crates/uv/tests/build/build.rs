@@ -3848,9 +3848,9 @@ fn build_workspace_constraint_hashes() -> Result<()> {
             {{ requirement = "build-dependency==1.0.0", hashes = ["sha256:{incorrect_hash}"] }},
         ]
     "#})?;
-    constraints.write_str(&format!(
-        "build-dependency==1.0.0 --hash=sha256:{build_hash}\n"
-    ))?;
+    constraints.write_str(&formatdoc! {"
+        build-dependency==1.0.0 --hash=sha256:{build_hash}
+    "})?;
 
     // Workspace hashes are checked even without command-line constraints.
     uv_snapshot!(context.filters(), context.build()
@@ -3875,24 +3875,15 @@ fn build_workspace_constraint_hashes() -> Result<()> {
         .child("backend-executed")
         .assert(predicate::path::missing());
 
-    // Workspace constraints follow command-line constraints, so their hashes take precedence.
+    // Workspace and command-line constraints must agree on an allowed hash.
     uv_snapshot!(context.filters(), context.build()
         .arg("--wheel")
         .arg("--no-cache")
         .args(["--build-constraint", "constraints.txt"]), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Building wheel...
     error: Failed to build `[TEMP_DIR]/`
-      cause: Failed to install requirements from `build-system.requires`
-      cause: Failed to download `build-dependency==1.0.0`
-      cause: Hash mismatch for `build-dependency==1.0.0`
-
-             Expected:
-               sha256:0000000000000000000000000000000000000000000000000000000000000000
-
-             Computed:
-               sha256:[BUILD_HASH]
+      cause: Conflicting hashes for `build-dependency==1.0.0`: no hash is allowed by all requirements and constraints
     ");
     context
         .temp_dir
@@ -3911,58 +3902,81 @@ fn build_workspace_constraint_hashes() -> Result<()> {
     ");
     fs_err::remove_file(context.temp_dir.child("backend-executed"))?;
 
-    let registry_pyproject = context.read("pyproject.toml");
     let wheel = context
         .temp_dir
         .child("wheels/build_dependency-1.0.0-py3-none-any.whl");
     let wheel_url =
         Url::from_file_path(wheel.path()).map_err(|()| anyhow!("invalid wheel path"))?;
     let requirement = format!("build-dependency @ {wheel_url}");
-    pyproject.write_str(&registry_pyproject.replace(
-        "requirement = \"build-dependency==1.0.0\"",
-        &format!("requirement = \"{requirement}\""),
-    ))?;
-    constraints.write_str(&format!("{requirement} --hash=sha256:{build_hash}\n"))?;
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["build-dependency==1.0.0"]
+        build-backend = "backend"
+        backend-path = ["."]
+
+        [tool.uv]
+        no-index = true
+        find-links = ["wheels"]
+        build-constraint-dependencies = [
+            {{ requirement = "{requirement}", hashes = ["sha256:{incorrect_hash}"] }},
+        ]
+    "#})?;
+    constraints.write_str(&formatdoc! {"
+        {requirement} --hash=sha256:{build_hash}
+    "})?;
     uv_snapshot!(context.filters(), context.build()
         .arg("--wheel")
         .arg("--no-cache")
         .args(["--build-constraint", "constraints.txt"]), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Building wheel...
     error: Failed to build `[TEMP_DIR]/`
-      cause: Failed to install requirements from `build-system.requires`
-      cause: Failed to read `build-dependency @ file://[TEMP_DIR]/wheels/build_dependency-1.0.0-py3-none-any.whl`
-      cause: Hash mismatch for `build-dependency @ file://[TEMP_DIR]/wheels/build_dependency-1.0.0-py3-none-any.whl`
-
-             Expected:
-               sha256:0000000000000000000000000000000000000000000000000000000000000000
-
-             Computed:
-               sha256:[BUILD_HASH]
+      cause: Conflicting hashes for `build-dependency @ file://[TEMP_DIR]/wheels/build_dependency-1.0.0-py3-none-any.whl`: no hash is allowed by all requirements and constraints
     ");
     context
         .temp_dir
         .child("backend-executed")
         .assert(predicate::path::missing());
 
-    // A correct workspace hash also takes precedence over an incorrect command-line hash.
-    constraints.write_str(&format!(
-        "build-dependency==1.0.0 --hash=sha256:{incorrect_hash}\n"
-    ))?;
-    pyproject.write_str(&registry_pyproject.replace(&incorrect_hash, &build_hash))?;
+    // Swapping the workspace and command-line hashes reports the same conflict.
+    constraints.write_str(&formatdoc! {"
+        build-dependency==1.0.0 --hash=sha256:{incorrect_hash}
+    "})?;
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["build-dependency==1.0.0"]
+        build-backend = "backend"
+        backend-path = ["."]
+
+        [tool.uv]
+        no-index = true
+        find-links = ["wheels"]
+        build-constraint-dependencies = [
+            {{ requirement = "build-dependency==1.0.0", hashes = ["sha256:{build_hash}"] }},
+        ]
+    "#})?;
     uv_snapshot!(context.filters(), context.build()
         .arg("--wheel")
         .arg("--no-cache")
         .args(["--build-constraint", "constraints.txt"]), @"
-    exit_code: 0 (success)
+    exit_code: 2 (failure)
     ----- stderr -----
-    Building wheel...
-    Successfully built dist/project-0.1.0-py3-none-any.whl
+    error: Failed to build `[TEMP_DIR]/`
+      cause: Conflicting hashes for `build-dependency==1.0.0`: no hash is allowed by all requirements and constraints
     ");
     context
         .temp_dir
         .child("backend-executed")
-        .assert(predicate::path::exists());
+        .assert(predicate::path::missing());
     Ok(())
 }
