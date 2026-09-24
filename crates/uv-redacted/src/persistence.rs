@@ -1,3 +1,8 @@
+//! Explicit serialization policies for persisted URLs.
+//!
+//! Deserialization accepts any syntactically valid URL, without applying human-input heuristics to
+//! paths in stored data or protocol messages. Human input should first be parsed as [`DisplaySafeUrl`].
+
 use std::fmt::{Debug, Display, Formatter};
 
 use ref_cast::RefCast;
@@ -14,7 +19,9 @@ use crate::DisplaySafeUrl;
 #[cfg_attr(feature = "schemars", schemars(transparent))]
 #[serde(transparent)]
 #[repr(transparent)]
-pub struct UrlWithCredentials(DisplaySafeUrl);
+pub struct UrlWithCredentials(
+    #[serde(deserialize_with = "DisplaySafeUrl::deserialize_from_url")] DisplaySafeUrl,
+);
 
 impl UrlWithCredentials {
     /// Borrow a URL with this persistence policy.
@@ -68,7 +75,9 @@ impl Display for UrlWithCredentials {
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "schemars", schemars(transparent))]
 #[serde(transparent)]
-pub struct UrlWithoutUserInfo(DisplaySafeUrl);
+pub struct UrlWithoutUserInfo(
+    #[serde(deserialize_with = "DisplaySafeUrl::deserialize_from_url")] DisplaySafeUrl,
+);
 
 impl From<DisplaySafeUrl> for UrlWithoutUserInfo {
     fn from(url: DisplaySafeUrl) -> Self {
@@ -107,7 +116,9 @@ impl Display for UrlWithoutUserInfo {
 #[cfg_attr(feature = "schemars", schemars(transparent))]
 #[serde(transparent)]
 #[repr(transparent)]
-pub struct UrlWithoutSensitiveParts(DisplaySafeUrl);
+pub struct UrlWithoutSensitiveParts(
+    #[serde(deserialize_with = "DisplaySafeUrl::deserialize_from_url")] DisplaySafeUrl,
+);
 
 impl UrlWithoutSensitiveParts {
     /// Borrow a URL with this persistence policy.
@@ -165,6 +176,30 @@ mod tests {
 
     use super::{UrlWithCredentials, UrlWithoutSensitiveParts, UrlWithoutUserInfo};
     use crate::DisplaySafeUrl;
+
+    #[test]
+    fn deserialize_persisted_url() -> Result<(), serde_json::Error> {
+        let input = "https://example.com/package:version@revision?sig=abc%2Bdef%3D";
+        let serialized = serde_json::to_string(input)?;
+        assert_eq!(
+            serde_json::from_str::<UrlWithCredentials>(&serialized)?
+                .as_url()
+                .as_str(),
+            input
+        );
+        assert_eq!(
+            serde_json::from_str::<UrlWithoutUserInfo>(&serialized)?.as_ref(),
+            input
+        );
+        assert_eq!(
+            serde_json::from_str::<UrlWithoutSensitiveParts>(&serialized)?
+                .as_url()
+                .as_str(),
+            input
+        );
+        assert!(serde_json::from_str::<DisplaySafeUrl>(&serialized).is_err());
+        Ok(())
+    }
 
     #[test]
     fn persistence_policies() -> Result<(), Box<dyn std::error::Error>> {
