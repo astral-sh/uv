@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use uv_configuration::{Constraint, ExcludeDependency, Override};
+use uv_configuration::{ExcludeDependency, Override};
 use uv_distribution_types::{Requirement, ResolutionLookups, StaticMetadata};
 use uv_normalize::PackageName;
 
@@ -48,24 +48,9 @@ pub(super) struct ManifestFilter {
 impl ManifestFilter {
     /// Select locked packages and settings consulted during resolution, including backtracking.
     fn from_resolution(lock: &Lock, mut lookups: ResolutionLookups) -> Self {
-        // Scoped constraints and overrides also affect global candidate selection. Retain all
+        // Scoped overrides also affect global candidate selection. Retain all
         // scopes (including empty ones) for a parent with a declaration for a consulted name.
         // Its exclusions can suppress those contributions, even if the parent never resolves.
-        for entry in &lock.manifest.constraints {
-            if let Constraint::Package(scope) = entry
-                && scope
-                    .dependencies
-                    .iter()
-                    .any(|requirement| lookups.candidate_policy.contains(&requirement.name))
-            {
-                lookups
-                    .scoped_constraints
-                    .insert(scope.package.name().clone());
-                lookups
-                    .scoped_exclusions
-                    .insert(scope.package.name().clone());
-            }
-        }
         for entry in &lock.manifest.overrides {
             if let Override::Package(scope) = entry
                 && scope
@@ -103,6 +88,12 @@ impl ManifestFilter {
                 .map(|package| package.name().clone())
                 .collect(),
             lookups: ResolutionLookups {
+                constraints: lock
+                    .manifest
+                    .constraints
+                    .iter()
+                    .map(|requirement| requirement.name.clone())
+                    .collect(),
                 dependency_metadata: lock
                     .manifest
                     .dependency_metadata
@@ -112,19 +103,6 @@ impl ManifestFilter {
                 ..ResolutionLookups::default()
             },
         };
-        for entry in &lock.manifest.constraints {
-            match entry {
-                Constraint::Requirement(requirement) => {
-                    filter.lookups.constraints.insert(requirement.name.clone());
-                }
-                Constraint::Package(scope) => {
-                    filter
-                        .lookups
-                        .scoped_constraints
-                        .insert(scope.package.name().clone());
-                }
-            }
-        }
         for entry in &lock.manifest.overrides {
             match entry {
                 Override::Requirement(requirement) => {
@@ -154,21 +132,10 @@ impl ManifestFilter {
         filter
     }
 
-    pub(super) fn includes_constraint(&self, entry: &Constraint<Requirement>) -> bool {
-        match entry {
-            Constraint::Requirement(requirement) => {
-                self.packages.contains(&requirement.name)
-                    || self.lookups.constraints.contains(&requirement.name)
-                    || self.lookups.candidate_policy.contains(&requirement.name)
-            }
-            Constraint::Package(scope) => {
-                self.packages.contains(scope.package.name())
-                    || self
-                        .lookups
-                        .scoped_constraints
-                        .contains(scope.package.name())
-            }
-        }
+    pub(super) fn includes_constraint(&self, requirement: &Requirement) -> bool {
+        self.packages.contains(&requirement.name)
+            || self.lookups.constraints.contains(&requirement.name)
+            || self.lookups.candidate_policy.contains(&requirement.name)
     }
 
     pub(super) fn includes_override(&self, entry: &Override<Requirement>) -> bool {

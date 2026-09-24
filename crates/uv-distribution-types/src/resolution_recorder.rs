@@ -12,8 +12,6 @@ pub struct ResolutionLookups {
     pub overrides: BTreeSet<PackageName>,
     /// Dependency names whose global exclusions were consulted.
     pub exclusions: BTreeSet<PackageName>,
-    /// Parent packages whose constraint scopes were consulted.
-    pub scoped_constraints: BTreeSet<PackageName>,
     /// Parent packages whose override scopes were consulted.
     pub scoped_overrides: BTreeSet<PackageName>,
     /// Parent packages whose exclusion scopes were consulted.
@@ -49,11 +47,6 @@ impl ResolutionRecorder {
     /// Record a global exclusion lookup, including misses.
     pub fn exclusion(&self, name: &PackageName) {
         self.lookups().exclusions.insert(name.clone());
-    }
-
-    /// Record a lookup of constraints scoped to a parent package.
-    pub fn scoped_constraint(&self, package: &PackageName) {
-        self.lookups().scoped_constraints.insert(package.clone());
     }
 
     /// Record a lookup of overrides scoped to a parent package.

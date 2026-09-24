@@ -43826,10 +43826,7 @@ fn lock_resolution_inputs_prune_unused_inputs() -> Result<()> {
 
         [tool.uv]
         preview-features = ["resolution-inputs"]
-        constraint-dependencies = [
-            "unused>=1",
-            { package = { name = "absent" }, dependencies = ["unused>=2"] },
-        ]
+        constraint-dependencies = ["unused>=1"]
         override-dependencies = [
             "unused==1",
             { package = { name = "absent" }, dependencies = ["unused==2"] },
@@ -43881,10 +43878,7 @@ fn lock_resolution_inputs_prune_unused_inputs() -> Result<()> {
 
         [tool.uv]
         preview-features = ["resolution-inputs"]
-        constraint-dependencies = [
-            "other>=1",
-            { package = { name = "other-parent" }, dependencies = ["other>=2"] },
-        ]
+        constraint-dependencies = ["other>=1"]
         override-dependencies = [
             "other==1",
             { package = { name = "other-parent" }, dependencies = ["other==2"] },
@@ -43915,10 +43909,7 @@ fn lock_resolution_inputs_prune_unused_inputs() -> Result<()> {
 
         [tool.uv]
         preview-features = ["resolution-inputs"]
-        constraint-dependencies = [
-            "unused>=1",
-            { package = { name = "absent" }, dependencies = ["unused>=2"] },
-        ]
+        constraint-dependencies = ["unused>=1"]
         override-dependencies = [
             "unused==1",
             { package = { name = "absent" }, dependencies = ["unused==2"] },
@@ -44631,98 +44622,6 @@ fn lock_resolution_inputs_candidate_policy_override() -> Result<()> {
     Ok(())
 }
 
-/// Scoped constraints can affect candidate policy even when their parent is absent.
-#[cfg(feature = "test-universal")]
-#[test]
-fn lock_resolution_inputs_candidate_policy_constraint() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_exclude_newer("2026-01-01T00:00:00Z");
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
-
-    pyproject_toml.write_str(indoc! {r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12,<3.13"
-        dependencies = ["numpy>=2.3"]
-
-        [tool.uv]
-        preview-features = ["resolution-inputs"]
-        constraint-dependencies = [
-            { package = { name = "absent" }, dependencies = ["numpy==2.4.0rc1"] },
-        ]
-        exclude-dependencies = [
-            { package = { name = "absent" }, dependencies = ["numpy"] },
-        ]
-    "#})?;
-    uv_snapshot!(context.filters(), context.tree(), @"
-    exit_code: 0 (success)
-    ----- stdout -----
-    project v0.1.0
-    └── numpy v2.3.5
-
-    ----- stderr -----
-    Resolved 2 packages in [TIME]
-    ");
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 2 packages in [TIME]
-    ");
-
-    // Removing the exclusion allows the scoped declaration to opt NumPy into prereleases.
-    pyproject_toml.write_str(indoc! {r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12,<3.13"
-        dependencies = ["numpy>=2.3"]
-
-        [tool.uv]
-        preview-features = ["resolution-inputs"]
-        constraint-dependencies = [
-            { package = { name = "absent" }, dependencies = ["numpy==2.4.0rc1"] },
-        ]
-        exclude-dependencies = [
-            { package = { name = "absent" }, dependencies = [] },
-        ]
-    "#})?;
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
-    exit_code: 1 (failure)
-    ----- stderr -----
-    Resolved 2 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
-
-    hint: To update the lockfile, run `uv lock`.
-    ");
-
-    // Retain a previously relevant scope during validation even if its new dependency is absent.
-    pyproject_toml.write_str(indoc! {r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12,<3.13"
-        dependencies = ["numpy>=2.3"]
-
-        [tool.uv]
-        preview-features = ["resolution-inputs"]
-        constraint-dependencies = [
-            { package = { name = "absent" }, dependencies = ["unrelated==1.0"] },
-        ]
-        exclude-dependencies = [
-            { package = { name = "absent" }, dependencies = ["numpy"] },
-        ]
-    "#})?;
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
-    exit_code: 1 (failure)
-    ----- stderr -----
-    Resolved 2 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
-
-    hint: To update the lockfile, run `uv lock`.
-    ");
-    Ok(())
-}
-
 /// A new setting for an absent parent can affect a refresh without invalidating the lock.
 #[cfg(feature = "test-universal")]
 #[test]
@@ -44843,10 +44742,7 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
 
         [tool.uv]
         preview-features = ["resolution-inputs"]
-        constraint-dependencies = [
-            "leaf>=2",
-            { package = { name = "discarded" }, dependencies = ["leaf>=1"] },
-        ]
+        constraint-dependencies = ["leaf>=2"]
         override-dependencies = [
             { package = { name = "discarded" }, dependencies = ["leaf==1.0.0"] },
         ]
@@ -44878,10 +44774,7 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
         discarded = "2025-01-01T00:00:00Z"
 
         [manifest]
-        constraints = [
-            { package = { name = "discarded" }, dependencies = [{ name = "leaf", specifier = ">=1" }] },
-            { name = "leaf", specifier = ">=2" },
-        ]
+        constraints = [{ name = "leaf", specifier = ">=2" }]
         overrides = [{ package = { name = "discarded" }, dependencies = [{ name = "leaf", specifier = "==1.0.0" }] }]
         excludes = [{ package = { name = "discarded" }, dependencies = ["unrelated"] }]
 
@@ -44926,12 +44819,7 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
 
         [tool.uv]
         preview-features = ["resolution-inputs"]
-        constraint-dependencies = [
-            "leaf>=2",
-            "discarded>=1",
-            { package = { name = "discarded" }, dependencies = ["leaf>=1"] },
-            { package = { name = "leaf" }, dependencies = ["a>=1"] },
-        ]
+        constraint-dependencies = ["leaf>=2", "discarded>=1"]
         override-dependencies = [
             "leaf==1.0.0",
             { package = { name = "discarded" }, dependencies = ["leaf==1.0.0"] },
@@ -44967,42 +44855,7 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
 
         [tool.uv]
         preview-features = ["resolution-inputs"]
-        constraint-dependencies = [
-            "leaf>=1",
-            { package = { name = "discarded" }, dependencies = ["leaf>=1"] },
-        ]
-        override-dependencies = [
-            { package = { name = "discarded" }, dependencies = ["leaf==1.0.0"] },
-        ]
-        exclude-dependencies = [
-            { package = { name = "discarded" }, dependencies = ["unrelated"] },
-        ]
-        exclude-newer-package = { discarded = "2025-01-01T00:00:00Z" }
-        dependency-metadata = [{ name = "discarded", version = "1.0.0", requires-dist = ["leaf"] }]
-    "#})?;
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
-    exit_code: 1 (failure)
-    ----- stderr -----
-    Resolved 2 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
-
-    hint: To update the lockfile, run `uv lock`.
-    ");
-
-    // Scoped constraints remain relevant even when the parent is absent from the final graph.
-    pyproject.write_str(indoc! {r#"
-        [project]
-        name = "project"
-        version = "1.0"
-        requires-python = ">=3.12"
-        dependencies = ["a"]
-
-        [tool.uv]
-        preview-features = ["resolution-inputs"]
-        constraint-dependencies = [
-            "leaf>=2",
-            { package = { name = "discarded" }, dependencies = ["leaf>=0"] },
-        ]
+        constraint-dependencies = ["leaf>=1"]
         override-dependencies = [
             { package = { name = "discarded" }, dependencies = ["leaf==1.0.0"] },
         ]
@@ -45031,10 +44884,7 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
 
         [tool.uv]
         preview-features = ["resolution-inputs"]
-        constraint-dependencies = [
-            "leaf>=2",
-            { package = { name = "discarded" }, dependencies = ["leaf>=1"] },
-        ]
+        constraint-dependencies = ["leaf>=2"]
         override-dependencies = [
             { package = { name = "discarded" }, dependencies = ["leaf>=1.0.0"] },
         ]
@@ -45063,10 +44913,7 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
 
         [tool.uv]
         preview-features = ["resolution-inputs"]
-        constraint-dependencies = [
-            "leaf>=2",
-            { package = { name = "discarded" }, dependencies = ["leaf>=1"] },
-        ]
+        constraint-dependencies = ["leaf>=2"]
         override-dependencies = [
             { package = { name = "discarded" }, dependencies = ["leaf==1.0.0"] },
         ]
@@ -45095,10 +44942,7 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
 
         [tool.uv]
         preview-features = ["resolution-inputs"]
-        constraint-dependencies = [
-            "leaf>=2",
-            { package = { name = "discarded" }, dependencies = ["leaf>=1"] },
-        ]
+        constraint-dependencies = ["leaf>=2"]
         override-dependencies = [
             { package = { name = "discarded" }, dependencies = ["leaf==1.0.0"] },
         ]
@@ -45127,10 +44971,7 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
 
         [tool.uv]
         preview-features = ["resolution-inputs"]
-        constraint-dependencies = [
-            "leaf>=2",
-            { package = { name = "discarded" }, dependencies = ["leaf>=1"] },
-        ]
+        constraint-dependencies = ["leaf>=2"]
         override-dependencies = [
             { package = { name = "discarded" }, dependencies = ["leaf==1.0.0"] },
         ]
@@ -45162,10 +45003,7 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
 
         [tool.uv]
         preview-features = ["resolution-inputs"]
-        constraint-dependencies = [
-            "leaf>=2",
-            { package = { name = "discarded" }, dependencies = ["leaf>=1"] },
-        ]
+        constraint-dependencies = ["leaf>=2"]
         override-dependencies = [
             { package = { name = "discarded" }, dependencies = ["leaf==1.0.0"] },
         ]
@@ -45195,10 +45033,7 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
 
         [tool.uv]
         preview-features = ["resolution-inputs"]
-        constraint-dependencies = [
-            "leaf>=2",
-            { package = { name = "discarded" }, dependencies = ["leaf>=1"] },
-        ]
+        constraint-dependencies = ["leaf>=2"]
         override-dependencies = [
             { package = { name = "discarded" }, dependencies = ["leaf==1.0.0"] },
         ]
