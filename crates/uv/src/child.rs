@@ -308,7 +308,7 @@ pub(crate) async fn run_to_completion(
             // wait status to an ordinary exit code. Preserve that diagnostic so a signal exit can
             // still be distinguished from a process that exits normally with the same code.
             if let Some(signal) = status.signal() {
-                if signal != libc::SIGINT && signal != libc::SIGPIPE {
+                if signal != nix::libc::SIGINT && signal != nix::libc::SIGPIPE {
                     let mut stderr = printer.stderr_important();
                     let core_dumped = if status.core_dumped() {
                         " (core dumped)"
