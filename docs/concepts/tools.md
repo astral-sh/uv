@@ -177,12 +177,12 @@ $ uv tool upgrade --preview-features locked-tools --locked example-tool
 uv selects a compatible version of the tool before reading its lock. Versions incompatible with the
 selected Python or platform can be skipped. Once a compatible wheel is selected, a missing or
 unusable lock is an error; uv does not resolve different dependency versions or try an older tool
-release to find a usable lock. Locked artifacts are checked against the hashes recorded in the lock.
+release to find a usable lock. Artifact hashes are required and checked against the lock.
 
 Installed tools remember `--locked`, so subsequent upgrades continue using packaged locks and
 require the preview feature. Reinstall a tool with `--reinstall` and without `--locked` to return to
-normal dependency resolution. Locked runs use a cache environment based on the packaged lock instead of reusing an
-installed tool with potentially different dependencies.
+normal dependency resolution. Locked runs use a cache environment based on the packaged lock instead
+of reusing an installed tool with potentially different dependencies.
 
 `--with`, dependency overrides, exclusions, and constraints on dependencies cannot be combined with
 `--locked`. Constraints on the tool itself are supported. Requested extras and dependency groups

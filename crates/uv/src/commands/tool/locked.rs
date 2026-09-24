@@ -223,6 +223,11 @@ pub(super) async fn resolve(
     };
     let lock: PylockToml = toml::from_str(&contents)
         .with_context(|| format!("`{selected_dist}` contains an invalid `pylock.toml`"))?;
+    if lock.has_missing_hashes() {
+        bail!(
+            "The packaged lock for `{selected_dist}` is missing artifact hashes; regenerate the lock before publishing the package"
+        );
+    }
     for extra in &requirement.extras {
         if !lock.extras.contains(extra) {
             bail!(

@@ -235,18 +235,8 @@ fn packaged_lock_required() -> Result<()> {
     error: The requested interpreter resolved to Python 3.12.[X], which is incompatible with the `pylock.toml`'s Python requirement: `>=3.13`
     ");
 
-    tool(
-        &context,
-        "5.0.0",
-        Some(indoc! {r#"
-        lock-version = "1.0"
-        created-by = "test"
-        packages = []
-    "#}),
-        None,
-    )?;
     uv_snapshot!(context.filters(), context.tool_install()
-        .args(["--locked", "--preview-features", "locked-tools", "--no-index", "--find-links", "wheels", "--with", "locked-dependency", "locked-tool==5.0.0"]), @"
+        .args(["--locked", "--preview-features", "locked-tools", "--no-index", "--find-links", "wheels", "--with", "locked-dependency", "locked-tool==1.0.0"]), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: `--locked` requires a single tool package and cannot be combined with `--with`
@@ -294,6 +284,16 @@ fn packaged_lock_hashes() -> Result<()> {
 
              Computed:
                sha256:186f30ded0fe1760a4ac23b80063cbce20ac85334ac2e090ffbff6bda181e466
+    ");
+
+    lock["packages"][0]["archive"]["hashes"] = toml::Value::Table(toml::Table::new());
+    tool(&context, "3.0.0", Some(&toml::to_string(&lock)?), None)?;
+    uv_snapshot!(context.filters(), context.tool_run()
+        .args(["--locked", "--preview-features", "locked-tools", "--no-index", "--find-links", "wheels", "locked-tool==3.0.0"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: Empty hash tables in `pylock.toml` will be rejected in a future uv version. Rerun the original `uv export` or `uv pip compile` command to regenerate the file.
+    error: The packaged lock for `locked-tool==3.0.0` is missing artifact hashes; regenerate the lock before publishing the package
     ");
     Ok(())
 }
