@@ -6337,6 +6337,8 @@ fn no_install_project_no_build_locked_dynamic_metadata() -> Result<()> {
             return dist_info.name
     "#})?;
 
+    let marker = context.temp_dir.child("validation-hook-called");
+
     // Excluding the project also applies when no lockfile exists.
     uv_snapshot!(context.filters(), context.sync()
         .arg("--no-install-project")
@@ -6347,7 +6349,6 @@ fn no_install_project_no_build_locked_dynamic_metadata() -> Result<()> {
     error: Failed to build `project @ file://[TEMP_DIR]/`
       cause: Building source distributions for `project` is disabled
     ");
-    assert!(!context.temp_dir.child("validation-hook-called").exists());
 
     uv_snapshot!(context.filters(), context.sync()
         .arg("--no-install-package")
@@ -6359,7 +6360,6 @@ fn no_install_project_no_build_locked_dynamic_metadata() -> Result<()> {
     error: Failed to build `project @ file://[TEMP_DIR]/`
       cause: Building source distributions for `project` is disabled
     ");
-    assert!(!context.temp_dir.child("validation-hook-called").exists());
 
     uv_snapshot!(context.filters(), context.add()
         .arg("example")
@@ -6376,7 +6376,6 @@ fn no_install_project_no_build_locked_dynamic_metadata() -> Result<()> {
 
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     ");
-    assert!(!context.temp_dir.child("validation-hook-called").exists());
 
     uv_snapshot!(context.filters(), context.check()
         .arg("--no-install-project")
@@ -6388,13 +6387,12 @@ fn no_install_project_no_build_locked_dynamic_metadata() -> Result<()> {
     error: Failed to build `project @ file://[TEMP_DIR]/`
       cause: Building source distributions for `project` is disabled
     ");
-    assert!(!context.temp_dir.child("validation-hook-called").exists());
+    assert!(!marker.exists());
 
     // Generate a lockfile, then remove the cached metadata so validation would need to invoke the
     // build backend again if it ignored `--no-build`.
     context.lock().assert().success();
 
-    let marker = context.temp_dir.child("validation-hook-called");
     assert!(marker.exists());
     fs_err::remove_file(marker.path())?;
     fs_err::remove_dir_all(&context.cache_dir)?;
