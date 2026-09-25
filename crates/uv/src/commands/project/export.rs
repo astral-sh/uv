@@ -458,6 +458,7 @@ async fn render_export<'output>(
             if all_packages {
                 InstallTarget::Workspace {
                     workspace: project.workspace(),
+                    project_name: Some(project.project_name()),
                     lock,
                 }
             } else {

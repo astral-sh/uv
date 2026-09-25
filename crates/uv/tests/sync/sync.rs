@@ -5778,6 +5778,132 @@ fn no_install_project() -> Result<()> {
     Ok(())
 }
 
+/// Exclude the current project when syncing every workspace member.
+#[test]
+fn no_install_project_all_packages() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+    context.temp_dir.child("src/project/__init__.py").touch()?;
+
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+    child.child("src/child/__init__.py").touch()?;
+
+    // Exclude the root project while retaining the child.
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--no-install-project").arg("--no-build").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    // From the child, exclude the child even though the root depends on it.
+    uv_snapshot!(context.filters(), context.sync().current_dir(child.path()).arg("--all-packages").arg("--no-install-project").arg("--no-build").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - child==0.1.0 (from file://[TEMP_DIR]/child)
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+
+    // The inverse filter should select the current project.
+    uv_snapshot!(context.filters(), context.sync().current_dir(child.path()).arg("--all-packages").arg("--only-install-project").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     - project==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+
+    Ok(())
+}
+
+/// A virtual workspace root has no current project to exclude.
+#[test]
+fn no_install_project_all_packages_virtual_workspace() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["alpha", "beta"]
+        "#,
+    )?;
+
+    for name in ["alpha", "beta"] {
+        let member = context.temp_dir.child(name);
+        member.child("pyproject.toml").write_str(&format!(
+            r#"
+            [project]
+            name = "{name}"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = ["uv_build>=0.7,<10000"]
+            build-backend = "uv_build"
+            "#,
+        ))?;
+        member.child(format!("src/{name}/__init__.py")).touch()?;
+    }
+
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--no-install-project").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + alpha==0.1.0 (from file://[TEMP_DIR]/alpha)
+     + beta==0.1.0 (from file://[TEMP_DIR]/beta)
+    ");
+
+    // From a member, only that member is the current project.
+    uv_snapshot!(context.filters(), context.sync().current_dir(context.temp_dir.child("alpha")).arg("--all-packages").arg("--no-install-project").arg("--frozen").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - alpha==0.1.0 (from file://[TEMP_DIR]/alpha)
+    ");
+
+    Ok(())
+}
+
 /// Avoid syncing workspace members and the project when `--no-install-workspace` is provided, but
 /// include all dependencies.
 #[test]
