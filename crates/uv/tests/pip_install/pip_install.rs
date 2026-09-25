@@ -36,9 +36,7 @@ use uv_test::archive::write_tar_gz;
 use uv_test::decode_token;
 use uv_test::find_links::FindLinksServer;
 use uv_test::package_server::PackageServer;
-#[cfg(windows)]
-use uv_test::packse::generate_wheel_with_files;
-use uv_test::packse::{PackseServer, generate_wheel};
+use uv_test::packse::{PackseServer, generate_wheel, generate_wheel_with_files};
 use uv_test::{
     DEFAULT_PYTHON_VERSION, TestContext, apply_filters, download_to_disk, get_bin, uv_snapshot,
     venv_bin_path,
@@ -14884,6 +14882,51 @@ fn install_in_prefix_symlinked_wheel_data_directory() -> Result<()> {
         .venv
         .child("share/man/man1/foo.1")
         .assert("foo manual\n");
+
+    Ok(())
+}
+
+/// Mutable files are copied during linking and must replace an existing leaf symlink.
+#[cfg(unix)]
+#[test]
+fn install_wheel_replaces_record_symlink() -> Result<()> {
+    allow_duplicates! {
+        for link_mode in ["copy", "hardlink", "symlink"] {
+            let context = uv_test::test_context!("3.12");
+            let outside = context.temp_dir.child("outside.txt");
+            outside.write_str("outside sentinel")?;
+            fs::create_dir_all(context.site_packages().join("foo"))?;
+            let record = context.site_packages().join("foo/RECORD");
+            symlink(outside.path(), &record)?;
+            let (filename, wheel) = generate_wheel_with_files(
+                &"foo".parse()?,
+                &"0.1.0".parse()?,
+                &[],
+                &BTreeMap::default(),
+                None,
+                "py3-none-any",
+                &[("foo/RECORD", "wheel payload")],
+            );
+            fs::write(context.temp_dir.join(&filename), wheel)?;
+
+            uv_snapshot!(context.filters(), context.pip_install()
+                .arg("--no-index")
+                .args(["--link-mode", link_mode])
+                .arg(&filename), @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Resolved 1 package in [TIME]
+            Prepared 1 package in [TIME]
+            Installed 1 package in [TIME]
+             + foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl)
+            ");
+
+            outside.assert("outside sentinel");
+            assert_eq!(fs::read_to_string(&record)?, "wheel payload");
+            assert!(!fs::symlink_metadata(&record)?.file_type().is_symlink());
+        }
+        Ok::<(), anyhow::Error>(())
+    }?;
 
     Ok(())
 }

@@ -406,11 +406,7 @@ where
         LinkMode::Hardlink => hardlink_file_with_fallback(path, target, state, options),
         LinkMode::Symlink => symlink_file_with_fallback(path, target, state, options),
         LinkMode::Copy => {
-            if options.on_existing_directory == OnExistingDirectory::Merge {
-                atomic_copy_overwrite(path, target)?;
-            } else {
-                copy_file(path, target, options)?;
-            }
+            copy_file(path, target, options)?;
             Ok(state)
         }
     }
@@ -749,17 +745,23 @@ where
     }
 }
 
-/// Copy a single file, using synchronized copying if [`CopyLocks`] are configured.
+/// Copy a single file, using atomic replacement when merging.
+///
+/// Otherwise, use [`CopyLocks`] if configured.
 fn copy_file<F>(path: &Path, target: &Path, options: &LinkOptions<'_, F>) -> Result<(), LinkError>
 where
     F: Fn(&Path) -> bool,
 {
-    options
-        .copy_file(path, target)
-        .map_err(|err| LinkError::Copy {
-            to: target.to_path_buf(),
-            err,
-        })
+    if options.on_existing_directory == OnExistingDirectory::Merge {
+        atomic_copy_overwrite(path, target)
+    } else {
+        options
+            .copy_file(path, target)
+            .map_err(|err| LinkError::Copy {
+                to: target.to_path_buf(),
+                err,
+            })
+    }
 }
 
 /// Try to create a hard link, handling `TooManyLinks` (EMLINK/`ERROR_TOO_MANY_LINKS`)
@@ -883,6 +885,8 @@ fn create_symlink(original: &Path, link: &Path) -> io::Result<()> {
 #[expect(clippy::print_stderr)]
 mod tests {
     use std::assert_matches;
+    #[cfg(unix)]
+    use std::fs::Permissions;
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
 
@@ -1334,37 +1338,37 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn test_copy_merge_replaces_symlink_and_preserves_permissions() -> Result<(), LinkError> {
-        let src_dir = test_tempdir();
-        let dst_dir = test_tempdir();
+        for mode in [LinkMode::Copy, LinkMode::Hardlink, LinkMode::Symlink] {
+            let src_dir = test_tempdir();
+            let dst_dir = test_tempdir();
 
-        let source = src_dir.path().join("script");
-        fs_err::write(&source, "new content")?;
-        fs_err::set_permissions(&source, std::fs::Permissions::from_mode(0o751))?;
+            let source = src_dir.path().join("script");
+            fs_err::write(&source, "new content")?;
+            fs_err::set_permissions(&source, Permissions::from_mode(0o751))?;
 
-        let destination = dst_dir.path().join("script");
-        fs_err::write(dst_dir.path().join("original"), "original content")?;
-        fs_err::os::unix::fs::symlink("original", &destination)?;
+            let destination = dst_dir.path().join("script");
+            fs_err::write(dst_dir.path().join("original"), "original content")?;
+            fs_err::os::unix::fs::symlink("original", &destination)?;
 
-        let locks = CopyLocks::default();
-        let options = LinkOptions::new(LinkMode::Copy)
-            .with_copy_locks(&locks)
-            .with_on_existing_directory(OnExistingDirectory::Merge);
-        assert_eq!(
-            link_dir(src_dir.path(), dst_dir.path(), &options)?,
-            LinkMode::Copy
-        );
+            let locks = CopyLocks::default();
+            let options = LinkOptions::new(mode)
+                .with_mutable_copy_filter(|path: &Path| path.ends_with("script"))
+                .with_copy_locks(&locks)
+                .with_on_existing_directory(OnExistingDirectory::Merge);
+            assert_eq!(link_dir(src_dir.path(), dst_dir.path(), &options)?, mode);
 
-        assert!(fs_err::symlink_metadata(&destination)?.is_file());
-        assert_eq!(fs_err::read_to_string(&destination)?, "new content");
-        assert_eq!(
-            fs_err::metadata(&destination)?.permissions().mode() & 0o777,
-            0o751
-        );
-        assert_eq!(
-            fs_err::read_to_string(dst_dir.path().join("original"))?,
-            "original content"
-        );
-        assert_eq!(fs_err::read_dir(dst_dir.path())?.count(), 2);
+            assert!(fs_err::symlink_metadata(&destination)?.is_file());
+            assert_eq!(fs_err::read_to_string(&destination)?, "new content");
+            assert_eq!(
+                fs_err::metadata(&destination)?.permissions().mode() & 0o777,
+                0o751
+            );
+            assert_eq!(
+                fs_err::read_to_string(dst_dir.path().join("original"))?,
+                "original content"
+            );
+            assert_eq!(fs_err::read_dir(dst_dir.path())?.count(), 2);
+        }
 
         Ok(())
     }
