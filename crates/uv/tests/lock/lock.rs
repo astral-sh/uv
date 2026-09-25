@@ -1,3 +1,5 @@
+#[cfg(feature = "test-universal")]
+use std::collections::BTreeMap;
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 use std::process::Command;
 
@@ -6,10 +8,6 @@ use anyhow::Result;
 use anyhow::anyhow;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
-#[cfg(feature = "test-universal")]
-use async_zip::base::write::ZipFileWriter;
-#[cfg(feature = "test-universal")]
-use async_zip::{Compression, ZipEntryBuilder};
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 #[cfg(feature = "test-universal")]
@@ -32,7 +30,7 @@ use uv_static::EnvVars;
 #[cfg(feature = "test-universal")]
 use uv_test::archive::{generate_source_archive, write_tar_gz};
 #[cfg(feature = "test-universal")]
-use uv_test::packse::{PackseServer, scenario::Scenario};
+use uv_test::packse::{PackseServer, generate_wheel_with_files, scenario::Scenario};
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 use uv_test::{READ_ONLY_GITHUB_TOKEN, decode_token};
 use uv_test::{diff_snapshot, uv_snapshot};
@@ -1583,31 +1581,17 @@ fn lock_sdist_url() -> Result<()> {
 
 /// Create a deterministic wheel whose module can be imported by a source build backend.
 #[cfg(feature = "test-universal")]
-async fn locked_build_dependency_wheel(module: &str) -> Result<Vec<u8>> {
-    let mut writer = ZipFileWriter::new(Vec::new());
-    for (name, contents) in [
-        ("review_dep.py", module),
-        (
-            "review_dep-1.0.0.dist-info/METADATA",
-            "Metadata-Version: 2.2\nName: review-dep\nVersion: 1.0.0\n",
-        ),
-        (
-            "review_dep-1.0.0.dist-info/WHEEL",
-            "Wheel-Version: 1.0\nGenerator: uv-test\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
-        ),
-        (
-            "review_dep-1.0.0.dist-info/RECORD",
-            "review_dep.py,,\nreview_dep-1.0.0.dist-info/METADATA,,\nreview_dep-1.0.0.dist-info/WHEEL,,\nreview_dep-1.0.0.dist-info/RECORD,,\n",
-        ),
-    ] {
-        writer
-            .write_entry_whole(
-                ZipEntryBuilder::new(name.into(), Compression::Stored),
-                contents.as_bytes(),
-            )
-            .await?;
-    }
-    Ok(writer.close().await?)
+fn locked_build_dependency_wheel(module: &str) -> Result<Vec<u8>> {
+    let (_, wheel) = generate_wheel_with_files(
+        &"review-dep".parse()?,
+        &"1.0.0".parse()?,
+        &[],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+        &[("review_dep/payload.py", module)],
+    );
+    Ok(wheel)
 }
 
 /// A known locked build dependency must be verified before its code enters an isolated build.
@@ -1624,12 +1608,11 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
     let wheel_path = "/files/review_dep-1.0.0-py3-none-any.whl";
     let sentinel = context.temp_dir.child("backend-executed");
     let marker = sentinel.path().escape_for_python();
-    let trusted = locked_build_dependency_wheel("pass\n").await?;
+    let trusted = locked_build_dependency_wheel("pass\n")?;
     let replacement = locked_build_dependency_wheel(&formatdoc! {r"
         from pathlib import Path
         Path({marker}).touch()
-    "})
-    .await?;
+    "})?;
     let trusted_digest = hex::encode(Sha256::digest(&trusted));
     let replacement_digest = hex::encode(Sha256::digest(&replacement));
     let context = context
@@ -1655,7 +1638,7 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
             from zipfile import ZipFile
 
             def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
-                import review_dep
+                import review_dep.payload
                 dist_info = Path(metadata_directory) / "demo_pkg-1.0.0.dist-info"
                 dist_info.mkdir()
                 (dist_info / "METADATA").write_text(
@@ -1664,7 +1647,7 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
                 return dist_info.name
 
             def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-                import review_dep
+                import review_dep.payload
                 Path({marker}).touch()
                 filename = "demo_pkg-1.0.0-py3-none-any.whl"
                 dist_info = "demo_pkg-1.0.0.dist-info"
@@ -1702,7 +1685,7 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
         .and(path(format!("{wheel_path}.metadata")))
         .respond_with(
             ResponseTemplate::new(200)
-                .set_body_string("Metadata-Version: 2.2\nName: review-dep\nVersion: 1.0.0\n"),
+                .set_body_string("Metadata-Version: 2.3\nName: review-dep\nVersion: 1.0.0\n"),
         )
         .mount(&server)
         .await;
