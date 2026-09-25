@@ -13,12 +13,9 @@ use std::env::current_dir;
 use std::path::Path;
 use url::Url;
 use uv_static::EnvVars;
+use uv_test::package_server::PackageServer;
 use uv_test::packse::generate_wheel;
 use uv_test::{DEFAULT_PYTHON_VERSION, apply_filters, get_bin, uv_snapshot};
-use wiremock::{
-    Mock, MockServer, ResponseTemplate,
-    matchers::{method, path as url_path},
-};
 
 fn zip_file_names(path: &Path) -> Result<Vec<String>> {
     block_on(async {
@@ -2088,25 +2085,23 @@ fn build_sha() -> Result<()> {
 async fn build_transitive_url_build_requirement_hashes() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filter((r"\\\.", ""));
 
-    let ok_wheel = current_dir()?.join("../../test/links/ok-1.0.0-py3-none-any.whl");
-    let validation_wheel =
-        current_dir()?.join("../../test/links/validation-1.0.0-py3-none-any.whl");
-    let server = MockServer::start().await;
-    let ok_wheel_url = Url::parse(&format!("{}/ok-1.0.0-py3-none-any.whl", server.uri()))?;
-    let validation_wheel_url = Url::parse(&format!(
-        "{}/validation-1.0.0-py3-none-any.whl",
-        server.uri()
-    ))?;
+    let links = context.workspace_root.join("test/links");
+    let ok_filename = "ok-1.0.0-py3-none-any.whl";
+    let validation_filename = "validation-1.0.0-py3-none-any.whl";
+    let ok_server = PackageServer::new(&"ok".parse()?).await;
+    let validation_server = PackageServer::new(&"validation".parse()?).await;
+    let ok_wheel_url = ok_server.file_url(ok_filename);
+    let validation_wheel_url = validation_server.file_url(validation_filename);
 
-    Mock::given(method("GET"))
-        .and(url_path("/ok-1.0.0-py3-none-any.whl"))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(ok_wheel)?))
-        .mount(&server)
+    ok_server
+        .serve(ok_filename, &fs_err::read(links.join(ok_filename))?, None)
         .await;
-    Mock::given(method("GET"))
-        .and(url_path("/validation-1.0.0-py3-none-any.whl"))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(validation_wheel)?))
-        .mount(&server)
+    validation_server
+        .serve(
+            validation_filename,
+            &fs_err::read(links.join(validation_filename))?,
+            None,
+        )
         .await;
 
     let project = context.temp_dir.child("project");

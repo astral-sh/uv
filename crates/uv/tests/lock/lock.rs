@@ -30,6 +30,8 @@ use uv_static::EnvVars;
 #[cfg(feature = "test-universal")]
 use uv_test::archive::{generate_source_archive, write_tar_gz};
 #[cfg(feature = "test-universal")]
+use uv_test::package_server::PackageServer;
+#[cfg(feature = "test-universal")]
 use uv_test::packse::{PackseServer, generate_wheel_with_files, scenario::Scenario};
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 use uv_test::{READ_ONLY_GITHUB_TOKEN, decode_token};
@@ -2021,12 +2023,12 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
 #[tokio::test]
 async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let server = MockServer::start().await;
-    let archive_path = "/files/demo_pkg-1.0.0.tar.gz";
-    let archive_url = format!("{}{archive_path}", server.uri());
+    let filename = "demo_pkg-1.0.0.tar.gz";
     let sentinel = context.temp_dir.child("backend-executed");
 
     let name = "demo-pkg".parse()?;
+    let server = PackageServer::new(&name).await;
+    let archive_url = server.file_url(filename);
     let version = "1.0.0".parse()?;
     let trusted_archive = generate_source_archive(&name, &version, "", None)?;
     let replacement_archive = generate_source_archive(&name, &version, "", Some(sentinel.path()))?;
@@ -2036,11 +2038,7 @@ async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
         .with_filter((trusted_digest, "[TRUSTED_HASH]"))
         .with_filter((replacement_digest, "[REPLACEMENT_HASH]"));
 
-    Mock::given(method("GET"))
-        .and(path(archive_path))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(trusted_archive))
-        .mount(&server)
-        .await;
+    server.serve(filename, &trusted_archive, None).await;
 
     context
         .temp_dir
@@ -2073,7 +2071,7 @@ async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
         [[package]]
         name = "demo-pkg"
         version = "1.0.0"
-        source = { url = "http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz" }
+        source = { url = "http://[LOCALHOST]/demo_pkg-1.0.0.tar.gz" }
         sdist = { hash = "sha256:[TRUSTED_HASH]" }
 
         [[package]]
@@ -2085,7 +2083,7 @@ async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "demo-pkg", url = "http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz" }]
+        requires-dist = [{ name = "demo-pkg", url = "http://[LOCALHOST]/demo_pkg-1.0.0.tar.gz" }]
         "#);
     });
 
@@ -2099,20 +2097,15 @@ async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
     ");
     assert!(!sentinel.exists(), "the trusted backend created a sentinel");
 
-    server.reset().await;
-    Mock::given(method("GET"))
-        .and(path(archive_path))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(replacement_archive))
-        .mount(&server)
-        .await;
+    server.serve(filename, &replacement_archive, None).await;
 
     uv_snapshot!(context.filters(), context.lock()
         .arg("--locked")
         .arg("--no-cache"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to generate package metadata for `demo-pkg==1.0.0 @ direct+http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
-      cause: Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+    error: Failed to generate package metadata for `demo-pkg==1.0.0 @ direct+http://[LOCALHOST]/demo_pkg-1.0.0.tar.gz`
+      cause: Hash mismatch for `demo-pkg @ http://[LOCALHOST]/demo_pkg-1.0.0.tar.gz`
 
              Expected:
                sha256:[TRUSTED_HASH]
@@ -2128,8 +2121,8 @@ async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
         .arg("--no-cache"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
-      cause: Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+    error: Failed to download and build `demo-pkg @ http://[LOCALHOST]/demo_pkg-1.0.0.tar.gz`
+      cause: Hash mismatch for `demo-pkg @ http://[LOCALHOST]/demo_pkg-1.0.0.tar.gz`
 
              Expected:
                sha256:[TRUSTED_HASH]
@@ -2149,8 +2142,8 @@ async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
         .arg("--no-cache"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
-      cause: Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+    error: Failed to download and build `demo-pkg @ http://[LOCALHOST]/demo_pkg-1.0.0.tar.gz`
+      cause: Hash mismatch for `demo-pkg @ http://[LOCALHOST]/demo_pkg-1.0.0.tar.gz`
 
              Expected:
                sha256:[TRUSTED_HASH]
@@ -2167,8 +2160,8 @@ async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
         .arg("--no-cache"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to generate package metadata for `demo-pkg==1.0.0 @ direct+http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
-      cause: Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+    error: Failed to generate package metadata for `demo-pkg==1.0.0 @ direct+http://[LOCALHOST]/demo_pkg-1.0.0.tar.gz`
+      cause: Hash mismatch for `demo-pkg @ http://[LOCALHOST]/demo_pkg-1.0.0.tar.gz`
 
              Expected:
                sha256:[TRUSTED_HASH]
@@ -2209,7 +2202,7 @@ async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
         [[package]]
         name = "demo-pkg"
         version = "1.0.0"
-        source = { url = "http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz" }
+        source = { url = "http://[LOCALHOST]/demo_pkg-1.0.0.tar.gz" }
         sdist = { hash = "sha256:[REPLACEMENT_HASH]" }
 
         [[package]]
@@ -2221,7 +2214,7 @@ async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "demo-pkg", url = "http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz" }]
+        requires-dist = [{ name = "demo-pkg", url = "http://[LOCALHOST]/demo_pkg-1.0.0.tar.gz" }]
         "#);
     });
 
@@ -2233,11 +2226,10 @@ async fn lock_sdist_url_locked_hash_mismatch() -> Result<()> {
 #[tokio::test]
 async fn lock_sdist_registry_changed_index_locked_hash_mismatch() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let server = MockServer::start().await;
-    let archive_path = "/files/demo_pkg-1.0.0.tar.gz";
-    let archive_url = format!("{}{archive_path}", server.uri());
+    let filename = "demo_pkg-1.0.0.tar.gz";
     let sentinel = context.temp_dir.child("backend-executed");
     let name = "demo-pkg".parse()?;
+    let server = PackageServer::new(&name).await;
     let version = "1.0.0".parse()?;
     let trusted_archive = generate_source_archive(&name, &version, "", None)?;
     let replacement_archive = generate_source_archive(&name, &version, "", Some(sentinel.path()))?;
@@ -2245,31 +2237,10 @@ async fn lock_sdist_registry_changed_index_locked_hash_mismatch() -> Result<()> 
     let replacement_digest = hex::encode(Sha256::digest(&replacement_archive));
     let context = context
         .with_filter((trusted_digest.clone(), "[TRUSTED_HASH]"))
-        .with_filter((replacement_digest, "[REPLACEMENT_HASH]"));
+        .with_filter((replacement_digest.clone(), "[REPLACEMENT_HASH]"));
 
-    let mut simple_index = json!({
-        "meta": { "api-version": "1.0" },
-        "name": "demo-pkg",
-        "files": [{
-            "filename": "demo_pkg-1.0.0.tar.gz",
-            "url": archive_url,
-            "hashes": { "sha256": trusted_digest },
-            "upload-time": "2024-01-01T00:00:00Z",
-        }],
-    });
-    Mock::given(method("GET"))
-        .and(path("/simple/demo-pkg/"))
-        .respond_with(ResponseTemplate::new(200).set_body_raw(
-            simple_index.to_string(),
-            "application/vnd.pypi.simple.v1+json",
-        ))
-        .mount(&server)
-        .await;
-
-    Mock::given(method("GET"))
-        .and(path(archive_path))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(trusted_archive))
-        .mount(&server)
+    server
+        .serve(filename, &trusted_archive, Some(&trusted_digest))
         .await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -2281,9 +2252,9 @@ async fn lock_sdist_registry_changed_index_locked_hash_mismatch() -> Result<()> 
         dependencies = ["demo-pkg==1.0.0"]
 
         [[tool.uv.index]]
-        url = "{}/simple"
+        url = "{}"
         default = true
-    "#, server.uri()})?;
+    "#, server.index_url()})?;
 
     uv_snapshot!(context.filters(), context.lock().arg("--no-cache"), @"
     exit_code: 0 (success)
@@ -2292,21 +2263,8 @@ async fn lock_sdist_registry_changed_index_locked_hash_mismatch() -> Result<()> 
     ");
     let locked = context.read("uv.lock");
 
-    server.reset().await;
-    simple_index["files"][0]["hashes"] =
-        json!({ "sha256": hex::encode(Sha256::digest(&replacement_archive)) });
-    Mock::given(method("GET"))
-        .and(path("/simple/demo-pkg/"))
-        .respond_with(ResponseTemplate::new(200).set_body_raw(
-            simple_index.to_string(),
-            "application/vnd.pypi.simple.v1+json",
-        ))
-        .mount(&server)
-        .await;
-    Mock::given(method("GET"))
-        .and(path(archive_path))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(replacement_archive))
-        .mount(&server)
+    server
+        .serve(filename, &replacement_archive, Some(&replacement_digest))
         .await;
 
     uv_snapshot!(context.filters(), context.lock()
@@ -2339,11 +2297,10 @@ async fn lock_sdist_registry_changed_index_locked_hash_mismatch() -> Result<()> 
 #[tokio::test]
 async fn lock_sdist_registry_missing_index_locked_hash_mismatch() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let server = MockServer::start().await;
-    let archive_path = "/files/demo_pkg-1.0.0.tar.gz";
-    let archive_url = format!("{}{archive_path}", server.uri());
+    let filename = "demo_pkg-1.0.0.tar.gz";
     let sentinel = context.temp_dir.child("backend-executed");
     let name = "demo-pkg".parse()?;
+    let server = PackageServer::new(&name).await;
     let version = "1.0.0".parse()?;
     let trusted_archive = generate_source_archive(&name, &version, "", None)?;
     let replacement_archive = generate_source_archive(&name, &version, "", Some(sentinel.path()))?;
@@ -2353,29 +2310,8 @@ async fn lock_sdist_registry_missing_index_locked_hash_mismatch() -> Result<()> 
         .with_filter((trusted_digest.clone(), "[TRUSTED_HASH]"))
         .with_filter((replacement_digest, "[REPLACEMENT_HASH]"));
 
-    let mut simple_index = json!({
-        "meta": { "api-version": "1.0" },
-        "name": "demo-pkg",
-        "files": [{
-            "filename": "demo_pkg-1.0.0.tar.gz",
-            "url": archive_url,
-            "hashes": { "sha256": trusted_digest },
-            "upload-time": "2024-01-01T00:00:00Z",
-        }],
-    });
-    Mock::given(method("GET"))
-        .and(path("/simple/demo-pkg/"))
-        .respond_with(ResponseTemplate::new(200).set_body_raw(
-            simple_index.to_string(),
-            "application/vnd.pypi.simple.v1+json",
-        ))
-        .mount(&server)
-        .await;
-
-    Mock::given(method("GET"))
-        .and(path(archive_path))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(trusted_archive))
-        .mount(&server)
+    server
+        .serve(filename, &trusted_archive, Some(&trusted_digest))
         .await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -2387,9 +2323,9 @@ async fn lock_sdist_registry_missing_index_locked_hash_mismatch() -> Result<()> 
         dependencies = ["demo-pkg==1.0.0"]
 
         [[tool.uv.index]]
-        url = "{}/simple"
+        url = "{}"
         default = true
-    "#, server.uri()})?;
+    "#, server.index_url()})?;
 
     uv_snapshot!(context.filters(), context.lock().arg("--no-cache"), @"
     exit_code: 0 (success)
@@ -2398,21 +2334,7 @@ async fn lock_sdist_registry_missing_index_locked_hash_mismatch() -> Result<()> 
     ");
     let locked = context.read("uv.lock");
 
-    server.reset().await;
-    simple_index["files"][0]["hashes"] = json!({});
-    Mock::given(method("GET"))
-        .and(path("/simple/demo-pkg/"))
-        .respond_with(ResponseTemplate::new(200).set_body_raw(
-            simple_index.to_string(),
-            "application/vnd.pypi.simple.v1+json",
-        ))
-        .mount(&server)
-        .await;
-    Mock::given(method("GET"))
-        .and(path(archive_path))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(replacement_archive))
-        .mount(&server)
-        .await;
+    server.serve(filename, &replacement_archive, None).await;
 
     uv_snapshot!(context.filters(), context.lock()
         .arg("--locked")
@@ -2444,11 +2366,11 @@ async fn lock_sdist_registry_missing_index_locked_hash_mismatch() -> Result<()> 
 #[tokio::test]
 async fn lock_sdist_url_root_subdirectory_locked_hash_mismatch() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let server = MockServer::start().await;
-    let archive_path = "/files/demo_pkg-1.0.0.tar.gz";
-    let archive_url = format!("{}{archive_path}", server.uri());
+    let filename = "demo_pkg-1.0.0.tar.gz";
     let sentinel = context.temp_dir.child("backend-executed");
     let name = "demo-pkg".parse()?;
+    let server = PackageServer::new(&name).await;
+    let archive_url = server.file_url(filename);
     let version = "1.0.0".parse()?;
     let trusted_archive = generate_source_archive(&name, &version, "", None)?;
     let replacement_archive = generate_source_archive(&name, &version, "", Some(sentinel.path()))?;
@@ -2458,11 +2380,7 @@ async fn lock_sdist_url_root_subdirectory_locked_hash_mismatch() -> Result<()> {
         .with_filter((trusted_digest, "[TRUSTED_HASH]"))
         .with_filter((replacement_digest, "[REPLACEMENT_HASH]"));
 
-    Mock::given(method("GET"))
-        .and(path(archive_path))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(trusted_archive))
-        .mount(&server)
-        .await;
+    server.serve(filename, &trusted_archive, None).await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(&formatdoc! {r#"
@@ -2480,20 +2398,15 @@ async fn lock_sdist_url_root_subdirectory_locked_hash_mismatch() -> Result<()> {
     ");
     let locked = context.read("uv.lock");
 
-    server.reset().await;
-    Mock::given(method("GET"))
-        .and(path(archive_path))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(replacement_archive))
-        .mount(&server)
-        .await;
+    server.serve(filename, &replacement_archive, None).await;
 
     uv_snapshot!(context.filters(), context.lock()
         .arg("--locked")
         .arg("--refresh"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz#subdirectory=.`
-      cause: Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz#subdirectory=.`
+    error: Failed to download and build `demo-pkg @ http://[LOCALHOST]/demo_pkg-1.0.0.tar.gz#subdirectory=.`
+      cause: Hash mismatch for `demo-pkg @ http://[LOCALHOST]/demo_pkg-1.0.0.tar.gz#subdirectory=.`
 
              Expected:
                sha256:[TRUSTED_HASH]
@@ -2515,11 +2428,11 @@ async fn lock_sdist_url_root_subdirectory_locked_hash_mismatch() -> Result<()> {
 #[tokio::test]
 async fn lock_sdist_url_rejected_archive_not_cached() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let server = MockServer::start().await;
-    let archive_path = "/files/demo_pkg-1.0.0.tar.gz";
-    let archive_url = format!("{}{archive_path}", server.uri());
+    let filename = "demo_pkg-1.0.0.tar.gz";
     let sentinel = context.temp_dir.child("backend-executed");
     let name = "demo-pkg".parse()?;
+    let server = PackageServer::new(&name).await;
+    let archive_url = server.file_url(filename);
     let version = "1.0.0".parse()?;
     let trusted_archive = generate_source_archive(&name, &version, "", None)?;
     let replacement_archive = generate_source_archive(&name, &version, "", Some(sentinel.path()))?;
@@ -2530,11 +2443,7 @@ async fn lock_sdist_url_rejected_archive_not_cached() -> Result<()> {
         .with_filter((replacement_digest, "[REPLACEMENT_HASH]"));
     let malformed_archive = b"not an archive";
 
-    Mock::given(method("GET"))
-        .and(path(archive_path))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(trusted_archive))
-        .mount(&server)
-        .await;
+    server.serve(filename, &trusted_archive, None).await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(&formatdoc! {r#"
@@ -2552,20 +2461,15 @@ async fn lock_sdist_url_rejected_archive_not_cached() -> Result<()> {
     ");
     let locked = context.read("uv.lock");
 
-    server.reset().await;
-    Mock::given(method("GET"))
-        .and(path(archive_path))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(replacement_archive))
-        .mount(&server)
-        .await;
+    server.serve(filename, &replacement_archive, None).await;
 
     uv_snapshot!(context.filters(), context.lock()
         .arg("--locked")
         .arg("--refresh"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
-      cause: Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
+    error: Failed to download and build `demo-pkg @ http://[LOCALHOST]/demo_pkg-1.0.0.tar.gz`
+      cause: Hash mismatch for `demo-pkg @ http://[LOCALHOST]/demo_pkg-1.0.0.tar.gz`
 
              Expected:
                sha256:[TRUSTED_HASH]
@@ -2593,12 +2497,7 @@ async fn lock_sdist_url_rejected_archive_not_cached() -> Result<()> {
     }
 
     // Malformed replacements fail immediately during extraction, before cache persistence.
-    server.reset().await;
-    Mock::given(method("GET"))
-        .and(path(archive_path))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(malformed_archive))
-        .mount(&server)
-        .await;
+    server.serve(filename, malformed_archive, None).await;
 
     uv_snapshot!(context.filters(), context.lock()
         .arg("--locked")
@@ -2606,8 +2505,8 @@ async fn lock_sdist_url_rejected_archive_not_cached() -> Result<()> {
         .env(EnvVars::UV_INTERNAL__TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`
-      cause: Failed to extract archive: demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz
+    error: Failed to download and build `demo-pkg @ http://[LOCALHOST]/demo_pkg-1.0.0.tar.gz`
+      cause: Failed to extract archive: demo-pkg @ http://[LOCALHOST]/demo_pkg-1.0.0.tar.gz
       cause: I/O operation failed during extraction
       cause: Invalid gzip header
     ");
@@ -2638,11 +2537,11 @@ async fn lock_sdist_url_rejected_archive_not_cached() -> Result<()> {
 #[tokio::test]
 async fn lock_sdist_url_equivalent_subdirectory_locked_hash_mismatch() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let server = MockServer::start().await;
-    let archive_path = "/files/demo_pkg-1.0.0.tar.gz";
-    let archive_url = format!("{}{archive_path}", server.uri());
+    let filename = "demo_pkg-1.0.0.tar.gz";
     let sentinel = context.temp_dir.child("backend-executed");
     let name = "demo-pkg".parse()?;
+    let server = PackageServer::new(&name).await;
+    let archive_url = server.file_url(filename);
     let version = "1.0.0".parse()?;
     let trusted_archive = generate_source_archive(&name, &version, "nested/", None)?;
     let replacement_archive =
@@ -2653,11 +2552,7 @@ async fn lock_sdist_url_equivalent_subdirectory_locked_hash_mismatch() -> Result
         .with_filter((trusted_digest, "[TRUSTED_HASH]"))
         .with_filter((replacement_digest, "[REPLACEMENT_HASH]"));
 
-    Mock::given(method("GET"))
-        .and(path(archive_path))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(trusted_archive))
-        .mount(&server)
-        .await;
+    server.serve(filename, &trusted_archive, None).await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(&formatdoc! {r#"
@@ -2682,20 +2577,15 @@ async fn lock_sdist_url_equivalent_subdirectory_locked_hash_mismatch() -> Result
             .replace("#subdirectory=nested", "#subdirectory=nested/../nested"),
     )?;
 
-    server.reset().await;
-    Mock::given(method("GET"))
-        .and(path(archive_path))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(replacement_archive))
-        .mount(&server)
-        .await;
+    server.serve(filename, &replacement_archive, None).await;
 
     uv_snapshot!(context.filters(), context.lock()
         .arg("--locked")
         .arg("--refresh"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: Failed to download and build `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz#subdirectory=nested/../nested`
-      cause: Hash mismatch for `demo-pkg @ http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz#subdirectory=nested/../nested`
+    error: Failed to download and build `demo-pkg @ http://[LOCALHOST]/demo_pkg-1.0.0.tar.gz#subdirectory=nested/../nested`
+      cause: Hash mismatch for `demo-pkg @ http://[LOCALHOST]/demo_pkg-1.0.0.tar.gz#subdirectory=nested/../nested`
 
              Expected:
                sha256:[TRUSTED_HASH]
@@ -12519,39 +12409,31 @@ async fn lock_index_hash_algorithm() -> Result<()> {
 #[tokio::test]
 async fn lock_index_hash_algorithm_missing() -> Result<()> {
     let context = uv_test::test_context!("3.13");
-    let server = MockServer::start().await;
+    let server = PackageServer::new(&"basic-package".parse()?).await;
+    let wheel_filename = "basic_package-0.1.0-py3-none-any.whl";
 
-    let simple_index = json!({
-        "meta": {
-            "api-version": "1.1"
-        },
-        "name": "basic-package",
-        "files": [{
-            "filename": "basic_package-0.1.0-py3-none-any.whl",
-            "url": format!("{}/files/basic_package-0.1.0-py3-none-any.whl", server.uri()),
-            "hashes": {
-                "sha512": "765bde25938af485e492e25ee0e8cde262462565122c1301213a69bf9ceb2008e3997b652a604092a238c4b1a6a334e697ff3cee3c22f9a617cb14f34e26ef17"
-            },
-            "core-metadata": true
-        }]
-    });
-
-    Mock::given(method("GET"))
-        .and(path("/simple/basic-package/"))
-        .respond_with(ResponseTemplate::new(200).set_body_raw(
-            simple_index.to_string(),
-            "application/vnd.pypi.simple.v1+json",
-        ))
-        .mount(&server)
+    // Resolution uses the separate metadata without downloading the wheel.
+    server
+        .serve_with(
+            wheel_filename,
+            b"",
+            None,
+            json!({
+                "hashes": {
+                    "sha512": "765bde25938af485e492e25ee0e8cde262462565122c1301213a69bf9ceb2008e3997b652a604092a238c4b1a6a334e697ff3cee3c22f9a617cb14f34e26ef17"
+                },
+                "core-metadata": true,
+            }),
+        )
         .await;
     Mock::given(method("GET"))
-        .and(path("/files/basic_package-0.1.0-py3-none-any.whl.metadata"))
+        .and(path(format!("/{wheel_filename}.metadata")))
         .respond_with(ResponseTemplate::new(200).set_body_string(indoc! {"
             Metadata-Version: 2.1
             Name: basic-package
             Version: 0.1.0
         "}))
-        .mount(&server)
+        .mount(server.mock_server())
         .await;
 
     context
@@ -12569,11 +12451,11 @@ async fn lock_index_hash_algorithm_missing() -> Result<()> {
 
         [[tool.uv.index]]
         name = "test-registry"
-        url = "{}/simple"
+        url = "{}"
         explicit = true
         hash-algorithm = "sha256"
         "#,
-            server.uri()
+            server.index_url()
         })?;
 
     uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @"

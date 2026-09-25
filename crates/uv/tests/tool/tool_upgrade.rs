@@ -8,12 +8,13 @@ use insta::assert_snapshot;
 use predicates::prelude::predicate;
 use serde_json::json;
 use wiremock::{
-    Mock, MockServer, ResponseTemplate,
+    Mock, ResponseTemplate,
     matchers::{method, path},
 };
 
 use uv_static::EnvVars;
 
+use uv_test::package_server::PackageServer;
 use uv_test::packse::{PackseServer, scenario::Scenario};
 use uv_test::{uv_snapshot, venv_bin_path};
 
@@ -1648,45 +1649,25 @@ fn tool_upgrade_writes_preview_lock() {
 ///
 /// Serving the metadata separately lets the resolver record the advertised hash without
 /// downloading the wheel that the installer will later verify.
-async fn mount_simple_launcher_index(server: &MockServer, hash: &str, wheel: &[u8]) {
+async fn mount_simple_launcher_index(server: &PackageServer, hash: &str, wheel: &[u8]) {
     let wheel_filename = "simple_launcher-0.1.0-py3-none-any.whl";
-    let simple_index = json!({
-        "meta": {
-            "api-version": "1.1"
-        },
-        "name": "simple-launcher",
-        "files": [{
-            "filename": wheel_filename,
-            "url": format!("{}/files/{wheel_filename}", server.uri()),
-            "hashes": {
-                "sha256": hash
-            },
-            "core-metadata": true,
-            "upload-time": "2024-03-24T00:00:00Z"
-        }]
-    });
-    Mock::given(method("GET"))
-        .and(path("/simple/simple-launcher/"))
-        .respond_with(ResponseTemplate::new(200).set_body_raw(
-            simple_index.to_string(),
-            "application/vnd.pypi.simple.v1+json",
-        ))
-        .mount(server)
+    server
+        .serve_with(
+            wheel_filename,
+            wheel,
+            Some(hash),
+            json!({ "core-metadata": true }),
+        )
         .await;
     Mock::given(method("GET"))
-        .and(path(format!("/files/{wheel_filename}.metadata")))
+        .and(path(format!("/{wheel_filename}.metadata")))
         .respond_with(ResponseTemplate::new(200).set_body_string(indoc! {"
             Metadata-Version: 2.1
             Name: simple-launcher
             Version: 0.1.0
             Requires-Python: >=3.8
         "}))
-        .mount(server)
-        .await;
-    Mock::given(method("GET"))
-        .and(path(format!("/files/{wheel_filename}")))
-        .respond_with(ResponseTemplate::new(200).set_body_bytes(wheel.to_vec()))
-        .mount(server)
+        .mount(server.mock_server())
         .await;
 }
 
@@ -1699,14 +1680,14 @@ async fn tool_upgrade_resolution_hints() -> Result<()> {
             .workspace_root
             .join("test/links/simple_launcher-0.1.0-py3-none-any.whl"),
     )?;
-    let server = MockServer::start().await;
+    let server = PackageServer::new(&"simple-launcher".parse()?).await;
     mount_simple_launcher_index(
         &server,
         "5327e0bb67cdb46800999de6dcf034bf0a5335702883494af0d8b7f6ca48cee4",
         &wheel,
     )
     .await;
-    let index_url = format!("{}/simple", server.uri());
+    let index_url = server.index_url();
     context
         .tool_install()
         .arg("simple-launcher")
@@ -1716,11 +1697,11 @@ async fn tool_upgrade_resolution_hints() -> Result<()> {
         .assert()
         .success();
 
-    server.reset().await;
+    server.mock_server().reset().await;
     Mock::given(method("GET"))
         .and(path("/simple/simple-launcher/"))
         .respond_with(ResponseTemplate::new(401))
-        .mount(&server)
+        .mount(server.mock_server())
         .await;
 
     uv_snapshot!(context.filters(), context.tool_upgrade()
@@ -1755,14 +1736,14 @@ async fn tool_upgrade_lock_verifies_hashes() -> Result<()> {
             .join("test/links")
             .join(wheel_filename),
     )?;
-    let server = MockServer::start().await;
+    let server = PackageServer::new(&"simple-launcher".parse()?).await;
     mount_simple_launcher_index(
         &server,
         "5327e0bb67cdb46800999de6dcf034bf0a5335702883494af0d8b7f6ca48cee4",
         &wheel,
     )
     .await;
-    let index_url = format!("{}/simple", server.uri());
+    let index_url = server.index_url();
 
     context
         .tool_install()
@@ -1773,7 +1754,6 @@ async fn tool_upgrade_lock_verifies_hashes() -> Result<()> {
         .assert()
         .success();
 
-    server.reset().await;
     mount_simple_launcher_index(
         &server,
         "0000000000000000000000000000000000000000000000000000000000000000",
