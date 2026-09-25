@@ -6,7 +6,7 @@
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::ops::Deref;
-use std::{iter, mem};
+use std::{iter, mem, vec};
 
 use indexmap::IndexMap;
 use uv_distribution_types::{Requirement, RequirementSource};
@@ -25,8 +25,17 @@ use crate::{ExcludeDependency, Excludes, Override, PackageOverride, PackageOverr
 pub struct NormalizedRequirements(Vec<Requirement>);
 
 impl NormalizedRequirements {
-    pub fn into_inner(self) -> Vec<Requirement> {
+    fn into_inner(self) -> Vec<Requirement> {
         self.0
+    }
+}
+
+impl IntoIterator for NormalizedRequirements {
+    type Item = Requirement;
+    type IntoIter = vec::IntoIter<Requirement>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
     }
 }
 
@@ -61,9 +70,12 @@ impl Deref for NormalizedRequirements {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct NormalizedConstraints(NormalizedRequirements);
 
-impl NormalizedConstraints {
-    pub fn into_inner(self) -> Vec<Requirement> {
-        self.0.into_inner()
+impl IntoIterator for NormalizedConstraints {
+    type Item = Requirement;
+    type IntoIter = vec::IntoIter<Requirement>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
     }
 }
 
@@ -167,15 +179,27 @@ impl NormalizedOverrideEntries {
     }
 }
 
+impl IntoIterator for NormalizedOverrideEntries {
+    type Item = Override<Requirement>;
+    type IntoIter = vec::IntoIter<Override<Requirement>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.into_inner().into_iter()
+    }
+}
+
 /// Exclusions sorted and deduplicated within each package and version scope.
 ///
 /// Empty version-specific scopes remain because they shadow versionless exclusions.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct NormalizedExcludes(Vec<ExcludeDependency>);
 
-impl NormalizedExcludes {
-    pub fn into_inner(self) -> Vec<ExcludeDependency> {
-        self.0
+impl IntoIterator for NormalizedExcludes {
+    type Item = ExcludeDependency;
+    type IntoIter = vec::IntoIter<ExcludeDependency>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
     }
 }
 
