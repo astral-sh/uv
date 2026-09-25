@@ -21,6 +21,7 @@ use crate::{ExcludeDependency, Excludes, Override, PackageOverride, PackageOverr
 /// Requirements with equivalent declarations combined.
 ///
 /// False markers remain because overrides can replace them before resolution.
+/// Declarations that exceed the marker expansion budget remain separate for conservative comparison.
 #[derive(Debug, Clone, Eq)]
 pub struct NormalizedRequirements(Vec<Requirement>);
 
@@ -273,6 +274,8 @@ fn normalize(mut requirements: Vec<Requirement>) -> Vec<Requirement> {
         requirement.groups.sort();
     }
     requirements.sort_by(compare_requirements);
+    // Lockfiles store declarations in sets, including when marker expansion exceeds its budget.
+    requirements.dedup_by(|left, right| compare_requirements(left, right).is_eq());
 
     let mut normalized = Vec::with_capacity(requirements.len());
     let mut requirements = requirements.into_iter().peekable();
@@ -322,58 +325,66 @@ fn normalize_package_requirements(
 
     let mut normalized = Vec::new();
     for requirements in sources.into_values() {
-        let mut regions: Vec<Requirement> = Vec::new();
-        for requirement in requirements {
-            let mut remaining = requirement.marker;
-            let mut next = Vec::new();
-            for region in regions {
-                let overlap = region.marker.and(requirement.marker);
-                if overlap.is_false() {
-                    next.push(region);
-                    continue;
-                }
-                remaining = remaining.and(region.marker.negate());
-                let outside = region.marker.and(requirement.marker.negate());
-                if !outside.is_false() {
-                    next.push(Requirement {
-                        marker: outside,
-                        ..region.clone()
-                    });
-                }
-                let mut combined = region;
-                combined.marker = overlap;
-                let mut extras = combined.extras.into_vec();
-                extras.extend_from_slice(&requirement.extras);
-                extras.sort();
-                extras.dedup();
-                combined.extras = extras.into_boxed_slice();
-                if let (
-                    RequirementSource::Registry { specifier, .. },
-                    RequirementSource::Registry {
-                        specifier: other, ..
-                    },
-                ) = (&mut combined.source, &requirement.source)
-                    && !allows_yanked(specifier.iter())
-                {
-                    *specifier = mem::take(specifier)
-                        .into_iter()
-                        .chain(other.iter().cloned())
-                        .collect();
-                }
-                next.push(combined);
+        normalized.extend(normalize_source_requirements(&requirements).unwrap_or(requirements));
+    }
+    normalized
+}
+
+/// Merge declarations for one source, or return `None` if the marker expansion budget is exceeded.
+/// Independent markers with distinct extras can produce exponentially many regions. Limit the total
+/// number of region intersections so both work and intermediate allocations stay bounded.
+fn normalize_source_requirements(requirements: &[Requirement]) -> Option<Vec<Requirement>> {
+    let mut remaining_intersections: usize = 1024;
+    let mut regions: Vec<Requirement> = Vec::new();
+    for requirement in requirements.iter().cloned() {
+        let mut remaining = requirement.marker;
+        let mut next = Vec::new();
+        for region in regions {
+            remaining_intersections = remaining_intersections.checked_sub(1)?;
+            let overlap = region.marker.and(requirement.marker);
+            if overlap.is_false() {
+                next.push(region);
+                continue;
             }
-            if !remaining.is_false() || requirement.marker.is_false() {
+            remaining = remaining.and(region.marker.negate());
+            let outside = region.marker.and(requirement.marker.negate());
+            if !outside.is_false() {
                 next.push(Requirement {
-                    marker: remaining,
-                    ..requirement
+                    marker: outside,
+                    ..region.clone()
                 });
             }
-            regions = coalesce(next);
+            let mut combined = region;
+            combined.marker = overlap;
+            let mut extras = combined.extras.into_vec();
+            extras.extend_from_slice(&requirement.extras);
+            extras.sort();
+            extras.dedup();
+            combined.extras = extras.into_boxed_slice();
+            if let (
+                RequirementSource::Registry { specifier, .. },
+                RequirementSource::Registry {
+                    specifier: other, ..
+                },
+            ) = (&mut combined.source, &requirement.source)
+                && !allows_yanked(specifier.iter())
+            {
+                *specifier = mem::take(specifier)
+                    .into_iter()
+                    .chain(other.iter().cloned())
+                    .collect();
+            }
+            next.push(combined);
         }
-        normalized.extend(regions);
+        if !remaining.is_false() || requirement.marker.is_false() {
+            next.push(Requirement {
+                marker: remaining,
+                ..requirement
+            });
+        }
+        regions = coalesce(next);
     }
-
-    normalized
+    Some(regions)
 }
 
 /// Order declarations deterministically, including precision-sensitive specifiers.
@@ -806,6 +817,38 @@ mod tests {
                 );
             }
         }
+        Ok(())
+    }
+
+    /// Independent markers with distinct extras must not expand into every possible combination.
+    #[test]
+    fn bounded_marker_expansion() -> Result<()> {
+        let original = ('a'..='l')
+            .map(|extra| {
+                Ok(Requirement::from(
+                    Pep508Requirement::<VerbatimParsedUrl>::from_str(&format!(
+                        "tool[{extra}]; '{extra}' in platform_release"
+                    ))?,
+                ))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let normalized = NormalizedRequirements::from(original.clone());
+        assert_eq!(normalized.len(), original.len());
+        assert_eq!(&*normalized, original.as_slice());
+        assert_eq!(
+            normalized,
+            NormalizedRequirements::from(normalized.clone().into_inner())
+        );
+
+        let mut duplicated = original.clone();
+        duplicated.extend(original.clone());
+        assert_eq!(normalized, NormalizedRequirements::from(duplicated));
+
+        let mut reordered = original;
+        reordered.reverse();
+        assert_eq!(normalized, NormalizedRequirements::from(reordered.clone()));
+        reordered.pop();
+        assert_ne!(normalized, NormalizedRequirements::from(reordered));
         Ok(())
     }
 
