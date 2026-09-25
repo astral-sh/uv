@@ -30,6 +30,7 @@ use uv_workspace::{
 };
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
+use crate::commands::project::edit::ProjectEdit;
 use crate::commands::project::lock::{LockEvent, LockMode, LockOperation, LockResult};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
@@ -498,15 +499,19 @@ pub(crate) async fn upgrade(
         );
     }
 
-    if !updated_requirements.is_empty() {
+    let edit = if !updated_requirements.is_empty() {
         let mut pyproject = PyProjectTomlMut::from_toml(
             &project.current_project().pyproject_toml().raw,
             DependencyTarget::PyProjectToml,
         )?;
         apply_requirement_replacements(&mut pyproject, updated_requirements.values())?;
         let pyproject_path = project.project_root().join("pyproject.toml");
+        let edit = ProjectEdit::new([pyproject_path.clone()])?;
         fs_err::write(pyproject_path, pyproject.to_string())?;
-    }
+        Some(edit)
+    } else {
+        None
+    };
 
     let events = match &result {
         LockResult::Changed(previous, lock) => {
@@ -541,6 +546,10 @@ pub(crate) async fn upgrade(
             update.original_text,
             update.replacement
         )?;
+    }
+
+    if let Some(edit) = edit {
+        edit.commit();
     }
 
     Ok(ExitStatus::Success)
