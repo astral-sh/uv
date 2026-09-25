@@ -14,7 +14,10 @@ use sha2::{Digest, Sha256};
 use tracing::{debug, instrument, trace, warn};
 use walkdir::WalkDir;
 
-use uv_fs::{PortablePath, Simplified, normalize_path_under, persist_with_retry_sync, relative_to};
+use uv_fs::{
+    PortablePath, Simplified, normalize_path, normalize_path_under, persist_with_retry_sync,
+    relative_to,
+};
 use uv_normalize::PackageName;
 use uv_pypi_types::DirectUrl;
 use uv_shell::escape_posix_for_single_quotes;
@@ -854,7 +857,11 @@ fn write_file_recorded(
         relative_path.display()
     );
 
-    uv_fs::write_atomic_sync(site_packages.join(relative_path), content.as_ref())?;
+    // Normalize `..` lexically instead of letting the system resolve to avoid traversing symlinks.
+    uv_fs::write_atomic_sync(
+        normalize_path(site_packages.join(relative_path)),
+        content.as_ref(),
+    )?;
 
     let hash = Sha256::new().chain_update(content.as_ref()).finalize();
     let encoded_hash = format!("sha256={}", BASE64URL_NOPAD.encode(&hash));
