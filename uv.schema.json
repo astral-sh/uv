@@ -1877,6 +1877,7 @@
             "no-distutils-patch",
             "index-hash-algorithm",
             "lockfile-format-check",
+            "lockfile-normalization",
             "lock-without-metadata",
             "tar-codec",
             "index-by-name",
