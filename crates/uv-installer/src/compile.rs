@@ -15,8 +15,13 @@ use walkdir::WalkDir;
 
 use uv_configuration::Concurrency;
 use uv_fs::Simplified;
+use uv_preview::PreviewFeature;
 use uv_static::EnvVars;
 use uv_warnings::warn_user;
+
+use self::rust::RustCompiler;
+
+mod rust;
 
 const COMPILEALL_SCRIPT: &str = include_str!("pip_compileall.py");
 /// This is longer than any compilation should ever take.
@@ -91,7 +96,7 @@ fn compile_timeout() -> Result<Option<Duration>, CompileError> {
     Ok(timeout)
 }
 
-fn spawn_workers(
+async fn spawn_workers(
     dir: &Path,
     python_executable: &Path,
     pip_compileall_py: &Path,
@@ -99,6 +104,17 @@ fn spawn_workers(
     worker_count: usize,
     timeout: Option<Duration>,
 ) -> Vec<WorkerHandle> {
+    let rust_compiler = if uv_preview::is_enabled(PreviewFeature::RustBytecode) {
+        match RustCompiler::query(dir, python_executable, timeout).await {
+            Ok(compiler) => compiler,
+            Err(err) => {
+                debug!("Failed to query Rust bytecode compilation support: {err:#}");
+                None
+            }
+        }
+    } else {
+        None
+    };
     debug!("Starting {} bytecode compilation workers", worker_count);
     let mut worker_handles = Vec::with_capacity(worker_count);
     for _ in 0..worker_count {
@@ -110,6 +126,7 @@ fn spawn_workers(
             pip_compileall_py.to_path_buf(),
             receiver.clone(),
             timeout,
+            rust_compiler.clone(),
         );
 
         // Spawn each worker on a dedicated thread.
@@ -158,8 +175,8 @@ async fn wait_for_workers(
     Ok(())
 }
 
-/// Bytecode compile all file in `dir` using a pool of Python interpreters running a Python script
-/// that calls `compileall.compile_file`.
+/// Bytecode compile all files in `dir` using serc when enabled and supported, or a pool of Python
+/// interpreters running a Python script that calls `compileall.compile_file`.
 ///
 /// All compilation errors are muted (like pip). There is a 60s timeout for each file to handle
 /// a broken `python`. The timeout can be configured with `UV_COMPILE_BYTECODE_TIMEOUT`; a value of
@@ -197,7 +214,8 @@ pub async fn compile_tree(
         &receiver,
         worker_count,
         timeout,
-    );
+    )
+    .await;
     // Make sure the channel gets closed when all workers exit.
     drop(receiver);
 
@@ -245,7 +263,8 @@ pub async fn compile_tree(
     Ok(source_files)
 }
 
-/// Bytecode compile the given Python source files using a pool of Python interpreters.
+/// Bytecode compile the given Python source files using serc when enabled and supported, or a pool
+/// of Python interpreters.
 ///
 /// All paths must be absolute. Compilation errors are muted (like pip), while failures to launch
 /// or communicate with the Python workers are returned.
@@ -279,7 +298,8 @@ pub async fn compile_files(
         &receiver,
         worker_count,
         timeout,
-    );
+    )
+    .await;
     drop(receiver);
 
     let mut send_error = None;
@@ -320,7 +340,33 @@ async fn worker(
     pip_compileall_py: PathBuf,
     receiver: Receiver<PathBuf>,
     timeout: Option<Duration>,
+    rust_compiler: Option<RustCompiler>,
 ) -> Result<(), CompileError> {
+    // Start a Python worker only if a file cannot be compiled by serc. Each Rust worker keeps its
+    // own fallback queue so that the Python workers retain the configured concurrency limit.
+    let receiver = if let Some(compiler) = rust_compiler {
+        let (sender, fallback) = async_channel::unbounded();
+        while let Ok(source_file) = receiver.recv().await {
+            if let Err(err) = compiler.compile(&source_file) {
+                debug!(
+                    "Falling back to Python to compile {}: {err:#}",
+                    source_file.display()
+                );
+                sender
+                    .send(source_file)
+                    .await
+                    .map_err(CompileError::WorkerDisappeared)?;
+            }
+        }
+        drop(sender);
+        if fallback.is_empty() {
+            return Ok(());
+        }
+        fallback
+    } else {
+        receiver
+    };
+
     fs_err::tokio::write(&pip_compileall_py, COMPILEALL_SCRIPT)
         .await
         .map_err(CompileError::TempFile)?;

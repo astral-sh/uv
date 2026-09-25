@@ -4030,6 +4030,7 @@ fn preview_features() {
     +            FrozenLockfile,
     +            MinimumLibcVersion,
     +            BuildDependencyCheck,
+    +            RustBytecode,
     +            BuildLazyImports,
     +            BuildDependencyHashes,
     +            WheelVariants,
