@@ -3951,6 +3951,7 @@ fn preview_features() {
     +            BatchExport,
     +            MinimumLibcVersion,
     +            BuildDependencyCheck,
+    +            RustBytecode,
     +            BuildLazyImports,
     +        ],
          },
