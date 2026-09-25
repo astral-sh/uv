@@ -9095,6 +9095,327 @@ fn require_hashes_constraint() -> Result<()> {
     Ok(())
 }
 
+/// An MD5-only constraint cannot satisfy or restrict a requirement under `--require-hashes`.
+#[test]
+fn require_hashes_md5_constraint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+
+    requirements_txt.write_str(indoc! {r"
+        ok==2.0.0
+    "})?;
+    constraints_txt.write_str(indoc! {r"
+        ok==2.0.0 --hash=md5:00000000000000000000000000000000
+    "})?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .arg("-c")
+        .arg(constraints_txt.path())
+        .args(["--no-index", "--no-deps", "--require-hashes"])
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links")), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: `md5` hashes are insecure and cannot be used with `--require-hashes` but no other hashes are available for: ok==2.0.0
+    ");
+
+    requirements_txt.write_str(indoc! {r"
+        ok==2.0.0 --hash=sha256:8163cd4f0477f8e93b856ac6a517fe5fa0f29339291fe2807d5376df685f6697
+    "})?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .arg("-c")
+        .arg(constraints_txt.path())
+        .args(["--no-index", "--no-deps", "--require-hashes"])
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links")), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: In `--require-hashes` mode, the constraint for ok==2.0.0 only has insecure `md5` hashes
+    ");
+
+    requirements_txt.write_str(indoc! {r"
+        ok==2.0.0 --hash=md5:00000000000000000000000000000000
+    "})?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .arg("-c")
+        .arg(constraints_txt.path())
+        .args(["--no-index", "--no-deps", "--require-hashes"])
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links")), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: `md5` hashes are insecure and cannot be used with `--require-hashes` but no other hashes are available for: ok==2.0.0
+    ");
+
+    requirements_txt.write_str(indoc! {r"
+        ok==2.0.0 --hash=sha256:8163cd4f0477f8e93b856ac6a517fe5fa0f29339291fe2807d5376df685f6697
+    "})?;
+    constraints_txt.write_str(indoc! {r"
+        ok==2.0.0 --hash=sha256:8163cd4f0477f8e93b856ac6a517fe5fa0f29339291fe2807d5376df685f6697 --hash=md5:00000000000000000000000000000000
+    "})?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .arg("-c")
+        .arg(constraints_txt.path())
+        .args(["--no-index", "--no-deps", "--require-hashes"])
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links")), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==2.0.0
+    ");
+
+    constraints_txt.write_str(indoc! {r"
+        unrelated==1.0.0 --hash=md5:00000000000000000000000000000000
+    "})?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .arg("-c")
+        .arg(constraints_txt.path())
+        .args(["--no-index", "--no-deps", "--require-hashes", "--reinstall"])
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links")), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ ok==2.0.0
+    ");
+
+    Ok(())
+}
+
+/// MD5 constraints remain active when hashes are verified but not required.
+#[test]
+fn verify_hashes_md5_constraint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+
+    requirements_txt.write_str(indoc! {r"
+        ok==2.0.0
+    "})?;
+    constraints_txt.write_str(indoc! {r"
+        ok==2.0.0 --hash=md5:00000000000000000000000000000000
+    "})?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .arg("-c")
+        .arg(constraints_txt.path())
+        .args(["--no-index", "--no-deps", "--verify-hashes"])
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links")), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to download `ok==2.0.0`
+      cause: Hash mismatch for `ok==2.0.0`
+
+             Expected:
+               md5:00000000000000000000000000000000
+
+             Computed:
+               md5:cc98f2961209039ce244a3d09ed42c46
+    ");
+
+    constraints_txt.write_str(indoc! {r"
+        ok==2.0.0 --hash=md5:cc98f2961209039ce244a3d09ed42c46
+    "})?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .arg("-c")
+        .arg(constraints_txt.path())
+        .args(["--no-index", "--no-deps", "--verify-hashes"])
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links")), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==2.0.0
+    ");
+
+    Ok(())
+}
+
+/// An MD5-only constraint cannot be bypassed by a secure hash on a direct file requirement.
+#[test]
+fn require_hashes_md5_file_constraint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheel = context
+        .workspace_root
+        .join("test/links/ok-2.0.0-py3-none-any.whl");
+    let url = Url::from_file_path(&wheel).map_err(|()| anyhow!("invalid wheel path"))?;
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+
+    requirements_txt.write_str(&formatdoc! {r"
+        ok @ {url} --hash=sha256:8163cd4f0477f8e93b856ac6a517fe5fa0f29339291fe2807d5376df685f6697
+    "})?;
+    constraints_txt.write_str(&formatdoc! {r"
+        ok @ {url} --hash=md5:00000000000000000000000000000000
+    "})?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .arg("-c")
+        .arg(constraints_txt.path())
+        .args(["--no-index", "--no-deps", "--require-hashes"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: In `--require-hashes` mode, the constraint for ok @ file://[WORKSPACE]/test/links/ok-2.0.0-py3-none-any.whl only has insecure `md5` hashes
+    ");
+
+    constraints_txt.write_str(&formatdoc! {r"
+        ok @ {url}#md5=00000000000000000000000000000000
+    "})?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .arg("-c")
+        .arg(constraints_txt.path())
+        .args(["--no-index", "--no-deps", "--require-hashes"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: In `--require-hashes` mode, the constraint for ok @ file://[WORKSPACE]/test/links/ok-2.0.0-py3-none-any.whl only has insecure `md5` hashes
+    ");
+
+    Ok(())
+}
+
+/// Remote URL constraints combine their secure hashes across declarations.
+#[test]
+fn require_hashes_md5_url_constraint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = FindLinksServer::new(&context.workspace_root.join("test/links"));
+    let context = context.with_filter((server.url().to_string(), "http://[LOCALHOST]"));
+    let url = format!("{}/ok-2.0.0-py3-none-any.whl", server.url());
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+
+    requirements_txt.write_str(&formatdoc! {r"
+        ok @ {url} --hash=sha256:8163cd4f0477f8e93b856ac6a517fe5fa0f29339291fe2807d5376df685f6697
+    "})?;
+    constraints_txt.write_str(&formatdoc! {r"
+        ok @ {url} --hash=md5:00000000000000000000000000000000
+    "})?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .arg("-c")
+        .arg(constraints_txt.path())
+        .args(["--no-index", "--no-deps", "--require-hashes"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: In `--require-hashes` mode, the constraint for ok @ http://[LOCALHOST]/ok-2.0.0-py3-none-any.whl only has insecure `md5` hashes
+    ");
+
+    constraints_txt.write_str(&formatdoc! {r"
+        ok @ {url} --hash=md5:00000000000000000000000000000000
+        ok @ {url} --hash=sha256:8163cd4f0477f8e93b856ac6a517fe5fa0f29339291fe2807d5376df685f6697
+    "})?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .arg("-c")
+        .arg(constraints_txt.path())
+        .args(["--no-index", "--no-deps", "--require-hashes"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==2.0.0 (from http://[LOCALHOST]/ok-2.0.0-py3-none-any.whl)
+    ");
+
+    constraints_txt.write_str(&formatdoc! {r"
+        ok @ {url} --hash=sha256:8163cd4f0477f8e93b856ac6a517fe5fa0f29339291fe2807d5376df685f6697
+        ok @ {url} --hash=md5:00000000000000000000000000000000
+    "})?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .arg("-c")
+        .arg(constraints_txt.path())
+        .args(["--no-index", "--no-deps", "--require-hashes", "--reinstall"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ ok==2.0.0 (from http://[LOCALHOST]/ok-2.0.0-py3-none-any.whl)
+    ");
+
+    Ok(())
+}
+
+/// The last nonempty constraint controls a repeated registry pin.
+#[test]
+fn require_hashes_repeated_md5_constraints() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+
+    requirements_txt.write_str(indoc! {r"
+        ok==2.0.0 --hash=sha256:8163cd4f0477f8e93b856ac6a517fe5fa0f29339291fe2807d5376df685f6697
+    "})?;
+    constraints_txt.write_str(indoc! {r"
+        ok==2.0.0 --hash=sha256:8163cd4f0477f8e93b856ac6a517fe5fa0f29339291fe2807d5376df685f6697
+        ok==2.0.0 --hash=md5:00000000000000000000000000000000
+    "})?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .arg("-c")
+        .arg(constraints_txt.path())
+        .args(["--no-index", "--no-deps", "--require-hashes"])
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links")), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: In `--require-hashes` mode, the constraint for ok==2.0.0 only has insecure `md5` hashes
+    ");
+
+    constraints_txt.write_str(indoc! {r"
+        ok==2.0.0 --hash=md5:00000000000000000000000000000000
+        ok==2.0.0 --hash=sha256:8163cd4f0477f8e93b856ac6a517fe5fa0f29339291fe2807d5376df685f6697
+    "})?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .arg("-c")
+        .arg(constraints_txt.path())
+        .args(["--no-index", "--no-deps", "--require-hashes"])
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links")), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==2.0.0
+    ");
+
+    Ok(())
+}
+
 /// Repeated registry requirements contribute alternative hashes, in either order.
 #[test]
 fn require_hashes_repeated_registry_requirements() -> Result<()> {

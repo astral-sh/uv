@@ -3,7 +3,7 @@ use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use uv_configuration::{Constraints, HashCheckingMode};
 use uv_distribution_types::{
@@ -23,6 +23,8 @@ use uv_redacted::DisplaySafeUrl;
 pub struct HashStrategy {
     collection: HashCollection,
     verification: HashVerification,
+    /// Constraints that supplied only insecure hashes in required-hash mode.
+    insecure_constraints: Arc<FxHashSet<VersionId>>,
 }
 
 /// The trusted hashes to enforce when retrieving distributions.
@@ -71,6 +73,8 @@ impl HashStrategy {
         let (requirement_hashes, mode) = match &self.verification {
             HashVerification::None => {
                 self.verification = constraints.verification.clone();
+                self.insecure_constraints
+                    .clone_from(&constraints.insecure_constraints);
                 return Ok(self);
             }
             HashVerification::IfPresent(hashes) => {
@@ -85,6 +89,8 @@ impl HashStrategy {
             HashVerification::Required(hashes) => (hashes, HashCheckingMode::Require),
         };
 
+        let mut insecure_constraints = (*self.insecure_constraints).clone();
+        insecure_constraints.extend(constraints.insecure_constraints.iter().cloned());
         let mut constraints = constraints.clone();
         let constraint_hashes = match &mut constraints.verification {
             HashVerification::None => return Ok(self),
@@ -93,13 +99,26 @@ impl HashStrategy {
             }
         };
         if mode.is_require() {
-            constraint_hashes.retain(|_, digests| {
+            constraint_hashes.retain(|id, digests| {
+                let has_md5 = digests
+                    .iter()
+                    .any(|digest| digest.algorithm() == HashAlgorithm::Md5);
                 digests.retain(|digest| digest.algorithm() != HashAlgorithm::Md5);
+                if digests.is_empty() && has_md5 {
+                    insecure_constraints.insert(id.clone());
+                }
                 !digests.is_empty()
             });
         }
         let mut hashes = constraint_hashes.clone();
         for (id, digests) in requirement_hashes.iter() {
+            if mode.is_require() && has_insecure_constraint(&insecure_constraints, id) {
+                return Err(HashStrategyError::InsecureConstraintHashAlgorithm(
+                    id.to_string(),
+                    HashAlgorithm::Md5,
+                    mode,
+                ));
+            }
             let mut digests = digests.clone();
             if mode.is_require() {
                 digests.retain(|digest| digest.algorithm() != HashAlgorithm::Md5);
@@ -117,6 +136,7 @@ impl HashStrategy {
             HashCheckingMode::Verify => HashVerification::IfPresent(Arc::new(hashes)),
             HashCheckingMode::Require => HashVerification::Required(Arc::new(hashes)),
         };
+        self.insecure_constraints = Arc::new(insecure_constraints);
         Ok(self)
     }
 
@@ -196,6 +216,9 @@ impl HashStrategy {
             }
             HashVerification::Required(hashes) => {
                 let id = id();
+                if has_insecure_constraint(&self.insecure_constraints, &id) {
+                    return hash_validation(&id, &[]);
+                }
                 return hash_validation(
                     &id,
                     hashes.get(&id).map(Vec::as_slice).unwrap_or_default(),
@@ -235,7 +258,9 @@ impl HashStrategy {
     pub fn allows_package(&self, name: &PackageName, version: &Version) -> bool {
         match &self.verification {
             HashVerification::Required(hashes) => {
-                hashes.contains_key(&VersionId::from_registry(name.clone(), version.clone()))
+                let id = VersionId::from_registry(name.clone(), version.clone());
+                !has_insecure_constraint(&self.insecure_constraints, &id)
+                    && hashes.contains_key(&id)
             }
             HashVerification::None | HashVerification::IfPresent(_) => true,
         }
@@ -244,7 +269,11 @@ impl HashStrategy {
     /// Returns `true` if the given direct URL package is allowed.
     pub fn allows_url(&self, url: &DisplaySafeUrl) -> bool {
         match &self.verification {
-            HashVerification::Required(hashes) => hashes.contains_key(&VersionId::from_url(url)),
+            HashVerification::Required(hashes) => {
+                let id = VersionId::from_url(url);
+                !has_insecure_constraint(&self.insecure_constraints, &id)
+                    && hashes.contains_key(&id)
+            }
             HashVerification::None | HashVerification::IfPresent(_) => true,
         }
     }
@@ -258,7 +287,9 @@ impl HashStrategy {
         match &mut self.verification {
             HashVerification::None => {}
             HashVerification::IfPresent(existing) | HashVerification::Required(existing) => {
-                if let Some(hashes) = Self::augment_hashes(existing, requirements)? {
+                if let Some(hashes) =
+                    Self::augment_hashes(existing, requirements, &self.insecure_constraints)?
+                {
                     *existing = Arc::new(hashes);
                 }
             }
@@ -291,6 +322,8 @@ impl HashStrategy {
     /// hashes across algorithms and reject conflicting digests for the same algorithm. When
     /// requirements and constraints both supply hashes, registry pins permit only shared hashes;
     /// direct references must match hashes from both sources.
+    /// In required-hash mode, an applicable MD5-only constraint is rejected even if the
+    /// requirement provides a secure hash.
     ///
     /// When the environment is not given, this treats all marker expressions
     /// that reference the environment as true. In other words, it does
@@ -303,6 +336,7 @@ impl HashStrategy {
         mode: HashCheckingMode,
     ) -> Result<Self, HashStrategyError> {
         let mut constraint_hashes = FxHashMap::<VersionId, Vec<HashDigest>>::default();
+        let mut insecure_constraints = FxHashSet::<VersionId>::default();
 
         // First, index the constraints by name.
         for (requirement, digests) in constraints {
@@ -334,14 +368,38 @@ impl HashStrategy {
                 merge_digests(&mut digests, fragment_hashes.iter(), requirement)?;
             }
 
+            let has_md5 = mode.is_require()
+                && digests
+                    .iter()
+                    .any(|digest| digest.algorithm() == HashAlgorithm::Md5);
             if mode.is_require() {
                 digests.retain(|digest| digest.algorithm() != HashAlgorithm::Md5);
             }
 
             if digests.is_empty() {
+                if has_md5 {
+                    // URL constraints combine hashes; other identities use the last nonempty
+                    // constraint, including when it contains only MD5.
+                    match &id {
+                        VersionId::ArchiveUrl { .. } => {
+                            if !constraint_hashes.contains_key(&id) {
+                                insecure_constraints.insert(id);
+                            }
+                        }
+                        VersionId::NameVersion(..)
+                        | VersionId::Git { .. }
+                        | VersionId::Path(..)
+                        | VersionId::Directory(..)
+                        | VersionId::Unknown(..) => {
+                            constraint_hashes.remove(&id);
+                            insecure_constraints.insert(id);
+                        }
+                    }
+                }
                 continue;
             }
 
+            insecure_constraints.remove(&id);
             merge_hashes(&mut constraint_hashes, id, digests, requirement)?;
         }
 
@@ -395,7 +453,23 @@ impl HashStrategy {
                 digests.retain(|digest| digest.algorithm() != HashAlgorithm::Md5);
             }
 
-            // Under `--require-hashes`, every requirement must include a hash.
+            if has_insecure_constraint(&insecure_constraints, &id) {
+                if digests.is_empty() {
+                    return Err(HashStrategyError::InsecureHashAlgorithm(
+                        requirement.to_string(),
+                        HashAlgorithm::Md5,
+                        mode,
+                    ));
+                }
+                return Err(HashStrategyError::InsecureConstraintHashAlgorithm(
+                    requirement.to_string(),
+                    HashAlgorithm::Md5,
+                    mode,
+                ));
+            }
+
+            // Under `--require-hashes`, every requirement must have a usable hash, either on the
+            // requirement itself or on a constraint.
             if digests.is_empty() {
                 if mode.is_require() && !constraint_hashes.contains_key(&id) {
                     if has_md5 {
@@ -425,9 +499,11 @@ impl HashStrategy {
                 | VersionId::Path(..)
                 | VersionId::Directory(..)
                 | VersionId::Unknown(..) => {
-                    existing.extend(digests);
-                    existing.sort_unstable();
-                    existing.dedup();
+                    for digest in digests {
+                        if !existing.contains(&digest) {
+                            existing.push(digest);
+                        }
+                    }
                 }
             }
         }
@@ -443,10 +519,12 @@ impl HashStrategy {
             hashes.insert(id, digests);
         }
         hashes.extend(constraint_hashes);
-        match mode {
-            HashCheckingMode::Verify => Ok(Self::verify(Arc::new(hashes))),
-            HashCheckingMode::Require => Ok(Self::require(Arc::new(hashes))),
-        }
+        let mut strategy = match mode {
+            HashCheckingMode::Verify => Self::verify(Arc::new(hashes)),
+            HashCheckingMode::Require => Self::require(Arc::new(hashes)),
+        };
+        strategy.insecure_constraints = Arc::new(insecure_constraints);
+        Ok(strategy)
     }
 
     /// Collect hashes from [`Constraints`] using the same handling as regular constraints in
@@ -504,10 +582,20 @@ impl HashStrategy {
     fn augment_hashes<'a>(
         existing: &FxHashMap<VersionId, Vec<HashDigest>>,
         requirements: impl Iterator<Item = &'a Requirement>,
+        insecure_constraints: &FxHashSet<VersionId>,
     ) -> Result<Option<FxHashMap<VersionId, Vec<HashDigest>>>, HashStrategyError> {
         let mut hashes = None;
 
         for requirement in requirements {
+            if let Some(id) = Self::pin(requirement)
+                && has_insecure_constraint(insecure_constraints, &id)
+            {
+                return Err(HashStrategyError::InsecureConstraintHashAlgorithm(
+                    requirement.to_string(),
+                    HashAlgorithm::Md5,
+                    HashCheckingMode::Require,
+                ));
+            }
             let Some((id, digests)) = Self::requirement_hashes(requirement)? else {
                 continue;
             };
@@ -589,6 +677,25 @@ impl HashStrategy {
             }
         }
     }
+}
+
+/// Whether an MD5-only constraint applies to an identity, including a local version.
+fn has_insecure_constraint(constraints: &FxHashSet<VersionId>, id: &VersionId) -> bool {
+    if constraints.is_empty() {
+        return false;
+    }
+    if constraints.contains(id) {
+        return true;
+    }
+    if let VersionId::NameVersion(name, version) = id
+        && version.is_local()
+    {
+        return constraints.contains(&VersionId::from_registry(
+            name.clone(),
+            version.clone().without_local(),
+        ));
+    }
+    false
 }
 
 fn hash_validation<'a>(id: &VersionId, digests: &'a [HashDigest]) -> HashValidation<'a> {
@@ -707,6 +814,8 @@ pub enum HashStrategyError {
         "`{1}` hashes are insecure and cannot be used with `{2}` but no other hashes are available for: {0}"
     )]
     InsecureHashAlgorithm(String, HashAlgorithm, HashCheckingMode),
+    #[error("In `{2}` mode, the constraint for {0} only has insecure `{1}` hashes")]
+    InsecureConstraintHashAlgorithm(String, HashAlgorithm, HashCheckingMode),
     #[error("In `{1}` mode, all requirements must have a hash, but none were provided for: {0}")]
     MissingHashes(String, HashCheckingMode),
     #[error(
@@ -731,10 +840,10 @@ mod tests {
     };
     use uv_normalize::PackageName;
     use uv_pep440::Version;
-    use uv_pypi_types::HashDigest;
+    use uv_pypi_types::{HashAlgorithm, HashDigest};
     use uv_redacted::DisplaySafeUrl;
 
-    use super::{HashStrategy, HashVerification};
+    use super::{HashStrategy, HashStrategyError, HashVerification};
 
     fn requirement(url: &str) -> Requirement {
         Requirement {
@@ -916,6 +1025,88 @@ mod tests {
                 ArchiveHashPolicy::Any(&[])
             );
             assert!(!strategy.allows_package(&name, &version));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn required_locked_hashes_reject_md5_only_constraints() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let registry = VersionId::from_registry("anyio".parse()?, "4.0.0".parse()?);
+        let local = VersionId::from_registry("anyio".parse()?, "4.0.0+local".parse()?);
+        let archive = VersionId::from_url(&"https://example.com/anyio-4.0.0.tar.gz".parse()?);
+        let digest = HashDigest::from_str(
+            "sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+        )?;
+        let md5 = HashDigest::from_str("md5:420d85e19168705cdf0223621b18831a")?;
+
+        for (locked_id, constraint_id) in [
+            (registry.clone(), registry.clone()),
+            (local, registry),
+            (archive.clone(), archive),
+        ] {
+            let locked = HashStrategy::require(Arc::new(FxHashMap::from_iter([(
+                locked_id,
+                vec![digest.clone()],
+            )])));
+            let constraints = HashStrategy::verify(Arc::new(FxHashMap::from_iter([(
+                constraint_id,
+                vec![md5.clone()],
+            )])));
+            match locked.with_constraint_hashes(&constraints) {
+                Err(HashStrategyError::InsecureConstraintHashAlgorithm(
+                    _,
+                    HashAlgorithm::Md5,
+                    HashCheckingMode::Require,
+                )) => {}
+                Err(error) => return Err(error.into()),
+                Ok(_) => return Err("expected an error for the MD5-only constraint".into()),
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn md5_only_constraint_rejects_later_url_requirement() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let constraint = requirement(
+            "https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl",
+        );
+        let requirement = requirement(
+            "https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl#sha256=cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+        );
+        let hashes = ["md5:420d85e19168705cdf0223621b18831a".to_string()];
+        let strategy = HashStrategy::from_requirements(
+            std::iter::empty(),
+            std::iter::once((&constraint, hashes.as_slice())),
+            None,
+            HashCheckingMode::Require,
+        )?;
+        let url: DisplaySafeUrl = "https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl".parse()?;
+        assert!(!strategy.allows_url(&url));
+
+        let digest = HashDigest::from_str(
+            "sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+        )?;
+        let additional = HashStrategy::verify(Arc::new(FxHashMap::from_iter([(
+            VersionId::from_url(&url),
+            vec![digest],
+        )])));
+        let strategy = strategy.with_constraint_hashes(&additional)?;
+        assert!(!strategy.allows_url(&url));
+        assert_eq!(
+            strategy.archive_policy_for_url(&url),
+            ArchiveHashPolicy::All(&[])
+        );
+
+        match strategy.augment_with_requirements(std::iter::once(&requirement)) {
+            Err(HashStrategyError::InsecureConstraintHashAlgorithm(
+                _,
+                HashAlgorithm::Md5,
+                HashCheckingMode::Require,
+            )) => {}
+            Err(error) => return Err(error.into()),
+            Ok(_) => return Err("expected an error for the MD5-only constraint".into()),
         }
         Ok(())
     }
