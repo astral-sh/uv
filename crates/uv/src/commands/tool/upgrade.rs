@@ -1,13 +1,16 @@
 use anyhow::{Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::fmt::Write;
-use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 #[cfg(windows)]
+use std::collections::BTreeSet;
+#[cfg(windows)]
 use std::io::{BufReader, Read};
+#[cfg(windows)]
+use std::path::Path;
 use tracing::{debug, trace};
 
 use uv_cache::Cache;
@@ -21,14 +24,20 @@ use uv_installer::{InstallationStrategy, Planner, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version};
 use uv_preview::{Preview, PreviewFeature};
+#[cfg(windows)]
+use uv_python::PythonEnvironment;
 use uv_python::{
-    EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest,
+    EnvironmentPreference, Interpreter, PythonDownloads, PythonInstallation, PythonPreference,
+    PythonRequest,
 };
 use uv_requirements::RequirementsSpecification;
 use uv_settings::{Combine, PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
-use uv_tool::{InstalledTools, Tool, entrypoint_paths};
+#[cfg(windows)]
+use uv_tool::entrypoint_paths;
+use uv_tool::{InstalledTools, Tool};
 use uv_types::{HashStrategy, SourceTreeEditablePolicy};
+#[cfg(windows)]
+use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
 
 use crate::commands::pip::loggers::{
@@ -158,9 +167,11 @@ pub(crate) async fn upgrade(
                     UpgradeOutcome::UpgradeEnvironment => {
                         did_upgrade_environment.push(name);
                     }
-                    UpgradeOutcome::UpgradeTool
-                    | UpgradeOutcome::UpgradeDependencies
-                    | UpgradeOutcome::RepairEntrypoints => {
+                    UpgradeOutcome::UpgradeTool | UpgradeOutcome::UpgradeDependencies => {
+                        did_upgrade_tool.push(name);
+                    }
+                    #[cfg(windows)]
+                    UpgradeOutcome::Entrypoints => {
                         did_upgrade_tool.push(name);
                     }
                     UpgradeOutcome::NoOp => {
@@ -231,8 +242,9 @@ enum UpgradeOutcome {
     UpgradeDependencies,
     /// The tool's environment was upgraded.
     UpgradeEnvironment,
-    /// The tool's executables were repaired.
-    RepairEntrypoints,
+    /// The tool's executables were repaired or require attention.
+    #[cfg(windows)]
+    Entrypoints,
     /// The tool was already up-to-date.
     NoOp,
 }
@@ -270,21 +282,22 @@ struct UpgradeReport {
     constraint: Option<UpgradeConstraint>,
 }
 
-/// Determine which executables the installed packages should export.
-fn expected_entrypoints(
+/// Repair recorded executables that differ from their installed counterparts.
+#[cfg(windows)]
+fn repair_entrypoints(
     environment: &PythonEnvironment,
     name: &PackageName,
     receipt: &Tool,
-) -> Result<BTreeMap<PathBuf, PathBuf>> {
+    installed_tools: &InstalledTools,
+    printer: Printer,
+) -> Result<bool> {
     let site_packages = SitePackages::from_environment(environment)?;
-    let executable_directory = uv_tool::tool_executable_dir()?;
     let packages = receipt
         .entrypoints()
         .iter()
         .filter_map(|entry| PackageName::from_str(entry.from.as_ref()?).ok())
         .filter(|package| package != name)
         .collect::<BTreeSet<_>>();
-
     let mut expected = BTreeMap::new();
     for package in packages.iter().chain(std::iter::once(name)) {
         let installed = site_packages.get_packages(package);
@@ -292,54 +305,69 @@ fn expected_entrypoints(
             anyhow::bail!("Expected package `{package}` to be installed");
         };
         for (entrypoint, source) in entrypoint_paths(&site_packages, dist.name(), dist.version())? {
-            let target = executable_directory.join(
-                source
-                    .file_name()
-                    .map(std::borrow::ToOwned::to_owned)
-                    .unwrap_or_else(|| entrypoint.into()),
-            );
-            expected.insert(target, source);
+            let filename = source
+                .file_name()
+                .map(std::borrow::ToOwned::to_owned)
+                .unwrap_or_else(|| entrypoint.into());
+            expected.insert(filename, source);
         }
     }
-    Ok(expected)
-}
 
-/// Check whether the recorded exports match the installed packages.
-fn entrypoints_need_repair(expected: &BTreeMap<PathBuf, PathBuf>, receipt: &Tool) -> Result<bool> {
-    let recorded: BTreeSet<_> = receipt
+    let recorded = receipt
         .entrypoints()
         .iter()
-        .map(|entry| &entry.install_path)
-        .collect();
-    if recorded.len() != expected.len() || expected.keys().any(|target| !recorded.contains(target))
-    {
-        return Ok(true);
+        .filter_map(|entry| entry.install_path.file_name())
+        .collect::<BTreeSet<_>>();
+    let changed = recorded.len() != expected.len()
+        || expected
+            .keys()
+            .any(|filename| !recorded.contains(filename.as_os_str()));
+    if changed {
+        warn_user!(
+            "The executables for `{name}` have changed; new or removed executables were not updated"
+        );
     }
-    for (target, source) in expected {
-        if !entrypoint_matches(source, target)? {
-            return Ok(true);
+
+    let mut repaired = BTreeSet::new();
+    for entrypoint in receipt.entrypoints() {
+        let Some(source) = entrypoint
+            .install_path
+            .file_name()
+            .and_then(|filename| expected.get(filename))
+        else {
+            continue;
+        };
+        let target = &entrypoint.install_path;
+        if entrypoint_matches(source, target)? {
+            continue;
         }
+
+        check_entrypoint_ownership(name, target, installed_tools)?;
+        let parent = target.parent().context("Executable path has no parent")?;
+        fs_err::create_dir_all(parent)?;
+        if std::env::current_exe()
+            .is_ok_and(|itself| std::path::absolute(target).is_ok_and(|target| itself == target))
+        {
+            self_replace::self_replace(source).context("Failed to install entrypoint")?;
+        } else {
+            uv_fs::copy_atomic_sync(source, target).context("Failed to install entrypoint")?;
+        }
+        repaired.insert(&entrypoint.name);
     }
-    Ok(false)
+
+    if !repaired.is_empty() {
+        let suffix = if repaired.len() == 1 { "" } else { "s" };
+        writeln!(
+            printer.stderr(),
+            "Repaired {} executable{suffix}: {}",
+            repaired.len(),
+            repaired.iter().map(|name| name.bold()).join(", ")
+        )?;
+    }
+    Ok(changed || !repaired.is_empty())
 }
 
-/// Compare an exported executable with the executable in its tool environment.
-#[cfg(unix)]
-fn entrypoint_matches(source: &Path, target: &Path) -> Result<bool> {
-    fs_err::metadata(source)?;
-    match fs_err::symlink_metadata(target) {
-        Ok(metadata) if metadata.file_type().is_symlink() => {
-            let link = fs_err::read_link(target)?;
-            let parent = target.parent().context("Executable path has no parent")?;
-            Ok(uv_fs::normalize_path(parent.join(link)) == uv_fs::normalize_path(source))
-        }
-        Ok(_) => Ok(false),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(false),
-        Err(err) => Err(err.into()),
-    }
-}
-
-/// Compare an exported executable with the executable in its tool environment.
+/// Compare a copied executable with the executable in the tool environment.
 #[cfg(windows)]
 fn entrypoint_matches(source: &Path, target: &Path) -> Result<bool> {
     let metadata = match fs_err::symlink_metadata(target) {
@@ -367,46 +395,13 @@ fn entrypoint_matches(source: &Path, target: &Path) -> Result<bool> {
     }
 }
 
-/// Check whether two receipt paths can refer to the same export.
-fn same_entrypoint_path(left: &Path, right: &Path) -> bool {
-    if uv_fs::is_same_file_allow_missing(left, right) == Some(true) {
-        return true;
-    }
-    #[cfg(windows)]
-    if let (Some(left_parent), Some(right_parent), Some(left_name), Some(right_name)) = (
-        left.parent(),
-        right.parent(),
-        left.file_name(),
-        right.file_name(),
-    ) && left_name.to_string_lossy().to_lowercase()
-        == right_name.to_string_lossy().to_lowercase()
-        && uv_fs::is_same_file_allow_missing(left_parent, right_parent) != Some(false)
-    {
-        return true;
-    }
-    false
-}
-
-/// Refuse to replace exports claimed by another tool or an unrelated file.
-///
-/// On Windows, a recorded executable is assumed to belong to its tool unless another receipt
-/// claims it, since the contents of a stale copy do not identify its owner.
+/// Refuse to replace an executable claimed by another tool or a non-file destination.
+#[cfg(windows)]
 fn check_entrypoint_ownership(
     name: &PackageName,
-    expected: &BTreeMap<PathBuf, PathBuf>,
-    receipt: &Tool,
+    target: &Path,
     installed_tools: &InstalledTools,
 ) -> Result<()> {
-    let paths: BTreeSet<&Path> = expected
-        .keys()
-        .map(PathBuf::as_path)
-        .chain(
-            receipt
-                .entrypoints()
-                .iter()
-                .map(|entry| entry.install_path.as_path()),
-        )
-        .collect();
     for (other_name, other_receipt) in installed_tools.tools()? {
         if &other_name == name {
             continue;
@@ -415,64 +410,45 @@ fn check_entrypoint_ownership(
             format!("Cannot check executable ownership for tool `{other_name}`")
         })?;
         for other in other_receipt.entrypoints() {
-            if paths
-                .iter()
-                .any(|path| same_entrypoint_path(path, &other.install_path))
-            {
+            if same_entrypoint_path(target, &other.install_path) {
                 anyhow::bail!(
                     "Cannot repair executable `{}`: it is also recorded by tool `{other_name}`",
-                    other.install_path.portable_display()
+                    target.user_display()
                 );
             }
         }
     }
-
-    for path in paths {
-        let metadata = match fs_err::symlink_metadata(path) {
-            Ok(metadata) => metadata,
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => continue,
-            Err(err) => return Err(err.into()),
-        };
-        let recorded = receipt
-            .entrypoints()
-            .iter()
-            .any(|entry| same_entrypoint_path(path, &entry.install_path));
-        if !recorded {
-            let matches = if let Some(source) = expected.get(path) {
-                entrypoint_matches(source, path)?
-            } else {
-                false
-            };
-            if !matches {
-                anyhow::bail!(
-                    "Cannot repair executable `{}`: it already exists",
-                    path.portable_display()
-                );
-            }
-        }
-
-        #[cfg(unix)]
-        {
-            let parent = path.parent().context("Executable path has no parent")?;
-            if !metadata.file_type().is_symlink()
-                || !uv_fs::normalize_path(parent.join(fs_err::read_link(path)?))
-                    .starts_with(uv_fs::normalize_path(installed_tools.tool_dir(name)))
-            {
-                anyhow::bail!(
-                    "Cannot repair executable `{}`: it is not a link to this tool",
-                    path.portable_display()
-                );
-            }
-        }
-        #[cfg(windows)]
-        if !metadata.file_type().is_file() {
+    match fs_err::symlink_metadata(target) {
+        Ok(metadata) if !metadata.file_type().is_file() => {
             anyhow::bail!(
                 "Cannot repair executable `{}`: it is not a file",
-                path.portable_display()
+                target.user_display()
             );
         }
+        Ok(_) => {}
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(err) => return Err(err.into()),
     }
     Ok(())
+}
+
+/// Check whether two paths name the same directory entry.
+#[cfg(windows)]
+fn same_entrypoint_path(left: &Path, right: &Path) -> bool {
+    if left == right {
+        return true;
+    }
+    if let (Some(left_parent), Some(right_parent), Some(left_name), Some(right_name)) = (
+        left.parent(),
+        right.parent(),
+        left.file_name(),
+        right.file_name(),
+    ) {
+        return left_name.to_string_lossy().to_lowercase()
+            == right_name.to_string_lossy().to_lowercase()
+            && uv_fs::is_same_file_allow_missing(left_parent, right_parent) != Some(false);
+    }
+    false
 }
 
 /// Upgrade a specific tool.
@@ -594,7 +570,7 @@ async fn upgrade_tool(
     let tool_dir = installed_tools.tool_dir(name);
     // TODO(zanieb): When updating an existing environment, build it in the cache directory then
     // copy it into the tool directory.
-    let (environment, mut outcome, tool_lock) = if tool_locks {
+    let (environment, outcome, tool_lock) = if tool_locks {
         let target_interpreter =
             requested_interpreter.unwrap_or_else(|| environment.environment().interpreter());
         let site_packages = SitePackages::from_environment(environment.environment())?;
@@ -803,26 +779,31 @@ async fn upgrade_tool(
         (environment, outcome, None)
     };
 
-    let install_entrypoints = match outcome {
-        UpgradeOutcome::UpgradeEnvironment
-        | UpgradeOutcome::UpgradeTool
-        | UpgradeOutcome::RepairEntrypoints => true,
-        UpgradeOutcome::UpgradeDependencies | UpgradeOutcome::NoOp => {
-            let expected = expected_entrypoints(&environment, name, &existing_tool_receipt)?;
-            if entrypoints_need_repair(&expected, &existing_tool_receipt)? {
-                check_entrypoint_ownership(
-                    name,
-                    &expected,
-                    &existing_tool_receipt,
-                    installed_tools,
-                )?;
-                true
+    #[cfg(windows)]
+    let outcome = match outcome {
+        UpgradeOutcome::NoOp | UpgradeOutcome::UpgradeDependencies => {
+            if repair_entrypoints(
+                &environment,
+                name,
+                &existing_tool_receipt,
+                installed_tools,
+                printer,
+            )? && outcome == UpgradeOutcome::NoOp
+            {
+                UpgradeOutcome::Entrypoints
             } else {
-                false
+                outcome
             }
         }
+        UpgradeOutcome::UpgradeEnvironment
+        | UpgradeOutcome::UpgradeTool
+        | UpgradeOutcome::Entrypoints => outcome,
     };
-    if install_entrypoints {
+
+    if matches!(
+        outcome,
+        UpgradeOutcome::UpgradeEnvironment | UpgradeOutcome::UpgradeTool
+    ) {
         // At this point, we updated the existing environment, so we should remove any of its
         // existing executables.
         remove_entrypoints(&existing_tool_receipt);
@@ -850,10 +831,6 @@ async fn upgrade_tool(
             tool_lock.as_ref(),
             printer,
         )?;
-
-        if outcome == UpgradeOutcome::NoOp {
-            outcome = UpgradeOutcome::RepairEntrypoints;
-        }
     } else if tool_locks {
         ToolLock::write(&tool_dir, tool_lock.as_ref())?;
         installed_tools.add_tool_receipt(
@@ -865,9 +842,12 @@ async fn upgrade_tool(
     }
 
     let constraint = match &outcome {
-        UpgradeOutcome::UpgradeDependencies
-        | UpgradeOutcome::RepairEntrypoints
-        | UpgradeOutcome::NoOp => pinned_requirement_version(&existing_tool_receipt, name)
+        UpgradeOutcome::UpgradeDependencies | UpgradeOutcome::NoOp => {
+            pinned_requirement_version(&existing_tool_receipt, name)
+                .map(|version| UpgradeConstraint::PinnedVersion { version })
+        }
+        #[cfg(windows)]
+        UpgradeOutcome::Entrypoints => pinned_requirement_version(&existing_tool_receipt, name)
             .map(|version| UpgradeConstraint::PinnedVersion { version }),
         UpgradeOutcome::UpgradeTool | UpgradeOutcome::UpgradeEnvironment => None,
     };

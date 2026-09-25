@@ -546,9 +546,10 @@ fn tool_upgrade_name() {
     ");
 }
 
-/// Retry installing executables after an upgrade fails to replace one.
+/// Retry a failed executable replacement without silently dropping new entrypoints.
+#[cfg(windows)]
 #[test]
-fn tool_upgrade_retry_executable_installation() -> Result<()> {
+fn tool_upgrade_retry_recorded_executable() -> Result<()> {
     let old_index = old_tool_index();
     let scenario = toml::from_str::<Scenario>(indoc! {r#"
         name = "new-tool-with-extra-executable"
@@ -568,47 +569,27 @@ fn tool_upgrade_retry_executable_installation() -> Result<()> {
         .with_filtered_counts()
         .with_filtered_exe_suffix()
         .with_filter((
-            r"Failed to install entrypoint",
-            "Failed to install executable",
-        ))
-        .with_filter((
-            r"(?m)^  cause: failed to (rename|copy) file from .*$",
+            r"(?m)^  cause: failed to copy file from .*$",
             "  cause: [FILE ERROR]",
         ))
         .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
-    let executable = bin_dir.child(format!("pybabel{}", std::env::consts::EXE_SUFFIX));
+    let executable = bin_dir.child("pybabel.exe");
 
-    uv_snapshot!(context.filters(), context.tool_install()
+    context
+        .tool_install()
         .arg("babel")
         .arg("--index-url")
         .arg(old_index.index_url())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Installed [N] packages in [TIME]
-     + babel==2.6.0
-     + pytz==2018.5
-    Installed 1 executable: pybabel
-    ");
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
 
-    // Block the destination so the environment can be upgraded but the executable cannot.
-    #[cfg(windows)]
-    let locked = {
-        fs_err::write(executable.path(), "stale executable")?;
-        fs_err::OpenOptions::new()
-            .read(true)
-            .share_mode(0)
-            .open(executable.path())?
-    };
-    #[cfg(not(windows))]
-    {
-        fs_err::remove_file(executable.path())?;
-        executable.create_dir_all()?;
-    }
-
+    fs_err::write(executable.path(), "stale executable")?;
+    let locked = fs_err::OpenOptions::new()
+        .read(true)
+        .share_mode(0)
+        .open(executable.path())?;
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("babel")
         .arg("--index-url")
@@ -621,42 +602,21 @@ fn tool_upgrade_retry_executable_installation() -> Result<()> {
      + babel==2.14.0
      - pytz==2018.5
     error: Failed to upgrade babel
-      cause: Failed to install executable
+      cause: Failed to install entrypoint
       cause: [FILE ERROR]
     ");
 
-    // A retry must still fail while the destination is blocked.
-    #[cfg(windows)]
-    uv_snapshot!(context.filters(), context.tool_upgrade()
+    context
+        .tool_upgrade()
         .arg("babel")
         .arg("--index-url")
         .arg(new_index.index_url())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    exit_code: 1 (failure)
-    ----- stderr -----
-    error: Failed to upgrade babel
-      cause: Failed to install executable
-      cause: [FILE ERROR]
-    ");
-    #[cfg(unix)]
-    uv_snapshot!(context.filters(), context.tool_upgrade()
-        .arg("babel")
-        .arg("--index-url")
-        .arg(new_index.index_url())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    exit_code: 1 (failure)
-    ----- stderr -----
-    error: Failed to upgrade babel
-      cause: Cannot repair executable `bin/pybabel`: it is not a link to this tool
-    ");
-
-    // Retry when the destination becomes writable again.
-    #[cfg(windows)]
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .failure();
     drop(locked);
-    #[cfg(not(windows))]
-    {
-        fs_err::remove_dir(executable.path())?;
-    }
+    assert_eq!(fs_err::read(executable.path())?, b"stale executable");
+
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("babel")
         .arg("--index-url")
@@ -664,221 +624,202 @@ fn tool_upgrade_retry_executable_installation() -> Result<()> {
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Installed 2 executables: pybabel, pybabel-extra
+    warning: The executables for `babel` have changed; new or removed executables were not updated
+    Repaired 1 executable: pybabel
     ");
-
-    let installed = venv_bin_path(context.temp_dir.join("tools").join("babel"))
-        .join(format!("pybabel{}", std::env::consts::EXE_SUFFIX));
+    let installed = venv_bin_path(context.temp_dir.join("tools").join("babel")).join("pybabel.exe");
     assert_eq!(fs_err::read(executable.path())?, fs_err::read(installed)?);
-    let extra = format!("pybabel-extra{}", std::env::consts::EXE_SUFFIX);
-    assert_eq!(
-        fs_err::read(bin_dir.join(&extra))?,
-        fs_err::read(venv_bin_path(context.temp_dir.join("tools").join("babel")).join(extra))?
-    );
+    assert!(!bin_dir.join("pybabel-extra.exe").exists());
 
-    uv_snapshot!(context.filters(), context.tool_upgrade()
+    context
+        .tool_upgrade()
         .arg("babel")
+        .arg("--reinstall")
         .arg("--index-url")
         .arg(new_index.index_url())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Nothing to upgrade
-    ");
-
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+    assert!(bin_dir.join("pybabel-extra.exe").exists());
     Ok(())
 }
 
-/// Repair a stale copy even when a previous uv version failed to install it.
+/// Repair only the missing executable when another tool claims a healthy one.
 #[cfg(windows)]
 #[test]
-fn tool_upgrade_repair_stale_executable() -> Result<()> {
-    let index = old_tool_index();
+fn tool_upgrade_repair_only_missing_executable() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "tools-with-shared-executable"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.owner.versions."1.0.0"]
+        requires_python = ">=3.11"
+        sdist = false
+        entry_points = ["shared", "extra"]
+
+        [packages.contender.versions."1.0.0"]
+        requires_python = ">=3.11"
+        sdist = false
+        entry_points = ["shared"]
+    "#})?;
+    let index = PackseServer::from_scenario(&scenario);
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix()
         .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
-    let executable = bin_dir.child("pybabel.exe");
+    let shared = bin_dir.child("shared.exe");
+    let extra = bin_dir.child("extra.exe");
 
     context
         .tool_install()
-        .arg("babel")
+        .arg("contender")
         .arg("--index-url")
         .arg(index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .assert()
         .success();
-    let original = fs_err::read(executable.path())?;
-    let mut stale = original.clone();
-    let Some(byte) = stale.first_mut() else {
-        bail!("Expected an executable");
-    };
-    *byte ^= 1;
-    fs_err::write(executable.path(), stale)?;
-
-    uv_snapshot!(context.filters(), context.tool_upgrade()
-        .arg("babel")
-        .arg("--index-url")
-        .arg(index.index_url())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Installed 1 executable: pybabel
-    ");
-    assert_eq!(fs_err::read(executable.path())?, original);
-
-    uv_snapshot!(context.filters(), context.tool_upgrade()
-        .arg("babel")
-        .arg("--index-url")
-        .arg(index.index_url())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Nothing to upgrade
-    ");
-    Ok(())
-}
-
-/// Do not overwrite an executable that another tool installed after this one.
-#[test]
-fn tool_upgrade_repair_competing_executable() -> Result<()> {
-    let index = old_tool_index();
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_counts()
-        .with_filtered_exe_suffix()
-        .with_tool_dirs();
-    let bin_dir = context.temp_dir.child("bin");
-    let executable = bin_dir.child(format!("pybabel{}", std::env::consts::EXE_SUFFIX));
-
-    uv_snapshot!(context.filters(), context.tool_install()
-        .arg("babel")
-        .arg("--index-url")
-        .arg(index.index_url())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Installed [N] packages in [TIME]
-     + babel==2.6.0
-     + pytz==2018.5
-    Installed 1 executable: pybabel
-    ");
-
-    uv_snapshot!(context.filters(), context.tool_install()
-        .arg("contender")
+    context
+        .tool_install()
+        .arg("owner")
         .arg("--force")
         .arg("--index-url")
         .arg(index.index_url())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+    fs_err::remove_file(extra.path())?;
+
+    // Permit reads while preventing removal or replacement of the healthy executable.
+    let locked = fs_err::OpenOptions::new()
+        .read(true)
+        .share_mode(1)
+        .open(shared.path())?;
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("owner")
+        .arg("--index-url")
+        .arg(index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Installed [N] packages in [TIME]
-     + contender==1.0.0
-    Installed 1 executable: pybabel
+    Repaired 1 executable: extra
     ");
+    assert!(extra.path().is_file());
+    drop(locked);
 
-    let other_executable = venv_bin_path(context.temp_dir.join("tools").join("contender"))
-        .join(format!("pybabel{}", std::env::consts::EXE_SUFFIX));
+    fs_err::write(shared.path(), "unrelated executable")?;
     uv_snapshot!(context.filters(), context.tool_upgrade()
-        .arg("babel")
+        .arg("owner")
         .arg("--index-url")
         .arg(index.index_url())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: Failed to upgrade babel
-      cause: Cannot repair executable `bin/pybabel`: it is also recorded by tool `contender`
+    error: Failed to upgrade owner
+      cause: Cannot repair executable `bin/shared`: it is also recorded by tool `contender`
     ");
-    assert_eq!(
-        fs_err::read(executable.path())?,
-        fs_err::read(other_executable)?
-    );
-
+    assert_eq!(fs_err::read(shared.path())?, b"unrelated executable");
     Ok(())
 }
 
-/// Refuse to replace a regular file that has taken the place of a tool symlink.
+/// Keep executable providers in the receipt when a dependency removes its executables.
+#[test]
+fn tool_upgrade_keeps_executable_provider() -> Result<()> {
+    let old = toml::from_str::<Scenario>(indoc! {r#"
+        name = "tool-with-executable-provider"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.owner.versions."1.0.0"]
+        requires_python = ">=3.11"
+        sdist = false
+        entry_points = ["owner"]
+        [packages.provider.versions."1.0.0"]
+        requires_python = ">=3.11"
+        sdist = false
+        entry_points = ["provider"]
+    "#})?;
+    let new = toml::from_str::<Scenario>(indoc! {r#"
+        name = "tool-without-provider-executable"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.owner.versions."1.0.0"]
+        requires_python = ">=3.11"
+        sdist = false
+        entry_points = ["owner"]
+        [packages.provider.versions."2.0.0"]
+        requires_python = ">=3.11"
+        sdist = false
+    "#})?;
+    let old_index = PackseServer::from_scenario(&old);
+    let new_index = PackseServer::from_scenario(&new);
+    let context = uv_test::test_context!("3.12").with_tool_dirs();
+    let bin_dir = context.temp_dir.child("bin");
+    let receipt = context.temp_dir.join("tools/owner/uv-receipt.toml");
+
+    context
+        .tool_install()
+        .arg("owner")
+        .arg("--with-executables-from")
+        .arg("provider")
+        .arg("--index-url")
+        .arg(old_index.index_url())
+        .env(EnvVars::UV_PREVIEW, "0")
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+    let before: toml::Value = toml::from_str(&fs_err::read_to_string(&receipt)?)?;
+
+    context
+        .tool_upgrade()
+        .arg("owner")
+        .arg("--index-url")
+        .arg(new_index.index_url())
+        .env(EnvVars::UV_PREVIEW, "0")
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+    let after: toml::Value = toml::from_str(&fs_err::read_to_string(&receipt)?)?;
+    assert_eq!(before["tool"]["entrypoints"], after["tool"]["entrypoints"]);
+    Ok(())
+}
+
+/// A symlinked tool directory and its real path refer to the same environment.
 #[cfg(unix)]
 #[test]
-fn tool_upgrade_repair_unrelated_executable() -> Result<()> {
+fn tool_upgrade_symlinked_tool_directory() -> Result<()> {
     let index = old_tool_index();
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_counts()
-        .with_tool_dirs();
+    let context = uv_test::test_context!("3.12").with_tool_dirs();
+    let tools = context.temp_dir.child("tools");
+    let alias = context.temp_dir.child("tools-alias");
     let bin_dir = context.temp_dir.child("bin");
-    let executable = bin_dir.child("pybabel");
+    tools.create_dir_all()?;
+    fs_err::os::unix::fs::symlink(tools.path(), alias.path())?;
 
     context
         .tool_install()
         .arg("babel")
         .arg("--index-url")
         .arg(index.index_url())
+        .env(EnvVars::UV_TOOL_DIR, alias.path())
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .assert()
         .success();
-    fs_err::remove_file(executable.path())?;
-    executable.write_str("unrelated executable")?;
-
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("babel")
         .arg("--index-url")
         .arg(index.index_url())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    exit_code: 1 (failure)
-    ----- stderr -----
-    error: Failed to upgrade babel
-      cause: Cannot repair executable `bin/pybabel`: it is not a link to this tool
-    ");
-    assert_eq!(
-        fs_err::read_to_string(executable.path())?,
-        "unrelated executable"
-    );
-
-    Ok(())
-}
-
-/// Repair a symlink that still points into the tool, but to an old executable.
-#[cfg(unix)]
-#[test]
-fn tool_upgrade_repair_stale_symlink() -> Result<()> {
-    let index = old_tool_index();
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_counts()
-        .with_tool_dirs();
-    let bin_dir = context.temp_dir.child("bin");
-    let executable = bin_dir.child("pybabel");
-    let scripts = venv_bin_path(context.temp_dir.join("tools").join("babel"));
-
-    context
-        .tool_install()
-        .arg("babel")
-        .arg("--index-url")
-        .arg(index.index_url())
-        .env(EnvVars::PATH, bin_dir.as_os_str())
-        .assert()
-        .success();
-    let stale = scripts.join("old-pybabel");
-    fs_err::write(&stale, "old executable")?;
-    fs_err::remove_file(executable.path())?;
-    fs_err::os::unix::fs::symlink(&stale, executable.path())?;
-
-    uv_snapshot!(context.filters(), context.tool_upgrade()
-        .arg("babel")
-        .arg("--index-url")
-        .arg(index.index_url())
+        .env(EnvVars::UV_TOOL_DIR, tools.path())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Installed 1 executable: pybabel
+    Nothing to upgrade
     ");
-    assert_eq!(
-        fs_err::read_link(executable.path())?,
-        scripts.join("pybabel")
-    );
     Ok(())
 }
 
@@ -2227,11 +2168,6 @@ fn old_tool_index() -> PackseServer {
         [packages.pytz.versions."2018.5"]
         requires_python = ">=3.11"
         sdist = false
-
-        [packages.contender.versions."1.0.0"]
-        requires_python = ">=3.11"
-        sdist = false
-        entry_points = ["pybabel"]
 
         [packages.python-dotenv.versions."0.10.2.post2"]
         requires_python = ">=3.11"
