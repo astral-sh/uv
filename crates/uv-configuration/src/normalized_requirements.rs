@@ -103,38 +103,13 @@ impl Deref for NormalizedConstraints {
     }
 }
 
-/// Replacement requirements, including false markers that suppress the original dependency.
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct NormalizedOverrides(NormalizedRequirements);
-
-impl NormalizedOverrides {
-    fn into_inner(self) -> Vec<Requirement> {
-        self.0.into_inner()
-    }
-}
-
-impl From<Vec<Requirement>> for NormalizedOverrides {
-    /// Normalize replacements without dropping false markers that suppress dependencies.
-    fn from(overrides: Vec<Requirement>) -> Self {
-        Self(NormalizedRequirements::from(overrides))
-    }
-}
-
-impl Deref for NormalizedOverrides {
-    type Target = [Requirement];
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
 /// Overrides normalized independently within their global or package-version scope.
 ///
 /// Empty package scopes remain because they shadow versionless scopes.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct NormalizedOverrideEntries {
-    global: NormalizedOverrides,
-    scoped: BTreeMap<PackageOverrideTarget, NormalizedOverrides>,
+    global: NormalizedRequirements,
+    scoped: BTreeMap<PackageOverrideTarget, NormalizedRequirements>,
 }
 
 impl From<Vec<Override<Requirement>>> for NormalizedOverrideEntries {
@@ -153,10 +128,12 @@ impl From<Vec<Override<Requirement>>> for NormalizedOverrideEntries {
             }
         }
         Self {
-            global: NormalizedOverrides::from(global),
+            global: NormalizedRequirements::from(global),
             scoped: scoped
                 .into_iter()
-                .map(|(package, requirements)| (package, NormalizedOverrides::from(requirements)))
+                .map(|(package, requirements)| {
+                    (package, NormalizedRequirements::from(requirements))
+                })
                 .collect(),
         }
     }
@@ -166,7 +143,6 @@ impl NormalizedOverrideEntries {
     /// Return global overrides followed by one declaration per package scope, including empty scopes.
     pub fn into_inner(self) -> Vec<Override<Requirement>> {
         self.global
-            .into_inner()
             .into_iter()
             .map(Override::Requirement)
             .chain(self.scoped.into_iter().map(|(package, dependencies)| {
