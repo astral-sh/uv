@@ -16,10 +16,10 @@ use uv_configuration::{
     ExcludeDependency, ExtrasSpecification, Override, PackageOverride, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
-use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
+use uv_distribution::{DistributionDatabase, FirstPartyPackages, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
     DependencyMetadata, HashCollection, IndexLocations, NameRequirementSpecification, Requirement,
-    RequirementSource, RequiresPython, ResolutionRecorder, UnresolvedRequirementSpecification,
+    RequiresPython, ResolutionRecorder, UnresolvedRequirementSpecification,
 };
 use uv_git::ResolvedRepositoryReference;
 use uv_git_types::GitOid;
@@ -542,23 +542,12 @@ async fn do_lock(
     let members = target.members();
     let packages = target.packages();
     let required_members = target.required_members();
-    let first_party = target
-        .members_requirements()
-        .filter(|requirement| !first_party_exclusions.contains(&requirement.name))
-        .filter_map(|requirement| match requirement.source {
-            RequirementSource::Directory {
-                install_path,
-                r#virtual: Some(false),
-                ..
-            } => Some((requirement.name, install_path.into_path_buf())),
-            RequirementSource::Directory { .. }
-            | RequirementSource::Registry { .. }
-            | RequirementSource::Url { .. }
-            | RequirementSource::GitDirectory { .. }
-            | RequirementSource::GitPath { .. }
-            | RequirementSource::Path { .. } => None,
-        })
-        .collect::<BTreeMap<_, _>>();
+    let first_party_packages = match target {
+        LockTarget::Workspace(workspace) => {
+            FirstPartyPackages::from_workspace(workspace, &first_party_exclusions)
+        }
+        LockTarget::Script(_) => FirstPartyPackages::default(),
+    };
     let requirements = target.requirements();
     let overrides = target.overrides();
     let excludes = target.exclude_dependencies();
@@ -955,7 +944,7 @@ async fn do_lock(
             &validation_build_dispatch,
             concurrency.downloads_semaphore.clone(),
         )
-        .with_first_party(&first_party);
+        .with_first_party_packages(&first_party_packages);
         match Box::pin(ValidatedLock::validate(
             existing_lock,
             target.install_path(),
@@ -1037,7 +1026,7 @@ async fn do_lock(
                 concurrency.downloads_semaphore.clone(),
             )
             .with_recorder(recorder.clone())
-            .with_first_party(&first_party);
+            .with_first_party_packages(&first_party_packages);
 
             // Determine whether we can reuse the existing package versions.
             let versions_lock = existing_lock.as_ref().and_then(|lock| match &lock {
