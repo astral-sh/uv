@@ -9098,128 +9098,282 @@ fn require_hashes_constraint() -> Result<()> {
 /// Repeated registry requirements contribute alternative hashes, in either order.
 #[test]
 fn require_hashes_repeated_registry_requirements() -> Result<()> {
-    let valid = "8163cd4f0477f8e93b856ac6a517fe5fa0f29339291fe2807d5376df685f6697";
-    let invalid = "0000000000000000000000000000000000000000000000000000000000000000";
+    let context = uv_test::test_context!("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc! {r"
+        ok==2.0.0 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000
+        ok==2.0.0 --hash=sha256:8163cd4f0477f8e93b856ac6a517fe5fa0f29339291fe2807d5376df685f6697
+    "})?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .args(["--no-index", "--no-deps", "--require-hashes"])
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links")), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==2.0.0
+    ");
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .args(["--no-index", "--no-deps", "--verify-hashes", "--reinstall"])
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links")), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ ok==2.0.0
+    ");
 
-    for (mode, first, second) in [
-        ("--require-hashes", invalid, valid),
-        ("--require-hashes", valid, invalid),
-        ("--verify-hashes", invalid, valid),
-        ("--verify-hashes", valid, invalid),
-    ] {
-        let context = uv_test::test_context!("3.12");
-        let requirements_txt = context.temp_dir.child("requirements.txt");
-        requirements_txt.write_str(&format!(
-            "ok==2.0.0 --hash=sha256:{first}\nok==2.0.0 --hash=sha256:{second}\n"
-        ))?;
-
-        allow_duplicates! {
-            uv_snapshot!(context.filters(), context.pip_install()
-                .arg("-r")
-                .arg(requirements_txt.path())
-                .args(["--no-index", "--no-deps", mode])
-                .arg("--find-links")
-                .arg(context.workspace_root.join("test/links")), @"
-            exit_code: 0 (success)
-            ----- stderr -----
-            Resolved 1 package in [TIME]
-            Prepared 1 package in [TIME]
-            Installed 1 package in [TIME]
-             + ok==2.0.0
-            ");
-        }
-    }
+    requirements_txt.write_str(indoc! {r"
+        ok==2.0.0 --hash=sha256:8163cd4f0477f8e93b856ac6a517fe5fa0f29339291fe2807d5376df685f6697
+        ok==2.0.0 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000
+    "})?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .args(["--no-index", "--no-deps", "--require-hashes", "--reinstall"])
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links")), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ ok==2.0.0
+    ");
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .args(["--no-index", "--no-deps", "--verify-hashes", "--reinstall"])
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links")), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ ok==2.0.0
+    ");
     Ok(())
 }
 
 /// Constraints apply to the combined hashes of repeated requirements, in either order.
 #[test]
 fn require_hashes_repeated_requirements_constraint() -> Result<()> {
-    let valid = "8163cd4f0477f8e93b856ac6a517fe5fa0f29339291fe2807d5376df685f6697";
-    let invalid = "0000000000000000000000000000000000000000000000000000000000000000";
+    let context = uv_test::test_context!("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    requirements_txt.write_str(indoc! {r"
+        ok==2.0.0 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000
+        ok==2.0.0 --hash=sha256:8163cd4f0477f8e93b856ac6a517fe5fa0f29339291fe2807d5376df685f6697
+    "})?;
+    constraints_txt.write_str(indoc! {r"
+        ok==2.0.0 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000
+    "})?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .arg("-c")
+        .arg(constraints_txt.path())
+        .args(["--no-index", "--no-deps", "--require-hashes"])
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links")), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to download `ok==2.0.0`
+      cause: Hash mismatch for `ok==2.0.0`
 
-    for (mode, first, second) in [
-        ("--require-hashes", invalid, valid),
-        ("--require-hashes", valid, invalid),
-        ("--verify-hashes", invalid, valid),
-        ("--verify-hashes", valid, invalid),
-    ] {
-        let context = uv_test::test_context!("3.12");
-        let requirements_txt = context.temp_dir.child("requirements.txt");
-        requirements_txt.write_str(&format!(
-            "ok==2.0.0 --hash=sha256:{first}\nok==2.0.0 --hash=sha256:{second}\n"
-        ))?;
-        let constraints_txt = context.temp_dir.child("constraints.txt");
-        constraints_txt.write_str(&format!("ok==2.0.0 --hash=sha256:{invalid}\n"))?;
+             Expected:
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
 
-        allow_duplicates! {
-            uv_snapshot!(context.filters(), context.pip_install()
-                .arg("-r")
-                .arg(requirements_txt.path())
-                .arg("-c")
-                .arg(constraints_txt.path())
-                .args(["--no-index", "--no-deps", mode])
-                .arg("--find-links")
-                .arg(context.workspace_root.join("test/links")), @"
-            exit_code: 1 (failure)
-            ----- stderr -----
-            Resolved 1 package in [TIME]
-            error: Failed to download `ok==2.0.0`
-              cause: Hash mismatch for `ok==2.0.0`
+             Computed:
+               sha256:8163cd4f0477f8e93b856ac6a517fe5fa0f29339291fe2807d5376df685f6697
+    ");
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .arg("-c")
+        .arg(constraints_txt.path())
+        .args(["--no-index", "--no-deps", "--verify-hashes"])
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links")), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to download `ok==2.0.0`
+      cause: Hash mismatch for `ok==2.0.0`
 
-                     Expected:
-                       sha256:0000000000000000000000000000000000000000000000000000000000000000
+             Expected:
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
 
-                     Computed:
-                       sha256:8163cd4f0477f8e93b856ac6a517fe5fa0f29339291fe2807d5376df685f6697
-            ");
-        }
-        constraints_txt.write_str(&format!("ok==2.0.0 --hash=sha256:{valid}\n"))?;
-        allow_duplicates! {
-            uv_snapshot!(context.filters(), context.pip_install()
-                .arg("-r")
-                .arg(requirements_txt.path())
-                .arg("-c")
-                .arg(constraints_txt.path())
-                .args(["--no-index", "--no-deps", mode])
-                .arg("--find-links")
-                .arg(context.workspace_root.join("test/links")), @"
-            exit_code: 0 (success)
-            ----- stderr -----
-            Resolved 1 package in [TIME]
-            Prepared 1 package in [TIME]
-            Installed 1 package in [TIME]
-             + ok==2.0.0
-            ");
-        }
-    }
+             Computed:
+               sha256:8163cd4f0477f8e93b856ac6a517fe5fa0f29339291fe2807d5376df685f6697
+    ");
+
+    requirements_txt.write_str(indoc! {r"
+        ok==2.0.0 --hash=sha256:8163cd4f0477f8e93b856ac6a517fe5fa0f29339291fe2807d5376df685f6697
+        ok==2.0.0 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000
+    "})?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .arg("-c")
+        .arg(constraints_txt.path())
+        .args(["--no-index", "--no-deps", "--require-hashes"])
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links")), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to download `ok==2.0.0`
+      cause: Hash mismatch for `ok==2.0.0`
+
+             Expected:
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+             Computed:
+               sha256:8163cd4f0477f8e93b856ac6a517fe5fa0f29339291fe2807d5376df685f6697
+    ");
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .arg("-c")
+        .arg(constraints_txt.path())
+        .args(["--no-index", "--no-deps", "--verify-hashes"])
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links")), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to download `ok==2.0.0`
+      cause: Hash mismatch for `ok==2.0.0`
+
+             Expected:
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+             Computed:
+               sha256:8163cd4f0477f8e93b856ac6a517fe5fa0f29339291fe2807d5376df685f6697
+    ");
+
+    constraints_txt.write_str(indoc! {r"
+        ok==2.0.0 --hash=sha256:8163cd4f0477f8e93b856ac6a517fe5fa0f29339291fe2807d5376df685f6697
+    "})?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .arg("-c")
+        .arg(constraints_txt.path())
+        .args(["--no-index", "--no-deps", "--require-hashes"])
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links")), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==2.0.0
+    ");
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .arg("-c")
+        .arg(constraints_txt.path())
+        .args(["--no-index", "--no-deps", "--verify-hashes", "--reinstall"])
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links")), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ ok==2.0.0
+    ");
+
+    requirements_txt.write_str(indoc! {r"
+        ok==2.0.0 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000
+        ok==2.0.0 --hash=sha256:8163cd4f0477f8e93b856ac6a517fe5fa0f29339291fe2807d5376df685f6697
+    "})?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .arg("-c")
+        .arg(constraints_txt.path())
+        .args(["--no-index", "--no-deps", "--require-hashes", "--reinstall"])
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links")), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ ok==2.0.0
+    ");
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .arg("-c")
+        .arg(constraints_txt.path())
+        .args(["--no-index", "--no-deps", "--verify-hashes", "--reinstall"])
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links")), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ ok==2.0.0
+    ");
     Ok(())
 }
 
 /// Repeating a hashed requirement does not authorize a hashless requirement.
 #[test]
 fn require_hashes_repeated_registry_missing_hash() -> Result<()> {
-    let valid = "8163cd4f0477f8e93b856ac6a517fe5fa0f29339291fe2807d5376df685f6697";
-    for requirements in [
-        format!("ok==2.0.0\nok==2.0.0 --hash=sha256:{valid}\n"),
-        format!("ok==2.0.0 --hash=sha256:{valid}\nok==2.0.0\n"),
-    ] {
-        let context = uv_test::test_context!("3.12");
-        let requirements_txt = context.temp_dir.child("requirements.txt");
-        requirements_txt.write_str(&requirements)?;
-        allow_duplicates! {
-            uv_snapshot!(context.filters(), context.pip_install()
-                .arg("-r")
-                .arg(requirements_txt.path())
-                .args(["--no-index", "--no-deps", "--require-hashes"])
-                .arg("--find-links")
-                .arg(context.workspace_root.join("test/links")), @"
-            exit_code: 2 (failure)
-            ----- stderr -----
-            error: In `--require-hashes` mode, all requirements must have a hash, but none were provided for: ok==2.0.0
-            ");
-        }
-    }
+    let context = uv_test::test_context!("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc! {r"
+        ok==2.0.0
+        ok==2.0.0 --hash=sha256:8163cd4f0477f8e93b856ac6a517fe5fa0f29339291fe2807d5376df685f6697
+    "})?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .args(["--no-index", "--no-deps", "--require-hashes"])
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links")), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: In `--require-hashes` mode, all requirements must have a hash, but none were provided for: ok==2.0.0
+    ");
+
+    requirements_txt.write_str(indoc! {r"
+        ok==2.0.0 --hash=sha256:8163cd4f0477f8e93b856ac6a517fe5fa0f29339291fe2807d5376df685f6697
+        ok==2.0.0
+    "})?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .args(["--no-index", "--no-deps", "--require-hashes"])
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links")), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: In `--require-hashes` mode, all requirements must have a hash, but none were provided for: ok==2.0.0
+    ");
     Ok(())
 }
 
@@ -9228,9 +9382,14 @@ fn require_hashes_repeated_registry_missing_hash() -> Result<()> {
 fn require_hashes_repeated_hashless_requirements_constraint() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("ok==2.0.0\nok==2.0.0\n")?;
+    requirements_txt.write_str(indoc! {r"
+        ok==2.0.0
+        ok==2.0.0
+    "})?;
     let constraints_txt = context.temp_dir.child("constraints.txt");
-    constraints_txt.write_str("ok==2.0.0 --hash=sha256:8163cd4f0477f8e93b856ac6a517fe5fa0f29339291fe2807d5376df685f6697\n")?;
+    constraints_txt.write_str(indoc! {r"
+        ok==2.0.0 --hash=sha256:8163cd4f0477f8e93b856ac6a517fe5fa0f29339291fe2807d5376df685f6697
+    "})?;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
@@ -9258,15 +9417,15 @@ fn require_hashes_repeated_file_requirements_constraint() -> Result<()> {
         .workspace_root
         .join("test/links/ok-2.0.0-py3-none-any.whl");
     let url = Url::from_file_path(&wheel).map_err(|()| anyhow!("invalid wheel path"))?;
-    let sha256 = "8163cd4f0477f8e93b856ac6a517fe5fa0f29339291fe2807d5376df685f6697";
-    let sha512 = "475807803935b30d42bc7f2f0cb7663f38019ff5337baa6547e029f343396af53dddbe2dfebdbee73d9c80add99de7b351735ace9923c1f8863f5ad8f037176b";
-    let invalid = "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
     let requirements_txt = context.temp_dir.child("requirements.txt");
     let constraints_txt = context.temp_dir.child("constraints.txt");
-    requirements_txt.write_str(&format!(
-        "ok @ {url} --hash=sha512:{invalid}\nok @ {url} --hash=sha256:{sha256}\n"
-    ))?;
-    constraints_txt.write_str(&format!("ok @ {url} --hash=sha256:{sha256}\n"))?;
+    requirements_txt.write_str(&formatdoc! {r"
+        ok @ {url} --hash=sha512:00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+        ok @ {url} --hash=sha256:8163cd4f0477f8e93b856ac6a517fe5fa0f29339291fe2807d5376df685f6697
+    "})?;
+    constraints_txt.write_str(&formatdoc! {r"
+        ok @ {url} --hash=sha256:8163cd4f0477f8e93b856ac6a517fe5fa0f29339291fe2807d5376df685f6697
+    "})?;
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg(requirements_txt.path())
@@ -9288,9 +9447,10 @@ fn require_hashes_repeated_file_requirements_constraint() -> Result<()> {
                sha512:475807803935b30d42bc7f2f0cb7663f38019ff5337baa6547e029f343396af53dddbe2dfebdbee73d9c80add99de7b351735ace9923c1f8863f5ad8f037176b
     ");
 
-    requirements_txt.write_str(&format!(
-        "ok @ {url} --hash=sha512:{sha512}\nok @ {url} --hash=sha256:{sha256}\n"
-    ))?;
+    requirements_txt.write_str(&formatdoc! {r"
+        ok @ {url} --hash=sha512:475807803935b30d42bc7f2f0cb7663f38019ff5337baa6547e029f343396af53dddbe2dfebdbee73d9c80add99de7b351735ace9923c1f8863f5ad8f037176b
+        ok @ {url} --hash=sha256:8163cd4f0477f8e93b856ac6a517fe5fa0f29339291fe2807d5376df685f6697
+    "})?;
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg(requirements_txt.path())
@@ -9305,8 +9465,12 @@ fn require_hashes_repeated_file_requirements_constraint() -> Result<()> {
      + ok==2.0.0 (from file://[WORKSPACE]/test/links/ok-2.0.0-py3-none-any.whl)
     ");
 
-    requirements_txt.write_str(&format!("ok @ {url} --hash=sha256:{sha256}\n"))?;
-    constraints_txt.write_str(&format!("ok @ {url} --hash=sha512:{invalid}\n"))?;
+    requirements_txt.write_str(&formatdoc! {r"
+        ok @ {url} --hash=sha256:8163cd4f0477f8e93b856ac6a517fe5fa0f29339291fe2807d5376df685f6697
+    "})?;
+    constraints_txt.write_str(&formatdoc! {r"
+        ok @ {url} --hash=sha512:00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+    "})?;
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg(requirements_txt.path())
@@ -9328,7 +9492,9 @@ fn require_hashes_repeated_file_requirements_constraint() -> Result<()> {
                sha512:475807803935b30d42bc7f2f0cb7663f38019ff5337baa6547e029f343396af53dddbe2dfebdbee73d9c80add99de7b351735ace9923c1f8863f5ad8f037176b
     ");
 
-    constraints_txt.write_str(&format!("ok @ {url} --hash=sha512:{sha512}\n"))?;
+    constraints_txt.write_str(&formatdoc! {r"
+        ok @ {url} --hash=sha512:475807803935b30d42bc7f2f0cb7663f38019ff5337baa6547e029f343396af53dddbe2dfebdbee73d9c80add99de7b351735ace9923c1f8863f5ad8f037176b
+    "})?;
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg(requirements_txt.path())
