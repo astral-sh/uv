@@ -7,10 +7,10 @@ use uv_test::pypi_proxy;
 mod direct_url_hashes;
 #[cfg(all(feature = "test-python", feature = "test-pypi"))]
 mod json;
+#[cfg(feature = "test-python")]
+mod native_bytecode;
 #[cfg(all(feature = "test-python", feature = "test-pypi"))]
 mod pip_install;
-#[cfg(feature = "test-python")]
-mod rust_bytecode;
 
 #[cfg(feature = "test-python")]
 mod wheel_variants;
