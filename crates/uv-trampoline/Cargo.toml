@@ -53,7 +53,6 @@ windows = { version = "0.61.0", features = [
 ] }
 ufmt-write = "0.1.0"
 ufmt = { version = "0.2.0", features = ["std"] }
-dunce = { version = "1.0.5" }
 
 [build-dependencies]
 embed-manifest = "1.4.0"
