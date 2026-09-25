@@ -66,7 +66,7 @@ use uv_resolver_types::{
     ResolutionGraphNode, ResolverOutput, UniversalMarker,
 };
 use uv_small_str::SmallString;
-use uv_types::{BuildContext, HashStrategy};
+use uv_types::{BuildContext, HashStrategy, HashStrategyError};
 use uv_warnings::warn_user_once;
 use uv_workspace::dependency_groups::{DependencyGroupError, FlatDependencyGroups};
 use uv_workspace::{Editability, WorkspaceMember};
@@ -83,6 +83,7 @@ pub use crate::lock::tree::{TreeDisplay, TreeJsonTarget};
 
 use self::requirements::{RequirementNormalizer, normalize_collection, normalize_requirement};
 
+mod build_constraints;
 mod deserialize;
 pub(crate) mod export;
 mod inputs;
@@ -4418,6 +4419,7 @@ impl Lock {
         // Validate that the lockfile was generated with the same build constraints.
         {
             let normalize_build_constraint = |constraint: NameRequirementSpecification| {
+                let constraint = build_constraints::materialize_hashes(constraint)?;
                 Ok::<_, LockError>(NameRequirementSpecification {
                     requirement: normalize_requirement(
                         constraint.requirement,
@@ -4427,18 +4429,21 @@ impl Lock {
                     hashes: constraint.hashes,
                 })
             };
-            let expected: BTreeSet<_> = build_constraints
-                .specifications()
-                .cloned()
-                .map(normalize_build_constraint)
-                .collect::<Result<_, _>>()?;
-            let actual: BTreeSet<_> = self
-                .manifest
-                .build_constraints
-                .iter()
-                .cloned()
-                .map(normalize_build_constraint)
-                .collect::<Result<_, _>>()?;
+            let expected = build_constraints::canonicalize(
+                build_constraints
+                    .specifications()
+                    .cloned()
+                    .map(normalize_build_constraint)
+                    .collect::<Result<Vec<_>, _>>()?,
+            )?;
+            let actual = build_constraints::canonicalize(
+                self.manifest
+                    .build_constraints
+                    .iter()
+                    .cloned()
+                    .map(normalize_build_constraint)
+                    .collect::<Result<Vec<_>, _>>()?,
+            )?;
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedBuildConstraints(
                     expected, actual,
@@ -6394,9 +6399,9 @@ impl ResolverManifest {
         build_constraints: impl IntoIterator<Item = NameRequirementSpecification>,
         dependency_groups: impl IntoIterator<Item = (GroupName, Vec<Requirement>)>,
         dependency_metadata: impl IntoIterator<Item = StaticMetadata>,
-    ) -> Self {
+    ) -> Result<Self, LockError> {
         let normalize = uv_preview::is_enabled(PreviewFeature::LockfileNormalization);
-        Self {
+        Ok(Self {
             members: members.into_iter().collect(),
             default_groups: None,
             group_requires_python: BTreeMap::new(),
@@ -6411,7 +6416,7 @@ impl ResolverManifest {
             ),
             overrides: normalize_collection::<_, NormalizedOverrideEntries>(overrides, normalize),
             excludes: normalize_collection::<_, NormalizedExcludes>(excludes, normalize),
-            build_constraints: build_constraints.into_iter().collect(),
+            build_constraints: build_constraints::canonicalize(build_constraints)?,
             dependency_groups: dependency_groups
                 .into_iter()
                 .map(|(group, requirements)| {
@@ -6422,7 +6427,7 @@ impl ResolverManifest {
                 })
                 .collect(),
             dependency_metadata: dependency_metadata.into_iter().collect(),
-        }
+        })
     }
 
     /// Convert the manifest to a relative form using the given workspace.
@@ -9845,6 +9850,9 @@ enum LockErrorKind {
     /// An error that occurs when collecting dependency-group settings.
     #[error(transparent)]
     DependencyGroups(#[from] DependencyGroupError),
+    /// A build-constraint hash is invalid or conflicts with a URL-fragment hash.
+    #[error(transparent)]
+    InvalidBuildConstraintHash(#[from] HashStrategyError),
     /// An error that occurs when the overrides for validating a
     /// metadata-free lockfile cannot be scoped to their packages.
     #[error(transparent)]
