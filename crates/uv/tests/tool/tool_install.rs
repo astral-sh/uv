@@ -6163,7 +6163,7 @@ fn tool_install_lock_revalidates_changed_constraints() -> Result<()> {
 
 /// Equivalent requirements reuse a tool lock and record the requested receipt inputs.
 #[test]
-fn tool_install_lock_reuses_equivalent_requirements() -> Result<()> {
+fn tool_install_lock_reuses_equivalent_requirements() {
     let context = uv_test::test_context!("3.12").with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
     let links = context.workspace_root.join("test/links");
@@ -6209,7 +6209,6 @@ fn tool_install_lock_reuses_equivalent_requirements() -> Result<()> {
         exclude-newer = "2024-03-25T00:00:00Z"
         "#);
     });
-    Ok(())
 }
 
 #[test]
