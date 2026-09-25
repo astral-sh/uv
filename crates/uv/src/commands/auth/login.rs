@@ -112,9 +112,9 @@ pub(crate) async fn login(
     }
 
     let display_url = if username == "__token__" {
-        url.without_credentials().to_string()
+        url.without_userinfo().to_string()
     } else {
-        format!("{username}@{}", url.without_credentials())
+        format!("{username}@{}", url.without_userinfo())
     };
 
     // TODO(zanieb): Add support for other authentication schemes here, e.g., `Credentials::Bearer`

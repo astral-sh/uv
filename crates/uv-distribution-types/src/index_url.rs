@@ -14,7 +14,7 @@ use uv_auth::RealmRef;
 use uv_cache_key::CanonicalUrl;
 use uv_pep508::{Scheme, VerbatimUrl, VerbatimUrlError, split_scheme};
 use uv_pypi_types::HashAlgorithm;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::{DisplaySafeUrl, UrlWithoutSensitiveParts};
 use uv_warnings::warn_user;
 
 use crate::{ExcludeNewerOverride, Index, IndexStatusCodeStrategy, Verbatim};
@@ -105,8 +105,8 @@ impl IndexUrl {
         }
     }
 
-    /// Return the redacted URL for the index, omitting any sensitive credentials.
-    pub fn without_credentials(&self) -> Cow<'_, DisplaySafeUrl> {
+    /// Return the index URL without userinfo, retaining all query parameters.
+    pub fn without_userinfo(&self) -> Cow<'_, DisplaySafeUrl> {
         let url = self.url();
         if url.username().is_empty() && url.password().is_none() {
             Cow::Borrowed(url)
@@ -115,6 +115,14 @@ impl IndexUrl {
             let _ = url.set_username("");
             let _ = url.set_password(None);
             Cow::Owned(url)
+        }
+    }
+
+    /// Return the index reference used in persisted configuration and lockfile comparisons.
+    pub fn without_sensitive_parts(&self) -> Cow<'_, DisplaySafeUrl> {
+        match self.url().without_sensitive_parts() {
+            Cow::Borrowed(_) => Cow::Borrowed(self.url()),
+            Cow::Owned(url) => Cow::Owned(DisplaySafeUrl::from_url(url)),
         }
     }
 
@@ -201,7 +209,7 @@ impl serde::ser::Serialize for IndexUrl {
     where
         S: serde::ser::Serializer,
     {
-        self.inner().without_credentials().serialize(serializer)
+        UrlWithoutSensitiveParts::ref_cast(self.url()).serialize(serializer)
     }
 }
 

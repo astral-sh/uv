@@ -1093,7 +1093,7 @@ fn make_referer(
     }
 
     let mut referer = original_url.clone();
-    referer.remove_credentials();
+    referer.remove_userinfo();
     referer.set_fragment(None);
     referer.as_str().parse().ok()
 }
