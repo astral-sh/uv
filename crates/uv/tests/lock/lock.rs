@@ -30186,8 +30186,51 @@ fn lock_unsupported_version() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock().arg("--frozen"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse `uv.lock`, which uses an unsupported schema version (v2, but only v1 is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`.
+    error: Failed to parse `uv.lock`, which uses a version 2 schema, while this version of uv only supports version 1
       cause: Dependency `iniconfig` has missing `source` field but has more than one matching package
+
+    hint: Try upgrading to a newer version of uv
+    ");
+
+    Ok(())
+}
+
+/// An unreadable lockfile with a newer revision should suggest upgrading uv.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_unparsable_revision() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 4
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "project"
+        version = false
+        source = { virtual = "." }
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--frozen"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to parse `uv.lock`, which uses a revision 4 schema, while this version of uv only supports up to revision 3
+      cause: TOML parse error at line 5, column 1
+               |
+             5 | [[package]]
+               | ^^^^^^^^^^^
+             invalid type: boolean `false`, expected a string
+
+    hint: Try upgrading to a newer version of uv
     ");
 
     Ok(())

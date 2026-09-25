@@ -179,7 +179,10 @@ pub(crate) async fn audit(
                 );
                 continue;
             }
-            Err(LockParseError::Toml(error)) => {
+            Err(
+                LockParseError::Toml(error)
+                | LockParseError::UnparsableRevision { source: error, .. },
+            ) => {
                 if explicit_tool {
                     bail!(
                         "Failed to parse the lockfile for tool `{name}` at `{}`: {error}",
