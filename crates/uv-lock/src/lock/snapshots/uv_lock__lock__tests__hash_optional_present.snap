@@ -136,7 +136,7 @@ Ok(
             constraints: {},
             overrides: {},
             excludes: {},
-            build_constraints: {},
+            build_constraints: [],
             dependency_metadata: {},
         },
     },

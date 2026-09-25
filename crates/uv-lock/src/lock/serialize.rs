@@ -1,4 +1,3 @@
-use std::collections::BTreeSet;
 use std::fmt;
 
 use rustc_hash::FxHashMap;
@@ -599,12 +598,13 @@ fn write_dependency_inline(
 }
 
 /// Writes a Serde-backed array, omitting the key when the array is empty.
-fn write_serialized_non_empty_array<T: Serialize>(
+fn write_serialized_non_empty_array<'a, T: Serialize + 'a>(
     writer: &mut LockWriter,
     key: &str,
-    values: &BTreeSet<T>,
+    values: impl IntoIterator<Item = &'a T, IntoIter: ExactSizeIterator>,
 ) -> Result<(), WriteError> {
-    if values.is_empty() {
+    let values = values.into_iter();
+    if values.len() == 0 {
         return Ok(());
     }
     write_serialized_array(writer, key, values)
@@ -614,11 +614,12 @@ fn write_serialized_non_empty_array<T: Serialize>(
 ///
 /// Empty and single-element arrays stay on one line, while larger arrays place each element on
 /// its own line. Unlike [`write_serialized_non_empty_array`], this retains empty dependency groups.
-fn write_serialized_array<T: Serialize>(
+fn write_serialized_array<'a, T: Serialize + 'a>(
     writer: &mut LockWriter,
     key: &str,
-    values: &BTreeSet<T>,
+    values: impl IntoIterator<Item = &'a T, IntoIter: ExactSizeIterator>,
 ) -> Result<(), WriteError> {
+    let values = values.into_iter();
     writer.key_start(key)?;
     let write_value = |writer: &mut LockWriter, value: &T| {
         let value = serialize_value(value)?;

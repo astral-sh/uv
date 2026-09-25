@@ -176,6 +176,585 @@ fn lock_preserves_noncanonical_lock() -> Result<()> {
     Ok(())
 }
 
+/// Equivalent dependency declarations should reuse metadata already stored in a lockfile.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_equivalent_requirements() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links = context.workspace_root.join("test/links");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "ok>=1.0",
+            "ok>=2",
+            "ok<3",
+            "ok<4",
+        ]
+
+        [dependency-groups]
+        dev = [
+            "ok>=1",
+            "ok<3",
+            "ok<4",
+        ]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--no-index").arg("--find-links").arg(&links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    let locked = context.read("uv.lock");
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(locked, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "ok"
+        version = "2.0.0"
+        source = { registry = "[WORKSPACE]/test/links" }
+        wheels = [
+            { path = "[WORKSPACE]/test/links/ok-2.0.0-py3-none-any.whl" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "ok" },
+        ]
+
+        [package.dev-dependencies]
+        dev = [
+            { name = "ok" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "ok", specifier = "<3" },
+            { name = "ok", specifier = "<4" },
+            { name = "ok", specifier = ">=1.0" },
+            { name = "ok", specifier = ">=2" },
+        ]
+
+        [package.metadata.requires-dev]
+        dev = [
+            { name = "ok", specifier = "<3" },
+            { name = "ok", specifier = "<4" },
+            { name = "ok", specifier = ">=1" },
+        ]
+        "#);
+    });
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok>=2.0.0,<3"]
+
+        [dependency-groups]
+        dev = ["ok>=1,<3.0.0"]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-index").arg("--find-links").arg(&links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), locked);
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lockfile-normalization").arg("--locked").arg("--offline").arg("--no-index").arg("--find-links").arg(&links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), locked);
+
+    fs_err::remove_file(context.temp_dir.child("uv.lock"))?;
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lockfile-normalization").arg("--offline").arg("--no-index").arg("--find-links").arg(&links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "ok"
+        version = "2.0.0"
+        source = { registry = "[WORKSPACE]/test/links" }
+        wheels = [
+            { path = "[WORKSPACE]/test/links/ok-2.0.0-py3-none-any.whl" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "ok" },
+        ]
+
+        [package.dev-dependencies]
+        dev = [
+            { name = "ok" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "ok", specifier = ">=2,<3" }]
+
+        [package.metadata.requires-dev]
+        dev = [{ name = "ok", specifier = ">=1,<3" }]
+        "#);
+    });
+
+    // Tightening a bound must still invalidate the lock, even if the selected version satisfies it.
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok>=2,<2.5"]
+
+        [dependency-groups]
+        dev = ["ok>=1,<3"]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-index").arg("--find-links").arg(&links), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    Ok(())
+}
+
+/// Normalize each manifest input within its own scope and with its own candidate policies.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_equivalent_manifest_inputs() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        constraint-dependencies = [
+            "a>=1",
+            "a>=2",
+            "a<3",
+            "b",
+            "c; python_version < '0'",
+        ]
+        override-dependencies = [
+            "a>=1",
+            "a>=2",
+            "a<3",
+            "b",
+            "c; python_version < '0'",
+            { package = { name = "parent" }, dependencies = ["a>=1", "a>=2", "a<3"] },
+            { package = { name = "parent", version = "1" }, dependencies = [] },
+        ]
+        exclude-dependencies = [
+            "c",
+            "c",
+            { package = { name = "parent" }, dependencies = ["b", "a"] },
+            { package = { name = "parent" }, dependencies = ["c"] },
+            { package = { name = "parent", version = "1" }, dependencies = [] },
+        ]
+        build-constraint-dependencies = [
+            "a>=1",
+            "a>=2",
+            "a<3",
+        ]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lockfile-normalization").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    let locked = context.read("uv.lock");
+    assert_snapshot!(locked, @r#"
+    version = 1
+    revision = 3
+    requires-python = ">=3.12"
+
+    [options]
+    exclude-newer = "2024-03-25T00:00:00Z"
+
+    [manifest]
+    constraints = [{ name = "a", specifier = ">=2,<3" }]
+    overrides = [
+        { package = { name = "parent" }, dependencies = [{ name = "a", specifier = ">=2,<3" }] },
+        { package = { name = "parent", version = "1" }, dependencies = [] },
+        { name = "a", specifier = ">=2,<3" },
+        { name = "b" },
+        { name = "c", marker = "python_version < '0'" },
+    ]
+    excludes = [
+        { package = { name = "parent" }, dependencies = ["a", "b", "c"] },
+        { package = { name = "parent", version = "1" }, dependencies = [] },
+        "c",
+    ]
+    build-constraints = [{ name = "a", specifier = ">=2,<3" }]
+
+    [[package]]
+    name = "project"
+    version = "0.1.0"
+    source = { virtual = "." }
+    "#);
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        constraint-dependencies = ["a>=2.0,<3"]
+        override-dependencies = [
+            "a>=2,<3.0",
+            "b",
+            "c; python_version < '0'",
+            { package = { name = "parent" }, dependencies = ["a>=2,<3"] },
+            { package = { name = "parent", version = "1.0" }, dependencies = [] },
+        ]
+        exclude-dependencies = [
+            "c",
+            { package = { name = "parent" }, dependencies = ["a", "b", "c"] },
+            { package = { name = "parent", version = "1.0" }, dependencies = [] },
+        ]
+        build-constraint-dependencies = ["a>=2.0,<3"]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), locked);
+    // Older locks can contain the original, unnormalized declarations.
+    let legacy_lock = indoc! {r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        constraints = [
+            { name = "a", specifier = "<3" },
+            { name = "a", specifier = ">=1" },
+            { name = "a", specifier = ">=2" },
+            { name = "b" },
+            { name = "c", marker = "python_version < '0'" },
+        ]
+        overrides = [
+            { package = { name = "parent" }, dependencies = [{ name = "a", specifier = ">=1" }, { name = "a", specifier = ">=2" }, { name = "a", specifier = "<3" }] },
+            { package = { name = "parent", version = "1" }, dependencies = [] },
+            { name = "a", specifier = "<3" },
+            { name = "a", specifier = ">=1" },
+            { name = "a", specifier = ">=2" },
+            { name = "b" },
+            { name = "c", marker = "python_version < '0'" },
+        ]
+        excludes = [
+            { package = { name = "parent" }, dependencies = ["b", "a"] },
+            { package = { name = "parent" }, dependencies = ["c"] },
+            { package = { name = "parent", version = "1" }, dependencies = [] },
+            "c",
+        ]
+        build-constraints = [
+            { name = "a", specifier = "<3" },
+            { name = "a", specifier = ">=1" },
+            { name = "a", specifier = ">=2" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+    "#};
+    context.temp_dir.child("uv.lock").write_str(legacy_lock)?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), legacy_lock);
+    Ok(())
+}
+
+/// Normalization and unused-input pruning can be combined when checking an existing lock.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_equivalent_pruned_inputs() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let links = context.workspace_root.join("test/links");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "ok",
+            "excluded",
+        ]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs", "lockfile-normalization"]
+        constraint-dependencies = [
+            "ok>=1",
+            "ok>=2",
+            "unused>=1",
+        ]
+        override-dependencies = [
+            "ok>=1",
+            "ok>=2",
+            "unused-override>=1",
+        ]
+        exclude-dependencies = [
+            "excluded",
+            "excluded",
+            "unused",
+        ]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--no-index").arg("--find-links").arg(&links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    let locked = context.read("uv.lock");
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(locked, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        constraints = [{ name = "ok", specifier = ">=2" }]
+        overrides = [{ name = "ok", specifier = ">=2" }]
+        excludes = ["excluded"]
+
+        [[package]]
+        name = "ok"
+        version = "2.0.0"
+        source = { registry = "[WORKSPACE]/test/links" }
+        wheels = [
+            { path = "[WORKSPACE]/test/links/ok-2.0.0-py3-none-any.whl" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "ok" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "excluded" },
+            { name = "ok" },
+        ]
+        "#);
+    });
+
+    // Equivalent retained inputs and changes to unused inputs can reuse the lock.
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "ok",
+            "excluded",
+        ]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs", "lockfile-normalization"]
+        constraint-dependencies = [
+            "ok>=2",
+            "other>=1",
+        ]
+        override-dependencies = [
+            "ok>=2",
+            "other-override>=1",
+        ]
+        exclude-dependencies = [
+            "excluded",
+            "other",
+        ]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-index").arg("--find-links").arg(&links), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), locked);
+
+    // A changed retained constraint still invalidates the lock.
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "ok",
+            "excluded",
+        ]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs", "lockfile-normalization"]
+        constraint-dependencies = ["ok>=2,<3"]
+        override-dependencies = ["ok>=2"]
+        exclude-dependencies = ["excluded"]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-index").arg("--find-links").arg(&links), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    Ok(())
+}
+
+/// Reordering build constraints preserves their hash restrictions and can reuse the lock.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_build_constraint_order() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        build-constraint-dependencies = [
+            { requirement = "a==1", hashes = ["sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] },
+            { requirement = "a==1", hashes = ["sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] },
+        ]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    assert_snapshot!(context.read("uv.lock"), @r#"
+    version = 1
+    revision = 3
+    requires-python = ">=3.12"
+
+    [options]
+    exclude-newer = "2024-03-25T00:00:00Z"
+
+    [manifest]
+    build-constraints = [
+        { name = "a", specifier = "==1", hashes = ["sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] },
+        { name = "a", specifier = "==1", hashes = ["sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] },
+    ]
+
+    [[package]]
+    name = "project"
+    version = "0.1.0"
+    source = { virtual = "." }
+    "#);
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    fs_err::remove_file(context.temp_dir.child("uv.lock"))?;
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lockfile-normalization").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    assert_snapshot!(context.read("uv.lock"), @r#"
+    version = 1
+    revision = 3
+    requires-python = ">=3.12"
+
+    [options]
+    exclude-newer = "2024-03-25T00:00:00Z"
+
+    [manifest]
+    build-constraints = [
+        { name = "a", specifier = "==1", hashes = ["sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] },
+        { name = "a", specifier = "==1", hashes = ["sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"] },
+    ]
+
+    [[package]]
+    name = "project"
+    version = "0.1.0"
+    source = { virtual = "." }
+    "#);
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lockfile-normalization").arg("--locked").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // The same declarations can reuse a preview lock without enabling the feature.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        build-constraint-dependencies = [
+            { requirement = "a==1", hashes = ["sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] },
+            { requirement = "a==1", hashes = ["sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] },
+        ]
+    "#})?;
+    // Reordering the same declarations can reuse the lock with or without the preview.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lockfile-normalization").arg("--locked").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    Ok(())
+}
+
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_wheel_registry() -> Result<()> {
@@ -26797,7 +27376,7 @@ fn lock_explicit_default_index() -> Result<()> {
     DEBUG Found static `requires-dist` for: [TEMP_DIR]/
     DEBUG Resolving despite existing lockfile due to mismatched requirements for: `project==0.1.0`
       Requested: {Requirement { name: PackageName("anyio"), extras: [], groups: [], marker: true, source: Registry { specifier: VersionSpecifiers([]), index: None, conflict: None }, scope: Global, origin: None }}
-      Existing: {Requirement { name: PackageName("iniconfig"), extras: [], groups: [], marker: true, source: Registry { specifier: VersionSpecifiers([VersionSpecifier { operator: Equal, version: "2.0.0" }]), index: Some(IndexMetadata { url: Url(VerbatimUrl { url: DisplaySafeUrl { scheme: "https", cannot_be_a_base: false, username: "", password: None, host: Some(Domain("test.pypi.org")), port: None, path: "/simple", query: None, fragment: None }, given: None, expanded: false, force_relative: false }), format: Simple }), conflict: None }, scope: Global, origin: None }}
+      Existing: {Requirement { name: PackageName("iniconfig"), extras: [], groups: [], marker: true, source: Registry { specifier: VersionSpecifiers([VersionSpecifier { operator: Equal, version: "2" }]), index: Some(IndexMetadata { url: Url(VerbatimUrl { url: DisplaySafeUrl { scheme: "https", cannot_be_a_base: false, username: "", password: None, host: Some(Domain("test.pypi.org")), port: None, path: "/simple", query: None, fragment: None }, given: None, expanded: false, force_relative: false }), format: Simple }), conflict: None }, scope: Global, origin: None }}
     DEBUG Found static `pyproject.toml` for: project @ file://[TEMP_DIR]/
     DEBUG Solving with installed Python version: 3.12.[X]
     DEBUG Solving with target Python version: >=3.12
