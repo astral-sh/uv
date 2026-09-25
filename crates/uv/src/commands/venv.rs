@@ -129,7 +129,7 @@ pub(crate) async fn venv(
         .map(|workspace| {
             (
                 workspace,
-                workspace.environment_selection(ActiveEnvironment::Ignore),
+                workspace.environment_selection(ActiveEnvironment::Ignore, None),
             )
         });
 
