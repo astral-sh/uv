@@ -414,7 +414,11 @@ fn lock_equivalent_manifest_inputs() -> Result<()> {
         { package = { name = "parent", version = "1" }, dependencies = [] },
         "c",
     ]
-    build-constraints = [{ name = "a", specifier = ">=2,<3" }]
+    build-constraints = [
+        { name = "a", specifier = "<3" },
+        { name = "a", specifier = ">=1" },
+        { name = "a", specifier = ">=2" },
+    ]
 
     [[package]]
     name = "project"
@@ -442,7 +446,7 @@ fn lock_equivalent_manifest_inputs() -> Result<()> {
             { package = { name = "parent" }, dependencies = ["a", "b", "c"] },
             { package = { name = "parent", version = "1.0" }, dependencies = [] },
         ]
-        build-constraint-dependencies = ["a>=2.0,<3"]
+        build-constraint-dependencies = ["a>=1", "a>=2", "a<3"]
     "#})?;
     uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
     exit_code: 0 (success)
@@ -500,6 +504,29 @@ fn lock_equivalent_manifest_inputs() -> Result<()> {
     Resolved 1 package in [TIME]
     ");
     assert_eq!(context.read("uv.lock"), legacy_lock);
+
+    // Build constraints continue to use the existing declaration comparison.
+    pyproject_toml.write_str(&context.read("pyproject.toml").replace(
+        "build-constraint-dependencies = [\"a>=1\", \"a>=2\", \"a<3\"]",
+        "build-constraint-dependencies = [\"a>=2,<3\"]",
+    ))?;
+    for preview in [false, true] {
+        let mut command = context.lock();
+        command.arg("--locked").arg("--offline");
+        if preview {
+            command.args(["--preview-features", "lockfile-normalization"]);
+        }
+        insta::allow_duplicates! {
+            uv_snapshot!(context.filters(), command, @"
+            exit_code: 1 (failure)
+            ----- stderr -----
+            Resolved 1 package in [TIME]
+            error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+            hint: To update the lockfile, run `uv lock`.
+            ");
+        }
+    }
     Ok(())
 }
 
@@ -639,118 +666,6 @@ fn lock_equivalent_pruned_inputs() -> Result<()> {
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
 
     hint: To update the lockfile, run `uv lock`.
-    ");
-    Ok(())
-}
-
-/// Reordering build constraints preserves their hash restrictions and can reuse the lock.
-#[cfg(feature = "test-universal")]
-#[test]
-fn lock_build_constraint_order() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! {r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-
-        [tool.uv]
-        build-constraint-dependencies = [
-            { requirement = "a==1", hashes = ["sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] },
-            { requirement = "a==1", hashes = ["sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] },
-        ]
-    "#})?;
-    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    ");
-    assert_snapshot!(context.read("uv.lock"), @r#"
-    version = 1
-    revision = 3
-    requires-python = ">=3.12"
-
-    [options]
-    exclude-newer = "2024-03-25T00:00:00Z"
-
-    [manifest]
-    build-constraints = [
-        { name = "a", specifier = "==1", hashes = ["sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] },
-        { name = "a", specifier = "==1", hashes = ["sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] },
-    ]
-
-    [[package]]
-    name = "project"
-    version = "0.1.0"
-    source = { virtual = "." }
-    "#);
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    ");
-
-    fs_err::remove_file(context.temp_dir.child("uv.lock"))?;
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lockfile-normalization").arg("--offline"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    ");
-    assert_snapshot!(context.read("uv.lock"), @r#"
-    version = 1
-    revision = 3
-    requires-python = ">=3.12"
-
-    [options]
-    exclude-newer = "2024-03-25T00:00:00Z"
-
-    [manifest]
-    build-constraints = [
-        { name = "a", specifier = "==1", hashes = ["sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] },
-        { name = "a", specifier = "==1", hashes = ["sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"] },
-    ]
-
-    [[package]]
-    name = "project"
-    version = "0.1.0"
-    source = { virtual = "." }
-    "#);
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lockfile-normalization").arg("--locked").arg("--offline"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    ");
-
-    // The same declarations can reuse a preview lock without enabling the feature.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    ");
-
-    pyproject_toml.write_str(indoc! {r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-
-        [tool.uv]
-        build-constraint-dependencies = [
-            { requirement = "a==1", hashes = ["sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] },
-            { requirement = "a==1", hashes = ["sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] },
-        ]
-    "#})?;
-    // Reordering the same declarations can reuse the lock with or without the preview.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    ");
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lockfile-normalization").arg("--locked").arg("--offline"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Resolved 1 package in [TIME]
     ");
     Ok(())
 }

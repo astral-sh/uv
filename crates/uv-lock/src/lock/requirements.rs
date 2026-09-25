@@ -4,12 +4,11 @@ use std::path::Path;
 use itertools::Either;
 
 use uv_configuration::{
-    NormalizedBuildConstraints, NormalizedConstraints, NormalizedOverrideEntries,
-    NormalizedRequirements, Override, PackageOverride,
+    NormalizedConstraints, NormalizedOverrideEntries, NormalizedRequirements, Override,
+    PackageOverride,
 };
 use uv_distribution_types::{
-    IndexMetadata, IndexUrl, NameRequirementSpecification, Requirement, RequirementScope,
-    RequirementSource, RequiresPython,
+    IndexMetadata, IndexUrl, Requirement, RequirementScope, RequirementSource, RequiresPython,
 };
 use uv_fs::normalize_path;
 use uv_git_types::GitUrl;
@@ -70,27 +69,6 @@ impl<'a> RequirementNormalizer<'a> {
             })
             .collect::<Result<Vec<_>, LockError>>()
             .map(NormalizedOverrideEntries::from)
-    }
-
-    /// Normalize build constraints while retaining hash restrictions for validation.
-    pub(super) fn build_constraints(
-        &self,
-        constraints: impl IntoIterator<Item = NameRequirementSpecification>,
-    ) -> Result<NormalizedBuildConstraints, LockError> {
-        constraints
-            .into_iter()
-            .map(|constraint| {
-                Ok(NameRequirementSpecification {
-                    requirement: normalize_requirement(
-                        constraint.requirement,
-                        self.root,
-                        self.requires_python,
-                    )?,
-                    hashes: constraint.hashes,
-                })
-            })
-            .collect::<Result<Vec<_>, LockError>>()
-            .map(NormalizedBuildConstraints::from)
     }
 
     fn declarations(
