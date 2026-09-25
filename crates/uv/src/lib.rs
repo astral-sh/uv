@@ -2931,6 +2931,7 @@ async fn run_project(
 
             Box::pin(commands::audit(
                 project_dir,
+                args.requirements,
                 args.extras,
                 args.groups,
                 args.lock_check,
