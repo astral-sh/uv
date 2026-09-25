@@ -299,6 +299,7 @@ fn publish_resolved_settings() -> anyhow::Result<()> {
             "****",
         ),
         index: None,
+        output_format: Text,
         dry_run: false,
         no_attestations: false,
         publish_url: DisplaySafeUrl {
