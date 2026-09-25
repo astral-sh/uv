@@ -165,6 +165,7 @@ pub(crate) async fn metadata(
             let install_target = match target {
                 LockTarget::Workspace(workspace) => InstallTarget::Workspace {
                     workspace,
+                    project_name: None,
                     lock: &lock,
                 },
                 LockTarget::Script(script) => InstallTarget::Script {
@@ -264,7 +265,9 @@ fn metadata_for_target(target: InstallTarget<'_>) -> Result<Metadata> {
         | InstallTarget::Projects {
             workspace, lock, ..
         }
-        | InstallTarget::Workspace { workspace, lock }
+        | InstallTarget::Workspace {
+            workspace, lock, ..
+        }
         | InstallTarget::NonProjectWorkspace { workspace, lock } => {
             Ok(Metadata::from_lock(workspace, lock)?)
         }

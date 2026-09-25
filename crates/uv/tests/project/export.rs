@@ -64,6 +64,78 @@ fn export_reuses_settings_workspace_discovery() -> Result<()> {
     Ok(())
 }
 
+/// Filter the current project when exporting every workspace member.
+#[test]
+fn export_no_emit_project_all_packages() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+
+    // Exclude the root project, but emit its child dependency.
+    uv_snapshot!(context.filters(), context.export().arg("--all-packages").arg("--no-emit-project").arg("--no-header").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./child
+        # via project
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // From the child, exclude the child, even though the root depends on it.
+    uv_snapshot!(context.filters(), context.export().current_dir(child.path()).arg("--all-packages").arg("--no-emit-project").arg("--no-header").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e .
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // The inverse filter should emit only the current project.
+    uv_snapshot!(context.filters(), context.export().current_dir(child.path()).arg("--all-packages").arg("--only-emit-project").arg("--no-header").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./child
+        # via project
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 #[cfg(feature = "test-universal")]
 #[test]
 fn requirements_txt_dependency() -> Result<()> {

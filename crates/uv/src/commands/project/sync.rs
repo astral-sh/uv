@@ -523,6 +523,7 @@ pub(crate) fn identify_project_installation_target<'a>(
             if all_packages {
                 InstallTarget::Workspace {
                     workspace: project.workspace(),
+                    project_name: Some(project.project_name()),
                     lock,
                 }
             } else {
