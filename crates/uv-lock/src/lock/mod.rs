@@ -3768,8 +3768,8 @@ impl Lock {
             return Ok(SatisfiesResult::MismatchedPackageRequirements(
                 &package.id.name,
                 package.id.version.as_ref(),
-                expected_requirements.into_inner().into_iter().collect(),
-                actual.into_inner().into_iter().collect(),
+                expected_requirements.into_iter().collect(),
+                actual.into_iter().collect(),
             ));
         }
 
@@ -3796,27 +3796,20 @@ impl Lock {
                 package.id.version.as_ref(),
                 expected_groups
                     .into_iter()
-                    .map(|(group, requirements)| {
-                        (group, requirements.into_inner().into_iter().collect())
-                    })
+                    .map(|(group, requirements)| (group, requirements.into_iter().collect()))
                     .collect(),
                 actual
                     .into_iter()
-                    .map(|(group, requirements)| {
-                        (group, requirements.into_inner().into_iter().collect())
-                    })
+                    .map(|(group, requirements)| (group, requirements.into_iter().collect()))
                     .collect(),
             ));
         }
         if allow_missing_package_metadata {
-            let expected_requirements = expected_requirements.into_inner().into_iter().collect();
-            let flattened =
-                flattened.map(|requirements| requirements.into_inner().into_iter().collect());
+            let expected_requirements = expected_requirements.into_iter().collect();
+            let flattened = flattened.map(|requirements| requirements.into_iter().collect());
             let expected_groups = expected_groups
                 .into_iter()
-                .map(|(group, requirements)| {
-                    (group, requirements.into_inner().into_iter().collect())
-                })
+                .map(|(group, requirements)| (group, requirements.into_iter().collect()))
                 .collect();
             let declarations = flattened.as_ref().unwrap_or(&expected_requirements);
             let package_activated_extras = activated_extras
@@ -4079,8 +4072,8 @@ impl Lock {
             let actual = normalizer.requirements(self.manifest.requirements.iter().cloned())?;
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedRequirements(
-                    expected.into_inner().into_iter().collect(),
-                    actual.into_inner().into_iter().collect(),
+                    expected.into_iter().collect(),
+                    actual.into_iter().collect(),
                 ));
             }
         }
@@ -4097,11 +4090,11 @@ impl Lock {
             let actual = normalizer.constraints(self.manifest.constraints.iter().cloned())?;
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedConstraints(
-                    expected.into_inner().into_iter().collect(),
-                    actual.into_inner().into_iter().collect(),
+                    expected.into_iter().collect(),
+                    actual.into_iter().collect(),
                 ));
             }
-            expected.into_inner().into_iter().collect()
+            expected.into_iter().collect()
         };
 
         let normalized_overrides = {
@@ -4114,8 +4107,8 @@ impl Lock {
             let actual = normalizer.overrides(self.manifest.overrides.iter().cloned())?;
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedOverrides(
-                    expected.into_inner().into_iter().collect(),
-                    actual.into_inner().into_iter().collect(),
+                    expected.into_iter().collect(),
+                    actual.into_iter().collect(),
                 ));
             }
             expected.into_inner()
@@ -4134,8 +4127,8 @@ impl Lock {
             );
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedExcludes(
-                    expected.into_inner().into_iter().collect(),
-                    actual.into_inner().into_iter().collect(),
+                    expected.into_iter().collect(),
+                    actual.into_iter().collect(),
                 ));
             }
         }
@@ -4200,15 +4193,11 @@ impl Lock {
                 return Ok(SatisfiesResult::MismatchedDependencyGroups(
                     expected
                         .into_iter()
-                        .map(|(group, requirements)| {
-                            (group, requirements.into_inner().into_iter().collect())
-                        })
+                        .map(|(group, requirements)| (group, requirements.into_iter().collect()))
                         .collect(),
                     actual
                         .into_iter()
-                        .map(|(group, requirements)| {
-                            (group, requirements.into_inner().into_iter().collect())
-                        })
+                        .map(|(group, requirements)| (group, requirements.into_iter().collect()))
                         .collect(),
                 ));
             }
@@ -6084,32 +6073,20 @@ impl ResolverManifest {
         let normalize = uv_preview::is_enabled(PreviewFeature::LockfileNormalization);
         Self {
             members: members.into_iter().collect(),
-            requirements: normalize_collection(requirements, normalize)
-                .map_right(NormalizedRequirements::into_inner)
-                .into_iter()
-                .collect(),
-            constraints: normalize_collection(constraints, normalize)
-                .map_right(NormalizedConstraints::into_inner)
-                .into_iter()
-                .collect(),
-            overrides: normalize_collection(overrides, normalize)
-                .map_right(NormalizedOverrideEntries::into_inner)
-                .into_iter()
-                .collect(),
-            excludes: normalize_collection(excludes, normalize)
-                .map_right(NormalizedExcludes::into_inner)
-                .into_iter()
-                .collect(),
+            requirements: normalize_collection::<_, NormalizedRequirements>(
+                requirements,
+                normalize,
+            ),
+            constraints: normalize_collection::<_, NormalizedConstraints>(constraints, normalize),
+            overrides: normalize_collection::<_, NormalizedOverrideEntries>(overrides, normalize),
+            excludes: normalize_collection::<_, NormalizedExcludes>(excludes, normalize),
             build_constraints: build_constraints.into_iter().collect(),
             dependency_groups: dependency_groups
                 .into_iter()
                 .map(|(group, requirements)| {
                     (
                         group,
-                        normalize_collection(requirements, normalize)
-                            .map_right(NormalizedRequirements::into_inner)
-                            .into_iter()
-                            .collect(),
+                        normalize_collection::<_, NormalizedRequirements>(requirements, normalize),
                     )
                 })
                 .collect(),
@@ -7135,11 +7112,10 @@ impl PackageMetadata {
             .cloned()
             .map(|requirement| requirement.relative_to(root))
             .collect::<Result<Vec<_>, _>>()
-            .map(|requirements| normalize_collection(requirements, normalize))
-            .map_err(LockErrorKind::RequirementRelativePath)?
-            .map_right(NormalizedRequirements::into_inner)
-            .into_iter()
-            .collect();
+            .map(|requirements| {
+                normalize_collection::<_, NormalizedRequirements>(requirements, normalize)
+            })
+            .map_err(LockErrorKind::RequirementRelativePath)?;
         let dependency_groups = metadata
             .dependency_groups
             .iter()
@@ -7149,11 +7125,10 @@ impl PackageMetadata {
                     .cloned()
                     .map(|requirement| requirement.relative_to(root))
                     .collect::<Result<Vec<_>, _>>()
-                    .map(|requirements| normalize_collection(requirements, normalize))
-                    .map_err(LockErrorKind::RequirementRelativePath)?
-                    .map_right(NormalizedRequirements::into_inner)
-                    .into_iter()
-                    .collect();
+                    .map(|requirements| {
+                        normalize_collection::<_, NormalizedRequirements>(requirements, normalize)
+                    })
+                    .map_err(LockErrorKind::RequirementRelativePath)?;
                 Ok::<_, LockError>((group.clone(), requirements))
             })
             .collect::<Result<_, _>>()?;

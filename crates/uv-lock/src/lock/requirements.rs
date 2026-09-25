@@ -1,8 +1,6 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use itertools::Either;
-
 use uv_configuration::{
     NormalizedConstraints, NormalizedOverrideEntries, NormalizedRequirements, Override,
     PackageOverride,
@@ -83,14 +81,16 @@ impl<'a> RequirementNormalizer<'a> {
 }
 
 /// Prepare declarations for serialization, combining equivalent declarations in preview mode.
-pub(super) fn normalize_collection<T: Ord, N: From<Vec<T>>>(
+pub(super) fn normalize_collection<T: Ord, N: From<Vec<T>> + IntoIterator<Item = T>>(
     declarations: impl IntoIterator<Item = T>,
     normalize: bool,
-) -> Either<BTreeSet<T>, N> {
+) -> BTreeSet<T> {
     if normalize {
-        Either::Right(N::from(declarations.into_iter().collect()))
+        N::from(declarations.into_iter().collect())
+            .into_iter()
+            .collect()
     } else {
-        Either::Left(declarations.into_iter().collect())
+        declarations.into_iter().collect()
     }
 }
 
