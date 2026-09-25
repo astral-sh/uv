@@ -16923,6 +16923,171 @@ fn project_build_hashes_lock_and_sync() -> Result<()> {
 }
 
 #[test]
+fn project_build_hashes_constraint_intersection() -> Result<()> {
+    let (context, hash) = build_hash_project()?;
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["build-dependency==1.0.0"]
+        build-backend = "backend"
+        backend-path = ["."]
+
+        [tool.uv]
+        no-index = true
+        find-links = ["wheels"]
+        build-constraint-dependencies = [
+            {{ requirement = "build-dependency==1.0.0", hashes = ["sha256:0000000000000000000000000000000000000000000000000000000000000000", "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"] }},
+            {{ requirement = "build-dependency==1.0.0", hashes = ["sha256:{hash}", "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"] }},
+            "build-dependency==1.0.0",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // The wheel's hash appears in only one constraint, so a frozen build must reject it.
+    uv_snapshot!(context.filters(), context.sync().args(["--frozen", "--no-editable"]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Failed to install requirements from `build-system.requires`
+      cause: Failed to download `build-dependency==1.0.0`
+      cause: Hash mismatch for `build-dependency==1.0.0`
+
+             Expected:
+               sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+
+             Computed:
+               sha256:[BUILD_HASH]
+    ");
+    context
+        .temp_dir
+        .child("backend-executed")
+        .assert(predicate::path::missing());
+
+    // Allow the wheel in both constraints. The hashless declaration adds no hash restriction.
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["build-dependency==1.0.0"]
+        build-backend = "backend"
+        backend-path = ["."]
+
+        [tool.uv]
+        no-index = true
+        find-links = ["wheels"]
+        build-constraint-dependencies = [
+            {{ requirement = "build-dependency==1.0.0", hashes = ["sha256:{hash}", "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"] }},
+            {{ requirement = "build-dependency==1.0.0", hashes = ["sha256:0000000000000000000000000000000000000000000000000000000000000000", "sha256:{hash}"] }},
+            "build-dependency==1.0.0",
+        ]
+    "#})?;
+    uv_snapshot!(context.filters(), context.sync().arg("--no-editable"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+    context
+        .temp_dir
+        .child("backend-executed")
+        .assert(predicate::path::exists());
+    Ok(())
+}
+
+#[test]
+fn project_build_hashes_conflicting_constraints() -> Result<()> {
+    let (context, hash) = build_hash_project()?;
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["build-dependency==1.0.0"]
+        build-backend = "backend"
+        backend-path = ["."]
+
+        [tool.uv]
+        no-index = true
+        find-links = ["wheels"]
+        build-constraint-dependencies = [
+            {{ requirement = "build-dependency==1.0.0", hashes = ["sha256:0000000000000000000000000000000000000000000000000000000000000000"] }},
+            {{ requirement = "build-dependency==1.0.0", hashes = ["sha256:{hash}"] }},
+        ]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Conflicting hashes for `build-dependency==1.0.0`: no hash is allowed by all requirements and constraints
+    ");
+
+    // The same conflict is rejected for ordinary constraints in require-hashes mode.
+    context.temp_dir.child("constraints.txt").write_str(&formatdoc! {"
+        build-dependency==1.0.0 --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000
+        build-dependency==1.0.0 --hash=sha256:{hash}
+    "})?;
+    uv_snapshot!(context.filters(), context.pip_install().args([
+        "build-dependency==1.0.0",
+        "--no-index",
+        "--find-links", "wheels",
+        "--constraint", "constraints.txt",
+        "--require-hashes",
+    ]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Conflicting hashes for `build-dependency==1.0.0`: no hash is allowed by all requirements and constraints
+    ");
+
+    // Reversing the declarations must report the same conflict.
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["build-dependency==1.0.0"]
+        build-backend = "backend"
+        backend-path = ["."]
+
+        [tool.uv]
+        no-index = true
+        find-links = ["wheels"]
+        build-constraint-dependencies = [
+            {{ requirement = "build-dependency==1.0.0", hashes = ["sha256:{hash}"] }},
+            {{ requirement = "build-dependency==1.0.0", hashes = ["sha256:0000000000000000000000000000000000000000000000000000000000000000"] }},
+        ]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Conflicting hashes for `build-dependency==1.0.0`: no hash is allowed by all requirements and constraints
+    ");
+    context
+        .temp_dir
+        .child("backend-executed")
+        .assert(predicate::path::missing());
+    Ok(())
+}
+
+#[test]
 fn project_build_hashes_incorrect() -> Result<()> {
     let (context, _) = build_hash_project()?;
     let pyproject = context.read("pyproject.toml");
