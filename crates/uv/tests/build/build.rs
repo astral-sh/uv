@@ -2176,42 +2176,6 @@ async fn build_transitive_url_build_requirement_hashes() -> Result<()> {
     Ok(())
 }
 
-/// A build constraint must not be bypassed by a later-discovered direct requirement.
-#[test]
-fn build_require_hashes_md5_constraint() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let wheel = context
-        .workspace_root
-        .join("test/links/ok-2.0.0-py3-none-any.whl");
-    let url = Url::from_file_path(&wheel).map_err(|()| anyhow!("invalid wheel path"))?;
-    let project = context.temp_dir.child("project");
-    project.child("pyproject.toml").write_str(&formatdoc! {r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-
-        [build-system]
-        requires = ["ok @ {url}#sha256=8163cd4f0477f8e93b856ac6a517fe5fa0f29339291fe2807d5376df685f6697"]
-        build-backend = "backend"
-    "#})?;
-    project.child("constraints.txt").write_str(&formatdoc! {r"
-        ok @ {url} --hash=md5:00000000000000000000000000000000
-    "})?;
-
-    uv_snapshot!(context.filters(), context.build()
-        .args(["--wheel", "--no-index", "--require-hashes", "--build-constraint", "constraints.txt"])
-        .current_dir(&project), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    Building wheel...
-    error: Failed to build `[TEMP_DIR]/project`
-      cause: Failed to resolve requirements from `build-system.requires`
-      cause: In `--require-hashes` mode, the constraint for ok @ file://[WORKSPACE]/test/links/ok-2.0.0-py3-none-any.whl#sha256=8163cd4f0477f8e93b856ac6a517fe5fa0f29339291fe2807d5376df685f6697 only has insecure `md5` hashes
-    ");
-
-    Ok(())
-}
-
 #[test]
 fn build_quiet() -> Result<()> {
     let context = uv_test::test_context!("3.12");
