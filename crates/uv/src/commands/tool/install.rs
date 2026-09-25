@@ -814,6 +814,12 @@ pub(crate) async fn install(
                         python,
                         existing_tool_receipt.entrypoints().iter().cloned(),
                         options.clone(),
+                    )
+                    .with_executable_packages(
+                        existing_tool_receipt
+                            .executable_packages()
+                            .into_iter()
+                            .filter(|package| package != package_name),
                     ),
                 )?;
                 writeln!(
@@ -1071,6 +1077,7 @@ pub(crate) async fn install(
         receipt_excludes,
         receipt_build_constraints,
         tool_lock.as_ref(),
+        None,
         printer,
     )?;
 

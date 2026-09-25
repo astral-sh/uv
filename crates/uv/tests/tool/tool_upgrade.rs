@@ -546,7 +546,7 @@ fn tool_upgrade_name() {
     ");
 }
 
-/// Retry a failed executable replacement without silently dropping new entrypoints.
+/// Retry a failed executable replacement and install newly added entrypoints.
 #[cfg(windows)]
 #[test]
 fn tool_upgrade_retry_recorded_executable() -> Result<()> {
@@ -606,8 +606,6 @@ fn tool_upgrade_retry_recorded_executable() -> Result<()> {
       cause: [FILE ERROR]
     ");
 
-    // The initial upgrade may have installed the new executable before failing.
-    let extra_exists = bin_dir.join("pybabel-extra.exe").exists();
     context
         .tool_upgrade()
         .arg("babel")
@@ -618,6 +616,7 @@ fn tool_upgrade_retry_recorded_executable() -> Result<()> {
         .failure();
     drop(locked);
     assert_eq!(fs_err::read(executable.path())?, b"stale executable");
+    assert!(bin_dir.join("pybabel-extra.exe").exists());
 
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("babel")
@@ -626,22 +625,10 @@ fn tool_upgrade_retry_recorded_executable() -> Result<()> {
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    warning: The executables for `babel` have changed; new or removed executables were not updated
     Repaired 1 executable: pybabel
     ");
     let installed = venv_bin_path(context.temp_dir.join("tools").join("babel")).join("pybabel.exe");
     assert_eq!(fs_err::read(executable.path())?, fs_err::read(installed)?);
-    assert_eq!(bin_dir.join("pybabel-extra.exe").exists(), extra_exists);
-
-    context
-        .tool_upgrade()
-        .arg("babel")
-        .arg("--reinstall")
-        .arg("--index-url")
-        .arg(new_index.index_url())
-        .env(EnvVars::PATH, bin_dir.as_os_str())
-        .assert()
-        .success();
     assert!(bin_dir.join("pybabel-extra.exe").exists());
     Ok(())
 }
@@ -728,7 +715,84 @@ fn tool_upgrade_repair_only_missing_executable() -> Result<()> {
     Ok(())
 }
 
-/// Keep executable providers in the receipt when a dependency removes its executables.
+/// Retain executables installed before an upgrade fails.
+#[test]
+fn tool_upgrade_recovers_partially_installed_executables() -> Result<()> {
+    let old = toml::from_str::<Scenario>(indoc! {r#"
+        name = "tool-with-one-executable"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.example.versions."1.0.0"]
+        requires_python = ">=3.11"
+        sdist = false
+        entry_points = ["z-script"]
+    "#})?;
+    let new = toml::from_str::<Scenario>(indoc! {r#"
+        name = "tool-with-two-executables"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.example.versions."2.0.0"]
+        requires_python = ">=3.11"
+        sdist = false
+        entry_points = ["a-script", "z-script"]
+    "#})?;
+    let old_index = PackseServer::from_scenario(&old);
+    let new_index = PackseServer::from_scenario(&new);
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
+    let bin_dir = context.temp_dir.child("bin");
+    let existing = bin_dir.join(format!("z-script{}", std::env::consts::EXE_SUFFIX));
+    let added = bin_dir.join(format!("a-script{}", std::env::consts::EXE_SUFFIX));
+    let receipt = context.temp_dir.join("tools/example/uv-receipt.toml");
+
+    context
+        .tool_install()
+        .arg("example")
+        .arg("--index-url")
+        .arg(old_index.index_url())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+    fs_err::remove_file(&existing)?;
+    fs_err::create_dir(&existing)?;
+    context
+        .tool_upgrade()
+        .arg("example")
+        .arg("--index-url")
+        .arg(new_index.index_url())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .failure();
+    assert!(added.is_file());
+    let receipt: toml::Value = toml::from_str(&fs_err::read_to_string(receipt)?)?;
+    assert!(
+        receipt["tool"]["entrypoints"]
+            .as_array()
+            .is_some_and(|entries| entries
+                .iter()
+                .any(|entry| entry["name"].as_str() == Some("a-script")))
+    );
+
+    fs_err::remove_dir(&existing)?;
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("example")
+        .arg("--index-url")
+        .arg(new_index.index_url())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Repaired 1 executable: z-script
+    ");
+    assert!(existing.is_file());
+    assert!(added.is_file());
+    Ok(())
+}
+
+/// Reconcile changed executables while retaining the requested provider.
 #[test]
 fn tool_upgrade_keeps_executable_provider() -> Result<()> {
     let old = toml::from_str::<Scenario>(indoc! {r#"
@@ -758,9 +822,27 @@ fn tool_upgrade_keeps_executable_provider() -> Result<()> {
         requires_python = ">=3.11"
         sdist = false
     "#})?;
+    let restored = toml::from_str::<Scenario>(indoc! {r#"
+        name = "tool-with-restored-provider-executable"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.owner.versions."1.0.0"]
+        requires_python = ">=3.11"
+        sdist = false
+        entry_points = ["owner"]
+        [packages.provider.versions."3.0.0"]
+        requires_python = ">=3.11"
+        sdist = false
+        entry_points = ["provider-new"]
+    "#})?;
     let old_index = PackseServer::from_scenario(&old);
     let new_index = PackseServer::from_scenario(&new);
-    let context = uv_test::test_context!("3.12").with_tool_dirs();
+    let restored_index = PackseServer::from_scenario(&restored);
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
     let bin_dir = context.temp_dir.child("bin");
     let receipt = context.temp_dir.join("tools/owner/uv-receipt.toml");
 
@@ -775,19 +857,66 @@ fn tool_upgrade_keeps_executable_provider() -> Result<()> {
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .assert()
         .success();
-    let before: toml::Value = toml::from_str(&fs_err::read_to_string(&receipt)?)?;
+    let mut before: toml::Value = toml::from_str(&fs_err::read_to_string(&receipt)?)?;
+    assert_eq!(
+        before["tool"]["executable-packages"][0].as_str(),
+        Some("provider")
+    );
+    let Some(tool) = before["tool"].as_table_mut() else {
+        bail!("Expected a tool receipt");
+    };
+    tool.remove("executable-packages");
+    fs_err::write(&receipt, toml::to_string(&before)?)?;
 
-    context
-        .tool_upgrade()
+    uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("owner")
         .arg("--index-url")
         .arg(new_index.index_url())
         .env(EnvVars::UV_PREVIEW, "0")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Modified owner environment
+     - provider==1.0.0
+     + provider==2.0.0
+    Removed 1 executable: provider
+    ");
+    let after: toml::Value = toml::from_str(&fs_err::read_to_string(&receipt)?)?;
+    assert_eq!(
+        after["tool"]["executable-packages"][0].as_str(),
+        Some("provider")
+    );
+    assert_eq!(
+        after["tool"]["entrypoints"].as_array().map(Vec::len),
+        Some(1)
+    );
+    let executable = bin_dir.child(format!("provider-new{}", std::env::consts::EXE_SUFFIX));
+    executable.write_str("unrelated executable")?;
+    context
+        .tool_upgrade()
+        .arg("owner")
+        .arg("--index-url")
+        .arg(restored_index.index_url())
+        .env(EnvVars::UV_PREVIEW, "0")
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .assert()
-        .success();
-    let after: toml::Value = toml::from_str(&fs_err::read_to_string(&receipt)?)?;
-    assert_eq!(before["tool"]["entrypoints"], after["tool"]["entrypoints"]);
+        .failure();
+    assert_eq!(
+        fs_err::read_to_string(executable.path())?,
+        "unrelated executable"
+    );
+    fs_err::remove_file(executable.path())?;
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("owner")
+        .arg("--index-url")
+        .arg(restored_index.index_url())
+        .env(EnvVars::UV_PREVIEW, "0")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Installed 1 executable: provider-new
+    ");
+    assert!(executable.path().is_file());
     Ok(())
 }
 

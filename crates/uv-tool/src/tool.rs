@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::fmt::{self, Display, Formatter};
 use std::path::PathBuf;
 
@@ -7,6 +8,7 @@ use toml_edit::{Array, Item, Table, Value, value};
 use uv_configuration::ExcludeDependency;
 use uv_distribution_types::{NameRequirementSpecification, Requirement};
 use uv_fs::{PortablePath, Simplified};
+use uv_normalize::PackageName;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::PythonRequest;
 use uv_settings::{ToolOptions, ToolOptionsWire};
@@ -32,6 +34,8 @@ pub struct Tool {
     python: Option<PythonRequest>,
     /// A mapping of entry point names to their metadata.
     entrypoints: Vec<ToolEntrypoint>,
+    /// Additional packages requested as sources of executables.
+    executable_packages: Vec<PackageName>,
     /// The [`ToolOptions`] used to install this tool.
     options: ToolOptions,
 }
@@ -51,6 +55,8 @@ struct ToolWire {
     build_constraint_dependencies: Vec<NameRequirementSpecification>,
     python: Option<PythonRequest>,
     entrypoints: Vec<ToolEntrypoint>,
+    #[serde(default)]
+    executable_packages: Vec<PackageName>,
     #[serde(default)]
     options: ToolOptionsWire,
 }
@@ -79,6 +85,7 @@ impl From<Tool> for ToolWire {
             build_constraint_dependencies: tool.build_constraints,
             python: tool.python,
             entrypoints: tool.entrypoints,
+            executable_packages: tool.executable_packages,
             options: tool.options.into(),
         }
     }
@@ -103,6 +110,7 @@ impl TryFrom<ToolWire> for Tool {
             build_constraints: tool.build_constraint_dependencies,
             python: tool.python,
             entrypoints: tool.entrypoints,
+            executable_packages: tool.executable_packages,
             options: tool.options.into(),
         })
     }
@@ -191,6 +199,7 @@ impl Tool {
             build_constraints,
             python,
             entrypoints,
+            executable_packages: Vec::new(),
             options,
         }
     }
@@ -199,6 +208,31 @@ impl Tool {
     #[must_use]
     pub fn with_options(self, options: ToolOptions) -> Self {
         Self { options, ..self }
+    }
+
+    /// Record the additional packages requested as sources of executables.
+    #[must_use]
+    pub fn with_executable_packages(
+        mut self,
+        packages: impl IntoIterator<Item = PackageName>,
+    ) -> Self {
+        self.executable_packages = packages
+            .into_iter()
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        self
+    }
+
+    /// Replace the recorded executable paths.
+    #[must_use]
+    pub fn with_entrypoints(
+        mut self,
+        entrypoints: impl IntoIterator<Item = ToolEntrypoint>,
+    ) -> Self {
+        self.entrypoints = entrypoints.into_iter().collect();
+        self.entrypoints.sort();
+        self
     }
 
     /// Returns the TOML table for this tool.
@@ -325,6 +359,15 @@ impl Tool {
             );
         }
 
+        if !self.executable_packages.is_empty() {
+            table.insert(
+                "executable-packages",
+                value(Array::from_iter(
+                    self.executable_packages.iter().map(PackageName::as_str),
+                )),
+            );
+        }
+
         table.insert("entrypoints", {
             let entrypoints = each_element_on_its_line_array(
                 self.entrypoints
@@ -353,6 +396,19 @@ impl Tool {
 
     pub fn entrypoints(&self) -> &[ToolEntrypoint] {
         &self.entrypoints
+    }
+
+    /// Return requested executable providers, including those inferred from older receipts.
+    pub fn executable_packages(&self) -> BTreeSet<PackageName> {
+        self.executable_packages
+            .iter()
+            .cloned()
+            .chain(
+                self.entrypoints
+                    .iter()
+                    .filter_map(|entry| entry.from.as_ref()?.parse().ok()),
+            )
+            .collect()
     }
 
     pub fn requirements(&self) -> &[Requirement] {
