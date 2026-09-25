@@ -606,6 +606,8 @@ fn tool_upgrade_retry_recorded_executable() -> Result<()> {
       cause: [FILE ERROR]
     ");
 
+    // The initial upgrade may have installed the new executable before failing.
+    let extra_exists = bin_dir.join("pybabel-extra.exe").exists();
     context
         .tool_upgrade()
         .arg("babel")
@@ -629,7 +631,7 @@ fn tool_upgrade_retry_recorded_executable() -> Result<()> {
     ");
     let installed = venv_bin_path(context.temp_dir.join("tools").join("babel")).join("pybabel.exe");
     assert_eq!(fs_err::read(executable.path())?, fs_err::read(installed)?);
-    assert!(!bin_dir.join("pybabel-extra.exe").exists());
+    assert_eq!(bin_dir.join("pybabel-extra.exe").exists(), extra_exists);
 
     context
         .tool_upgrade()
