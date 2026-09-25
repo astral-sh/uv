@@ -6163,6 +6163,7 @@ fn tool_install_with_build_hashes() -> Result<()> {
             &BTreeMap::new(),
             None,
             "py3-none-any",
+            &[],
             &[
                 ("hash_tool/cli.py", "def main():\n    print('tool-ok')\n"),
                 (

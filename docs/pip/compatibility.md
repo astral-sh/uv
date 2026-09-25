@@ -14,6 +14,21 @@ details; and in others, they may be bugs.
 This document outlines the known differences between uv and `pip`, along with rationale,
 workarounds, and a statement of intent for compatibility in the future.
 
+## Installation order
+
+When installing a set of prepared wheels, uv finishes installing dependencies before the packages
+that depend on them. Independent packages can be installed concurrently. Packages in a dependency
+cycle are installed in alphabetical order by normalized package name.
+
+This ordering uses dependencies recorded in the resolution. Commands such as `uv pip sync`,
+`uv pip install --no-deps`, and installation from `pylock.toml` can omit dependency edges, so they
+do not guarantee the same ordering. The separate installation stages used for `--no-build-isolation`
+also determine when packages become available.
+
+Dependency ordering does not make it safe for unrelated packages to overwrite each other's files, or
+ensure that removing one such package leaves the other intact. The
+`--preview-features detect-module-conflicts` option can help diagnose conflicting packages.
+
 ## Configuration files and environment variables
 
 uv does not read configuration files or environment variables that are specific to `pip`, like

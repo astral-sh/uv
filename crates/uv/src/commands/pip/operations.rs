@@ -1161,7 +1161,7 @@ async fn execute_plan(
             // This technically can block the runtime, but we are on the main thread and
             // have no other running tasks at this point, so this lets us avoid spawning a blocking
             // task.
-            .install_blocking(installs)?;
+            .install_blocking(installs, resolution)?;
 
         logger.on_install(installs.len(), start, printer, DryRun::Disabled)?;
     }
