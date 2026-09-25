@@ -520,20 +520,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
                         inverse[package_index.0] = Some(index);
                         index
                     }
-                    Some(index) => {
-                        if groups.prod()
-                            && let Node::Dist { install: false, .. } = &petgraph[index]
-                        {
-                            petgraph[index] = self.package_to_node(
-                                dist,
-                                tags,
-                                build_options,
-                                install_options,
-                                marker_env,
-                            )?;
-                        }
-                        index
-                    }
+                    Some(index) => index,
                 };
 
                 // Add the edge.
