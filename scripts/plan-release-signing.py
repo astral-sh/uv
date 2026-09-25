@@ -34,6 +34,36 @@ PLATFORMS = {
     },
 }
 
+PACKAGES = {
+    "macos": {"uv": ["uv", "uvx"], "uv_build": ["uv-build"]},
+    "windows": {
+        "uv": ["uv.exe", "uvx.exe", "uvw.exe"],
+        "uv_build": ["uv-build.exe"],
+    },
+}
+
+
+def artifact_inputs(system: str, target: str) -> dict:
+    """Declare uv's wheel packages and exact GitHub archive members once per target."""
+    extension = "tar.gz" if system == "macos" else "zip"
+    directory = f"uv-{target}"
+    return {
+        "system": system,
+        "wheels": [
+            {
+                "package": package,
+                "directory": f"wheels/{target}",
+                "binaries": binaries,
+            }
+            for package, binaries in PACKAGES[system].items()
+        ],
+        "github-archive": f"github-archives/{directory}.{extension}",
+        "github-archive-members": [
+            f"{directory}/{binary}" if system == "macos" else binary
+            for binary in PACKAGES[system]["uv"]
+        ],
+    }
+
 
 def release_targets() -> list[str]:
     """Read the target inventory used by cargo-dist."""
@@ -41,7 +71,7 @@ def release_targets() -> list[str]:
     return tomllib.loads(workspace.read_text(encoding="utf-8"))["dist"]["targets"]
 
 
-def signing_plan() -> dict[str, list[dict[str, str]]]:
+def signing_plan() -> dict[str, list[dict]]:
     """Require every macOS and Windows release target to have a verification job."""
     targets = release_targets()
     expected = {
@@ -60,6 +90,7 @@ def signing_plan() -> dict[str, list[dict[str, str]]]:
                 "target": target,
                 "runner": runner,
                 "python-architecture": architecture,
+                **artifact_inputs(system, target),
             }
             for target, (runner, architecture) in platforms.items()
         ]
@@ -68,10 +99,13 @@ def signing_plan() -> dict[str, list[dict[str, str]]]:
 
 
 def main() -> None:
-    """Print one GitHub Actions output for each signing matrix."""
+    """Print release targets, native matrices, and signing artifact declarations."""
     print(f"targets={json.dumps(release_targets(), separators=(',', ':'))}")
-    for system, platforms in signing_plan().items():
+    plan = signing_plan()
+    for system, platforms in plan.items():
         print(f"{system}={json.dumps(platforms, separators=(',', ':'))}")
+    artifacts = [target for platforms in plan.values() for target in platforms]
+    print(f"artifacts={json.dumps(artifacts, separators=(',', ':'))}")
 
 
 if __name__ == "__main__":
