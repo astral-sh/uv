@@ -96,7 +96,7 @@ impl Deref for NormalizedConstraints {
 pub struct NormalizedOverrides(NormalizedRequirements);
 
 impl NormalizedOverrides {
-    pub fn into_inner(self) -> Vec<Requirement> {
+    pub(crate) fn into_inner(self) -> Vec<Requirement> {
         self.0.into_inner()
     }
 }
