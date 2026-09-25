@@ -3,7 +3,7 @@ use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use uv_configuration::{Constraints, HashCheckingMode};
 use uv_distribution_types::{
@@ -302,6 +302,8 @@ impl HashStrategy {
         mode: HashCheckingMode,
     ) -> Result<Self, HashStrategyError> {
         let mut constraint_hashes = FxHashMap::<VersionId, Vec<HashDigest>>::default();
+        // Remember which constraints contained MD5 to distinguish insecure hashes from missing hashes.
+        let mut md5_constraints = FxHashSet::default();
 
         // First, index the constraints by name.
         for (requirement, digests) in constraints {
@@ -334,6 +336,12 @@ impl HashStrategy {
             }
 
             if mode.is_require() {
+                if digests
+                    .iter()
+                    .any(|digest| digest.algorithm() == HashAlgorithm::Md5)
+                {
+                    md5_constraints.insert(id.clone());
+                }
                 digests.retain(|digest| digest.algorithm() != HashAlgorithm::Md5);
             }
 
@@ -408,7 +416,7 @@ impl HashStrategy {
             // constraint.
             if digests.is_empty() {
                 if mode.is_require() {
-                    if has_md5 {
+                    if has_md5 || md5_constraints.contains(&id) {
                         return Err(HashStrategyError::InsecureHashAlgorithm(
                             requirement.to_string(),
                             HashAlgorithm::Md5,
