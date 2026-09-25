@@ -1346,6 +1346,39 @@ fn lock_wheel_git_archive_missing_lfs() -> Result<()> {
     Ok(())
 }
 
+/// Show changed requirements when an offline lock check cannot fetch package metadata.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_check_mismatched_requirements() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("simple/single-package.toml");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a @ {wheel_url}", "project>=0.0.1"]
+    "#, wheel_url = server.file_url("a-1.0.0-py3-none-any.whl")})?;
+    context.lock().assert().success();
+
+    pyproject_toml
+        .write_str(&fs_err::read_to_string(&pyproject_toml)?.replace(">=0.0.1", ">=0.1.0"))?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check").arg("--offline").arg("--no-cache"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+
+    hint: The lockfile needs to be updated because the requirements for `project` have changed:
+      Added: `project>=0.1.0`
+      Removed: `project>=0.0.1`
+    error: Failed to download `a @ http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`
+      cause: Network connectivity is disabled, but the requested data wasn't found in the cache for: `http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`
+    ");
+
+    Ok(())
+}
+
 /// Lock a requirement from a direct URL to a wheel.
 #[cfg(feature = "test-universal")]
 #[test]
