@@ -35763,6 +35763,33 @@ fn lock_no_build_workspace_member_dynamic_metadata() -> Result<()> {
     ");
     assert!(wheel_marker.exists());
 
+    // A stale lockfile can refer to the old path after a workspace member moves.
+    fs_err::remove_file(wheel_marker.path())?;
+    let new_child = context.temp_dir.child("new-child");
+    new_child.create_dir_all()?;
+    fs_err::copy(
+        child.join("pyproject.toml"),
+        new_child.join("pyproject.toml"),
+    )?;
+    fs_err::copy(
+        child.join("build_backend.py"),
+        new_child.join("build_backend.py"),
+    )?;
+    let pyproject = context
+        .read("pyproject.toml")
+        .replace("members = [\"child\"]", "members = [\"new-child\"]");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&pyproject)?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--no-build").arg("--offline").arg("--no-cache"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Distribution `child @ directory+child` can't be installed because it is marked as `--no-build` but has no binary distribution
+    ");
+    assert!(!wheel_marker.exists());
+
     Ok(())
 }
 
