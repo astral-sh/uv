@@ -1887,7 +1887,7 @@
             "batch-export",
             "minimum-libc-version",
             "build-dependency-check",
-            "rust-bytecode",
+            "native-bytecode",
             "build-lazy-imports"
           ]
         },

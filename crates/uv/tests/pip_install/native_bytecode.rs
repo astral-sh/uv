@@ -30,7 +30,7 @@ fn bytecode_wheel(context: &TestContext) -> Result<PathBuf> {
 
 /// Prove that the opt-in compiles without compileall and produces code the target Python can load.
 #[test]
-fn rust_bytecode() -> Result<()> {
+fn native_bytecode() -> Result<()> {
     allow_duplicates! {
         for python_version in ["3.12", "3.13", "3.14"] {
             for preview in [false, true] {
@@ -43,7 +43,7 @@ fn rust_bytecode() -> Result<()> {
                 let mut command = context.pip_install();
                 command.arg(&wheel).arg("--compile-bytecode");
                 if preview {
-                    command.arg("--preview-features").arg("rust-bytecode");
+                    command.arg("--preview-features").arg("native-bytecode");
                 }
                 uv_snapshot!(context.filters(), command, @"
                 exit_code: 0 (success)
@@ -91,7 +91,7 @@ fn rust_bytecode() -> Result<()> {
 
 /// Unsupported interpreters and bytecode settings continue to use Python's compiler.
 #[test]
-fn rust_bytecode_fallback() -> Result<()> {
+fn native_bytecode_fallback() -> Result<()> {
     allow_duplicates! {
         for (python_version, variable, value, flags, optimization) in [
             ("3.11", "PYC_INVALIDATION_MODE", "TIMESTAMP", 0, ""),
@@ -112,7 +112,7 @@ fn rust_bytecode_fallback() -> Result<()> {
             uv_snapshot!(context.filters(), context.pip_install()
                 .arg(&wheel)
                 .arg("--compile-bytecode")
-                .arg("--preview-features").arg("rust-bytecode")
+                .arg("--preview-features").arg("native-bytecode")
                 .env(variable, &value), @"
             exit_code: 0 (success)
             ----- stderr -----
@@ -152,7 +152,7 @@ fn rust_bytecode_fallback() -> Result<()> {
 
 /// Directory compilation reuses current bytecode, refreshes stale bytecode, and falls back per file.
 #[test]
-fn rust_bytecode_recompile() -> Result<()> {
+fn native_bytecode_recompile() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let wheel = bytecode_wheel(&context)?;
     context
@@ -162,7 +162,7 @@ fn rust_bytecode_recompile() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--compile-bytecode")
-        .arg("--preview-features").arg("rust-bytecode"), @"
+        .arg("--preview-features").arg("native-bytecode"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -180,7 +180,7 @@ fn rust_bytecode_recompile() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--compile-bytecode")
-        .arg("--preview-features").arg("rust-bytecode"), @"
+        .arg("--preview-features").arg("native-bytecode"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -197,7 +197,7 @@ fn rust_bytecode_recompile() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--compile-bytecode")
-        .arg("--preview-features").arg("rust-bytecode"), @"
+        .arg("--preview-features").arg("native-bytecode"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
