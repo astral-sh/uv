@@ -1013,7 +1013,8 @@ async fn do_lock(
             // Determine whether we can reuse the existing package versions.
             let versions_lock = existing_lock.as_ref().and_then(|lock| match &lock {
                 ValidatedLock::Satisfies(lock) => Some(lock),
-                ValidatedLock::Preferable(lock, _) => Some(lock),
+                ValidatedLock::Preferable(lock)
+                | ValidatedLock::MismatchedRequirements(lock, _) => Some(lock),
                 ValidatedLock::Versions(lock) => Some(lock),
                 ValidatedLock::Unusable(_) => None,
             });
@@ -1033,7 +1034,8 @@ async fn do_lock(
             // Determine whether we can reuse the existing package forks.
             let forks_lock = existing_lock.as_ref().and_then(|lock| match &lock {
                 ValidatedLock::Satisfies(lock) => Some(lock),
-                ValidatedLock::Preferable(lock, _) => Some(lock),
+                ValidatedLock::Preferable(lock)
+                | ValidatedLock::MismatchedRequirements(lock, _) => Some(lock),
                 ValidatedLock::Versions(_) => None,
                 ValidatedLock::Unusable(_) => None,
             });
@@ -1060,78 +1062,79 @@ async fn do_lock(
                     }),
             );
 
-            // A metadata failure can hide why a lock check needed to resolve in the first place.
-            // Do not suggest updating the lockfile during an update or for resolver conflicts.
-            let report_mismatch = |err: &RequirementsError| {
-                if let LockMode::Locked(..) = mode
-                    && let RequirementsError::Dist(..) | RequirementsError::Distribution(_) = err
-                    && let Some(ValidatedLock::Preferable(_, Some(reason))) = &existing_lock
-                {
-                    let mut hints = Hints::from(reason.as_str());
-                    hints.push("To update the lockfile, run `uv lock`.".to_string());
-                    let _ = writeln!(printer.stderr(), "{hints}");
+            // Resolve the requirements.
+            let member_requirements = ExtrasResolver::new(&hasher, state.index(), database)
+                .with_reporter(Arc::new(ResolverReporter::from(printer)))
+                .resolve(target.members_requirements())
+                .await;
+            let resolution = match member_requirements {
+                Ok(member_requirements) => {
+                    pip::operations::resolve(
+                        member_requirements
+                            .into_iter()
+                            .chain(target.group_requirements())
+                            .chain(requirements.iter().cloned())
+                            .chain(
+                                dependency_groups
+                                    .values()
+                                    .flat_map(|requirements| requirements.iter().cloned()),
+                            )
+                            .map(UnresolvedRequirementSpecification::from)
+                            .collect(),
+                        constraints
+                            .iter()
+                            .cloned()
+                            .map(NameRequirementSpecification::from)
+                            .chain(external)
+                            .collect(),
+                        Vec::new(),
+                        overrides.clone(),
+                        excludes.clone(),
+                        source_trees,
+                        // The root is always null in workspaces, it "depends on" the projects
+                        None,
+                        packages.keys().cloned().collect(),
+                        &extras,
+                        &groups,
+                        preferences,
+                        EmptyInstalledPackages,
+                        &hasher,
+                        &Reinstall::default(),
+                        upgrade,
+                        None,
+                        resolver_env,
+                        python_requirement,
+                        interpreter.markers(),
+                        conflicts.clone(),
+                        &client,
+                        &flat_index,
+                        state.index(),
+                        &build_dispatch,
+                        concurrency,
+                        options,
+                        recorder.clone(),
+                        Box::new(SummaryResolveLogger),
+                        printer,
+                    )
+                    .await
+                }
+                Err(error) => Err(error.into()),
+            };
+            let (resolution, _) = match resolution {
+                Ok(resolution) => resolution,
+                Err(error) => {
+                    if let LockMode::Locked(..) = mode
+                        && let OperationError::Requirements(
+                            RequirementsError::Dist(..) | RequirementsError::Distribution(_),
+                        ) = &error
+                        && let Some(ValidatedLock::MismatchedRequirements(_, reason)) =
+                            &existing_lock
+                    {
+                        let _ = writeln!(printer.stderr(), "{}", Hints::from(reason.as_str()));
+                    }
+                    return Err(error.into());
                 }
             };
-
-            // Resolve the requirements.
-            let (resolution, _) = pip::operations::resolve(
-                ExtrasResolver::new(&hasher, state.index(), database)
-                    .with_reporter(Arc::new(ResolverReporter::from(printer)))
-                    .resolve(target.members_requirements())
-                    .await
-                    .inspect_err(report_mismatch)
-                    .map_err(|err| ProjectError::Operation(err.into()))?
-                    .into_iter()
-                    .chain(target.group_requirements())
-                    .chain(requirements.iter().cloned())
-                    .chain(
-                        dependency_groups
-                            .values()
-                            .flat_map(|requirements| requirements.iter().cloned()),
-                    )
-                    .map(UnresolvedRequirementSpecification::from)
-                    .collect(),
-                constraints
-                    .iter()
-                    .cloned()
-                    .map(NameRequirementSpecification::from)
-                    .chain(external)
-                    .collect(),
-                Vec::new(),
-                overrides.clone(),
-                excludes.clone(),
-                source_trees,
-                // The root is always null in workspaces, it "depends on" the projects
-                None,
-                packages.keys().cloned().collect(),
-                &extras,
-                &groups,
-                preferences,
-                EmptyInstalledPackages,
-                &hasher,
-                &Reinstall::default(),
-                upgrade,
-                None,
-                resolver_env,
-                python_requirement,
-                interpreter.markers(),
-                conflicts.clone(),
-                &client,
-                &flat_index,
-                state.index(),
-                &build_dispatch,
-                concurrency,
-                options,
-                recorder.clone(),
-                Box::new(SummaryResolveLogger),
-                printer,
-            )
-            .await
-            .inspect_err(|err| {
-                if let OperationError::Requirements(err) = err {
-                    report_mismatch(err);
-                }
-            })?;
 
             // Print the success message after completing resolution.
             logger.on_complete(resolution.len(), start, printer)?;
@@ -1194,9 +1197,10 @@ pub(crate) enum ValidatedLock {
     /// though the forks should be ignored.
     Versions(Lock),
     /// An existing lockfile was provided, and the locked versions and forks should be preferred if
-    /// possible, but resolution is still required. Retain known requirement mismatches for
-    /// lock-check diagnostics.
-    Preferable(Lock, Option<String>),
+    /// possible, even though the lockfile does not satisfy the workspace requirements.
+    Preferable(Lock),
+    /// Package requirements have changed, so the lockfile must be updated.
+    MismatchedRequirements(Lock, String),
     /// An existing lockfile was provided, and it satisfies the workspace requirements.
     Satisfies(Lock),
 }
@@ -1264,7 +1268,7 @@ impl ValidatedLock {
                     printer.stderr(),
                     "Resolving despite existing lockfile due to {change}",
                 );
-                return Ok(Self::Preferable(lock, None));
+                return Ok(Self::Preferable(lock));
             }
         }
 
@@ -1375,7 +1379,7 @@ impl ValidatedLock {
                 requires_python,
             );
             return if lock.fork_markers().is_empty() {
-                Ok(Self::Preferable(lock, None))
+                Ok(Self::Preferable(lock))
             } else {
                 Ok(Self::Versions(lock))
             };
@@ -1396,7 +1400,7 @@ impl ValidatedLock {
                     "Resolving despite existing lockfile due to change in package-specific pre-release modes"
                 );
             }
-            return Ok(Self::Preferable(lock, None));
+            return Ok(Self::Preferable(lock));
         }
 
         // If the user specified `--upgrade-package` or `--upgrade-group`, then at best we can
@@ -1405,18 +1409,18 @@ impl ValidatedLock {
             debug!(
                 "Resolving despite existing lockfile due to `--upgrade-package` or `--upgrade-group`"
             );
-            return Ok(Self::Preferable(lock, None));
+            return Ok(Self::Preferable(lock));
         }
 
         if !lock.satisfies_hash_algorithms(install_path, index_locations)? {
             debug!("Resolving despite existing lockfile due to mismatched hash algorithm");
-            return Ok(Self::Preferable(lock, None));
+            return Ok(Self::Preferable(lock));
         }
 
         // If the user specified `--refresh`, then we have to re-resolve.
         if matches!(refresh, Some(Refresh::All(..) | Refresh::Packages(..))) {
             debug!("Resolving despite existing lockfile due to `--refresh`");
-            return Ok(Self::Preferable(lock, None));
+            return Ok(Self::Preferable(lock));
         }
 
         // If the user provided at least one index URL (from the command line, or from a configuration
@@ -1466,7 +1470,7 @@ impl ValidatedLock {
                     "Resolving despite existing lockfile due to mismatched members:\n  Requested: {:?}\n  Existing: {:?}",
                     expected, actual
                 );
-                Ok(Self::Preferable(lock, None))
+                Ok(Self::Preferable(lock))
             }
             SatisfiesResult::MismatchedEditable(name, expected) => {
                 if expected {
@@ -1478,7 +1482,7 @@ impl ValidatedLock {
                         "Resolving despite existing lockfile due to mismatched source: `{name}` (unexpected: `editable`)"
                     );
                 }
-                Ok(Self::Preferable(lock, None))
+                Ok(Self::Preferable(lock))
             }
             SatisfiesResult::MismatchedVirtual(name, expected) => {
                 if expected {
@@ -1490,7 +1494,7 @@ impl ValidatedLock {
                         "Resolving despite existing lockfile due to mismatched source: `{name}` (unexpected: `virtual`)"
                     );
                 }
-                Ok(Self::Preferable(lock, None))
+                Ok(Self::Preferable(lock))
             }
             SatisfiesResult::MismatchedDynamic(name, expected) => {
                 if expected {
@@ -1502,7 +1506,7 @@ impl ValidatedLock {
                         "Resolving despite existing lockfile due to dynamic version: `{name}` (expected a static version)"
                     );
                 }
-                Ok(Self::Preferable(lock, None))
+                Ok(Self::Preferable(lock))
             }
             SatisfiesResult::MismatchedVersion(name, expected, actual) => {
                 if let Some(actual) = actual {
@@ -1514,73 +1518,73 @@ impl ValidatedLock {
                         "Resolving despite existing lockfile due to mismatched version: `{name}` (expected: `{expected}`)"
                     );
                 }
-                Ok(Self::Preferable(lock, None))
+                Ok(Self::Preferable(lock))
             }
             SatisfiesResult::MismatchedRequirements(expected, actual) => {
                 debug!(
                     "Resolving despite existing lockfile due to mismatched requirements:\n  Requested: {:?}\n  Existing: {:?}",
                     expected, actual
                 );
-                Ok(Self::Preferable(lock, None))
+                Ok(Self::Preferable(lock))
             }
             SatisfiesResult::MismatchedConstraints(expected, actual) => {
                 debug!(
                     "Resolving despite existing lockfile due to mismatched constraints:\n  Requested: {:?}\n  Existing: {:?}",
                     expected, actual
                 );
-                Ok(Self::Preferable(lock, None))
+                Ok(Self::Preferable(lock))
             }
             SatisfiesResult::MismatchedOverrides(expected, actual) => {
                 debug!(
                     "Resolving despite existing lockfile due to mismatched overrides:\n  Requested: {:?}\n  Existing: {:?}",
                     expected, actual
                 );
-                Ok(Self::Preferable(lock, None))
+                Ok(Self::Preferable(lock))
             }
             SatisfiesResult::MismatchedExcludes(expected, actual) => {
                 debug!(
                     "Resolving despite existing lockfile due to mismatched excludes:\n  Requested: {:?}\n  Existing: {:?}",
                     expected, actual
                 );
-                Ok(Self::Preferable(lock, None))
+                Ok(Self::Preferable(lock))
             }
             SatisfiesResult::MismatchedBuildConstraints(expected, actual) => {
                 debug!(
                     "Resolving despite existing lockfile due to mismatched build constraints:\n  Requested: {:?}\n  Existing: {:?}",
                     expected, actual
                 );
-                Ok(Self::Preferable(lock, None))
+                Ok(Self::Preferable(lock))
             }
             SatisfiesResult::MismatchedDependencyGroups(expected, actual) => {
                 debug!(
                     "Resolving despite existing lockfile due to mismatched dependency groups:\n  Requested: {:?}\n  Existing: {:?}",
                     expected, actual
                 );
-                Ok(Self::Preferable(lock, None))
+                Ok(Self::Preferable(lock))
             }
             SatisfiesResult::MismatchedStaticMetadata(expected, actual) => {
                 debug!(
                     "Resolving despite existing lockfile due to mismatched static metadata:\n  Requested: {:?}\n  Existing: {:?}",
                     expected, actual
                 );
-                Ok(Self::Preferable(lock, None))
+                Ok(Self::Preferable(lock))
             }
             SatisfiesResult::MissingRoot(name) => {
                 debug!("Resolving despite existing lockfile due to missing root package: `{name}`");
-                Ok(Self::Preferable(lock, None))
+                Ok(Self::Preferable(lock))
             }
             SatisfiesResult::MissingRemoteIndex(name, version, index) => {
                 debug!(
                     "Resolving despite existing lockfile due to missing remote index: `{name}` `{version}` from `{index}`"
                 );
-                Ok(Self::Preferable(lock, None))
+                Ok(Self::Preferable(lock))
             }
             SatisfiesResult::MissingLocalIndex(name, version, index) => {
                 debug!(
                     "Resolving despite existing lockfile due to missing local index: `{name}` `{version}` from `{}`",
                     index.display()
                 );
-                Ok(Self::Preferable(lock, None))
+                Ok(Self::Preferable(lock))
             }
             SatisfiesResult::MismatchedPackageRequirements(name, version, expected, actual) => {
                 if let Some(version) = version {
@@ -1603,7 +1607,7 @@ impl ValidatedLock {
                 for requirement in actual.difference(&expected) {
                     write!(reason, "\n  Removed: `{requirement}`")?;
                 }
-                Ok(Self::Preferable(lock, Some(reason)))
+                Ok(Self::MismatchedRequirements(lock, reason))
             }
             SatisfiesResult::MismatchedPackageDependencies(name, version, expected, actual) => {
                 if let Some(version) = version {
@@ -1617,7 +1621,7 @@ impl ValidatedLock {
                         expected, actual
                     );
                 }
-                Ok(Self::Preferable(lock, None))
+                Ok(Self::Preferable(lock))
             }
             SatisfiesResult::MismatchedPackageDependencyGroups(name, version, expected, actual) => {
                 if let Some(version) = version {
@@ -1631,7 +1635,7 @@ impl ValidatedLock {
                         expected, actual
                     );
                 }
-                Ok(Self::Preferable(lock, None))
+                Ok(Self::Preferable(lock))
             }
             SatisfiesResult::MismatchedPackageProvidesExtra(name, version, expected, actual) => {
                 if let Some(version) = version {
@@ -1645,11 +1649,11 @@ impl ValidatedLock {
                         expected, actual
                     );
                 }
-                Ok(Self::Preferable(lock, None))
+                Ok(Self::Preferable(lock))
             }
             SatisfiesResult::MissingVersion(name) => {
                 debug!("Resolving despite existing lockfile due to missing version: `{name}`");
-                Ok(Self::Preferable(lock, None))
+                Ok(Self::Preferable(lock))
             }
         }
     }
@@ -1672,7 +1676,7 @@ impl ValidatedLock {
         match self {
             Self::Unusable(lock) => lock,
             Self::Satisfies(lock) => lock,
-            Self::Preferable(lock, _) => lock,
+            Self::Preferable(lock) | Self::MismatchedRequirements(lock, _) => lock,
             Self::Versions(lock) => lock,
         }
     }
