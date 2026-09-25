@@ -85,6 +85,74 @@ fn write_many_files_wheel(path: &Path, source_files: usize) -> Result<()> {
     Ok(())
 }
 
+fn write_crlf_script_wheel(path: &Path) -> Result<()> {
+    let mut writer = ZipFileWriter::new(Vec::new());
+    let metadata = indoc! {"
+        Metadata-Version: 2.1
+        Name: encoded-script
+        Version: 1.0.0
+    "};
+    let wheel = indoc! {"
+        Wheel-Version: 1.0
+        Generator: uv-test
+        Root-Is-Purelib: true
+        Tag: py3-none-any
+    "};
+    let entries: [(&str, &[u8]); 4] = [
+        ("encoded_script/__init__.py", b"VALUE = 1\n"),
+        (
+            "encoded_script-1.0.0.dist-info/METADATA",
+            metadata.as_bytes(),
+        ),
+        ("encoded_script-1.0.0.dist-info/WHEEL", wheel.as_bytes()),
+        (
+            "encoded_script-1.0.0.data/scripts/encoded-script",
+            b"#!python\r\n# coding: latin-1\r\nprint('\x63\x61\x66\xe9')\r\n",
+        ),
+    ];
+    let mut record = String::new();
+    for (entry_name, contents) in entries {
+        let entry = ZipEntryBuilder::new(entry_name.into(), Compression::Stored);
+        block_on(writer.write_entry_whole(entry, contents))?;
+        writeln!(record, "{entry_name},,")?;
+    }
+    record.push_str("encoded_script-1.0.0.dist-info/RECORD,,\n");
+    let entry = ZipEntryBuilder::new(
+        "encoded_script-1.0.0.dist-info/RECORD".into(),
+        Compression::Stored,
+    );
+    block_on(writer.write_entry_whole(entry, record.as_bytes()))?;
+    fs_err::write(path, block_on(writer.close())?)?;
+    Ok(())
+}
+
+#[test]
+fn install_crlf_wheel_script_preserves_encoding_cookie() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheel = context
+        .temp_dir
+        .join("encoded_script-1.0.0-py3-none-any.whl");
+    write_crlf_script_wheel(&wheel)?;
+
+    uv_snapshot!(context.filters(), context.pip_install().arg(&wheel), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + encoded-script==1.0.0 (from file://[TEMP_DIR]/encoded_script-1.0.0-py3-none-any.whl)
+    ");
+
+    let script = venv_bin_path(&context.venv).join("encoded-script");
+    uv_snapshot!(context.python_command().arg(script), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    café
+    ");
+
+    Ok(())
+}
+
 /// Hash the entire HTTP response even when extraction stops before trailing bytes.
 #[test]
 fn install_http_wheel_hashes_trailing_bytes() -> Result<()> {
