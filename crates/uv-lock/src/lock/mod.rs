@@ -23,9 +23,9 @@ use uv_cache_key::RepositoryUrl;
 use uv_configuration::{
     BuildOptions, Constraints, DependencyGroupsWithDefaults, ExcludeDependency, ExcludeNewer,
     ExcludeNewerPackage, Excludes, ExtrasSpecificationWithDefaults, ForkStrategy, InstallTarget,
-    NormalizedBuildConstraints, NormalizedConstraints, NormalizedExcludes,
-    NormalizedOverrideEntries, NormalizedRequirements, Override, Overrides, PackageOverride,
-    Prerelease, PrereleaseMode, PrereleasePackage, ResolutionMode, ScopedOverrideSourceError,
+    NormalizedConstraints, NormalizedExcludes, NormalizedOverrideEntries, NormalizedRequirements,
+    Override, Overrides, PackageOverride, Prerelease, PrereleaseMode, PrereleasePackage,
+    ResolutionMode, ScopedOverrideSourceError,
 };
 use uv_distribution::{
     DistributionDatabase, FlatRequiresDist, Metadata as DistributionMetadata, RequiresDist,
@@ -4142,16 +4142,33 @@ impl Lock {
 
         let mut source_tree_metadata = FxHashMap::default();
 
-        // Validate the build constraints.
+        // Validate that the lockfile was generated with the same build constraints.
         {
-            let expected =
-                normalizer.build_constraints(build_constraints.specifications().cloned())?;
-            let actual =
-                normalizer.build_constraints(self.manifest.build_constraints.iter().cloned())?;
+            let normalize_build_constraint = |constraint: NameRequirementSpecification| {
+                Ok::<_, LockError>(NameRequirementSpecification {
+                    requirement: normalize_requirement(
+                        constraint.requirement,
+                        root,
+                        &self.requires_python,
+                    )?,
+                    hashes: constraint.hashes,
+                })
+            };
+            let expected: BTreeSet<_> = build_constraints
+                .specifications()
+                .cloned()
+                .map(normalize_build_constraint)
+                .collect::<Result<_, _>>()?;
+            let actual: BTreeSet<_> = self
+                .manifest
+                .build_constraints
+                .iter()
+                .cloned()
+                .map(normalize_build_constraint)
+                .collect::<Result<_, _>>()?;
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedBuildConstraints(
-                    expected.into_inner(),
-                    actual.into_inner(),
+                    expected, actual,
                 ));
             }
         }
@@ -5870,8 +5887,8 @@ pub enum SatisfiesResult<'lock> {
     MismatchedExcludes(BTreeSet<ExcludeDependency>, BTreeSet<ExcludeDependency>),
     /// The lockfile uses a different set of build constraints.
     MismatchedBuildConstraints(
-        Vec<NameRequirementSpecification>,
-        Vec<NameRequirementSpecification>,
+        BTreeSet<NameRequirementSpecification>,
+        BTreeSet<NameRequirementSpecification>,
     ),
     /// The lockfile uses a different set of dependency groups.
     MismatchedDependencyGroups(
@@ -6083,10 +6100,7 @@ impl ResolverManifest {
                 .map_right(NormalizedExcludes::into_inner)
                 .into_iter()
                 .collect(),
-            build_constraints: normalize_collection(build_constraints, normalize)
-                .map_right(NormalizedBuildConstraints::into_inner)
-                .into_iter()
-                .collect(),
+            build_constraints: build_constraints.into_iter().collect(),
             dependency_groups: dependency_groups
                 .into_iter()
                 .map(|(group, requirements)| {

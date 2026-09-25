@@ -1,7 +1,7 @@
 //! Normalize dependency declarations for lockfile serialization and semantic comparison.
 //!
 //! Each collection retains the declarations that affect its behavior: false overrides suppress
-//! dependencies, standalone pins permit yanked versions, and build hashes restrict allowed artifacts.
+//! dependencies, and standalone pins permit yanked versions.
 
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
@@ -9,7 +9,7 @@ use std::ops::Deref;
 use std::{iter, mem};
 
 use indexmap::IndexMap;
-use uv_distribution_types::{NameRequirementSpecification, Requirement, RequirementSource};
+use uv_distribution_types::{Requirement, RequirementSource};
 use uv_pep440::{
     Operator, Version, VersionSpecifier, VersionSpecifiers, canonicalize_version_ranges,
 };
@@ -188,83 +188,6 @@ impl From<Vec<ExcludeDependency>> for NormalizedExcludes {
 
 impl Deref for NormalizedExcludes {
     type Target = [ExcludeDependency];
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-/// Build constraints with equivalent hashless declarations combined and hashes retained.
-#[derive(Debug, Clone, Eq)]
-pub struct NormalizedBuildConstraints(Vec<NameRequirementSpecification>);
-
-impl NormalizedBuildConstraints {
-    pub fn into_inner(self) -> Vec<NameRequirementSpecification> {
-        self.0
-    }
-}
-
-impl From<Vec<NameRequirementSpecification>> for NormalizedBuildConstraints {
-    /// Normalize hashless registry declarations and sort hash-bearing declarations.
-    ///
-    /// Hash-bearing declarations remain separate so hash validation can intersect their allowed
-    /// artifacts. URL fragments can also carry hashes, so only hashless registry entries combine.
-    ///
-    /// Bare constraints remain because hash validation checks for unpinned declarations.
-    fn from(constraints: Vec<NameRequirementSpecification>) -> Self {
-        let mut normalized = Vec::new();
-        let mut unhashed = Vec::new();
-        for mut constraint in constraints {
-            if constraint.requirement.marker.is_false() {
-                continue;
-            }
-            constraint.requirement.extras = Box::new([]);
-            if constraint.hashes.is_empty()
-                && let RequirementSource::Registry { .. } = &constraint.requirement.source
-            {
-                unhashed.push(constraint.requirement);
-                continue;
-            }
-            if let RequirementSource::Registry { specifier, .. } =
-                &mut constraint.requirement.source
-            {
-                *specifier = simplify_specifiers(mem::take(specifier));
-            }
-            constraint.requirement.groups.sort();
-            constraint.hashes.sort();
-            constraint.hashes.dedup();
-            normalized.push(constraint);
-        }
-        normalized.extend(
-            normalize(unhashed)
-                .into_iter()
-                .map(NameRequirementSpecification::from),
-        );
-        normalized.sort_by(|left, right| {
-            compare_requirements(&left.requirement, &right.requirement)
-                .then_with(|| left.hashes.cmp(&right.hashes))
-        });
-        normalized.dedup_by(|left, right| {
-            left.hashes == right.hashes
-                && SemanticRequirement(&left.requirement) == SemanticRequirement(&right.requirement)
-        });
-        Self(normalized)
-    }
-}
-
-impl PartialEq for NormalizedBuildConstraints {
-    fn eq(&self, other: &Self) -> bool {
-        self.len() == other.len()
-            && self.iter().zip(other.iter()).all(|(left, right)| {
-                left.hashes == right.hashes
-                    && SemanticRequirement(&left.requirement)
-                        == SemanticRequirement(&right.requirement)
-            })
-    }
-}
-
-impl Deref for NormalizedBuildConstraints {
-    type Target = [NameRequirementSpecification];
 
     fn deref(&self) -> &Self::Target {
         &self.0
