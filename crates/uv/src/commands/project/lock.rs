@@ -402,7 +402,6 @@ impl<'env> LockOperation<'env> {
                     Some(existing),
                     self.mode,
                     check_lockfile_contents,
-                    true,
                     self.constraints,
                     self.refresh,
                     self.settings,
@@ -457,7 +456,6 @@ impl<'env> LockOperation<'env> {
                     existing,
                     self.mode,
                     check_lockfile_contents,
-                    false,
                     self.constraints,
                     self.refresh,
                     self.settings,
@@ -492,7 +490,6 @@ async fn do_lock(
     existing_lock: Option<Lock>,
     mode: LockMode<'_>,
     check_lockfile_contents: Option<String>,
-    lock_check: bool,
     external: Vec<NameRequirementSpecification>,
     refresh: Option<&Refresh>,
     settings: &ResolverSettings,
@@ -1066,11 +1063,8 @@ async fn do_lock(
             // A metadata failure can hide why a lock check needed to resolve in the first place.
             // Do not suggest updating the lockfile during an update or for resolver conflicts.
             let report_mismatch = |err: &RequirementsError| {
-                if lock_check
-                    && matches!(
-                        err,
-                        RequirementsError::Dist(..) | RequirementsError::Distribution(_)
-                    )
+                if let LockMode::Locked(..) = mode
+                    && let RequirementsError::Dist(..) | RequirementsError::Distribution(_) = err
                     && let Some(ValidatedLock::Preferable(_, Some(reason))) = &existing_lock
                 {
                     let mut hints = Hints::from(reason.as_str());
