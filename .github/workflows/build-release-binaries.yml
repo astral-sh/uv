@@ -755,6 +755,8 @@ jobs:
         platform:
           - target: s390x-unknown-linux-gnu
             arch: s390x
+            # Match Rust's z10 baseline when assembling psm's stack-switching routines.
+            maturin_docker_options: -e CFLAGS_s390x_unknown_linux_gnu=-march=z10
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
