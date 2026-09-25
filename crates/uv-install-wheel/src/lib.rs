@@ -47,6 +47,12 @@ pub enum Error {
     /// The wheel is broken
     #[error("The wheel is invalid: {0}")]
     InvalidWheel(String),
+    #[error(
+        "Installation destination `{}` resolves outside the Python installation scheme: `{}`",
+        path.simplified_display(),
+        resolved.simplified_display()
+    )]
+    InvalidInstallDestination { path: PathBuf, resolved: PathBuf },
     /// Doesn't follow file name schema
     #[error("Failed to move data files")]
     WalkDir(#[from] walkdir::Error),
@@ -99,6 +105,7 @@ impl Error {
     pub fn is_user_failure(&self) -> bool {
         match self {
             Self::InvalidWheel(_)
+            | Self::InvalidInstallDestination { .. }
             | Self::RecordFile { .. }
             | Self::RecordCsv(_)
             | Self::NonUtf8WheelPath(..)
