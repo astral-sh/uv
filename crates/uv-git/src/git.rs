@@ -1,9 +1,14 @@
 //! Git support is derived from Cargo's implementation.
 //! Cargo is dual-licensed under either Apache 2.0 or MIT, at the user's choice.
 //! Source: <https://github.com/rust-lang/cargo/blob/23eb492cf920ce051abfc56bbaf838514dc8365c/src/cargo/sources/git/utils.rs>
+#[cfg(target_os = "macos")]
+use std::ffi::OsStr;
 use std::fmt::Display;
+#[cfg(target_os = "macos")]
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
-use std::str::{self};
+#[cfg(target_os = "macos")]
+use std::process::Command;
 use std::sync::LazyLock;
 
 use anyhow::{Context, Result, anyhow};
@@ -47,6 +52,20 @@ pub static GIT: LazyLock<Result<ProcessBuilder, GitError>> = LazyLock::new(|| {
         which::Error::CannotFindBinaryPath => GitError::GitNotFound,
         err => GitError::Other(err),
     })?;
+
+    // Resolve Apple's developer-tool shim once instead of looking up the toolchain on every Git invocation.
+    #[cfg(target_os = "macos")]
+    let path = if path == Path::new("/usr/bin/git")
+        && let Ok(output) = Command::new("/usr/bin/xcrun")
+            .args(["--find", "git"])
+            .output()
+        && output.status.success()
+    {
+        let stdout = output.stdout.strip_suffix(b"\n").unwrap_or(&output.stdout);
+        PathBuf::from(OsStr::from_bytes(stdout))
+    } else {
+        path
+    };
 
     let mut cmd = ProcessBuilder::new(path);
 
