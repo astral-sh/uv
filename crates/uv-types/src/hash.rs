@@ -285,12 +285,11 @@ impl HashStrategy {
 
     /// Collect hashes from [`UnresolvedRequirement`] entries and constraints.
     ///
-    /// Repeated requirements contribute their hashes to the same identity. Registry pins accept
-    /// any allowed digest; direct URLs must match all supplied digests. For duplicate registry pins
-    /// and local files, the last nonempty constraint hash list wins. Remote archive URLs combine
-    /// hashes across algorithms and reject conflicting digests for the same algorithm. When
-    /// requirements and constraints both supply hashes, registry pins permit only shared hashes;
-    /// direct references must match hashes from both sources.
+    /// For duplicate registry pins and local files, the last nonempty hash list wins. Remote
+    /// archive URLs combine hashes across algorithms and reject conflicting digests for the same
+    /// algorithm. Registry pins accept any allowed digest; direct references must match all
+    /// supplied digests. When requirements and constraints both supply hashes, registry pins
+    /// permit only shared hashes; direct references must match hashes from both sources.
     ///
     /// When the environment is not given, this treats all marker expressions
     /// that reference the environment as true. In other words, it does
@@ -346,8 +345,7 @@ impl HashStrategy {
         }
 
         // For each requirement, map from hash identity to allowed hashes.
-        let mut requirement_hashes =
-            FxHashMap::<VersionId, (&UnresolvedRequirement, Vec<HashDigest>)>::default();
+        let mut requirement_hashes = FxHashMap::<VersionId, Vec<HashDigest>>::default();
         for (requirement, digests) in requirements {
             if !requirement
                 .evaluate_markers(marker_env.map(ResolverMarkerEnvironment::markers), &[])
@@ -395,10 +393,16 @@ impl HashStrategy {
                 digests.retain(|digest| digest.algorithm() != HashAlgorithm::Md5);
             }
 
+            let digests = if let Some(constraint) = constraint_hashes.get(&id) {
+                combine_constraint_hashes(&id, digests, constraint, requirement, mode)?
+            } else {
+                digests
+            };
+
             // Under `--require-hashes`, every requirement needs a hash from the requirement or a
             // constraint.
             if digests.is_empty() {
-                if mode.is_require() && !constraint_hashes.contains_key(&id) {
+                if mode.is_require() {
                     if has_md5 {
                         return Err(HashStrategyError::InsecureHashAlgorithm(
                             requirement.to_string(),
@@ -414,38 +418,14 @@ impl HashStrategy {
                 continue;
             }
 
-            let (_, existing) = requirement_hashes
-                .entry(id.clone())
-                .or_insert_with(|| (requirement, Vec::new()));
-            match id {
-                VersionId::ArchiveUrl { .. } => {
-                    merge_digests(existing, &digests, requirement)?;
-                }
-                VersionId::NameVersion(..)
-                | VersionId::Git { .. }
-                | VersionId::Path(..)
-                | VersionId::Directory(..)
-                | VersionId::Unknown(..) => {
-                    for digest in digests {
-                        if !existing.contains(&digest) {
-                            existing.push(digest);
-                        }
-                    }
-                }
-            }
+            merge_hashes(&mut requirement_hashes, id, digests, requirement)?;
         }
 
-        // Apply each constraint to the complete set of hashes for its requirement identity.
-        let mut hashes = FxHashMap::default();
-        for (id, (requirement, digests)) in requirement_hashes {
-            let digests = if let Some(constraint) = constraint_hashes.remove(&id) {
-                combine_constraint_hashes(&id, digests, &constraint, requirement, mode)?
-            } else {
-                digests
-            };
-            hashes.insert(id, digests);
-        }
-        hashes.extend(constraint_hashes);
+        // Requirements take precedence because each matching constraint is already applied.
+        let hashes: FxHashMap<VersionId, Vec<HashDigest>> = constraint_hashes
+            .into_iter()
+            .chain(requirement_hashes)
+            .collect();
         match mode {
             HashCheckingMode::Verify => Ok(Self::verify(Arc::new(hashes))),
             HashCheckingMode::Require => Ok(Self::require(Arc::new(hashes))),
