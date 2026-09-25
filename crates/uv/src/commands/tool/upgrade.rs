@@ -154,7 +154,9 @@ pub(crate) async fn upgrade(
                     UpgradeOutcome::UpgradeEnvironment => {
                         did_upgrade_environment.push(name);
                     }
-                    UpgradeOutcome::UpgradeTool | UpgradeOutcome::UpgradeDependencies => {
+                    UpgradeOutcome::UpgradeTool
+                    | UpgradeOutcome::UpgradeDependencies
+                    | UpgradeOutcome::RepairEntrypoints => {
                         did_upgrade_tool.push(name);
                     }
                     UpgradeOutcome::NoOp => {
@@ -225,6 +227,8 @@ enum UpgradeOutcome {
     UpgradeDependencies,
     /// The tool's environment was upgraded.
     UpgradeEnvironment,
+    /// The tool's executables were repaired after an incomplete upgrade.
+    RepairEntrypoints,
     /// The tool was already up-to-date.
     NoOp,
 }
@@ -379,9 +383,12 @@ async fn upgrade_tool(
     let requested_interpreter =
         interpreter.filter(|interpreter| !environment.environment().uses(interpreter));
     let tool_dir = installed_tools.tool_dir(name);
+    let pending_entrypoints = tool_dir.join(".uv-upgrade-pending");
+    let repair_entrypoints = pending_entrypoints.try_exists()?;
+
     // TODO(zanieb): When updating an existing environment, build it in the cache directory then
     // copy it into the tool directory.
-    let (environment, outcome, tool_lock) = if tool_locks {
+    let (environment, mut outcome, tool_lock) = if tool_locks {
         let target_interpreter =
             requested_interpreter.unwrap_or_else(|| environment.environment().interpreter());
         let site_packages = SitePackages::from_environment(environment.environment())?;
@@ -590,10 +597,17 @@ async fn upgrade_tool(
         (environment, outcome, None)
     };
 
-    if matches!(
-        outcome,
-        UpgradeOutcome::UpgradeEnvironment | UpgradeOutcome::UpgradeTool
-    ) {
+    let install_entrypoints = match outcome {
+        UpgradeOutcome::UpgradeEnvironment
+        | UpgradeOutcome::UpgradeTool
+        | UpgradeOutcome::RepairEntrypoints => true,
+        UpgradeOutcome::UpgradeDependencies | UpgradeOutcome::NoOp => repair_entrypoints,
+    };
+    if install_entrypoints {
+        // Keep track of incomplete executable installation so a later upgrade retries it even if
+        // the environment is already up-to-date.
+        fs_err::write(&pending_entrypoints, b"")?;
+
         // At this point, we updated the existing environment, so we should remove any of its
         // existing executables.
         remove_entrypoints(&existing_tool_receipt);
@@ -621,6 +635,12 @@ async fn upgrade_tool(
             tool_lock.as_ref(),
             printer,
         )?;
+
+        fs_err::remove_file(&pending_entrypoints)?;
+
+        if outcome == UpgradeOutcome::NoOp {
+            outcome = UpgradeOutcome::RepairEntrypoints;
+        }
     } else if tool_locks {
         ToolLock::write(&tool_dir, tool_lock.as_ref())?;
         installed_tools.add_tool_receipt(
@@ -632,10 +652,10 @@ async fn upgrade_tool(
     }
 
     let constraint = match &outcome {
-        UpgradeOutcome::UpgradeDependencies | UpgradeOutcome::NoOp => {
-            pinned_requirement_version(&existing_tool_receipt, name)
-                .map(|version| UpgradeConstraint::PinnedVersion { version })
-        }
+        UpgradeOutcome::UpgradeDependencies
+        | UpgradeOutcome::RepairEntrypoints
+        | UpgradeOutcome::NoOp => pinned_requirement_version(&existing_tool_receipt, name)
+            .map(|version| UpgradeConstraint::PinnedVersion { version }),
         UpgradeOutcome::UpgradeTool | UpgradeOutcome::UpgradeEnvironment => None,
     };
 

@@ -1,5 +1,8 @@
 use std::process::Command;
 
+#[cfg(windows)]
+use fs_err::os::windows::fs::OpenOptionsExt;
+
 use anyhow::{Result, bail};
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
@@ -541,6 +544,120 @@ fn tool_upgrade_name() {
      - pytz==2018.5
     Installed 1 executable: pybabel
     ");
+}
+
+/// Retry installing executables after an upgrade fails to replace one.
+#[test]
+fn tool_upgrade_retry_executable_installation() -> Result<()> {
+    let old_index = old_tool_index();
+    let new_index = new_tool_index();
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix()
+        .with_filter((
+            r"Failed to install entrypoint",
+            "Failed to install executable",
+        ))
+        .with_filter((
+            r"(?m)^  cause: failed to (rename|copy) file from .*$",
+            "  cause: [FILE ERROR]",
+        ))
+        .with_tool_dirs();
+    let bin_dir = context.temp_dir.child("bin");
+    let executable = bin_dir.child(format!("pybabel{}", std::env::consts::EXE_SUFFIX));
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("babel")
+        .arg("--index-url")
+        .arg(old_index.index_url())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + babel==2.6.0
+     + pytz==2018.5
+    Installed 1 executable: pybabel
+    ");
+
+    // Block the destination so the environment can be upgraded but the executable cannot.
+    #[cfg(windows)]
+    let locked = {
+        fs_err::write(executable.path(), "stale executable")?;
+        fs_err::OpenOptions::new()
+            .read(true)
+            .share_mode(0)
+            .open(executable.path())?
+    };
+    #[cfg(not(windows))]
+    {
+        fs_err::remove_file(executable.path())?;
+        executable.create_dir_all()?;
+    }
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("babel")
+        .arg("--index-url")
+        .arg(new_index.index_url())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Updated babel v2.6.0 -> v2.14.0
+     - babel==2.6.0
+     + babel==2.14.0
+     - pytz==2018.5
+    error: Failed to upgrade babel
+      cause: Failed to install executable
+      cause: [FILE ERROR]
+    ");
+
+    // A retry must still fail while the destination is blocked.
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("babel")
+        .arg("--index-url")
+        .arg(new_index.index_url())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to upgrade babel
+      cause: Failed to install executable
+      cause: [FILE ERROR]
+    ");
+
+    // Leave a stale executable in place when the destination becomes writable again.
+    #[cfg(windows)]
+    drop(locked);
+    #[cfg(not(windows))]
+    {
+        fs_err::remove_dir(executable.path())?;
+        executable.write_str("stale executable")?;
+    }
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("babel")
+        .arg("--index-url")
+        .arg(new_index.index_url())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Installed 1 executable: pybabel
+    ");
+
+    let installed = venv_bin_path(context.temp_dir.join("tools").join("babel"))
+        .join(format!("pybabel{}", std::env::consts::EXE_SUFFIX));
+    assert_eq!(fs_err::read(executable.path())?, fs_err::read(installed)?);
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("babel")
+        .arg("--index-url")
+        .arg(new_index.index_url())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Nothing to upgrade
+    ");
+
+    Ok(())
 }
 
 #[test]
