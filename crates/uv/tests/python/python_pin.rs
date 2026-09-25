@@ -852,3 +852,41 @@ fn python_pin_rm() {
     error: No Python version file found; use `--rm --global` to remove the global pin
     ");
 }
+
+#[test]
+fn python_pin_rm_versions() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    let global = context.user_config_dir.child("uv");
+    global.create_dir_all()?;
+    let global_versions = global.child(PYTHON_VERSIONS_FILENAME);
+    global_versions.write_str("3.11\n3.12\n")?;
+
+    let local_versions = context.temp_dir.child(PYTHON_VERSIONS_FILENAME);
+    local_versions.write_str("3.12\n")?;
+
+    uv_snapshot!(context.filters(), context.python_pin().arg("--rm"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Removed Python version file at `.python-versions`
+    ");
+    assert!(!local_versions.exists());
+
+    uv_snapshot!(context.filters(), context.python_pin().arg("--rm"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: No Python version file found; use `--rm --global` to remove the global pin
+    ");
+    assert_snapshot!(context.read(&global_versions), @"
+    3.11
+    3.12
+    ");
+
+    uv_snapshot!(context.filters(), context.python_pin().arg("--rm").arg("--global"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Removed global Python pin at `[UV_USER_CONFIG_DIR]/.python-versions`
+    ");
+    assert!(!global_versions.exists());
+
+    Ok(())
+}
