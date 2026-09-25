@@ -6323,17 +6323,18 @@ fn no_install_project_no_build_locked_dynamic_metadata() -> Result<()> {
     let build_backend = context.temp_dir.child("build_backend.py");
     build_backend.write_str(indoc! {r#"
         import pathlib
+        from textwrap import dedent
 
         def prepare_metadata_for_build_editable(metadata_directory, config_settings=None):
             pathlib.Path("validation-hook-called").write_text("called")
             dist_info = pathlib.Path(metadata_directory, "project-0.1.0.dist-info")
             dist_info.mkdir()
-            dist_info.joinpath("METADATA").write_text(
-                "Metadata-Version: 2.1\n"
-                "Name: project\n"
-                "Version: 0.1.0\n"
-                "Requires-Dist: anyio==3.7.0\n"
-            )
+            dist_info.joinpath("METADATA").write_text(dedent("""
+                Metadata-Version: 2.1
+                Name: project
+                Version: 0.1.0
+                Requires-Dist: anyio==3.7.0
+            """).lstrip())
             return dist_info.name
     "#})?;
 
@@ -6442,16 +6443,17 @@ fn no_install_project_all_packages_no_build_dynamic_metadata() -> Result<()> {
         .child("build_backend.py")
         .write_str(indoc! {r#"
         import pathlib
+        from textwrap import dedent
 
         def prepare_metadata_for_build_editable(metadata_directory, config_settings=None):
             pathlib.Path("metadata-hook-called").write_text("called")
             dist_info = pathlib.Path(metadata_directory, "project-0.1.0.dist-info")
             dist_info.mkdir()
-            dist_info.joinpath("METADATA").write_text(
-                "Metadata-Version: 2.1\n"
-                "Name: project\n"
-                "Version: 0.1.0\n"
-            )
+            dist_info.joinpath("METADATA").write_text(dedent("""
+                Metadata-Version: 2.1
+                Name: project
+                Version: 0.1.0
+            """).lstrip())
             return dist_info.name
     "#})?;
     context
@@ -6537,22 +6539,23 @@ fn sync_no_build_first_party_wheel_metadata() -> Result<()> {
         .write_str(indoc! {r#"
         import pathlib
         import zipfile
+        from textwrap import dedent
 
         def build_editable(wheel_directory, config_settings=None, metadata_directory=None):
             pathlib.Path("wheel-hook-called").write_text("called")
             filename = "project-0.1.0-py3-none-any.whl"
             with zipfile.ZipFile(pathlib.Path(wheel_directory, filename), "w") as wheel:
-                wheel.writestr("project-0.1.0.dist-info/METADATA", (
-                    "Metadata-Version: 2.1\n"
-                    "Name: project\n"
-                    "Version: 0.1.0\n"
-                ))
-                wheel.writestr("project-0.1.0.dist-info/WHEEL", (
-                    "Wheel-Version: 1.0\n"
-                    "Generator: test\n"
-                    "Root-Is-Purelib: true\n"
-                    "Tag: py3-none-any\n"
-                ))
+                wheel.writestr("project-0.1.0.dist-info/METADATA", dedent("""
+                    Metadata-Version: 2.1
+                    Name: project
+                    Version: 0.1.0
+                """).lstrip())
+                wheel.writestr("project-0.1.0.dist-info/WHEEL", dedent("""
+                    Wheel-Version: 1.0
+                    Generator: test
+                    Root-Is-Purelib: true
+                    Tag: py3-none-any
+                """).lstrip())
                 wheel.writestr("project-0.1.0.dist-info/RECORD", "")
             return filename
     "#})?;

@@ -35607,17 +35607,19 @@ fn lock_no_build_first_party_dynamic_metadata() -> Result<()> {
         .child("build_backend.py")
         .write_str(indoc! {r#"
         import pathlib
+        from textwrap import dedent
+
         import ok
 
         def prepare_metadata_for_build_editable(metadata_directory, config_settings=None):
             pathlib.Path("metadata-hook-called").write_text("called")
             dist_info = pathlib.Path(metadata_directory, "project-0.1.0.dist-info")
             dist_info.mkdir()
-            dist_info.joinpath("METADATA").write_text(
-                "Metadata-Version: 2.1\n"
-                "Name: project\n"
-                "Version: 0.1.0\n"
-            )
+            dist_info.joinpath("METADATA").write_text(dedent("""
+                Metadata-Version: 2.1
+                Name: project
+                Version: 0.1.0
+            """).lstrip())
             return dist_info.name
     "#})?;
 
@@ -35631,13 +35633,23 @@ fn lock_no_build_first_party_dynamic_metadata() -> Result<()> {
     assert!(marker.exists());
     fs_err::remove_file(marker.path())?;
     fs_err::remove_dir_all(&context.cache_dir)?;
-    let pyproject = context
-        .read("pyproject.toml")
-        .replace("no-build = true\n", "");
     context
         .temp_dir
         .child("pyproject.toml")
-        .write_str(&pyproject)?;
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        requires-python = ">=3.12"
+        dynamic = ["version", "dependencies"]
+
+        [build-system]
+        requires = ["ok==1.0.0"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+
+        [tool.uv]
+        find-links = ["wheels"]
+    "#})?;
 
     // A locked project with dynamic dependencies must invoke the backend again on a cold cache.
     uv_snapshot!(context.filters(), context.lock()
@@ -35690,16 +35702,17 @@ fn lock_no_build_workspace_member_dynamic_metadata() -> Result<()> {
     "#})?;
     child.child("build_backend.py").write_str(indoc! {r#"
         import pathlib
+        from textwrap import dedent
 
         def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
             pathlib.Path("metadata-hook-called").write_text("called")
             dist_info = pathlib.Path(metadata_directory, "child-0.1.0.dist-info")
             dist_info.mkdir()
-            dist_info.joinpath("METADATA").write_text(
-                "Metadata-Version: 2.1\n"
-                "Name: child\n"
-                "Version: 0.1.0\n"
-            )
+            dist_info.joinpath("METADATA").write_text(dedent("""
+                Metadata-Version: 2.1
+                Name: child
+                Version: 0.1.0
+            """).lstrip())
             return dist_info.name
     "#})?;
 
@@ -35726,22 +35739,23 @@ fn lock_no_build_workspace_member_dynamic_metadata() -> Result<()> {
     child.child("build_backend.py").write_str(indoc! {r#"
         import pathlib
         import zipfile
+        from textwrap import dedent
 
         def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
             pathlib.Path("wheel-hook-called").write_text("called")
             filename = "child-0.1.0-py3-none-any.whl"
             with zipfile.ZipFile(pathlib.Path(wheel_directory, filename), "w") as wheel:
-                wheel.writestr("child-0.1.0.dist-info/METADATA", (
-                    "Metadata-Version: 2.1\n"
-                    "Name: child\n"
-                    "Version: 0.1.0\n"
-                ))
-                wheel.writestr("child-0.1.0.dist-info/WHEEL", (
-                    "Wheel-Version: 1.0\n"
-                    "Generator: test\n"
-                    "Root-Is-Purelib: true\n"
-                    "Tag: py3-none-any\n"
-                ))
+                wheel.writestr("child-0.1.0.dist-info/METADATA", dedent("""
+                    Metadata-Version: 2.1
+                    Name: child
+                    Version: 0.1.0
+                """).lstrip())
+                wheel.writestr("child-0.1.0.dist-info/WHEEL", dedent("""
+                    Wheel-Version: 1.0
+                    Generator: test
+                    Root-Is-Purelib: true
+                    Tag: py3-none-any
+                """).lstrip())
                 wheel.writestr("child-0.1.0.dist-info/RECORD", "")
             return filename
     "#})?;
@@ -35775,13 +35789,22 @@ fn lock_no_build_workspace_member_dynamic_metadata() -> Result<()> {
         child.join("build_backend.py"),
         new_child.join("build_backend.py"),
     )?;
-    let pyproject = context
-        .read("pyproject.toml")
-        .replace("members = [\"child\"]", "members = [\"new-child\"]");
     context
         .temp_dir
         .child("pyproject.toml")
-        .write_str(&pyproject)?;
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [tool.uv.workspace]
+        members = ["new-child"]
+
+        [tool.uv.sources]
+        child = { workspace = true, editable = false }
+    "#})?;
 
     uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--no-build").arg("--offline").arg("--no-cache"), @"
     exit_code: 2 (failure)
