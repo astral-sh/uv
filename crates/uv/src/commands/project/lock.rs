@@ -19,7 +19,7 @@ use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
     DependencyMetadata, HashCollection, IndexLocations, NameRequirementSpecification, Requirement,
-    RequiresPython, ResolutionRecorder, UnresolvedRequirementSpecification,
+    RequirementSource, RequiresPython, ResolutionRecorder, UnresolvedRequirementSpecification,
 };
 use uv_git::ResolvedRepositoryReference;
 use uv_git_types::GitOid;
@@ -292,6 +292,7 @@ pub(crate) enum LockMode<'env> {
 pub(crate) struct LockOperation<'env> {
     mode: LockMode<'env>,
     constraints: Vec<NameRequirementSpecification>,
+    first_party_exclusions: BTreeSet<PackageName>,
     refresh: Option<&'env Refresh>,
     check_lockfile_contents: bool,
     settings: &'env ResolverSettings,
@@ -322,6 +323,7 @@ impl<'env> LockOperation<'env> {
         Self {
             mode,
             constraints: vec![],
+            first_party_exclusions: BTreeSet::new(),
             refresh: None,
             check_lockfile_contents: false,
             settings,
@@ -343,6 +345,13 @@ impl<'env> LockOperation<'env> {
         constraints: Vec<NameRequirementSpecification>,
     ) -> Self {
         self.constraints = constraints;
+        self
+    }
+
+    /// Exclude workspace packages that will not be installed from the first-party build exemption.
+    #[must_use]
+    pub(crate) fn with_first_party_exclusions(mut self, exclusions: BTreeSet<PackageName>) -> Self {
+        self.first_party_exclusions = exclusions;
         self
     }
 
@@ -401,6 +410,7 @@ impl<'env> LockOperation<'env> {
                     self.mode,
                     check_lockfile_contents,
                     self.constraints,
+                    self.first_party_exclusions,
                     self.refresh,
                     self.settings,
                     self.client_builder,
@@ -455,6 +465,7 @@ impl<'env> LockOperation<'env> {
                     self.mode,
                     check_lockfile_contents,
                     self.constraints,
+                    self.first_party_exclusions,
                     self.refresh,
                     self.settings,
                     self.client_builder,
@@ -489,6 +500,7 @@ async fn do_lock(
     mode: LockMode<'_>,
     check_lockfile_contents: Option<String>,
     external: Vec<NameRequirementSpecification>,
+    first_party_exclusions: BTreeSet<PackageName>,
     refresh: Option<&Refresh>,
     settings: &ResolverSettings,
     client_builder: &BaseClientBuilder<'_>,
@@ -530,6 +542,23 @@ async fn do_lock(
     let members = target.members();
     let packages = target.packages();
     let required_members = target.required_members();
+    let first_party = target
+        .members_requirements()
+        .filter(|requirement| !first_party_exclusions.contains(&requirement.name))
+        .filter_map(|requirement| match requirement.source {
+            RequirementSource::Directory {
+                install_path,
+                r#virtual: Some(false),
+                ..
+            } => Some((requirement.name, install_path.into_path_buf())),
+            RequirementSource::Directory { .. }
+            | RequirementSource::Registry { .. }
+            | RequirementSource::Url { .. }
+            | RequirementSource::GitDirectory { .. }
+            | RequirementSource::GitPath { .. }
+            | RequirementSource::Path { .. } => None,
+        })
+        .collect::<BTreeMap<_, _>>();
     let requirements = target.requirements();
     let overrides = target.overrides();
     let excludes = target.exclude_dependencies();
@@ -925,7 +954,8 @@ async fn do_lock(
             &client,
             &validation_build_dispatch,
             concurrency.downloads_semaphore.clone(),
-        );
+        )
+        .with_first_party(&first_party);
         match Box::pin(ValidatedLock::validate(
             existing_lock,
             target.install_path(),
@@ -1006,7 +1036,8 @@ async fn do_lock(
                 &build_dispatch,
                 concurrency.downloads_semaphore.clone(),
             )
-            .with_recorder(recorder.clone());
+            .with_recorder(recorder.clone())
+            .with_first_party(&first_party);
 
             // Determine whether we can reuse the existing package versions.
             let versions_lock = existing_lock.as_ref().and_then(|lock| match &lock {

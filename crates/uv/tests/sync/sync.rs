@@ -6337,6 +6337,59 @@ fn no_install_project_no_build_locked_dynamic_metadata() -> Result<()> {
             return dist_info.name
     "#})?;
 
+    // Excluding the project also applies when no lockfile exists.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--no-install-project")
+        .arg("--no-build")
+        .arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Building source distributions for `project` is disabled
+    ");
+    assert!(!context.temp_dir.child("validation-hook-called").exists());
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--no-install-package")
+        .arg("project")
+        .arg("--no-build")
+        .arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Building source distributions for `project` is disabled
+    ");
+    assert!(!context.temp_dir.child("validation-hook-called").exists());
+
+    uv_snapshot!(context.filters(), context.add()
+        .arg("example")
+        .arg("--group")
+        .arg("dev")
+        .arg("--no-install-project")
+        .arg("--no-build")
+        .arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to add dependencies
+      cause: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Building source distributions for `project` is disabled
+
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
+    ");
+    assert!(!context.temp_dir.child("validation-hook-called").exists());
+
+    uv_snapshot!(context.filters(), context.check()
+        .arg("--no-install-project")
+        .arg("--no-build")
+        .arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Building source distributions for `project` is disabled
+    ");
+    assert!(!context.temp_dir.child("validation-hook-called").exists());
+
     // Generate a lockfile, then remove the cached metadata so validation would need to invoke the
     // build backend again if it ignored `--no-build`.
     context.lock().assert().success();
@@ -6356,6 +6409,64 @@ fn no_install_project_no_build_locked_dynamic_metadata() -> Result<()> {
     ");
 
     assert!(!marker.exists());
+
+    Ok(())
+}
+
+/// A first-party backend without a metadata hook can build a wheel to provide metadata.
+#[test]
+fn sync_no_build_first_party_wheel_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        requires-python = ">=3.12"
+        dynamic = ["version", "dependencies"]
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+    context
+        .temp_dir
+        .child("build_backend.py")
+        .write_str(indoc! {r#"
+        import pathlib
+        import zipfile
+
+        def build_editable(wheel_directory, config_settings=None, metadata_directory=None):
+            pathlib.Path("wheel-hook-called").write_text("called")
+            filename = "project-0.1.0-py3-none-any.whl"
+            with zipfile.ZipFile(pathlib.Path(wheel_directory, filename), "w") as wheel:
+                wheel.writestr("project-0.1.0.dist-info/METADATA", (
+                    "Metadata-Version: 2.1\n"
+                    "Name: project\n"
+                    "Version: 0.1.0\n"
+                ))
+                wheel.writestr("project-0.1.0.dist-info/WHEEL", (
+                    "Wheel-Version: 1.0\n"
+                    "Generator: test\n"
+                    "Root-Is-Purelib: true\n"
+                    "Tag: py3-none-any\n"
+                ))
+                wheel.writestr("project-0.1.0.dist-info/RECORD", "")
+            return filename
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-build").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+    assert!(context.temp_dir.child("wheel-hook-called").exists());
 
     Ok(())
 }

@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::fmt::Write;
 use std::ops::Deref;
 use std::path::Path;
@@ -16,7 +17,7 @@ use uv_client::{BaseClientBuilder, CachedClient, RegistryClientBuilder};
 use uv_configuration::{
     ActiveEnvironment, Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults,
     DryRun, EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, HashCheckingMode,
-    InstallOptions, TargetTriple, Upgrade,
+    InstallOptions, InstallTarget as InstallOptionTarget, TargetTriple, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::LoweredExtraBuildDependencies;
@@ -352,6 +353,10 @@ pub(crate) async fn sync(
         SyncTarget::Script(script) => LockTarget::from(script),
     };
 
+    let first_party_exclusions = target.project().map_or_else(BTreeSet::new, |project| {
+        first_party_exclusions(project, all_packages, &package, &install_options)
+    });
+
     let outcome = match Box::pin(
         LockOperation::new(
             mode,
@@ -365,6 +370,7 @@ pub(crate) async fn sync(
             printer,
             preview,
         )
+        .with_first_party_exclusions(first_party_exclusions)
         .execute(lock_target),
     )
     .await
@@ -509,6 +515,48 @@ fn identify_installation_target<'a>(
         }
         SyncTarget::Script(script) => InstallTarget::Script { script, lock },
     }
+}
+
+/// Identify workspace members excluded from installation before a lockfile is available.
+pub(crate) fn first_party_exclusions(
+    project: &VirtualProject,
+    all_packages: bool,
+    package: &[PackageName],
+    install_options: &InstallOptions,
+) -> BTreeSet<PackageName> {
+    let workspace = project.workspace();
+    let members = workspace
+        .packages()
+        .keys()
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let project_name = if all_packages {
+        if members.len() == 1 && !workspace.is_non_project() {
+            members.iter().next()
+        } else {
+            None
+        }
+    } else {
+        match package {
+            [] => project.project_name(),
+            [name] => Some(name),
+            _ => None,
+        }
+    };
+    members
+        .iter()
+        .filter(|name| {
+            !install_options.include_package(
+                InstallOptionTarget {
+                    name,
+                    is_local: true,
+                },
+                project_name,
+                &members,
+            )
+        })
+        .cloned()
+        .collect()
 }
 
 /// Select workspace members with the same semantics as `uv sync`.

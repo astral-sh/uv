@@ -1,7 +1,9 @@
+use std::borrow::Cow;
 use std::cmp::Reverse;
+use std::collections::BTreeMap;
 use std::future::Future;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -25,13 +27,13 @@ use uv_client::{
 };
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
-    ArchiveHashPolicy, BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, HashCollection,
-    HashValidation, Hashed, IndexUrl, InstalledDist, MetadataHashPolicy, Name, ResolutionRecorder,
-    SourceDist, SourceUrl, parse_url_hashes,
+    ArchiveHashPolicy, BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, FirstParty,
+    HashCollection, HashValidation, Hashed, IndexUrl, InstalledDist, MetadataHashPolicy, Name,
+    ResolutionRecorder, SourceDist, SourceUrl, parse_url_hashes,
 };
 use uv_extract::dirhash::{DirectoryDigest, HashedFile};
 use uv_extract::hash::Hasher;
-use uv_fs::{LockedFile, write_atomic};
+use uv_fs::{LockedFile, normalize_path, write_atomic};
 use uv_git::{GIT_LFS, GitError};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -70,6 +72,7 @@ pub struct DistributionDatabase<'a, Context: BuildContext> {
     client: ManagedClient<'a>,
     reporter: Option<Arc<dyn Reporter>>,
     content_addressed_cache: bool,
+    first_party: Option<&'a BTreeMap<PackageName, PathBuf>>,
 }
 
 impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
@@ -90,7 +93,22 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             client: ManagedClient::new(client, downloads_semaphore),
             reporter: None,
             content_addressed_cache,
+            first_party: None,
         }
+    }
+
+    /// Allow metadata builds for the given first-party workspace source trees.
+    #[must_use]
+    pub fn with_first_party(mut self, first_party: &'a BTreeMap<PackageName, PathBuf>) -> Self {
+        self.first_party = Some(first_party);
+        self
+    }
+
+    /// Return whether the name and path identify an eligible workspace member.
+    pub fn is_first_party(&self, name: &PackageName, path: &Path) -> bool {
+        self.first_party
+            .and_then(|members| members.get(name))
+            .is_some_and(|member| normalize_path(member.as_path()) == normalize_path(path))
     }
 
     /// Record which static metadata entries are consulted while resolving runtime dependencies.
@@ -250,7 +268,17 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         match dist {
             Dist::Built(built) => self.get_wheel_metadata(built, hashes).await,
             Dist::Source(source) => {
-                self.build_wheel_metadata(&BuildableSource::Dist(source), hashes)
+                let source = if let SourceDist::Directory(directory) = source
+                    && !source.is_virtual()
+                    && self.is_first_party(&directory.name, &directory.install_path)
+                {
+                    let mut directory = directory.clone();
+                    directory.first_party = FirstParty::Yes;
+                    Cow::Owned(SourceDist::Directory(directory))
+                } else {
+                    Cow::Borrowed(source)
+                };
+                self.build_wheel_metadata(&BuildableSource::Dist(&source), hashes)
                     .await
             }
         }

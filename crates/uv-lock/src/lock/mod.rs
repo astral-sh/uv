@@ -5692,12 +5692,26 @@ impl Lock {
         index: &DistributionMetadataIndex,
         database: &DistributionDatabase<'_, Context>,
     ) -> Result<DistributionMetadata, LockError> {
+        let first_party = match &package.id.source {
+            Source::Editable(path) | Source::Directory(path)
+                if database.is_first_party(&package.id.name, &root.join(path)) =>
+            {
+                FirstParty::Yes
+            }
+            Source::Editable(_)
+            | Source::Directory(_)
+            | Source::Virtual(_)
+            | Source::Path(_)
+            | Source::Direct(..)
+            | Source::Git(..)
+            | Source::Registry(_) => FirstParty::No,
+        };
         let HashedDist { dist, hashes } = package.to_dist(
             root,
             TagPolicy::Preferred(tags),
             build_options,
             markers,
-            FirstParty::No,
+            first_party,
         )?;
         let locked_hashes = match (&package.id.source, &dist) {
             (Source::Direct(..) | Source::Path(_), Dist::Source(_)) if !hashes.is_empty() => {
