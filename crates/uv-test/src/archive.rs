@@ -34,7 +34,7 @@ pub fn write_tar_gz(writer: impl Write, entries: &[(&str, impl AsRef<[u8]>)]) ->
 
 /// Create a source archive with a backend that provides metadata and builds wheels.
 ///
-/// Reading the metadata requires running the backend.
+/// An empty `subdirectory` produces an sdist. Dynamic dependencies require running the backend.
 /// If `marker_path` is set, importing the backend creates that file.
 /// The path is stored in the archive, so changing it changes the archive's hash.
 pub fn generate_source_archive(
@@ -52,6 +52,12 @@ pub fn generate_source_archive(
         "py3-none-any",
         &[],
     );
+    let pkg_info = formatdoc! {r"
+        Metadata-Version: 2.2
+        Name: {name}
+        Version: {version}
+        Dynamic: Requires-Dist
+    "};
     let name = name.as_dist_info_name();
     let pyproject = indoc! {r#"
         [build-system]
@@ -95,6 +101,7 @@ pub fn generate_source_archive(
         &mut archive,
         &[
             (&format!("{prefix}pyproject.toml"), pyproject.as_bytes()),
+            (&format!("{prefix}PKG-INFO"), pkg_info.as_bytes()),
             (&format!("{prefix}backend.py"), backend.as_bytes()),
             (&format!("{prefix}{filename}"), wheel.as_slice()),
         ],
