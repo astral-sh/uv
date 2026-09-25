@@ -6321,9 +6321,11 @@ name = "uv-configuration"
 version = "0.0.86"
 dependencies = [
  "anyhow",
+ "astral-version-ranges",
  "clap",
  "either",
  "fs-err",
+ "indexmap",
  "insta",
  "jiff",
  "reqwest",
@@ -6335,6 +6337,7 @@ dependencies = [
  "serde_json",
  "thiserror",
  "tokio",
+ "toml",
  "tracing",
  "url",
  "uv-auth",

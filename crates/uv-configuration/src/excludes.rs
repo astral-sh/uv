@@ -115,6 +115,32 @@ impl Excludes {
         excludes
     }
 
+    /// Return sorted declarations, combining duplicate exclusions within each package scope.
+    ///
+    /// Retain empty version-specific scopes: they shadow exclusions from a versionless scope.
+    pub(crate) fn into_entries(self) -> Vec<ExcludeDependency> {
+        let mut entries = self
+            .global
+            .into_iter()
+            .map(ExcludeDependency::Dependency)
+            .collect::<Vec<_>>();
+        for (name, packages) in self.scoped {
+            for package in packages {
+                let mut dependencies = package.excludes.into_iter().collect::<Vec<_>>();
+                dependencies.sort();
+                entries.push(ExcludeDependency::Package(PackageExclusion {
+                    package: PackageExclusionTarget {
+                        name: name.clone(),
+                        version: package.version,
+                    },
+                    dependencies: dependencies.into_boxed_slice(),
+                }));
+            }
+        }
+        entries.sort();
+        entries
+    }
+
     /// Check if a package is excluded.
     pub fn contains(&self, name: &PackageName) -> bool {
         if let Some(recorder) = &self.recorder {
