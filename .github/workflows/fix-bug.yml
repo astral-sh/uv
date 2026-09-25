@@ -150,7 +150,7 @@ jobs:
           issue_number="$(jq --raw-output '.number' "$RUNNER_TEMP/issue-triage-event.json")"
           if ! [[ "$ISSUE_NUMBER" =~ ^[1-9][0-9]*$ ]] ||
             [ "$issue_number" != "$ISSUE_NUMBER" ] ||
-            [ "$PARENT_HEAD_REF" != "zb/reproduce-bug/$issue_number" ] ||
+            [ "$PARENT_HEAD_REF" != "automations/reproduce-bug/$issue_number" ] ||
             ! [[ "$PARENT_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] ||
             ! [[ "$PARENT_PULL_REQUEST" =~ ^https://github\.com/astral-sh/uv-dev/pull/[1-9][0-9]*$ ]]; then
             echo "The regression-test pull request context is invalid." >&2
