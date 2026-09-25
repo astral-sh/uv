@@ -531,11 +531,7 @@ pub(crate) fn first_party_exclusions(
         .cloned()
         .collect::<BTreeSet<_>>();
     let project_name = if all_packages {
-        if members.len() == 1 && !workspace.is_non_project() {
-            members.iter().next()
-        } else {
-            None
-        }
+        project.project_name()
     } else {
         match package {
             [] => project.project_name(),

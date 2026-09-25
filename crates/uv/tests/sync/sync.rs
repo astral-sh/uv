@@ -6413,6 +6413,107 @@ fn no_install_project_no_build_locked_dynamic_metadata() -> Result<()> {
     Ok(())
 }
 
+/// Exclude the current project from metadata builds when syncing all workspace packages.
+#[test]
+fn no_install_project_all_packages_no_build_dynamic_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dynamic = ["dependencies"]
+
+        [dependency-groups]
+        dev = []
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+    context
+        .temp_dir
+        .child("build_backend.py")
+        .write_str(indoc! {r#"
+        import pathlib
+
+        def prepare_metadata_for_build_editable(metadata_directory, config_settings=None):
+            pathlib.Path("metadata-hook-called").write_text("called")
+            dist_info = pathlib.Path(metadata_directory, "project-0.1.0.dist-info")
+            dist_info.mkdir()
+            dist_info.joinpath("METADATA").write_text(
+                "Metadata-Version: 2.1\n"
+                "Name: project\n"
+                "Version: 0.1.0\n"
+            )
+            return dist_info.name
+    "#})?;
+    context
+        .temp_dir
+        .child("child/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    let marker = context.temp_dir.child("metadata-hook-called");
+
+    // Resolving without a lockfile must not execute the excluded project's backend.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--all-packages")
+        .arg("--no-install-project")
+        .arg("--no-build")
+        .arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Building source distributions for `project` is disabled
+    ");
+    assert!(!marker.exists());
+
+    context.lock().arg("--offline").assert().success();
+    assert!(marker.exists());
+    fs_err::remove_file(marker.path())?;
+    fs_err::remove_dir_all(&context.cache_dir)?;
+
+    // Nor may lock validation execute the backend after cached metadata is removed.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--all-packages")
+        .arg("--no-install-project")
+        .arg("--no-build")
+        .arg("--locked")
+        .arg("--offline"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Distribution `project==0.1.0 @ editable+.` can't be installed because it is marked as `--no-build` but has no binary distribution
+    ");
+    assert!(!marker.exists());
+
+    // Group-only selection can still execute the backend to validate the lockfile.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--only-dev")
+        .arg("--no-build")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Checked in [TIME]
+    ");
+    assert!(marker.exists());
+
+    Ok(())
+}
+
 /// A first-party backend without a metadata hook can build a wheel to provide metadata.
 #[test]
 fn sync_no_build_first_party_wheel_metadata() -> Result<()> {

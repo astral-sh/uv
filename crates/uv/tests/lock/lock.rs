@@ -35573,7 +35573,6 @@ fn lock_no_build_static_metadata() -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "test-universal")]
 #[test]
 fn lock_no_build_first_party_dynamic_metadata() -> Result<()> {
     let context = uv_test::test_context!("3.12");
