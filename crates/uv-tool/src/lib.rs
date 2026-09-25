@@ -233,8 +233,8 @@ impl InstalledTools {
             .to_toml()
             .map_err(|err| Error::ReceiptWrite(path.clone(), Box::new(err)))?;
 
-        // Save the modified `uv-receipt.toml`.
-        fs_err::write(&path, doc)?;
+        // Save the modified `uv-receipt.toml` atomically.
+        uv_fs::write_atomic_sync(&path, doc)?;
 
         Ok(())
     }
