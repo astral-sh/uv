@@ -156,19 +156,6 @@
       datasourceTemplate: "npm",
       versioningTemplate: "semver",
     },
-    // Keep the directly downloaded Codex release and its SHA-256 in sync.
-    {
-      customType: "regex",
-      managerFilePatterns: [
-        "/^agents/security-pr-review/scripts/install-codex-security\\.sh$/",
-      ],
-      matchStrings: [
-        "releases/download/rust-v(?<currentValue>\\d+\\.\\d+\\.\\d+)/codex-x86_64-unknown-linux-musl\\.tar\\.gz[\\s\\S]*?(?<currentDigest>[a-f0-9]{64})",
-      ],
-      depNameTemplate: "@openai/codex",
-      datasourceTemplate: "custom.codex-release-assets",
-      versioningTemplate: "semver",
-    },
     // Minimum supported Rust toolchain version
     {
       customType: "regex",
@@ -192,13 +179,4 @@
       datasourceTemplate: "github-releases",
     },
   ],
-  customDatasources: {
-    "codex-release-assets": {
-      // Include release history so the inherited minimum release age can apply.
-      defaultRegistryUrlTemplate: "https://api.github.com/repos/openai/codex/releases?per_page=100",
-      transformTemplates: [
-        '{"releases": [$[draft = false and prerelease = false and $exists(assets[name = "codex-x86_64-unknown-linux-musl.tar.gz"].digest)].{"version": $substringAfter(tag_name, "rust-v"), "digest": $substringAfter(assets[name = "codex-x86_64-unknown-linux-musl.tar.gz"].digest, "sha256:"), "releaseTimestamp": published_at, "isStable": true}]}',
-      ],
-    },
-  },
 }
