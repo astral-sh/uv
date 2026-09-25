@@ -394,6 +394,11 @@ impl HashStrategy {
             }
 
             let digests = if let Some(constraint) = constraint_hashes.get(&id) {
+                // A hashless duplicate must not replace earlier requirement hashes with the
+                // constraint's hashes.
+                if digests.is_empty() && requirement_hashes.contains_key(&id) {
+                    continue;
+                }
                 combine_constraint_hashes(&id, digests, constraint, requirement, mode)?
             } else {
                 digests
