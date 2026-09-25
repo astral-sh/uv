@@ -7,7 +7,6 @@ use assert_fs::prelude::*;
 use async_zip::base::write::ZipFileWriter;
 use async_zip::{Compression, ZipEntryBuilder};
 use futures::executor::block_on;
-use indoc::indoc;
 use insta::{allow_duplicates, assert_snapshot};
 use predicates::prelude::predicate;
 use serde_json::json;
@@ -21,7 +20,7 @@ use uv_cache::CacheBucket;
 use uv_fs::PortablePath;
 #[cfg(unix)]
 use uv_fs::create_symlink;
-use uv_test::archive::write_tar_gz;
+use uv_test::archive::generate_source_archive;
 use uv_test::{TestContext, get_bin, uv_snapshot};
 
 /// A custom cache directory must configure commands and snapshot filters together.
@@ -370,47 +369,13 @@ async fn index_source_hashes() -> Result<()> {
     let server = MockServer::start().await;
     let index_url = format!("{}/simple/", server.uri());
     let marker = context.temp_dir.child("backend-marker");
-    let wheel = context
-        .workspace_root
-        .join("test/links/ok-1.0.0-py3-none-any.whl");
-    let context = context
-        .with_env("INDEX_SOURCE_MARKER", marker.path())
-        .with_env("INDEX_SOURCE_WHEEL", wheel);
     context
         .temp_dir
         .child("requirements.txt")
         .write_str("ok==1.0.0")?;
 
-    let mut archive = Vec::new();
-    write_tar_gz(
-        &mut archive,
-        &[
-            (
-                "ok-1.0.0/pyproject.toml",
-                indoc! {r#"
-                    [build-system]
-                    requires = []
-                    build-backend = "backend"
-                    backend-path = ["."]
-                "#},
-            ),
-            (
-                "ok-1.0.0/backend.py",
-                indoc! {r#"
-                    import os
-                    import shutil
-                    from pathlib import Path
-
-                    Path(os.environ["INDEX_SOURCE_MARKER"]).write_text("executed")
-
-                    def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-                        wheel = Path(os.environ["INDEX_SOURCE_WHEEL"])
-                        shutil.copyfile(wheel, Path(wheel_directory) / wheel.name)
-                        return wheel.name
-                "#},
-            ),
-        ],
-    )?;
+    let archive =
+        generate_source_archive(&"ok".parse()?, &"1.0.0".parse()?, "", Some(marker.path()))?;
     let source_hash = hex::encode(Sha256::digest(&archive));
     let wrong_hash = "0".repeat(64);
     let context = context
