@@ -57,6 +57,7 @@ fn show_settings_returns_before_running_commands() {
             read_timeout: [TIME],
             connect_timeout: [TIME],
             retries: 3,
+            metadata_range_request: Fallback,
         },
         concurrency: Concurrency {
             downloads: 50,
