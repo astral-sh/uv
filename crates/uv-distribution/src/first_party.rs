@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use uv_distribution_types::RequirementSource;
+use uv_distribution_types::{BuildableSource, RequirementSource, SourceDist};
 use uv_fs::normalize_path;
 use uv_normalize::PackageName;
 use uv_workspace::Workspace;
@@ -43,5 +43,14 @@ impl FirstPartyPackages {
         self.members
             .get(name)
             .is_some_and(|member| normalize_path(member.as_path()) == normalize_path(path))
+    }
+
+    /// Return whether the source identifies an eligible member.
+    pub(crate) fn contains_source(&self, source: &BuildableSource<'_>) -> bool {
+        let BuildableSource::Dist(SourceDist::Directory(directory)) = source else {
+            return false;
+        };
+        !directory.r#virtual.unwrap_or(false)
+            && self.contains(&directory.name, &directory.install_path)
     }
 }

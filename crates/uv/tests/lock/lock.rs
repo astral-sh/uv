@@ -35720,6 +35720,49 @@ fn lock_no_build_workspace_member_dynamic_metadata() -> Result<()> {
     ");
     assert!(marker.exists());
 
+    // A non-editable member can also build a wheel when its backend has no metadata hook.
+    fs_err::remove_file(context.temp_dir.join("uv.lock"))?;
+    fs_err::remove_dir_all(&context.cache_dir)?;
+    child.child("build_backend.py").write_str(indoc! {r#"
+        import pathlib
+        import zipfile
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            pathlib.Path("wheel-hook-called").write_text("called")
+            filename = "child-0.1.0-py3-none-any.whl"
+            with zipfile.ZipFile(pathlib.Path(wheel_directory, filename), "w") as wheel:
+                wheel.writestr("child-0.1.0.dist-info/METADATA", (
+                    "Metadata-Version: 2.1\n"
+                    "Name: child\n"
+                    "Version: 0.1.0\n"
+                ))
+                wheel.writestr("child-0.1.0.dist-info/WHEEL", (
+                    "Wheel-Version: 1.0\n"
+                    "Generator: test\n"
+                    "Root-Is-Purelib: true\n"
+                    "Tag: py3-none-any\n"
+                ))
+                wheel.writestr("child-0.1.0.dist-info/RECORD", "")
+            return filename
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--no-build").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    let wheel_marker = child.child("wheel-hook-called");
+    assert!(wheel_marker.exists());
+    fs_err::remove_file(wheel_marker.path())?;
+    fs_err::remove_dir_all(&context.cache_dir)?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--no-build").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    assert!(wheel_marker.exists());
+
     Ok(())
 }
 

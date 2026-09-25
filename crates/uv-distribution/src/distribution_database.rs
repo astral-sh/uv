@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::cmp::Reverse;
 use std::future::Future;
 use std::io;
@@ -26,9 +25,9 @@ use uv_client::{
 };
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
-    ArchiveHashPolicy, BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, FirstParty,
-    HashCollection, HashValidation, Hashed, IndexUrl, InstalledDist, MetadataHashPolicy, Name,
-    ResolutionRecorder, SourceDist, SourceUrl, parse_url_hashes,
+    ArchiveHashPolicy, BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, HashCollection,
+    HashValidation, Hashed, IndexUrl, InstalledDist, MetadataHashPolicy, Name, ResolutionRecorder,
+    SourceDist, SourceUrl, parse_url_hashes,
 };
 use uv_extract::dirhash::{DirectoryDigest, HashedFile};
 use uv_extract::hash::Hasher;
@@ -269,17 +268,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         match dist {
             Dist::Built(built) => self.get_wheel_metadata(built, hashes).await,
             Dist::Source(source) => {
-                let source = if let SourceDist::Directory(directory) = source
-                    && !source.is_virtual()
-                    && self.is_first_party(&directory.name, &directory.install_path)
-                {
-                    let mut directory = directory.clone();
-                    directory.first_party = FirstParty::Yes;
-                    Cow::Owned(SourceDist::Directory(directory))
-                } else {
-                    Cow::Borrowed(source)
-                };
-                self.build_wheel_metadata(&BuildableSource::Dist(&source), hashes)
+                self.build_wheel_metadata(&BuildableSource::Dist(source), hashes)
                     .await
             }
         }
@@ -743,6 +732,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         };
         let ArchiveMetadata { metadata, hashes } = self
             .builder
+            .for_metadata(self.first_party_packages)
             .download_and_build_metadata(source, build_hash_policy, &self.client)
             .boxed_local()
             .await?;

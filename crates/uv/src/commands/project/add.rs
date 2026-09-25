@@ -1098,12 +1098,7 @@ async fn lock_and_sync(
         no_install_package,
         only_install_package,
     );
-    let first_party_exclusions = match &target {
-        AddTarget::Project(project, _) => {
-            project::sync::first_party_exclusions(project, false, &[], &install_options)
-        }
-        AddTarget::Script(..) => BTreeSet::new(),
-    };
+    let first_party_exclusions = target.first_party_exclusions(&install_options);
     let mut lock = Box::pin(
         project::lock::LockOperation::new(
             if let LockCheck::Enabled(lock_check) = lock_check {
@@ -1396,6 +1391,16 @@ impl<'lock> From<&'lock AddTarget> for LockTarget<'lock> {
 }
 
 impl AddTarget {
+    /// Return workspace members excluded from the first-party build exemption.
+    fn first_party_exclusions(&self, install_options: &InstallOptions) -> BTreeSet<PackageName> {
+        match self {
+            Self::Project(project, _) => {
+                project::sync::first_party_exclusions(project, false, &[], install_options)
+            }
+            Self::Script(..) => BTreeSet::new(),
+        }
+    }
+
     /// Acquire a file lock mapped to the underlying interpreter to prevent concurrent
     /// modifications.
     pub(super) async fn acquire_lock(&self) -> Result<LockedFile, LockedFileError> {
