@@ -744,8 +744,10 @@ pub(crate) fn finalize_tool_install(
     excludes: Vec<ExcludeDependency>,
     build_constraints: Vec<NameRequirementSpecification>,
     lock: Option<&ToolLock>,
+    recovery_receipt: Option<&Tool>,
     printer: Printer,
 ) -> anyhow::Result<()> {
+    let mut recovery_receipt = recovery_receipt.cloned();
     let executable_directory = uv_tool::tool_executable_dir()?;
     fs_err::create_dir_all(&executable_directory)
         .context("Failed to create executable directory")?;
@@ -896,8 +898,8 @@ pub(crate) fn finalize_tool_install(
         let itself = std::env::current_exe().ok();
 
         let mut names = BTreeSet::new();
-        for (name, src, target) in target_entrypoints {
-            debug!("Installing executable: `{name}`");
+        for (entrypoint, src, target) in target_entrypoints {
+            debug!("Installing executable: `{entrypoint}`");
 
             #[cfg(unix)]
             replace_symlink(src, &target).context("Failed to install executable")?;
@@ -911,8 +913,15 @@ pub(crate) fn finalize_tool_install(
                 fs_err::copy(src, &target).context("Failed to install entrypoint")?;
             }
 
-            let tool_entry = ToolEntrypoint::new(&name, target, package.to_string());
+            let tool_entry = ToolEntrypoint::new(&entrypoint, target, package.to_string());
             names.insert(tool_entry.name.clone());
+            if let Some(receipt) = &mut recovery_receipt {
+                let mut entries = receipt.entrypoints().to_vec();
+                entries.retain(|entry| entry.install_path != tool_entry.install_path);
+                entries.push(tool_entry.clone());
+                *receipt = receipt.clone().with_entrypoints(entries);
+                installed_tools.add_tool_receipt(name, receipt.clone())?;
+            }
             installed_entrypoints.push(tool_entry);
         }
 
@@ -940,6 +949,12 @@ pub(crate) fn finalize_tool_install(
         python,
         installed_entrypoints,
         options.clone(),
+    )
+    .with_executable_packages(
+        entrypoints
+            .iter()
+            .filter(|package| *package != name)
+            .cloned(),
     );
     ToolLock::write(&installed_tools.tool_dir(name), lock)?;
     installed_tools.add_tool_receipt(name, tool)?;

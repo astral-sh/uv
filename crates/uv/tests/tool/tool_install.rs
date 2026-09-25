@@ -5508,6 +5508,7 @@ fn tool_install_with_executables_from() -> Result<()> {
             { name = "dependency-tool" },
             { name = "extra-tool" },
         ]
+        executable-packages = ["dependency-tool", "extra-tool"]
         entrypoints = [
             { name = "dep-one", install-path = "[TEMP_DIR]/bin/dep-one", from = "dependency-tool" },
             { name = "dep-two", install-path = "[TEMP_DIR]/bin/dep-two", from = "dependency-tool" },

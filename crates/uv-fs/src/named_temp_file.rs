@@ -49,6 +49,17 @@ impl NamedTempFile {
                 file: Self(error.file),
             })
     }
+
+    /// Persist the temporary file only if the destination does not exist.
+    #[expect(clippy::disallowed_types, reason = "tempfile exposes a std::fs::File")]
+    pub fn persist_noclobber(self, path: impl AsRef<Path>) -> Result<std::fs::File, PersistError> {
+        self.0
+            .persist_noclobber(verbatim_path(path.as_ref()))
+            .map_err(|error| PersistError {
+                error: error.error,
+                file: Self(error.file),
+            })
+    }
 }
 
 impl AsRef<Path> for NamedTempFile {
