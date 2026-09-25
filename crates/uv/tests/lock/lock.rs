@@ -35573,6 +35573,342 @@ fn lock_no_build_static_metadata() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn lock_no_build_first_party_dynamic_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("wheels").create_dir_all()?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        context.temp_dir.join("wheels/ok-1.0.0-py3-none-any.whl"),
+    )?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        requires-python = ">=3.12"
+        dynamic = ["version", "dependencies"]
+
+        [build-system]
+        requires = ["ok==1.0.0"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+
+        [tool.uv]
+        no-build = true
+        find-links = ["wheels"]
+    "#})?;
+    context
+        .temp_dir
+        .child("build_backend.py")
+        .write_str(indoc! {r#"
+        import pathlib
+        from textwrap import dedent
+
+        import ok
+
+        def prepare_metadata_for_build_editable(metadata_directory, config_settings=None):
+            pathlib.Path("metadata-hook-called").write_text("called")
+            dist_info = pathlib.Path(metadata_directory, "project-0.1.0.dist-info")
+            dist_info.mkdir()
+            dist_info.joinpath("METADATA").write_text(dedent("""
+                Metadata-Version: 2.1
+                Name: project
+                Version: 0.1.0
+            """).lstrip())
+            return dist_info.name
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    let marker = context.temp_dir.child("metadata-hook-called");
+    assert!(marker.exists());
+    fs_err::remove_file(marker.path())?;
+    fs_err::remove_dir_all(&context.cache_dir)?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        requires-python = ">=3.12"
+        dynamic = ["version", "dependencies"]
+
+        [build-system]
+        requires = ["ok==1.0.0"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+
+        [tool.uv]
+        find-links = ["wheels"]
+    "#})?;
+
+    // A locked project with dynamic dependencies must invoke the backend again on a cold cache.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--no-build-package")
+        .arg("project")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    assert!(marker.exists());
+
+    Ok(())
+}
+
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_no_build_workspace_member_dynamic_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [tool.uv.sources]
+        child = { workspace = true, editable = false }
+    "#})?;
+
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        requires-python = ">=3.12"
+        dynamic = ["version", "dependencies"]
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+    child.child("build_backend.py").write_str(indoc! {r#"
+        import pathlib
+        from textwrap import dedent
+
+        def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
+            pathlib.Path("metadata-hook-called").write_text("called")
+            dist_info = pathlib.Path(metadata_directory, "child-0.1.0.dist-info")
+            dist_info.mkdir()
+            dist_info.joinpath("METADATA").write_text(dedent("""
+                Metadata-Version: 2.1
+                Name: child
+                Version: 0.1.0
+            """).lstrip())
+            return dist_info.name
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--no-build").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    let marker = child.child("metadata-hook-called");
+    assert!(marker.exists());
+    fs_err::remove_file(marker.path())?;
+    fs_err::remove_dir_all(&context.cache_dir)?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--no-build").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    assert!(marker.exists());
+
+    // A non-editable member can also build a wheel when its backend has no metadata hook.
+    fs_err::remove_file(context.temp_dir.join("uv.lock"))?;
+    fs_err::remove_dir_all(&context.cache_dir)?;
+    child.child("build_backend.py").write_str(indoc! {r#"
+        import pathlib
+        import zipfile
+        from textwrap import dedent
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            pathlib.Path("wheel-hook-called").write_text("called")
+            filename = "child-0.1.0-py3-none-any.whl"
+            with zipfile.ZipFile(pathlib.Path(wheel_directory, filename), "w") as wheel:
+                wheel.writestr("child-0.1.0.dist-info/METADATA", dedent("""
+                    Metadata-Version: 2.1
+                    Name: child
+                    Version: 0.1.0
+                """).lstrip())
+                wheel.writestr("child-0.1.0.dist-info/WHEEL", dedent("""
+                    Wheel-Version: 1.0
+                    Generator: test
+                    Root-Is-Purelib: true
+                    Tag: py3-none-any
+                """).lstrip())
+                wheel.writestr("child-0.1.0.dist-info/RECORD", "")
+            return filename
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--no-build").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    let wheel_marker = child.child("wheel-hook-called");
+    assert!(wheel_marker.exists());
+    fs_err::remove_file(wheel_marker.path())?;
+    fs_err::remove_dir_all(&context.cache_dir)?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--no-build").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    assert!(wheel_marker.exists());
+
+    // A stale lockfile can refer to the old path after a workspace member moves.
+    fs_err::remove_file(wheel_marker.path())?;
+    let new_child = context.temp_dir.child("new-child");
+    new_child.create_dir_all()?;
+    fs_err::copy(
+        child.join("pyproject.toml"),
+        new_child.join("pyproject.toml"),
+    )?;
+    fs_err::copy(
+        child.join("build_backend.py"),
+        new_child.join("build_backend.py"),
+    )?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [tool.uv.workspace]
+        members = ["new-child"]
+
+        [tool.uv.sources]
+        child = { workspace = true, editable = false }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--no-build").arg("--offline").arg("--no-cache"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Distribution `child @ directory+child` can't be installed because it is marked as `--no-build` but has no binary distribution
+    ");
+    assert!(!wheel_marker.exists());
+
+    Ok(())
+}
+
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_no_build_non_workspace_dynamic_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+    "#})?;
+
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        requires-python = ">=3.12"
+        dynamic = ["version"]
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+    child
+        .child("build_backend.py")
+        .write_str("raise RuntimeError('backend should not run')")?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--no-build").arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to build `child @ file://[TEMP_DIR]/child`
+      cause: Building source distributions for `child` is disabled
+    ");
+
+    Ok(())
+}
+
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_no_build_first_party_build_dependency() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("archives").create_dir_all()?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/basic_package-0.1.0.tar.gz"),
+        context.temp_dir.join("archives/basic_package-0.1.0.tar.gz"),
+    )?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        requires-python = ">=3.12"
+        dynamic = ["version"]
+
+        [build-system]
+        requires = ["basic-package==0.1.0"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+
+        [tool.uv]
+        no-build = true
+        find-links = ["archives"]
+    "#})?;
+    context
+        .temp_dir
+        .child("build_backend.py")
+        .write_str("raise RuntimeError('backend should not run')")?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Failed to resolve requirements from `build-system.requires`
+      cause: No solution found when resolving: `basic-package==0.1.0`
+      cause: Because basic-package==0.1.0 has no usable wheels and you require basic-package==0.1.0, we can conclude that your requirements are unsatisfiable.
+
+    hint: Wheels are required for `basic-package` because building from source is disabled for all packages (i.e., with `--no-build`)
+    ");
+
+    Ok(())
+}
+
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_no_build_dynamic_metadata() -> Result<()> {

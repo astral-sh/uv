@@ -494,6 +494,16 @@ pub(crate) async fn check(
     } else if let Some(project) = &project {
         let extras = extras.with_defaults(DefaultExtras::default());
         let mut malware_context = project::sync::MalwareCheckContext::from(&malware_settings);
+        let install_options = InstallOptions::new(
+            no_install_project,
+            false,
+            false,
+            false,
+            false,
+            false,
+            Vec::new(),
+            Vec::new(),
+        );
 
         let venv = if let Some(venv) = isolated_venv {
             venv
@@ -589,6 +599,12 @@ pub(crate) async fn check(
                 printer,
                 preview,
             )
+            .with_first_party_exclusions(project::sync::first_party_exclusions(
+                project,
+                all_packages,
+                &package,
+                &install_options,
+            ))
             .execute(project.workspace().into()),
         )
         .await
@@ -676,16 +692,7 @@ pub(crate) async fn check(
                 &extras,
                 &groups,
                 None,
-                InstallOptions::new(
-                    no_install_project,
-                    false,
-                    false,
-                    false,
-                    false,
-                    false,
-                    Vec::new(),
-                    Vec::new(),
-                ),
+                install_options,
                 Modifications::Sufficient,
                 None,
                 (&settings).into(),

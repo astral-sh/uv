@@ -6323,25 +6323,77 @@ fn no_install_project_no_build_locked_dynamic_metadata() -> Result<()> {
     let build_backend = context.temp_dir.child("build_backend.py");
     build_backend.write_str(indoc! {r#"
         import pathlib
+        from textwrap import dedent
 
         def prepare_metadata_for_build_editable(metadata_directory, config_settings=None):
             pathlib.Path("validation-hook-called").write_text("called")
             dist_info = pathlib.Path(metadata_directory, "project-0.1.0.dist-info")
             dist_info.mkdir()
-            dist_info.joinpath("METADATA").write_text(
-                "Metadata-Version: 2.1\n"
-                "Name: project\n"
-                "Version: 0.1.0\n"
-                "Requires-Dist: anyio==3.7.0\n"
-            )
+            dist_info.joinpath("METADATA").write_text(dedent("""
+                Metadata-Version: 2.1
+                Name: project
+                Version: 0.1.0
+                Requires-Dist: anyio==3.7.0
+            """).lstrip())
             return dist_info.name
     "#})?;
+
+    let marker = context.temp_dir.child("validation-hook-called");
+
+    // Excluding the project also applies when no lockfile exists.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--no-install-project")
+        .arg("--no-build")
+        .arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Building source distributions for `project` is disabled
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--no-install-package")
+        .arg("project")
+        .arg("--no-build")
+        .arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Building source distributions for `project` is disabled
+    ");
+
+    uv_snapshot!(context.filters(), context.add()
+        .arg("example")
+        .arg("--group")
+        .arg("dev")
+        .arg("--no-install-project")
+        .arg("--no-build")
+        .arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to add dependencies
+      cause: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Building source distributions for `project` is disabled
+
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
+    ");
+
+    uv_snapshot!(context.filters(), context.check()
+        .arg("--no-install-project")
+        .arg("--no-build")
+        .arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Building source distributions for `project` is disabled
+    ");
+    assert!(!marker.exists());
 
     // Generate a lockfile, then remove the cached metadata so validation would need to invoke the
     // build backend again if it ignored `--no-build`.
     context.lock().assert().success();
 
-    let marker = context.temp_dir.child("validation-hook-called");
     assert!(marker.exists());
     fs_err::remove_file(marker.path())?;
     fs_err::remove_dir_all(&context.cache_dir)?;
@@ -6356,6 +6408,167 @@ fn no_install_project_no_build_locked_dynamic_metadata() -> Result<()> {
     ");
 
     assert!(!marker.exists());
+
+    Ok(())
+}
+
+/// Exclude the current project from metadata builds when syncing all workspace packages.
+#[test]
+fn no_install_project_all_packages_no_build_dynamic_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dynamic = ["dependencies"]
+
+        [dependency-groups]
+        dev = []
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+    context
+        .temp_dir
+        .child("build_backend.py")
+        .write_str(indoc! {r#"
+        import pathlib
+        from textwrap import dedent
+
+        def prepare_metadata_for_build_editable(metadata_directory, config_settings=None):
+            pathlib.Path("metadata-hook-called").write_text("called")
+            dist_info = pathlib.Path(metadata_directory, "project-0.1.0.dist-info")
+            dist_info.mkdir()
+            dist_info.joinpath("METADATA").write_text(dedent("""
+                Metadata-Version: 2.1
+                Name: project
+                Version: 0.1.0
+            """).lstrip())
+            return dist_info.name
+    "#})?;
+    context
+        .temp_dir
+        .child("child/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    let marker = context.temp_dir.child("metadata-hook-called");
+
+    // Resolving without a lockfile must not execute the excluded project's backend.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--all-packages")
+        .arg("--no-install-project")
+        .arg("--no-build")
+        .arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Building source distributions for `project` is disabled
+    ");
+    assert!(!marker.exists());
+
+    context.lock().arg("--offline").assert().success();
+    assert!(marker.exists());
+    fs_err::remove_file(marker.path())?;
+    fs_err::remove_dir_all(&context.cache_dir)?;
+
+    // Nor may lock validation execute the backend after cached metadata is removed.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--all-packages")
+        .arg("--no-install-project")
+        .arg("--no-build")
+        .arg("--locked")
+        .arg("--offline"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Distribution `project==0.1.0 @ editable+.` can't be installed because it is marked as `--no-build` but has no binary distribution
+    ");
+    assert!(!marker.exists());
+
+    // Group-only selection can still execute the backend to validate the lockfile.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--only-dev")
+        .arg("--no-build")
+        .arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Checked in [TIME]
+    ");
+    assert!(marker.exists());
+
+    Ok(())
+}
+
+/// A first-party backend without a metadata hook can build a wheel to provide metadata.
+#[test]
+fn sync_no_build_first_party_wheel_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        requires-python = ">=3.12"
+        dynamic = ["version", "dependencies"]
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+    context
+        .temp_dir
+        .child("build_backend.py")
+        .write_str(indoc! {r#"
+        import pathlib
+        import zipfile
+        from textwrap import dedent
+
+        def build_editable(wheel_directory, config_settings=None, metadata_directory=None):
+            pathlib.Path("wheel-hook-called").write_text("called")
+            filename = "project-0.1.0-py3-none-any.whl"
+            with zipfile.ZipFile(pathlib.Path(wheel_directory, filename), "w") as wheel:
+                wheel.writestr("project-0.1.0.dist-info/METADATA", dedent("""
+                    Metadata-Version: 2.1
+                    Name: project
+                    Version: 0.1.0
+                """).lstrip())
+                wheel.writestr("project-0.1.0.dist-info/WHEEL", dedent("""
+                    Wheel-Version: 1.0
+                    Generator: test
+                    Root-Is-Purelib: true
+                    Tag: py3-none-any
+                """).lstrip())
+                wheel.writestr("project-0.1.0.dist-info/RECORD", "")
+            return filename
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-build").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+    assert!(context.temp_dir.child("wheel-hook-called").exists());
 
     Ok(())
 }

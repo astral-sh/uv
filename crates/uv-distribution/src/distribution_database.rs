@@ -49,7 +49,7 @@ use crate::extracted_wheel::{ExtractedWheel, HashedWheel, WheelExtractor};
 use crate::hash::http_hash_algorithms;
 use crate::metadata::{ArchiveMetadata, Metadata};
 use crate::source::SourceDistributionBuilder;
-use crate::{Error, LocalWheel, Reporter, RequiresDist};
+use crate::{Error, FirstPartyPackages, LocalWheel, Reporter, RequiresDist};
 
 /// A cached high-level interface to convert distributions (a requirement resolved to a location)
 /// to a wheel or wheel metadata.
@@ -70,6 +70,7 @@ pub struct DistributionDatabase<'a, Context: BuildContext> {
     client: ManagedClient<'a>,
     reporter: Option<Arc<dyn Reporter>>,
     content_addressed_cache: bool,
+    first_party_packages: Option<&'a FirstPartyPackages>,
 }
 
 impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
@@ -90,7 +91,24 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             client: ManagedClient::new(client, downloads_semaphore),
             reporter: None,
             content_addressed_cache,
+            first_party_packages: None,
         }
+    }
+
+    /// Allow metadata builds for the given first-party workspace source trees.
+    #[must_use]
+    pub fn with_first_party_packages(
+        mut self,
+        first_party_packages: &'a FirstPartyPackages,
+    ) -> Self {
+        self.first_party_packages = Some(first_party_packages);
+        self
+    }
+
+    /// Return whether the name and path identify an eligible workspace member.
+    pub fn is_first_party(&self, name: &PackageName, path: &Path) -> bool {
+        self.first_party_packages
+            .is_some_and(|packages| packages.contains(name, path))
     }
 
     /// Record which static metadata entries are consulted while resolving runtime dependencies.
@@ -714,6 +732,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         };
         let ArchiveMetadata { metadata, hashes } = self
             .builder
+            .for_metadata(self.first_party_packages)
             .download_and_build_metadata(source, build_hash_policy, &self.client)
             .boxed_local()
             .await?;
