@@ -340,12 +340,16 @@ impl<'lock> LockTarget<'lock> {
             Self::Workspace(workspace) => workspace.install_path().join("uv.lock"),
             // `script.py.lock`
             Self::Script(script) => {
-                let mut file_name = match script.path.file_name() {
+                // Resolve symlinks so that invoking a script through a symlink
+                // finds the lockfile stored alongside the underlying script.
+                let path =
+                    dunce::canonicalize(&script.path).unwrap_or_else(|_| script.path.clone());
+                let mut file_name = match path.file_name() {
                     Some(f) => f.to_os_string(),
                     None => panic!("Script path has no file name"),
                 };
                 file_name.push(".lock");
-                script.path.with_file_name(file_name)
+                path.with_file_name(file_name)
             }
         }
     }
