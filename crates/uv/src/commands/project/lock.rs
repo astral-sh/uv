@@ -1127,7 +1127,7 @@ async fn do_lock(
                 build_constraints.specifications().cloned(),
                 dependency_groups,
                 dependency_metadata.values().cloned(),
-            )
+            )?
             .relative_to(target.install_path())?;
 
             let previous = existing_lock.map(ValidatedLock::into_lock);
