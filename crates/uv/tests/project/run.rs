@@ -7832,7 +7832,7 @@ fn run_centralized_environment_path_file() -> Result<()> {
         .assert()
         .success();
     // Resolve a relative path file target from `.venv`'s parent.
-    environment.write_str("external")?;
+    environment.write_str("external\r\n")?;
 
     // Like a directory link, use the path file's interpreter to select the cached environment.
     uv_snapshot!(context.filters(), context.run()

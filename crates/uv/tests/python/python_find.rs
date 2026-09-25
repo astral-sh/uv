@@ -682,6 +682,75 @@ fn python_find_venv() {
 }
 
 #[test]
+fn python_find_venv_redirect_file() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"])
+        .with_filtered_exe_suffix()
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin();
+
+    context.venv().arg("external").arg("-q").assert().success();
+    let redirect = context.temp_dir.child(".venv");
+    redirect.write_str("external\r\n")?;
+
+    // A redirect is usable without enabling preview; enabling the feature silences its warning.
+    #[cfg(not(windows))]
+    uv_snapshot!(context.filters(), context.python_find().env_remove(EnvVars::UV_PREVIEW), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/external/[BIN]/[PYTHON]
+
+    ----- stderr -----
+    warning: Using `.venv` redirect files is experimental and may change without warning. Pass `--preview-features venv-redirect-files` to disable this warning.
+    ");
+
+    #[cfg(not(windows))]
+    uv_snapshot!(context.filters(), context.python_find().env_remove(EnvVars::UV_PREVIEW)
+        .arg("--preview-features").arg("venv-redirect-files"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/external/[BIN]/[PYTHON]
+    ");
+
+    // An explicit system selection doesn't inspect the redirect.
+    uv_snapshot!(context.filters(), context.python_find().env_remove(EnvVars::UV_PREVIEW)
+        .arg("--system"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [PYTHON-3.12]
+    ");
+
+    // `uv pip` uses the same discovery when no virtual environment is activated.
+    uv_snapshot!(context.filters(), context.pip_list().env_remove(EnvVars::VIRTUAL_ENV), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Using `.venv` redirect files is experimental and may change without warning. Pass `--preview-features venv-redirect-files` to disable this warning.
+    Using Python 3.12.[X] environment at: external
+    ");
+
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    context.venv().arg("other").arg("-q").assert().success();
+    child.child(".venv").write_str("../other\n")?;
+    #[cfg(not(windows))]
+    uv_snapshot!(context.filters(), context.python_find().env_remove(EnvVars::UV_PREVIEW)
+        .current_dir(&child).arg("--preview-features").arg("venv-redirect-files"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/other/[BIN]/[PYTHON]
+    ");
+
+    // Targets without a virtual environment are reported.
+    redirect.write_str("missing\n")?;
+    uv_snapshot!(context.filters(), context.python_find().env_remove(EnvVars::UV_PREVIEW), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Invalid `.venv` redirect file `[VENV]/`
+      cause: `[TEMP_DIR]/missing` does not contain a virtual environment
+    ");
+    Ok(())
+}
+
+#[test]
 #[cfg(unix)]
 fn python_find_venv_executable_precedence() -> Result<()> {
     let context = uv_test::test_context!("3.12");

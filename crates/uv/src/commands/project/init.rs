@@ -40,6 +40,14 @@ use crate::commands::project::{find_requires_python, init_script_python_requirem
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
 
+/// Use an existing environment in the directory being initialized, including a `.venv` redirect.
+fn existing_init_environment(path: &Path, cache: &Cache) -> Result<Option<PythonEnvironment>> {
+    let project_environment_path = path.join(".venv");
+    let root = super::project_environment_redirect(&project_environment_path, cache)?
+        .unwrap_or(project_environment_path);
+    Ok(PythonEnvironment::from_root(&root, cache).ok())
+}
+
 /// Add one or more packages to the project requirements.
 #[expect(clippy::single_match_else, clippy::fn_params_excessive_bools)]
 pub(crate) async fn init(
@@ -614,7 +622,7 @@ async fn determine_requires_python(
         debug!("Using Python version `{requires_python}` from request `{python_request}`");
 
         Ok((requires_python, python_pin))
-    } else if let Ok(virtualenv) = PythonEnvironment::from_root(path.join(".venv"), cache) {
+    } else if let Some(virtualenv) = existing_init_environment(path, cache)? {
         // (2) An existing Python environment in the target directory
         let interpreter = virtualenv.into_interpreter();
 
