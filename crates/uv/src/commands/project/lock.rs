@@ -1,7 +1,7 @@
 #![expect(clippy::single_match_else)]
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::fmt::Write;
+use std::fmt::{self, Write};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -1130,7 +1130,7 @@ async fn do_lock(
                         && let Some(ValidatedLock::MismatchedRequirements(_, reason)) =
                             &existing_lock
                     {
-                        let _ = writeln!(printer.stderr(), "{}", Hints::from(reason.as_str()));
+                        let _ = writeln!(printer.stderr(), "{}", Hints::from(reason.to_string()));
                     }
                     return Err(error.into());
                 }
@@ -1200,9 +1200,34 @@ pub(crate) enum ValidatedLock {
     /// possible, even though the lockfile does not satisfy the workspace requirements.
     Preferable(Lock),
     /// Package requirements have changed, so the lockfile must be updated.
-    MismatchedRequirements(Lock, String),
+    MismatchedRequirements(Lock, RequirementsMismatch),
     /// An existing lockfile was provided, and it satisfies the workspace requirements.
     Satisfies(Lock),
+}
+
+/// The requested and locked requirements for a package whose requirements changed.
+#[derive(Debug)]
+pub(crate) struct RequirementsMismatch {
+    name: PackageName,
+    expected: BTreeSet<Requirement>,
+    actual: BTreeSet<Requirement>,
+}
+
+impl fmt::Display for RequirementsMismatch {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "The lockfile needs to be updated because the requirements for `{}` have changed:",
+            self.name
+        )?;
+        for requirement in self.expected.difference(&self.actual) {
+            write!(f, "\n  Added: `{requirement}`")?;
+        }
+        for requirement in self.actual.difference(&self.expected) {
+            write!(f, "\n  Removed: `{requirement}`")?;
+        }
+        Ok(())
+    }
 }
 
 impl ValidatedLock {
@@ -1598,15 +1623,11 @@ impl ValidatedLock {
                         expected, actual
                     );
                 }
-                let mut reason = format!(
-                    "The lockfile needs to be updated because the requirements for `{name}` have changed:"
-                );
-                for requirement in expected.difference(&actual) {
-                    write!(reason, "\n  Added: `{requirement}`")?;
-                }
-                for requirement in actual.difference(&expected) {
-                    write!(reason, "\n  Removed: `{requirement}`")?;
-                }
+                let reason = RequirementsMismatch {
+                    name: name.clone(),
+                    expected,
+                    actual,
+                };
                 Ok(Self::MismatchedRequirements(lock, reason))
             }
             SatisfiesResult::MismatchedPackageDependencies(name, version, expected, actual) => {
