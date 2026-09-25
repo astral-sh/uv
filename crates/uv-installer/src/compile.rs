@@ -104,7 +104,7 @@ async fn spawn_workers(
     worker_count: usize,
     timeout: Option<Duration>,
 ) -> Vec<WorkerHandle> {
-    let rust_compiler = if uv_preview::is_enabled(PreviewFeature::RustBytecode) {
+    let rust_compiler = if uv_preview::is_enabled(PreviewFeature::NativeBytecode) {
         match RustCompiler::query(dir, python_executable, timeout).await {
             Ok(compiler) => compiler,
             Err(err) => {

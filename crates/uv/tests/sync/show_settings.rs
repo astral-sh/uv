@@ -3960,7 +3960,7 @@ fn preview_features() {
     +            FrozenLockfile,
     +            MinimumLibcVersion,
     +            BuildDependencyCheck,
-    +            RustBytecode,
+    +            NativeBytecode,
     +            BuildLazyImports,
     +        ],
          },
