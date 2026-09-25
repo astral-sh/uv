@@ -4,6 +4,7 @@ use std::process::ExitCode;
 use std::str::FromStr;
 use std::time::Instant;
 
+use anstream::eprintln;
 use tracing::{debug, trace};
 use tracing_durations_export::DurationsLayerBuilder;
 use tracing_durations_export::plot::PlotConfig;
@@ -12,11 +13,29 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer};
 
-use uv_dev::run;
+use uv_dev::{COVERAGE_RUSTC_WRAPPER_ENV, coverage_rustc_wrapper, run};
 use uv_static::EnvVars;
 
+fn main() -> ExitCode {
+    // Handle Cargo's compiler-wrapper invocation before initializing the normal CLI runtime.
+    if env::var_os(COVERAGE_RUSTC_WRAPPER_ENV).is_some()
+        && let Some(result) = coverage_rustc_wrapper()
+    {
+        return match result {
+            Ok(status) if status.success() => ExitCode::SUCCESS,
+            Ok(_) => ExitCode::FAILURE,
+            Err(error) => {
+                eprintln!("uv-dev coverage rustc wrapper failed: {error:#}");
+                ExitCode::FAILURE
+            }
+        };
+    }
+
+    run_main()
+}
+
 #[tokio::main(flavor = "current_thread")]
-async fn main() -> ExitCode {
+async fn run_main() -> ExitCode {
     let (duration_layer, _guard) = if let Ok(location) = env::var(EnvVars::TRACING_DURATIONS_FILE) {
         let location = PathBuf::from(location);
         if let Some(parent) = location.parent() {
