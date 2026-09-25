@@ -344,6 +344,66 @@ fn lock_equivalent_requirements() -> Result<()> {
     Ok(())
 }
 
+/// Complex markers can retain their original declarations without preventing lock reuse.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_bounded_marker_expansion() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    let mut overrides = ('a'..='l')
+        .map(|extra| format!(r#""tool[{extra}]; '{extra}' in platform_release""#))
+        .collect::<Vec<_>>();
+    let pyproject = |overrides: &[String]| {
+        formatdoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [tool.uv]
+            override-dependencies = [{}]
+        "#, overrides.join(", ")}
+    };
+    overrides.push(overrides[0].clone());
+    pyproject_toml.write_str(&pyproject(&overrides))?;
+    uv_snapshot!(context.filters(), context.lock().arg("--offline").arg("--preview-features").arg("lockfile-normalization"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    let locked = context.read("uv.lock");
+
+    overrides.pop();
+    overrides.reverse();
+    pyproject_toml.write_str(&pyproject(&overrides))?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), locked);
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--preview-features").arg("lockfile-normalization"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), locked);
+
+    // The fallback must retain every declaration, including inputs past the expansion budget.
+    overrides[0] = r#""tool[l]; 'changed' in platform_release""#.to_string();
+    pyproject_toml.write_str(&pyproject(&overrides))?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    assert_eq!(context.read("uv.lock"), locked);
+    Ok(())
+}
+
 /// Normalize each manifest input within its own scope and with its own candidate policies.
 #[cfg(feature = "test-universal")]
 #[test]
