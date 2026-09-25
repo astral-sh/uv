@@ -2535,7 +2535,7 @@ async fn lock_sdist_url_rejected_archive_not_cached() -> Result<()> {
 /// Equivalent subdirectory spellings must retain the hash of an already-locked archive.
 #[cfg(feature = "test-universal")]
 #[tokio::test]
-async fn lock_sdist_url_equivalent_subdirectory_locked_hash_mismatch() -> Result<()> {
+async fn lock_source_archive_url_equivalent_subdirectory_locked_hash_mismatch() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let filename = "demo_pkg-1.0.0.tar.gz";
     let sentinel = context.temp_dir.child("backend-executed");
