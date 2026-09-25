@@ -1,5 +1,10 @@
 use std::collections::BTreeMap;
+use std::env::consts::EXE_SUFFIX;
 use std::fmt::Write;
+#[cfg(unix)]
+use std::fs::Permissions;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 #[cfg(windows)]
 use std::os::windows::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
@@ -28,17 +33,17 @@ use wiremock::{
 };
 
 use uv_extract::dirhash::{DirectoryDigest, dirhash_path};
-use uv_fs::{PortablePath, Simplified};
+use uv_fs::{PortablePath, Simplified, create_symlink};
 use uv_install_wheel::validate_and_heal_record;
 use uv_static::EnvVars;
+#[cfg(unix)]
+use uv_test::ReadOnlyDirectoryGuard;
 use uv_test::archive::write_tar_gz;
 #[cfg(feature = "test-git")]
 use uv_test::decode_token;
 use uv_test::find_links::FindLinksServer;
 use uv_test::package_server::PackageServer;
-#[cfg(windows)]
-use uv_test::packse::generate_wheel_with_files;
-use uv_test::packse::{PackseServer, generate_wheel};
+use uv_test::packse::{PackseServer, generate_wheel, generate_wheel_with_files};
 use uv_test::{
     DEFAULT_PYTHON_VERSION, TestContext, apply_filters, download_to_disk, get_bin, uv_snapshot,
     venv_bin_path,
@@ -508,6 +513,55 @@ fn install_target_current_directory() {
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     ");
+}
+
+/// Resolve a target through the filesystem, including a parent component after a symlink.
+#[cfg(unix)]
+#[test]
+fn install_target_symlink_parent_directory() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix();
+    context.temp_dir.child("physical/nested").create_dir_all()?;
+    symlink("physical/nested", context.temp_dir.join("alias"))?;
+    symlink("nested", context.temp_dir.join("physical/target"))?;
+    // The package alias resolves exactly to the target's purelib, platlib, and data roots.
+    symlink(".", context.temp_dir.join("physical/nested/foo"))?;
+    let (filename, wheel) = generate_wheel(
+        &"foo".parse()?,
+        &"0.1.0".parse()?,
+        &[],
+        &BTreeMap::default(),
+        None,
+        "py3-none-any",
+        &[],
+    );
+    fs::write(context.temp_dir.join(&filename), wheel)?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-index")
+        .args(["--target", "alias/../target"])
+        .arg(&filename), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl)
+    ");
+
+    context
+        .temp_dir
+        .child("physical/nested/__init__.py")
+        .assert("__version__ = \"0.1.0\"\n");
+    context
+        .temp_dir
+        .child("target")
+        .assert(predicate::path::missing());
+
+    Ok(())
 }
 
 #[test]
@@ -14888,6 +14942,508 @@ fn install_in_prefix_symlinked_wheel_data_directory() -> Result<()> {
     Ok(())
 }
 
+/// Reject directory aliases outside the installation scheme before installing any files.
+#[test]
+fn reject_external_wheel_destination_directory() -> Result<()> {
+    let site_packages = if cfg!(windows) {
+        "Lib/site-packages"
+    } else {
+        "lib/python3.12/site-packages"
+    };
+
+    allow_duplicates! {
+        for (file, destination) in [
+            ("foo/payload.txt", format!("{site_packages}/foo")),
+            ("foo/nested/payload.txt", format!("{site_packages}/foo/nested")),
+            ("foo-0.1.0.data/purelib/alias/payload.txt", format!("{site_packages}/alias")),
+            ("foo-0.1.0.data/platlib/alias/payload.txt", format!("{site_packages}/alias")),
+            ("foo-0.1.0.data/data/alias/payload.txt", "alias".to_string()),
+            ("foo-0.1.0.data/headers/payload.txt", "include/site/python3.12/foo".to_string()),
+        ] {
+            let context = uv_test::test_context!("3.12").with_filter((
+                r"Installation destination `[^`]+`",
+                "Installation destination `[DESTINATION]`",
+            ));
+            let outside = context.temp_dir.child("outside");
+            outside.child("payload.txt").write_str("outside sentinel")?;
+            let destination = context.venv.join(destination);
+            fs::create_dir_all(destination.parent().context("Destination must have a parent")?)?;
+            create_symlink(outside.path(), &destination)?;
+
+            let (filename, wheel) = generate_wheel_with_files(
+                &"foo".parse()?,
+                &"0.1.0".parse()?,
+                &[],
+                &BTreeMap::default(),
+                None,
+                "py3-none-any",
+                &[(file, "wheel payload"), ("harmless.py", "this must not be installed")],
+            );
+            fs::write(context.temp_dir.join(&filename), wheel)?;
+
+            uv_snapshot!(context.filters(), context.pip_install()
+                .arg("--no-index")
+                .args(["--link-mode", "copy"])
+                .arg(&filename), @"
+            exit_code: 2 (failure)
+            ----- stderr -----
+            Resolved 1 package in [TIME]
+            Prepared 1 package in [TIME]
+            error: Failed to install: foo-0.1.0-py3-none-any.whl (foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl))
+              cause: Installation destination `[DESTINATION]` resolves outside the Python installation scheme: `[TEMP_DIR]/outside`
+            ");
+
+            outside.child("payload.txt").assert("outside sentinel");
+            outside.child("__init__.py").assert(predicate::path::missing());
+            assert!(!context.site_packages().join("harmless.py").exists());
+            assert!(!context.site_packages().join("foo-0.1.0.dist-info").exists());
+            assert!(!context.site_packages().join("foo/__init__.py").exists());
+        }
+        Ok::<(), anyhow::Error>(())
+    }?;
+
+    Ok(())
+}
+
+/// Destination checks include existing files and empty directories in a merged `.data` tree.
+#[test]
+fn reject_external_merged_wheel_data_directory() -> Result<()> {
+    allow_duplicates! {
+        for directory in [false, true] {
+            let context = uv_test::test_context!("3.12");
+            let outside = context.temp_dir.child("outside");
+            outside.child("payload.txt").write_str("outside sentinel")?;
+            create_symlink(outside.path(), context.venv.join("escape"))?;
+            let staged = context.site_packages().join("foo-0.1.0.data/data/escape");
+            fs::create_dir_all(&staged)?;
+            if directory {
+                fs::create_dir_all(staged.join("nested"))?;
+            } else {
+                fs::write(staged.join("payload.txt"), "stale payload")?;
+            }
+            let (filename, wheel) = generate_wheel_with_files(
+                &"foo".parse()?,
+                &"0.1.0".parse()?,
+                &[],
+                &BTreeMap::default(),
+                None,
+                "py3-none-any",
+                &[("foo-0.1.0.data/data/safe.txt", "wheel payload")],
+            );
+            fs::write(context.temp_dir.join(&filename), wheel)?;
+
+            uv_snapshot!(context.filters(), context.pip_install()
+                .arg("--no-index")
+                .args(["--link-mode", "copy"])
+                .arg(&filename), @"
+            exit_code: 2 (failure)
+            ----- stderr -----
+            Resolved 1 package in [TIME]
+            Prepared 1 package in [TIME]
+            error: Failed to install: foo-0.1.0-py3-none-any.whl (foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl))
+              cause: Installation destination `[VENV]/escape` resolves outside the Python installation scheme: `[TEMP_DIR]/outside`
+            ");
+
+            outside.child("payload.txt").assert("outside sentinel");
+            outside.child("nested").assert(predicate::path::missing());
+            context.venv.child("safe.txt").assert(predicate::path::missing());
+        }
+        Ok::<(), anyhow::Error>(())
+    }?;
+
+    Ok(())
+}
+
+/// A merged `.data` tree cannot install aliases or rewrite scripts absent from the wheel's `RECORD`.
+#[test]
+fn reject_unrecorded_merged_wheel_data_entry() -> Result<()> {
+    allow_duplicates! {
+        for directory in ["data", "scripts"] {
+            let context = uv_test::test_context!("3.12").with_filter((
+                r"foo-0\.1\.0\.data[/\\](?:data|scripts)[/\\]unrecorded",
+                "foo-0.1.0.data/[SCHEME]/unrecorded",
+            ));
+            let outside = context.temp_dir.child("outside");
+            outside.child("payload.txt").write_str("outside sentinel")?;
+            let staged = context.site_packages().join(format!("foo-0.1.0.data/{directory}"));
+            fs::create_dir_all(&staged)?;
+            let destination = if directory == "scripts" {
+                fs::write(staged.join("unrecorded"), "#!python\nprint('stale')\n")?;
+                venv_bin_path(&context.venv).join("unrecorded")
+            } else {
+                create_symlink(outside.path(), staged.join("unrecorded"))?;
+                context.venv.join("unrecorded")
+            };
+            let (filename, wheel) = generate_wheel_with_files(
+                &"foo".parse()?,
+                &"0.1.0".parse()?,
+                &[],
+                &BTreeMap::default(),
+                None,
+                "py3-none-any",
+                &[(
+                    &format!("foo-0.1.0.data/{directory}/safe.txt"),
+                    "wheel payload",
+                )],
+            );
+            fs::write(context.temp_dir.join(&filename), wheel)?;
+
+            uv_snapshot!(context.filters(), context.pip_install()
+                .arg("--no-index")
+                .args(["--link-mode", "copy"])
+                .arg(&filename), @"
+            exit_code: 2 (failure)
+            ----- stderr -----
+            Resolved 1 package in [TIME]
+            Prepared 1 package in [TIME]
+            error: Failed to install: foo-0.1.0-py3-none-any.whl (foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl))
+              cause: RECORD file doesn't match wheel contents, could not find entry for: foo-0.1.0.data/[SCHEME]/unrecorded ([SITE_PACKAGES]/foo-0.1.0.data/[SCHEME]/unrecorded)
+            ");
+
+            outside.child("payload.txt").assert("outside sentinel");
+            assert!(!destination.exists());
+        }
+        Ok::<(), anyhow::Error>(())
+    }?;
+
+    Ok(())
+}
+
+/// Aliases can resolve to another scheme directory or to an installation root itself.
+#[test]
+fn install_internal_wheel_destination_directories() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filter((r"(?:\.\./)+include/site/python3\.12/foo", "[HEADERS]/foo"))
+        .with_filter((
+            r"(foo-0\.1\.0\.dist-info/(?:direct_url|uv_cache)\.json),[^\n]*",
+            "$1,sha256=[SHA256],[SIZE]",
+        ));
+    let headers = context.venv.child("include/site/python3.12");
+    headers.create_dir_all()?;
+    let shared_headers = context.venv.child("share/headers");
+    shared_headers.create_dir_all()?;
+    create_symlink(shared_headers.path(), headers.join("foo"))?;
+    create_symlink(context.site_packages(), context.site_packages().join("foo"))?;
+
+    let (filename, wheel) = generate_wheel_with_files(
+        &"foo".parse()?,
+        &"0.1.0".parse()?,
+        &[],
+        &BTreeMap::default(),
+        None,
+        "py3-none-any",
+        &[("foo-0.1.0.data/headers/foo.h", "foo header\n")],
+    );
+    fs::write(context.temp_dir.join(&filename), wheel)?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-index")
+        .args(["--link-mode", "copy"])
+        .arg(&filename), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl)
+    ");
+
+    shared_headers.child("foo.h").assert("foo header\n");
+    assert_eq!(
+        fs::read_to_string(context.site_packages().join("__init__.py"))?,
+        "__version__ = \"0.1.0\"\n"
+    );
+    let record = fs::read_to_string(context.site_packages().join("foo-0.1.0.dist-info/RECORD"))?;
+    assert_snapshot!(apply_filters(record, context.filters()), @"
+    [HEADERS]/foo/foo.h,sha256=Ah08Q1TAXsYfmYm8kPM-UTGh5DY8mpHdRKUx_HbDtvI,11
+    foo-0.1.0.dist-info/INSTALLER,sha256=5hhM4Q4mYTT9z6QB6PGpUAW81PGNFrYrdXMj4oM_6ak,2
+    foo-0.1.0.dist-info/METADATA,sha256=Q4V_biBkmYoF3yJrYOW-i2ZiY85Y5gokSH_5Ptj6cLo,47
+    foo-0.1.0.dist-info/RECORD,,
+    foo-0.1.0.dist-info/REQUESTED,sha256=47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU,0
+    foo-0.1.0.dist-info/WHEEL,sha256=ujr00BDMtYYidJ71ulklWmNFpiGqy5NyjK1fX-JwFO4,78
+    foo-0.1.0.dist-info/direct_url.json,sha256=[SHA256],[SIZE]
+    foo-0.1.0.dist-info/uv_cache.json,sha256=[SHA256],[SIZE]
+    foo/__init__.py,sha256=kUR5RAFc7HCeiqdlX36dZOHkUI5wI6V_43RpEcD8b-0,22
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_uninstall().arg("foo"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl)
+    ");
+    shared_headers
+        .child("foo.h")
+        .assert(predicate::path::missing());
+    assert!(!context.site_packages().join("__init__.py").exists());
+    assert!(!context.site_packages().join("foo-0.1.0.dist-info").exists());
+
+    Ok(())
+}
+
+/// Linking the wheel can create the targets of aliases used by its `.data` payload.
+#[test]
+fn install_wheel_data_through_dangling_directory_alias() -> Result<()> {
+    allow_duplicates! {
+        for link_mode in ["copy", "hardlink", "symlink", "clone"] {
+            if cfg!(windows) && link_mode == "symlink" {
+                continue;
+            }
+            for (alias, directory, package) in [
+                ("alias", "data/alias", "foo"),
+                ("bin", "scripts", "realbin"),
+            ] {
+                let context = uv_test::test_context!("3.12")
+                    .with_filtered_python_names()
+                    .with_filtered_virtualenv_bin()
+                    .with_filtered_exe_suffix();
+                let target = context.temp_dir.child("target");
+                let referent = target.child(package);
+                // The Windows junction helper requires an existing target.
+                referent.create_dir_all()?;
+                create_symlink(referent.path(), target.join(alias))?;
+                fs::remove_dir(&referent)?;
+
+                let (filename, wheel) = generate_wheel_with_files(
+                    &"foo".parse()?,
+                    &"0.1.0".parse()?,
+                    &[],
+                    &BTreeMap::default(),
+                    None,
+                    "py3-none-any",
+                    &[
+                        (&format!("{package}/marker"), "package marker"),
+                        (&format!("foo-0.1.0.data/{directory}/payload"), "wheel payload"),
+                    ],
+                );
+                fs::write(context.temp_dir.join(&filename), wheel)?;
+
+                uv_snapshot!(context.filters(), context.pip_install()
+                    .arg("--no-index")
+                    .args(["--target", "target"])
+                    .args(["--link-mode", link_mode])
+                    .arg(&filename), @"
+                exit_code: 0 (success)
+                ----- stderr -----
+                Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+                Resolved 1 package in [TIME]
+                Prepared 1 package in [TIME]
+                Installed 1 package in [TIME]
+                 + foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl)
+                ");
+
+                referent.child("marker").assert("package marker");
+                referent.child("payload").assert("wheel payload");
+            }
+        }
+        Ok::<(), anyhow::Error>(())
+    }?;
+
+    Ok(())
+}
+
+/// An alias that becomes resolvable during linking must still stay inside the installation scheme.
+#[cfg(unix)]
+#[test]
+fn reject_external_wheel_data_through_dangling_directory_alias() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix();
+    let target = context.temp_dir.child("target");
+    target.create_dir_all()?;
+    let outside = context.temp_dir.child("outside");
+    outside.child("payload").write_str("outside sentinel")?;
+    // Traversing `..` requires `foo` to exist, so this link is initially dangling.
+    symlink("foo/../../outside", target.join("alias"))?;
+
+    let (filename, wheel) = generate_wheel_with_files(
+        &"foo".parse()?,
+        &"0.1.0".parse()?,
+        &[],
+        &BTreeMap::default(),
+        None,
+        "py3-none-any",
+        &[("foo-0.1.0.data/data/alias/payload", "wheel payload")],
+    );
+    fs::write(context.temp_dir.join(&filename), wheel)?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-index")
+        .args(["--target", "target"])
+        .args(["--link-mode", "copy"])
+        .arg(&filename), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    error: Failed to install: foo-0.1.0-py3-none-any.whl (foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl))
+      cause: Installation destination `target/alias` resolves outside the Python installation scheme: `[TEMP_DIR]/outside`
+    ");
+
+    target
+        .child("foo/__init__.py")
+        .assert("__version__ = \"0.1.0\"\n");
+    outside.child("payload").assert("outside sentinel");
+
+    Ok(())
+}
+
+/// An unused, inaccessible headers directory does not prevent installing through an internal alias.
+#[cfg(unix)]
+#[test]
+fn install_wheel_with_inaccessible_unused_scheme_root() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let shared = context.venv.child("shared");
+    shared.create_dir_all()?;
+    create_symlink(shared.path(), context.site_packages().join("foo"))?;
+    let include = context.venv.child("include");
+    let headers = include.child("site/python3.12");
+    headers.create_dir_all()?;
+
+    let (filename, wheel) = generate_wheel(
+        &"foo".parse()?,
+        &"0.1.0".parse()?,
+        &[],
+        &BTreeMap::default(),
+        None,
+        "py3-none-any",
+        &[],
+    );
+    fs::write(context.temp_dir.join(&filename), wheel)?;
+
+    let _guard = ReadOnlyDirectoryGuard::new(include.path())?;
+    fs::set_permissions(&include, Permissions::from_mode(0o000))?;
+    // Privileged users can bypass directory permissions, so this case cannot exercise the error.
+    if fs::canonicalize(&headers).is_ok() {
+        return Ok(());
+    }
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-index")
+        .args(["--link-mode", "copy"])
+        .arg(&filename), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl)
+    ");
+    shared
+        .child("__init__.py")
+        .assert("__version__ = \"0.1.0\"\n");
+
+    Ok(())
+}
+
+/// Package and data aliases into the scripts directory cannot overwrite the interpreter.
+#[test]
+fn reject_reserved_wheel_destination_alias() -> Result<()> {
+    let interpreter = format!("python{EXE_SUFFIX}");
+
+    allow_duplicates! {
+        for directory in [
+            "alias",
+            "foo-0.1.0.data/purelib/alias",
+            "foo-0.1.0.data/platlib/alias",
+            "foo-0.1.0.data/data/alias",
+            "foo-0.1.0.data/headers",
+        ] {
+            let context = uv_test::test_context!("3.12").with_filter((
+                r"got: `python\.exe`", "got: `python`",
+            ));
+            let destination = match directory {
+                "foo-0.1.0.data/data/alias" => context.venv.join("alias"),
+                "foo-0.1.0.data/headers" => context.venv.join("include/site/python3.12/foo"),
+                _ => context.site_packages().join("alias"),
+            };
+            fs::create_dir_all(destination.parent().context("Destination must have a parent")?)?;
+            create_symlink(venv_bin_path(&context.venv), &destination)?;
+            let (filename, wheel) = generate_wheel_with_files(
+                &"foo".parse()?,
+                &"0.1.0".parse()?,
+                &[],
+                &BTreeMap::default(),
+                None,
+                "py3-none-any",
+                &[(
+                    &format!("{directory}/{interpreter}"),
+                    "this must not replace python",
+                )],
+            );
+            fs::write(context.temp_dir.join(&filename), wheel)?;
+
+            uv_snapshot!(context.filters(), context.pip_install()
+                .arg("--no-index")
+                .arg(&filename), @"
+            exit_code: 2 (failure)
+            ----- stderr -----
+            Resolved 1 package in [TIME]
+            Prepared 1 package in [TIME]
+            error: Failed to install: foo-0.1.0-py3-none-any.whl (foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl))
+              cause: Scripts must not use the reserved name `python`, got: `python`
+            ");
+
+            Command::new(venv_bin_path(&context.venv).join(&interpreter))
+                .arg("--version")
+                .assert()
+                .success();
+            assert!(!context.site_packages().join("foo").exists());
+            assert!(!context.site_packages().join("foo-0.1.0.dist-info").exists());
+        }
+        Ok::<(), anyhow::Error>(())
+    }?;
+
+    Ok(())
+}
+
+/// Mutable files are copied during linking and must replace an existing leaf symlink.
+#[cfg(unix)]
+#[test]
+fn install_wheel_replaces_record_symlink() -> Result<()> {
+    allow_duplicates! {
+        for link_mode in ["copy", "hardlink", "symlink"] {
+            let context = uv_test::test_context!("3.12");
+            let outside = context.temp_dir.child("outside.txt");
+            outside.write_str("outside sentinel")?;
+            fs::create_dir_all(context.site_packages().join("foo"))?;
+            let record = context.site_packages().join("foo/RECORD");
+            symlink(outside.path(), &record)?;
+            let (filename, wheel) = generate_wheel_with_files(
+                &"foo".parse()?,
+                &"0.1.0".parse()?,
+                &[],
+                &BTreeMap::default(),
+                None,
+                "py3-none-any",
+                &[("foo/RECORD", "wheel payload")],
+            );
+            fs::write(context.temp_dir.join(&filename), wheel)?;
+
+            uv_snapshot!(context.filters(), context.pip_install()
+                .arg("--no-index")
+                .args(["--link-mode", link_mode])
+                .arg(&filename), @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Resolved 1 package in [TIME]
+            Prepared 1 package in [TIME]
+            Installed 1 package in [TIME]
+             + foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl)
+            ");
+
+            outside.assert("outside sentinel");
+            assert_eq!(fs::read_to_string(&record)?, "wheel payload");
+            assert!(!fs::symlink_metadata(&record)?.file_type().is_symlink());
+        }
+        Ok::<(), anyhow::Error>(())
+    }?;
+
+    Ok(())
+}
+
 #[test]
 fn reject_reserved_wheel_data_script_name() -> Result<()> {
     let interpreter = if cfg!(windows) {
@@ -14963,66 +15519,109 @@ fn reject_reserved_wheel_data_script_name() -> Result<()> {
     Ok(())
 }
 
-fn repacked_wheel_with_entrypoint(
+/// Reserved interpreter names are rejected before installing any files, even if the scripts directory
+/// does not exist.
+#[test]
+fn reject_reserved_wheel_destination_missing_scripts() -> Result<()> {
+    let scripts = if cfg!(windows) { "Scripts" } else { "bin" };
+    let site_packages = if cfg!(windows) {
+        "Lib/site-packages"
+    } else {
+        "lib/python3.12/site-packages"
+    };
+
+    allow_duplicates! {
+        for (option, file) in [
+            ("--prefix", "foo-0.1.0.data/scripts/python".to_string()),
+            ("--prefix", format!("foo-0.1.0.data/data/{scripts}/python")),
+            ("--target", "bin/python".to_string()),
+            ("--target", "foo-0.1.0.data/purelib/bin/python".to_string()),
+        ] {
+            let context = uv_test::test_context!("3.12")
+                .with_filtered_python_names()
+                .with_filtered_virtualenv_bin()
+                .with_filtered_exe_suffix();
+            let destination = context.temp_dir.child("destination");
+            let (filename, wheel) = generate_wheel_with_files(
+                &"foo".parse()?,
+                &"0.1.0".parse()?,
+                &[],
+                &BTreeMap::default(),
+                None,
+                "py3-none-any",
+                &[(file.as_str(), "reserved script"), ("harmless.py", "this must not be installed")],
+            );
+            fs::write(context.temp_dir.join(&filename), wheel)?;
+
+            uv_snapshot!(context.filters(), context.pip_install()
+                .arg("--no-index")
+                .arg(option)
+                .arg("destination")
+                .arg(&filename), @"
+            exit_code: 2 (failure)
+            ----- stderr -----
+            Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+            Resolved 1 package in [TIME]
+            Prepared 1 package in [TIME]
+            error: Failed to install: foo-0.1.0-py3-none-any.whl (foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl))
+              cause: Scripts must not use the reserved name `python`, got: `python`
+            ");
+
+            let installed = if option == "--prefix" {
+                destination.child(scripts).assert(predicate::path::missing());
+                destination.child(site_packages)
+            } else {
+                destination.child("bin").assert(predicate::path::missing());
+                destination.child("")
+            };
+            installed.child("harmless.py").assert(predicate::path::missing());
+            installed.child("foo").assert(predicate::path::missing());
+            installed.child("foo-0.1.0.dist-info").assert(predicate::path::missing());
+        }
+        Ok::<(), anyhow::Error>(())
+    }?;
+
+    Ok(())
+}
+
+fn generate_wheel_with_entrypoint(
     context: &TestContext,
     section: &str,
     entrypoint_name: &str,
 ) -> Result<PathBuf> {
-    context.init().arg("--lib").arg("foo").assert().success();
-    context.build().arg("--wheel").arg("foo").assert().success();
-
-    let built_wheel = context.temp_dir.join("foo/dist/foo-0.1.0-py3-none-any.whl");
-    let unpacked = context.temp_dir.join("foo-unpacked");
-    uv_extract::unzip(File::open(&built_wheel)?, &unpacked)?;
-
-    fs::write(
-        unpacked.join("foo-0.1.0.dist-info/entry_points.txt"),
-        formatdoc! {"
-            [{section}]
-            {entrypoint_name} = foo:main
-            ",
-        },
-    )?;
-
-    let repacked_wheel = context.temp_dir.join("foo-0.1.0-py3-none-any.whl");
-    let mut writer = ZipFileWriter::new(Vec::new());
-    for entry in WalkDir::new(&unpacked) {
-        let entry = entry?;
-        let path = entry.path();
-        let name = path.strip_prefix(&unpacked)?;
-        if name.as_os_str().is_empty() {
-            continue;
-        }
-        // Zip entries must use forward slashes, even on Windows.
-        let mut name = PortablePath::from(name).to_string();
-        if path.is_dir() {
-            name.push('/');
-            let entry = ZipEntryBuilder::new(name.into(), Compression::Stored);
-            block_on(writer.write_entry_whole(entry, &[]))?;
-        } else {
-            let entry = ZipEntryBuilder::new(name.into(), Compression::Stored);
-            block_on(writer.write_entry_whole(entry, &fs_err::read(path)?))?;
-        }
-    }
-    fs_err::write(&repacked_wheel, block_on(writer.close())?)?;
-
-    Ok(repacked_wheel)
+    let (filename, wheel) = generate_wheel_with_files(
+        &"foo".parse()?,
+        &"0.1.0".parse()?,
+        &[],
+        &BTreeMap::default(),
+        None,
+        "py3-none-any",
+        &[(
+            "foo-0.1.0.dist-info/entry_points.txt",
+            &formatdoc! {"
+                [{section}]
+                {entrypoint_name} = foo:main
+            "},
+        )],
+    );
+    let path = context.temp_dir.join(filename);
+    fs::write(&path, wheel)?;
+    Ok(path)
 }
 
 #[test]
 fn reject_wheel_entrypoint_paths() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
-    // Build a normal wheel, then rewrite its entry-point metadata to exercise the installer
-    // directly, rather than relying on backend-side validation.
+    // Generate entry-point metadata directly to exercise the installer's validation.
     let escaped_entrypoint = context.temp_dir.child("escaped-entrypoint");
-    let repacked_wheel = repacked_wheel_with_entrypoint(
+    let wheel = generate_wheel_with_entrypoint(
         &context,
         "console_scripts",
         &escaped_entrypoint.path().portable_display().to_string(),
     )?;
 
-    uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
+    uv_snapshot!(context.filters(), context.pip_install().arg(&wheel), @"
     exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -15037,13 +15636,161 @@ fn reject_wheel_entrypoint_paths() -> Result<()> {
     Ok(())
 }
 
+/// Generated entrypoints cannot follow a scripts-directory alias outside the installation scheme.
+#[test]
+fn reject_external_wheel_entrypoint_alias() -> Result<()> {
+    allow_duplicates! {
+        for section in ["console_scripts", "gui_scripts"] {
+            for entrypoint in ["script", "nested/script"] {
+                let context = uv_test::test_context!("3.12")
+                    .with_filter((
+                        r"Installation destination `[^`]+`",
+                        "Installation destination `[DESTINATION]`",
+                    ))
+                    .with_filter((r"[/\\]outside[/\\]nested`", "/outside`"));
+                let wheel = generate_wheel_with_entrypoint(&context, section, &format!("alias/{entrypoint}"))?;
+                let outside = context.temp_dir.child("outside");
+                let script = outside.child(format!("{entrypoint}{EXE_SUFFIX}"));
+                script.write_str("outside sentinel")?;
+                create_symlink(outside.path(), venv_bin_path(&context.venv).join("alias"))?;
+
+                uv_snapshot!(context.filters(), context.pip_install().arg(&wheel), @"
+                exit_code: 2 (failure)
+                ----- stderr -----
+                Resolved 1 package in [TIME]
+                Prepared 1 package in [TIME]
+                error: Failed to install: foo-0.1.0-py3-none-any.whl (foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl))
+                  cause: Installation destination `[DESTINATION]` resolves outside the Python installation scheme: `[TEMP_DIR]/outside`
+                ");
+
+                script.assert("outside sentinel");
+            }
+        }
+        Ok::<(), anyhow::Error>(())
+    }?;
+
+    Ok(())
+}
+
+/// Symlinked library directories can give entrypoint writes and permission changes different targets.
+#[cfg(unix)]
+#[test]
+fn reject_external_wheel_entrypoint_with_symlinked_lib() -> Result<()> {
+    allow_duplicates! {
+        for external_parent in [true, false] {
+            let context = uv_test::test_context!("3.12")
+                .with_filter((
+                    r"Installation destination `[^`]+`",
+                    "Installation destination `[DESTINATION]`",
+                ))
+                .with_filter((r"`[^`]+/outside(?:/sentinel)?`", "`[EXTERNAL]`"));
+            let wheel = generate_wheel_with_entrypoint(&context, "console_scripts", "custom-script")?;
+            let outside = context.temp_dir.child("outside");
+            let sentinel = outside.child("sentinel");
+            sentinel.write_str("outside sentinel")?;
+            fs::set_permissions(&sentinel, Permissions::from_mode(0o600))?;
+
+            let lib = context.venv.join("lib");
+            let usr = context.venv.child("usr");
+            usr.create_dir_all()?;
+            fs::rename(&lib, usr.join("lib"))?;
+            symlink("usr/lib", &lib)?;
+            if external_parent {
+                create_symlink(outside.path(), usr.join("bin"))?;
+            } else {
+                usr.child("bin").create_dir_all()?;
+                symlink(sentinel.path(), venv_bin_path(&context.venv).join("custom-script"))?;
+            }
+
+            uv_snapshot!(context.filters(), context.pip_install().arg(&wheel), @"
+            exit_code: 2 (failure)
+            ----- stderr -----
+            Resolved 1 package in [TIME]
+            Prepared 1 package in [TIME]
+            error: Failed to install: foo-0.1.0-py3-none-any.whl (foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl))
+              cause: Installation destination `[DESTINATION]` resolves outside the Python installation scheme: `[EXTERNAL]`
+            ");
+
+            sentinel.assert("outside sentinel");
+            assert_eq!(fs::metadata(&sentinel)?.permissions().mode() & 0o777, 0o600);
+            outside.child("custom-script").assert(predicate::path::missing());
+        }
+        Ok::<(), anyhow::Error>(())
+    }?;
+
+    Ok(())
+}
+
+/// An entrypoint's reserved basename is checked after resolving its parent directory.
+#[test]
+fn reject_reserved_wheel_entrypoint_alias() -> Result<()> {
+    allow_duplicates! {
+        for section in ["console_scripts", "gui_scripts"] {
+            for entrypoint in ["alias/python", "alias/python.py"] {
+                let context = uv_test::test_context!("3.12").with_filter((
+                    r"got: `python(?:\.exe|\.py)?`", "got: `python`",
+                ));
+                let wheel = generate_wheel_with_entrypoint(&context, section, entrypoint)?;
+                let scripts = venv_bin_path(&context.venv);
+                create_symlink(&scripts, scripts.join("alias"))?;
+                let interpreter = scripts.join(format!("python{EXE_SUFFIX}"));
+                let interpreter_contents = fs::read(&interpreter)?;
+
+                uv_snapshot!(context.filters(), context.pip_install().arg(&wheel), @"
+                exit_code: 2 (failure)
+                ----- stderr -----
+                Resolved 1 package in [TIME]
+                Prepared 1 package in [TIME]
+                error: Failed to install: foo-0.1.0-py3-none-any.whl (foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl))
+                  cause: Scripts must not use the reserved name `python`, got: `python`
+                ");
+
+                assert_eq!(fs::read(&interpreter)?, interpreter_contents);
+                Command::new(&interpreter).arg("--version").assert().success();
+            }
+        }
+        Ok::<(), anyhow::Error>(())
+    }?;
+
+    Ok(())
+}
+
+/// Generated entrypoints may use nested directories and aliases within the installation scheme.
+#[test]
+fn install_internal_wheel_entrypoint_alias() -> Result<()> {
+    allow_duplicates! {
+        for section in ["console_scripts", "gui_scripts"] {
+            let context = uv_test::test_context!("3.12");
+            let wheel = generate_wheel_with_entrypoint(&context, section, "alias/nested/script")?;
+            let shared = context.venv.child("shared");
+            shared.child("nested").create_dir_all()?;
+            create_symlink(shared.path(), venv_bin_path(&context.venv).join("alias"))?;
+
+            uv_snapshot!(context.filters(), context.pip_install().arg(&wheel), @"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Resolved 1 package in [TIME]
+            Prepared 1 package in [TIME]
+            Installed 1 package in [TIME]
+             + foo==0.1.0 (from file://[TEMP_DIR]/foo-0.1.0-py3-none-any.whl)
+            ");
+
+            shared
+                .child(format!("nested/script{EXE_SUFFIX}"))
+                .assert(predicate::path::is_file());
+        }
+        Ok::<(), anyhow::Error>(())
+    }?;
+
+    Ok(())
+}
+
 #[test]
 fn reject_normalized_reserved_wheel_entrypoint_name() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let repacked_wheel =
-        repacked_wheel_with_entrypoint(&context, "console_scripts", "nested/../python")?;
+    let wheel = generate_wheel_with_entrypoint(&context, "console_scripts", "nested/../python")?;
 
-    uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
+    uv_snapshot!(context.filters(), context.pip_install().arg(&wheel), @"
     exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -15059,9 +15806,9 @@ fn reject_normalized_reserved_wheel_entrypoint_name() -> Result<()> {
 #[test]
 fn reject_case_variant_reserved_wheel_entrypoint_name() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let repacked_wheel = repacked_wheel_with_entrypoint(&context, "console_scripts", "Python")?;
+    let wheel = generate_wheel_with_entrypoint(&context, "console_scripts", "Python")?;
 
-    uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
+    uv_snapshot!(context.filters(), context.pip_install().arg(&wheel), @"
     exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -15071,9 +15818,9 @@ fn reject_case_variant_reserved_wheel_entrypoint_name() -> Result<()> {
     ");
 
     let context = uv_test::test_context!("3.12");
-    let repacked_wheel = repacked_wheel_with_entrypoint(&context, "console_scripts", "Python.PY")?;
+    let wheel = generate_wheel_with_entrypoint(&context, "console_scripts", "Python.PY")?;
 
-    uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
+    uv_snapshot!(context.filters(), context.pip_install().arg(&wheel), @"
     exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -15083,9 +15830,9 @@ fn reject_case_variant_reserved_wheel_entrypoint_name() -> Result<()> {
     ");
 
     let context = uv_test::test_context!("3.12");
-    let repacked_wheel = repacked_wheel_with_entrypoint(&context, "console_scripts", "python.Py")?;
+    let wheel = generate_wheel_with_entrypoint(&context, "console_scripts", "python.Py")?;
 
-    uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
+    uv_snapshot!(context.filters(), context.pip_install().arg(&wheel), @"
     exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -15100,10 +15847,9 @@ fn reject_case_variant_reserved_wheel_entrypoint_name() -> Result<()> {
 #[test]
 fn reject_normalized_reserved_gui_wheel_entrypoint_name() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let repacked_wheel =
-        repacked_wheel_with_entrypoint(&context, "gui_scripts", "nested/../python")?;
+    let wheel = generate_wheel_with_entrypoint(&context, "gui_scripts", "nested/../python")?;
 
-    uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
+    uv_snapshot!(context.filters(), context.pip_install().arg(&wheel), @"
     exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -15119,10 +15865,9 @@ fn reject_normalized_reserved_gui_wheel_entrypoint_name() -> Result<()> {
 #[test]
 fn reject_free_threaded_python_wheel_entrypoint_name() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let repacked_wheel =
-        repacked_wheel_with_entrypoint(&context, "console_scripts", "python3.13t")?;
+    let wheel = generate_wheel_with_entrypoint(&context, "console_scripts", "python3.13t")?;
 
-    uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
+    uv_snapshot!(context.filters(), context.pip_install().arg(&wheel), @"
     exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -15138,10 +15883,9 @@ fn reject_free_threaded_python_wheel_entrypoint_name() -> Result<()> {
 #[test]
 fn reject_windowed_free_threaded_python_wheel_entrypoint_name() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let repacked_wheel =
-        repacked_wheel_with_entrypoint(&context, "console_scripts", "pythonw3.13t")?;
+    let wheel = generate_wheel_with_entrypoint(&context, "console_scripts", "pythonw3.13t")?;
 
-    uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
+    uv_snapshot!(context.filters(), context.pip_install().arg(&wheel), @"
     exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -15157,9 +15901,9 @@ fn reject_windowed_free_threaded_python_wheel_entrypoint_name() -> Result<()> {
 #[test]
 fn reject_windows_rewritten_python_wheel_entrypoint_name() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let repacked_wheel = repacked_wheel_with_entrypoint(&context, "console_scripts", "python.py")?;
+    let wheel = generate_wheel_with_entrypoint(&context, "console_scripts", "python.py")?;
 
-    uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
+    uv_snapshot!(context.filters(), context.pip_install().arg(&wheel), @"
     exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -15175,10 +15919,9 @@ fn reject_windows_rewritten_python_wheel_entrypoint_name() -> Result<()> {
 #[test]
 fn reject_windows_rewritten_free_threaded_python_wheel_entrypoint_name() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let repacked_wheel =
-        repacked_wheel_with_entrypoint(&context, "console_scripts", "pythonw3.13t.py")?;
+    let wheel = generate_wheel_with_entrypoint(&context, "console_scripts", "pythonw3.13t.py")?;
 
-    uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
+    uv_snapshot!(context.filters(), context.pip_install().arg(&wheel), @"
     exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -15194,9 +15937,9 @@ fn reject_windows_rewritten_free_threaded_python_wheel_entrypoint_name() -> Resu
 #[test]
 fn reject_pypy_major_wheel_entrypoint_name() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let repacked_wheel = repacked_wheel_with_entrypoint(&context, "console_scripts", "pypy3")?;
+    let wheel = generate_wheel_with_entrypoint(&context, "console_scripts", "pypy3")?;
 
-    uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
+    uv_snapshot!(context.filters(), context.pip_install().arg(&wheel), @"
     exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -15212,9 +15955,9 @@ fn reject_pypy_major_wheel_entrypoint_name() -> Result<()> {
 #[test]
 fn reject_windows_rewritten_pypy_wheel_entrypoint_name() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let repacked_wheel = repacked_wheel_with_entrypoint(&context, "console_scripts", "pypy.py")?;
+    let wheel = generate_wheel_with_entrypoint(&context, "console_scripts", "pypy.py")?;
 
-    uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
+    uv_snapshot!(context.filters(), context.pip_install().arg(&wheel), @"
     exit_code: 2 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -15230,10 +15973,10 @@ fn reject_windows_rewritten_pypy_wheel_entrypoint_name() -> Result<()> {
 #[test]
 fn warn_normalized_activation_wheel_entrypoint_name() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let repacked_wheel =
-        repacked_wheel_with_entrypoint(&context, "console_scripts", "nested/../activate.bash")?;
+    let wheel =
+        generate_wheel_with_entrypoint(&context, "console_scripts", "nested/../activate.bash")?;
 
-    uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
+    uv_snapshot!(context.filters(), context.pip_install().arg(&wheel), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -15250,10 +15993,10 @@ fn warn_normalized_activation_wheel_entrypoint_name() -> Result<()> {
 #[test]
 fn accept_normalized_gui_wheel_entrypoint_paths() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let repacked_wheel =
-        repacked_wheel_with_entrypoint(&context, "gui_scripts", "nested/../normalized-gui")?;
+    let wheel =
+        generate_wheel_with_entrypoint(&context, "gui_scripts", "nested/../normalized-gui")?;
 
-    uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
+    uv_snapshot!(context.filters(), context.pip_install().arg(&wheel), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -15277,10 +16020,10 @@ fn accept_normalized_gui_wheel_entrypoint_paths() -> Result<()> {
 #[test]
 fn accept_normalized_wheel_entrypoint_paths() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let repacked_wheel =
-        repacked_wheel_with_entrypoint(&context, "console_scripts", "nested/../normalized-script")?;
+    let wheel =
+        generate_wheel_with_entrypoint(&context, "console_scripts", "nested/../normalized-script")?;
 
-    uv_snapshot!(context.filters(), context.pip_install().arg(&repacked_wheel), @"
+    uv_snapshot!(context.filters(), context.pip_install().arg(&wheel), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
