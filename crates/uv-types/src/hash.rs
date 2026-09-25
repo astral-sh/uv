@@ -529,8 +529,8 @@ impl HashStrategy {
         Ok(Some((id, digests)))
     }
 
-    /// Pin a [`Requirement`] to a [`VersionId`], if possible.
-    fn pin(requirement: &Requirement) -> Option<VersionId> {
+    /// Identify a pinned requirement using the same identity as hash verification.
+    pub fn pin(requirement: &Requirement) -> Option<VersionId> {
         match &requirement.source {
             RequirementSource::Registry { specifier, .. } => {
                 // Must be a single specifier.

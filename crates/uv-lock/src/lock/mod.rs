@@ -65,7 +65,7 @@ use uv_resolver_types::{
     ResolutionGraphNode, ResolverOutput, UniversalMarker,
 };
 use uv_small_str::SmallString;
-use uv_types::{BuildContext, HashStrategy};
+use uv_types::{BuildContext, HashStrategy, HashStrategyError};
 use uv_warnings::warn_user_once;
 use uv_workspace::{Editability, WorkspaceMember};
 
@@ -79,6 +79,7 @@ pub use crate::lock::installable::{Installable, InstallableRootKind};
 pub use crate::lock::map::PackageMap;
 pub use crate::lock::tree::{TreeDisplay, TreeJsonTarget};
 
+mod build_constraints;
 mod deserialize;
 pub(crate) mod export;
 mod inputs;
@@ -4182,6 +4183,7 @@ impl Lock {
         // Validate that the lockfile was generated with the same build constraints.
         {
             let normalize_build_constraint = |constraint: NameRequirementSpecification| {
+                let constraint = build_constraints::materialize_hashes(constraint)?;
                 Ok::<_, LockError>(NameRequirementSpecification {
                     requirement: normalize_requirement(
                         constraint.requirement,
@@ -4191,18 +4193,21 @@ impl Lock {
                     hashes: constraint.hashes,
                 })
             };
-            let expected: BTreeSet<_> = build_constraints
-                .specifications()
-                .cloned()
-                .map(normalize_build_constraint)
-                .collect::<Result<_, _>>()?;
-            let actual: BTreeSet<_> = self
-                .manifest
-                .build_constraints
-                .iter()
-                .cloned()
-                .map(normalize_build_constraint)
-                .collect::<Result<_, _>>()?;
+            let expected = build_constraints::canonicalize(
+                build_constraints
+                    .specifications()
+                    .cloned()
+                    .map(normalize_build_constraint)
+                    .collect::<Result<Vec<_>, _>>()?,
+            )?;
+            let actual = build_constraints::canonicalize(
+                self.manifest
+                    .build_constraints
+                    .iter()
+                    .cloned()
+                    .map(normalize_build_constraint)
+                    .collect::<Result<Vec<_>, _>>()?,
+            )?;
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedBuildConstraints(
                     expected, actual,
@@ -6105,20 +6110,20 @@ impl ResolverManifest {
         build_constraints: impl IntoIterator<Item = NameRequirementSpecification>,
         dependency_groups: impl IntoIterator<Item = (GroupName, Vec<Requirement>)>,
         dependency_metadata: impl IntoIterator<Item = StaticMetadata>,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, LockError> {
+        Ok(Self {
             members: members.into_iter().collect(),
             requirements: requirements.into_iter().collect(),
             constraints: constraints.into_iter().collect(),
             overrides: overrides.into_iter().collect(),
             excludes: excludes.into_iter().collect(),
-            build_constraints: build_constraints.into_iter().collect(),
+            build_constraints: build_constraints::canonicalize(build_constraints)?,
             dependency_groups: dependency_groups
                 .into_iter()
                 .map(|(group, requirements)| (group, requirements.into_iter().collect()))
                 .collect(),
             dependency_metadata: dependency_metadata.into_iter().collect(),
-        }
+        })
     }
 
     /// Convert the manifest to a relative form using the given workspace.
@@ -9699,6 +9704,9 @@ impl std::fmt::Display for WheelTagHint {
 /// is with the caller somewhere in such cases.
 #[derive(Debug, thiserror::Error)]
 enum LockErrorKind {
+    /// A build-constraint hash is invalid or conflicts with a URL-fragment hash.
+    #[error(transparent)]
+    InvalidBuildConstraintHash(#[from] HashStrategyError),
     /// An error that occurs when the overrides for validating a
     /// metadata-free lockfile cannot be scoped to their packages.
     #[error(transparent)]

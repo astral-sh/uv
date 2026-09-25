@@ -16792,7 +16792,11 @@ fn sync_frozen_workspace_member_git_credentials() -> Result<()> {
 
 /// A project with an in-tree backend and locally generated build dependencies.
 fn build_hash_project() -> Result<(TestContext, String)> {
-    let context = uv_test::test_context!("3.12");
+    build_hash_project_with_python("3.12")
+}
+
+fn build_hash_project_with_python(python_version: &str) -> Result<(TestContext, String)> {
+    let context = uv_test::test_context!(python_version);
     let mut build_hash = String::new();
     for (name, version) in [("build-dependency", "1.0.0"), ("project", "0.1.0")] {
         let (filename, wheel) = generate_wheel(
@@ -16918,6 +16922,300 @@ fn project_build_hashes_lock_and_sync() -> Result<()> {
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
 
     hint: To update the lockfile, run `uv lock`.
+    ");
+    Ok(())
+}
+
+#[test]
+fn project_build_hashes_repeated_constraints() -> Result<()> {
+    let (context, hash) = build_hash_project()?;
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    let original = context.read("pyproject.toml");
+    let incorrect = "f".repeat(64);
+    let constraints = formatdoc! {r#"
+        build-constraint-dependencies = [
+            {{ requirement = "build-dependency==1.0.0", hashes = ["sha256:{incorrect}"] }},
+            {{ requirement = "build-dependency==1.0.0", hashes = ["sha256:{hash}"] }},
+            "build-dependency==1.0.0",
+        ]
+    "#};
+    pyproject.write_str(&format!("{original}\n{constraints}"))?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    insta::with_settings!({filters => context.filters()}, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        build-constraints = [
+            { name = "build-dependency", specifier = "==1.0.0" },
+            { name = "build-dependency", specifier = "==1.0.0", hashes = ["sha256:[BUILD_HASH]"] },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        "#);
+    });
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.sync().args(["--frozen", "--no-editable"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+
+    // An older lock may have sorted the declarations into the opposite precedence order.
+    let lockfile = context.temp_dir.child("uv.lock");
+    let previous = context.read("uv.lock");
+    let correct_entry = format!(
+        "{{ name = \"build-dependency\", specifier = \"==1.0.0\", hashes = [\"sha256:{hash}\"] }}"
+    );
+    let incorrect_entry = format!(
+        "{{ name = \"build-dependency\", specifier = \"==1.0.0\", hashes = [\"sha256:{incorrect}\"] }}"
+    );
+    lockfile.write_str(&previous.replace(
+        &correct_entry,
+        &format!("{correct_entry},\n    {incorrect_entry}"),
+    ))?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), previous);
+
+    // An exact duplicate after a different hash still takes precedence.
+    let repeated = formatdoc! {r#"
+        build-constraint-dependencies = [
+            {{ requirement = "build-dependency==1.0.0", hashes = ["sha256:{hash}"] }},
+            {{ requirement = "build-dependency==1.0.0", hashes = ["sha256:{incorrect}"] }},
+            {{ requirement = "build-dependency==1.0.0", hashes = ["sha256:{hash}"] }},
+        ]
+    "#};
+    pyproject.write_str(&format!("{original}\n{repeated}"))?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // Reversing the hash-bearing declarations changes the effective constraint.
+    let reversed = formatdoc! {r#"
+        build-constraint-dependencies = [
+            {{ requirement = "build-dependency==1.0.0", hashes = ["sha256:{hash}"] }},
+            {{ requirement = "build-dependency==1.0.0", hashes = ["sha256:{incorrect}"] }},
+        ]
+    "#};
+    pyproject.write_str(&format!("{original}\n{reversed}"))?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    fs_err::remove_file(context.temp_dir.child("backend-executed"))?;
+    uv_snapshot!(context.filters(), context.sync().args(["--frozen", "--no-editable", "--reinstall", "--no-cache"]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Failed to install requirements from `build-system.requires`
+      cause: Failed to download `build-dependency==1.0.0`
+      cause: Hash mismatch for `build-dependency==1.0.0`
+
+             Expected:
+               sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+
+             Computed:
+               sha256:[BUILD_HASH]
+    ");
+    context
+        .temp_dir
+        .child("backend-executed")
+        .assert(predicate::path::missing());
+    Ok(())
+}
+
+#[test]
+fn project_build_hashes_repeated_constraints_with_markers() -> Result<()> {
+    let (context, hash) = build_hash_project()?;
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    let original = context.read("pyproject.toml").replace(">=3.12", ">=3.8");
+    pyproject.write_str(&formatdoc! {r#"
+        {original}
+        build-constraint-dependencies = [
+            {{ requirement = "build-dependency==1.0.0", hashes = ["sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"] }},
+            {{ requirement = "build-dependency==1.0.0; python_version >= '3.12'", hashes = ["sha256:{hash}"] }},
+        ]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    insta::with_settings!({filters => context.filters()}, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.8"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        build-constraints = [
+            { name = "build-dependency", specifier = "==1.0.0" },
+            { name = "build-dependency", marker = "python_full_version < '3.12'", specifier = "==1.0.0", hashes = ["sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"] },
+            { name = "build-dependency", marker = "python_full_version >= '3.12'", specifier = "==1.0.0", hashes = ["sha256:[BUILD_HASH]"] },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        "#);
+    });
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.sync().args(["--frozen", "--no-editable"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+    Ok(())
+}
+
+#[test]
+fn project_build_hashes_repeated_constraints_with_inactive_marker() -> Result<()> {
+    let (context, hash) = build_hash_project_with_python("3.11")?;
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    let original = context.read("pyproject.toml").replace(">=3.12", ">=3.8");
+    pyproject.write_str(&formatdoc! {r#"
+        {original}
+        build-constraint-dependencies = [
+            {{ requirement = "build-dependency==1.0.0", hashes = ["sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"] }},
+            {{ requirement = "build-dependency==1.0.0; python_version >= '3.12'", hashes = ["sha256:{hash}"] }},
+        ]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.sync().args(["--frozen", "--no-editable"]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Failed to install requirements from `build-system.requires`
+      cause: Failed to download `build-dependency==1.0.0`
+      cause: Hash mismatch for `build-dependency==1.0.0`
+
+             Expected:
+               sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+
+             Computed:
+               sha256:[BUILD_HASH]
+    ");
+    context
+        .temp_dir
+        .child("backend-executed")
+        .assert(predicate::path::missing());
+    Ok(())
+}
+
+#[test]
+fn project_build_hashes_repeated_file_urls() -> Result<()> {
+    let (context, hash) = build_hash_project()?;
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    let original = context.read("pyproject.toml");
+    let wheel = context
+        .temp_dir
+        .join("wheels/build_dependency-1.0.0-py3-none-any.whl");
+    let url = Url::from_file_path(&wheel).map_err(|()| anyhow!("invalid wheel path"))?;
+    pyproject.write_str(&formatdoc! {r#"
+        {original}
+        build-constraint-dependencies = [
+            "build-dependency @ {url}#sha256=ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            "build-dependency @ {url}#sha256={hash}",
+        ]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    insta::with_settings!({filters => context.filters()}, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        build-constraints = [
+            { name = "build-dependency", path = "[TEMP_DIR]/wheels/build_dependency-1.0.0-py3-none-any.whl" },
+            { name = "build-dependency", path = "[TEMP_DIR]/wheels/build_dependency-1.0.0-py3-none-any.whl", hashes = ["sha256:[BUILD_HASH]"] },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        "#);
+    });
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.sync().args(["--frozen", "--no-editable"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
     ");
     Ok(())
 }
