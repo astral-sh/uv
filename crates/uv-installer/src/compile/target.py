@@ -1,0 +1,32 @@
+"""Identify settings compatible with serc's timestamp-based, unoptimized bytecode."""
+
+import importlib.util
+import json
+import os
+import sys
+
+invalidation_mode = os.environ.get("PYC_INVALIDATION_MODE")
+if invalidation_mode is None:
+    invalidation_mode = (
+        "CHECKED_HASH" if "SOURCE_DATE_EPOCH" in os.environ else "TIMESTAMP"
+    )
+
+if (
+    sys.implementation.name == "cpython"
+    and sys.flags.optimize == 0
+    and getattr(sys, "pycache_prefix", None) is None
+    and not sys._xoptions.get("no_debug_ranges", False)
+    and not os.environ.get("PYTHONNODEBUGRANGES")
+    and invalidation_mode == "TIMESTAMP"
+):
+    print(
+        json.dumps(
+            {
+                "python_version": f"{sys.version_info.major}.{sys.version_info.minor}",
+                "cache_tag": sys.implementation.cache_tag,
+                "magic_number": list(importlib.util.MAGIC_NUMBER),
+            }
+        )
+    )
+else:
+    print("null")
