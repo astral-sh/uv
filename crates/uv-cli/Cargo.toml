@@ -43,6 +43,7 @@ serde = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
+fs-err = { workspace = true }
 insta = { workspace = true }
 
 [features]
