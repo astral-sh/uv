@@ -9,7 +9,9 @@ use std::ops::Deref;
 use std::{iter, mem, vec};
 
 use indexmap::IndexMap;
+use rustc_hash::FxHashSet;
 use uv_distribution_types::{Requirement, RequirementSource};
+use uv_normalize::ExtraName;
 use uv_pep440::{
     Operator, Version, VersionSpecifier, VersionSpecifiers, canonicalize_version_ranges,
 };
@@ -21,7 +23,7 @@ use crate::{ExcludeDependency, Excludes, Override, PackageOverride, PackageOverr
 /// Requirements with equivalent declarations combined.
 ///
 /// False markers remain because overrides can replace them before resolution.
-/// Declarations that exceed the marker expansion budget remain separate for conservative comparison.
+/// Serialization retains overlapping declarations; equality compares their combined semantics.
 #[derive(Debug, Clone, Eq)]
 pub struct NormalizedRequirements(Vec<Requirement>);
 
@@ -46,16 +48,20 @@ impl From<Vec<Requirement>> for NormalizedRequirements {
     }
 }
 
-/// Compare registry constraints by accepted versions, prerelease opt-in, and yanked-version
-/// eligibility. All other requirement fields use [`Requirement`]'s equality.
+/// Compare activation markers, extras, accepted versions, and candidate policies for each source.
+/// Equivalent collections need not have the same serialized declarations.
 impl PartialEq for NormalizedRequirements {
     fn eq(&self, other: &Self) -> bool {
-        self.0.len() == other.0.len()
+        if self.0.len() == other.0.len()
             && self
                 .0
                 .iter()
                 .zip(&other.0)
                 .all(|(left, right)| SemanticRequirement(left) == SemanticRequirement(right))
+        {
+            return true;
+        }
+        semantic_requirements(&self.0) == semantic_requirements(&other.0)
     }
 }
 
@@ -260,9 +266,9 @@ impl RequirementsKey {
     }
 }
 
-/// Merge requirements with the same source and scope across disjoint marker regions.
+/// Compact requirements with the same source and scope without splitting marker regions.
 ///
-/// Extras are unioned and version constraints intersected wherever markers overlap.
+/// Merge identical markers or equivalent requirement bodies until no further merges are possible.
 /// Standalone pins stay separate because they permit yanked versions.
 /// False requirements and overrides remain because overrides can replace their markers.
 fn normalize(mut requirements: Vec<Requirement>) -> Vec<Requirement> {
@@ -274,7 +280,7 @@ fn normalize(mut requirements: Vec<Requirement>) -> Vec<Requirement> {
         requirement.groups.sort();
     }
     requirements.sort_by(compare_requirements);
-    // Lockfiles store declarations in sets, including when marker expansion exceeds its budget.
+    // Lockfiles store declarations in sets.
     requirements.dedup_by(|left, right| compare_requirements(left, right).is_eq());
 
     let mut normalized = Vec::with_capacity(requirements.len());
@@ -307,56 +313,53 @@ fn normalize_package_requirements(
 ) -> Vec<Requirement> {
     let mut sources = BTreeMap::<Requirement, Vec<Requirement>>::new();
     for requirement in requirements {
-        let mut key = requirement.clone();
-        key.extras = Box::new([]);
-        // Overrides retain a dependency's top-level extra condition. Combining different extra
-        // markers can change that condition, so only merge declarations with identical markers
-        // when they mention extras.
-        if key.marker.without_extras() == key.marker {
-            key.marker = MarkerTree::TRUE;
-        }
-        if let RequirementSource::Registry { specifier, .. } = &mut key.source
-            && !allows_yanked(specifier.iter())
-        {
-            *specifier = VersionSpecifiers::empty();
-        }
+        let key = requirement_source_key(&requirement);
         sources.entry(key).or_default().push(requirement);
     }
 
     let mut normalized = Vec::new();
     for requirements in sources.into_values() {
-        normalized.extend(normalize_source_requirements(&requirements).unwrap_or(requirements));
+        normalized.extend(normalize_source_requirements(requirements));
     }
     normalized
 }
 
-/// Merge declarations for one source, or return `None` if the marker expansion budget is exceeded.
-/// Independent markers with distinct extras can produce exponentially many regions. Limit the total
-/// number of region intersections so both work and intermediate allocations stay bounded.
-fn normalize_source_requirements(requirements: &[Requirement]) -> Option<Vec<Requirement>> {
-    let mut remaining_intersections: usize = 1024;
-    let mut regions: Vec<Requirement> = Vec::new();
-    for requirement in requirements.iter().cloned() {
-        let mut remaining = requirement.marker;
-        let mut next = Vec::new();
-        for region in regions {
-            remaining_intersections = remaining_intersections.checked_sub(1)?;
-            let overlap = region.marker.and(requirement.marker);
-            if overlap.is_false() {
-                next.push(region);
+/// Group by source and scope, keeping standalone pins and top-level extra conditions separate.
+fn requirement_source_key(requirement: &Requirement) -> Requirement {
+    let mut key = requirement.clone();
+    key.extras = Box::new([]);
+    // Overrides retain a dependency's top-level extra condition. Combining different extra
+    // markers can change that condition, so only merge declarations with identical markers
+    // when they mention extras.
+    if key.marker.without_extras() == key.marker {
+        key.marker = MarkerTree::TRUE;
+    }
+    if let RequirementSource::Registry { specifier, .. } = &mut key.source
+        && !allows_yanked(specifier.iter())
+    {
+        *specifier = VersionSpecifiers::empty();
+    }
+    key
+}
+
+/// Combine declarations that share a marker, or whose bodies are equivalent.
+/// Every merge removes a declaration, so independent markers never produce a cross product.
+fn normalize_source_requirements(mut requirements: Vec<Requirement>) -> Vec<Requirement> {
+    loop {
+        let count = requirements.len();
+        let mut markers = BTreeMap::<MarkerTree, Requirement>::new();
+        let mut normalized = Vec::new();
+        for requirement in coalesce(requirements) {
+            // An override can replace a false marker, so retain the individual declarations.
+            if requirement.marker.is_false() {
+                normalized.push(requirement);
                 continue;
             }
-            remaining = remaining.and(region.marker.negate());
-            let outside = region.marker.and(requirement.marker.negate());
-            if !outside.is_false() {
-                next.push(Requirement {
-                    marker: outside,
-                    ..region.clone()
-                });
-            }
-            let mut combined = region;
-            combined.marker = overlap;
-            let mut extras = combined.extras.into_vec();
+            let Some(combined) = markers.get_mut(&requirement.marker) else {
+                markers.insert(requirement.marker, requirement);
+                continue;
+            };
+            let mut extras = mem::take(&mut combined.extras).into_vec();
             extras.extend_from_slice(&requirement.extras);
             extras.sort();
             extras.dedup();
@@ -374,17 +377,105 @@ fn normalize_source_requirements(requirements: &[Requirement]) -> Option<Vec<Req
                     .chain(other.iter().cloned())
                     .collect();
             }
-            next.push(combined);
         }
-        if !remaining.is_false() || requirement.marker.is_false() {
-            next.push(Requirement {
-                marker: remaining,
-                ..requirement
-            });
+        normalized.extend(markers.into_values());
+        if normalized.len() == count {
+            return normalized;
         }
-        regions = coalesce(next);
+        requirements = normalized;
     }
-    Some(regions)
+}
+
+/// Compare each source independently, retaining the scopes and candidate policies used by resolution.
+fn semantic_requirements(
+    requirements: &[Requirement],
+) -> BTreeMap<Requirement, RequirementSemantics> {
+    let mut sources = BTreeMap::<Requirement, Vec<&Requirement>>::new();
+    for requirement in requirements {
+        sources
+            .entry(requirement_source_key(requirement))
+            .or_default()
+            .push(requirement);
+    }
+    sources
+        .into_iter()
+        .map(|(source, requirements)| {
+            (
+                source,
+                RequirementSemantics::from_requirements(requirements),
+            )
+        })
+        .collect()
+}
+
+/// The conditions for requiring a source, requesting each extra, and excluding candidate versions.
+/// These facts are independent, so equality does not require enumerating combinations of extras.
+#[derive(Eq, PartialEq)]
+struct RequirementSemantics {
+    required: MarkerTree,
+    extras: BTreeMap<ExtraName, MarkerTree>,
+    prerelease: MarkerTree,
+    /// Disjoint version ranges grouped by the marker under which they are excluded.
+    /// The `false` entry contains versions that are never excluded.
+    excluded: BTreeMap<MarkerTree, Ranges<Version>>,
+    /// False declarations remain relevant when overrides replace their markers.
+    inactive: FxHashSet<RequirementsKey>,
+}
+
+impl RequirementSemantics {
+    /// Accumulate activation predicates, partitioning only the one-dimensional version domain.
+    fn from_requirements(requirements: Vec<&Requirement>) -> Self {
+        let mut semantics = Self {
+            required: MarkerTree::FALSE,
+            extras: BTreeMap::new(),
+            prerelease: MarkerTree::FALSE,
+            excluded: BTreeMap::from([(MarkerTree::FALSE, Ranges::full())]),
+            inactive: FxHashSet::default(),
+        };
+        for requirement in requirements {
+            let key = RequirementsKey::new(requirement.clone());
+            if requirement.marker.is_false() {
+                semantics.inactive.insert(key);
+                continue;
+            }
+            semantics.required = semantics.required.or(requirement.marker);
+            for extra in &requirement.extras {
+                let marker = semantics
+                    .extras
+                    .entry(extra.clone())
+                    .or_insert(MarkerTree::FALSE);
+                *marker = marker.or(requirement.marker);
+            }
+            if key.prerelease {
+                semantics.prerelease = semantics.prerelease.or(requirement.marker);
+            }
+            if key.range != Ranges::full() {
+                semantics.restrict_versions(&key.range, requirement.marker);
+            }
+        }
+        semantics
+    }
+
+    /// Add exclusions at version boundaries, combining the predicates for overlapping exclusions.
+    /// The number of version intervals is bounded by the number of input range endpoints.
+    fn restrict_versions(&mut self, allowed: &Ranges<Version>, marker: MarkerTree) {
+        let excluded = allowed.complement();
+        let mut partitions = BTreeMap::<MarkerTree, Ranges<Version>>::new();
+        for (condition, versions) in mem::take(&mut self.excluded) {
+            for (range, condition) in [
+                (versions.intersection(allowed), condition),
+                (versions.intersection(&excluded), condition.or(marker)),
+            ] {
+                if !range.is_empty() {
+                    partitions
+                        .entry(condition)
+                        .and_modify(|versions| *versions = versions.union(&range))
+                        .or_insert(range);
+                }
+            }
+        }
+        self.excluded = partitions;
+    }
 }
 
 /// Order declarations deterministically, including precision-sensitive specifiers.
@@ -394,8 +485,8 @@ fn compare_requirements(left: &Requirement, right: &Requirement) -> Ordering {
         .then_with(|| left.to_string().cmp(&right.to_string()))
 }
 
-/// Combine disjoint marker regions with equivalent extras, accepted versions, and candidate policies.
-/// Keep the first region's simplified specifiers when multiple forms accept the same versions.
+/// Combine declarations with equivalent extras, accepted versions, and candidate policies.
+/// Keep the first declaration's simplified specifiers when multiple forms accept the same versions.
 fn coalesce(mut requirements: Vec<Requirement>) -> Vec<Requirement> {
     for requirement in &mut requirements {
         if let RequirementSource::Registry { specifier, .. } = &mut requirement.source {
@@ -822,12 +913,12 @@ mod tests {
 
     /// Independent markers with distinct extras must not expand into every possible combination.
     #[test]
-    fn bounded_marker_expansion() -> Result<()> {
+    fn independent_markers() -> Result<()> {
         let original = ('a'..='l')
             .map(|extra| {
                 Ok(Requirement::from(
                     Pep508Requirement::<VerbatimParsedUrl>::from_str(&format!(
-                        "tool[{extra}]; '{extra}' in platform_release"
+                        "tool[{extra}]>=1; '{extra}' in platform_release"
                     ))?,
                 ))
             })
@@ -849,6 +940,21 @@ mod tests {
         assert_eq!(normalized, NormalizedRequirements::from(reordered.clone()));
         reordered.pop();
         assert_ne!(normalized, NormalizedRequirements::from(reordered));
+
+        // The version constraint can be shared without enumerating combinations of extras.
+        let mut factored = requirements(&["tool>=1"])?;
+        factored[0].marker = normalized
+            .iter()
+            .fold(MarkerTree::FALSE, |marker, requirement| {
+                marker.or(requirement.marker)
+            });
+        for mut requirement in normalized.iter().cloned() {
+            if let RequirementSource::Registry { specifier, .. } = &mut requirement.source {
+                *specifier = VersionSpecifiers::empty();
+            }
+            factored.push(requirement);
+        }
+        assert_eq!(normalized, NormalizedRequirements::from(factored));
         Ok(())
     }
 
@@ -871,9 +977,14 @@ mod tests {
                 .join("\n")
         };
         assert_snapshot!(display(&normalized), @"
-        tool[a,b,c]>=2, <3 ; python_full_version < '3.13'
-        tool[a,c]>=1, <3 ; python_full_version >= '3.13'
+        tool[a,c]>=1, <3
+        tool[b]>=2 ; python_full_version < '3.13'
         ");
+        let partitioned = requirements(&[
+            "tool[a,b,c]>=2,<3; python_version < '3.13'",
+            "tool[a,c]>=1,<3; python_version >= '3.13'",
+        ])?;
+        assert_eq!(normalized, NormalizedRequirements::from(partitioned));
         assert_eq!(
             display(&normalized),
             display(&NormalizedRequirements::from(
@@ -916,6 +1027,85 @@ mod tests {
                     })
             };
             assert_eq!(activated(&original), activated(&normalized), "{extra}");
+        }
+        Ok(())
+    }
+
+    /// Splitting two overlapping declarations into disjoint environments preserves their meaning.
+    #[test]
+    fn version_partition_equivalence() -> Result<()> {
+        let clauses = [
+            ">=0.dev0",
+            "<0.dev0",
+            ">=1",
+            "<=1",
+            ">1",
+            "<1",
+            "==1.*",
+            "!=1.*",
+            "==1.0.*",
+            "!=1.0.*",
+            "~=1.0",
+            "~=1.0.0",
+            ">=1rc1",
+            "<1b1",
+            "!=1a1",
+            ">1.post0",
+            "<1.post1",
+            "==1+local,>=0",
+            "!=1+local",
+            ">=1!1",
+        ];
+        let left_marker = "'a' in platform_release";
+        let right_marker = "'b' in platform_release";
+        for left in clauses {
+            for right in clauses {
+                let overlapping = requirements(&[
+                    &format!("tool[a]{left}; {left_marker}"),
+                    &format!("tool[b]{right}; {right_marker}"),
+                ])?;
+                let partitioned = requirements(&[
+                    &format!("tool[a]{left}; {left_marker} and 'b' not in platform_release"),
+                    &format!("tool[b]{right}; 'a' not in platform_release and {right_marker}"),
+                    &format!("tool[a,b]{left},{right}; {left_marker} and {right_marker}"),
+                ])?;
+                assert_eq!(
+                    NormalizedRequirements::from(overlapping),
+                    NormalizedRequirements::from(partitioned),
+                    "{left} / {right}"
+                );
+            }
+        }
+        Ok(())
+    }
+
+    /// Equal version restrictions do not imply equal candidate or override policies.
+    #[test]
+    fn conditional_requirement_policies() -> Result<()> {
+        let unequal: &[(&[&str], &[&str])] = &[
+            (
+                &["tool>=1", "tool>=1rc1; sys_platform == 'win32'"],
+                &["tool>=1"],
+            ),
+            (
+                &["tool>=0", "tool==1; sys_platform == 'win32'"],
+                &["tool>=0", "tool>=1,<=1; sys_platform == 'win32'"],
+            ),
+            (
+                &["tool>=3", "tool[a]>=1; python_version < '0'"],
+                &["tool>=3", "tool[a]>=2; python_version < '0'"],
+            ),
+            (
+                &["tool; extra == 'a'", "tool; extra == 'b'"],
+                &["tool; extra == 'a' or extra == 'b'"],
+            ),
+        ];
+        for (left, right) in unequal {
+            assert_ne!(
+                NormalizedRequirements::from(requirements(left)?),
+                NormalizedRequirements::from(requirements(right)?),
+                "{left:?} != {right:?}"
+            );
         }
         Ok(())
     }
