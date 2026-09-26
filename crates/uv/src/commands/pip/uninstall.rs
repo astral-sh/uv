@@ -32,6 +32,7 @@ pub(crate) async fn pip_uninstall(
     prefix: Option<Prefix>,
     cache: Cache,
     keyring_provider: KeyringProviderType,
+    git_lfs: uv_git::GitLfs,
     client_builder: &BaseClientBuilder<'_>,
     dry_run: DryRun,
     printer: Printer,
@@ -41,7 +42,8 @@ pub(crate) async fn pip_uninstall(
     let client_builder = client_builder.clone().keyring(keyring_provider);
 
     // Read all requirements from the provided sources.
-    let spec = RequirementsSpecification::from_simple_sources(sources, &client_builder).await?;
+    let spec =
+        RequirementsSpecification::from_simple_sources(sources, git_lfs, &client_builder).await?;
 
     // Detect the current Python interpreter.
     let environment = PythonEnvironment::find(

@@ -523,6 +523,7 @@ async fn do_lock(
         prerelease,
         fork_strategy,
         dependency_metadata,
+        git_lfs,
         config_setting,
         config_settings_package,
         build_isolation,
@@ -564,6 +565,7 @@ async fn do_lock(
             cache,
             workspace_cache,
             client_builder.credentials_cache(),
+            *git_lfs,
         )
         .await?;
     let overrides = {
@@ -580,6 +582,7 @@ async fn do_lock(
                                 cache,
                                 workspace_cache,
                                 client_builder.credentials_cache(),
+                                *git_lfs,
                             )
                             .await?
                             .into_iter()
@@ -597,6 +600,7 @@ async fn do_lock(
                                 cache,
                                 workspace_cache,
                                 client_builder.credentials_cache(),
+                                *git_lfs,
                             )
                             .await?
                             .into_boxed_slice(),
@@ -614,6 +618,7 @@ async fn do_lock(
             cache,
             workspace_cache,
             client_builder.credentials_cache(),
+            *git_lfs,
         )
         .await?;
     let build_constraints = target
@@ -623,6 +628,7 @@ async fn do_lock(
             cache,
             workspace_cache,
             client_builder.credentials_cache(),
+            *git_lfs,
         )
         .await?;
     let mut lowered_dependency_groups = BTreeMap::new();
@@ -635,6 +641,7 @@ async fn do_lock(
                 cache,
                 workspace_cache,
                 client_builder.credentials_cache(),
+                *git_lfs,
             )
             .await?;
         lowered_dependency_groups.insert(name, requirements);
@@ -892,6 +899,7 @@ async fn do_lock(
                 cache,
                 workspace_cache,
                 client.credentials_cache(),
+                *git_lfs,
             )
             .await?
         }
@@ -934,6 +942,7 @@ async fn do_lock(
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
+        *git_lfs,
     );
 
     // If any of the resolution-determining settings changed, invalidate the lock.

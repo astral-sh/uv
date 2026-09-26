@@ -47,6 +47,7 @@ use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, IndexUrl,
     MinimumLibcVersion, NameRequirementSpecification, PackageConfigSettings, Requirement,
 };
+use uv_git::GitLfs;
 use uv_install_wheel::LinkMode;
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pep440::Version;
@@ -4533,6 +4534,7 @@ pub(crate) struct InstallerSettingsRef<'a> {
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) dependency_metadata: &'a DependencyMetadata,
+    pub(crate) git_lfs: GitLfs,
     pub(crate) config_setting: &'a ConfigSettings,
     pub(crate) config_settings_package: &'a PackageConfigSettings,
     pub(crate) build_isolation: &'a BuildIsolation,
@@ -4556,6 +4558,7 @@ pub(crate) struct ResolverSettings {
     pub(crate) config_setting: ConfigSettings,
     pub(crate) config_settings_package: PackageConfigSettings,
     pub(crate) dependency_metadata: DependencyMetadata,
+    pub(crate) git_lfs: GitLfs,
     pub(crate) exclude_newer: ExcludeNewer,
     pub(crate) fork_strategy: ForkStrategy,
     pub(crate) index_locations: IndexLocations,
@@ -4645,6 +4648,7 @@ impl ResolverSettings {
         Self {
             cuda_driver_version: environment.cuda_driver_version.clone(),
             amd_gpu_architecture: environment.amd_gpu_architecture,
+            git_lfs: GitLfs::from(environment.lfs),
             ..Self::from(options)
         }
     }
@@ -4663,6 +4667,7 @@ impl From<ResolverOptions> for ResolverSettings {
             dependency_metadata: DependencyMetadata::from_entries(
                 value.dependency_metadata.into_iter().flatten(),
             ),
+            git_lfs: GitLfs::Disabled,
             index_strategy: value.index_strategy.unwrap_or_default(),
             keyring_provider: value.keyring_provider.unwrap_or_default(),
             config_setting: value.config_settings.unwrap_or_default(),
@@ -4742,6 +4747,7 @@ impl ResolverInstallerSettings {
             resolver: ResolverSettings {
                 cuda_driver_version: environment.cuda_driver_version.clone(),
                 amd_gpu_architecture: environment.amd_gpu_architecture,
+                git_lfs: GitLfs::from(environment.lfs),
                 ..base.resolver
             },
             ..base
@@ -4782,6 +4788,7 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
                 dependency_metadata: DependencyMetadata::from_entries(
                     value.dependency_metadata.into_iter().flatten(),
                 ),
+                git_lfs: GitLfs::Disabled,
                 exclude_newer: ExcludeNewer::from_args(
                     value.exclude_newer,
                     value
@@ -4850,6 +4857,7 @@ pub(crate) struct PipSettings {
     pub(crate) prerelease: Prerelease,
     pub(crate) fork_strategy: ForkStrategy,
     pub(crate) dependency_metadata: DependencyMetadata,
+    pub(crate) git_lfs: GitLfs,
     pub(crate) output_file: Option<PathBuf>,
     pub(crate) no_strip_extras: bool,
     pub(crate) no_strip_markers: bool,
@@ -5095,6 +5103,7 @@ impl PipSettings {
                     .combine(dependency_metadata)
                     .unwrap_or_default(),
             ),
+            git_lfs: GitLfs::from(environment.lfs),
             output_file: args.output_file.combine(output_file),
             no_strip_extras: args
                 .no_strip_extras
@@ -5267,6 +5276,7 @@ impl<'a> From<&'a ResolverInstallerSettings> for InstallerSettingsRef<'a> {
             index_strategy: settings.resolver.index_strategy,
             keyring_provider: settings.resolver.keyring_provider,
             dependency_metadata: &settings.resolver.dependency_metadata,
+            git_lfs: settings.resolver.git_lfs,
             config_setting: &settings.resolver.config_setting,
             config_settings_package: &settings.resolver.config_settings_package,
             build_isolation: &settings.resolver.build_isolation,

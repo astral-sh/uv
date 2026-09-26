@@ -8,6 +8,7 @@ use uv_auth::CredentialsCache;
 use uv_cache::Cache;
 use uv_configuration::NoSources;
 use uv_distribution_types::{IndexLocations, Requirement};
+use uv_git_types::GitLfs;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::MarkerTree;
 use uv_workspace::dependency_groups::FlatDependencyGroups;
@@ -39,6 +40,7 @@ impl RequiresDist {
         cache: &Cache,
         workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
+        git_lfs: GitLfs,
     ) -> Result<Self, MetadataError> {
         let discovery = DiscoveryOptions {
             stop_discovery_at: git_member.map(|git_member| {
@@ -62,7 +64,7 @@ impl RequiresDist {
         )
         .await?
         else {
-            return Self::from_metadata23_with_source_context(metadata, git_member);
+            return Self::from_metadata23_with_source_context(metadata, git_member, git_lfs);
         };
 
         Self::from_project_workspace(
@@ -75,6 +77,7 @@ impl RequiresDist {
             cache,
             workspace_cache,
             credentials_cache,
+            git_lfs,
         )
         .await
     }
@@ -82,11 +85,12 @@ impl RequiresDist {
     fn from_metadata23_with_source_context(
         metadata: uv_pypi_types::RequiresDist,
         git_member: Option<&GitWorkspaceMember<'_>>,
+        git_lfs: GitLfs,
     ) -> Result<Self, MetadataError> {
         let requires_dist = Box::into_iter(metadata.requires_dist)
             .map(|requirement| {
                 let requirement_name = requirement.name.clone();
-                LoweredRequirement::preserve_git_source(requirement, git_member)
+                LoweredRequirement::preserve_git_source(requirement, git_member, git_lfs)
                     .map(LoweredRequirement::into_inner)
                     .map_err(|err| MetadataError::LoweringError(requirement_name, Box::new(err)))
             })
@@ -111,6 +115,7 @@ impl RequiresDist {
         cache: &Cache,
         workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
+        git_lfs: GitLfs,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.index` entries.
         let empty = vec![];
@@ -150,7 +155,7 @@ impl RequiresDist {
             let mut requirements = Vec::new();
             for requirement in flat_group.requirements {
                 if no_sources.for_package(&requirement.name) {
-                    requirements.push(Requirement::from(requirement));
+                    requirements.push(Requirement::from(requirement).with_git_lfs(git_lfs));
                     continue;
                 }
 
@@ -168,6 +173,7 @@ impl RequiresDist {
                         project_workspace.workspace(),
                         git_member,
                         editable,
+                        git_lfs,
                         cache,
                         workspace_cache,
                         credentials_cache,
@@ -194,7 +200,7 @@ impl RequiresDist {
         let mut requires_dist = Vec::new();
         for requirement in Box::into_iter(metadata.requires_dist) {
             if no_sources.for_package(&requirement.name) {
-                requires_dist.push(Requirement::from(requirement));
+                requires_dist.push(Requirement::from(requirement).with_git_lfs(git_lfs));
                 continue;
             }
 
@@ -213,6 +219,7 @@ impl RequiresDist {
                     project_workspace.workspace(),
                     git_member,
                     editable,
+                    git_lfs,
                     cache,
                     workspace_cache,
                     credentials_cache,

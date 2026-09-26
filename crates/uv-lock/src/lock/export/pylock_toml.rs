@@ -1222,6 +1222,7 @@ impl<'lock> PylockToml {
         groups: &[GroupName],
         tags: &Tags,
         build_options: &BuildOptions,
+        git_lfs: GitLfs,
     ) -> Result<Resolution, PylockTomlError> {
         // Convert the extras and dependency groups specifications to a concrete environment.
         let mut graph =
@@ -1376,9 +1377,11 @@ impl<'lock> PylockToml {
                 }
             } else if let Some(sdist) = package.vcs.as_ref().filter(|_| !no_build) {
                 let hashes = HashDigests::empty();
-                let sdist = Dist::Source(SourceDist::GitDirectory(
-                    sdist.to_sdist(install_path, &package.name)?,
-                ));
+                let sdist = Dist::Source(SourceDist::GitDirectory(sdist.to_sdist(
+                    install_path,
+                    &package.name,
+                    git_lfs,
+                )?));
                 let dist = ResolvedDist::Installable {
                     dist: Arc::new(sdist),
                     version: package.version,
@@ -1700,6 +1703,7 @@ impl PylockTomlVcs {
         &self,
         install_path: &Path,
         name: &PackageName,
+        git_lfs: GitLfs,
     ) -> Result<GitDirectorySourceDist, PylockTomlErrorKind> {
         let subdirectory = self.subdirectory.clone().map(Box::<Path>::from);
 
@@ -1725,8 +1729,7 @@ impl PylockTomlVcs {
                 .unwrap_or_else(|| GitReference::BranchOrTagOrCommit(self.commit_id.to_string()));
             let precise = self.commit_id;
 
-            // TODO(samypr100): GitLfs::from_env() as pylock.toml spec doesn't specify how to label LFS support
-            GitUrl::from_commit(url, reference, precise, GitLfs::from_env())?
+            GitUrl::from_commit(url, reference, precise, git_lfs)?
         };
 
         // Reconstruct the PEP 508-compatible URL from the `GitSource`.

@@ -148,6 +148,20 @@ impl Requirement {
             ..self
         }
     }
+
+    /// Set the default Git LFS mode for this requirement's Git source.
+    #[must_use]
+    pub fn with_git_lfs(mut self, lfs: GitLfs) -> Self {
+        match &mut self.source {
+            RequirementSource::GitDirectory { git, .. }
+            | RequirementSource::GitPath { git, .. } => *git = git.clone().with_lfs(lfs),
+            RequirementSource::Registry { .. }
+            | RequirementSource::Url { .. }
+            | RequirementSource::Path { .. }
+            | RequirementSource::Directory { .. } => {}
+        }
+        self
+    }
 }
 
 impl std::hash::Hash for Requirement {

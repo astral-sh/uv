@@ -20,6 +20,7 @@ use uv_distribution_types::{
     PackageConfigSettings, Resolution,
 };
 use uv_fs::Simplified;
+use uv_git::GitLfs;
 use uv_install_wheel::LinkMode;
 use uv_installer::{InstallationStrategy, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups};
@@ -70,6 +71,7 @@ pub(crate) async fn pip_sync(
     cuda_driver_version: Option<Version>,
     amd_gpu_architecture: Option<AmdGpuArchitecture>,
     dependency_metadata: DependencyMetadata,
+    git_lfs: GitLfs,
     keyring_provider: KeyringProviderType,
     client_builder: &BaseClientBuilder<'_>,
     allow_empty_requirements: bool,
@@ -138,6 +140,7 @@ pub(crate) async fn pip_sync(
         excludes,
         extras,
         Some(groups),
+        git_lfs,
         &client_builder,
     )
     .await?;
@@ -155,7 +158,7 @@ pub(crate) async fn pip_sync(
 
     // Read build constraints.
     let build_constraints = Constraints::from_specifications(
-        operations::read_constraints(build_constraints, &client_builder).await?,
+        operations::read_constraints(build_constraints, git_lfs, &client_builder).await?,
     );
 
     // Validate that the requirements are non-empty.
@@ -387,6 +390,7 @@ pub(crate) async fn pip_sync(
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
+        git_lfs,
     );
 
     // Determine the set of installed packages.
@@ -417,6 +421,7 @@ pub(crate) async fn pip_sync(
             &extras,
             &groups,
             &build_options,
+            git_lfs,
             hash_checking,
         )?
     } else {
@@ -503,6 +508,7 @@ pub(crate) async fn pip_sync(
         workspace_cache,
         concurrency.clone(),
         preview,
+        git_lfs,
     );
 
     // Sync the environment.

@@ -423,6 +423,7 @@ impl ToolLock {
             prerelease,
             fork_strategy,
             dependency_metadata,
+            git_lfs,
             config_setting,
             config_settings_package,
             build_isolation,
@@ -505,6 +506,7 @@ impl ToolLock {
             workspace_cache.clone(),
             concurrency.clone(),
             preview,
+            *git_lfs,
         );
         let database = DistributionDatabase::new(
             &client,

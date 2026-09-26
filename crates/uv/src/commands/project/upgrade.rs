@@ -359,6 +359,7 @@ pub(crate) async fn upgrade(
         &cache,
         workspace_cache,
         client_builder.credentials_cache(),
+        settings.git_lfs,
     )
     .await?;
 

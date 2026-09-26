@@ -30,6 +30,7 @@ use uv_distribution_types::{
     DerivationChain, DistributionMetadata, InstalledMetadata, Name, Resolution,
 };
 use uv_fs::{CWD, Simplified, normalize_path_under};
+use uv_git::GitLfs;
 use uv_install_wheel::{LinkMode, installed_dist_info_path, read_record_into_iter};
 use uv_installer::{InstallationStrategy, Plan, Planner, Preparer, SitePackages};
 use uv_normalize::PackageName;
@@ -66,6 +67,7 @@ pub(crate) async fn read_requirements(
     excludes: &[RequirementsSource],
     extras: &ExtrasSpecification,
     groups: Option<&GroupsSpecification>,
+    git_lfs: GitLfs,
     client_builder: &BaseClientBuilder<'_>,
 ) -> Result<RequirementsSpecification, Error> {
     // If the user requests `extras` but does not provide a valid source (e.g., a `pyproject.toml`),
@@ -84,6 +86,7 @@ pub(crate) async fn read_requirements(
         overrides,
         excludes,
         groups,
+        git_lfs,
         client_builder,
     )
     .await?)
@@ -92,13 +95,20 @@ pub(crate) async fn read_requirements(
 /// Resolve a set of constraints.
 pub(crate) async fn read_constraints(
     constraints: &[RequirementsSource],
+    git_lfs: GitLfs,
     client_builder: &BaseClientBuilder<'_>,
 ) -> Result<Vec<NameRequirementSpecification>, Error> {
-    Ok(
-        RequirementsSpecification::from_sources(&[], constraints, &[], &[], None, client_builder)
-            .await?
-            .constraints,
+    Ok(RequirementsSpecification::from_sources(
+        &[],
+        constraints,
+        &[],
+        &[],
+        None,
+        git_lfs,
+        client_builder,
     )
+    .await?
+    .constraints)
 }
 
 /// Resolve a set of requirements, similar to running `pip compile`.
@@ -232,6 +242,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 build_dispatch.cache(),
                 build_dispatch.workspace_cache(),
                 client.credentials_cache(),
+                build_dispatch.git_lfs(),
             )
             .await
             .with_context(|| {

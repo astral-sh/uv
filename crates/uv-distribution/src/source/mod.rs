@@ -1540,6 +1540,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         self.build_context.cache(),
                         self.build_context.workspace_cache(),
                         credentials_cache,
+                        self.build_context.git_lfs(),
                     )
                     .await?,
                 ));
@@ -1596,6 +1597,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                             self.build_context.cache(),
                             self.build_context.workspace_cache(),
                             credentials_cache,
+                            self.build_context.git_lfs(),
                         )
                         .await?,
                     ));
@@ -1648,6 +1650,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     self.build_context.cache(),
                     self.build_context.workspace_cache(),
                     credentials_cache,
+                    self.build_context.git_lfs(),
                 )
                 .await?,
             ));
@@ -1715,6 +1718,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 self.build_context.cache(),
                 self.build_context.workspace_cache(),
                 credentials_cache,
+                self.build_context.git_lfs(),
             )
             .await?,
         ))
@@ -1795,6 +1799,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     self.build_context.cache(),
                     self.build_context.workspace_cache(),
                     credentials_cache,
+                    self.build_context.git_lfs(),
                 )
                 .await?;
                 Ok(Some(requires_dist))
@@ -2406,6 +2411,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                             self.build_context.cache(),
                             self.build_context.workspace_cache(),
                             credentials_cache,
+                            self.build_context.git_lfs(),
                         )
                         .await?,
                     ));
@@ -2444,6 +2450,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                                 self.build_context.cache(),
                                 self.build_context.workspace_cache(),
                                 credentials_cache,
+                                self.build_context.git_lfs(),
                             )
                             .await?,
                         ));
@@ -2501,6 +2508,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     self.build_context.cache(),
                     self.build_context.workspace_cache(),
                     credentials_cache,
+                    self.build_context.git_lfs(),
                 )
                 .await?,
             ));
@@ -2570,6 +2578,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 self.build_context.cache(),
                 self.build_context.workspace_cache(),
                 credentials_cache,
+                self.build_context.git_lfs(),
             )
             .await?,
         ))

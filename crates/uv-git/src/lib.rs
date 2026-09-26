@@ -6,6 +6,7 @@ pub use crate::resolver::{
 };
 pub(crate) use crate::source::GitSource;
 pub use crate::source::{Fetch, Reporter};
+pub use uv_git_types::GitLfs;
 
 mod credentials;
 mod git;

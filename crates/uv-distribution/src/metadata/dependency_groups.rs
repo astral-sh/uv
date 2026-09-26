@@ -5,6 +5,7 @@ use uv_auth::CredentialsCache;
 use uv_cache::Cache;
 use uv_configuration::NoSources;
 use uv_distribution_types::{IndexLocations, Requirement};
+use uv_git_types::GitLfs;
 use uv_normalize::{GroupName, PackageName};
 use uv_workspace::dependency_groups::FlatDependencyGroups;
 use uv_workspace::pyproject::{Sources, ToolUvSources};
@@ -62,6 +63,7 @@ impl SourcedDependencyGroups {
         cache: &Cache,
         workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
+        git_lfs: GitLfs,
     ) -> Result<Self, MetadataError> {
         // If the `pyproject.toml` doesn't exist, fail early.
         if !pyproject_path.is_file() {
@@ -107,7 +109,7 @@ impl SourcedDependencyGroups {
                         let requirements = group
                             .requirements
                             .into_iter()
-                            .map(Requirement::from)
+                            .map(|requirement| Requirement::from(requirement).with_git_lfs(git_lfs))
                             .collect();
                         (name, requirements)
                     })
@@ -146,7 +148,7 @@ impl SourcedDependencyGroups {
             let mut requirements = Vec::new();
             for requirement in group.requirements {
                 if no_sources.for_package(&requirement.name) {
-                    requirements.push(Requirement::from(requirement));
+                    requirements.push(Requirement::from(requirement).with_git_lfs(git_lfs));
                     continue;
                 }
 
@@ -164,6 +166,7 @@ impl SourcedDependencyGroups {
                         project.workspace(),
                         git_member,
                         true,
+                        git_lfs,
                         cache,
                         workspace_cache,
                         credentials_cache,

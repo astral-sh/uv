@@ -315,6 +315,7 @@ async fn build_impl(
         prerelease: _,
         fork_strategy: _,
         dependency_metadata,
+        git_lfs,
         config_setting,
         config_settings_package,
         build_isolation,
@@ -512,6 +513,7 @@ async fn build_impl(
             config_setting,
             config_settings_package,
             preview,
+            *git_lfs,
         );
         async {
             let result = Box::pin(future).await;
@@ -589,6 +591,7 @@ async fn build_package(
     config_setting: &ConfigSettings,
     config_settings_package: &PackageConfigSettings,
     preview: Preview,
+    git_lfs: uv_git::GitLfs,
 ) -> Result<Vec<BuildMessage>, Error> {
     let output_dir = if let Some(output_dir) = output_dir {
         Cow::Owned(std::path::absolute(output_dir)?)
@@ -649,7 +652,7 @@ async fn build_package(
 
     // Read build constraints.
     let command_line_constraints =
-        operations::read_constraints(build_constraints, &client_builder).await?;
+        operations::read_constraints(build_constraints, git_lfs, &client_builder).await?;
     let build_constraints = Constraints::from_specifications(
         command_line_constraints
             .iter()
@@ -735,6 +738,7 @@ async fn build_package(
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
+        git_lfs,
     );
     let dependency_check = match types_build_isolation {
         uv_types::BuildIsolation::Isolated => None,

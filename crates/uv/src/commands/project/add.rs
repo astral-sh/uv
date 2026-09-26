@@ -382,6 +382,7 @@ pub(crate) async fn add(
         &[],
         &[],
         None,
+        settings.resolver.git_lfs,
         &client_builder,
     )
     .await?;
@@ -432,6 +433,7 @@ pub(crate) async fn add(
                     cache,
                     &WorkspaceCache::default(),
                     client.credentials_cache(),
+                    settings.resolver.git_lfs,
                 )
                 .await?;
             let build_hasher = HashStrategy::from_constraints(
@@ -467,6 +469,7 @@ pub(crate) async fn add(
                     cache,
                     &WorkspaceCache::default(),
                     client.credentials_cache(),
+                    settings.resolver.git_lfs,
                 )
                 .await?
             } else {
@@ -503,6 +506,7 @@ pub(crate) async fn add(
                 WorkspaceCache::default(),
                 concurrency.clone(),
                 preview,
+                settings.resolver.git_lfs,
             );
 
             requirements.extend(

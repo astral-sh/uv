@@ -744,6 +744,7 @@ pub(crate) async fn run(
                             &cache,
                             workspace_cache,
                             client_builder.credentials_cache(),
+                            settings.resolver.git_lfs,
                         )
                         .await?;
                 }
@@ -952,8 +953,12 @@ pub(crate) async fn run(
     let spec = if requirements.is_empty() {
         None
     } else {
-        let spec =
-            RequirementsSpecification::from_simple_sources(&requirements, &client_builder).await?;
+        let spec = RequirementsSpecification::from_simple_sources(
+            &requirements,
+            settings.resolver.git_lfs,
+            &client_builder,
+        )
+        .await?;
 
         Some(spec)
     };
