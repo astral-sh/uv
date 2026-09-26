@@ -6,29 +6,24 @@ use std::path::Path;
 use rustc_hash::FxHashMap;
 use tracing::debug;
 
-use uv_configuration::{BuildOptions, Constraints, Overrides, PrereleaseMode};
+use uv_configuration::{BuildOptions, Constraints, Overrides};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{Requirement, RequirementSource};
-use uv_normalize::PackageName;
-use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, MarkerTree};
 use uv_platform_tags::Tags;
 use uv_resolver_types::DistributionMetadataIndex;
 use uv_types::{BuildContext, HashStrategy};
 
-use super::{
-    DependencyContext, DependencySources, Lock, LockError, SatisfiesResult, Source,
-    implicit_constraints_marker,
-};
+use super::{DependencyContext, Lock, LockError, SatisfiesResult, implicit_constraints_marker};
 
 impl Lock {
     /// Validate current constraints against the locked graph, without comparing declarations.
+    /// Locked sources and pre-releases remain valid unless a current constraint excludes them.
     pub(super) async fn satisfies_constraints<Context: BuildContext>(
         &self,
         constraints: &BTreeSet<Requirement>,
         root_requirements: &[Cow<'_, Requirement>],
         overrides: &Overrides,
-        sources: &DependencySources<'_>,
         root: &Path,
         tags: &Tags,
         marker_environment: &MarkerEnvironment,
@@ -37,6 +32,9 @@ impl Lock {
         index: &DistributionMetadataIndex,
         database: &DistributionDatabase<'_, Context>,
     ) -> Result<SatisfiesResult<'_>, LockError> {
+        if constraints.is_empty() {
+            return Ok(SatisfiesResult::Satisfied);
+        }
         let constraints = Constraints::from_requirements(constraints.iter().cloned());
         let mut contexts = FxHashMap::default();
         let mut queue = VecDeque::new();
@@ -162,69 +160,10 @@ impl Lock {
                     || !Self::package_satisfies_requirement(package, constraint, root)?
                 {
                     debug!(
-                        "Locked package `{}` does not establish constraint `{constraint}`",
+                        "Locked package `{}` does not satisfy constraint `{constraint}`",
                         package.id
                     );
-                    return Ok(SatisfiesResult::UnvalidatedConstraints(&package.id.name));
-                }
-            }
-
-            match &package.id.source {
-                Source::Registry(_) => {
-                    if package
-                        .id
-                        .version
-                        .as_ref()
-                        .is_some_and(Version::any_prerelease)
-                    {
-                        match self.prerelease().mode(&package.id.name) {
-                            PrereleaseMode::Disallow => {
-                                return Ok(SatisfiesResult::UnvalidatedConstraints(
-                                    &package.id.name,
-                                ));
-                            }
-                            PrereleaseMode::Explicit => {
-                                let allowed = sources.prereleases.get(&package.id.name);
-                                if !marker.without_extras().implies(allowed).is_true() {
-                                    return Ok(SatisfiesResult::UnvalidatedConstraints(
-                                        &package.id.name,
-                                    ));
-                                }
-                            }
-                            #[expect(deprecated)]
-                            PrereleaseMode::Allow
-                            | PrereleaseMode::IfNecessary
-                            | PrereleaseMode::IfNecessaryOrExplicit => {}
-                        }
-                    }
-                }
-                Source::Git(..)
-                | Source::Direct(..)
-                | Source::Path(..)
-                | Source::Directory(..)
-                | Source::Editable(..)
-                | Source::Virtual(..) => {
-                    // Removing a source constraint must not leave its selected source implicitly
-                    // authorized by an inherited edge. Current declarations may still select it.
-                    let mut authorized = if self.is_workspace_package(package) {
-                        MarkerTree::TRUE
-                    } else {
-                        MarkerTree::FALSE
-                    };
-                    for requirement in sources.requirements.requirements() {
-                        if requirement.name == package.id.name
-                            && !matches!(requirement.source, RequirementSource::Registry { .. })
-                            && package
-                                .id
-                                .source
-                                .satisfies_requirement_source(&requirement.source, root)?
-                        {
-                            authorized = authorized.or(requirement.marker);
-                        }
-                    }
-                    if !marker.implies(authorized).is_true() {
-                        return Ok(SatisfiesResult::UnvalidatedConstraints(&package.id.name));
-                    }
+                    return Ok(SatisfiesResult::UnsatisfiedConstraint(&package.id.name));
                 }
             }
 
@@ -273,24 +212,5 @@ impl Lock {
             }
         }
         Ok(SatisfiesResult::Satisfied)
-    }
-}
-
-/// Explicit pre-release opt-ins collected alongside current source declarations.
-#[derive(Default)]
-pub(super) struct PrereleaseMarkers(FxHashMap<PackageName, MarkerTree>);
-
-impl PrereleaseMarkers {
-    pub(super) fn insert(&mut self, requirement: &Requirement, marker: MarkerTree) {
-        if requirement.allows_prereleases() {
-            self.0
-                .entry(requirement.name.clone())
-                .and_modify(|existing| *existing = existing.or(marker))
-                .or_insert(marker);
-        }
-    }
-
-    fn get(&self, name: &PackageName) -> MarkerTree {
-        self.0.get(name).copied().unwrap_or(MarkerTree::FALSE)
     }
 }

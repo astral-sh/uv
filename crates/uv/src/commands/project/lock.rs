@@ -1528,9 +1528,9 @@ impl ValidatedLock {
                 );
                 Ok(Self::Preferable(lock))
             }
-            SatisfiesResult::UnvalidatedConstraints(name) => {
+            SatisfiesResult::UnsatisfiedConstraint(name) => {
                 debug!(
-                    "Resolving despite existing lockfile because constraints could not be validated for `{name}`"
+                    "Resolving despite existing lockfile because a constraint is not satisfied by `{name}`"
                 );
                 Ok(Self::Preferable(lock))
             }
