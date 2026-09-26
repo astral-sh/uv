@@ -11,12 +11,11 @@ impl Lock {
     ///
     /// Consulted settings can affect backtracking even when their packages are absent from the
     /// final graph. Retain complete parent scopes and metadata declarations for each relevant name.
+    /// Runtime constraints are validated against the graph instead of retaining their declarations.
     #[must_use]
     pub fn prune_unused(mut self, lookups: ResolutionLookups) -> Self {
         let filter = ManifestFilter::from_resolution(&self, lookups);
-        self.manifest
-            .constraints
-            .retain(|entry| filter.includes_constraint(entry));
+        self.manifest.constraints.clear();
         self.manifest
             .overrides
             .retain(|entry| filter.includes_override(entry));

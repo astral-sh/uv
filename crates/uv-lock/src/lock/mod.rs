@@ -81,6 +81,7 @@ pub use crate::lock::tree::{TreeDisplay, TreeJsonTarget};
 
 use self::requirements::{RequirementNormalizer, normalize_collection, normalize_requirement};
 
+mod constraints;
 mod deserialize;
 pub(crate) mod export;
 mod inputs;
@@ -428,7 +429,7 @@ impl<'lock> DependencySelectionContext<'lock> {
 }
 
 /// The dependency section in which a locked edge is stored.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum DependencyContext<'a> {
     Production,
     Extra(&'a ExtraName),
@@ -4079,16 +4080,18 @@ impl Lock {
         }
 
         let filter = ManifestFilter::from_lock(self);
+        let validate_constraints = uv_preview::is_enabled(PreviewFeature::ResolutionInputs);
 
+        // Compare declarations for legacy validation; the preview validates the graph below.
         let normalized_constraints = {
             let expected = normalizer.constraints(
                 constraints
                     .iter()
-                    .filter(|entry| filter.includes_constraint(entry))
+                    .filter(|entry| validate_constraints || filter.includes_constraint(entry))
                     .cloned(),
             )?;
             let actual = normalizer.constraints(self.manifest.constraints.iter().cloned())?;
-            if expected != actual {
+            if !validate_constraints && expected != actual {
                 return Ok(SatisfiesResult::MismatchedConstraints(
                     expected.into_iter().collect(),
                     actual.into_iter().collect(),
@@ -4216,13 +4219,13 @@ impl Lock {
             }
         }
 
-        let dependency_overrides = if allow_missing_package_metadata {
+        let dependency_overrides = if allow_missing_package_metadata || validate_constraints {
             Overrides::from_entries(normalized_overrides)
                 .map_err(LockErrorKind::InvalidScopedOverride)?
         } else {
             Overrides::default()
         };
-        let dependency_excludes = if allow_missing_package_metadata {
+        let dependency_excludes = if allow_missing_package_metadata || validate_constraints {
             Excludes::from_entries(excludes.iter().cloned())
         } else {
             Excludes::default()
@@ -4240,9 +4243,9 @@ impl Lock {
                 !dependency_excludes.contains_for_package(None, &requirement.name)
             })
             .collect::<Vec<_>>();
-        let dependency_sources = if allow_missing_package_metadata {
+        let dependency_sources = if allow_missing_package_metadata || validate_constraints {
             Box::pin(self.collect_dependency_sources(
-                normalized_constraints,
+                normalized_constraints.clone(),
                 &root_requirements,
                 dependency_metadata,
                 &dependency_overrides,
@@ -4260,6 +4263,28 @@ impl Lock {
         } else {
             DependencySources::default()
         };
+
+        if validate_constraints {
+            match Box::pin(self.satisfies_constraints(
+                &normalized_constraints,
+                &root_requirements,
+                &dependency_overrides,
+                &dependency_sources,
+                &source_tree_metadata,
+                root,
+                tags,
+                markers,
+                build_options,
+                hasher,
+                index,
+                database,
+            ))
+            .await?
+            {
+                SatisfiesResult::Satisfied => {}
+                result => return Ok(result),
+            }
+        }
 
         // Collect the set of available indexes (both `--index-url` and `--find-links` entries).
         let mut remotes = indexes.map(|locations| {
@@ -5867,6 +5892,8 @@ pub enum SatisfiesResult<'lock> {
     MismatchedRequirements(BTreeSet<Requirement>, BTreeSet<Requirement>),
     /// The lockfile uses a different set of constraints.
     MismatchedConstraints(BTreeSet<Requirement>, BTreeSet<Requirement>),
+    /// The locked package could not be validated against the current constraint policy.
+    UnvalidatedConstraints(&'lock PackageName),
     /// The lockfile uses a different set of overrides.
     MismatchedOverrides(
         BTreeSet<Override<Requirement>>,
