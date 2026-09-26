@@ -521,6 +521,13 @@ pub(crate) async fn pip_install(
         let groups = pylock_groups.with_defaults(DefaultGroups::List(lock.default_groups.clone()));
         let groups = groups
             .group_names(lock.dependency_groups.iter())
+            // PEP 751 allows synthetic default groups that aren't publicly selectable.
+            .chain(
+                lock.default_groups
+                    .iter()
+                    .filter(|group| groups.contains_because_default(group)),
+            )
+            .unique()
             .cloned()
             .collect::<Vec<_>>();
 
