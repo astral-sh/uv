@@ -9,7 +9,7 @@ use insta::allow_duplicates;
 use uv_test::packse::generate_wheel_with_files;
 use uv_test::{TestContext, uv_snapshot};
 
-/// Create a wheel with executable source and a syntax error, as found in vendored Python 2 code.
+/// Create a wheel with executable Python source.
 fn bytecode_wheel(context: &TestContext) -> Result<PathBuf> {
     let (filename, bytes) = generate_wheel_with_files(
         &"example".parse()?,
@@ -18,10 +18,7 @@ fn bytecode_wheel(context: &TestContext) -> Result<PathBuf> {
         &BTreeMap::new(),
         None,
         "py3-none-any",
-        &[
-            ("example/module.py", "def answer():\n    return 42\n"),
-            ("example/invalid.py", "def invalid syntax\n"),
-        ],
+        &[("example/module.py", "def answer():\n    return 42\n")],
     );
     let wheel = context.temp_dir.join(filename);
     fs_err::write(&wheel, bytes)?;
@@ -51,7 +48,7 @@ fn native_bytecode() -> Result<()> {
                 Resolved 1 package in [TIME]
                 Prepared 1 package in [TIME]
                 Installed 1 package in [TIME]
-                Bytecode compiled 3 files in [TIME]
+                Bytecode compiled 2 files in [TIME]
                  + example==1.0.0 (from file://[TEMP_DIR]/example-1.0.0-py3-none-any.whl)
                 ");
 
@@ -72,12 +69,11 @@ fn native_bytecode() -> Result<()> {
                     assert bytecode[:4] == importlib.util.MAGIC_NUMBER
                     assert struct.unpack('<III', bytecode[4:16]) == (0, int(source.stat().st_mtime) & 0xffffffff, source.stat().st_size)
                     code = marshal.loads(bytecode[16:])
-                    assert code.co_filename == str(source)
-                    assert code == compile(source.read_bytes(), str(source), 'exec')
+                    assert pathlib.Path(code.co_filename).samefile(source)
+                    assert code == compile(source.read_bytes(), code.co_filename, 'exec')
                     namespace = {}
                     exec(code, namespace)
                     print(namespace['answer']())
-                    assert not pathlib.Path(importlib.util.cache_from_source(str(source.with_name('invalid.py')))).exists()
                 "}), @"
                 exit_code: 0 (success)
                 ----- stdout -----
@@ -89,68 +85,128 @@ fn native_bytecode() -> Result<()> {
     }
 }
 
-/// Unsupported interpreters and bytecode settings continue to use Python's compiler.
+/// Unsupported interpreters fail instead of silently selecting Python's compiler.
 #[test]
-fn native_bytecode_fallback() -> Result<()> {
+fn native_bytecode_unsupported_python() -> Result<()> {
+    let context = uv_test::test_context!("3.11");
+    let wheel = bytecode_wheel(&context)?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(&wheel)
+        .arg("--compile-bytecode")
+        .arg("--preview-features").arg("native-bytecode"), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+    error: Failed to bytecode-compile installed packages
+      cause: Failed to configure native bytecode compilation
+      cause: serc does not support Python 3.11
+      cause: unsupported Python version "3.11"; expected 3.12, 3.13, 3.14, or 3.15
+    "#);
+    Ok(())
+}
+
+/// Unsupported bytecode settings report which option cannot be honored by serc.
+#[test]
+fn native_bytecode_unsupported_settings() -> Result<()> {
     allow_duplicates! {
-        for (python_version, variable, value, flags, optimization) in [
-            ("3.11", "PYC_INVALIDATION_MODE", "TIMESTAMP", 0, ""),
-            ("3.12", "PYC_INVALIDATION_MODE", "CHECKED_HASH", 3, ""),
-            ("3.12", "PYC_INVALIDATION_MODE", "UNCHECKED_HASH", 1, ""),
-            ("3.12", "SOURCE_DATE_EPOCH", "0", 3, ""),
-            ("3.12", "PYTHONOPTIMIZE", "1", 0, "1"),
-            ("3.12", "PYTHONPYCACHEPREFIX", "bytecode-cache", 0, ""),
+        for (variable, value) in [
+            ("PYC_INVALIDATION_MODE", "CHECKED_HASH"),
+            ("SOURCE_DATE_EPOCH", "0"),
         ] {
-            let context = uv_test::test_context!(python_version);
+            let context = uv_test::test_context!("3.12");
             let wheel = bytecode_wheel(&context)?;
-            // An absolute prefix is required because compiler workers run in the uv cache.
-            let value = if variable == "PYTHONPYCACHEPREFIX" {
-                context.temp_dir.join(value).to_string_lossy().into_owned()
-            } else {
-                value.to_string()
-            };
             uv_snapshot!(context.filters(), context.pip_install()
                 .arg(&wheel)
                 .arg("--compile-bytecode")
                 .arg("--preview-features").arg("native-bytecode")
-                .env(variable, &value), @"
-            exit_code: 0 (success)
+                .env(variable, value), @"
+            exit_code: 2 (failure)
             ----- stderr -----
             Resolved 1 package in [TIME]
             Prepared 1 package in [TIME]
             Installed 1 package in [TIME]
-            Bytecode compiled 3 files in [TIME]
-             + example==1.0.0 (from file://[TEMP_DIR]/example-1.0.0-py3-none-any.whl)
-            ");
-
-            uv_snapshot!(context.python_command().env(variable, &value)
-                .env_remove("PYTHONOPTIMIZE")
-                .arg("-c").arg(indoc! {r"
-                    import importlib.util
-                    import marshal
-                    import pathlib
-                    import struct
-                    import sys
-                    import sysconfig
-
-                    source = pathlib.Path(sysconfig.get_path('purelib')) / 'example/module.py'
-                    bytecode = pathlib.Path(importlib.util.cache_from_source(str(source), optimization=sys.argv[2])).read_bytes()
-                    assert bytecode[:4] == importlib.util.MAGIC_NUMBER
-                    assert struct.unpack('<I', bytecode[4:8])[0] == int(sys.argv[1])
-                    namespace = {}
-                    exec(marshal.loads(bytecode[16:]), namespace)
-                    print(namespace['answer']())
-                "}).arg(flags.to_string()).arg(optimization), @"
-            exit_code: 0 (success)
-            ----- stdout -----
-            42
+            error: Failed to bytecode-compile installed packages
+              cause: Failed to configure native bytecode compilation
+              cause: Bytecode target query failed: serc does not support bytecode invalidation mode CHECKED_HASH
             ");
         }
-        Ok(())
-    }
+        Ok::<_, anyhow::Error>(())
+    }?;
+
+    let context = uv_test::test_context!("3.12");
+    let wheel = bytecode_wheel(&context)?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(&wheel)
+        .arg("--compile-bytecode")
+        .arg("--preview-features").arg("native-bytecode")
+        .env("PYC_INVALIDATION_MODE", "UNCHECKED_HASH"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+    error: Failed to bytecode-compile installed packages
+      cause: Failed to configure native bytecode compilation
+      cause: Bytecode target query failed: serc does not support bytecode invalidation mode UNCHECKED_HASH
+    ");
+
+    let context = uv_test::test_context!("3.12");
+    let wheel = bytecode_wheel(&context)?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(&wheel)
+        .arg("--compile-bytecode")
+        .arg("--preview-features").arg("native-bytecode")
+        .env("PYTHONOPTIMIZE", "1"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+    error: Failed to bytecode-compile installed packages
+      cause: Failed to configure native bytecode compilation
+      cause: Bytecode target query failed: serc does not support optimized bytecode (PYTHONOPTIMIZE)
+    ");
+
+    let context = uv_test::test_context!("3.12");
+    let wheel = bytecode_wheel(&context)?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(&wheel)
+        .arg("--compile-bytecode")
+        .arg("--preview-features").arg("native-bytecode")
+        .env("PYTHONPYCACHEPREFIX", context.temp_dir.join("bytecode-cache")), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+    error: Failed to bytecode-compile installed packages
+      cause: Failed to configure native bytecode compilation
+      cause: Bytecode target query failed: serc does not support a custom bytecode cache prefix (PYTHONPYCACHEPREFIX)
+    ");
+
+    let context = uv_test::test_context!("3.12");
+    let wheel = bytecode_wheel(&context)?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(&wheel)
+        .arg("--compile-bytecode")
+        .arg("--preview-features").arg("native-bytecode")
+        .env("PYTHONNODEBUGRANGES", "1"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+    error: Failed to bytecode-compile installed packages
+      cause: Failed to configure native bytecode compilation
+      cause: Bytecode target query failed: serc does not support omitting debug ranges (PYTHONNODEBUGRANGES)
+    ");
+
+    Ok(())
 }
 
-/// Directory compilation reuses current bytecode, refreshes stale bytecode, and falls back per file.
+/// Directory compilation reuses current bytecode, refreshes stale bytecode, and reports errors.
 #[test]
 fn native_bytecode_recompile() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -168,15 +224,13 @@ fn native_bytecode_recompile() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-    Bytecode compiled 4 files in [TIME]
+    Bytecode compiled 3 files in [TIME]
      + example==1.0.0 (from file://[TEMP_DIR]/example-1.0.0-py3-none-any.whl)
     ");
 
     let package = context.site_packages().join("example");
     let bytecode = package.join("__pycache__/module.cpython-312.pyc");
     let compiled = fs_err::metadata(&bytecode)?.modified()?;
-    // CP1252 is accepted by Python but not by serc.
-    fs_err::write(package.join("legacy.py"), "# coding: cp1252\nvalue = 42\n")?;
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--compile-bytecode")
@@ -184,11 +238,9 @@ fn native_bytecode_recompile() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Bytecode compiled 5 files in [TIME]
+    Bytecode compiled 3 files in [TIME]
     ");
     assert_eq!(fs_err::metadata(&bytecode)?.modified()?, compiled);
-    assert!(package.join("__pycache__/legacy.cpython-312.pyc").exists());
-    assert!(!package.join("__pycache__/invalid.cpython-312.pyc").exists());
 
     fs_err::write(
         package.join("module.py"),
@@ -201,7 +253,7 @@ fn native_bytecode_recompile() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Bytecode compiled 5 files in [TIME]
+    Bytecode compiled 3 files in [TIME]
     ");
     uv_snapshot!(context.python_command().arg("-c").arg(indoc! {r"
         import importlib.util
@@ -210,17 +262,31 @@ fn native_bytecode_recompile() -> Result<()> {
         import sysconfig
 
         package = pathlib.Path(sysconfig.get_path('purelib')) / 'example'
-        for name in ['module.py', 'legacy.py']:
-            source = package / name
-            bytecode = pathlib.Path(importlib.util.cache_from_source(str(source))).read_bytes()
-            namespace = {}
-            exec(marshal.loads(bytecode[16:]), namespace)
-            print(namespace['answer']() if name == 'module.py' else namespace['value'])
+        source = package / 'module.py'
+        bytecode = pathlib.Path(importlib.util.cache_from_source(str(source))).read_bytes()
+        namespace = {}
+        exec(marshal.loads(bytecode[16:]), namespace)
+        print(namespace['answer']())
     "}), @"
     exit_code: 0 (success)
     ----- stdout -----
     1234
-    42
     ");
+
+    // CP1252 is accepted by Python but not by serc.
+    fs_err::write(package.join("legacy.py"), "# coding: cp1252\nvalue = 42\n")?;
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--compile-bytecode")
+        .arg("--preview-features").arg("native-bytecode"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to bytecode-compile Python file in: [SITE_PACKAGES]/
+      cause: Failed to compile `[SITE_PACKAGES]/example/legacy.py` with serc
+      cause: failed to decode Python source: unsupported source encoding `cp1252`
+      cause: unsupported source encoding `cp1252`
+    ");
+    assert!(!package.join("__pycache__/legacy.cpython-312.pyc").exists());
     Ok(())
 }

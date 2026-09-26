@@ -45,6 +45,14 @@ pub enum CompileError {
     PythonSubcommand(#[source] io::Error),
     #[error("Failed to create temporary script file")]
     TempFile(#[source] io::Error),
+    #[error("Failed to configure native bytecode compilation")]
+    NativeSetup(#[source] anyhow::Error),
+    #[error("Failed to compile `{}` with serc", source_file.user_display())]
+    NativeCompile {
+        source_file: PathBuf,
+        #[source]
+        err: anyhow::Error,
+    },
     #[error(r#"Bytecode compilation failed, expected "{0}", received: "{1}""#)]
     WrongPath(String, String),
     #[error("Failed to write to Python {device}")]
@@ -104,15 +112,13 @@ async fn spawn_workers(
     receiver: &Receiver<PathBuf>,
     worker_count: usize,
     timeout: Option<Duration>,
-) -> Vec<WorkerHandle> {
+) -> Result<Vec<WorkerHandle>, CompileError> {
     let rust_compiler = if uv_preview::is_enabled(PreviewFeature::NativeBytecode) {
-        match RustCompiler::query(dir, python_executable, timeout).await {
-            Ok(compiler) => compiler,
-            Err(err) => {
-                debug!("Failed to query Rust bytecode compilation support: {err:#}");
-                None
-            }
-        }
+        Some(
+            RustCompiler::query(dir, python_executable, timeout)
+                .await
+                .map_err(CompileError::NativeSetup)?,
+        )
     } else {
         None
     };
@@ -150,7 +156,7 @@ async fn spawn_workers(
 
         worker_handles.push(rx);
     }
-    worker_handles
+    Ok(worker_handles)
 }
 
 /// Wait for all workers to exit so worker failures are not hidden by channel send errors.
@@ -176,10 +182,11 @@ async fn wait_for_workers(
     Ok(())
 }
 
-/// Bytecode compile all files in `dir` using serc when enabled and supported, or a pool of Python
+/// Bytecode compile all files in `dir` using serc when enabled, or a pool of Python
 /// interpreters running a Python script that calls `compileall.compile_file`.
 ///
-/// All compilation errors are muted (like pip). There is a 60s timeout for each file to handle
+/// Python compilation errors are muted (like pip); native compilation errors are returned.
+/// There is a 60s timeout for each file compiled by Python to handle
 /// a broken `python`. The timeout can be configured with `UV_COMPILE_BYTECODE_TIMEOUT`; a value of
 /// `0` disables the timeout.
 ///
@@ -216,7 +223,7 @@ pub async fn compile_tree(
         worker_count,
         timeout,
     )
-    .await;
+    .await?;
     // Make sure the channel gets closed when all workers exit.
     drop(receiver);
 
@@ -264,11 +271,11 @@ pub async fn compile_tree(
     Ok(source_files)
 }
 
-/// Bytecode compile the given Python source files using serc when enabled and supported, or a pool
+/// Bytecode compile the given Python source files using serc when enabled, or a pool
 /// of Python interpreters.
 ///
-/// All paths must be absolute. Compilation errors are muted (like pip), while failures to launch
-/// or communicate with the Python workers are returned.
+/// All paths must be absolute. Python compilation errors are muted (like pip), while native
+/// compilation errors and failures to launch or communicate with the Python workers are returned.
 #[instrument(skip(files, python_executable))]
 pub async fn compile_files(
     files: impl IntoIterator<Item = anyhow::Result<PathBuf>>,
@@ -300,7 +307,7 @@ pub async fn compile_files(
         worker_count,
         timeout,
     )
-    .await;
+    .await?;
     drop(receiver);
 
     let mut send_error = None;
@@ -343,30 +350,14 @@ async fn worker(
     timeout: Option<Duration>,
     rust_compiler: Option<RustCompiler>,
 ) -> Result<(), CompileError> {
-    // Start a Python worker only if a file cannot be compiled by serc. Each Rust worker keeps its
-    // own fallback queue so that the Python workers retain the configured concurrency limit.
-    let receiver = if let Some(compiler) = rust_compiler {
-        let (sender, fallback) = async_channel::unbounded();
+    if let Some(compiler) = rust_compiler {
         while let Ok(source_file) = receiver.recv().await {
-            if let Err(err) = compiler.compile(&source_file) {
-                debug!(
-                    "Falling back to Python to compile {}: {err:#}",
-                    source_file.display()
-                );
-                sender
-                    .send(source_file)
-                    .await
-                    .map_err(CompileError::WorkerDisappeared)?;
-            }
+            compiler
+                .compile(&source_file)
+                .map_err(|err| CompileError::NativeCompile { source_file, err })?;
         }
-        drop(sender);
-        if fallback.is_empty() {
-            return Ok(());
-        }
-        fallback
-    } else {
-        receiver
-    };
+        return Ok(());
+    }
 
     fs_err::tokio::write(&pip_compileall_py, COMPILEALL_SCRIPT)
         .await
