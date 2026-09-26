@@ -122,7 +122,7 @@ pub enum Error {
     },
     #[error("Failed to parse metadata from built wheel")]
     Metadata(#[from] uv_pypi_types::MetadataError),
-    #[error("Failed to read metadata: `{}`", _0.user_display())]
+    #[error("Failed to read metadata: {}", _0.user_display())]
     WheelMetadata(PathBuf, #[source] Box<uv_metadata::Error>),
     #[error("Failed to read metadata from installed package `{0}`")]
     ReadInstalled(Box<InstalledDist>, #[source] InstalledDistError),
@@ -201,12 +201,12 @@ pub enum Error {
     },
 
     #[error(
-        "Hash-checking is enabled, but no hashes were provided or computed for: `{distribution}`"
+        "Hash-checking is enabled, but no hashes were provided or computed for: {distribution}"
     )]
     MissingHashes { distribution: String },
 
     #[error(
-        "Hash-checking is enabled, but no hashes were computed for: `{distribution}`\n\nExpected:\n{expected}"
+        "Hash-checking is enabled, but no hashes were computed for: {distribution}\n\nExpected:\n{expected}"
     )]
     MissingActualHashes {
         distribution: String,
@@ -214,17 +214,17 @@ pub enum Error {
     },
 
     #[error(
-        "Hash-checking is enabled, but no hashes were provided for: `{distribution}`\n\nComputed:\n{actual}"
+        "Hash-checking is enabled, but no hashes were provided for: {distribution}\n\nComputed:\n{actual}"
     )]
     MissingExpectedHashes {
         distribution: String,
         actual: String,
     },
 
-    #[error("Hash-checking is not supported for local directories: `{0}`")]
+    #[error("Hash-checking is not supported for local directories: {0}")]
     HashesNotSupportedSourceTree(String),
 
-    #[error("Hash-checking is not supported for Git repositories: `{0}`")]
+    #[error("Hash-checking is not supported for Git repositories: {0}")]
     HashesNotSupportedGit(String),
 
     #[error(transparent)]

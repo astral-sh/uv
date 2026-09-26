@@ -54,9 +54,9 @@ pub enum Error {
     ExtractError(#[from] uv_extract::Error),
     #[error(transparent)]
     SysconfigError(#[from] sysconfig::Error),
-    #[error("Missing expected Python executable at {}", _0.user_display())]
+    #[error("Missing expected Python executable at `{}`", _0.user_display())]
     MissingExecutable(PathBuf),
-    #[error("Missing expected target directory for Python minor version link at {}", _0.user_display())]
+    #[error("Missing expected target directory for Python minor version link at `{}`", _0.user_display())]
     MissingPythonMinorVersionLinkTargetDirectory(PathBuf),
     #[error("Failed to create canonical Python executable")]
     CanonicalizeExecutable(#[source] io::Error),
@@ -516,7 +516,7 @@ impl ManagedPythonInstallation {
             match symlink_or_copy_file(&python, &executable) {
                 Ok(()) => {
                     debug!(
-                        "Created link {} -> {}",
+                        "Created link `{}` -> `{}`",
                         executable.user_display(),
                         python.user_display(),
                     );
@@ -801,7 +801,7 @@ impl PythonMinorVersionLink {
         ) {
             Ok(()) => {
                 debug!(
-                    "Created link {} -> {}",
+                    "Created link `{}` -> `{}`",
                     &self.symlink_directory.user_display(),
                     &self.target_directory.user_display(),
                 );

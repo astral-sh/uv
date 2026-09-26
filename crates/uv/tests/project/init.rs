@@ -174,7 +174,7 @@ fn init_application() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+     + foo==0.1.0 (from `file://[TEMP_DIR]/foo`)
     ");
 
     Ok(())
@@ -347,7 +347,7 @@ fn init_application_package() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+     + foo==0.1.0 (from `file://[TEMP_DIR]/foo`)
     ");
 
     Ok(())
@@ -425,7 +425,7 @@ fn init_library() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+     + foo==0.1.0 (from `file://[TEMP_DIR]/foo`)
     ");
 
     Ok(())
@@ -3133,7 +3133,7 @@ fn init_application_package_flit() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+     + foo==0.1.0 (from `file://[TEMP_DIR]/foo`)
     ");
 
     Ok(())
@@ -3210,7 +3210,7 @@ fn init_library_flit() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+     + foo==0.1.0 (from `file://[TEMP_DIR]/foo`)
     ");
 
     Ok(())
@@ -3323,7 +3323,7 @@ fn init_library_poetry() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+     + foo==0.1.0 (from `file://[TEMP_DIR]/foo`)
     ");
 
     Ok(())
@@ -3879,7 +3879,7 @@ fn init_application_package_hatchling() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+     + foo==0.1.0 (from `file://[TEMP_DIR]/foo`)
     ");
 
     Ok(())

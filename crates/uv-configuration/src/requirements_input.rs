@@ -120,6 +120,6 @@ pub enum RequirementsInputError {
     #[error(transparent)]
     Url(#[from] DisplaySafeUrlError),
     /// A `file://` URL could not be converted to a local path.
-    #[error("invalid file URL: `{0}`")]
+    #[error("invalid file URL: {0}")]
     InvalidFileUrl(DisplaySafeUrl),
 }

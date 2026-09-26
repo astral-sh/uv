@@ -28,14 +28,14 @@ pub enum Error {
     #[error("Multiple .dist-info directories found: {0}")]
     MultipleDistInfo(String),
     #[error(
-        "The .dist-info directory does not consist of the normalized package name and version: `{0}`"
+        "The .dist-info directory does not consist of the normalized package name and version: {0}"
     )]
     MissingDistInfoSegments(String),
-    #[error("The .dist-info directory {0} does not start with the normalized package name: {1}")]
+    #[error("The .dist-info directory `{0}` does not start with the normalized package name: {1}")]
     MissingDistInfoPackageName(String, String),
     #[error("The .dist-info directory name contains invalid characters")]
     InvalidName(#[from] InvalidNameError),
-    #[error("The metadata at {0} is invalid")]
+    #[error("The metadata at `{0}` is invalid")]
     InvalidMetadata(String, Box<uv_pypi_types::MetadataError>),
     #[error("Bad CRC (got {computed:08x}, expected {expected:08x}) for file: {path}")]
     BadCrc32 {
@@ -323,7 +323,7 @@ mod test {
             .expect("valid wheel filename");
         let name = "other_package-1.0";
         let path = format!("{name}.dist-info/METADATA");
-        let expected = "The .dist-info directory other_package-1.0 does not start with the normalized package name: friendly-bard";
+        let expected = "The .dist-info directory `other_package-1.0` does not start with the normalized package name: friendly-bard";
 
         assert_eq!(
             find_archive_dist_info(&filename, [((), path.as_str())].into_iter())

@@ -216,13 +216,13 @@ pub enum WorkspaceErrorKind {
     NestedWorkspace(PathBuf),
     #[error("The workspace does not have a member {}: {}", _0, _1.simplified_display())]
     NoSuchMember(PackageName, PathBuf),
-    #[error("Two workspace members are both named `{name}`: `{}` and `{}`", first.simplified_display(), second.simplified_display())]
+    #[error("Two workspace members are both named `{name}`: {} and {}", first.simplified_display(), second.simplified_display())]
     DuplicatePackage {
         name: PackageName,
         first: PathBuf,
         second: PathBuf,
     },
-    #[error("pyproject.toml section is declared as dynamic, but must be static: `{0}`")]
+    #[error("`pyproject.toml` section is declared as dynamic, but must be static: `{0}`")]
     DynamicNotAllowed(&'static str),
     #[error(
         "Workspace member `{}` was requested as both `editable = true` and `editable = false`",
@@ -232,11 +232,11 @@ pub enum WorkspaceErrorKind {
     #[error("Failed to find directories for glob: `{0}`")]
     Pattern(String, #[source] PatternError),
     // Syntax and other errors.
-    #[error("Directory walking failed for `tool.uv.workspace.members` glob: `{0}`")]
+    #[error("Directory walking failed for `tool.uv.workspace.members` glob: {0}")]
     GlobWalk(String, #[source] GlobError),
     #[error(transparent)]
     Io(#[from] std::io::Error),
-    #[error("Failed to parse: `{}`", _0.user_display())]
+    #[error("Failed to parse: {}", _0.user_display())]
     Toml(PathBuf, #[source] Box<PyprojectTomlError>),
     #[error(transparent)]
     Conflicts(#[from] ConflictError),
@@ -429,7 +429,7 @@ impl Workspace {
         }
 
         debug!(
-            "Found workspace root: `{}`",
+            "Found workspace root: {}",
             workspace_root.simplified_display()
         );
 
@@ -1068,7 +1068,7 @@ impl Workspace {
         cache: &Cache,
     ) -> Result<Arc<Self>, WorkspaceError> {
         trace!(
-            "Discovering workspace members for: `{}`",
+            "Discovering workspace members for: {}",
             &workspace_root.simplified_display()
         );
         let workspace_members = Self::collect_members_only(
@@ -1090,7 +1090,7 @@ impl Workspace {
                 MemberDiscovery::None | MemberDiscovery::Ignore(_)
             );
             debug!(
-                "Adding current workspace member: `{}`",
+                "Adding current workspace member: {}",
                 root_member.root.simplified_display()
             );
 
@@ -1178,7 +1178,7 @@ impl Workspace {
         // project. If it is the current project, it is added as such in the next step.
         if let Some(project) = &workspace_pyproject_toml.project {
             debug!(
-                "Adding root workspace member: `{}`",
+                "Adding root workspace member: {}",
                 workspace_root.simplified_display()
             );
 
@@ -1216,7 +1216,7 @@ impl Workspace {
                     .is_some_and(|cache_root| member_root.starts_with(cache_root))
                 {
                     debug!(
-                        "Ignoring cache directory while discovering workspace members: `{}`",
+                        "Ignoring cache directory while discovering workspace members: {}",
                         member_root.simplified_display()
                     );
                     continue;
@@ -1235,7 +1235,7 @@ impl Workspace {
                 };
                 if skip {
                     debug!(
-                        "Ignoring workspace member: `{}`",
+                        "Ignoring workspace member: {}",
                         member_root.simplified_display()
                     );
                     continue;
@@ -1251,14 +1251,14 @@ impl Workspace {
                     .matches(&member_root)
                 {
                     debug!(
-                        "Ignoring workspace member: `{}`",
+                        "Ignoring workspace member: {}",
                         member_root.simplified_display()
                     );
                     continue;
                 }
 
                 trace!(
-                    "Processing workspace member: `{}`",
+                    "Processing workspace member: {}",
                     member_root.user_display()
                 );
 
@@ -1274,7 +1274,7 @@ impl Workspace {
                                     && err.kind() == std::io::ErrorKind::NotFound =>
                             {
                                 debug!(
-                                    "Ignoring missing workspace member: `{}`",
+                                    "Ignoring missing workspace member: {}",
                                     member_root.simplified_display()
                                 );
                                 continue;
@@ -1283,7 +1283,7 @@ impl Workspace {
                         };
                         if !metadata.is_dir() {
                             warn!(
-                                "Ignoring non-directory workspace member: `{}`",
+                                "Ignoring non-directory workspace member: {}",
                                 member_root.simplified_display()
                             );
                             continue;
@@ -1297,7 +1297,7 @@ impl Workspace {
                                 .is_some_and(|name| name.as_encoded_bytes().starts_with(b"."))
                             {
                                 debug!(
-                                    "Ignoring hidden workspace member: `{}`",
+                                    "Ignoring hidden workspace member: {}",
                                     member_root.simplified_display()
                                 );
                                 continue;
@@ -1307,7 +1307,7 @@ impl Workspace {
                             // (e.g., `__pycache__`), skip it.
                             if has_only_gitignored_files(&member_root) {
                                 debug!(
-                                    "Ignoring workspace member with only gitignored files: `{}`",
+                                    "Ignoring workspace member with only gitignored files: {}",
                                     member_root.simplified_display()
                                 );
                                 continue;
@@ -1315,7 +1315,7 @@ impl Workspace {
 
                             if matches!(options.members, MemberDiscovery::Existing) {
                                 debug!(
-                                    "Ignoring missing workspace member: `{}`",
+                                    "Ignoring missing workspace member: {}",
                                     member_root.simplified_display()
                                 );
                                 continue;
@@ -1367,7 +1367,7 @@ impl Workspace {
                 };
 
                 debug!(
-                    "Adding discovered workspace member: `{}`",
+                    "Adding discovered workspace member: {}",
                     member_root.simplified_display()
                 );
 
@@ -1585,10 +1585,7 @@ impl ProjectWorkspace {
             .find(|path| path.join("pyproject.toml").is_file())
             .ok_or_else(|| WorkspaceErrorKind::MissingPyprojectToml)?;
 
-        debug!(
-            "Found project root: `{}`",
-            project_root.simplified_display()
-        );
+        debug!("Found project root: {}", project_root.simplified_display());
 
         Self::from_project_root(project_root, options, cache, workspace_cache).await
     }
@@ -1817,7 +1814,7 @@ impl ProjectWorkspace {
         }
 
         debug!(
-            "Found workspace root: `{}`",
+            "Found workspace root: {}",
             workspace_root.simplified_display()
         );
 
@@ -1864,7 +1861,7 @@ async fn find_workspace(
         && project_root.starts_with(cache_root)
     {
         debug!(
-            "Project is contained in cache directory: `{}`",
+            "Project is contained in cache directory: {}",
             project_root.simplified_display()
         );
         return Ok(None);
@@ -1888,7 +1885,7 @@ async fn find_workspace(
             continue;
         }
         trace!(
-            "Found `pyproject.toml` at: `{}`",
+            "Found `pyproject.toml` at: {}",
             pyproject_path.simplified_display()
         );
 
@@ -1945,14 +1942,14 @@ async fn find_workspace(
             // we ignore all `albatross` is doing and any potential workspace it might be
             // contained in.
             debug!(
-                "Project is contained in non-workspace project: `{}`",
+                "Project is contained in non-workspace project: {}",
                 workspace_root.simplified_display()
             );
             Ok(None)
         } else {
             // We require that a `project.toml` file either declares a workspace or a project.
             warn!(
-                "`pyproject.toml` does not contain a `project` table: `{}`",
+                "`pyproject.toml` does not contain a `project` table: {}",
                 pyproject_path.simplified_display()
             );
             Ok(None)
@@ -2143,10 +2140,7 @@ impl VirtualProject {
             .find(|path| path.join("pyproject.toml").is_file())
             .ok_or(WorkspaceErrorKind::MissingPyprojectToml)?;
 
-        debug!(
-            "Found project root: `{}`",
-            project_root.simplified_display()
-        );
+        debug!("Found project root: {}", project_root.simplified_display());
 
         // Fast path: The workspace is already cached.
         if let Some(workspace) = workspace_cache.get(project_root, &options.members) {
@@ -3687,7 +3681,7 @@ foo_bar = ["iniconfig"]
         insta::with_settings!({filters => filters}, {
             assert_snapshot!(
                 error,
-            @"Two workspace members are both named `seeds`: `[ROOT]/packages/seeds` and `[ROOT]/packages/seeds2`");
+            @"Two workspace members are both named `seeds`: [ROOT]/packages/seeds and [ROOT]/packages/seeds2");
         });
 
         Ok(())

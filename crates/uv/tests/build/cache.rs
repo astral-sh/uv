@@ -62,7 +62,7 @@ fn build_warns_cache_inside_source() -> Result<()> {
     ----- stderr -----
     warning: The cache directory `project/.uv-cache` is inside the build source directory `project` and may be included in distributions
     Building source distribution...
-    Successfully built project/dist/project-0.1.0.tar.gz
+    Successfully built `project/dist/project-0.1.0.tar.gz`
     ");
 
     project
@@ -114,7 +114,7 @@ fn build_warns_symlinked_cache_inside_source() -> Result<()> {
     ----- stderr -----
     warning: The cache directory `cache-link` is inside the build source directory `project` and may be included in distributions
     Building source distribution...
-    Successfully built project/dist/project-0.1.0.tar.gz
+    Successfully built `project/dist/project-0.1.0.tar.gz`
     ");
 
     project
@@ -159,7 +159,7 @@ fn build_allows_cache_outside_selected_source() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Building source distribution...
-    Successfully built dist/member-0.1.0.tar.gz
+    Successfully built `dist/member-0.1.0.tar.gz`
     ");
 
     workspace
@@ -430,8 +430,10 @@ async fn binary_payloads_stay_in_archive_without_preview() -> Result<()> {
     let server = PackageServer::new(&"binary-payload".parse()?).await;
     let filename = "binary_payload-0.1.0-py3-none-any.whl";
     for streaming in [false, true] {
-        let context = uv_test::test_context!("3.12")
-            .with_filter((r" \(from (?:file|http)://.*\)", " (from [WHEEL_URL])"));
+        let context = uv_test::test_context!("3.12").with_filter((
+            r" \(from `(?:file|http)://[^`]+`\)",
+            " (from `[WHEEL_URL]`)",
+        ));
         let wheel = binary_payload_wheel(&context)?;
         let mut command = context.pip_install();
         if streaming {
@@ -448,7 +450,7 @@ async fn binary_payloads_stay_in_archive_without_preview() -> Result<()> {
             Resolved 1 package in [TIME]
             Prepared 1 package in [TIME]
             Installed 1 package in [TIME]
-             + binary-payload==0.1.0 (from [WHEEL_URL])
+             + binary-payload==0.1.0 (from `[WHEEL_URL]`)
             ");
         }
 
@@ -474,7 +476,10 @@ async fn all_files_except_record_use_archive_file_store() -> Result<()> {
     for (streaming, concurrent_installs) in [(false, "1"), (false, "4"), (true, "1"), (true, "4")] {
         let context = uv_test::test_context!("3.12")
             .with_concurrent_installs(concurrent_installs)
-            .with_filter((r" \(from (?:file|http)://.*\)", " (from [WHEEL_URL])"));
+            .with_filter((
+                r" \(from `(?:file|http)://[^`]+`\)",
+                " (from `[WHEEL_URL]`)",
+            ));
         let wheel = binary_payload_wheel(&context)?;
         let mut command = context.pip_install();
         command.args(["--preview-features", "content-addressed-cache"]);
@@ -491,7 +496,7 @@ async fn all_files_except_record_use_archive_file_store() -> Result<()> {
             Resolved 1 package in [TIME]
             Prepared 1 package in [TIME]
             Installed 1 package in [TIME]
-             + binary-payload==0.1.0 (from [WHEEL_URL])
+             + binary-payload==0.1.0 (from `[WHEEL_URL]`)
             ");
         }
 
@@ -552,7 +557,7 @@ fn binary_payloads_use_archive_file_store() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + binary-payload==0.1.0 (from file://[TEMP_DIR]/binary_payload-0.1.0-py3-none-any.whl)
+     + binary-payload==0.1.0 (from `file://[TEMP_DIR]/binary_payload-0.1.0-py3-none-any.whl`)
     ");
 
     let objects = context.cache_files(CacheBucket::Files)?;
@@ -588,7 +593,7 @@ fn binary_payloads_use_archive_file_store() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
-     + binary-payload==0.1.0 (from file://[TEMP_DIR]/binary_payload-0.1.0-py3-none-any.whl)
+     + binary-payload==0.1.0 (from `file://[TEMP_DIR]/binary_payload-0.1.0-py3-none-any.whl`)
     ");
     assert_eq!(
         fs_err::read(target.join("binary_payload/native.so"))?,
@@ -647,7 +652,7 @@ fn binary_payload_copy_fallback_uses_archive_file_store() -> Result<()> {
              If the cache and target directories are on different filesystems, hardlinking may not be supported.
              If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning.
     Installed 1 package in [TIME]
-     + binary-payload==0.1.0 (from file://[TEMP_DIR]/binary_payload-0.1.0-py3-none-any.whl)
+     + binary-payload==0.1.0 (from `file://[TEMP_DIR]/binary_payload-0.1.0-py3-none-any.whl`)
     ");
 
     let archive_files = context.cache_files(CacheBucket::Files)?;
@@ -668,7 +673,7 @@ fn binary_payload_copy_fallback_uses_archive_file_store() -> Result<()> {
              If the cache and target directories are on different filesystems, hardlinking may not be supported.
              If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning.
     Installed 1 package in [TIME]
-     + binary-payload==0.1.0 (from file://[TEMP_DIR]/binary_payload-0.1.0-py3-none-any.whl)
+     + binary-payload==0.1.0 (from `file://[TEMP_DIR]/binary_payload-0.1.0-py3-none-any.whl`)
     ");
 
     assert_eq!(

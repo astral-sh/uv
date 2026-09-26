@@ -107,14 +107,14 @@ impl SitePackages {
                         }) =>
                     {
                         warn_user!(
-                            "Ignoring dangling temporary directory: `{}`",
+                            "Ignoring dangling temporary directory: {}",
                             path.simplified_display().cyan()
                         );
                         continue;
                     }
                     Err(err) => {
                         return Err(err).context(format!(
-                            "Failed to read metadata from: `{}`",
+                            "Failed to read metadata from: {}",
                             path.simplified_display()
                         ));
                     }

@@ -76,7 +76,7 @@ impl FileSnapshot {
             return Ok(());
         }
 
-        debug!("Reverting changes to {}", self.path.user_display());
+        debug!("Reverting changes to `{}`", self.path.user_display());
         if let Some(contents) = &self.contents {
             fs_err::write(&self.path, contents)
         } else {
@@ -93,7 +93,7 @@ impl FileSnapshot {
 fn revert(files: &mut Vec<FileSnapshot>) {
     for file in files.drain(..) {
         if let Err(err) = file.revert() {
-            warn!("Failed to restore {}: {err}", file.path.user_display());
+            warn!("Failed to restore `{}`: {err}", file.path.user_display());
         }
     }
 }

@@ -466,7 +466,7 @@ impl std::fmt::Display for ShortSpecifier<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Version(version) => version.fmt(f),
-            Self::Url(url) => write!(f, " @ {url}"),
+            Self::Url(url) => write!(f, " @ `{url}`"),
         }
     }
 }
@@ -481,8 +481,11 @@ pub(crate) enum LongSpecifier<'a> {
 impl std::fmt::Display for LongSpecifier<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::InstalledVersion(version) => version.fmt(f),
-            Self::Url(url) => write!(f, " @ {url}"),
+            Self::InstalledVersion(InstalledVersion::Version(version)) => write!(f, "=={version}"),
+            Self::InstalledVersion(InstalledVersion::Url(url, version)) => {
+                write!(f, "=={version} (from `{url}`)")
+            }
+            Self::Url(url) => write!(f, " @ `{url}`"),
         }
     }
 }
@@ -925,14 +928,14 @@ fn python_source_files_for_installs<'a>(
     ];
     installs.iter().flat_map(move |install| {
         let dist_info = match installed_dist_info_path(&layout, install.path()).with_context(|| {
-            format!("Failed to locate installed distribution for bytecode compilation: `{install}`")
+            format!("Failed to locate installed distribution for bytecode compilation: {install}")
         }) {
             Ok(dist_info) => dist_info,
             Err(err) => return Box::new(std::iter::once(Err(err))) as PythonSourceFileIterator,
         };
         let Some(record_root) = dist_info.parent().map(|path| CWD.join(path)) else {
             return Box::new(std::iter::once(Err(anyhow!(
-                "Invalid installed distribution path: `{}`",
+                "Invalid installed distribution path: {}",
                 dist_info.user_display()
             ))));
         };
@@ -1128,7 +1131,7 @@ async fn execute_plan(
                     uv_install_wheel::Error::MissingRecord(_),
                 )) => {
                     warn_user!(
-                        "Failed to uninstall package at {} due to missing `RECORD` file. Installation may result in an incomplete environment.",
+                        "Failed to uninstall package at `{}` due to missing `RECORD` file. Installation may result in an incomplete environment.",
                         dist_info.install_path().user_display().cyan(),
                     );
                 }
@@ -1136,7 +1139,7 @@ async fn execute_plan(
                     uv_install_wheel::Error::MissingTopLevel(_),
                 )) => {
                     warn_user!(
-                        "Failed to uninstall package at {} due to missing `top_level.txt` file. Installation may result in an incomplete environment.",
+                        "Failed to uninstall package at `{}` due to missing `top_level.txt` file. Installation may result in an incomplete environment.",
                         dist_info.install_path().user_display().cyan(),
                     );
                 }

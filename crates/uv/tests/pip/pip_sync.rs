@@ -28,7 +28,7 @@ fn missing_requirements_txt() {
         .arg("--strict"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: File not found: `requirements.txt`
+    error: File not found: requirements.txt
     ");
 
     requirements_txt.assert(predicates::path::missing());
@@ -659,7 +659,7 @@ fn install_url() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + werkzeug==2.0.0 (from https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl)
+     + werkzeug==2.0.0 (from `https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl`)
     "
     );
 
@@ -685,7 +685,7 @@ fn install_git_commit() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+     + uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389`)
     "
     );
 
@@ -715,7 +715,7 @@ fn install_git_tag() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
+     + uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979`)
     "
     );
 
@@ -743,8 +743,8 @@ fn install_git_subdirectories() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + example-pkg-a==1 (from git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_a)
-     + example-pkg-b==1 (from git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_b)
+     + example-pkg-a==1 (from `git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_a`)
+     + example-pkg-b==1 (from `git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_b`)
     "
     );
 
@@ -798,7 +798,7 @@ fn install_sdist_url() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
+     + source-distribution==0.0.1 (from `https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`)
     "
     );
 
@@ -930,7 +930,7 @@ fn install_version_then_install_url() -> Result<()> {
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - werkzeug==2.0.0
-     + werkzeug==2.0.0 (from https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl)
+     + werkzeug==2.0.0 (from `https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl`)
     "
     );
 
@@ -1304,7 +1304,7 @@ fn install_local_wheel() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
+     + tomli==2.0.1 (from `file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl`)
     "
     );
 
@@ -1322,7 +1322,7 @@ fn install_local_wheel() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
-     + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
+     + tomli==2.0.1 (from `file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl`)
     "
     );
 
@@ -1345,7 +1345,7 @@ fn install_local_wheel() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
+     + tomli==2.0.1 (from `file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl`)
     "
     );
 
@@ -1364,7 +1364,7 @@ fn install_local_wheel() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
+     ~ tomli==2.0.1 (from `file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl`)
     "
     );
 
@@ -1414,7 +1414,7 @@ fn install_unnamed_wheel_url_rejects_path_traversal() -> Result<()> {
         .arg("--strict"), @r#"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: The wheel filename "pkg-1.0-py3-none-../../../target.whl" is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods
+    error: The wheel filename `pkg-1.0-py3-none-../../../target.whl` is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods
     "#
     );
 
@@ -1435,7 +1435,7 @@ fn install_unnamed_wheel_url_rejects_stream_separator() -> Result<()> {
         .arg("--strict"), @r#"
     exit_code: 1 (failure)
     ----- stderr -----
-    error: The wheel filename "pkg-1.0-py3-none-target:stream.whl" is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods
+    error: The wheel filename `pkg-1.0-py3-none-target:stream.whl` is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods
     "#
     );
 
@@ -1480,7 +1480,7 @@ fn mismatched_version() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
-     + tomli==3.7.2 (from file://[TEMP_DIR]/tomli-3.7.2-py3-none-any.whl)
+     + tomli==3.7.2 (from `file://[TEMP_DIR]/tomli-3.7.2-py3-none-any.whl`)
     "
     );
 
@@ -1514,7 +1514,7 @@ fn mismatched_name() -> Result<()> {
       cause: Because foo has an invalid package format and you require foo, we can conclude that your requirements are unsatisfiable.
 
     hint: The structure of `foo` was invalid
-      Caused by: The .dist-info directory tomli-2.0.1 does not start with the normalized package name: foo
+      Caused by: The .dist-info directory `tomli-2.0.1` does not start with the normalized package name: foo
     "
     );
 
@@ -1547,7 +1547,7 @@ fn install_local_source_distribution() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + wheel==0.42.0 (from file://[TEMP_DIR]/wheel-0.42.0.tar.gz)
+     + wheel==0.42.0 (from `file://[TEMP_DIR]/wheel-0.42.0.tar.gz`)
     "
     );
 
@@ -1583,7 +1583,7 @@ fn install_build_system_no_backend() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + build-system-no-backend==0.1.0 (from https://files.pythonhosted.org/packages/ec/25/1e531108ca027dc3a3b37d351f4b86d811df4884c6a81cd99e73b8b589f5/build-system-no-backend-0.1.0.tar.gz)
+     + build-system-no-backend==0.1.0 (from `https://files.pythonhosted.org/packages/ec/25/1e531108ca027dc3a3b37d351f4b86d811df4884c6a81cd99e73b8b589f5/build-system-no-backend-0.1.0.tar.gz`)
     "
     );
 
@@ -1612,7 +1612,7 @@ fn install_url_source_dist_cached() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
+     + source-distribution==0.0.1 (from `https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`)
     "
     );
 
@@ -1631,7 +1631,7 @@ fn install_url_source_dist_cached() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
-     + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
+     + source-distribution==0.0.1 (from `https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`)
     "
     );
 
@@ -1660,7 +1660,7 @@ fn install_url_source_dist_cached() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
+     + source-distribution==0.0.1 (from `https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`)
     "
     );
 
@@ -1688,7 +1688,7 @@ fn install_git_source_dist_cached() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+     + uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389`)
     "
     );
 
@@ -1707,7 +1707,7 @@ fn install_git_source_dist_cached() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+     + uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389`)
     "
     );
 
@@ -1734,7 +1734,7 @@ fn install_git_source_dist_cached() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+     + uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389`)
     "
     );
 
@@ -1850,7 +1850,7 @@ fn install_path_source_dist_cached() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + source-distribution==0.0.1 (from file://[TEMP_DIR]/source_distribution-0.0.1.tar.gz)
+     + source-distribution==0.0.1 (from `file://[TEMP_DIR]/source_distribution-0.0.1.tar.gz`)
     "
     );
 
@@ -1869,7 +1869,7 @@ fn install_path_source_dist_cached() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
-     + source-distribution==0.0.1 (from file://[TEMP_DIR]/source_distribution-0.0.1.tar.gz)
+     + source-distribution==0.0.1 (from `file://[TEMP_DIR]/source_distribution-0.0.1.tar.gz`)
     "
     );
 
@@ -1898,7 +1898,7 @@ fn install_path_source_dist_cached() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + source-distribution==0.0.1 (from file://[TEMP_DIR]/source_distribution-0.0.1.tar.gz)
+     + source-distribution==0.0.1 (from `file://[TEMP_DIR]/source_distribution-0.0.1.tar.gz`)
     "
     );
 
@@ -1935,7 +1935,7 @@ fn install_path_built_dist_cached() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
+     + tomli==2.0.1 (from `file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl`)
     "
     );
 
@@ -1952,7 +1952,7 @@ fn install_path_built_dist_cached() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
-     + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
+     + tomli==2.0.1 (from `file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl`)
     "
     );
 
@@ -1979,7 +1979,7 @@ fn install_path_built_dist_cached() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
+     + tomli==2.0.1 (from `file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl`)
     "
     );
 
@@ -2014,7 +2014,7 @@ fn install_url_built_dist_cached() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + tqdm==4.66.1 (from https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl)
+     + tqdm==4.66.1 (from `https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl`)
     "
     );
 
@@ -2031,7 +2031,7 @@ fn install_url_built_dist_cached() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
-     + tqdm==4.66.1 (from https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl)
+     + tqdm==4.66.1 (from `https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl`)
     "
     );
 
@@ -2058,7 +2058,7 @@ fn install_url_built_dist_cached() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + tqdm==4.66.1 (from https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl)
+     + tqdm==4.66.1 (from `https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl`)
     "
     );
 
@@ -2220,7 +2220,7 @@ fn reinstall_git() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+     + uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389`)
     "
     );
 
@@ -2240,7 +2240,7 @@ fn reinstall_git() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+     ~ uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389`)
     "
     );
 
@@ -2378,7 +2378,7 @@ fn sync_editable() -> Result<()> {
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + anyio==3.7.0
-     + poetry-editable==0.1.0 (from file://[TEMP_DIR]/poetry_editable)
+     + poetry-editable==0.1.0 (from `file://[TEMP_DIR]/poetry_editable`)
     "
     );
 
@@ -2403,7 +2403,7 @@ fn sync_editable() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ poetry-editable==0.1.0 (from file://[TEMP_DIR]/poetry_editable)
+     ~ poetry-editable==0.1.0 (from `file://[TEMP_DIR]/poetry_editable`)
     "
     );
 
@@ -2468,8 +2468,8 @@ fn sync_editable() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - poetry-editable==0.1.0 (from file://[TEMP_DIR]/poetry_editable)
-     + poetry-editable==0.1.1 (from file://[TEMP_DIR]/poetry_editable)
+     - poetry-editable==0.1.0 (from `file://[TEMP_DIR]/poetry_editable`)
+     + poetry-editable==0.1.1 (from `file://[TEMP_DIR]/poetry_editable`)
     "
     );
 
@@ -2490,7 +2490,7 @@ fn sync_editable() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ poetry-editable==0.1.1 (from file://[TEMP_DIR]/poetry_editable)
+     ~ poetry-editable==0.1.1 (from `file://[TEMP_DIR]/poetry_editable`)
     "
     );
 
@@ -2548,7 +2548,7 @@ fn sync_editable_and_registry() -> Result<()> {
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - black==24.1.0
-     + black==0.1.0 (from file://[TEMP_DIR]/black_editable)
+     + black==0.1.0 (from `file://[TEMP_DIR]/black_editable`)
     "
     );
 
@@ -2585,7 +2585,7 @@ fn sync_editable_and_registry() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - black==0.1.0 (from file://[TEMP_DIR]/black_editable)
+     - black==0.1.0 (from `file://[TEMP_DIR]/black_editable`)
      + black==23.10.0
     warning: The package `black` requires `click>=8.0.0`, but it's not installed
     warning: The package `black` requires `mypy-extensions>=0.4.3`, but it's not installed
@@ -2622,7 +2622,7 @@ fn sync_editable_and_local() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + black==0.1.0 (from file://[TEMP_DIR]/black_editable)
+     + black==0.1.0 (from `file://[TEMP_DIR]/black_editable`)
     "
     );
 
@@ -2641,7 +2641,7 @@ fn sync_editable_and_local() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ black==0.1.0 (from file://[TEMP_DIR]/black_editable)
+     ~ black==0.1.0 (from `file://[TEMP_DIR]/black_editable`)
     "
     );
 
@@ -2659,7 +2659,7 @@ fn sync_editable_and_local() -> Result<()> {
     Resolved 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ black==0.1.0 (from file://[TEMP_DIR]/black_editable)
+     ~ black==0.1.0 (from `file://[TEMP_DIR]/black_editable`)
     "
     );
 
@@ -2707,7 +2707,7 @@ fn sync_legacy_sdist_pep_517() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + flake8==6.0.0 (from https://files.pythonhosted.org/packages/66/53/3ad4a3b74d609b3b9008a10075c40e7c8909eae60af53623c3888f7a529a/flake8-6.0.0.tar.gz)
+     + flake8==6.0.0 (from `https://files.pythonhosted.org/packages/66/53/3ad4a3b74d609b3b9008a10075c40e7c8909eae60af53623c3888f7a529a/flake8-6.0.0.tar.gz`)
     "
     );
 
@@ -2739,7 +2739,7 @@ fn find_links() -> Result<()> {
      + markupsafe==2.1.3
      + numpy==1.26.3
      + tqdm==1000.0.0
-     + werkzeug==3.0.1 (from https://files.pythonhosted.org/packages/c3/fc/254c3e9b5feb89ff5b9076a23218dafbc99c96ac5941e900b71206e6313b/werkzeug-3.0.1-py3-none-any.whl)
+     + werkzeug==3.0.1 (from `https://files.pythonhosted.org/packages/c3/fc/254c3e9b5feb89ff5b9076a23218dafbc99c96ac5941e900b71206e6313b/werkzeug-3.0.1-py3-none-any.whl`)
     "
     );
 
@@ -3115,7 +3115,7 @@ fn tar_dont_preserve_mtime() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + tomli==2.0.1 (from https://files.pythonhosted.org/packages/c0/3f/d7af728f075fb08564c5949a9c95e44352e23dee646869fa104a3b2060a3/tomli-2.0.1.tar.gz)
+     + tomli==2.0.1 (from `https://files.pythonhosted.org/packages/c0/3f/d7af728f075fb08564c5949a9c95e44352e23dee646869fa104a3b2060a3/tomli-2.0.1.tar.gz`)
     ");
 
     Ok(())
@@ -3212,7 +3212,7 @@ requires-python = ">=3.8"
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + example==0.0.0 (from file://[TEMP_DIR]/editable)
+     + example==0.0.0 (from `file://[TEMP_DIR]/editable`)
     "
     );
 
@@ -3247,7 +3247,7 @@ requires-python = ">=3.8"
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ example==0.0.0 (from file://[TEMP_DIR]/editable)
+     ~ example==0.0.0 (from `file://[TEMP_DIR]/editable`)
     "
     );
 
@@ -3763,7 +3763,7 @@ fn require_hashes_source_url() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
+     + source-distribution==0.0.1 (from `https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`)
     "
     );
 
@@ -3778,7 +3778,7 @@ fn require_hashes_source_url() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
+     ~ source-distribution==0.0.1 (from `https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`)
     "
     );
 
@@ -3852,7 +3852,7 @@ fn require_hashes_wheel_url() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
+     + anyio==4.0.0 (from `https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`)
     "
     );
 
@@ -3867,7 +3867,7 @@ fn require_hashes_wheel_url() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
+     ~ anyio==4.0.0 (from `https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`)
     "
     );
 
@@ -3967,7 +3967,7 @@ fn require_hashes_git() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to download and build `anyio @ git+https://github.com/agronholm/anyio@4a23745badf5bf5ef7928f1e346e9986bd696d82`
-      cause: Hash-checking is not supported for Git repositories: `anyio @ git+https://github.com/agronholm/anyio@4a23745badf5bf5ef7928f1e346e9986bd696d82`
+      cause: Hash-checking is not supported for Git repositories: anyio @ git+https://github.com/agronholm/anyio@4a23745badf5bf5ef7928f1e346e9986bd696d82
     "
     );
 
@@ -3994,7 +3994,7 @@ fn require_hashes_source_tree() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to build `black @ file://[WORKSPACE]/test/packages/black_editable`
-      cause: Hash-checking is not supported for local directories: `black @ file://[WORKSPACE]/test/packages/black_editable`
+      cause: Hash-checking is not supported for local directories: black @ file://[WORKSPACE]/test/packages/black_editable
     "
     );
 
@@ -4088,7 +4088,7 @@ fn require_hashes_wheel_path() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + tqdm==1000.0.0 (from file://[WORKSPACE]/test/links/tqdm-1000.0.0-py3-none-any.whl)
+     + tqdm==1000.0.0 (from `file://[WORKSPACE]/test/links/tqdm-1000.0.0-py3-none-any.whl`)
     "
     );
 
@@ -4117,7 +4117,7 @@ fn require_hashes_wheel_path_blake2b() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + tqdm==1000.0.0 (from file://[WORKSPACE]/test/links/tqdm-1000.0.0-py3-none-any.whl)
+     + tqdm==1000.0.0 (from `file://[WORKSPACE]/test/links/tqdm-1000.0.0-py3-none-any.whl`)
     "
     );
 
@@ -4220,7 +4220,7 @@ fn require_hashes_source_path() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + tqdm==999.0.0 (from file://[WORKSPACE]/test/links/tqdm-999.0.0.tar.gz)
+     + tqdm==999.0.0 (from `file://[WORKSPACE]/test/links/tqdm-999.0.0.tar.gz`)
     "
     );
 
@@ -4279,7 +4279,7 @@ fn require_hashes_unnamed() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
+     + anyio==4.0.0 (from `https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`)
     "
     );
 
@@ -4367,7 +4367,7 @@ fn require_hashes_repeated_hash() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
+     + anyio==4.0.0 (from `https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`)
     "
     );
 
@@ -4389,7 +4389,7 @@ fn require_hashes_repeated_hash() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
+     ~ anyio==4.0.0 (from `https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`)
     "
     );
 
@@ -4483,7 +4483,7 @@ fn require_hashes_repeated_hash_multiple_files() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
+     + anyio==4.0.0 (from `https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`)
     "
     );
 
@@ -5112,7 +5112,7 @@ fn require_hashes_url() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374)
+     + iniconfig==2.0.0 (from `https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374`)
     "
     );
 
@@ -5206,7 +5206,7 @@ fn require_hashes_url_merge() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl#sha256=cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f)
+     + anyio==4.0.0 (from `https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl#sha256=cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f`)
     "
     );
 
@@ -5230,7 +5230,7 @@ fn require_hashes_url_unnamed() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374)
+     + iniconfig==2.0.0 (from `https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374`)
     "
     );
 
@@ -5685,7 +5685,7 @@ fn sanitize() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + payload-package==0.1.0 (from https://github.com/astral-sh/sanitize-wheel-test/raw/bc59283d5b4b136a191792e32baa51b477fdf65e/payload_package-0.1.0-py3-none-any.whl)
+     + payload-package==0.1.0 (from `https://github.com/astral-sh/sanitize-wheel-test/raw/bc59283d5b4b136a191792e32baa51b477fdf65e/payload_package-0.1.0-py3-none-any.whl`)
     "
     );
 
@@ -5712,7 +5712,7 @@ fn semicolon_trailing_space() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
+     + iniconfig==2.0.0 (from `https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`)
     "
     );
 
@@ -6067,7 +6067,7 @@ fn pep_751_validates_cached_remote_archive_size() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Installed 1 package in [TIME]
-     + a==1.0.0 (from http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl)
+     + a==1.0.0 (from `http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl`)
     "#);
 
     context.reset_venv();
@@ -6254,7 +6254,7 @@ fn pep_751_validates_cached_url_sdist_size() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Installed 1 package in [TIME]
-     + a==1.0.0 (from http://[LOCALHOST]/files/a-1.0.0.tar.gz)
+     + a==1.0.0 (from `http://[LOCALHOST]/files/a-1.0.0.tar.gz`)
     "#);
 
     context.reset_venv();
@@ -6600,7 +6600,7 @@ fn pep_751_direct_url_tags() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to determine installation plan
-      cause: A URL (https://files.pythonhosted.org/packages/6b/b0/18f76bba336fa5aecf79d45dcd6c806c280ec44538b3c13671d49099fdd0/MarkupSafe-3.0.2-cp312-cp312-macosx_11_0_arm64.whl) dependency is incompatible with the current platform
+      cause: A URL (`https://files.pythonhosted.org/packages/6b/b0/18f76bba336fa5aecf79d45dcd6c806c280ec44538b3c13671d49099fdd0/MarkupSafe-3.0.2-cp312-cp312-macosx_11_0_arm64.whl`) dependency is incompatible with the current platform
 
     hint: The wheel is compatible with macOS (`macosx_11_0_arm64`), but you're on Linux (`manylinux_2_28_x86_64`)
     "
@@ -6614,7 +6614,7 @@ fn pep_751_direct_url_tags() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Installed 1 package in [TIME]
-     + markupsafe==3.0.2 (from https://files.pythonhosted.org/packages/6b/b0/18f76bba336fa5aecf79d45dcd6c806c280ec44538b3c13671d49099fdd0/MarkupSafe-3.0.2-cp312-cp312-macosx_11_0_arm64.whl)
+     + markupsafe==3.0.2 (from `https://files.pythonhosted.org/packages/6b/b0/18f76bba336fa5aecf79d45dcd6c806c280ec44538b3c13671d49099fdd0/MarkupSafe-3.0.2-cp312-cp312-macosx_11_0_arm64.whl`)
     "
     );
 
@@ -6636,7 +6636,7 @@ fn incompatible_python_version_direct_url() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to determine installation plan
-      cause: A URL (https://files.pythonhosted.org/packages/ae/11/7c546fcf42145f29b71e4d6f429e96d8d68e5a7ba1830b2e68d7418f0bbd/numpy-2.3.2-cp313-cp313-win32.whl) dependency is incompatible with the current platform
+      cause: A URL (`https://files.pythonhosted.org/packages/ae/11/7c546fcf42145f29b71e4d6f429e96d8d68e5a7ba1830b2e68d7418f0bbd/numpy-2.3.2-cp313-cp313-win32.whl`) dependency is incompatible with the current platform
 
     hint: The wheel is compatible with CPython 3.13 (`cp313`), but you're using CPython 3.12 (`cp312`)
     "
@@ -6660,7 +6660,7 @@ fn incompatible_direct_url_redacts_credentials() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to determine installation plan
-      cause: A URL (https://user:****@files.pythonhosted.org/packages/ae/11/7c546fcf42145f29b71e4d6f429e96d8d68e5a7ba1830b2e68d7418f0bbd/numpy-2.3.2-cp313-cp313-win32.whl?X-Amz-Signature=****) dependency is incompatible with the current platform
+      cause: A URL (`https://user:****@files.pythonhosted.org/packages/ae/11/7c546fcf42145f29b71e4d6f429e96d8d68e5a7ba1830b2e68d7418f0bbd/numpy-2.3.2-cp313-cp313-win32.whl?X-Amz-Signature=****`) dependency is incompatible with the current platform
 
     hint: The wheel is compatible with CPython 3.13 (`cp313`), but you're using CPython 3.12 (`cp312`)
     "
@@ -6684,7 +6684,7 @@ fn incompatible_platform_direct_url() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to determine installation plan
-      cause: A URL (https://files.pythonhosted.org/packages/ae/11/7c546fcf42145f29b71e4d6f429e96d8d68e5a7ba1830b2e68d7418f0bbd/numpy-2.3.2-cp313-cp313-win32.whl) dependency is incompatible with the current platform
+      cause: A URL (`https://files.pythonhosted.org/packages/ae/11/7c546fcf42145f29b71e4d6f429e96d8d68e5a7ba1830b2e68d7418f0bbd/numpy-2.3.2-cp313-cp313-win32.whl`) dependency is incompatible with the current platform
 
     hint: The wheel is compatible with Windows (`win32`), but you're on Linux (`manylinux_2_28_x86_64`)
     "

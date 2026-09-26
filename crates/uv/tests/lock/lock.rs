@@ -499,7 +499,7 @@ fn lock_sdist_git() -> Result<()> {
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
+     + uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979`)
     ");
 
     // Re-lock with a precise commit that maps to the same tag.
@@ -737,7 +737,7 @@ fn lock_sdist_git_subdirectory() -> Result<()> {
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + example-pkg-a==1 (from git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_a)
+     + example-pkg-a==1 (from `git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_a`)
     ");
 
     // Re-install from the lockfile.
@@ -1050,7 +1050,7 @@ fn lock_sdist_git_short_rev() -> Result<()> {
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
+     + uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979`)
     ");
 
     // Re-install from the lockfile.
@@ -1093,8 +1093,8 @@ fn lock_sdist_git_archive() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + iniconfig==2.0.0 (from git+https://github.com/astral-sh/archive-in-git-test@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0.tar.gz)
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + iniconfig==2.0.0 (from `git+https://github.com/astral-sh/archive-in-git-test@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0.tar.gz`)
+     + project==0.1.0 (from `file://[TEMP_DIR]/`)
     "###);
 
     let lock = context.read("uv.lock");
@@ -1161,8 +1161,8 @@ fn lock_sdist_git_archive() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Installed 2 packages in [TIME]
-     + iniconfig==2.0.0 (from git+https://github.com/astral-sh/archive-in-git-test@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0.tar.gz)
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + iniconfig==2.0.0 (from `git+https://github.com/astral-sh/archive-in-git-test@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0.tar.gz`)
+     + project==0.1.0 (from `file://[TEMP_DIR]/`)
     "###);
 
     Ok(())
@@ -1284,8 +1284,8 @@ fn lock_wheel_git_archive() -> Result<()> {
     ----- stderr -----
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + iniconfig==2.0.0 (from git+https://github.com/astral-sh/archive-in-git-test@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0-py3-none-any.whl)
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + iniconfig==2.0.0 (from `git+https://github.com/astral-sh/archive-in-git-test@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0-py3-none-any.whl`)
+     + project==0.1.0 (from `file://[TEMP_DIR]/`)
     "###);
 
     // Re-install from the lockfile.
@@ -1304,8 +1304,8 @@ fn lock_wheel_git_archive() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Installed 2 packages in [TIME]
-     + iniconfig==2.0.0 (from git+https://github.com/astral-sh/archive-in-git-test@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0-py3-none-any.whl)
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + iniconfig==2.0.0 (from `git+https://github.com/astral-sh/archive-in-git-test@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0-py3-none-any.whl`)
+     + project==0.1.0 (from `file://[TEMP_DIR]/`)
     "###);
 
     Ok(())
@@ -1473,7 +1473,7 @@ fn lock_wheel_url() -> Result<()> {
     ----- stderr -----
     Prepared 2 packages in [TIME]
     Installed 3 packages in [TIME]
-     + anyio==4.3.0 (from https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl)
+     + anyio==4.3.0 (from `https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl`)
      + idna==3.6
      + sniffio==1.3.1
     ");
@@ -1568,7 +1568,7 @@ fn lock_sdist_url() -> Result<()> {
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + a==1.0.0 (from http://[LOCALHOST]/files/a-1.0.0.tar.gz)
+     + a==1.0.0 (from `http://[LOCALHOST]/files/a-1.0.0.tar.gz`)
     ");
 
     // Re-install from the lockfile.
@@ -1734,7 +1734,7 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + demo-pkg==1.0.0 (from http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz)
+     + demo-pkg==1.0.0 (from `http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`)
     ");
     sentinel.assert("");
     context.assert_installed("demo_pkg", "1.0.0");
@@ -1775,7 +1775,7 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ demo-pkg==1.0.0 (from http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz)
+     ~ demo-pkg==1.0.0 (from `http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`)
     ");
     sentinel.assert("");
     assert_eq!(context.read("uv.lock"), locked);
@@ -2012,7 +2012,7 @@ async fn lock_sdist_url_locked_build_dependency_hash_mismatch() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ demo-pkg==1.0.0 (from http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz)
+     ~ demo-pkg==1.0.0 (from `http://[LOCALHOST]/files/demo_pkg-1.0.0.tar.gz`)
     ");
     assert!(sentinel.exists());
     Ok(())
@@ -2940,7 +2940,7 @@ fn lock_sdist_url_subdirectory() -> Result<()> {
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + root==0.0.1 (from https://github.com/user-attachments/files/18216295/subdirectory-test.tar.gz#subdirectory=packages/root)
+     + root==0.0.1 (from `https://github.com/user-attachments/files/18216295/subdirectory-test.tar.gz#subdirectory=packages/root`)
      + sniffio==1.3.1
     ");
 
@@ -3063,7 +3063,7 @@ fn lock_sdist_url_subdirectory_pep508() -> Result<()> {
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + root==0.0.1 (from https://github.com/user-attachments/files/18216295/subdirectory-test.tar.gz#subdirectory=packages/root)
+     + root==0.0.1 (from `https://github.com/user-attachments/files/18216295/subdirectory-test.tar.gz#subdirectory=packages/root`)
      + sniffio==1.3.1
     ");
 
@@ -3508,7 +3508,7 @@ fn lock_project_with_override_sources() -> Result<()> {
     Prepared 2 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==3.7.0
-     + idna==3.2 (from https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl)
+     + idna==3.2 (from `https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl`)
      + sniffio==1.3.1
     ");
 
@@ -3999,7 +3999,7 @@ fn lock_project_with_constraint_sources() -> Result<()> {
     Prepared 2 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==3.7.0
-     + idna==3.2 (from https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl)
+     + idna==3.2 (from `https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl`)
      + sniffio==1.3.1
     ");
 
@@ -4931,7 +4931,7 @@ fn lock_conflicting_project_basic1() -> Result<()> {
     ----- stderr -----
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0 (from `file://[TEMP_DIR]/`)
      + sortedcontainers==2.3.0
     ");
 
@@ -4950,7 +4950,7 @@ fn lock_conflicting_project_basic1() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 1 package in [TIME]
-     - project==0.1.0 (from file://[TEMP_DIR]/)
+     - project==0.1.0 (from `file://[TEMP_DIR]/`)
      - sortedcontainers==2.3.0
      + sortedcontainers==2.4.0
     ");
@@ -5130,7 +5130,7 @@ fn lock_conflicting_workspace_members() -> Result<()> {
     ----- stderr -----
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + example==0.1.0 (from file://[TEMP_DIR]/)
+     + example==0.1.0 (from `file://[TEMP_DIR]/`)
      + sortedcontainers==2.3.0
     ");
 
@@ -5141,10 +5141,10 @@ fn lock_conflicting_workspace_members() -> Result<()> {
     Prepared 2 packages in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     - example==0.1.0 (from file://[TEMP_DIR]/)
+     - example==0.1.0 (from `file://[TEMP_DIR]/`)
      - sortedcontainers==2.3.0
      + sortedcontainers==2.4.0
-     + subexample==0.1.0 (from file://[TEMP_DIR]/subexample)
+     + subexample==0.1.0 (from `file://[TEMP_DIR]/subexample`)
     ");
 
     // Attempt to install them together, i.e., with `--all-packages`
@@ -5386,7 +5386,7 @@ fn lock_conflicting_workspace_members_depends_direct_extra() -> Result<()> {
     ----- stderr -----
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + example==0.1.0 (from file://[TEMP_DIR]/)
+     + example==0.1.0 (from `file://[TEMP_DIR]/`)
      + sortedcontainers==2.3.0
     ");
 
@@ -5404,10 +5404,10 @@ fn lock_conflicting_workspace_members_depends_direct_extra() -> Result<()> {
     Prepared 2 packages in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     - example==0.1.0 (from file://[TEMP_DIR]/)
+     - example==0.1.0 (from `file://[TEMP_DIR]/`)
      - sortedcontainers==2.3.0
      + sortedcontainers==2.4.0
-     + subexample==0.1.0 (from file://[TEMP_DIR]/subexample)
+     + subexample==0.1.0 (from `file://[TEMP_DIR]/subexample`)
     ");
 
     // Install with just development dependencies
@@ -5416,7 +5416,7 @@ fn lock_conflicting_workspace_members_depends_direct_extra() -> Result<()> {
     ----- stderr -----
     Uninstalled 2 packages in [TIME]
      - sortedcontainers==2.4.0
-     - subexample==0.1.0 (from file://[TEMP_DIR]/subexample)
+     - subexample==0.1.0 (from `file://[TEMP_DIR]/subexample`)
     ");
 
     let lock = lock_without_package_metadata(&context.read("uv.lock"))?;
@@ -5733,7 +5733,7 @@ fn lock_conflicting_workspace_members_depends_transitive_extra() -> Result<()> {
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + sortedcontainers==2.4.0
-     + subexample==0.1.0 (from file://[TEMP_DIR]/subexample)
+     + subexample==0.1.0 (from `file://[TEMP_DIR]/subexample`)
     ");
 
     let lock = lock_without_package_metadata(&context.read("uv.lock"))?;
@@ -5908,7 +5908,7 @@ fn lock_conflicting_project_basic2() -> Result<()> {
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
-     + example==0.1.0 (from file://[TEMP_DIR]/)
+     + example==0.1.0 (from `file://[TEMP_DIR]/`)
      + idna==3.6
      + sniffio==1.3.1
     ");
@@ -5929,7 +5929,7 @@ fn lock_conflicting_project_basic2() -> Result<()> {
     Installed 1 package in [TIME]
      - anyio==4.3.0
      + anyio==4.1.0
-     - example==0.1.0 (from file://[TEMP_DIR]/)
+     - example==0.1.0 (from `file://[TEMP_DIR]/`)
     ");
 
     Ok(())
@@ -6091,7 +6091,7 @@ fn lock_conflicting_mixed() -> Result<()> {
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0 (from `file://[TEMP_DIR]/`)
     ");
     // Another install, but with the group enabled.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=project1"), @"
@@ -6912,7 +6912,7 @@ fn lock_git_plus_prefix() -> Result<()> {
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+     + uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389`)
     ");
 
     Ok(())
@@ -9679,7 +9679,7 @@ fn lock_dev() -> Result<()> {
     ----- stderr -----
     warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Installed 1 package in [TIME]
-     + typing-extensions==4.12.2 (from https://files.pythonhosted.org/packages/26/9f/ad63fc0248c5379346306f8668cda6e2e2e9c95e01216d2b8ffd9ff037d0/typing_extensions-4.12.2-py3-none-any.whl)
+     + typing-extensions==4.12.2 (from `https://files.pythonhosted.org/packages/26/9f/ad63fc0248c5379346306f8668cda6e2e2e9c95e01216d2b8ffd9ff037d0/typing_extensions-4.12.2-py3-none-any.whl`)
     ");
 
     Ok(())
@@ -14174,7 +14174,7 @@ async fn lock_redact_http() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to download `iniconfig==2.0.0`
-      cause: Failed to fetch: `http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
+      cause: Failed to fetch: http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl
       cause: HTTP status client error (401 Unauthorized) for url (http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
 
     hint: `iniconfig` (v2.0.0) was included because `foo` (v0.1.0) depends on `iniconfig`
@@ -14185,7 +14185,7 @@ async fn lock_redact_http() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to download `iniconfig==2.0.0`
-      cause: Failed to fetch: `http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
+      cause: Failed to fetch: http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl
       cause: HTTP status client error (401 Unauthorized) for url (http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
 
     hint: `iniconfig` (v2.0.0) was included because `foo` (v0.1.0) depends on `iniconfig`
@@ -14215,7 +14215,7 @@ async fn lock_redact_http() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to download `iniconfig==2.0.0`
-      cause: Failed to fetch: `http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
+      cause: Failed to fetch: http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl
       cause: HTTP status client error (401 Unauthorized) for url (http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
 
     hint: `iniconfig` (v2.0.0) was included because `foo` (v0.1.0) depends on `iniconfig`
@@ -14403,7 +14403,7 @@ fn lock_redact_git_pep508() -> Result<()> {
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-private-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
+     + uv-private-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071`)
     ");
 
     Ok(())
@@ -14482,7 +14482,7 @@ fn lock_redact_git_sources() -> Result<()> {
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-private-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
+     + uv-private-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071`)
     ");
 
     Ok(())
@@ -14554,7 +14554,7 @@ fn lock_redact_git_pep508_non_project() -> Result<()> {
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-private-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
+     + uv-private-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071`)
     ");
 
     Ok(())
@@ -14721,7 +14721,7 @@ async fn lock_redact_url_sources() -> Result<()> {
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + iniconfig==2.0.0 (from http://public:****@[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
+     + iniconfig==2.0.0 (from `http://public:****@[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`)
     ");
 
     Ok(())
@@ -17195,7 +17195,7 @@ fn lock_sources_url() -> Result<()> {
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
-     + workspace==0.1.0 (from https://github.com/user-attachments/files/16592193/workspace.zip)
+     + workspace==0.1.0 (from `https://github.com/user-attachments/files/16592193/workspace.zip`)
     ");
 
     Ok(())
@@ -17389,7 +17389,7 @@ fn lock_sources_archive() -> Result<()> {
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
-     + workspace==0.1.0 (from file://[TEMP_DIR]/workspace.zip)
+     + workspace==0.1.0 (from `file://[TEMP_DIR]/workspace.zip`)
     ");
 
     Ok(())
@@ -17501,9 +17501,9 @@ fn lock_sources_source_tree() -> Result<()> {
     ----- stderr -----
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
-     + anyio==0.1.0 (from file://[TEMP_DIR]/workspace/anyio)
-     + project==0.1.0 (from file://[TEMP_DIR]/)
-     + workspace==0.1.0 (from file://[TEMP_DIR]/workspace)
+     + anyio==0.1.0 (from `file://[TEMP_DIR]/workspace/anyio`)
+     + project==0.1.0 (from `file://[TEMP_DIR]/`)
+     + workspace==0.1.0 (from `file://[TEMP_DIR]/workspace`)
     ");
 
     Ok(())
@@ -17862,9 +17862,9 @@ fn lock_mixed_extras() -> Result<()> {
     Creating virtual environment at: .venv
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
-     + leaf1==0.1.0 (from file://[TEMP_DIR]/workspace1/packages/leaf1)
-     + leaf2==0.1.0 (from file://[TEMP_DIR]/workspace2/packages/leaf2)
-     + workspace2==0.1.0 (from file://[TEMP_DIR]/workspace2)
+     + leaf1==0.1.0 (from `file://[TEMP_DIR]/workspace1/packages/leaf1`)
+     + leaf2==0.1.0 (from `file://[TEMP_DIR]/workspace2/packages/leaf2`)
+     + workspace2==0.1.0 (from `file://[TEMP_DIR]/workspace2`)
     ");
 
     // Install from the lockfile with the `async` extra. This should include `typing-extensions`,
@@ -18028,7 +18028,7 @@ fn lock_transitive_extra() -> Result<()> {
     Creating virtual environment at: .venv
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + leaf==0.1.0 (from file://[TEMP_DIR]/workspace/packages/leaf)
+     + leaf==0.1.0 (from `file://[TEMP_DIR]/workspace/packages/leaf`)
     ");
 
     // Install from the lockfile with the `async` extra. This should include `typing-extensions`
@@ -18226,7 +18226,7 @@ fn lock_mismatched_versions() -> Result<()> {
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
+     + uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979`)
     ");
 
     Ok(())
@@ -22287,7 +22287,7 @@ fn lock_metadata_free_frozen_preserves_recorded_selections() -> Result<()> {
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + dependency==1.0.0 (from file://[TEMP_DIR]/dependency)
+     + dependency==1.0.0 (from `file://[TEMP_DIR]/dependency`)
     ");
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra").arg("added"), @"
     exit_code: 2 (failure)
@@ -26580,7 +26580,7 @@ fn lock_invalid_index() -> Result<()> {
          |                ^^^^^^^^^^^^^^^^
       Index names may only contain letters, digits, hyphens, underscores, and periods, but found unsupported character (` `) in: `internal proxy`
 
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 9, column 31
                |
              9 |         iniconfig = { index = "internal proxy" }
@@ -26783,15 +26783,15 @@ fn lock_explicit_default_index() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock().arg("--verbose"), @r#"
     exit_code: 1 (failure)
     ----- stderr -----
-    DEBUG Found workspace root: `[TEMP_DIR]/`
-    DEBUG Adding root workspace member: `[TEMP_DIR]/`
+    DEBUG Found workspace root: [TEMP_DIR]/
+    DEBUG Adding root workspace member: [TEMP_DIR]/
     DEBUG Found workspace configuration at `[TEMP_DIR]/pyproject.toml`
-    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
+    DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
     DEBUG uv [VERSION] ([COMMIT] DATE)
-    DEBUG Found project root: `[TEMP_DIR]/`
+    DEBUG Found project root: [TEMP_DIR]/
     DEBUG No Python version file found in workspace: [TEMP_DIR]/
     DEBUG Using Python request `>=3.12` from `requires-python` metadata
-    DEBUG Checking for Python environment at: `.venv`
+    DEBUG Checking for Python environment at: .venv
     DEBUG The project environment's Python version satisfies the request: `Python >=3.12`
     DEBUG Using request connect timeout of [TIME] and read timeout of [TIME]
     DEBUG Found static `requires-dist` for: [TEMP_DIR]/
@@ -26803,12 +26803,12 @@ fn lock_explicit_default_index() -> Result<()> {
     DEBUG Solving with target Python version: >=3.12
     DEBUG Solving with exclude-newer: global: 2024-03-25T00:00:00Z
     DEBUG Adding direct dependency: project*
-    DEBUG Searching for a compatible version of project @ file://[TEMP_DIR]/ (*)
+    DEBUG Searching for a compatible version of project @ `file://[TEMP_DIR]/` (*)
     DEBUG Adding direct dependency: anyio*
     DEBUG Searching for a compatible version of anyio (*)
     DEBUG No compatible version found for: anyio
     DEBUG Recording unit propagation conflict of anyio from incompatibility of (project)
-    DEBUG Searching for a compatible version of project @ file://[TEMP_DIR]/ (<0.1.0 | >0.1.0)
+    DEBUG Searching for a compatible version of project @ `file://[TEMP_DIR]/` (<0.1.0 | >0.1.0)
     DEBUG No compatible version found for: project
     error: No solution found when resolving dependencies
       cause: Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
@@ -26885,7 +26885,7 @@ fn lock_unnamed_explicit_index() -> Result<()> {
         |         ^^^^^^^^^^^^^^^^^
       An index with `explicit = true` requires a `name`: https://test.pypi.org/simple
 
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 8, column 9
                |
              8 |         [[tool.uv.index]]
@@ -26930,7 +26930,7 @@ fn lock_invalid_index_cache_control() -> Result<()> {
          |         ^^^^^^^^^^^^^
       `cache-control.api` must be a valid HTTP header value
 
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 11, column 9
                 |
              11 |         cache-control.api = """
@@ -27357,7 +27357,7 @@ fn lock_repeat_named_index() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 8, column 9
                |
              8 |         [[tool.uv.index]]
@@ -27398,7 +27398,7 @@ fn lock_multiple_default_indexes() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 8, column 9
                |
              8 |         [[tool.uv.index]]
@@ -28404,7 +28404,7 @@ fn lock_implicit_package_path() -> Result<()> {
     Prepared 5 packages in [TIME]
     Installed 5 packages in [TIME]
      + anyio==4.3.0
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
      + idna==3.6
      + iniconfig==2.0.0
      + sniffio==1.3.1
@@ -29578,7 +29578,7 @@ fn lock_dependency_metadata_git() -> Result<()> {
     ----- stderr -----
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + anyio==4.6.2 (from git+https://github.com/agronholm/anyio@c4844254e6db0cb804c240ba07405db73d810e0b)
+     + anyio==4.6.2 (from `git+https://github.com/agronholm/anyio@c4844254e6db0cb804c240ba07405db73d810e0b`)
      + iniconfig==2.0.0
     ");
 
@@ -29657,7 +29657,7 @@ fn lock_strip_fragment() -> Result<()> {
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
+     + iniconfig==2.0.0 (from `https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`)
     ");
 
     Ok(())
@@ -29761,7 +29761,7 @@ fn lock_duplicate_sources() -> Result<()> {
         |         ^^^^^^^^^^^^^^^^
       duplicate key
 
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 9, column 9
                |
              9 |         python-multipart = { url = "https://files.pythonhosted.org/packages/c0/3e/9fbfd74e7f5b54f653f7ca99d44ceb56e718846920162165061c4c22b71a/python_multipart-0.0.8-py3-none-any.whl" }
@@ -29786,7 +29786,7 @@ fn lock_duplicate_sources() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 7, column 9
                |
              7 |         [tool.uv.sources]
@@ -29858,7 +29858,7 @@ fn lock_missing_name() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 1, column 1
                |
              1 | [project]
@@ -29887,7 +29887,7 @@ fn lock_missing_version() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 1, column 1
                |
              1 | [project]
@@ -30538,8 +30538,8 @@ async fn lock_keyring_credentials_always_authenticate_unsupported_mode() -> Resu
     exit_code: 2 (failure)
     ----- stderr -----
     warning: Attempted to fetch credentials using the `keyring` command, but it does not support `--mode creds`; upgrade to `keyring>=v25.2.1` or provide a username
-    error: Failed to fetch: `http://[LOCALHOST]/basic-auth/simple/iniconfig/`
-      cause: Missing credentials for http://[LOCALHOST]/basic-auth/simple/iniconfig/
+    error: Failed to fetch: http://[LOCALHOST]/basic-auth/simple/iniconfig/
+      cause: Missing credentials for `http://[LOCALHOST]/basic-auth/simple/iniconfig/`
     ");
 
     Ok(())
@@ -30664,7 +30664,7 @@ fn lock_multiple_sources_conflict() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: Failed to parse `tool.uv.sources`
       cause: Source markers must be disjoint, but the following markers overlap: `python_full_version == '3.12.*' and sys_platform == 'win32'` and `sys_platform == 'win32'`.
 
@@ -30699,7 +30699,7 @@ fn lock_multiple_sources_no_marker() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @r#"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: Failed to parse `tool.uv.sources`
       cause: When multiple sources are provided, each source must include a platform marker (e.g., `marker = "sys_platform == 'linux'"`)
     "#);
@@ -32746,7 +32746,7 @@ fn lock_group_invalid_entry_group_name() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @r#"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 9, column 16
                |
              9 |         foo = [{include-group = "invalid!"}]
@@ -32780,7 +32780,7 @@ fn lock_group_invalid_duplicate_group_name() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 8, column 9
                |
              8 |         [dependency-groups]
@@ -32872,7 +32872,7 @@ fn lock_group_invalid_entry_type() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 9, column 33
                |
              9 |         foo = [{include-group = true}]
@@ -32905,7 +32905,7 @@ fn lock_group_empty_entry_table() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 9, column 16
                |
              9 |         foo = [{}]
@@ -33253,8 +33253,8 @@ fn lock_transitive_git() -> Result<()> {
     Prepared 5 packages in [TIME]
     Installed 5 packages in [TIME]
      + anyio==4.3.0
-     + c==1.0.0 (from git+https://github.com/astral-sh/workspace-virtual-root-test@fac39c8d4c5d0ef32744e2bb309bbe34a759fd46#subdirectory=packages/c)
-     + d==1.0.0 (from git+https://github.com/astral-sh/workspace-virtual-root-test@fac39c8d4c5d0ef32744e2bb309bbe34a759fd46#subdirectory=packages/d)
+     + c==1.0.0 (from `git+https://github.com/astral-sh/workspace-virtual-root-test@fac39c8d4c5d0ef32744e2bb309bbe34a759fd46#subdirectory=packages/c`)
+     + d==1.0.0 (from `git+https://github.com/astral-sh/workspace-virtual-root-test@fac39c8d4c5d0ef32744e2bb309bbe34a759fd46#subdirectory=packages/d`)
      + idna==3.6
      + sniffio==1.3.1
     ");
@@ -34334,7 +34334,7 @@ fn lock_dynamic_built_cache() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + project==0.1.0 (from `file://[TEMP_DIR]/`)
     ");
 
     // Remove the lockfile.
@@ -41431,8 +41431,8 @@ async fn lock_exclude_newer_index_disable() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    warning: iniconfig-2.0.0.tar.gz is missing an upload date, but user provided: 2024-03-25T00:00:00Z
-    warning: iniconfig-2.0.0-py3-none-any.whl is missing an upload date, but user provided: 2024-03-25T00:00:00Z
+    warning: `iniconfig-2.0.0.tar.gz` is missing an upload date, but user provided: 2024-03-25T00:00:00Z
+    warning: `iniconfig-2.0.0-py3-none-any.whl` is missing an upload date, but user provided: 2024-03-25T00:00:00Z
     error: No solution found when resolving dependencies
       cause: Because there are no versions of iniconfig and your project depends on iniconfig>=2, we can conclude that your project's requirements are unsatisfiable.
 
@@ -41510,8 +41510,8 @@ async fn lock_exclude_newer_index_value() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     warning: Setting `exclude-newer` on configured indexes is experimental and may change without warning. Pass `--preview-features index-exclude-newer` to disable this warning.
-    warning: iniconfig-2.0.0.tar.gz is missing an upload date, but user provided: 2025-01-01T00:00:00Z
-    warning: iniconfig-2.0.0-py3-none-any.whl is missing an upload date, but user provided: 2025-01-01T00:00:00Z
+    warning: `iniconfig-2.0.0.tar.gz` is missing an upload date, but user provided: 2025-01-01T00:00:00Z
+    warning: `iniconfig-2.0.0-py3-none-any.whl` is missing an upload date, but user provided: 2025-01-01T00:00:00Z
     error: No solution found when resolving dependencies
       cause: Because there are no versions of iniconfig and your project depends on iniconfig>=2, we can conclude that your project's requirements are unsatisfiable.
 
@@ -41524,8 +41524,8 @@ async fn lock_exclude_newer_index_value() -> Result<()> {
         .arg("index-exclude-newer"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    warning: iniconfig-2.0.0.tar.gz is missing an upload date, but user provided: 2025-01-01T00:00:00Z
-    warning: iniconfig-2.0.0-py3-none-any.whl is missing an upload date, but user provided: 2025-01-01T00:00:00Z
+    warning: `iniconfig-2.0.0.tar.gz` is missing an upload date, but user provided: 2025-01-01T00:00:00Z
+    warning: `iniconfig-2.0.0-py3-none-any.whl` is missing an upload date, but user provided: 2025-01-01T00:00:00Z
     error: No solution found when resolving dependencies
       cause: Because there are no versions of iniconfig and your project depends on iniconfig>=2, we can conclude that your project's requirements are unsatisfiable.
 
@@ -43616,7 +43616,7 @@ async fn lock_check_multiple_default_indexes_explicit_assignment_dependency_grou
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 13, column 9
                 |
              13 |         [[tool.uv.index]]

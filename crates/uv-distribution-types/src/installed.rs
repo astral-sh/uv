@@ -48,20 +48,20 @@ pub enum InstalledDistError {
     #[error(transparent)]
     ExpandedTagParse(#[from] uv_distribution_filename::ExpandedTagError),
 
-    #[error("Invalid .egg-link path: `{}`", _0.user_display())]
+    #[error("Invalid .egg-link path: {}", _0.user_display())]
     InvalidEggLinkPath(PathBuf),
 
-    #[error("Invalid .egg-link target: `{}`", _0.user_display())]
+    #[error("Invalid .egg-link target: {}", _0.user_display())]
     InvalidEggLinkTarget(PathBuf),
 
-    #[error("Failed to parse METADATA file: `{}`", path.user_display())]
+    #[error("Failed to parse `METADATA` file: {}", path.user_display())]
     MetadataParse {
         path: PathBuf,
         #[source]
         err: Box<MetadataError>,
     },
 
-    #[error("Failed to parse `PKG-INFO` file: `{}`", path.user_display())]
+    #[error("Failed to parse `PKG-INFO` file: {}", path.user_display())]
     PkgInfoParse {
         path: PathBuf,
         #[source]
@@ -620,14 +620,14 @@ fn read_metadata(path: &Path) -> Option<uv_pypi_types::Metadata10> {
     let content = match fs::read(path) {
         Ok(content) => content,
         Err(err) => {
-            warn!("Failed to read metadata for {path:?}: {err}");
+            warn!("Failed to read metadata for `{path:?}`: {err}");
             return None;
         }
     };
     let metadata = match uv_pypi_types::Metadata10::parse_pkg_info(&content) {
         Ok(metadata) => metadata,
         Err(err) => {
-            warn!("Failed to parse metadata for {path:?}: {err}");
+            warn!("Failed to parse metadata for `{path:?}`: {err}");
             return None;
         }
     };

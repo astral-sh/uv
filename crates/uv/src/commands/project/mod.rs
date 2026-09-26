@@ -1088,7 +1088,7 @@ fn existing_project_environment(
             if unix {
                 let target_path = fs_err::read_link(&path)?;
                 warn_user!(
-                    "Ignoring existing virtual environment linked to non-existent Python interpreter: {} -> {}",
+                    "Ignoring existing virtual environment linked to non-existent Python interpreter: {} -> `{}`",
                     path.user_display().cyan(),
                     target_path.user_display().cyan(),
                 );
@@ -1140,7 +1140,7 @@ fn discover_project_environment(
         && environment.interpreter().python_version() != base_interpreter.python_version()
     {
         debug!(
-            "Clearing cached interpreter info for {} after finding conflicting Python versions ({} and {})",
+            "Clearing cached interpreter info for `{}` after finding conflicting Python versions ({} and {})",
             base_executable.user_display(),
             base_interpreter.python_version(),
             environment.interpreter().python_version(),
@@ -3489,7 +3489,7 @@ fn warn_on_requirements_txt_setting(spec: &RequirementsSpecification, settings: 
         if let Some(index_url) = index_url {
             if settings.index_locations.default_index().map(Index::url) != Some(index_url) {
                 warn_user_once!(
-                    "Ignoring `--index-url` from requirements file: `{index_url}`. Instead, use the `--index-url` command-line argument, or set `index-url` in a `uv.toml` or `pyproject.toml` file."
+                    "Ignoring `--index-url` from requirements file: {index_url}. Instead, use the `--index-url` command-line argument, or set `index-url` in a `uv.toml` or `pyproject.toml` file."
                 );
             }
         }
@@ -3500,7 +3500,7 @@ fn warn_on_requirements_txt_setting(spec: &RequirementsSpecification, settings: 
                 .any(|index| index.url() == extra_index_url)
             {
                 warn_user_once!(
-                    "Ignoring `--extra-index-url` from requirements file: `{extra_index_url}`. Instead, use the `--extra-index-url` command-line argument, or set `extra-index-url` in a `uv.toml` or `pyproject.toml` file.`"
+                    "Ignoring `--extra-index-url` from requirements file: {extra_index_url}. Instead, use the `--extra-index-url` command-line argument, or set `extra-index-url` in a `uv.toml` or `pyproject.toml` file."
                 );
             }
         }
@@ -3511,7 +3511,7 @@ fn warn_on_requirements_txt_setting(spec: &RequirementsSpecification, settings: 
                 .any(|index| index.url() == find_link)
             {
                 warn_user_once!(
-                    "Ignoring `--find-links` from requirements file: `{find_link}`. Instead, use the `--find-links` command-line argument, or set `find-links` in a `uv.toml` or `pyproject.toml` file.`"
+                    "Ignoring `--find-links` from requirements file: {find_link}. Instead, use the `--find-links` command-line argument, or set `find-links` in a `uv.toml` or `pyproject.toml` file."
                 );
             }
         }

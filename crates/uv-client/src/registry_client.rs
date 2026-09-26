@@ -151,7 +151,7 @@ impl<'a> RegistryClientBuilder<'a> {
         for index in self.index_locations.known_indexes() {
             if let Some(credentials) = index.credentials()? {
                 trace!(
-                    "Read credentials for index {}",
+                    "Read credentials for index `{}`",
                     index
                         .name
                         .as_ref()
@@ -551,7 +551,7 @@ impl RegistryClient {
             // ref https://github.com/servo/rust-url/issues/333
             .push("");
 
-        trace!("Fetching metadata for {package_name} from {url}");
+        trace!("Fetching metadata for {package_name} from `{url}`");
 
         let cache_entry = self.cache.entry(
             CacheBucket::Simple,
@@ -1241,7 +1241,7 @@ impl RegistryClient {
                     )
                     .await
                     .map_err(|err| ErrorKind::AsyncHttpRangeReader(url.clone(), err))?;
-                    trace!("Getting metadata for {filename} by range request");
+                    trace!("Getting metadata for `{filename}` by range request");
                     let text = wheel_metadata_from_remote_zip(filename, url, &mut reader).await?;
                     ResolutionMetadata::parse_metadata(text.as_bytes()).map_err(|err| {
                         Error::from(ErrorKind::MetadataParseError(
@@ -1280,7 +1280,7 @@ impl RegistryClient {
 
                         // The range request version failed. Fall back to streaming the file to search
                         // for the METADATA file.
-                        warn!("Range requests not supported for {filename}; streaming wheel");
+                        warn!("Range requests not supported for `{filename}`; streaming wheel");
 
                         // Mark the index as not supporting range requests.
                         if let Some(index) = index {

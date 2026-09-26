@@ -143,7 +143,7 @@ impl<'a> RegistryWheelIndex<'a> {
                 && (entry.built || entry.size != Some(expected))
             {
                 debug!(
-                    "Skipping cached wheel {}: expected wheel archive size {expected}, cached archive size {:?} (built from source: {})",
+                    "Skipping cached wheel `{}`: expected wheel archive size {expected}, cached archive size {:?} (built from source: {})",
                     entry.dist.filename, entry.size, entry.built,
                 );
                 return None;
@@ -174,7 +174,7 @@ impl<'a> RegistryWheelIndex<'a> {
                 && (!entry.built || entry.size != Some(expected))
             {
                 debug!(
-                    "Skipping cached wheel {}: expected source archive size {expected}, cached archive size {:?} (built from source: {})",
+                    "Skipping cached wheel `{}`: expected source archive size {expected}, cached archive size {:?} (built from source: {})",
                     entry.dist.filename, entry.size, entry.built,
                 );
                 return None;

@@ -548,7 +548,7 @@ impl uv_resolver::ResolverReporter for ResolverReporter {
                 self.reporter.root.set_message(format!("{name}=={version}"));
             }
             VersionOrUrlRef::Url(url) => {
-                self.reporter.root.set_message(format!("{name} @ {url}"));
+                self.reporter.root.set_message(format!("{name} @ `{url}`"));
             }
         }
     }
@@ -720,14 +720,14 @@ impl uv_publish::Reporter for PublishReporter {
         if self.dry_run {
             writeln!(
                 self.reporter.printer.stderr(),
-                "{} {name} {}",
+                "{} `{name}` {}",
                 "Checking".bold().cyan(),
                 format!("({bytes:.1})").dimmed()
             )
         } else {
             writeln!(
                 self.reporter.printer.stderr(),
-                "{} {name} {}",
+                "{} `{name}` {}",
                 "Hashing".bold().green(),
                 format!("({bytes:.1})").dimmed()
             )
@@ -738,7 +738,7 @@ impl uv_publish::Reporter for PublishReporter {
         let bytes = human_readable_bytes(size);
         writeln!(
             self.reporter.printer.stderr(),
-            "{} {name} {}",
+            "{} `{name}` {}",
             "Uploading".bold().green(),
             format!("({bytes:.1})").dimmed()
         )

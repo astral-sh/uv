@@ -58,7 +58,7 @@ pub enum Error {
     MissingCentralDirectoryEntry { path: PathBuf, offset: u64 },
     #[error("ZIP file contains an end-of-central-directory record entry, but no local file header for: {} ({offset}", path.display())]
     MissingLocalFileHeader { path: PathBuf, offset: u64 },
-    #[error("ZIP file uses conflicting paths for the local file header at {} (got {}, expected {})", offset, local_path.display(), central_directory_path.display())]
+    #[error("ZIP file uses conflicting paths for the local file header at {} (got `{}`, expected `{}`)", offset, local_path.display(), central_directory_path.display())]
     ConflictingPaths {
         offset: u64,
         local_path: PathBuf,

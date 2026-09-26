@@ -82,11 +82,11 @@ impl KeyringProvider {
         credentials: &Credentials,
     ) -> Result<bool, Error> {
         let Some(username) = credentials.username() else {
-            trace!("Unable to store credentials in keyring for {url} due to missing username");
+            trace!("Unable to store credentials in keyring for `{url}` due to missing username");
             return Ok(false);
         };
         let Some(password) = credentials.password() else {
-            trace!("Unable to store credentials in keyring for {url} due to missing password");
+            trace!("Unable to store credentials in keyring for `{url}` due to missing password");
             return Ok(false);
         };
 
@@ -210,7 +210,7 @@ impl KeyringProvider {
 
         // Check the full URL first
         // <https://github.com/pypa/pip/blob/ae5fff36b0aad6e5e0037884927eaa29163c0611/src/pip/_internal/network/auth.py#L376C1-L379C14>
-        trace!("Checking keyring for URL {url}");
+        trace!("Checking keyring for URL `{url}`");
         let mut credentials = match self.backend {
             KeyringProviderBackend::Native => self.fetch_native(url.as_str(), username).await,
             KeyringProviderBackend::Subprocess => {

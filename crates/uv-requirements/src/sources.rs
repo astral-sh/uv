@@ -52,7 +52,7 @@ impl RequirementsSource {
                     "pyproject.toml" | "setup.py" | "setup.cfg"
                 ) {
                     return Err(anyhow::anyhow!(
-                        "Remote `{filename}` inputs are not supported: `{url}`"
+                        "Remote `{filename}` inputs are not supported: {url}"
                     ));
                 }
 
@@ -213,7 +213,7 @@ impl RequirementsSource {
         }
 
         let requirement = RequirementsTxtRequirement::parse(name, &*CWD, false)
-            .with_context(|| format!("Failed to parse: `{name}`"))?;
+            .with_context(|| format!("Failed to parse: {name}"))?;
 
         Ok(Self::Package(requirement))
     }
@@ -263,7 +263,7 @@ impl RequirementsSource {
         }
 
         let requirement = RequirementsTxtRequirement::parse(name, &*CWD, false)
-            .with_context(|| format!("Failed to parse: `{name}`"))?;
+            .with_context(|| format!("Failed to parse: {name}"))?;
 
         Ok(Self::Package(requirement))
     }
@@ -271,7 +271,7 @@ impl RequirementsSource {
     /// Parse an editable [`RequirementsSource`] (e.g., `uv pip install -e .`).
     pub fn from_editable(name: &str) -> Result<Self> {
         let requirement = RequirementsTxtRequirement::parse(name, &*CWD, true)
-            .with_context(|| format!("Failed to parse: `{name}`"))?;
+            .with_context(|| format!("Failed to parse: {name}"))?;
 
         Ok(Self::Editable(requirement))
     }
@@ -279,7 +279,7 @@ impl RequirementsSource {
     /// Parse a package [`RequirementsSource`] (e.g., `uv pip install ruff`).
     pub fn from_package(name: &str) -> Result<Self> {
         let requirement = RequirementsTxtRequirement::parse(name, &*CWD, false)
-            .with_context(|| format!("Failed to parse: `{name}`"))?;
+            .with_context(|| format!("Failed to parse: {name}"))?;
 
         Ok(Self::Package(requirement))
     }

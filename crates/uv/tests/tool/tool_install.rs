@@ -365,7 +365,7 @@ fn tool_install_from_directory_ignores_global_pin_outside_requires_python_range(
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+     + foo==0.1.0 (from `file://[TEMP_DIR]/foo`)
     Installed 1 executable: foo
     ");
 
@@ -438,7 +438,7 @@ fn tool_install_from_directory_uses_global_pin_within_requires_python_range() {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+     + foo==0.1.0 (from `file://[TEMP_DIR]/foo`)
     Installed 1 executable: foo
     ");
 
@@ -734,7 +734,7 @@ fn tool_install_with_editable() -> Result<()> {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + anyio==4.3.0+foo (from file://[TEMP_DIR]/src/anyio_local)
+     + anyio==4.3.0+foo (from `file://[TEMP_DIR]/src/anyio_local`)
      + executable-application==0.3.0
      + iniconfig==2.0.0
     Installed 1 executable: app
@@ -1146,8 +1146,8 @@ fn tool_install_reinstall_converts_workspace_members_to_non_editable() -> Result
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
-     + root==0.1.0 (from file://[TEMP_DIR]/)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
+     + root==0.1.0 (from `file://[TEMP_DIR]/`)
     Installed 1 executable: root_cli
     ");
 
@@ -1247,8 +1247,8 @@ fn tool_install_workspace_members_are_non_editable_by_default() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
-     + root==0.1.0 (from file://[TEMP_DIR]/)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
+     + root==0.1.0 (from `file://[TEMP_DIR]/`)
     Installed 1 executable: root_cli
     ");
 
@@ -1340,8 +1340,8 @@ fn tool_install_workspace_members_honor_editable_flag() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
-     + root==0.1.0 (from file://[TEMP_DIR]/)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
+     + root==0.1.0 (from `file://[TEMP_DIR]/`)
     Installed 1 executable: root_cli
     ");
 
@@ -1434,8 +1434,8 @@ fn tool_install_workspace_members_honor_source_editable_flag() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
-     + root==0.1.0 (from file://[TEMP_DIR]/)
+     + child==0.1.0 (from `file://[TEMP_DIR]/child`)
+     + root==0.1.0 (from `file://[TEMP_DIR]/`)
     Installed 1 executable: root_cli
     ");
 
@@ -1737,7 +1737,7 @@ fn tool_install_editable() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + black==0.1.0 (from file://[WORKSPACE]/test/packages/black_editable)
+     + black==0.1.0 (from `file://[WORKSPACE]/test/packages/black_editable`)
     Installed 1 executable: black
     ");
 
@@ -1832,7 +1832,7 @@ fn tool_install_editable() {
     Prepared 6 packages in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 6 packages in [TIME]
-     - black==0.1.0 (from file://[WORKSPACE]/test/packages/black_editable)
+     - black==0.1.0 (from `file://[WORKSPACE]/test/packages/black_editable`)
      + black==24.2.0
      + click==8.1.7
      + mypy-extensions==1.0.0
@@ -1939,7 +1939,7 @@ fn tool_install_editable_rebuilds_explicit_local_directory() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + dynamic-tool-demo==0.1.0 (from file://[TEMP_DIR]/dynamic_tool)
+     + dynamic-tool-demo==0.1.0 (from `file://[TEMP_DIR]/dynamic_tool`)
     Installed 1 executable: dynamic-tool-alpha
     ");
 
@@ -1965,8 +1965,8 @@ fn tool_install_editable_rebuilds_explicit_local_directory() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - dynamic-tool-demo==0.1.0 (from file://[TEMP_DIR]/dynamic_tool)
-     + dynamic-tool-demo==0.2.0 (from file://[TEMP_DIR]/dynamic_tool)
+     - dynamic-tool-demo==0.1.0 (from `file://[TEMP_DIR]/dynamic_tool`)
+     + dynamic-tool-demo==0.2.0 (from `file://[TEMP_DIR]/dynamic_tool`)
     Installed 2 executables: dynamic-tool-alpha, dynamic-tool-beta
     ");
 
@@ -1980,7 +1980,7 @@ fn tool_install_editable_rebuilds_explicit_local_directory() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ dynamic-tool-demo==0.2.0 (from file://[TEMP_DIR]/dynamic_tool)
+     ~ dynamic-tool-demo==0.2.0 (from `file://[TEMP_DIR]/dynamic_tool`)
     Installed 2 executables: dynamic-tool-alpha, dynamic-tool-beta
     ");
 
@@ -2271,7 +2271,7 @@ fn tool_install_remove_on_empty() -> Result<()> {
     Uninstalled 6 packages in [TIME]
     Installed 1 package in [TIME]
      - black==24.3.0
-     + black==0.1.0 (from file://[TEMP_DIR]/black)
+     + black==0.1.0 (from `file://[TEMP_DIR]/black`)
      - click==8.1.7
      - mypy-extensions==1.0.0
      - packaging==24.0
@@ -2338,7 +2338,7 @@ fn tool_install_editable_from() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + black==0.1.0 (from file://[WORKSPACE]/test/packages/black_editable)
+     + black==0.1.0 (from `file://[WORKSPACE]/test/packages/black_editable`)
     Installed 1 executable: black
     ");
 
@@ -3179,7 +3179,7 @@ fn tool_install_unnamed_package() {
     Resolved 6 packages in [TIME]
     Prepared 6 packages in [TIME]
     Installed 6 packages in [TIME]
-     + black==24.4.2 (from https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl)
+     + black==24.4.2 (from `https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl`)
      + click==8.1.7
      + mypy-extensions==1.0.0
      + packaging==24.0
@@ -3263,7 +3263,7 @@ fn tool_install_git() {
     Resolved 6 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 6 packages in [TIME]
-     + black==24.2.0 (from git+https://github.com/psf/black@6fdf8a4af28071ed1d079c01122b34c5d587207a)
+     + black==24.2.0 (from `git+https://github.com/psf/black@6fdf8a4af28071ed1d079c01122b34c5d587207a`)
      + click==8.1.7
      + mypy-extensions==1.0.0
      + packaging==24.0
@@ -3292,7 +3292,7 @@ fn tool_install_git() {
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Installed 6 packages in [TIME]
-     + black==24.2.0 (from git+https://github.com/psf/black@6fdf8a4af28071ed1d079c01122b34c5d587207a)
+     + black==24.2.0 (from `git+https://github.com/psf/black@6fdf8a4af28071ed1d079c01122b34c5d587207a`)
      + click==8.1.7
      + mypy-extensions==1.0.0
      + packaging==24.0
@@ -3338,7 +3338,7 @@ fn tool_install_git_infers_static_requires_python() {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + static-requires-python-tool==0.1.0 (from git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=static)
+     + static-requires-python-tool==0.1.0 (from `git+https://github.com/astral-sh/uv-dynamic-requires-python-test@75a612dc87fc215e999a25a0efc376cbf9831afa#subdirectory=static`)
     Installed 1 executable: static-requires-python-tool
     ");
 
@@ -3430,7 +3430,7 @@ fn tool_install_git_lfs() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@e282f5be233e3f1d44934164895a043fc534b8aa#lfs=true)
+     + test-lfs-repo==0.1.0 (from `git+https://github.com/astral-sh/test-lfs-repo@e282f5be233e3f1d44934164895a043fc534b8aa#lfs=true`)
     Installed 2 executables: test-lfs-repo, test-lfs-repo-assets
     ");
 
@@ -3509,8 +3509,8 @@ fn tool_install_git_lfs() {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@e282f5be233e3f1d44934164895a043fc534b8aa#lfs=true)
-     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@e282f5be233e3f1d44934164895a043fc534b8aa)
+     - test-lfs-repo==0.1.0 (from `git+https://github.com/astral-sh/test-lfs-repo@e282f5be233e3f1d44934164895a043fc534b8aa#lfs=true`)
+     + test-lfs-repo==0.1.0 (from `git+https://github.com/astral-sh/test-lfs-repo@e282f5be233e3f1d44934164895a043fc534b8aa`)
     Installed 2 executables: test-lfs-repo, test-lfs-repo-assets
     ");
 
@@ -3590,7 +3590,7 @@ fn tool_install_unnamed_from() {
     Resolved 6 packages in [TIME]
     Prepared 6 packages in [TIME]
     Installed 6 packages in [TIME]
-     + black==24.4.2 (from https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl)
+     + black==24.4.2 (from `https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl`)
      + click==8.1.7
      + mypy-extensions==1.0.0
      + packaging==24.0
@@ -3676,7 +3676,7 @@ fn tool_install_unnamed_with() {
     Installed 7 packages in [TIME]
      + black==24.3.0
      + click==8.1.7
-     + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
+     + iniconfig==2.0.0 (from `https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`)
      + mypy-extensions==1.0.0
      + packaging==24.0
      + pathspec==0.12.1
@@ -3979,7 +3979,7 @@ fn tool_install_requirements_txt_arguments() {
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     exit_code: 0 (success)
     ----- stderr -----
-    warning: Ignoring `--index-url` from requirements file: `https://test.pypi.org/simple`. Instead, use the `--index-url` command-line argument, or set `index-url` in a `uv.toml` or `pyproject.toml` file.
+    warning: Ignoring `--index-url` from requirements file: https://test.pypi.org/simple. Instead, use the `--index-url` command-line argument, or set `index-url` in a `uv.toml` or `pyproject.toml` file.
     Resolved 7 packages in [TIME]
     Prepared 7 packages in [TIME]
     Installed 7 packages in [TIME]
@@ -4153,7 +4153,7 @@ fn tool_install_upgrade() {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
+     + iniconfig==2.0.0 (from `https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`)
     Installed 2 executables: black, blackd
     ");
 
@@ -4191,7 +4191,7 @@ fn tool_install_upgrade() {
     Installed [N] packages in [TIME]
      - black==24.1.1
      + black==24.3.0
-     - iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
+     - iniconfig==2.0.0 (from `https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`)
     Installed 2 executables: black, blackd
     ");
 
@@ -5424,8 +5424,8 @@ async fn tool_install_default_credentials() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to upgrade executable-application
-      cause: Failed to fetch: `http://[LOCALHOST]/basic-auth/simple/executable-application/`
-      cause: Missing credentials for http://[LOCALHOST]/basic-auth/simple/executable-application/
+      cause: Failed to fetch: http://[LOCALHOST]/basic-auth/simple/executable-application/
+      cause: Missing credentials for `http://[LOCALHOST]/basic-auth/simple/executable-application/`
     ");
 
     // Attempt to upgrade.
@@ -6080,8 +6080,8 @@ fn tool_install_lock_refreshes_local_directory_constraint() -> Result<()> {
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     - simple-launcher==1.0.0 (from file://[TEMP_DIR]/simple-launcher)
-     + simple-launcher==2.0.0 (from file://[TEMP_DIR]/simple-launcher)
+     - simple-launcher==1.0.0 (from `file://[TEMP_DIR]/simple-launcher`)
+     + simple-launcher==2.0.0 (from `file://[TEMP_DIR]/simple-launcher`)
     Installed 1 executable: simple-launcher
     ");
 
@@ -6244,7 +6244,7 @@ fn tool_install_with_build_hashes() -> Result<()> {
             Resolved 1 package in [TIME]
             Prepared 1 package in [TIME]
             Installed 1 package in [TIME]
-             + hash-tool==1.0.0 (from file://[TEMP_DIR]/project)
+             + hash-tool==1.0.0 (from `file://[TEMP_DIR]/project`)
             Installed 1 executable: hash-tool
             ");
         }
@@ -6354,7 +6354,7 @@ fn tool_install_with_build_hashes() -> Result<()> {
             exit_code: 0 (success)
             ----- stderr -----
             Modified hash-tool environment
-             ~ hash-tool==1.0.0 (from file://[TEMP_DIR]/project)
+             ~ hash-tool==1.0.0 (from `file://[TEMP_DIR]/project`)
             Nothing to upgrade
             ");
         } else {

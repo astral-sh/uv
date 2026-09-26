@@ -1725,7 +1725,7 @@ pub enum SourceError {
     UnusedEditable(String),
     #[error("Failed to resolve absolute path")]
     Absolute(#[from] std::io::Error),
-    #[error("Path contains invalid characters: `{}`", _0.display())]
+    #[error("Path contains invalid characters: {}", _0.display())]
     NonUtf8Path(PathBuf),
     #[error("Source markers must be disjoint, but the following markers overlap: `{0}` and `{1}`.")]
     OverlappingMarkers(String, String, String),

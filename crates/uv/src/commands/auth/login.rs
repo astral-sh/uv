@@ -131,7 +131,7 @@ pub(crate) async fn login(
 
     writeln!(
         printer.stderr(),
-        "Stored credentials for {}",
+        "Stored credentials for `{}`",
         display_url.bold().cyan()
     )?;
     Ok(ExitStatus::Success)

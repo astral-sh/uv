@@ -33,7 +33,7 @@ fn invalid_requirement() {
         .arg("flask==1.0.x"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `flask==1.0.x`
+    error: Failed to parse: flask==1.0.x
       cause: after parsing `1.0`, found `.x`, which is not part of a valid version
              flask==1.0.x
                   ^^^^^^^
@@ -49,7 +49,7 @@ fn missing_requirements_txt() {
         .arg("requirements.txt"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: File not found: `requirements.txt`
+    error: File not found: requirements.txt
     "
     );
 }
@@ -165,7 +165,7 @@ fn uninstall_editable_by_name() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Uninstalled 1 package in [TIME]
-     - flit-editable==0.1.0 (from file://[WORKSPACE]/test/packages/flit_editable)
+     - flit-editable==0.1.0 (from `file://[WORKSPACE]/test/packages/flit_editable`)
     "
     );
 
@@ -203,7 +203,7 @@ fn uninstall_by_path() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Uninstalled 1 package in [TIME]
-     - flit-editable==0.1.0 (from file://[WORKSPACE]/test/packages/flit_editable)
+     - flit-editable==0.1.0 (from `file://[WORKSPACE]/test/packages/flit_editable`)
     "
     );
 
@@ -242,7 +242,7 @@ fn uninstall_duplicate_by_path() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Uninstalled 1 package in [TIME]
-     - flit-editable==0.1.0 (from file://[WORKSPACE]/test/packages/flit_editable)
+     - flit-editable==0.1.0 (from `file://[WORKSPACE]/test/packages/flit_editable`)
     "
     );
 
@@ -549,9 +549,9 @@ fn uninstall_record_path_traversal() -> Result<()> {
         .arg("evilpkg"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    warning: Invalid RECORD entry in evilpkg==0.1.0 (from file://[TEMP_DIR]/evilpkg) that escapes the Python environment, skipping: [..]/traversal_target.txt
+    warning: Invalid `RECORD` entry in `evilpkg==0.1.0 (from file://[TEMP_DIR]/evilpkg)` that escapes the Python environment, skipping: [..]/traversal_target.txt
     Uninstalled 1 package in [TIME]
-     - evilpkg==0.1.0 (from file://[TEMP_DIR]/evilpkg)
+     - evilpkg==0.1.0 (from `file://[TEMP_DIR]/evilpkg`)
     ");
 
     // The regular package files have been removed, while the file outside the scheme still exists.

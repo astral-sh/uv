@@ -2784,7 +2784,7 @@ fn version_set_workspace() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + child2==1.1.1 (from file://[TEMP_DIR]/child2)
+     + child2==1.1.1 (from `file://[TEMP_DIR]/child2`)
     ");
 
     // `uv version` implies a full lock and sync, including development dependencies.
@@ -2840,7 +2840,7 @@ fn version_set_workspace() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + child1==1.2.3 (from file://[TEMP_DIR]/child1)
+     + child1==1.2.3 (from `file://[TEMP_DIR]/child1`)
     ");
 
     let lock = context.read("uv.lock");
@@ -3004,10 +3004,10 @@ fn version_set_workspace() -> Result<()> {
     Prepared 2 packages in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     - child1==1.2.3 (from file://[TEMP_DIR]/child1)
-     + child1==3.0.0 (from file://[TEMP_DIR]/child1)
-     - child2==1.1.1 (from file://[TEMP_DIR]/child2)
-     + child2==2.0.1 (from file://[TEMP_DIR]/child2)
+     - child1==1.2.3 (from `file://[TEMP_DIR]/child1`)
+     + child1==3.0.0 (from `file://[TEMP_DIR]/child1`)
+     - child2==1.1.1 (from `file://[TEMP_DIR]/child2`)
+     + child2==2.0.1 (from `file://[TEMP_DIR]/child2`)
     ");
     Ok(())
 }
@@ -3088,8 +3088,8 @@ fn version_set_evil_constraints() -> Result<()> {
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
-     + idna==3.10.0 (from file://[TEMP_DIR]/idna)
-     + myproj==0.1.0 (from file://[TEMP_DIR]/myproj)
+     + idna==3.10.0 (from `file://[TEMP_DIR]/idna`)
+     + myproj==0.1.0 (from `file://[TEMP_DIR]/myproj`)
      + sniffio==1.3.1
     ");
 
@@ -3170,8 +3170,8 @@ fn version_set_evil_constraints() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - idna==3.10.0 (from file://[TEMP_DIR]/idna)
-     + idna==2.0.0 (from file://[TEMP_DIR]/idna)
+     - idna==3.10.0 (from `file://[TEMP_DIR]/idna`)
+     + idna==2.0.0 (from `file://[TEMP_DIR]/idna`)
     ");
 
     let lock = context.read("uv.lock");

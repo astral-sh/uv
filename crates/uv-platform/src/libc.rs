@@ -24,9 +24,9 @@ pub enum LibcDetectionError {
         "Could not detect either glibc version nor musl libc version, at least one of which is required"
     )]
     NoLibcFound,
-    #[error("Failed to get base name of symbolic link path {0}")]
+    #[error("Failed to get base name of symbolic link path `{0}`")]
     MissingBasePath(PathBuf),
-    #[error("Failed to find glibc version in the filename of linker: `{0}`")]
+    #[error("Failed to find glibc version in the filename of linker: {0}")]
     GlibcExtractionMismatch(PathBuf),
     #[error("Failed to determine {libc} version by running: `{program}`")]
     FailedToRun {
@@ -37,7 +37,7 @@ pub enum LibcDetectionError {
     },
     #[error("Could not find glibc version in output of: `{0} --version`")]
     InvalidLdSoOutputGnu(PathBuf),
-    #[error("Could not find musl version in output of: `{0}`")]
+    #[error("Could not find musl version in output of: {0}")]
     InvalidLdSoOutputMusl(PathBuf),
     #[error("Could not read ELF interpreter from any of the following paths: {0}")]
     CoreBinaryParsing(String),
@@ -165,7 +165,7 @@ fn detect_linux_libc() -> Result<LibcVersion, LibcDetectionError> {
         Ok(os) => return Ok(os),
         Err(err) => {
             trace!(
-                "Tried to find libc version from possible symlink at {ld_path:?}, but failed: {err}"
+                "Tried to find libc version from possible symlink at `{ld_path:?}`, but failed: {err}"
             );
         }
     }
@@ -450,7 +450,7 @@ fn find_ld_path_at(path: impl AsRef<Path>) -> Option<PathBuf> {
     };
     let Some(elf_interpreter) = elf.interpreter else {
         trace!(
-            "Couldn't find ELF interpreter path from {}",
+            "Couldn't find ELF interpreter path from `{}`",
             path.user_display()
         );
         return None;

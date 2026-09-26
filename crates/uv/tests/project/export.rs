@@ -52,12 +52,12 @@ fn export_reuses_settings_workspace_discovery() -> Result<()> {
     #    uv export --cache-dir [CACHE_DIR] --no-hashes
 
     ----- stderr -----
-    DEBUG Found workspace root: `[TEMP_DIR]/`
-    TRACE Discovering workspace members for: `[TEMP_DIR]/`
-    DEBUG Adding root workspace member: `[TEMP_DIR]/`
-    TRACE Processing workspace member: `member`
-    DEBUG Adding discovered workspace member: `[TEMP_DIR]/member`
-    DEBUG Found project root: `[TEMP_DIR]/`
+    DEBUG Found workspace root: [TEMP_DIR]/
+    TRACE Discovering workspace members for: [TEMP_DIR]/
+    DEBUG Adding root workspace member: [TEMP_DIR]/
+    TRACE Processing workspace member: member
+    DEBUG Adding discovered workspace member: [TEMP_DIR]/member
+    DEBUG Found project root: [TEMP_DIR]/
     Resolved 2 packages in [TIME]
     ");
 
@@ -2350,9 +2350,9 @@ fn requirements_txt_relative_path() -> Result<()> {
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
-     + dependency==0.1.0 (from file://[TEMP_DIR]/dependency)
+     + dependency==0.1.0 (from `file://[TEMP_DIR]/dependency`)
      + iniconfig==2.0.0
-     + project==0.1.0 (from file://[TEMP_DIR]/project)
+     + project==0.1.0 (from `file://[TEMP_DIR]/project`)
     ");
 
     Ok(())
@@ -10831,7 +10831,7 @@ fn export_batch_manifest_validation() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     warning: `uv export --batch` is experimental and may change without warning. Pass `--preview-features batch-export` to disable this warning.
-    error: Duplicate export output: `[TEMP_DIR]/requirements.txt`
+    error: Duplicate export output: [TEMP_DIR]/requirements.txt
     ");
 
     // Group-only exports cannot include project extras.

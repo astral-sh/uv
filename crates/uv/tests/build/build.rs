@@ -65,8 +65,8 @@ fn build_basic() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     Building wheel from source distribution...
-    Successfully built project/dist/project-0.1.0.tar.gz
-    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    Successfully built `project/dist/project-0.1.0.tar.gz`
+    Successfully built `project/dist/project-0.1.0-py3-none-any.whl`
     ");
 
     project
@@ -86,8 +86,8 @@ fn build_basic() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     Building wheel from source distribution...
-    Successfully built dist/project-0.1.0.tar.gz
-    Successfully built dist/project-0.1.0-py3-none-any.whl
+    Successfully built `dist/project-0.1.0.tar.gz`
+    Successfully built `dist/project-0.1.0-py3-none-any.whl`
     ");
 
     project
@@ -107,7 +107,7 @@ fn build_basic() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     error: Failed to build `[TEMP_DIR]/`
-      cause: [TEMP_DIR]/ does not appear to be a Python project, as neither `pyproject.toml` nor `setup.py` are present in the directory
+      cause: `[TEMP_DIR]/` does not appear to be a Python project, as neither `pyproject.toml` nor `setup.py` are present in the directory
     ");
 
     // Build to a specified path, even if builds are disabled for the project by name.
@@ -116,8 +116,8 @@ fn build_basic() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     Building wheel from source distribution...
-    Successfully built out/project-0.1.0.tar.gz
-    Successfully built out/project-0.1.0-py3-none-any.whl
+    Successfully built `out/project-0.1.0.tar.gz`
+    Successfully built `out/project-0.1.0-py3-none-any.whl`
     ");
 
     project
@@ -137,8 +137,8 @@ fn build_basic() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     Building wheel from source distribution...
-    Successfully built dist/project-0.1.0.tar.gz
-    Successfully built dist/project-0.1.0-py3-none-any.whl
+    Successfully built `dist/project-0.1.0.tar.gz`
+    Successfully built `dist/project-0.1.0-py3-none-any.whl`
     ");
 
     project
@@ -349,8 +349,8 @@ fn build_hook_invokes_uv() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     Building wheel from source distribution...
-    Successfully built dist/project-0.1.0.tar.gz
-    Successfully built dist/project-0.1.0-py3-none-any.whl
+    Successfully built `dist/project-0.1.0.tar.gz`
+    Successfully built `dist/project-0.1.0-py3-none-any.whl`
     ");
 
     Ok(())
@@ -527,7 +527,7 @@ fn build_sdist() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Building source distribution...
-    Successfully built dist/project-0.1.0.tar.gz
+    Successfully built `dist/project-0.1.0.tar.gz`
     ");
 
     project
@@ -575,7 +575,7 @@ fn build_wheel() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Building wheel...
-    Successfully built dist/project-0.1.0-py3-none-any.whl
+    Successfully built `dist/project-0.1.0-py3-none-any.whl`
     ");
 
     project
@@ -624,8 +624,8 @@ fn build_sdist_wheel() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     Building wheel...
-    Successfully built dist/project-0.1.0.tar.gz
-    Successfully built dist/project-0.1.0-py3-none-any.whl
+    Successfully built `dist/project-0.1.0.tar.gz`
+    Successfully built `dist/project-0.1.0-py3-none-any.whl`
     ");
 
     project
@@ -673,7 +673,7 @@ fn build_wheel_from_sdist() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Building source distribution...
-    Successfully built dist/project-0.1.0.tar.gz
+    Successfully built `dist/project-0.1.0.tar.gz`
     ");
 
     project
@@ -706,7 +706,7 @@ fn build_wheel_from_sdist() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Building wheel from source distribution...
-    Successfully built dist/project-0.1.0-py3-none-any.whl
+    Successfully built `dist/project-0.1.0-py3-none-any.whl`
     ");
 
     project
@@ -881,8 +881,8 @@ fn build_workspace() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     Building wheel from source distribution...
-    Successfully built dist/member-0.1.0.tar.gz
-    Successfully built dist/member-0.1.0-py3-none-any.whl
+    Successfully built `dist/member-0.1.0.tar.gz`
+    Successfully built `dist/member-0.1.0-py3-none-any.whl`
     ");
 
     project
@@ -902,10 +902,10 @@ fn build_workspace() -> Result<()> {
     [PKG] Building source distribution...
     [PKG] Building wheel from source distribution...
     [PKG] Building wheel from source distribution...
-    Successfully built dist/member-0.1.0.tar.gz
-    Successfully built dist/member-0.1.0-py3-none-any.whl
-    Successfully built dist/project-0.1.0.tar.gz
-    Successfully built dist/project-0.1.0-py3-none-any.whl
+    Successfully built `dist/member-0.1.0.tar.gz`
+    Successfully built `dist/member-0.1.0-py3-none-any.whl`
+    Successfully built `dist/project-0.1.0.tar.gz`
+    Successfully built `dist/project-0.1.0-py3-none-any.whl`
     ");
 
     project
@@ -931,8 +931,8 @@ fn build_workspace() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     Building wheel from source distribution...
-    Successfully built project/dist/member-0.1.0.tar.gz
-    Successfully built project/dist/member-0.1.0-py3-none-any.whl
+    Successfully built `project/dist/member-0.1.0.tar.gz`
+    Successfully built `project/dist/member-0.1.0-py3-none-any.whl`
     ");
 
     // If a source is provided, discover the workspace from the source.
@@ -943,10 +943,10 @@ fn build_workspace() -> Result<()> {
     [PKG] Building source distribution...
     [PKG] Building wheel from source distribution...
     [PKG] Building wheel from source distribution...
-    Successfully built project/dist/member-0.1.0.tar.gz
-    Successfully built project/dist/member-0.1.0-py3-none-any.whl
-    Successfully built project/dist/project-0.1.0.tar.gz
-    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    Successfully built `project/dist/member-0.1.0.tar.gz`
+    Successfully built `project/dist/member-0.1.0-py3-none-any.whl`
+    Successfully built `project/dist/project-0.1.0.tar.gz`
+    Successfully built `project/dist/project-0.1.0-py3-none-any.whl`
     ");
 
     // Fail when `--package` is provided without a workspace.
@@ -1080,15 +1080,15 @@ fn build_all_with_failure() -> Result<()> {
     [PKG] Building source distribution...
     [PKG] Building wheel from source distribution...
     [PKG] Building wheel from source distribution...
-    Successfully built dist/member_a-0.1.0.tar.gz
-    Successfully built dist/member_a-0.1.0-py3-none-any.whl
+    Successfully built `dist/member_a-0.1.0.tar.gz`
+    Successfully built `dist/member_a-0.1.0-py3-none-any.whl`
     error: Failed to build `member-b @ [TEMP_DIR]/project/packages/member_b`
       cause: The build backend returned an error
       cause: Call to `setuptools.build_meta.get_requires_for_build_sdist` failed (exit status: 1)
 
     hint: Build failures usually indicate a problem with the package or the build environment
-    Successfully built dist/project-0.1.0.tar.gz
-    Successfully built dist/project-0.1.0-py3-none-any.whl
+    Successfully built `dist/project-0.1.0.tar.gz`
+    Successfully built `dist/project-0.1.0-py3-none-any.whl`
     ");
 
     // project and member_a should be built, regardless of member_b build failure
@@ -1289,8 +1289,8 @@ fn build_dependency_check_dynamic_requirements() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     Building wheel from source distribution...
-    Successfully built dist/project-0.1.0.tar.gz
-    Successfully built dist/project-0.1.0-py3-none-any.whl
+    Successfully built `dist/project-0.1.0.tar.gz`
+    Successfully built `dist/project-0.1.0-py3-none-any.whl`
     ");
     project
         .child("sdist-hook-called")
@@ -1378,8 +1378,8 @@ fn build_dependency_check_bundled_backend() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     Building wheel from source distribution...
-    Successfully built dist/project-0.1.0.tar.gz
-    Successfully built dist/project-0.1.0-py3-none-any.whl
+    Successfully built `dist/project-0.1.0.tar.gz`
+    Successfully built `dist/project-0.1.0-py3-none-any.whl`
     ");
     project
         .child("dist/project-0.1.0.tar.gz")
@@ -1426,7 +1426,7 @@ fn build_dependency_check_preview_and_skip_dependency_check() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Building wheel...
-    Successfully built dist/project-0.1.0-py3-none-any.whl
+    Successfully built `dist/project-0.1.0-py3-none-any.whl`
     ");
     // Skip static and dynamic checks even when the preview is enabled.
     uv_snapshot!(context.filters(), context.build().args([
@@ -1436,7 +1436,7 @@ fn build_dependency_check_preview_and_skip_dependency_check() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Building wheel...
-    Successfully built dist/project-0.1.0-py3-none-any.whl
+    Successfully built `dist/project-0.1.0-py3-none-any.whl`
     ");
     Ok(())
 }
@@ -1569,7 +1569,7 @@ fn build_dependency_check_isolated_build_calls_dependency_hook_once() -> Result<
     exit_code: 0 (success)
     ----- stderr -----
     Building wheel...
-    Successfully built dist/project-0.1.0-py3-none-any.whl
+    Successfully built `dist/project-0.1.0-py3-none-any.whl`
     ");
     // A package-specific exemption for another package must still use an isolated build.
     fs_err::remove_file(project.child("hook-called"))?;
@@ -1580,7 +1580,7 @@ fn build_dependency_check_isolated_build_calls_dependency_hook_once() -> Result<
     exit_code: 0 (success)
     ----- stderr -----
     Building wheel...
-    Successfully built dist/project-0.1.0-py3-none-any.whl
+    Successfully built `dist/project-0.1.0-py3-none-any.whl`
     ");
     Ok(())
 }
@@ -1744,8 +1744,8 @@ fn build_source_path_ignores_workspace_build_constraint_dependencies() -> Result
     ----- stderr -----
     [PKG] Building source distribution...
     [PKG] Building wheel from source distribution...
-    Successfully built project/dist/member-0.1.0.tar.gz
-    Successfully built project/dist/member-0.1.0-py3-none-any.whl
+    Successfully built `project/dist/member-0.1.0.tar.gz`
+    Successfully built `project/dist/member-0.1.0-py3-none-any.whl`
     ");
 
     project
@@ -1872,7 +1872,7 @@ fn build_workspace_transitive_build_dependency() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Building wheel...
-    Successfully built dist/my_tool-0.1.0-py3-none-any.whl
+    Successfully built `dist/my_tool-0.1.0-py3-none-any.whl`
     "
     );
 
@@ -2065,8 +2065,8 @@ fn build_sha() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     Building wheel from source distribution...
-    Successfully built dist/project-0.1.0.tar.gz
-    Successfully built dist/project-0.1.0-py3-none-any.whl
+    Successfully built `dist/project-0.1.0.tar.gz`
+    Successfully built `dist/project-0.1.0-py3-none-any.whl`
     ");
 
     project
@@ -2164,7 +2164,7 @@ async fn build_transitive_url_build_requirement_hashes() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Building wheel...
-    Successfully built dist/project-0.1.0-py3-none-any.whl
+    Successfully built `dist/project-0.1.0-py3-none-any.whl`
     "
     );
 
@@ -2244,8 +2244,8 @@ fn build_no_build_logs() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     Building wheel from source distribution...
-    Successfully built project/dist/project-0.1.0.tar.gz
-    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    Successfully built `project/dist/project-0.1.0.tar.gz`
+    Successfully built `project/dist/project-0.1.0-py3-none-any.whl`
     ");
 
     Ok(())
@@ -2285,8 +2285,8 @@ fn build_hide_build_output_env_var() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     Building wheel from source distribution...
-    Successfully built project/dist/project-0.1.0.tar.gz
-    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    Successfully built `project/dist/project-0.1.0.tar.gz`
+    Successfully built `project/dist/project-0.1.0-py3-none-any.whl`
     ");
 
     Ok(())
@@ -2437,8 +2437,8 @@ fn build_tool_uv_sources() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     Building wheel from source distribution...
-    Successfully built dist/project-0.1.0.tar.gz
-    Successfully built dist/project-0.1.0-py3-none-any.whl
+    Successfully built `dist/project-0.1.0.tar.gz`
+    Successfully built `dist/project-0.1.0-py3-none-any.whl`
     ");
 
     project
@@ -2527,8 +2527,8 @@ fn build_git_boundary_in_dist_build() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     Building wheel from source distribution...
-    Successfully built dist/demo-0.1.0.tar.gz
-    Successfully built dist/demo-0.1.0-py3-none-any.whl
+    Successfully built `dist/demo-0.1.0.tar.gz`
+    Successfully built `dist/demo-0.1.0-py3-none-any.whl`
     ");
 
     // Check that the source file is included
@@ -2649,8 +2649,8 @@ fn build_fast_path() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     Building wheel from source distribution...
-    Successfully built output1/built_by_uv-0.1.0.tar.gz
-    Successfully built output1/built_by_uv-0.1.0-py3-none-any.whl
+    Successfully built `output1/built_by_uv-0.1.0.tar.gz`
+    Successfully built `output1/built_by_uv-0.1.0-py3-none-any.whl`
     ");
     context
         .temp_dir
@@ -2671,7 +2671,7 @@ fn build_fast_path() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Building source distribution...
-    Successfully built output2/built_by_uv-0.1.0.tar.gz
+    Successfully built `output2/built_by_uv-0.1.0.tar.gz`
     ");
     context
         .temp_dir
@@ -2687,7 +2687,7 @@ fn build_fast_path() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Building wheel...
-    Successfully built output3/built_by_uv-0.1.0-py3-none-any.whl
+    Successfully built `output3/built_by_uv-0.1.0-py3-none-any.whl`
     ");
     context
         .temp_dir
@@ -2705,8 +2705,8 @@ fn build_fast_path() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     Building wheel...
-    Successfully built output4/built_by_uv-0.1.0.tar.gz
-    Successfully built output4/built_by_uv-0.1.0-py3-none-any.whl
+    Successfully built `output4/built_by_uv-0.1.0.tar.gz`
+    Successfully built `output4/built_by_uv-0.1.0-py3-none-any.whl`
     ");
     context
         .temp_dir
@@ -2749,7 +2749,7 @@ fn build_fast_path_unbounded_backend() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Building wheel...
-    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    Successfully built `project/dist/project-0.1.0-py3-none-any.whl`
     ");
 
     uv_snapshot!(&filters, context.build().arg("project").arg("--sdist"), @r#"
@@ -2757,7 +2757,7 @@ fn build_fast_path_unbounded_backend() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     warning: `build_system.requires = ["uv-build"]` is missing an upper bound on the `uv_build` version such as `<[NEXT_BREAKING]`. Without bounding the `uv_build` version, the source distribution will break when a future, breaking version of `uv_build` is released.
-    Successfully built project/dist/project-0.1.0.tar.gz
+    Successfully built `project/dist/project-0.1.0.tar.gz`
     "#);
 
     Ok(())
@@ -2807,7 +2807,7 @@ fn build_fast_path_verbose() -> Result<()> {
     assert_snapshot!(messages, @r"
     DEBUG Using bundled `uv_build` backend for `project`
     Building source distribution...
-    Successfully built project/dist/project-0.1.0.tar.gz
+    Successfully built `project/dist/project-0.1.0.tar.gz`
     ");
 
     Ok(())
@@ -3142,7 +3142,7 @@ fn build_list_files() -> Result<()> {
 
     ----- stderr -----
     Building source distribution...
-    Successfully built output1/built_by_uv-0.1.0.tar.gz
+    Successfully built `output1/built_by_uv-0.1.0.tar.gz`
     ");
     context
         .temp_dir
@@ -3349,8 +3349,8 @@ fn build_with_symlink() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     Building wheel from source distribution...
-    Successfully built dist/softlinked-0.1.0.tar.gz
-    Successfully built dist/softlinked-0.1.0-py3-none-any.whl
+    Successfully built `dist/softlinked-0.1.0.tar.gz`
+    Successfully built `dist/softlinked-0.1.0-py3-none-any.whl`
     ");
     Ok(())
 }
@@ -3381,7 +3381,7 @@ fn build_unconfigured_setuptools() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + greet==0.1.0 (from file://[TEMP_DIR]/)
+     + greet==0.1.0 (from `file://[TEMP_DIR]/`)
     ");
 
     uv_snapshot!(context.filters(), context.python_command().arg("-c").arg("import greet"), @"
@@ -3477,8 +3477,8 @@ fn build_with_nonnormalized_name() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     Building wheel from source distribution...
-    Successfully built dist/my.PROJECT-0.1.0.tar.gz
-    Successfully built dist/my.PROJECT-0.1.0-py3-none-any.whl
+    Successfully built `dist/my.PROJECT-0.1.0.tar.gz`
+    Successfully built `dist/my.PROJECT-0.1.0-py3-none-any.whl`
     ");
 
     project
@@ -3651,8 +3651,8 @@ fn test_workspace_trailing_slash() {
     ----- stderr -----
     Building source distribution...
     Building wheel from source distribution...
-    Successfully built dist/child-0.1.0.tar.gz
-    Successfully built dist/child-0.1.0-py3-none-any.whl
+    Successfully built `dist/child-0.1.0.tar.gz`
+    Successfully built `dist/child-0.1.0-py3-none-any.whl`
     ");
 
     // Check that workspace discovery still works.
@@ -3661,8 +3661,8 @@ fn test_workspace_trailing_slash() {
     ----- stderr -----
     Building source distribution...
     Building wheel from source distribution...
-    Successfully built dist/child-0.1.0.tar.gz
-    Successfully built dist/child-0.1.0-py3-none-any.whl
+    Successfully built `dist/child-0.1.0.tar.gz`
+    Successfully built `dist/child-0.1.0-py3-none-any.whl`
     ");
 
     // Check general normalization too.
@@ -3671,8 +3671,8 @@ fn test_workspace_trailing_slash() {
     ----- stderr -----
     Building source distribution...
     Building wheel from source distribution...
-    Successfully built dist/child-0.1.0.tar.gz
-    Successfully built dist/child-0.1.0-py3-none-any.whl
+    Successfully built `dist/child-0.1.0.tar.gz`
+    Successfully built `dist/child-0.1.0-py3-none-any.whl`
     ");
 
     uv_snapshot!(context.filters(), context.build().arg("./child/../child/"), @"
@@ -3680,8 +3680,8 @@ fn test_workspace_trailing_slash() {
     ----- stderr -----
     Building source distribution...
     Building wheel from source distribution...
-    Successfully built dist/child-0.1.0.tar.gz
-    Successfully built dist/child-0.1.0-py3-none-any.whl
+    Successfully built `dist/child-0.1.0.tar.gz`
+    Successfully built `dist/child-0.1.0-py3-none-any.whl`
     ");
 }
 
@@ -3700,8 +3700,8 @@ fn build_clear() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     Building wheel from source distribution...
-    Successfully built project/dist/project-0.1.0.tar.gz
-    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    Successfully built `project/dist/project-0.1.0.tar.gz`
+    Successfully built `project/dist/project-0.1.0-py3-none-any.whl`
     ");
 
     project
@@ -3726,8 +3726,8 @@ fn build_clear() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     Building wheel from source distribution...
-    Successfully built project/dist/project-0.1.0.tar.gz
-    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    Successfully built `project/dist/project-0.1.0.tar.gz`
+    Successfully built `project/dist/project-0.1.0-py3-none-any.whl`
     ");
 
     project
@@ -3761,8 +3761,8 @@ fn build_no_gitignore() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     Building wheel from source distribution...
-    Successfully built project/dist/project-0.1.0.tar.gz
-    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    Successfully built `project/dist/project-0.1.0.tar.gz`
+    Successfully built `project/dist/project-0.1.0-py3-none-any.whl`
     ");
 
     project
@@ -3778,8 +3778,8 @@ fn build_no_gitignore() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     Building wheel from source distribution...
-    Successfully built project/dist/project-0.1.0.tar.gz
-    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    Successfully built `project/dist/project-0.1.0.tar.gz`
+    Successfully built `project/dist/project-0.1.0-py3-none-any.whl`
     ");
 
     project
@@ -3907,7 +3907,7 @@ fn build_workspace_constraint_hashes() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Building wheel...
-    Successfully built dist/project-0.1.0-py3-none-any.whl
+    Successfully built `dist/project-0.1.0-py3-none-any.whl`
     ");
     fs_err::remove_file(context.temp_dir.child("backend-executed"))?;
 
@@ -3958,7 +3958,7 @@ fn build_workspace_constraint_hashes() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Building wheel...
-    Successfully built dist/project-0.1.0-py3-none-any.whl
+    Successfully built `dist/project-0.1.0-py3-none-any.whl`
     ");
     context
         .temp_dir

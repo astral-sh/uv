@@ -134,7 +134,7 @@ fn missing_requirements_in() {
             .arg("requirements.in"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: File not found: `requirements.in`
+    error: File not found: requirements.in
     "
     );
 
@@ -1026,7 +1026,7 @@ build-backend = "poetry.core.masonry.api"
             .arg("pyproject.toml"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 13, column 1
                 |
              13 | [project.dependencies]
@@ -1228,7 +1228,7 @@ dependencies = [
             .arg("pyproject.toml"), @r#"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 6, column 8
                |
              6 | name = "!project"
@@ -4435,7 +4435,7 @@ fn override_dependency_from_workspace_invalid_syntax() -> Result<()> {
       werkzeug=2.3.0
               ^^^^^^
 
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 10, column 7
                 |
              10 |       "werkzeug=2.3.0"
@@ -7584,7 +7584,7 @@ fn conflicting_index_urls_requirements_txt() -> Result<()> {
             .arg("constraints.in"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Multiple index URLs specified: `https://google.com/` vs. `https://wikipedia.org/`
+    error: Multiple index URLs specified: https://google.com/ vs. https://wikipedia.org/
     "
     );
 
@@ -7816,7 +7816,7 @@ fn offline_direct_url() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to download `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
-      cause: Network connectivity is disabled, but the requested data wasn't found in the cache for: `https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
+      cause: Network connectivity is disabled, but the requested data wasn't found in the cache for: https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl
     "
     );
 
@@ -8298,7 +8298,7 @@ fn unsupported_scheme() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Couldn't parse requirement in `requirements.in` at position 0
-      cause: Unsupported URL prefix `bzr` in URL: `bzr+https://example.com/anyio` (Bazaar is not supported)
+      cause: Unsupported URL prefix `bzr` in URL: bzr+https://example.com/anyio (Bazaar is not supported)
              anyio @ bzr+https://example.com/anyio
                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     "
@@ -12547,7 +12547,7 @@ fn not_found_direct_url() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to download `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/fake/iniconfig-2.0.0-py3-none-any.whl`
-      cause: Failed to fetch: `https://files.pythonhosted.org/packages/ef/a6/fake/iniconfig-2.0.0-py3-none-any.whl`
+      cause: Failed to fetch: https://files.pythonhosted.org/packages/ef/a6/fake/iniconfig-2.0.0-py3-none-any.whl
       cause: HTTP status client error (404 Not Found) for url (https://files.pythonhosted.org/packages/ef/a6/fake/iniconfig-2.0.0-py3-none-any.whl)
     "
     );
@@ -13347,7 +13347,7 @@ fn local_version_of_remote_package() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + anyio==4.3.0+foo (from file://[WORKSPACE]/test/packages/anyio_local)
+     + anyio==4.3.0+foo (from `file://[WORKSPACE]/test/packages/anyio_local`)
     "
     );
 
@@ -17152,7 +17152,7 @@ fn invalid_group() -> Result<()> {
         .arg("--group").arg("./:foo"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: invalid value './:foo' for '--group <GROUP>': The `--group` path is required to end in 'pyproject.toml' for compatibility with pip; got: ./
+    error: invalid value './:foo' for '--group <GROUP>': The `--group` path is required to end in `pyproject.toml` for compatibility with pip; got: ./
 
     For more information, try '--help'.
     ");
@@ -17162,7 +17162,7 @@ fn invalid_group() -> Result<()> {
         .arg("--group").arg("subdir/:foo"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: invalid value 'subdir/:foo' for '--group <GROUP>': The `--group` path is required to end in 'pyproject.toml' for compatibility with pip; got: subdir/
+    error: invalid value 'subdir/:foo' for '--group <GROUP>': The `--group` path is required to end in `pyproject.toml` for compatibility with pip; got: subdir/
 
     For more information, try '--help'.
     ");
@@ -17525,7 +17525,7 @@ fn group_target_does_not_exist() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to read dependency groups from: does/not/exist/pyproject.toml
-      cause: No pyproject.toml found at: does/not/exist/pyproject.toml
+      cause: No `pyproject.toml` found at: does/not/exist/pyproject.toml
     ");
 
     Ok(())
@@ -18030,7 +18030,7 @@ fn pep_751_compile_directory() -> Result<()> {
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
-     + foo==1.0.0 (from file://[TEMP_DIR]/foo)
+     + foo==1.0.0 (from `file://[TEMP_DIR]/foo`)
      + idna==3.6
      + sniffio==1.3.1
     "
@@ -18079,7 +18079,7 @@ fn pep_751_compile_git() -> Result<()> {
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage.git@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
+     + uv-public-pypackage==0.1.0 (from `git+https://github.com/astral-test/uv-public-pypackage.git@0dacfd662c64cb4ceb16e6cf65a157a8b715b979`)
     "
     );
 
@@ -18138,7 +18138,7 @@ fn pep_751_compile_url_wheel() -> Result<()> {
     ----- stderr -----
     Prepared 2 packages in [TIME]
     Installed 3 packages in [TIME]
-     + anyio==4.3.0 (from https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl)
+     + anyio==4.3.0 (from `https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl`)
      + idna==3.6
      + sniffio==1.3.1
     "
@@ -18191,7 +18191,7 @@ fn pep_751_compile_url_sdist() -> Result<()> {
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + a==1.0.0 (from http://[LOCALHOST]/files/a-1.0.0.tar.gz)
+     + a==1.0.0 (from `http://[LOCALHOST]/files/a-1.0.0.tar.gz`)
     "
     );
 
@@ -18299,7 +18299,7 @@ fn pep_751_compile_path_wheel() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Installed 1 package in [TIME]
-     + iniconfig==2.0.0 (from file://[TEMP_DIR]/iniconfig-2.0.0-py3-none-any.whl)
+     + iniconfig==2.0.0 (from `file://[TEMP_DIR]/iniconfig-2.0.0-py3-none-any.whl`)
     "
     );
 
@@ -18375,7 +18375,7 @@ fn pep_751_compile_path_sdist() -> Result<()> {
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + iniconfig==2.0.0 (from file://[TEMP_DIR]/iniconfig-2.0.0.tar.gz)
+     + iniconfig==2.0.0 (from `file://[TEMP_DIR]/iniconfig-2.0.0.tar.gz`)
     "
     );
 
@@ -19714,7 +19714,7 @@ async fn compile_missing_python_download_error_warning() {
         .without_python_download_cache()
         .with_managed_python_dirs()
         .with_filter((
-            r"(https://github\.com/astral-sh/python-build-standalone/releases/download/).*"
+            r"(https://github\.com/astral-sh/python-build-standalone/releases/download/)[^`\n]*"
                 .to_string(),
             "$1[FILE-PATH]".to_string(),
         ));
@@ -19741,12 +19741,12 @@ async fn compile_missing_python_download_error_warning() {
     exit_code: 2 (failure)
     ----- stderr -----
     warning: A managed Python download is available for Python 3.10, but an error occurred when attempting to download it.
-      cause: Failed to download https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]
+      cause: Failed to download `https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]`
       cause: error sending request for url (https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]
       cause: client error (Connect)
       cause: tunnel error: unsuccessful
     warning: The requested Python version 3.10 is not available; 3.12.[X] will be used to build dependencies instead.
-    error: Failed to fetch: `https://pypi.org/simple/anyio/`
+    error: Failed to fetch: https://pypi.org/simple/anyio/
       cause: error sending request for url (https://pypi.org/simple/anyio/)
       cause: client error (Connect)
       cause: tunnel error: unsuccessful
@@ -19763,7 +19763,7 @@ async fn compile_missing_python_download_error_warning() {
         .arg("requirements.in"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to fetch: `https://pypi.org/simple/anyio/`
+    error: Failed to fetch: https://pypi.org/simple/anyio/
       cause: error sending request for url (https://pypi.org/simple/anyio/)
       cause: client error (Connect)
       cause: tunnel error: unsuccessful
@@ -19780,12 +19780,12 @@ async fn compile_missing_python_download_error_warning() {
     exit_code: 2 (failure)
     ----- stderr -----
     warning: A managed Python download is available for Python 3.10, but an error occurred when attempting to download it.
-      cause: Failed to download https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]
+      cause: Failed to download `https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]`
       cause: error sending request for url (https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]
       cause: client error (Connect)
       cause: tunnel error: unsuccessful
     warning: The requested Python version 3.10.99 is not available; 3.12.[X] will be used to build dependencies instead.
-    error: Failed to fetch: `https://pypi.org/simple/anyio/`
+    error: Failed to fetch: https://pypi.org/simple/anyio/
       cause: error sending request for url (https://pypi.org/simple/anyio/)
       cause: client error (Connect)
       cause: tunnel error: unsuccessful
@@ -19802,12 +19802,12 @@ async fn compile_missing_python_download_error_warning() {
     exit_code: 2 (failure)
     ----- stderr -----
     warning: A managed Python download is available for Python 3.10.19, but an error occurred when attempting to download it.
-      cause: Failed to download https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]
+      cause: Failed to download `https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]`
       cause: error sending request for url (https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]
       cause: client error (Connect)
       cause: tunnel error: unsuccessful
     warning: The requested Python version 3.10.19 is not available; 3.12.[X] will be used to build dependencies instead.
-    error: Failed to fetch: `https://pypi.org/simple/anyio/`
+    error: Failed to fetch: https://pypi.org/simple/anyio/
       cause: error sending request for url (https://pypi.org/simple/anyio/)
       cause: client error (Connect)
       cause: tunnel error: unsuccessful

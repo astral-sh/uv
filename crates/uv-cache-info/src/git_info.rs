@@ -8,13 +8,13 @@ use walkdir::WalkDir;
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum GitInfoError {
-    #[error("The repository at {0} is missing a `.git` directory")]
+    #[error("The repository at `{0}` is missing a `.git` directory")]
     MissingGitDir(PathBuf),
-    #[error("The repository at {0} is missing a `HEAD` file")]
+    #[error("The repository at `{0}` is missing a `HEAD` file")]
     MissingHead(PathBuf),
-    #[error("The repository at {0} is missing the reference `{1}`")]
+    #[error("The repository at `{0}` is missing the reference `{1}`")]
     MissingRef(PathBuf, String),
-    #[error("The repository at {0} has an invalid reference: `{1}`")]
+    #[error("The repository at `{0}` has an invalid reference: `{1}`")]
     InvalidRef(PathBuf, String),
     #[error("The discovered commit has an invalid length (expected 40 characters): `{0}`")]
     WrongLength(String),

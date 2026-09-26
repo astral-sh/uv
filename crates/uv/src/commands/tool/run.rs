@@ -457,7 +457,7 @@ pub(crate) async fn run(
         }
         Err(err) => Err(err),
     }
-    .with_context(|| format!("Failed to spawn: `{executable}`"))?;
+    .with_context(|| format!("Failed to spawn: {executable}"))?;
 
     run_to_completion(handle).await
 }

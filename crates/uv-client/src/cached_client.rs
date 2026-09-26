@@ -258,11 +258,14 @@ impl CachedClient {
                     DisplaySafeUrl::from_url(req.url().clone())
                 ),
                 Err(err) if err.is_file_not_exists() => {
-                    trace!("No cache entry exists for {}", cache_entry.path().display());
+                    trace!(
+                        "No cache entry exists for `{}`",
+                        cache_entry.path().display()
+                    );
                 }
                 Err(err) => {
                     warn!(
-                        "Broken cache entry at {}, removing: {err}",
+                        "Broken cache entry at `{}`, removing: {err}",
                         cache_entry.path().display()
                     );
                     let _ = fs_err::tokio::remove_file(&cache_entry.path()).await;
@@ -291,7 +294,7 @@ impl CachedClient {
                     Ok(payload) => Ok(payload),
                     Err(err) => {
                         warn!(
-                            "Broken fresh cache entry (for payload) at {}, removing: {err}",
+                            "Broken fresh cache entry (for payload) at `{}`, removing: {err}",
                             cache_entry.path().display()
                         );
                         self.resend_and_heal_cache(
@@ -352,7 +355,7 @@ impl CachedClient {
                         Err(err) => {
                             warn!(
                                 "Broken fresh cache entry after revalidation \
-                                 (for payload) at {}, removing: {err}",
+                                 (for payload) at `{}`, removing: {err}",
                                 cache_entry.path().display()
                             );
                             self.resend_and_heal_cache(
@@ -544,10 +547,13 @@ impl CachedClient {
                 // When we know the cache entry doesn't exist, then things are
                 // normal and we shouldn't emit a WARN.
                 if err.is_file_not_exists() {
-                    trace!("No cache entry exists for {}", cache_entry.path().display());
+                    trace!(
+                        "No cache entry exists for `{}`",
+                        cache_entry.path().display()
+                    );
                 } else {
                     warn!(
-                        "Broken cache policy entry at {}, removing: {err}",
+                        "Broken cache policy entry at `{}`, removing: {err}",
                         cache_entry.path().display()
                     );
                     let _ = fs_err::tokio::remove_file(&cache_entry.path()).await;

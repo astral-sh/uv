@@ -33,11 +33,11 @@ use crate::settings::ModuleName;
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
-    #[error("Failed to persist temporary file to {}", _0.user_display())]
+    #[error("Failed to persist temporary file to `{}`", _0.user_display())]
     Persist(PathBuf, #[source] io::Error),
     #[error("Invalid metadata format in: {}", _0.user_display())]
     Toml(PathBuf, #[source] toml::de::Error),
-    #[error("Failed to serialize pyproject.toml")]
+    #[error("Failed to serialize `pyproject.toml`")]
     TomlSerialize(#[source] toml::ser::Error),
     #[error("Invalid project metadata")]
     Validation(#[from] ValidationError),
@@ -66,7 +66,7 @@ pub enum Error {
     },
     #[error("Failed to write wheel zip archive")]
     AsyncZip(#[from] async_zip::error::ZipError),
-    #[error("Failed to write RECORD file")]
+    #[error("Failed to write `RECORD` file")]
     Csv(#[from] csv::Error),
     #[error("Failed to write JSON metadata file")]
     Json(#[source] serde_json::Error),
@@ -84,14 +84,14 @@ pub enum Error {
     VenvInSourceTree(PathBuf),
     #[error("Inconsistent metadata between prepare and build step: {0}")]
     InconsistentSteps(&'static str),
-    #[error("Failed to write tar archive to {}", _0.user_display())]
+    #[error("Failed to write tar archive to `{}`", _0.user_display())]
     TarWrite(PathBuf, #[source] io::Error),
-    #[error("Failed to write tar archive to {}", _0.user_display())]
+    #[error("Failed to write tar archive to `{}`", _0.user_display())]
     TarCodecWrite(
         PathBuf,
         #[source] tar_codec::BuildError<tar_codec::EncodeError>,
     ),
-    #[error("Failed to finish gzip stream for {}", _0.user_display())]
+    #[error("Failed to finish gzip stream for `{}`", _0.user_display())]
     GzipWrite(PathBuf, #[source] io::Error),
 }
 
@@ -207,7 +207,7 @@ fn check_metadata_directory(
     };
 
     debug!(
-        "Checking metadata directory {}",
+        "Checking metadata directory `{}`",
         metadata_directory.user_display()
     );
 
@@ -522,7 +522,7 @@ mod tests {
 
         assert_snapshot!(format_err(&err), @r#"
         Unsupported glob expression in: tool.uv.build-backend.source-include
-          Caused by: Invalid character `@` at position 3 in glob: `**/@test`
+          Caused by: Invalid character `@` at position 3 in glob: **/@test
 
         hint: Characters can be escaped with a backslash
         "#);

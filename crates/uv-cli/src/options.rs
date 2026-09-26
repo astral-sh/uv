@@ -49,7 +49,7 @@ pub fn flag(yes: bool, no: bool, name: &str) -> anyhow::Result<Option<bool>> {
             bail!(ArgumentError(format!(
                 "`{}` and `{}` cannot be used together. \
                 Boolean flags on different levels are currently not supported \
-                (https://github.com/clap-rs/clap/issues/6049)",
+                (`https://github.com/clap-rs/clap/issues/6049`)",
                 format!("--{name}").green(),
                 format!("--no-{name}").green(),
             )));

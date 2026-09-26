@@ -226,7 +226,7 @@ pub(crate) fn create(
                     "symlink directory"
                 };
                 debug!(
-                    "Using {} {} instead of base Python path: {}",
+                    "Using {} `{}` instead of base Python path: {}",
                     debug_symlink_term,
                     &minor_version_link.symlink_directory.display(),
                     &base_python.display()

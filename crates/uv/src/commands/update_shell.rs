@@ -29,14 +29,14 @@ pub(super) async fn update_shell(
         if uv_shell::prepend_path(executable_directory)? {
             writeln!(
                 printer.stderr(),
-                "Updated PATH to include executable directory {}",
+                "Updated PATH to include executable directory `{}`",
                 executable_directory.simplified_display().cyan()
             )?;
             writeln!(printer.stderr(), "Restart your shell to apply changes")?;
         } else {
             writeln!(
                 printer.stderr(),
-                "Executable directory {} is already in PATH",
+                "Executable directory `{}` is already in PATH",
                 executable_directory.simplified_display().cyan()
             )?;
         }
@@ -47,7 +47,7 @@ pub(super) async fn update_shell(
     if Shell::contains_path(executable_directory) {
         writeln!(
             printer.stderr(),
-            "Executable directory {} is already in PATH",
+            "Executable directory `{}` is already in PATH",
             executable_directory.simplified_display().cyan()
         )?;
         return Ok(ExitStatus::Success);
@@ -56,7 +56,7 @@ pub(super) async fn update_shell(
     // Determine the current shell.
     let Some(shell) = Shell::from_env() else {
         return Err(anyhow::anyhow!(
-            "The executable directory {} is not in PATH, but the current shell could not be determined",
+            "The executable directory `{}` is not in PATH, but the current shell could not be determined",
             executable_directory.simplified_display().cyan()
         ));
     };
@@ -65,7 +65,7 @@ pub(super) async fn update_shell(
     let files = shell.configuration_files();
     if files.is_empty() {
         return Err(anyhow::anyhow!(
-            "The executable directory {} is not in PATH, but updating {shell} is currently unsupported",
+            "The executable directory `{}` is not in PATH, but updating {shell} is currently unsupported",
             executable_directory.simplified_display().cyan()
         ));
     }
@@ -73,7 +73,7 @@ pub(super) async fn update_shell(
     // Prepare the command (e.g., `export PATH="$HOME/.cargo/bin:$PATH"`).
     let Some(command) = shell.prepend_path(executable_directory) else {
         return Err(anyhow::anyhow!(
-            "The executable directory {} is not in PATH, but the necessary command to update {shell} could not be determined",
+            "The executable directory `{}` is not in PATH, but the necessary command to update {shell} could not be determined",
             executable_directory.simplified_display().cyan()
         ));
     };
@@ -152,7 +152,7 @@ pub(super) async fn update_shell(
         Ok(ExitStatus::Success)
     } else {
         Err(anyhow::anyhow!(
-            "The executable directory {} is not in PATH, but the {shell} configuration files are already up-to-date",
+            "The executable directory `{}` is not in PATH, but the {shell} configuration files are already up-to-date",
             executable_directory.simplified_display().cyan()
         ))
     }

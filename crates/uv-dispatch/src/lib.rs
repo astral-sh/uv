@@ -406,7 +406,7 @@ impl BuildContext for BuildDispatch<'_> {
         let hasher = requirements.hasher();
 
         debug!(
-            "Installing in {} in {}",
+            "Installing in {} in `{}`",
             resolution
                 .distributions()
                 .map(ToString::to_string)

@@ -553,7 +553,7 @@ impl GitCheckout {
         // were not originally "fetched".
         let lfs_skip_smudge = if with_lfs == Some(true) { "0" } else { "1" };
 
-        debug!("Reset {} to {}", self.repo.path.display(), self.revision);
+        debug!("Reset `{}` to {}", self.repo.path.display(), self.revision);
 
         // Perform the hard reset.
         GIT.as_ref()

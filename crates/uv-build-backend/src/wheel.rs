@@ -68,7 +68,7 @@ pub fn build_wheel(
     );
 
     let wheel_path = wheel_dir.join(filename.to_string());
-    debug!("Writing wheel at {}", wheel_path.user_display());
+    debug!("Writing wheel at `{}`", wheel_path.user_display());
 
     if wheel_path.exists() {
         fs_err::remove_file(&wheel_path)?;
@@ -279,7 +279,7 @@ pub fn build_editable(
     );
 
     let wheel_path = wheel_dir.join(filename.to_string());
-    debug!("Writing wheel at {}", wheel_path.user_display());
+    debug!("Writing wheel at `{}`", wheel_path.user_display());
 
     if wheel_path.exists() {
         fs_err::remove_file(&wheel_path)?;
@@ -288,7 +288,7 @@ pub fn build_editable(
     let temp_file = uv_fs::tempfile_in(wheel_dir)?;
     let mut wheel_writer = ZipDirectoryWriter::new_editable(temp_file.as_file());
 
-    debug!("Adding pth file to {}", wheel_path.user_display());
+    debug!("Adding pth file to `{}`", wheel_path.user_display());
     // Check that a module root exists in the directory we're linking from the `.pth` file
     let (src_root, _module_relative) = find_roots(
         source_tree,
@@ -429,7 +429,7 @@ pub fn metadata(
     );
 
     debug!(
-        "Writing metadata files to {}",
+        "Writing metadata files to `{}`",
         metadata_directory.user_display()
     );
     let mut wheel_writer = FilesystemWriter::new(metadata_directory);
@@ -893,7 +893,7 @@ impl<W: AsyncWrite + AsyncSeek + Unpin> Write for EntryWriter<'_, W> {
 
 impl<W: AsyncWrite + AsyncSeek + Unpin> DirectoryWriter for ZipDirectoryWriter<W> {
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
-        trace!("Adding {}", path);
+        trace!("Adding `{}`", path);
         // Set appropriate permissions for metadata files (644 = rw-r--r--)
         let entry = Self::entry(path, self.compression, Self::REGULAR_FILE_MODE);
         block_on(self.writer.write_entry_whole(entry, bytes))?;
@@ -909,7 +909,7 @@ impl<W: AsyncWrite + AsyncSeek + Unpin> DirectoryWriter for ZipDirectoryWriter<W
     }
 
     fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error> {
-        trace!("Adding {} from {}", path, file.user_display());
+        trace!("Adding `{}` from `{}`", path, file.user_display());
         let metadata = file.metadata()?;
         // Preserve the executable bit, especially for scripts
         #[cfg(unix)]
@@ -948,7 +948,7 @@ impl<W: AsyncWrite + AsyncSeek + Unpin> DirectoryWriter for ZipDirectoryWriter<W
     }
 
     fn write_directory(&mut self, directory: &str) -> Result<(), Error> {
-        trace!("Adding directory {}", directory);
+        trace!("Adding directory `{}`", directory);
         let directory = if directory.ends_with('/') {
             directory.to_string()
         } else {
@@ -962,7 +962,7 @@ impl<W: AsyncWrite + AsyncSeek + Unpin> DirectoryWriter for ZipDirectoryWriter<W
     /// Write the `RECORD` file and the central directory.
     fn close(mut self, dist_info_dir: &str) -> Result<(), Error> {
         let record_path = format!("{dist_info_dir}/RECORD");
-        trace!("Adding {record_path}");
+        trace!("Adding `{record_path}`");
         let record = mem::take(&mut self.record);
         let mut record_bytes = Vec::new();
         write_record(&mut record_bytes, dist_info_dir, record)?;
@@ -992,7 +992,7 @@ impl FilesystemWriter {
 
     /// Add a file with the given name and return a writer for it.
     fn new_writer<'slf>(&'slf mut self, path: &str) -> Result<Box<dyn Write + 'slf>, Error> {
-        trace!("Adding {}", path);
+        trace!("Adding `{}`", path);
         Ok(Box::new(File::create(self.root.join(path))?))
     }
 }
@@ -1000,7 +1000,7 @@ impl FilesystemWriter {
 /// File system writer.
 impl DirectoryWriter for FilesystemWriter {
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
-        trace!("Adding {}", path);
+        trace!("Adding `{}`", path);
         let hash = base64.encode(Sha256::new().chain_update(bytes).finalize());
         self.record.push(RecordEntry {
             path: path.to_string(),
@@ -1011,7 +1011,7 @@ impl DirectoryWriter for FilesystemWriter {
         Ok(fs_err::write(self.root.join(path), bytes)?)
     }
     fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error> {
-        trace!("Adding {} from {}", path, file.user_display());
+        trace!("Adding `{}` from `{}`", path, file.user_display());
         let mut reader = BufReader::new(File::open(file)?);
         let mut writer = self.new_writer(path)?;
         let record = write_hashed(path, &mut reader, &mut writer)?;
@@ -1021,7 +1021,7 @@ impl DirectoryWriter for FilesystemWriter {
     }
 
     fn write_directory(&mut self, directory: &str) -> Result<(), Error> {
-        trace!("Adding directory {}", directory);
+        trace!("Adding directory `{}`", directory);
         Ok(fs_err::create_dir(self.root.join(directory))?)
     }
 

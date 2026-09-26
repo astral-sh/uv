@@ -1063,14 +1063,14 @@ impl Error {
                 InterpreterError::UnexpectedResponse(UnexpectedResponseError { path, .. })
                 | InterpreterError::StatusCode(StatusCodeError { path, .. }) => {
                     debug!(
-                        "Skipping bad interpreter at {} from {source}: {err}",
+                        "Skipping bad interpreter at `{}` from {source}: {err}",
                         path.display()
                     );
                     false
                 }
                 InterpreterError::QueryScript { path, err } => {
                     debug!(
-                        "Skipping bad interpreter at {} from {source}: {err}",
+                        "Skipping bad interpreter at `{}` from {source}: {err}",
                         path.display()
                     );
                     false
@@ -1078,14 +1078,14 @@ impl Error {
                 #[cfg(windows)]
                 InterpreterError::CorruptWindowsPackage { path, err } => {
                     debug!(
-                        "Skipping bad interpreter at {} from {source}: {err}",
+                        "Skipping bad interpreter at `{}` from {source}: {err}",
                         path.display()
                     );
                     false
                 }
                 InterpreterError::PermissionDenied { path, err } => {
                     debug!(
-                        "Skipping unexecutable interpreter at {} from {source}: {err}",
+                        "Skipping unexecutable interpreter at `{}` from {source}: {err}",
                         path.display()
                     );
                     false
@@ -1099,13 +1099,13 @@ impl Error {
                     {
                         true
                     } else {
-                        trace!("Skipping missing interpreter at {}", path.display());
+                        trace!("Skipping missing interpreter at `{}`", path.display());
                         false
                     }
                 }
             },
             Self::VirtualEnv(VirtualEnvError::MissingPyVenvCfg(path)) => {
-                trace!("Skipping broken virtualenv at {}", path.display());
+                trace!("Skipping broken virtualenv at `{}`", path.display());
                 false
             }
             _ => true,

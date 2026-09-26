@@ -67,9 +67,9 @@ pub enum Error {
     Io(#[from] io::Error),
     #[error(transparent)]
     LockedFile(#[from] LockedFileError),
-    #[error("Failed to update `uv-receipt.toml` at {0}")]
+    #[error("Failed to update `uv-receipt.toml` at `{0}`")]
     ReceiptWrite(PathBuf, #[source] Box<toml_edit::ser::Error>),
-    #[error("Failed to read `uv-receipt.toml` at {0}")]
+    #[error("Failed to read `uv-receipt.toml` at `{0}`")]
     ReceiptRead(PathBuf, #[source] Box<toml::de::Error>),
     #[error(transparent)]
     VirtualEnvError(#[from] uv_virtualenv::Error),
@@ -79,7 +79,7 @@ pub enum Error {
     NoExecutableDirectory,
     #[error(transparent)]
     EnvironmentError(#[from] uv_python::Error),
-    #[error("Failed to find a receipt for tool `{0}` at {1}")]
+    #[error("Failed to find a receipt for tool `{0}` at `{1}`")]
     MissingToolReceipt(String, PathBuf),
     #[error("Failed to read tool environment packages at `{0}`: {1}")]
     EnvironmentRead(PathBuf, String),
@@ -225,7 +225,7 @@ impl InstalledTools {
         let path = self.tool_dir(name).join("uv-receipt.toml");
 
         debug!(
-            "Adding metadata entry for tool `{name}` at {}",
+            "Adding metadata entry for tool `{name}` at `{}`",
             path.user_display()
         );
 
@@ -252,7 +252,7 @@ impl InstalledTools {
         let environment_path = self.tool_dir(name);
 
         debug!(
-            "Deleting environment for tool `{name}` at {}",
+            "Deleting environment for tool `{name}` at `{}`",
             environment_path.user_display()
         );
 
@@ -301,7 +301,7 @@ impl InstalledTools {
                 if unix {
                     let target_path = fs_err::read_link(&path)?;
                     warn!(
-                        "Ignoring existing virtual environment linked to non-existent Python interpreter: {} -> {}",
+                        "Ignoring existing virtual environment linked to non-existent Python interpreter: {} -> `{}`",
                         path.user_display().cyan(),
                         target_path.user_display().cyan(),
                     );

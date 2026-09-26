@@ -47,7 +47,7 @@ impl RetryableStrategy for UvRetryableStrategy {
                         .join("\n");
                     let error = redact(&err.to_string());
                     debug!(
-                        "Transient request failure for {}, retrying: {error}\n{context}",
+                        "Transient request failure for `{}`, retrying: {error}\n{context}",
                         url.map_or_else(|| "unknown URL".to_owned(), ToString::to_string)
                     );
                 }
@@ -172,7 +172,7 @@ impl RetryState {
     /// Wait before retrying the request.
     pub async fn sleep_backoff(&self, duration: Duration) {
         debug!(
-            "Transient failure while handling response from {}; retrying after {:.1}s...",
+            "Transient failure while handling response from `{}`; retrying after {:.1}s...",
             self.url,
             duration.as_secs_f32(),
         );
@@ -196,7 +196,7 @@ pub fn retryable_on_request_failure(err: &(dyn Error + 'static)) -> Option<Retry
         .map(|request_err| (request_err.status(), request_err.url()))
     {
         trace!(
-            "Considering retry of response HTTP {status} for {url}",
+            "Considering retry of response HTTP {status} for `{url}`",
             url = DisplaySafeUrl::from_url(url.clone())
         );
     } else if let Some(url) = request_error_url(err) {

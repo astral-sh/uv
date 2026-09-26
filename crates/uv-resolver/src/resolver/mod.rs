@@ -1182,7 +1182,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         requests: &'index MetadataRequests,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
         debug!(
-            "Searching for a compatible version of {name} @ {} ({range})",
+            "Searching for a compatible version of {name} @ `{}` ({range})",
             url.verbatim
         );
 
@@ -1453,7 +1453,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         };
 
         debug!(
-            "Selecting: {}=={} [{}] ({})",
+            "Selecting: {}=={} [{}] (`{}`)",
             name,
             candidate.version(),
             candidate.choice_kind(),
@@ -1619,7 +1619,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             };
 
             debug!(
-                "Preferring non-local candidate: {}=={} [{}] ({})",
+                "Preferring non-local candidate: {}=={} [{}] (`{}`)",
                 name,
                 base_candidate.version(),
                 base_candidate.choice_kind(),
@@ -2068,9 +2068,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         let message = UnavailableVersion::from(reason).singular_message();
                         if let Some(err) = reason.source() {
                             // Show the detailed error for metadata parse errors.
-                            warn!("{dist} {message}: {err}");
+                            warn!("`{dist}` {message}: {err}");
                         } else {
-                            warn!("{dist} {message}");
+                            warn!("`{dist}` {message}");
                         }
                     }
                     self.index
@@ -3348,10 +3348,10 @@ impl Display for Request {
                 write!(f, "Versions {package_name}")
             }
             Self::Dist(dist) => {
-                write!(f, "Metadata {dist}")
+                write!(f, "Metadata `{dist}`")
             }
             Self::Installed(dist) => {
-                write!(f, "Installed metadata {dist}")
+                write!(f, "Installed metadata `{dist}`")
             }
             Self::Prefetch(package_name, range, _) => {
                 write!(f, "Prefetch {package_name} {range}")
