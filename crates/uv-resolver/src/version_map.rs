@@ -769,25 +769,8 @@ impl VersionMapLazy {
         }
 
         // Check if hashes line up. If hashes aren't required, they're considered matching.
-        let hash = self
-            .hasher
-            .locked_registry_hash_comparison(
-                &filename.name,
-                &filename.version,
-                &self.index,
-                registry_filename,
-                hashes,
-            )
-            .unwrap_or_else(|| {
-                let hash_policy = self
-                    .hasher
-                    .archive_policy_for_package(&filename.name, &filename.version);
-                if hash_policy.digests().is_empty() {
-                    HashComparison::Matched
-                } else {
-                    hash_policy.compare(hashes)
-                }
-            });
+        let hash =
+            self.hash_comparison(&filename.name, &filename.version, registry_filename, hashes);
 
         SourceDistCompatibility::Compatible(hash)
     }
@@ -842,30 +825,35 @@ impl VersionMapLazy {
         };
 
         // Check if hashes line up. If hashes aren't required, they're considered matching.
-        let hash = self
-            .hasher
-            .locked_registry_hash_comparison(
-                &filename.name,
-                &filename.version,
-                &self.index,
-                registry_filename,
-                hashes,
-            )
-            .unwrap_or_else(|| {
-                let hash_policy = self
-                    .hasher
-                    .archive_policy_for_package(&filename.name, &filename.version);
-                if hash_policy.digests().is_empty() {
-                    HashComparison::Matched
-                } else {
-                    hash_policy.compare(hashes)
-                }
-            });
+        let hash =
+            self.hash_comparison(&filename.name, &filename.version, registry_filename, hashes);
 
         // Break ties with the build tag.
         let build_tag = filename.build_tag().cloned();
 
         WheelCompatibility::Compatible(hash, priority, build_tag)
+    }
+
+    /// Compare the hashes for a candidate from a registry index.
+    fn hash_comparison(
+        &self,
+        name: &PackageName,
+        version: &Version,
+        filename: &str,
+        hashes: &[HashDigest],
+    ) -> HashComparison {
+        self.hasher
+            .locked_registry_hash_comparison(name, version, &self.index, filename, hashes)
+            .unwrap_or_else(|| {
+                let hash_policy = self.hasher.archive_policy_for_package(name, version);
+                // An empty hash list does not affect candidate ranking; archive verification still
+                // enforces a required empty policy.
+                if hash_policy.digests().is_empty() {
+                    HashComparison::Matched
+                } else {
+                    hash_policy.compare(hashes)
+                }
+            })
     }
 }
 

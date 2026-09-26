@@ -10,7 +10,7 @@ use uv_client::{
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    File, IncompatibleSource, IncompatibleWheel, Index, IndexLocations, IndexUrl,
+    File, HashComparison, IncompatibleSource, IncompatibleWheel, Index, IndexLocations, IndexUrl,
     MinimumLibcVersion, PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist,
     SourceDistCompatibility, WheelCompatibility,
 };
@@ -192,20 +192,7 @@ impl FlatDistributions {
         }
 
         // Check if hashes line up.
-        let hashes = file.hashes.as_slice();
-        let hash = hasher
-            .locked_registry_hash_comparison(
-                &filename.name,
-                &filename.version,
-                index,
-                file.filename.as_ref(),
-                hashes,
-            )
-            .unwrap_or_else(|| {
-                let hash_policy =
-                    hasher.archive_policy_for_package(&filename.name, &filename.version);
-                hash_policy.compare(hashes)
-            });
+        let hash = Self::hash_comparison(&filename.name, &filename.version, file, index, hasher);
 
         SourceDistCompatibility::Compatible(hash)
     }
@@ -235,25 +222,30 @@ impl FlatDistributions {
         };
 
         // Check if hashes line up.
-        let hashes = file.hashes.as_slice();
-        let hash = hasher
-            .locked_registry_hash_comparison(
-                &filename.name,
-                &filename.version,
-                index,
-                file.filename.as_ref(),
-                hashes,
-            )
-            .unwrap_or_else(|| {
-                let hash_policy =
-                    hasher.archive_policy_for_package(&filename.name, &filename.version);
-                hash_policy.compare(hashes)
-            });
+        let hash = Self::hash_comparison(&filename.name, &filename.version, file, index, hasher);
 
         // Break ties with the build tag.
         let build_tag = filename.build_tag().cloned();
 
         WheelCompatibility::Compatible(hash, priority, build_tag)
+    }
+
+    /// Compare the hashes for a candidate from a flat index.
+    fn hash_comparison(
+        name: &PackageName,
+        version: &Version,
+        file: &File,
+        index: &IndexUrl,
+        hasher: &HashStrategy,
+    ) -> HashComparison {
+        let hashes = file.hashes.as_slice();
+        hasher
+            .locked_registry_hash_comparison(name, version, index, file.filename.as_ref(), hashes)
+            .unwrap_or_else(|| {
+                hasher
+                    .archive_policy_for_package(name, version)
+                    .compare(hashes)
+            })
     }
 }
 

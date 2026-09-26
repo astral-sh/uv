@@ -441,42 +441,23 @@ impl HashStrategy {
         &self,
         distribution: &T,
     ) -> HashValidation<'_> {
-        if let HashVerification::LockedBuild { .. } = &self.verification
+        if let HashVerification::LockedBuild { registry, .. } = &self.verification
             && let Some((index, file)) = distribution.registry_file()
             && let VersionOrUrlRef::Version(version) = distribution.version_or_url()
         {
-            return self.validation_for_registry(
+            return self.locked_registry_validation(
                 distribution.name(),
                 version,
-                index,
-                file.filename.as_ref(),
+                registry.artifact_hashes(
+                    distribution.name(),
+                    version,
+                    index,
+                    file.filename.as_ref(),
+                ),
                 file.hashes.as_slice(),
             );
         }
         self.validation_for_id(|| distribution.version_id())
-    }
-
-    fn validation_for_registry(
-        &self,
-        name: &PackageName,
-        version: &Version,
-        index: &IndexUrl,
-        filename: &str,
-        advertised: &[HashDigest],
-    ) -> HashValidation<'_> {
-        match &self.verification {
-            HashVerification::LockedBuild { registry, .. } => self.locked_registry_validation(
-                name,
-                version,
-                registry.artifact_hashes(name, version, index, filename),
-                advertised,
-            ),
-            HashVerification::None
-            | HashVerification::IfPresent(_)
-            | HashVerification::Required(_) => {
-                self.validation_for_id(|| VersionId::from_registry(name.clone(), version.clone()))
-            }
-        }
     }
 
     fn locked_registry_validation<'a>(
@@ -500,7 +481,14 @@ impl HashStrategy {
         if validation != HashValidation::None {
             return validation;
         }
-        relocated_registry_validation(hashes, name, version, advertised)
+        // Recognize a recorded artifact at a different location without trusting a new index digest.
+        if let Some(expected) = hashes.get(&VersionId::from_registry(name.clone(), version.clone()))
+            && ArchiveHashPolicy::Any(expected).matches(advertised)
+        {
+            HashValidation::Any(expected)
+        } else {
+            HashValidation::None
+        }
     }
 
     /// Construct an identity only when verification requires a lookup.
@@ -928,22 +916,6 @@ fn lookup_hashes<'a>(
         .map(Vec::as_slice)
 }
 
-/// Recognize a recorded artifact at a different location without trusting a new index digest.
-fn relocated_registry_validation<'a>(
-    hashes: &'a FxHashMap<VersionId, Vec<HashDigest>>,
-    name: &PackageName,
-    version: &Version,
-    advertised: &[HashDigest],
-) -> HashValidation<'a> {
-    if let Some(expected) = hashes.get(&VersionId::from_registry(name.clone(), version.clone()))
-        && ArchiveHashPolicy::Any(expected).matches(advertised)
-    {
-        HashValidation::Any(expected)
-    } else {
-        HashValidation::None
-    }
-}
-
 fn hash_validation<'a>(id: &VersionId, digests: &'a [HashDigest]) -> HashValidation<'a> {
     match id {
         VersionId::NameVersion { .. } => HashValidation::Any(digests),
@@ -1357,7 +1329,7 @@ mod tests {
         let mut registry = LockedRegistryHashes::default();
         registry.insert_wheel(&index, &wheel, wheel_hash.clone());
         registry.insert_source(&index, &wheel.name, &wheel.version, source_hash.clone());
-        let strategy = HashStrategy::verify_build(hashes.clone(), registry);
+        let strategy = HashStrategy::verify_build(hashes.clone(), registry.clone());
 
         // Changed or missing index hashes cannot change a known artifact's authority.
         for advertised in [&[][..], slice::from_ref(&source_hash)] {
@@ -1417,11 +1389,15 @@ mod tests {
 
         // A renamed source archive and a cached source revision keep the source-scoped policy.
         assert_eq!(
-            strategy.validation_for_registry(
+            strategy.locked_registry_validation(
                 &wheel.name,
                 &wheel.version,
-                &index,
-                "demo__pkg-1.0.0.zip",
+                registry.artifact_hashes(
+                    &wheel.name,
+                    &wheel.version,
+                    &index,
+                    "demo__pkg-1.0.0.zip",
+                ),
                 slice::from_ref(&wheel_hash),
             ),
             HashValidation::Any(slice::from_ref(&source_hash)),
