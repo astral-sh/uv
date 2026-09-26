@@ -6,32 +6,27 @@ use std::path::Path;
 use rustc_hash::FxHashMap;
 use tracing::debug;
 
-use uv_configuration::{BuildOptions, Constraints, Overrides};
-use uv_distribution::DistributionDatabase;
+use uv_configuration::{Constraints, Overrides};
 use uv_distribution_types::{Requirement, RequirementSource};
-use uv_pep508::{MarkerEnvironment, MarkerTree};
-use uv_platform_tags::Tags;
-use uv_resolver_types::DistributionMetadataIndex;
-use uv_types::{BuildContext, HashStrategy};
+use uv_pep440::VersionSpecifiers;
+use uv_pep508::MarkerTree;
 
-use super::{DependencyContext, Lock, LockError, SatisfiesResult, implicit_constraints_marker};
+use super::{
+    DependencyContext, Lock, LockError, Package, SatisfiesResult, implicit_constraints_marker,
+};
 
 impl Lock {
-    /// Validate current constraints against the locked graph, without comparing declarations.
-    /// Locked sources and pre-releases remain valid unless a current constraint excludes them.
-    pub(super) async fn satisfies_constraints<Context: BuildContext>(
-        &self,
+    /// Establish current constraints from the locked graph, or require resolution when uncertain.
+    /// Locked sources and pre-releases remain valid when the current constraints admit them.
+    /// Collect dynamic version bounds for validation after the dependency structure is checked.
+    pub(super) fn satisfies_constraints<'lock>(
+        &'lock self,
         constraints: &BTreeSet<Requirement>,
         root_requirements: &[Cow<'_, Requirement>],
         overrides: &Overrides,
         root: &Path,
-        tags: &Tags,
-        marker_environment: &MarkerEnvironment,
-        build_options: &BuildOptions,
-        hasher: &HashStrategy,
-        index: &DistributionMetadataIndex,
-        database: &DistributionDatabase<'_, Context>,
-    ) -> Result<SatisfiesResult<'_>, LockError> {
+        dynamic_constraints: &mut Vec<(&'lock Package, VersionSpecifiers)>,
+    ) -> Result<SatisfiesResult<'lock>, LockError> {
         if constraints.is_empty() {
             return Ok(SatisfiesResult::Satisfied);
         }
@@ -47,27 +42,12 @@ impl Lock {
             .iter()
             .filter(|package| self.is_workspace_package(package))
         {
-            queue.push_back((
-                package,
-                DependencyContext::Production,
-                DependencyContext::Production,
-                root_marker,
-            ));
+            queue.push_back((package, DependencyContext::Production, root_marker));
             for extra in package.optional_dependencies.keys() {
-                queue.push_back((
-                    package,
-                    DependencyContext::Extra(extra),
-                    DependencyContext::Production,
-                    root_marker,
-                ));
+                queue.push_back((package, DependencyContext::Extra(extra), root_marker));
             }
             for group in package.dependency_groups.keys() {
-                queue.push_back((
-                    package,
-                    DependencyContext::Group(group),
-                    DependencyContext::Production,
-                    root_marker,
-                ));
+                queue.push_back((package, DependencyContext::Group(group), root_marker));
             }
         }
         for requirement in root_requirements {
@@ -76,25 +56,15 @@ impl Lock {
                     continue;
                 };
                 let marker = marker.and(root_marker);
-                queue.push_back((
-                    package,
-                    DependencyContext::Production,
-                    DependencyContext::Production,
-                    marker,
-                ));
+                queue.push_back((package, DependencyContext::Production, marker));
                 for extra in &requirement.extras {
                     if let Some((extra, _)) = package.optional_dependencies.get_key_value(extra) {
-                        queue.push_back((
-                            package,
-                            DependencyContext::Extra(extra),
-                            DependencyContext::Production,
-                            marker,
-                        ));
+                        queue.push_back((package, DependencyContext::Extra(extra), marker));
                     }
                 }
             }
         }
-        while let Some((package, context, parent_context, marker)) = queue.pop_front() {
+        while let Some((package, context, marker)) = queue.pop_front() {
             let mut marker = marker.and(context.conflict_marker(&package.id.name, &self.conflicts));
             if !package.fork_markers.is_empty() {
                 let forks = package
@@ -106,10 +76,12 @@ impl Lock {
             if marker.is_false() {
                 continue;
             }
-            // Constraints apply in the incoming parent's extra context, before merging paths
-            // that activate the same outgoing dependency section.
+            // Recursive extras are flattened into their callers' dependency sections, so the
+            // lock cannot establish a constraint's original extra context. Clear extra predicates
+            // as in the resolver's package lowering, conservatively retaining every potentially
+            // applicable bound. Incompatible bounds require resolution to determine applicability.
             for constraint in constraints.get(&package.id.name).into_iter().flatten() {
-                let mut marker = marker.and(parent_context.constraint_marker(constraint.marker));
+                let mut marker = marker.and(constraint.marker.simplify_extras_with(|_| true));
                 if marker.is_false() {
                     continue;
                 }
@@ -126,44 +98,18 @@ impl Lock {
                     }
                 }
 
-                // Dynamic source-tree versions are absent from the lock, so obtain the current
-                // metadata before checking their version bounds.
-                let metadata;
-                let version = if package.id.version.is_none()
-                    && constraint
-                        .source
-                        .version_specifiers()
-                        .is_some_and(|specifiers| !specifiers.is_empty())
-                {
-                    metadata = Self::package_metadata(
-                        package,
-                        root,
-                        tags,
-                        marker_environment,
-                        build_options,
-                        hasher,
-                        index,
-                        database,
-                    )
-                    .await?;
-                    Some(&metadata.version)
-                } else {
-                    package.id.version.as_ref()
-                };
-                let version_matches = constraint
-                    .source
-                    .version_specifiers()
-                    .zip(version)
-                    .is_none_or(|(specifiers, version)| specifiers.contains(version));
-
-                if !version_matches
-                    || !Self::package_satisfies_requirement(package, constraint, root)?
-                {
+                if !Self::package_satisfies_requirement(package, constraint, root)? {
                     debug!(
-                        "Locked package `{}` does not satisfy constraint `{constraint}`",
+                        "Cannot validate constraint `{constraint}` against locked package `{}`",
                         package.id
                     );
-                    return Ok(SatisfiesResult::UnsatisfiedConstraint(&package.id.name));
+                    return Ok(SatisfiesResult::UnvalidatedConstraint(&package.id.name));
+                }
+                if package.id.version.is_none()
+                    && let Some(specifiers) = constraint.source.version_specifiers()
+                    && !specifiers.is_empty()
+                {
+                    dynamic_constraints.push((package, specifiers.clone()));
                 }
             }
 
@@ -178,21 +124,11 @@ impl Lock {
             match context {
                 DependencyContext::Production => {
                     for group in package.dependency_groups.keys() {
-                        queue.push_back((
-                            package,
-                            DependencyContext::Group(group),
-                            parent_context,
-                            marker,
-                        ));
+                        queue.push_back((package, DependencyContext::Group(group), marker));
                     }
                 }
                 DependencyContext::Extra(_) => {
-                    queue.push_back((
-                        package,
-                        DependencyContext::Production,
-                        parent_context,
-                        marker,
-                    ));
+                    queue.push_back((package, DependencyContext::Production, marker));
                 }
                 DependencyContext::Group(_) => {}
             }
@@ -207,7 +143,7 @@ impl Lock {
                             .map(|(extra, _)| DependencyContext::Extra(extra))
                     }),
                 ) {
-                    queue.push_back((package, child_context, context, marker));
+                    queue.push_back((package, child_context, marker));
                 }
             }
         }
