@@ -32,12 +32,12 @@ struct Target {
 }
 
 impl RustCompiler {
-    /// Probe the interpreter once, falling back to Python for unsupported formats or settings.
+    /// Probe the interpreter once, rejecting unsupported formats or settings.
     pub(super) async fn query(
         dir: &Path,
         python_executable: &Path,
         timeout: Option<Duration>,
-    ) -> anyhow::Result<Option<Self>> {
+    ) -> anyhow::Result<Self> {
         let mut command = Command::new(python_executable);
         command
             .arg("-c")
@@ -55,33 +55,28 @@ impl RustCompiler {
         if !output.status.success() {
             bail!(
                 "Bytecode target query failed: {}",
-                String::from_utf8_lossy(&output.stderr)
+                String::from_utf8_lossy(&output.stderr).trim()
             );
         }
-        let Some(target) = serde_json::from_slice::<Option<Target>>(&output.stdout)? else {
-            debug!("Using Python bytecode compilation for unsupported interpreter settings");
-            return Ok(None);
-        };
-        let Ok(python_version) = target.python_version.parse::<PythonVersion>() else {
-            debug!(
-                "Using Python bytecode compilation for Python {}",
-                target.python_version
-            );
-            return Ok(None);
-        };
+        let target = serde_json::from_slice::<Target>(&output.stdout)?;
+        let python_version = target
+            .python_version
+            .parse::<PythonVersion>()
+            .with_context(|| format!("serc does not support Python {}", target.python_version))?;
         // In particular, prereleases can change bytecode formats within the same minor version.
         if target.magic_number != python_version.target().magic_number {
-            debug!("Using Python bytecode compilation for an unsupported bytecode magic number");
-            return Ok(None);
+            bail!(
+                "serc does not support the bytecode magic number for this Python {python_version} interpreter"
+            );
         }
         debug!("Using serc for Python {python_version} bytecode compilation");
-        Ok(Some(Self {
+        Ok(Self {
             options: CompileOptions {
                 python_version,
                 ..CompileOptions::default()
             },
             cache_tag: target.cache_tag,
-        }))
+        })
     }
 
     /// Compile a source file, reusing current bytecode and atomically replacing stale bytecode.
