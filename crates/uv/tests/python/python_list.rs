@@ -704,6 +704,95 @@ async fn python_list_remote_python_downloads_json_url() -> Result<()> {
     Ok(())
 }
 
+#[tokio::test]
+async fn python_list_all_variants() {
+    let context = uv_test::test_context_with_versions!(&[]);
+    let server = MockServer::start().await;
+
+    let remote_json = r#"
+    {
+        "cpython-3.14.0-linux-x86_64-gnu": {
+            "name": "cpython",
+            "arch": {
+                "family": "x86_64",
+                "variant": null
+            },
+            "os": "linux",
+            "libc": "gnu",
+            "major": 3,
+            "minor": 14,
+            "patch": 0,
+            "prerelease": "",
+            "url": "https://custom.com/cpython-3.14.0-linux-x86_64-gnu.tar.gz",
+            "sha256": null,
+            "variant": null,
+            "build": "20251120"
+        },
+        "cpython-3.14.0+debug-linux-x86_64-gnu": {
+            "name": "cpython",
+            "arch": {
+                "family": "x86_64",
+                "variant": null
+            },
+            "os": "linux",
+            "libc": "gnu",
+            "major": 3,
+            "minor": 14,
+            "patch": 0,
+            "prerelease": "",
+            "url": "https://custom.com/cpython-3.14.0+debug-linux-x86_64-gnu.tar.gz",
+            "sha256": null,
+            "variant": "debug",
+            "build": "20251120"
+        }
+    }
+    "#;
+    Mock::given(method("GET"))
+        .and(path("/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(remote_json, "application/json"))
+        .mount(&server)
+        .await;
+
+    // Debug builds are hidden by default
+    uv_snapshot!(context
+        .python_list()
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS)
+        .arg("--all-platforms")
+        .arg("--show-urls")
+        .arg("--python-downloads-json-url").arg(server.uri()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    cpython-3.14.0-linux-x86_64-gnu    https://custom.com/cpython-3.14.0-linux-x86_64-gnu.tar.gz
+    ");
+
+    // `--all-variants` includes debug builds
+    uv_snapshot!(context
+        .python_list()
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS)
+        .arg("--all-platforms")
+        .arg("--all-variants")
+        .arg("--show-urls")
+        .arg("--python-downloads-json-url").arg(server.uri()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    cpython-3.14.0-linux-x86_64-gnu          https://custom.com/cpython-3.14.0-linux-x86_64-gnu.tar.gz
+    cpython-3.14.0+debug-linux-x86_64-gnu    https://custom.com/cpython-3.14.0+debug-linux-x86_64-gnu.tar.gz
+    ");
+
+    // Requesting a debug build explicitly shows it without `--all-variants`
+    uv_snapshot!(context
+        .python_list()
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS)
+        .arg("3.14+debug")
+        .arg("--all-platforms")
+        .arg("--show-urls")
+        .arg("--python-downloads-json-url").arg(server.uri()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    cpython-3.14.0+debug-linux-x86_64-gnu    https://custom.com/cpython-3.14.0+debug-linux-x86_64-gnu.tar.gz
+    ");
+}
+
 #[test]
 fn python_list_with_mirrors() {
     let context = uv_test::test_context_with_versions!(&[])

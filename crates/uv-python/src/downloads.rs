@@ -630,7 +630,7 @@ impl PythonDownloadRequest {
     }
 
     /// Whether this download request opts-in to a debug Python version.
-    pub(crate) fn allows_debug(&self) -> bool {
+    pub fn allows_debug(&self) -> bool {
         self.version.as_ref().is_some_and(VersionRequest::is_debug)
     }
 
