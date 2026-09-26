@@ -97,6 +97,8 @@ allow-build-scripts = [
 [sources]
 unknown-registry = "deny"
 unknown-git = "deny"
+# The PubGrub dependency query API is not released yet.
+allow-git = ["https://github.com/astral-sh/pubgrub"]
 
 [licenses]
 confidence-threshold = 0.95
