@@ -6,7 +6,6 @@ use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
 use fs_err as fs;
 use indoc::{formatdoc, indoc};
-use insta::allow_duplicates;
 use predicates::Predicate;
 use url::Url;
 use wiremock::matchers::{method, path};
@@ -5825,8 +5824,13 @@ fn pep_751() -> Result<()> {
 #[test]
 fn pep_751_default_groups() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let pylock_toml = context.temp_dir.child("pylock.toml");
-    let packages = indoc! {r#"
+
+    context.temp_dir.child("pylock.toml").write_str(
+        r#"
+        lock-version = "1.0"
+        created-by = "uv"
+        default-groups = ["default"]
+
         [[packages]]
         name = "iniconfig"
         version = "2.0.0"
@@ -5838,47 +5842,168 @@ fn pep_751_default_groups() -> Result<()> {
         version = "4.10.0"
         marker = "'test' in dependency_groups"
         wheels = [{ url = "https://example.com/typing_extensions-4.10.0-py3-none-any.whl", hashes = { sha256 = "1111111111111111111111111111111111111111111111111111111111111111" } }]
-    "#};
+        "#,
+    )?;
 
-    // Synthetic defaults need not be declared as public dependency groups.
-    allow_duplicates! {
-        for dependency_groups in [
-            "",
-            "dependency-groups = []",
-            "dependency-groups = ['test']",
-            "dependency-groups = ['default', 'test']",
-        ] {
-            pylock_toml.write_str(&formatdoc! {r#"
-                lock-version = "1.0"
-                created-by = "uv"
-                default-groups = ["default"]
-                {dependency_groups}
-                {packages}
-            "#})?;
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("--offline")
+        .arg("--dry-run")
+        .arg("pylock.toml"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would download 1 package
+    Would install 1 package
+     + iniconfig==2.0.0
+    ");
 
-            uv_snapshot!(context.filters(), context.pip_sync()
-                .arg("--preview")
-                .arg("--offline")
-                .arg("--dry-run")
-                .arg("pylock.toml"), @"
-            exit_code: 0 (success)
-            ----- stderr -----
-            Would download 1 package
-            Would install 1 package
-             + iniconfig==2.0.0
-            ");
-        }
-        Ok::<(), anyhow::Error>(())
-    }?;
+    Ok(())
+}
 
-    // Explicit public groups replace the defaults, including synthetic defaults.
-    pylock_toml.write_str(&formatdoc! {r#"
+#[test]
+fn pep_751_default_groups_empty_public_groups() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pylock.toml").write_str(
+        r#"
+        lock-version = "1.0"
+        created-by = "uv"
+        dependency-groups = []
+        default-groups = ["default"]
+
+        [[packages]]
+        name = "iniconfig"
+        version = "2.0.0"
+        marker = "'default' in dependency_groups"
+        wheels = [{ url = "https://example.com/iniconfig-2.0.0-py3-none-any.whl", hashes = { sha256 = "0000000000000000000000000000000000000000000000000000000000000000" } }]
+
+        [[packages]]
+        name = "typing-extensions"
+        version = "4.10.0"
+        marker = "'test' in dependency_groups"
+        wheels = [{ url = "https://example.com/typing_extensions-4.10.0-py3-none-any.whl", hashes = { sha256 = "1111111111111111111111111111111111111111111111111111111111111111" } }]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("--offline")
+        .arg("--dry-run")
+        .arg("pylock.toml"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would download 1 package
+    Would install 1 package
+     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn pep_751_default_groups_unrelated_public_groups() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pylock.toml").write_str(
+        r#"
         lock-version = "1.0"
         created-by = "uv"
         dependency-groups = ["test"]
         default-groups = ["default"]
-        {packages}
-    "#})?;
+
+        [[packages]]
+        name = "iniconfig"
+        version = "2.0.0"
+        marker = "'default' in dependency_groups"
+        wheels = [{ url = "https://example.com/iniconfig-2.0.0-py3-none-any.whl", hashes = { sha256 = "0000000000000000000000000000000000000000000000000000000000000000" } }]
+
+        [[packages]]
+        name = "typing-extensions"
+        version = "4.10.0"
+        marker = "'test' in dependency_groups"
+        wheels = [{ url = "https://example.com/typing_extensions-4.10.0-py3-none-any.whl", hashes = { sha256 = "1111111111111111111111111111111111111111111111111111111111111111" } }]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("--offline")
+        .arg("--dry-run")
+        .arg("pylock.toml"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would download 1 package
+    Would install 1 package
+     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn pep_751_default_groups_overlapping_public_groups() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pylock.toml").write_str(
+        r#"
+        lock-version = "1.0"
+        created-by = "uv"
+        dependency-groups = ["default", "test"]
+        default-groups = ["default"]
+
+        [[packages]]
+        name = "iniconfig"
+        version = "2.0.0"
+        marker = "'default' in dependency_groups"
+        wheels = [{ url = "https://example.com/iniconfig-2.0.0-py3-none-any.whl", hashes = { sha256 = "0000000000000000000000000000000000000000000000000000000000000000" } }]
+
+        [[packages]]
+        name = "typing-extensions"
+        version = "4.10.0"
+        marker = "'test' in dependency_groups"
+        wheels = [{ url = "https://example.com/typing_extensions-4.10.0-py3-none-any.whl", hashes = { sha256 = "1111111111111111111111111111111111111111111111111111111111111111" } }]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("--offline")
+        .arg("--dry-run")
+        .arg("pylock.toml"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Would download 1 package
+    Would install 1 package
+     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn pep_751_default_groups_explicit_group() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pylock.toml").write_str(
+        r#"
+        lock-version = "1.0"
+        created-by = "uv"
+        dependency-groups = ["test"]
+        default-groups = ["default"]
+
+        [[packages]]
+        name = "iniconfig"
+        version = "2.0.0"
+        marker = "'default' in dependency_groups"
+        wheels = [{ url = "https://example.com/iniconfig-2.0.0-py3-none-any.whl", hashes = { sha256 = "0000000000000000000000000000000000000000000000000000000000000000" } }]
+
+        [[packages]]
+        name = "typing-extensions"
+        version = "4.10.0"
+        marker = "'test' in dependency_groups"
+        wheels = [{ url = "https://example.com/typing_extensions-4.10.0-py3-none-any.whl", hashes = { sha256 = "1111111111111111111111111111111111111111111111111111111111111111" } }]
+        "#,
+    )?;
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("--preview")
@@ -5894,13 +6019,32 @@ fn pep_751_default_groups() -> Result<()> {
      + typing-extensions==4.10.0
     ");
 
-    // Public groups alone do not enable any defaults.
-    pylock_toml.write_str(&formatdoc! {r#"
+    Ok(())
+}
+
+#[test]
+fn pep_751_default_groups_absent() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pylock.toml").write_str(
+        r#"
         lock-version = "1.0"
         created-by = "uv"
         dependency-groups = ["default", "test"]
-        {packages}
-    "#})?;
+
+        [[packages]]
+        name = "iniconfig"
+        version = "2.0.0"
+        marker = "'default' in dependency_groups"
+        wheels = [{ url = "https://example.com/iniconfig-2.0.0-py3-none-any.whl", hashes = { sha256 = "0000000000000000000000000000000000000000000000000000000000000000" } }]
+
+        [[packages]]
+        name = "typing-extensions"
+        version = "4.10.0"
+        marker = "'test' in dependency_groups"
+        wheels = [{ url = "https://example.com/typing_extensions-4.10.0-py3-none-any.whl", hashes = { sha256 = "1111111111111111111111111111111111111111111111111111111111111111" } }]
+        "#,
+    )?;
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("--preview")
