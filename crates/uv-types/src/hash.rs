@@ -5,15 +5,20 @@ use std::sync::Arc;
 
 use rustc_hash::FxHashMap;
 
+use uv_cache_key::CanonicalUrl;
 use uv_configuration::{Constraints, HashCheckingMode};
+use uv_distribution_filename::{DistExtension, WheelFilename};
 use uv_distribution_types::{
-    ArchiveHashPolicy, DistributionMetadata, HashCollection, HashValidation, MetadataHashPolicy,
-    Name, Requirement, RequirementSource, Resolution, UnresolvedRequirement, VersionId,
+    ArchiveHashPolicy, DistributionMetadata, HashCollection, HashComparison, HashValidation,
+    IndexUrl, MetadataHashPolicy, Name, Requirement, RequirementSource, Resolution,
+    UnresolvedRequirement, VersionId, VersionOrUrlRef,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version};
 use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, HashError, ResolverMarkerEnvironment};
 use uv_redacted::DisplaySafeUrl;
+
+type HashesById = FxHashMap<VersionId, Vec<HashDigest>>;
 
 /// Hash collection and verification policies for a resolution.
 ///
@@ -33,8 +38,116 @@ pub enum HashVerification {
     None,
     /// Validate known hashes, without requiring hashes for other distributions.
     IfPresent(Arc<FxHashMap<VersionId, Vec<HashDigest>>>),
+    /// Validate build artifacts recorded in a lockfile, allowing other wheel variants.
+    LockedBuild {
+        /// Recorded hashes used to identify registry artifacts at different locations.
+        hashes: Arc<FxHashMap<VersionId, Vec<HashDigest>>>,
+        /// Registry artifacts, scoped to their source and exact version.
+        registry: Arc<LockedRegistryHashes>,
+        /// Explicit constraints and hashes for non-registry artifacts.
+        additional: Arc<HashStrategy>,
+    },
     /// Every distribution must have a matching trusted hash.
     Required(Arc<FxHashMap<VersionId, Vec<HashDigest>>>),
+}
+
+/// The registry artifacts recorded in a lockfile for isolated build verification.
+#[derive(Debug, Default, Clone)]
+pub struct LockedRegistryHashes {
+    /// A lockfile can omit wheels unreachable under its runtime markers.
+    wheels: FxHashMap<(CanonicalUrl, WheelFilename), Vec<HashDigest>>,
+    /// Source archives for a known source and version must match a recorded source hash.
+    sources: FxHashMap<(CanonicalUrl, PackageName, Version), Vec<HashDigest>>,
+}
+
+impl LockedRegistryHashes {
+    fn apply_constraints(&mut self, constraints: &HashStrategy) {
+        for ((_, filename), hashes) in &mut self.wheels {
+            let id = VersionId::from_registry(filename.name.clone(), filename.version.clone());
+            if let Some(allowed) = constraints.hashes_for_id(&id) {
+                hashes.retain(|hash| allowed.contains(hash));
+            } else if !constraints.allows_package(&filename.name, &filename.version) {
+                hashes.clear();
+            }
+        }
+        for ((_, name, version), hashes) in &mut self.sources {
+            let id = VersionId::from_registry(name.clone(), version.clone());
+            if let Some(allowed) = constraints.hashes_for_id(&id) {
+                hashes.retain(|hash| allowed.contains(hash));
+            } else if !constraints.allows_package(name, version) {
+                hashes.clear();
+            }
+        }
+    }
+
+    /// Record a wheel's trusted hash under its source and complete filename.
+    pub fn insert_wheel(&mut self, index: &IndexUrl, filename: &WheelFilename, hash: HashDigest) {
+        let hashes = self
+            .wheels
+            .entry((CanonicalUrl::new(index.url().clone()), filename.clone()))
+            .or_default();
+        if !hashes.contains(&hash) {
+            hashes.push(hash);
+        }
+    }
+
+    /// Record a source archive's trusted hash under its source and exact version.
+    pub fn insert_source(
+        &mut self,
+        index: &IndexUrl,
+        name: &PackageName,
+        version: &Version,
+        hash: HashDigest,
+    ) {
+        let hashes = self
+            .sources
+            .entry((
+                CanonicalUrl::new(index.url().clone()),
+                name.clone(),
+                version.clone(),
+            ))
+            .or_default();
+        if !hashes.contains(&hash) {
+            hashes.push(hash);
+        }
+    }
+
+    fn artifact_hashes(
+        &self,
+        name: &PackageName,
+        version: &Version,
+        index: &IndexUrl,
+        filename: &str,
+    ) -> Option<&[HashDigest]> {
+        match DistExtension::from_path(filename) {
+            Ok(DistExtension::Wheel) => WheelFilename::from_str(filename)
+                .ok()
+                .and_then(|filename| self.wheel_hashes(index, &filename)),
+            Ok(DistExtension::Source(_)) => self.source_hashes(name, version, index),
+            Err(_) => None,
+        }
+    }
+
+    fn source_hashes(
+        &self,
+        name: &PackageName,
+        version: &Version,
+        index: &IndexUrl,
+    ) -> Option<&[HashDigest]> {
+        self.sources
+            .get(&(
+                CanonicalUrl::new(index.url().clone()),
+                name.clone(),
+                version.clone(),
+            ))
+            .map(Vec::as_slice)
+    }
+
+    fn wheel_hashes(&self, index: &IndexUrl, filename: &WheelFilename) -> Option<&[HashDigest]> {
+        self.wheels
+            .get(&(CanonicalUrl::new(index.url().clone()), filename.clone()))
+            .map(Vec::as_slice)
+    }
 }
 
 impl HashStrategy {
@@ -49,6 +162,31 @@ impl HashStrategy {
     /// Validate hashes when present.
     pub fn verify(hashes: Arc<FxHashMap<VersionId, Vec<HashDigest>>>) -> Self {
         Self::default().with_verification(HashVerification::IfPresent(hashes))
+    }
+
+    /// Verify build artifacts recorded in a lockfile without requiring every wheel variant to
+    /// appear in the runtime resolution.
+    pub fn verify_build(
+        hashes: Arc<FxHashMap<VersionId, Vec<HashDigest>>>,
+        registry: LockedRegistryHashes,
+    ) -> Self {
+        let additional = hashes
+            .iter()
+            .filter(|(id, _)| match id {
+                VersionId::NameVersion(..) => false,
+                VersionId::ArchiveUrl { .. }
+                | VersionId::Git { .. }
+                | VersionId::Path(_)
+                | VersionId::Directory(_)
+                | VersionId::Unknown(_) => true,
+            })
+            .map(|(id, hashes)| (id.clone(), hashes.clone()))
+            .collect();
+        Self::default().with_verification(HashVerification::LockedBuild {
+            hashes,
+            registry: Arc::new(registry),
+            additional: Arc::new(Self::verify(Arc::new(additional))),
+        })
     }
 
     /// Require a matching trusted hash for every distribution.
@@ -68,30 +206,37 @@ impl HashStrategy {
     /// Preserve hash collection and require hashes if either strategy requires them. Constraints
     /// for identities absent from this strategy remain available for newly resolved dependencies.
     pub fn with_constraint_hashes(mut self, constraints: &Self) -> Result<Self, HashStrategyError> {
-        let (requirement_hashes, mode) = match &self.verification {
+        let (requirement_hashes, requirement_mode) = match &mut self.verification {
             HashVerification::None => {
                 self.verification = constraints.verification.clone();
                 return Ok(self);
             }
-            HashVerification::IfPresent(hashes) => {
-                let mode = match &constraints.verification {
-                    HashVerification::Required(_) => HashCheckingMode::Require,
-                    HashVerification::None | HashVerification::IfPresent(_) => {
-                        HashCheckingMode::Verify
-                    }
-                };
-                (hashes, mode)
+            HashVerification::IfPresent(hashes) => (Arc::clone(hashes), HashCheckingMode::Verify),
+            HashVerification::Required(hashes) => (Arc::clone(hashes), HashCheckingMode::Require),
+            HashVerification::LockedBuild {
+                registry,
+                additional,
+                ..
+            } => {
+                let combined = additional
+                    .as_ref()
+                    .clone()
+                    .with_constraint_hashes(constraints)?;
+                Arc::make_mut(registry).apply_constraints(&combined);
+                *additional = Arc::new(combined);
+                return Ok(self);
             }
-            HashVerification::Required(hashes) => (hashes, HashCheckingMode::Require),
         };
 
-        let mut constraints = constraints.clone();
-        let constraint_hashes = match &mut constraints.verification {
-            HashVerification::None => return Ok(self),
-            HashVerification::IfPresent(hashes) | HashVerification::Required(hashes) => {
-                Arc::make_mut(hashes)
-            }
+        let Some((constraint_hashes, constraint_mode)) = constraints.hashes_and_mode() else {
+            return Ok(self);
         };
+        let mode = if requirement_mode.is_require() || constraint_mode.is_require() {
+            HashCheckingMode::Require
+        } else {
+            HashCheckingMode::Verify
+        };
+        let mut constraint_hashes = constraint_hashes.clone();
         if mode.is_require() {
             constraint_hashes.retain(|_, digests| {
                 digests.retain(|digest| digest.algorithm() != HashAlgorithm::Md5);
@@ -104,11 +249,12 @@ impl HashStrategy {
             if mode.is_require() {
                 digests.retain(|digest| digest.algorithm() != HashAlgorithm::Md5);
             }
-            let digests = if let Some(constraint) = constraints.hashes_for_id(id) {
-                combine_constraint_hashes(id, digests, constraint, id, mode)?
-            } else {
-                digests
-            };
+            let digests =
+                if let Some(constraint) = lookup_hashes(&constraint_hashes, id, constraint_mode) {
+                    combine_constraint_hashes(id, digests, constraint, id, mode)?
+                } else {
+                    digests
+                };
             if !digests.is_empty() {
                 hashes.insert(id.clone(), digests);
             }
@@ -118,6 +264,15 @@ impl HashStrategy {
             HashCheckingMode::Require => HashVerification::Required(Arc::new(hashes)),
         };
         Ok(self)
+    }
+
+    fn hashes_and_mode(&self) -> Option<(&HashesById, HashCheckingMode)> {
+        match &self.verification {
+            HashVerification::None => None,
+            HashVerification::IfPresent(hashes) => Some((hashes, HashCheckingMode::Verify)),
+            HashVerification::Required(hashes) => Some((hashes, HashCheckingMode::Require)),
+            HashVerification::LockedBuild { additional, .. } => additional.hashes_and_mode(),
+        }
     }
 
     /// Return the hash collection policy.
@@ -135,7 +290,7 @@ impl HashStrategy {
         &self,
         distribution: &T,
     ) -> ArchiveHashPolicy<'_> {
-        self.archive_policy_for_id(|| distribution.version_id())
+        self.archive_policy_from_validation(self.validation_for_distribution(distribution))
     }
 
     /// Return the [`MetadataHashPolicy`] for retrieving the given distribution's metadata.
@@ -145,7 +300,7 @@ impl HashStrategy {
     ) -> MetadataHashPolicy<'_> {
         MetadataHashPolicy {
             collection: self.collection,
-            validation: self.validation_for_id(|| distribution.version_id()),
+            validation: self.validation_for_distribution(distribution),
         }
     }
 
@@ -156,6 +311,97 @@ impl HashStrategy {
         version: &Version,
     ) -> ArchiveHashPolicy<'_> {
         self.archive_policy_for_id(|| VersionId::from_registry(name.clone(), version.clone()))
+    }
+
+    /// Return the policy for a downloaded wheel in the registry cache.
+    pub fn archive_policy_for_registry_wheel(
+        &self,
+        index: &IndexUrl,
+        filename: &WheelFilename,
+        computed: &[HashDigest],
+    ) -> ArchiveHashPolicy<'_> {
+        let validation = match &self.verification {
+            HashVerification::LockedBuild { registry, .. } => self.locked_registry_validation(
+                &filename.name,
+                &filename.version,
+                registry.wheel_hashes(index, filename),
+                computed,
+            ),
+            HashVerification::None
+            | HashVerification::IfPresent(_)
+            | HashVerification::Required(_) => self.validation_for_id(|| {
+                VersionId::from_registry(filename.name.clone(), filename.version.clone())
+            }),
+        };
+        self.archive_policy_from_validation(validation)
+    }
+
+    /// Return the policy for a cached wheel built from a registry source archive.
+    ///
+    /// The source cache retains the original source version, which may differ from the built wheel
+    /// version, but not the source filename. If that source and version has recorded source hashes,
+    /// a different revision must be resolved again with its full identity.
+    pub fn archive_policy_for_cached_source(
+        &self,
+        name: &PackageName,
+        version: &Version,
+        index: &IndexUrl,
+        wheel: &WheelFilename,
+        computed: &[HashDigest],
+    ) -> ArchiveHashPolicy<'_> {
+        let validation = match &self.verification {
+            HashVerification::LockedBuild { registry, .. } => self.locked_registry_validation(
+                name,
+                version,
+                registry.source_hashes(name, version, index),
+                computed,
+            ),
+            HashVerification::None
+            | HashVerification::IfPresent(_)
+            | HashVerification::Required(_) => self.validation_for_id(|| {
+                VersionId::from_registry(wheel.name.clone(), wheel.version.clone())
+            }),
+        };
+        self.archive_policy_from_validation(validation)
+    }
+
+    /// Compare a registry candidate's advertised hashes with the optional locked build hashes.
+    ///
+    /// An unrecorded build wheel is allowed, but ranks below a candidate with a recorded digest.
+    /// This also recognizes trusted artifacts relocated through `--find-links`.
+    /// Other verification modes return `None` to use the index's usual comparison.
+    pub fn locked_registry_hash_comparison(
+        &self,
+        name: &PackageName,
+        version: &Version,
+        index: &IndexUrl,
+        filename: &str,
+        advertised: &[HashDigest],
+    ) -> Option<HashComparison> {
+        let HashVerification::LockedBuild {
+            hashes,
+            registry,
+            additional,
+        } = &self.verification
+        else {
+            return None;
+        };
+        if let Some(expected) = registry.artifact_hashes(name, version, index, filename) {
+            return Some(ArchiveHashPolicy::Any(expected).compare(advertised));
+        }
+        let constraint = additional.archive_policy_for_package(name, version);
+        if constraint.requires_validation() {
+            return Some(constraint.compare(advertised));
+        }
+        if let Some(expected) = hashes.get(&VersionId::from_registry(name.clone(), version.clone()))
+        {
+            return Some(if ArchiveHashPolicy::Any(expected).matches(advertised) {
+                HashComparison::Matched
+            } else {
+                HashComparison::Unrecorded
+            });
+        }
+        Some(HashComparison::Matched)
     }
 
     /// Return the [`ArchiveHashPolicy`] for the given direct URL package.
@@ -175,7 +421,13 @@ impl HashStrategy {
 
     /// Return the archive hash policy for a distribution identity.
     fn archive_policy_for_id(&self, id: impl FnOnce() -> VersionId) -> ArchiveHashPolicy<'_> {
-        let validation = self.validation_for_id(id);
+        self.archive_policy_from_validation(self.validation_for_id(id))
+    }
+
+    fn archive_policy_from_validation<'a>(
+        &self,
+        validation: HashValidation<'a>,
+    ) -> ArchiveHashPolicy<'a> {
         match validation {
             HashValidation::None => match self.collection {
                 HashCollection::None => ArchiveHashPolicy::None,
@@ -183,6 +435,72 @@ impl HashStrategy {
             },
             HashValidation::Any(_) | HashValidation::All(_) => validation.into(),
         }
+    }
+
+    fn validation_for_distribution<T: DistributionMetadata>(
+        &self,
+        distribution: &T,
+    ) -> HashValidation<'_> {
+        if let HashVerification::LockedBuild { .. } = &self.verification
+            && let Some((index, file)) = distribution.registry_file()
+            && let VersionOrUrlRef::Version(version) = distribution.version_or_url()
+        {
+            return self.validation_for_registry(
+                distribution.name(),
+                version,
+                index,
+                file.filename.as_ref(),
+                file.hashes.as_slice(),
+            );
+        }
+        self.validation_for_id(|| distribution.version_id())
+    }
+
+    fn validation_for_registry(
+        &self,
+        name: &PackageName,
+        version: &Version,
+        index: &IndexUrl,
+        filename: &str,
+        advertised: &[HashDigest],
+    ) -> HashValidation<'_> {
+        match &self.verification {
+            HashVerification::LockedBuild { registry, .. } => self.locked_registry_validation(
+                name,
+                version,
+                registry.artifact_hashes(name, version, index, filename),
+                advertised,
+            ),
+            HashVerification::None
+            | HashVerification::IfPresent(_)
+            | HashVerification::Required(_) => {
+                self.validation_for_id(|| VersionId::from_registry(name.clone(), version.clone()))
+            }
+        }
+    }
+
+    fn locked_registry_validation<'a>(
+        &'a self,
+        name: &PackageName,
+        version: &Version,
+        recorded: Option<&'a [HashDigest]>,
+        advertised: &[HashDigest],
+    ) -> HashValidation<'a> {
+        let HashVerification::LockedBuild {
+            hashes, additional, ..
+        } = &self.verification
+        else {
+            return HashValidation::None;
+        };
+        if let Some(recorded) = recorded {
+            return HashValidation::Any(recorded);
+        }
+        let validation = additional
+            .validation_for_id(|| VersionId::from_registry(name.clone(), version.clone()));
+        if validation != HashValidation::None {
+            return validation;
+        }
+        relocated_registry_validation(hashes, name, version, advertised)
     }
 
     /// Construct an identity only when verification requires a lookup.
@@ -201,6 +519,9 @@ impl HashStrategy {
                     hashes.get(&id).map(Vec::as_slice).unwrap_or_default(),
                 );
             }
+            HashVerification::LockedBuild { additional, .. } => {
+                return additional.validation_for_id(id);
+            }
             HashVerification::None => {}
         }
         HashValidation::None
@@ -210,24 +531,13 @@ impl HashStrategy {
     fn hashes_for_id(&self, id: &VersionId) -> Option<&[HashDigest]> {
         match &self.verification {
             HashVerification::None => None,
-            HashVerification::IfPresent(hashes) => hashes
-                .get(id)
-                .or_else(|| {
-                    // `==1.0.0` can also select `1.0.0+local`. If the local version has no hash
-                    // of its own, check it against the hash for `1.0.0`.
-                    if let VersionId::NameVersion(name, version) = id
-                        && version.is_local()
-                    {
-                        hashes.get(&VersionId::from_registry(
-                            name.clone(),
-                            version.clone().without_local(),
-                        ))
-                    } else {
-                        None
-                    }
-                })
-                .map(Vec::as_slice),
-            HashVerification::Required(hashes) => hashes.get(id).map(Vec::as_slice),
+            HashVerification::IfPresent(hashes) => {
+                lookup_hashes(hashes, id, HashCheckingMode::Verify)
+            }
+            HashVerification::Required(hashes) => {
+                lookup_hashes(hashes, id, HashCheckingMode::Require)
+            }
+            HashVerification::LockedBuild { additional, .. } => additional.hashes_for_id(id),
         }
     }
 
@@ -237,6 +547,9 @@ impl HashStrategy {
             HashVerification::Required(hashes) => {
                 hashes.contains_key(&VersionId::from_registry(name.clone(), version.clone()))
             }
+            HashVerification::LockedBuild { additional, .. } => {
+                additional.allows_package(name, version)
+            }
             HashVerification::None | HashVerification::IfPresent(_) => true,
         }
     }
@@ -245,6 +558,7 @@ impl HashStrategy {
     pub fn allows_url(&self, url: &DisplaySafeUrl) -> bool {
         match &self.verification {
             HashVerification::Required(hashes) => hashes.contains_key(&VersionId::from_url(url)),
+            HashVerification::LockedBuild { additional, .. } => additional.allows_url(url),
             HashVerification::None | HashVerification::IfPresent(_) => true,
         }
     }
@@ -262,6 +576,14 @@ impl HashStrategy {
                     *existing = Arc::new(hashes);
                 }
             }
+            HashVerification::LockedBuild { additional, .. } => {
+                *additional = Arc::new(
+                    additional
+                        .as_ref()
+                        .clone()
+                        .augment_with_requirements(requirements)?,
+                );
+            }
         }
         Ok(self)
     }
@@ -277,7 +599,10 @@ impl HashStrategy {
         self,
         requirements: impl Iterator<Item = &'a Requirement>,
     ) -> Result<Self, HashStrategyError> {
-        if matches!(&self.verification, HashVerification::Required(_)) {
+        if self
+            .hashes_and_mode()
+            .is_some_and(|(_, mode)| mode.is_require())
+        {
             return Ok(self);
         }
         self.augment_with_requirements(requirements)
@@ -579,6 +904,46 @@ impl HashStrategy {
     }
 }
 
+/// Look up a pinned hash, including public-version pins in verification mode.
+fn lookup_hashes<'a>(
+    hashes: &'a FxHashMap<VersionId, Vec<HashDigest>>,
+    id: &VersionId,
+    mode: HashCheckingMode,
+) -> Option<&'a [HashDigest]> {
+    hashes
+        .get(id)
+        .or_else(|| {
+            if !mode.is_require()
+                && let VersionId::NameVersion(name, version) = id
+                && version.is_local()
+            {
+                hashes.get(&VersionId::from_registry(
+                    name.clone(),
+                    version.clone().without_local(),
+                ))
+            } else {
+                None
+            }
+        })
+        .map(Vec::as_slice)
+}
+
+/// Recognize a recorded artifact at a different location without trusting a new index digest.
+fn relocated_registry_validation<'a>(
+    hashes: &'a FxHashMap<VersionId, Vec<HashDigest>>,
+    name: &PackageName,
+    version: &Version,
+    advertised: &[HashDigest],
+) -> HashValidation<'a> {
+    if let Some(expected) = hashes.get(&VersionId::from_registry(name.clone(), version.clone()))
+        && ArchiveHashPolicy::Any(expected).matches(advertised)
+    {
+        HashValidation::Any(expected)
+    } else {
+        HashValidation::None
+    }
+}
+
 fn hash_validation<'a>(id: &VersionId, digests: &'a [HashDigest]) -> HashValidation<'a> {
     match id {
         VersionId::NameVersion { .. } => HashValidation::Any(digests),
@@ -712,17 +1077,18 @@ mod tests {
 
     use rustc_hash::FxHashMap;
     use uv_configuration::HashCheckingMode;
-    use uv_distribution_filename::DistExtension;
+    use uv_distribution_filename::{DistExtension, WheelFilename};
     use uv_distribution_types::{
-        ArchiveHashPolicy, HashCollection, HashValidation, MetadataHashPolicy, Requirement,
-        RequirementScope, RequirementSource, UnresolvedRequirement, VersionId,
+        ArchiveHashPolicy, HashCollection, HashComparison, HashValidation, IndexUrl,
+        MetadataHashPolicy, Requirement, RequirementScope, RequirementSource,
+        UnresolvedRequirement, VersionId,
     };
     use uv_normalize::PackageName;
     use uv_pep440::Version;
     use uv_pypi_types::HashDigest;
     use uv_redacted::DisplaySafeUrl;
 
-    use super::{HashStrategy, HashVerification};
+    use super::{HashStrategy, HashVerification, LockedRegistryHashes};
 
     fn requirement(url: &str) -> Requirement {
         Requirement {
@@ -967,6 +1333,211 @@ mod tests {
             )])));
             assert!(locked.with_constraint_hashes(&conflicting).is_err());
         }
+        Ok(())
+    }
+
+    #[test]
+    fn locked_build_hashes_scope_wheels_and_sources() -> Result<(), Box<dyn std::error::Error>> {
+        let index = IndexUrl::parse("https://example.com/simple", None)?;
+        let other_index = IndexUrl::parse("https://example.org/simple", None)?;
+        let wheel: WheelFilename = "demo_pkg-1.0.0-1-py3-none-any.whl".parse()?;
+        let other_wheel: WheelFilename = "demo_pkg-1.0.0-2-py3-none-any.whl".parse()?;
+        let local_wheel: WheelFilename = "demo_pkg-1.0.0+local-py3-none-any.whl".parse()?;
+        let wheel_hash = HashDigest::from_str(
+            "sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+        )?;
+        let source_hash = HashDigest::from_str(
+            "sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb",
+        )?;
+        let expected = vec![wheel_hash.clone(), source_hash.clone()];
+        let hashes = Arc::new(FxHashMap::from_iter([(
+            VersionId::from_registry(wheel.name.clone(), wheel.version.clone()),
+            expected.clone(),
+        )]));
+        let mut registry = LockedRegistryHashes::default();
+        registry.insert_wheel(&index, &wheel, wheel_hash.clone());
+        registry.insert_source(&index, &wheel.name, &wheel.version, source_hash.clone());
+        let strategy = HashStrategy::verify_build(hashes.clone(), registry);
+
+        // Changed or missing index hashes cannot change a known artifact's authority.
+        for advertised in [&[][..], slice::from_ref(&source_hash)] {
+            assert_eq!(
+                strategy.archive_policy_for_registry_wheel(&index, &wheel, advertised),
+                ArchiveHashPolicy::Any(slice::from_ref(&wheel_hash)),
+            );
+        }
+        let equivalent_index = IndexUrl::parse("https://user:password@example.com/simple/", None)?;
+        assert_eq!(
+            strategy.archive_policy_for_registry_wheel(&equivalent_index, &wheel, &[]),
+            ArchiveHashPolicy::Any(slice::from_ref(&wheel_hash)),
+        );
+        assert_eq!(
+            strategy.archive_policy_for_registry_wheel(&index, &other_wheel, &[]),
+            ArchiveHashPolicy::None,
+        );
+        assert_eq!(
+            strategy.archive_policy_for_registry_wheel(&other_index, &wheel, &[]),
+            ArchiveHashPolicy::None,
+        );
+        assert_eq!(
+            strategy.archive_policy_for_registry_wheel(
+                &other_index,
+                &other_wheel,
+                slice::from_ref(&wheel_hash),
+            ),
+            ArchiveHashPolicy::Any(&expected),
+        );
+        for (index, wheel, advertised, comparison) in [
+            (
+                &index,
+                &wheel,
+                slice::from_ref(&source_hash),
+                HashComparison::Mismatched,
+            ),
+            (&index, &wheel, &[][..], HashComparison::Missing),
+            (&index, &other_wheel, &[][..], HashComparison::Unrecorded),
+            (
+                &other_index,
+                &other_wheel,
+                slice::from_ref(&wheel_hash),
+                HashComparison::Matched,
+            ),
+        ] {
+            assert_eq!(
+                strategy.locked_registry_hash_comparison(
+                    &wheel.name,
+                    &wheel.version,
+                    index,
+                    &wheel.to_string(),
+                    advertised,
+                ),
+                Some(comparison),
+            );
+        }
+
+        // A renamed source archive and a cached source revision keep the source-scoped policy.
+        assert_eq!(
+            strategy.validation_for_registry(
+                &wheel.name,
+                &wheel.version,
+                &index,
+                "demo__pkg-1.0.0.zip",
+                slice::from_ref(&wheel_hash),
+            ),
+            HashValidation::Any(slice::from_ref(&source_hash)),
+        );
+        assert_eq!(
+            strategy.archive_policy_for_cached_source(
+                &wheel.name,
+                &wheel.version,
+                &index,
+                &local_wheel,
+                slice::from_ref(&wheel_hash),
+            ),
+            ArchiveHashPolicy::Any(slice::from_ref(&source_hash)),
+        );
+
+        // Lock identities are exact; a user-authored public-version pin still covers local builds.
+        assert_eq!(
+            strategy.archive_policy_for_registry_wheel(
+                &index,
+                &local_wheel,
+                slice::from_ref(&wheel_hash),
+            ),
+            ArchiveHashPolicy::None,
+        );
+        assert_eq!(
+            HashStrategy::verify(hashes.clone())
+                .archive_policy_for_package(&local_wheel.name, &local_wheel.version),
+            ArchiveHashPolicy::Any(&expected),
+        );
+        assert_eq!(
+            HashStrategy::require(hashes.clone()).archive_policy_for_cached_source(
+                &wheel.name,
+                &wheel.version,
+                &index,
+                &local_wheel,
+                slice::from_ref(&source_hash),
+            ),
+            ArchiveHashPolicy::Any(&[]),
+        );
+        assert_eq!(
+            HashStrategy::require(hashes.clone()).locked_registry_hash_comparison(
+                &local_wheel.name,
+                &local_wheel.version,
+                &index,
+                &local_wheel.to_string(),
+                &[],
+            ),
+            None,
+        );
+        let mut local_pins = hashes.as_ref().clone();
+        local_pins.insert(
+            VersionId::from_registry(local_wheel.name.clone(), local_wheel.version.clone()),
+            vec![wheel_hash.clone()],
+        );
+        let local_pins = Arc::new(local_pins);
+        for strategy in [
+            HashStrategy::verify(local_pins.clone()),
+            HashStrategy::require(local_pins),
+        ] {
+            assert_eq!(
+                strategy.archive_policy_for_cached_source(
+                    &wheel.name,
+                    &wheel.version,
+                    &index,
+                    &local_wheel,
+                    slice::from_ref(&source_hash),
+                ),
+                ArchiveHashPolicy::Any(slice::from_ref(&wheel_hash)),
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn locked_build_hashes_intersect_constraints_per_artifact()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let index = IndexUrl::parse("https://example.com/simple", None)?;
+        let locked_wheel: WheelFilename = "demo_pkg-1.0.0-1-py3-none-any.whl".parse()?;
+        let other_wheel: WheelFilename = "demo_pkg-1.0.0-2-py3-none-any.whl".parse()?;
+        let locked_hash = HashDigest::from_str(
+            "sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+        )?;
+        let allowed_hash = HashDigest::from_str(
+            "sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb",
+        )?;
+        let id = VersionId::from_registry(locked_wheel.name.clone(), locked_wheel.version.clone());
+        let mut registry = LockedRegistryHashes::default();
+        registry.insert_wheel(&index, &locked_wheel, locked_hash.clone());
+        let locked = HashStrategy::verify_build(
+            Arc::new(FxHashMap::from_iter([(
+                id.clone(),
+                vec![locked_hash.clone()],
+            )])),
+            registry,
+        );
+        let constraints = HashStrategy::verify(Arc::new(FxHashMap::from_iter([(
+            id,
+            vec![allowed_hash.clone()],
+        )])));
+        let constrained = locked.clone().with_constraint_hashes(&constraints)?;
+
+        // Both the locked artifact and the explicit constraint must authorize a recorded wheel.
+        assert_eq!(
+            constrained.archive_policy_for_registry_wheel(&index, &locked_wheel, &[]),
+            ArchiveHashPolicy::Any(&[]),
+        );
+        // A wheel absent from the lock is governed by the explicit constraint on its own.
+        assert_eq!(
+            constrained.archive_policy_for_registry_wheel(&index, &other_wheel, &[]),
+            ArchiveHashPolicy::Any(slice::from_ref(&allowed_hash)),
+        );
+        // Cloning a strategy must not change the original lock-backed policy.
+        assert_eq!(
+            locked.archive_policy_for_registry_wheel(&index, &locked_wheel, &[]),
+            ArchiveHashPolicy::Any(slice::from_ref(&locked_hash)),
+        );
         Ok(())
     }
 }
