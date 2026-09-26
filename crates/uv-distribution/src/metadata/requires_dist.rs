@@ -474,6 +474,7 @@ mod test {
     use uv_cache::Cache;
     use uv_configuration::NoSources;
     use uv_distribution_types::IndexLocations;
+    use uv_git_types::GitLfs;
     use uv_normalize::PackageName;
     use uv_pep508::Requirement;
     use uv_workspace::{DiscoveryOptions, ProjectWorkspace, WorkspaceCache};
@@ -511,6 +512,7 @@ mod test {
             &cache,
             &workspace_cache,
             &CredentialsCache::new(),
+            GitLfs::default(),
         )
         .await?)
     }
