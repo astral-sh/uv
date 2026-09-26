@@ -743,6 +743,7 @@ pub(crate) fn finalize_tool_install(
     overrides: Vec<Requirement>,
     excludes: Vec<ExcludeDependency>,
     build_constraints: Vec<NameRequirementSpecification>,
+    system_site_packages: bool,
     lock: Option<&ToolLock>,
     printer: Printer,
 ) -> anyhow::Result<()> {
@@ -937,6 +938,7 @@ pub(crate) fn finalize_tool_install(
         overrides,
         excludes,
         build_constraints,
+        system_site_packages,
         python,
         installed_entrypoints,
         options.clone(),
