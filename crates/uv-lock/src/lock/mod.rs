@@ -69,6 +69,7 @@ use uv_types::{BuildContext, HashStrategy};
 use uv_warnings::warn_user_once;
 use uv_workspace::{Editability, WorkspaceMember};
 
+use crate::lock::dependency_marker::RelativeDependencyMarker;
 pub use crate::lock::deserialize::Error as CanonicalLockError;
 pub use crate::lock::export::RequirementsTxtExport;
 pub use crate::lock::export::{
@@ -79,6 +80,7 @@ pub use crate::lock::installable::{Installable, InstallableRootKind};
 pub use crate::lock::map::PackageMap;
 pub use crate::lock::tree::{TreeDisplay, TreeJsonTarget};
 
+mod dependency_marker;
 mod deserialize;
 pub(crate) mod export;
 mod inputs;
@@ -907,7 +909,7 @@ impl<'a> LockedDependencyBuilder<'a> {
                         .iter()
                         .filter(|existing| existing.package_id == dependency.id)
                         .fold(UniversalMarker::FALSE, |mut selected, existing| {
-                            selected.or(existing.complexified_marker);
+                            selected.or(existing.complexified_marker.in_parent_context());
                             selected
                         });
                     for extra in requirement
@@ -1267,7 +1269,7 @@ impl<'a> LockedDependencyBuilder<'a> {
             .iter()
             .filter(|dependency| dependency.package_id == *package_id)
             .fold(UniversalMarker::FALSE, |mut marker, dependency| {
-                marker.or(dependency.complexified_marker);
+                marker.or(dependency.complexified_marker.in_parent_context());
                 marker
             });
         let mut required_marker = base_marker;
@@ -1373,7 +1375,7 @@ impl<'a> LockedDependencyBuilder<'a> {
                     dependency.extra.iter().any(|extra| extras.contains(extra))
                 }
         }) {
-            let mut marker = dependency.complexified_marker;
+            let mut marker = dependency.complexified_marker.in_parent_context();
             // A group can select its base through any extra, including one from an included
             // group. Retain the extra predicates when proving that those edges cover the base.
             if !is_group {
@@ -1420,8 +1422,7 @@ impl<'a> LockedDependencyBuilder<'a> {
                 dependency.package_id == *package_id && dependency.extra.is_empty()
             })
             .any(|dependency| {
-                let mut marker = dependency.complexified_marker;
-                marker.and(base_marker);
+                let mut marker = dependency.complexified_marker.within(base_marker);
                 marker.and(self.activation_marker);
                 for extra in &requirement.extras {
                     if expected.lock.conflicts.contains(&package_id.name, extra) {
@@ -2100,7 +2101,10 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             }
 
             for dependency in dependencies {
-                payload_marker = payload_marker.or(dependency.complexified_marker.combined());
+                payload_marker = payload_marker.or(dependency
+                    .complexified_marker
+                    .in_parent_context()
+                    .combined());
             }
         }
         payload_marker
@@ -2150,8 +2154,7 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
                 }
             }
 
-            let mut marker = dependency.complexified_marker;
-            marker.and(activation);
+            let mut marker = dependency.complexified_marker.within(activation);
             let target = self.lock.package(self.lock.by_id[&dependency.package_id]);
             for alternative in self
                 .lock
@@ -2235,9 +2238,14 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             let key = (dependency.package_id.clone(), dependency.extra.clone());
             let marker = marker.combined();
             let forbidden_conflict = forbidden_conflict.combined();
-            let raw_conflict =
-                UniversalMarker::new(MarkerTree::TRUE, dependency.complexified_marker.conflict())
-                    .combined();
+            let raw_conflict = UniversalMarker::new(
+                MarkerTree::TRUE,
+                dependency
+                    .complexified_marker
+                    .in_parent_context()
+                    .conflict(),
+            )
+            .combined();
             comparable
                 .entry(key)
                 .and_modify(|existing| {
@@ -2275,7 +2283,7 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
                 generated
                     .iter()
                     .chain(actual)
-                    .map(|dependency| dependency.complexified_marker),
+                    .map(|dependency| dependency.complexified_marker.in_parent_context()),
             ),
         );
         let generated_comparable =
@@ -2357,7 +2365,10 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
                         &dependency.package_id == actual_id && &dependency.extra == actual_extras
                     })
                     .fold(MarkerTree::FALSE, |marker, dependency| {
-                        marker.or(dependency.complexified_marker.combined())
+                        marker.or(dependency
+                            .complexified_marker
+                            .in_parent_context()
+                            .combined())
                     });
                 forbidden.and(UniversalMarker::from_combined(actual_raw_marker));
                 forbidden.and(UniversalMarker::from_combined(generated_marker.negate()));
@@ -3163,7 +3174,7 @@ impl Lock {
             // For example, if this group declares `foo; sys_platform == 'linux'`, another
             // dependency can still keep `foo` in the universal lock on macOS; this group's edge
             // must not match there.
-            if !dependency.complexified_marker.evaluate(
+            if !dependency.complexified_marker.in_parent_context().evaluate(
                 marker_environment,
                 std::iter::empty::<&PackageName>(),
                 dependency
@@ -3212,7 +3223,7 @@ impl Lock {
             .iter()
             .filter(|dependency| &dependency.package_id.name == dependency_name)
         {
-            if !dependency.complexified_marker.evaluate(
+            if !dependency.complexified_marker.in_parent_context().evaluate(
                 marker_environment,
                 std::iter::once(project_name),
                 dependency
@@ -5195,9 +5206,12 @@ impl Lock {
                     .map(DependencyContext::Group),
             ) {
                 for dependency in dependency_context.dependencies(package) {
-                    let marker = marker
-                        .and(dependency_context.conflict_marker(&package.id.name, &self.conflicts))
-                        .and(dependency.complexified_marker.combined());
+                    let parent = marker
+                        .and(dependency_context.conflict_marker(&package.id.name, &self.conflicts));
+                    let marker = dependency
+                        .complexified_marker
+                        .within(UniversalMarker::from_combined(parent))
+                        .combined();
                     let dependency_package = self.package(dependency.index);
                     for dependency_extra in
                         iter::once(None).chain(dependency.extra.iter().map(Some))
@@ -8895,7 +8909,7 @@ pub struct Dependency {
     /// The "complexified" marker is independent of `requires-python`, but remains contextual to
     /// the PEP 508 reachability of its parent package. It can be evaluated while traversing
     /// dependencies from that package.
-    complexified_marker: UniversalMarker,
+    complexified_marker: RelativeDependencyMarker,
 }
 
 impl Dependency {
@@ -8911,7 +8925,9 @@ impl Dependency {
             index: PackageIndex(0),
             extra,
             simplified_marker,
-            complexified_marker: UniversalMarker::from_combined(complexified_marker),
+            complexified_marker: RelativeDependencyMarker::new(UniversalMarker::from_combined(
+                complexified_marker,
+            )),
         }
     }
 
@@ -9015,7 +9031,7 @@ impl DependencyWire {
             index: PackageIndex(0),
             extra: self.extra,
             simplified_marker,
-            complexified_marker,
+            complexified_marker: RelativeDependencyMarker::new(complexified_marker),
         })
     }
 }
@@ -10615,6 +10631,11 @@ wheels = [{ filename = "local-1.0.0-py3-none-any.whl", hash = "sha256:53a42340ae
             marker.try_to_string().as_deref(),
             Some("python_full_version >= '3.12' and extra != 'extra-1-x-foo'")
         );
+
+        let relative = RelativeDependencyMarker::new(UniversalMarker::from_combined(marker));
+        let outside = MarkerTree::from_str("sys_platform == 'linux'").expect("valid marker");
+        assert!(!relative.in_parent_context().pep508().is_disjoint(outside));
+        assert!(relative.within(parent).pep508().is_disjoint(outside));
     }
 
     #[test]
