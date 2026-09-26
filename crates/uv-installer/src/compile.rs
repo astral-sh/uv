@@ -15,8 +15,13 @@ use walkdir::WalkDir;
 
 use uv_configuration::Concurrency;
 use uv_fs::Simplified;
+use uv_preview::PreviewFeature;
 use uv_static::EnvVars;
 use uv_warnings::warn_user;
+
+use self::rust::RustCompiler;
+
+mod rust;
 
 const COMPILEALL_SCRIPT: &str = include_str!("pip_compileall.py");
 /// This is longer than any compilation should ever take.
@@ -39,6 +44,14 @@ pub enum CompileError {
     PythonSubcommand(#[source] io::Error),
     #[error("Failed to create temporary script file")]
     TempFile(#[source] io::Error),
+    #[error("Failed to configure native bytecode compilation")]
+    NativeSetup(#[source] anyhow::Error),
+    #[error("Failed to compile `{}` with serc", source_file.user_display())]
+    NativeCompile {
+        source_file: PathBuf,
+        #[source]
+        err: anyhow::Error,
+    },
     #[error(r#"Bytecode compilation failed, expected "{0}", received: "{1}""#)]
     WrongPath(String, String),
     #[error("Failed to write to Python {device}")]
@@ -91,14 +104,23 @@ fn compile_timeout() -> Result<Option<Duration>, CompileError> {
     Ok(timeout)
 }
 
-fn spawn_workers(
+async fn spawn_workers(
     dir: &Path,
     python_executable: &Path,
     pip_compileall_py: &Path,
     receiver: &Receiver<PathBuf>,
     worker_count: usize,
     timeout: Option<Duration>,
-) -> Vec<WorkerHandle> {
+) -> Result<Vec<WorkerHandle>, CompileError> {
+    let rust_compiler = if uv_preview::is_enabled(PreviewFeature::NativeBytecode) {
+        Some(
+            RustCompiler::query(dir, python_executable, timeout)
+                .await
+                .map_err(CompileError::NativeSetup)?,
+        )
+    } else {
+        None
+    };
     debug!("Starting {} bytecode compilation workers", worker_count);
     let mut worker_handles = Vec::with_capacity(worker_count);
     for _ in 0..worker_count {
@@ -110,6 +132,7 @@ fn spawn_workers(
             pip_compileall_py.to_path_buf(),
             receiver.clone(),
             timeout,
+            rust_compiler.clone(),
         );
 
         // Spawn each worker on a dedicated thread.
@@ -132,7 +155,7 @@ fn spawn_workers(
 
         worker_handles.push(rx);
     }
-    worker_handles
+    Ok(worker_handles)
 }
 
 /// Wait for all workers to exit so worker failures are not hidden by channel send errors.
@@ -158,10 +181,11 @@ async fn wait_for_workers(
     Ok(())
 }
 
-/// Bytecode compile all file in `dir` using a pool of Python interpreters running a Python script
-/// that calls `compileall.compile_file`.
+/// Bytecode compile all files in `dir` using serc when enabled, or a pool of Python
+/// interpreters running a Python script that calls `compileall.compile_file`.
 ///
-/// All compilation errors are muted (like pip). There is a 60s timeout for each file to handle
+/// Python compilation errors are muted (like pip); native compilation errors are returned.
+/// There is a 60s timeout for each file compiled by Python to handle
 /// a broken `python`. The timeout can be configured with `UV_COMPILE_BYTECODE_TIMEOUT`; a value of
 /// `0` disables the timeout.
 ///
@@ -197,7 +221,8 @@ pub async fn compile_tree(
         &receiver,
         worker_count,
         timeout,
-    );
+    )
+    .await?;
     // Make sure the channel gets closed when all workers exit.
     drop(receiver);
 
@@ -245,10 +270,11 @@ pub async fn compile_tree(
     Ok(source_files)
 }
 
-/// Bytecode compile the given Python source files using a pool of Python interpreters.
+/// Bytecode compile the given Python source files using serc when enabled, or a pool
+/// of Python interpreters.
 ///
-/// All paths must be absolute. Compilation errors are muted (like pip), while failures to launch
-/// or communicate with the Python workers are returned.
+/// All paths must be absolute. Python compilation errors are muted (like pip), while native
+/// compilation errors and failures to launch or communicate with the Python workers are returned.
 #[instrument(skip(files, python_executable))]
 pub async fn compile_files(
     files: impl IntoIterator<Item = anyhow::Result<PathBuf>>,
@@ -279,7 +305,8 @@ pub async fn compile_files(
         &receiver,
         worker_count,
         timeout,
-    );
+    )
+    .await?;
     drop(receiver);
 
     let mut send_error = None;
@@ -320,7 +347,17 @@ async fn worker(
     pip_compileall_py: PathBuf,
     receiver: Receiver<PathBuf>,
     timeout: Option<Duration>,
+    rust_compiler: Option<RustCompiler>,
 ) -> Result<(), CompileError> {
+    if let Some(compiler) = rust_compiler {
+        while let Ok(source_file) = receiver.recv().await {
+            compiler
+                .compile(&source_file)
+                .map_err(|err| CompileError::NativeCompile { source_file, err })?;
+        }
+        return Ok(());
+    }
+
     fs_err::tokio::write(&pip_compileall_py, COMPILEALL_SCRIPT)
         .await
         .map_err(CompileError::TempFile)?;

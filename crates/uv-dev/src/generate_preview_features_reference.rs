@@ -142,6 +142,8 @@ mod tests {
         - <a id="missing-exclude-newer-package-lock" href="#missing-exclude-newer-package-lock"><code>missing-exclude-newer-package-lock</code></a>: Exclude `exclude-newer-package` entries from the lockfile when not included in the
           project's resolved dependencies.
         - <a id="native-auth" href="#native-auth"><code>native-auth</code></a>: Enables storage of credentials in a [system-native location](../concepts/authentication/http.md#the-uv-credentials-store).
+        - <a id="native-bytecode" href="#native-bytecode"><code>native-bytecode</code></a>: Uses the Rust-based [serc](https://github.com/astral-sh/serc) compiler for bytecode compilation
+          on supported CPython versions. Unsupported files and settings cause an error.
         - <a id="no-distutils-patch" href="#no-distutils-patch"><code>no-distutils-patch</code></a>: Stops installing the `_virtualenv.py` / `_virtualenv.pth` distutils configuration monkeypatch
           in virtual environments for Python 3.10 and later.
         - <a id="package-conflicts" href="#package-conflicts"><code>package-conflicts</code></a>: Allows defining workspace conflicts at the package level.
