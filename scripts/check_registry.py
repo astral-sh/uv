@@ -124,6 +124,8 @@ def main(uv: str):
     py_311_line = r" -V:Astral/CPython3.11.11 C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.11.11-windows-x86_64-none\python.exe"
     py_312_line = r" -V:Astral/CPython3.12.8 C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.12.8-windows-x86_64-none\python.exe"
     py_313_line = r" -V:Astral/CPython3.13.1 C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.13.1-windows-x86_64-none\python.exe"
+    # Preserve the free-threaded registry tag used by older uv versions.
+    py_313t_line = r" -V:Astral/CPython3.13.1t C:\Users\runneradmin\AppData\Roaming\uv\python\cpython-3.13.1+freethreaded-windows-x86_64-none\python.exe"
 
     # Use the powershell command to get an outside view on the registry values we wrote
     # By default, powershell wraps the output at terminal size
@@ -134,10 +136,11 @@ def main(uv: str):
     # Check 1a: Install new interpreters.
     # Check 1b: Request installation of already installed interpreters.
     for _ in range(2):
-        print("Installing Python 3.11.11, 3.12.8, and 3.13.1")
+        print("Installing Python 3.11.11, 3.12.8, 3.13.1, and 3.13.1t")
         subprocess.check_call([uv, "python", "install", "-v", "--preview", "3.11.11"])
         subprocess.check_call([uv, "python", "install", "-v", "--preview", "3.12.8"])
         subprocess.check_call([uv, "python", "install", "-v", "--preview", "3.13.1"])
+        subprocess.check_call([uv, "python", "install", "-v", "--preview", "3.13.1t"])
         # The default shell for a subprocess is not powershell
         actual_registry = subprocess.check_output(
             ["powershell", "-Command", list_registry_command], text=True
@@ -160,14 +163,16 @@ def main(uv: str):
             py_311_line not in py_listed
             or py_312_line not in py_listed
             or py_313_line not in py_listed
+            or py_313t_line not in py_listed
         ):
             print(
                 "Python launcher interpreter mismatch: "
-                f"{py_listed} vs. {py_311_line}, {py_312_line}, {py_313_line}"
+                f"{py_listed} vs. {py_311_line}, {py_312_line}, {py_313_line}, {py_313t_line}"
             )
             sys.exit(1)
 
-    # Check 2: Remove a single interpreter and check that its gone.
+    # Check 2: Remove a single interpreter and check that its gone, while preserving the
+    # other registrations, including the legacy free-threaded tag.
     # Check 2a: Removing an existing interpreter.
     # Check 2b: Remove a missing interpreter.
     for _ in range(2):
@@ -179,10 +184,11 @@ def main(uv: str):
             py_311_line in py_listed
             or py_312_line not in py_listed
             or py_313_line not in py_listed
+            or py_313t_line not in py_listed
         ):
             print(
                 "Python launcher interpreter not removed: "
-                f"{py_listed} vs. {py_312_line}, {py_313_line}"
+                f"{py_listed} vs. {py_312_line}, {py_313_line}, {py_313t_line}"
             )
             sys.exit(1)
 
@@ -207,6 +213,7 @@ def main(uv: str):
             py_311_line in py_listed
             or py_312_line in py_listed
             or py_313_line in py_listed
+            or py_313t_line in py_listed
         ):
             print(f"Python launcher interpreter not cleared: {py_listed}")
             sys.exit(1)
