@@ -1327,7 +1327,7 @@ pub(crate) async fn run(
         .spawn()
         .with_context(|| format!("Failed to spawn: `{}`", command.display_executable()))?;
 
-    run_to_completion(handle).await
+    run_to_completion(handle, printer).await
 }
 
 /// Returns `true` if we can skip creating an additional ephemeral environment in `uv run`.

@@ -459,7 +459,7 @@ pub(crate) async fn run(
     }
     .with_context(|| format!("Failed to spawn: `{executable}`"))?;
 
-    run_to_completion(handle).await
+    run_to_completion(handle, printer).await
 }
 
 /// Return the entry points for the specified package.
