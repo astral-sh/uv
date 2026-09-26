@@ -1,13 +1,14 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use indoc::indoc;
 use predicates::prelude::*;
+use uv_cache::Cache;
 use uv_cache_key::cache_digest;
 use uv_fs::{LockedFile, LockedFileMode};
-use uv_python::{PYTHON_VERSION_FILENAME, PYTHON_VERSIONS_FILENAME};
+use uv_python::{PYTHON_VERSION_FILENAME, PYTHON_VERSIONS_FILENAME, PythonEnvironment};
 use uv_static::EnvVars;
 
 #[cfg(unix)]
@@ -69,6 +70,62 @@ fn create_venv() {
     );
 
     context.venv.assert(predicates::path::is_dir());
+}
+
+/// Creating a venv caches its interpreter without running Python.
+#[test]
+fn create_venv_caches_interpreter() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let cache = Cache::from_path(context.cache_dir.path().to_path_buf())
+        .init_no_wait()?
+        .context("Interpreter cache is locked")?;
+
+    // It should cache for both a system interpreter and when starting from another venv.
+    for python in [Path::new("3.12"), context.venv.path()] {
+        let root = tempfile::tempdir_in(context.temp_dir.path())?;
+        context
+            .venv()
+            .arg(root.path())
+            .arg("--clear")
+            .arg("--python")
+            .arg(python)
+            .assert()
+            .success();
+
+        let site_packages = site_packages_path(root.path(), "python3.12");
+        fs_err::write(
+            site_packages.join("sitecustomize.py"),
+            indoc! {r#"
+                from pathlib import Path
+
+                Path(__file__).with_name("interpreter-started").touch()
+            "#},
+        )?;
+        let startup_marker = site_packages.join("interpreter-started");
+
+        // Recreating the venv without clearing its packages must not run its Python to cache it.
+        context
+            .venv()
+            .arg(root.path())
+            .arg("--allow-existing")
+            .arg("--python")
+            .arg(python)
+            .assert()
+            .success();
+        assert!(!startup_marker.exists());
+
+        let cached = PythonEnvironment::from_root(root.path(), &cache)?;
+        assert!(!startup_marker.exists());
+
+        let fresh_cache = Cache::temp()?
+            .init_no_wait()?
+            .context("Fresh interpreter cache is locked")?;
+        let queried = PythonEnvironment::from_root(root.path(), &fresh_cache)?;
+        assert!(startup_marker.is_file());
+        assert_eq!(cached, queried);
+    }
+
+    Ok(())
 }
 
 #[test]
