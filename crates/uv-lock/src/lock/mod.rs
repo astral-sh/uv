@@ -434,24 +434,16 @@ enum DependencyContext<'a> {
 }
 
 impl DependencyContext<'_> {
-    /// Evaluate extra predicates in the requiring dependency section.
-    fn constraint_marker(self, marker: MarkerTree) -> MarkerTree {
-        match self {
-            Self::Production | Self::Group(_) => marker.simplify_not_extras_with(|_| true),
-            Self::Extra(extra) => marker
-                .simplify_extras(slice::from_ref(extra))
-                .simplify_not_extras_with(|candidate| candidate != extra),
-        }
-    }
-
     /// Specialize a requirement to the dependency section that can activate it.
     fn requirement_marker(self, marker: MarkerTree) -> MarkerTree {
+        let production_marker = marker.simplify_not_extras_with(|_| true);
         match self {
-            Self::Production | Self::Group(_) => self.constraint_marker(marker),
-            // Production requirements already belong to the base distribution.
-            Self::Extra(_) => self
-                .constraint_marker(marker)
-                .and(Self::Production.constraint_marker(marker).negate()),
+            Self::Production | Self::Group(_) => production_marker,
+            Self::Extra(extra) => marker
+                .simplify_extras(slice::from_ref(extra))
+                .simplify_not_extras_with(|candidate| candidate != extra)
+                // Production requirements already belong to the base distribution.
+                .and(production_marker.negate()),
         }
     }
 
@@ -4303,21 +4295,15 @@ impl Lock {
             })
             .collect::<Vec<_>>();
 
+        let mut dynamic_constraints = Vec::new();
         if validate_constraints {
-            match Box::pin(self.satisfies_constraints(
+            match self.satisfies_constraints(
                 &normalized_constraints,
                 &root_requirements,
                 &dependency_overrides,
                 root,
-                tags,
-                markers,
-                build_options,
-                hasher,
-                index,
-                database,
-            ))
-            .await?
-            {
+                &mut dynamic_constraints,
+            )? {
                 SatisfiesResult::Satisfied => {}
                 result => return Ok(result),
             }
@@ -4817,6 +4803,25 @@ impl Lock {
                 if seen.insert(dependency.index) || needs_extra_validation {
                     queue.push_back(dependency.index);
                 }
+            }
+        }
+
+        // Dependency validation must establish that the graph is current before inspecting
+        // dynamic versions: a removed local dependency may no longer exist on disk.
+        for (package, specifiers) in dynamic_constraints {
+            let metadata = Self::package_metadata(
+                package,
+                root,
+                tags,
+                markers,
+                build_options,
+                hasher,
+                index,
+                database,
+            )
+            .await?;
+            if !specifiers.contains(&metadata.version) {
+                return Ok(SatisfiesResult::UnvalidatedConstraint(&package.id.name));
             }
         }
 
@@ -5957,8 +5962,8 @@ pub enum SatisfiesResult<'lock> {
     MismatchedRequirements(BTreeSet<Requirement>, BTreeSet<Requirement>),
     /// The lockfile uses a different set of constraints.
     MismatchedConstraints(BTreeSet<Requirement>, BTreeSet<Requirement>),
-    /// A locked package does not satisfy a current constraint.
-    UnsatisfiedConstraint(&'lock PackageName),
+    /// A current constraint could not be established from the locked graph.
+    UnvalidatedConstraint(&'lock PackageName),
     /// The lockfile uses a different set of overrides.
     MismatchedOverrides(
         BTreeSet<Override<Requirement>>,

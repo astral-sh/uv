@@ -44066,7 +44066,7 @@ fn lock_resolution_inputs_version_constraints() -> Result<()> {
         r#"["b<3"]"#,
         "[]",
         r#"["absent<0"]"#,
-        r#"["b>=2 ; extra == 'inactive'"]"#,
+        r#"["b>=2 ; extra != 'inactive'"]"#,
     ] {
         pyproject.write_str(&initial.replace(r#"["b<2"]"#, constraints))?;
         insta::allow_duplicates! {
@@ -44078,6 +44078,16 @@ fn lock_resolution_inputs_version_constraints() -> Result<()> {
         }
         assert_eq!(context.read("uv.lock"), lock);
     }
+
+    // An incompatible extra-marked bound needs resolution to establish applicability: the lock
+    // may have flattened away recursive extras. Cached metadata makes this possible offline.
+    pyproject.write_str(&initial.replace("b<2", "b>=2 ; extra == 'inactive'"))?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), lock);
 
     // A new bound must still invalidate an incompatible transitive version.
     pyproject.write_str(&initial.replace("b<2", "b>=2"))?;
@@ -44157,6 +44167,81 @@ fn lock_resolution_inputs_extra_constraints() -> Result<()> {
 
     hint: To update the lockfile, run `uv lock`.
     ");
+    Ok(())
+}
+
+/// Recursive extras lose their original context when their dependency edges are flattened.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_resolution_inputs_recursive_extra_constraints() -> Result<()> {
+    let server = PackseServer::from_scenario(&toml::from_str::<Scenario>(indoc! {r#"
+        name = "resolution-inputs-recursive-extra-constraints"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.a.versions."1.0.0"]
+        sdist = false
+        [packages.a.versions."1.0.0".extras]
+        feature = ["a[sub]"]
+        sub = ["b"]
+        [packages.b.versions."1.0.0"]
+        sdist = false
+        [packages.b.versions."2.0.0"]
+        sdist = false
+    "#})?);
+    let context = uv_test::test_context!("3.12");
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    let initial = indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a[feature]"]
+        [tool.uv]
+        preview-features = ["resolution-inputs", "lock-without-metadata"]
+        constraint-dependencies = []
+    "#};
+    pyproject.write_str(initial)?;
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    let initial_lock = context.read("uv.lock");
+    let constrained = initial.replace(
+        "constraint-dependencies = []",
+        "constraint-dependencies = [\"b<2 ; extra == 'sub'\"]",
+    );
+    pyproject.write_str(&constrained)?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Updated b v2.0.0 -> v1.0.0
+    ");
+    // Satisfied bounds need no extra provenance and remain valid without cached metadata.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    // The outer extra's name does not establish the applicability of the flattened constraint.
+    context.temp_dir.child("uv.lock").write_str(&initial_lock)?;
+    pyproject.write_str(&constrained.replace("extra == 'sub'", "extra == 'feature'"))?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), initial_lock);
     Ok(())
 }
 
@@ -44790,6 +44875,17 @@ fn lock_resolution_inputs_dynamic_constraints() -> Result<()> {
     ----- stderr -----
     error: No solution found when resolving dependencies
       cause: Because only provider<2 is available and your project depends on provider>=2, we can conclude that your project's requirements are unsatisfiable.
+    ");
+    // Removing the dependency makes its remaining version constraint irrelevant, even if its
+    // former source is no longer available for dynamic metadata discovery.
+    pyproject
+        .write_str(&without_source.replace("dependencies = [\"provider\"]", "dependencies = []"))?;
+    fs_err::remove_dir_all(context.temp_dir.child("provider"))?;
+    uv_snapshot!(context.filters(), context.lock().arg("--offline").arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Removed provider (dynamic)
     ");
     Ok(())
 }
