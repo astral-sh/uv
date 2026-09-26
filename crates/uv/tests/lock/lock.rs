@@ -44061,7 +44061,13 @@ fn lock_resolution_inputs_version_constraints() -> Result<()> {
     });
 
     // Unchanged, weaker, removed, and unrelated constraints all admit the locked versions.
-    for constraints in [r#"["b<2"]"#, r#"["b<3"]"#, "[]", r#"["absent<0"]"#] {
+    for constraints in [
+        r#"["b<2"]"#,
+        r#"["b<3"]"#,
+        "[]",
+        r#"["absent<0"]"#,
+        r#"["b>=2 ; extra == 'inactive'"]"#,
+    ] {
         pyproject.write_str(&initial.replace(r#"["b<2"]"#, constraints))?;
         insta::allow_duplicates! {
             uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache").arg("--index-url").arg(server.index_url()), @"
@@ -44097,6 +44103,59 @@ fn lock_resolution_inputs_version_constraints() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// Extra predicates on constraints refer to the parent that requests the dependency.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_resolution_inputs_extra_constraints() -> Result<()> {
+    let server = PackseServer::from_scenario(&toml::from_str::<Scenario>(indoc! {r#"
+        name = "resolution-inputs-extra-constraints"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.a.versions."1.0.0"]
+        sdist = false
+        [packages.a.versions."1.0.0".extras]
+        feature = ["b"]
+        [packages.b.versions."1.0.0"]
+        sdist = false
+        [packages.b.versions."2.0.0"]
+        sdist = false
+    "#})?);
+    let context = uv_test::test_context!("3.12");
+    let initial = indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a[feature]"]
+        [tool.uv]
+        preview-features = ["resolution-inputs"]
+        constraint-dependencies = ["b<2 ; extra == 'feature'"]
+    "#};
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(initial)?;
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    pyproject.write_str(&initial.replace("b<2", "b>=2"))?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
     Ok(())
 }
@@ -44334,6 +44393,7 @@ fn lock_resolution_inputs_source_constraints() -> Result<()> {
             .files()
             .map(|(filename, hash)| (hash.to_owned(), format!("[SHA256:{filename}]"))),
     );
+    let source = server.file_url("b-1.0.0-py3-none-any.whl");
     let pyproject = context.temp_dir.child("pyproject.toml");
     let initial = formatdoc! {r#"
         [project]
@@ -44345,7 +44405,7 @@ fn lock_resolution_inputs_source_constraints() -> Result<()> {
         preview-features = ["resolution-inputs", "lock-without-metadata"]
         constraint-dependencies = ["b @ {url}"]
     "#,
-        url = server.file_url("b-1.0.0-py3-none-any.whl"),
+        url = source,
     };
     pyproject.write_str(&initial)?;
     uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
@@ -44396,10 +44456,25 @@ fn lock_resolution_inputs_source_constraints() -> Result<()> {
     Resolved 3 packages in [TIME]
     ");
 
+    let initial_lock = context.read("uv.lock");
+    // Narrowing a source constraint removes its authority on other platforms.
     pyproject.write_str(&initial.replace(
-        &format!("b @ {}", server.file_url("b-1.0.0-py3-none-any.whl")),
-        "b==1",
+        &format!("b @ {source}"),
+        &format!("b @ {source} ; sys_platform == 'linux'"),
     ))?;
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+    context.temp_dir.child("uv.lock").write_str(&initial_lock)?;
+
+    pyproject.write_str(&initial.replace(&format!("b @ {source}"), "b==1"))?;
     uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
     exit_code: 1 (failure)
     ----- stderr -----
@@ -44597,6 +44672,57 @@ fn lock_resolution_inputs_prerelease_constraints() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Updated b v0.9.0 -> v1.0.0a1
+    ");
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// Current local wheel metadata supplies pre-release opt-in even when omitted from the lock.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_resolution_inputs_local_prerelease() -> Result<()> {
+    let server = PackseServer::from_scenario(&toml::from_str::<Scenario>(indoc! {r#"
+        name = "resolution-inputs-local-prerelease"
+        [root]
+        [expected]
+        satisfiable = true
+        [packages.b.versions."1.0.0a1"]
+        sdist = false
+    "#})?);
+    let context = uv_test::test_context!("3.12");
+    let (filename, wheel) = generate_wheel_with_files(
+        &"provider".parse()?,
+        &"1.0.0".parse()?,
+        &["b==1.0.0a1".parse()?],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+        &[],
+    );
+    context.temp_dir.child(&filename).write_binary(&wheel)?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["provider"]
+        [tool.uv]
+        preview-features = ["resolution-inputs", "lock-without-metadata"]
+        prerelease = "explicit"
+        [tool.uv.sources]
+        provider = {{ path = "{filename}" }}
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
     ");
     uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache").arg("--index-url").arg(server.index_url()), @"
     exit_code: 0 (success)

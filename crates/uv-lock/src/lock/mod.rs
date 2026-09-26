@@ -434,16 +434,24 @@ enum DependencyContext<'a> {
 }
 
 impl DependencyContext<'_> {
-    /// Specialize a requirement to the dependency section that can activate it.
-    fn requirement_marker(self, marker: MarkerTree) -> MarkerTree {
-        let production_marker = marker.simplify_not_extras_with(|_| true);
+    /// Evaluate extra predicates in the requiring dependency section.
+    fn constraint_marker(self, marker: MarkerTree) -> MarkerTree {
         match self {
-            Self::Production | Self::Group(_) => production_marker,
+            Self::Production | Self::Group(_) => marker.simplify_not_extras_with(|_| true),
             Self::Extra(extra) => marker
                 .simplify_extras(slice::from_ref(extra))
-                .simplify_not_extras_with(|candidate| candidate != extra)
-                // Production requirements already belong to the base distribution.
-                .and(production_marker.negate()),
+                .simplify_not_extras_with(|candidate| candidate != extra),
+        }
+    }
+
+    /// Specialize a requirement to the dependency section that can activate it.
+    fn requirement_marker(self, marker: MarkerTree) -> MarkerTree {
+        match self {
+            Self::Production | Self::Group(_) => self.constraint_marker(marker),
+            // Production requirements already belong to the base distribution.
+            Self::Extra(_) => self
+                .constraint_marker(marker)
+                .and(Self::Production.constraint_marker(marker).negate()),
         }
     }
 
@@ -1576,6 +1584,7 @@ struct DependencySourceChanges<'lock> {
 #[derive(Default)]
 struct DependencySources<'lock> {
     requirements: Constraints,
+    prereleases: constraints::PrereleaseMarkers,
     package_markers: PackageMarkers<'lock>,
 }
 
@@ -4319,7 +4328,6 @@ impl Lock {
                 &root_requirements,
                 &dependency_overrides,
                 &dependency_sources,
-                &source_tree_metadata,
                 root,
                 tags,
                 markers,
@@ -4927,6 +4935,7 @@ impl Lock {
         root: &Path,
         source_requirements: &mut BTreeSet<Requirement>,
         pending_sources: &mut Vec<Requirement>,
+        prereleases: &mut constraints::PrereleaseMarkers,
     ) -> Result<(), LockError> {
         let Some(package_marker) = package_markers.get(&package.id) else {
             return Ok(());
@@ -4971,6 +4980,10 @@ impl Lock {
                 }
                 requirement_marker
             };
+
+            if !requirement_marker.is_false() {
+                prereleases.insert(&requirement, requirement_marker.without_extras());
+            }
 
             // Registry requirements do not select a reusable direct source.
             if requirement_marker.is_false()
@@ -5332,6 +5345,34 @@ impl Lock {
         database: &DistributionDatabase<'_, Context>,
         source_tree_metadata: &mut FxHashMap<PackageId, Option<SourceTreeRequiresDist>>,
     ) -> Result<DependencySources<'_>, LockError> {
+        let mut prereleases = constraints::PrereleaseMarkers::default();
+        // Candidate policy retains the exclusions consulted by the previous resolution.
+        let retained_excludes = Excludes::from_entries(self.manifest.excludes.iter().cloned());
+        for requirement in source_requirements
+            .iter()
+            .chain(root_requirements.iter().map(AsRef::as_ref))
+            .chain(dependency_overrides.global_requirements())
+            .filter(|requirement| !retained_excludes.contains(&requirement.name))
+        {
+            prereleases.insert(
+                requirement,
+                DependencyContext::Production.requirement_marker(requirement.marker),
+            );
+        }
+        for (package, version, requirement) in dependency_overrides.scoped_requirements() {
+            if !retained_excludes.contains_for_scope(
+                dependency_overrides,
+                package,
+                version,
+                &requirement.name,
+            ) {
+                prereleases.insert(
+                    requirement,
+                    DependencyContext::Production.requirement_marker(requirement.marker),
+                );
+            }
+        }
+
         // Global URL overrides authorize sources and replace competing URL constraints.
         // Scoped overrides cannot grant this privilege, and excluded packages stay inactive.
         let global_source_overrides = dependency_overrides
@@ -5679,6 +5720,7 @@ impl Lock {
                 root,
                 &mut source_requirements,
                 &mut pending_sources,
+                &mut prereleases,
             )?;
             for (group, requirements) in dependency_groups.into_iter().filter(|(group, _)| {
                 self.is_workspace_package(package) || package.dependency_groups.contains_key(group)
@@ -5694,12 +5736,14 @@ impl Lock {
                     root,
                     &mut source_requirements,
                     &mut pending_sources,
+                    &mut prereleases,
                 )?;
             }
             source_candidates.extend(pending_sources[pending_sources_start..].iter().cloned());
         }
 
         Ok(DependencySources {
+            prereleases,
             requirements: Constraints::from_requirements(source_requirements.into_iter()),
             package_markers: reachability.package_markers,
         })
