@@ -4,6 +4,7 @@ use thiserror::Error;
 #[cfg(test)]
 use uv_static::EnvVars;
 
+pub(crate) use crate::discovery::VariantRequest;
 #[cfg(all(test, unix))]
 use crate::discovery::find_python_installations;
 pub use crate::discovery::{
