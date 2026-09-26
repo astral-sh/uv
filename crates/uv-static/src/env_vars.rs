@@ -553,6 +553,16 @@ impl EnvVars {
     #[attr_added_in("0.8.14")]
     pub const UV_PYTHON_CPYTHON_BUILD: &'static str = "UV_PYTHON_CPYTHON_BUILD";
 
+    /// Pin an explicitly requested managed Python build variant to a specific build revision.
+    ///
+    /// This applies to provider-defined variants, such as `3.13+custom`, and optimization
+    /// variants, such as `3.13+pgo+lto`.
+    ///
+    /// Version requests without an explicit build variant, such as `3.13` or `3.13+freethreaded`,
+    /// use implementation-specific variables such as `UV_PYTHON_CPYTHON_BUILD`.
+    #[attr_added_in("next release")]
+    pub const UV_PYTHON_BUILD: &'static str = "UV_PYTHON_BUILD";
+
     /// Pin managed PyPy versions to a specific build version.
     ///
     /// For PyPy, this should be the PyPy version (e.g., "7.3.20").

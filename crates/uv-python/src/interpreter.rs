@@ -1592,7 +1592,9 @@ mod tests {
             formatdoc! {r#"
                 #!/bin/sh
                 printf '.' >> "{}"
-                cat "{}"
+                # Discovery tests may temporarily replace PATH, so use shell built-ins.
+                IFS= read -r response < "{}"
+                printf '%s' "$response"
             "#, query_count.display(), response_file.display()},
         )?;
         fs::set_permissions(

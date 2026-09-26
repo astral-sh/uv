@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::fmt;
 use std::hash::{Hash, Hasher};
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use indexmap::IndexMap;
@@ -40,17 +41,22 @@ pub struct PythonInstallation {
     pub(crate) source: PythonSource,
     pub(crate) interpreter: Interpreter,
     key: PythonInstallationKey,
+    managed_path: Option<PathBuf>,
 }
 
 impl PythonInstallation {
     /// Create a new [`PythonInstallation`] from a source and interpreter.
     pub fn new(source: PythonSource, interpreter: Interpreter) -> Self {
-        let key = ManagedPythonInstallation::key_from_interpreter(&interpreter)
-            .unwrap_or_else(|| interpreter.key());
+        let (managed_path, key) =
+            match ManagedPythonInstallation::path_and_key_from_interpreter(&interpreter) {
+                Some((path, key)) => (Some(path), key),
+                None => (None, interpreter.key()),
+            };
         Self {
             source,
             interpreter,
             key,
+            managed_path,
         }
     }
 
@@ -439,6 +445,11 @@ impl PythonInstallation {
 
     pub fn key(&self) -> &PythonInstallationKey {
         &self.key
+    }
+
+    /// Return the managed installation directory resolved alongside the installation key.
+    pub(crate) fn managed_path(&self) -> Option<&Path> {
+        self.managed_path.as_deref()
     }
 
     /// Return the Python [`Version`] of the Python installation as reported by its interpreter.
