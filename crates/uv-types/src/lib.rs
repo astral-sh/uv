@@ -4,6 +4,7 @@ pub use downloads::*;
 pub use hash::*;
 pub use requirements::*;
 pub use traits::*;
+pub use uv_git::GitLfs;
 
 mod builds;
 mod downloads;

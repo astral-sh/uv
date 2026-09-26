@@ -72,6 +72,7 @@ pub(crate) async fn venv(
     index_locations: &IndexLocations,
     index_strategy: IndexStrategy,
     dependency_metadata: DependencyMetadata,
+    git_lfs: uv_git::GitLfs,
     keyring_provider: KeyringProviderType,
     client_builder: &BaseClientBuilder<'_>,
     prompt: uv_virtualenv::Prompt,
@@ -341,6 +342,7 @@ pub(crate) async fn venv(
             workspace_cache.clone(),
             concurrency,
             preview,
+            git_lfs,
         );
 
         // Resolve the seed packages.

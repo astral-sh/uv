@@ -232,6 +232,7 @@ pub(crate) async fn tree(
                 torch_backend: _,
                 cuda_driver_version: _,
                 amd_gpu_architecture: _,
+                git_lfs: _,
             } = &settings;
 
             let capabilities = IndexCapabilities::default();

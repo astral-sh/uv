@@ -6,6 +6,7 @@ use url::Url;
 
 use uv_client::BaseClientBuilder;
 use uv_configuration::RequirementsInput;
+use uv_git::GitLfs;
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 
@@ -108,6 +109,7 @@ async fn constraint_specifications_preserve_hashes() -> Result<()> {
         &[],
         &[],
         None,
+        GitLfs::Disabled,
         &BaseClientBuilder::default(),
     )
     .await?;

@@ -332,6 +332,7 @@ impl SourceBuild {
             build_context.cache(),
             workspace_cache,
             credentials_cache,
+            build_context.git_lfs(),
         )
         .await
         .map_err(|err| *err)?;
@@ -669,6 +670,7 @@ impl SourceBuild {
         cache: &Cache,
         workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
+        git_lfs: uv_types::GitLfs,
     ) -> Result<(Pep517Backend, Option<Project>), Box<Error>> {
         let pyproject_toml = match fs::read_to_string(source_tree.join("pyproject.toml")) {
             Ok(toml) => {
@@ -781,6 +783,7 @@ impl SourceBuild {
                     cache,
                     workspace_cache,
                     credentials_cache,
+                    git_lfs,
                 )
                 .await
                 .map_err(Error::Lowering)?;
@@ -789,7 +792,7 @@ impl SourceBuild {
                 build_system
                     .requires
                     .into_iter()
-                    .map(Requirement::from)
+                    .map(|requirement| Requirement::from(requirement).with_git_lfs(git_lfs))
                     .collect()
             };
 
@@ -1205,7 +1208,10 @@ async fn get_pep517_build_requirements(
 
     // If necessary, lower the requirements.
     let extra_requires = if no_sources.all() {
-        extra_requires.into_iter().map(Requirement::from).collect()
+        extra_requires
+            .into_iter()
+            .map(|requirement| Requirement::from(requirement).with_git_lfs(build_context.git_lfs()))
+            .collect()
     } else {
         let build_requires = uv_pypi_types::BuildRequires {
             name: package_name.cloned(),
@@ -1223,6 +1229,7 @@ async fn get_pep517_build_requirements(
             build_context.cache(),
             workspace_cache,
             credentials_cache,
+            build_context.git_lfs(),
         )
         .await
         .map_err(Error::Lowering)?;

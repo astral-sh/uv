@@ -698,6 +698,7 @@ pub(crate) async fn do_sync<'a>(
         index_strategy,
         keyring_provider,
         dependency_metadata,
+        git_lfs,
         config_setting,
         config_settings_package,
         build_isolation,
@@ -725,6 +726,7 @@ pub(crate) async fn do_sync<'a>(
                 cache,
                 workspace_cache,
                 client_builder.credentials_cache(),
+                git_lfs,
             )
             .await?
         }
@@ -735,6 +737,7 @@ pub(crate) async fn do_sync<'a>(
                 config_setting: config_setting.clone(),
                 config_settings_package: config_settings_package.clone(),
                 dependency_metadata: dependency_metadata.clone(),
+                git_lfs,
                 exclude_newer: exclude_newer.clone(),
                 fork_strategy: ForkStrategy::default(),
                 index_locations: index_locations.clone(),
@@ -945,6 +948,7 @@ pub(crate) async fn do_sync<'a>(
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
+        git_lfs,
     );
 
     // Run a malware check against OSV before installing.

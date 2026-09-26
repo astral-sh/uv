@@ -6691,7 +6691,6 @@ dependencies = [
  "url",
  "uv-cache-key",
  "uv-redacted",
- "uv-static",
 ]
 
 [[package]]
