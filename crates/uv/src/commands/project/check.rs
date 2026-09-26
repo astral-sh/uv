@@ -721,10 +721,11 @@ pub(crate) async fn check(
     };
 
     // Forward the user's explicit Python request so ty can apply its own version selection rules.
+    // Build variants do not affect the language version obtained from an existing environment.
     let python_version = if let Some(python) = python {
         let request = PythonRequest::parse(&python);
         if let Some(venv) = venv.as_ref()
-            && request.satisfied(venv.interpreter(), cache)
+            && request.satisfied_by_interpreter(venv.interpreter(), cache)
         {
             Some(venv.interpreter().python_minor_version())
         } else {

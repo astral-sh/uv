@@ -1082,13 +1082,21 @@ async fn get_or_create_environment(
         let _lock = installed_tools.lock().await?;
 
         if let ToolRequirement::Package { requirement, .. } = &from {
-            let existing_environment = installed_tools
-                .get_environment(&requirement.name, cache)?
-                .filter(|environment| {
-                    python_request.as_ref().is_none_or(|python_request| {
-                        python_request.satisfied(environment.environment().interpreter(), cache)
-                    })
-                });
+            let mut existing_environment =
+                installed_tools.get_environment(&requirement.name, cache)?;
+            if let Some(environment) = &existing_environment
+                && let Some(python_request) = &python_request
+                && !python_request
+                    .satisfied_with_catalog(
+                        environment.environment().interpreter(),
+                        client_builder,
+                        cache,
+                        install_mirrors.python_downloads_json_url.as_deref(),
+                    )
+                    .await?
+            {
+                existing_environment = None;
+            }
 
             // Check if the installed packages meet the requirements.
             if let Some(environment) = existing_environment {

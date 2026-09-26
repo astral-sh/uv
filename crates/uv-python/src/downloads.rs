@@ -4,6 +4,7 @@ use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::str::FromStr;
+use std::sync::OnceLock;
 use std::task::{Context, Poll};
 use std::time::{Duration, Instant, SystemTimeError};
 use std::{env, io};
@@ -23,7 +24,7 @@ use tokio_util::either::Either;
 use tracing::{debug, instrument};
 use url::Url;
 
-use uv_cache::{Cache, CacheBucket};
+use uv_cache::{Cache, CacheBucket, CacheEntry, Freshness};
 use uv_cache_key::cache_digest;
 use uv_client::{
     BaseClient, BaseClientBuilder, CacheControl, CachedClient, CachedClientError, ClientBuildError,
@@ -45,7 +46,7 @@ use crate::PythonBuildVariant;
 use crate::implementation::{
     Error as ImplementationError, ImplementationName, LenientImplementationName,
 };
-use crate::installation::PythonInstallationKey;
+use crate::installation::{PythonInstallation, PythonInstallationKey};
 use crate::managed::ManagedPythonInstallation;
 use crate::python_version::{BuildVersionError, python_build_version_from_env};
 use crate::{Interpreter, PythonRequest, PythonVersion, VariantRequest, VersionRequest};
@@ -650,6 +651,22 @@ impl PythonDownloadRequest {
             || self.os.is_some_and(|os| os.is_emscripten())
     }
 
+    /// Check both the installation identity and the interpreter's reported properties.
+    pub(crate) fn satisfied_by_discovered_installation(
+        &self,
+        installation: &PythonInstallation,
+    ) -> bool {
+        if let Some(version) = self.version()
+            && !version.matches_installation_key(installation.key())
+        {
+            return false;
+        }
+        self.satisfied_by_interpreter(installation.interpreter())
+    }
+
+    /// Check the interpreter's reported properties, without resolving its managed identity.
+    ///
+    /// Use [`Self::satisfied_by_discovered_installation`] when the installation key is available.
     pub(crate) fn satisfied_by_interpreter(&self, interpreter: &Interpreter) -> bool {
         let executable = interpreter.sys_executable().display();
         if let Some(version) = self.version()
@@ -964,8 +981,10 @@ impl FromStr for PythonDownloadRequest {
 const BUILTIN_PYTHON_DOWNLOADS_JSON: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/download-metadata-minified.json"));
 
+static BUILTIN_PYTHON_DOWNLOADS: OnceLock<Vec<ManagedPythonDownload>> = OnceLock::new();
+
 pub struct ManagedPythonDownloadList {
-    downloads: Vec<ManagedPythonDownload>,
+    downloads: Cow<'static, [ManagedPythonDownload]>,
 }
 
 // Cached downloads use positional MessagePack records. Keep fields through `build` in order,
@@ -1149,6 +1168,84 @@ impl ManagedPythonDownloadList {
         cache: &Cache,
         python_downloads_json_url: Option<&str>,
     ) -> Result<Self, Error> {
+        Self::load(client_builder, cache, python_downloads_json_url, None).await
+    }
+
+    /// Use the cached catalog for an installed interpreter, loading it if no snapshot is available.
+    pub(crate) async fn cached_or_new(
+        client_builder: &BaseClientBuilder<'_>,
+        cache: &Cache,
+        python_downloads_json_url: Option<&str>,
+    ) -> Result<Self, Error> {
+        if let Some(download_list) =
+            Self::from_cache(client_builder, cache, python_downloads_json_url).await?
+        {
+            Ok(download_list)
+        } else {
+            Self::new(client_builder, cache, python_downloads_json_url).await
+        }
+    }
+
+    /// Load a cached remote catalog without contacting the server.
+    ///
+    /// HTTP expiration does not invalidate a catalog used to select an installed interpreter.
+    /// An explicit cache refresh bypasses this snapshot, except when offline.
+    pub(crate) async fn from_cache(
+        client_builder: &BaseClientBuilder<'_>,
+        cache: &Cache,
+        python_downloads_json_url: Option<&str>,
+    ) -> Result<Option<Self>, Error> {
+        let Some(url) = python_downloads_json_url
+            .and_then(|url| DisplaySafeUrl::parse(url).ok())
+            .filter(|url| matches!(url.scheme(), "http" | "https"))
+        else {
+            return Ok(None);
+        };
+        let cache_entry = downloads_json_cache_entry(cache, &url);
+        if client_builder.connectivity.is_online()
+            && cache.freshness(&cache_entry, None, None)? != Freshness::Fresh
+        {
+            return Ok(None);
+        }
+        let client = CachedClient::new(
+            client_builder
+                .clone()
+                .connectivity(Connectivity::Offline)
+                .build()
+                .map_err(|err| Error::ClientBuild(Box::new(err)))?,
+        );
+        match fetch_downloads_from_url(&client, cache, &url, None).await {
+            Ok(downloads) => Ok(Some(Self {
+                downloads: Cow::Owned(parse_json_downloads(downloads)),
+            })),
+            Err(error) => {
+                debug!("No usable cached Python catalog for {url}: {error}");
+                Ok(None)
+            }
+        }
+    }
+
+    /// Revalidate the remote catalog after cached metadata yields no installed candidate.
+    pub(crate) async fn refresh(
+        client_builder: &BaseClientBuilder<'_>,
+        cache: &Cache,
+        python_downloads_json_url: Option<&str>,
+    ) -> Result<Self, Error> {
+        Self::load(
+            client_builder,
+            cache,
+            python_downloads_json_url,
+            Some(CacheControl::MustRevalidate),
+        )
+        .await
+    }
+
+    async fn load(
+        client_builder: &BaseClientBuilder<'_>,
+        cache: &Cache,
+        python_downloads_json_url: Option<&str>,
+        cache_control: Option<CacheControl>,
+    ) -> Result<Self, Error> {
         // file:// URLs are converted to local file reads, and we also support parsing bare
         // filenames like "/tmp/py.json", not just "file:///tmp/py.json". Note that
         // "C:\Temp\py.json" should be considered a filename, even though Url::parse would
@@ -1176,10 +1273,7 @@ impl ManagedPythonDownloadList {
         };
 
         let json_downloads = match json_source {
-            Source::BuiltIn => parse_downloads_json(
-                BUILTIN_PYTHON_DOWNLOADS_JSON,
-                "EMBEDDED IN THE BINARY".to_owned(),
-            )?,
+            Source::BuiltIn => return Self::from_embedded(),
             Source::Path(ref path) => parse_downloads_json(
                 &fs_err::read(path.as_ref())?,
                 path.to_string_lossy().to_string(),
@@ -1190,7 +1284,7 @@ impl ManagedPythonDownloadList {
                         .build()
                         .map_err(|err| Error::ClientBuild(Box::new(err)))?,
                 );
-                let response = fetch_downloads_from_url(&client, cache, url).await;
+                let response = fetch_downloads_from_url(&client, cache, url, cache_control).await;
                 // If the server is unavailable, retain the cached catalog's selection policy.
                 // Invalid catalogs must still fail instead of silently using older metadata.
                 let response = match response {
@@ -1206,7 +1300,7 @@ impl ManagedPythonDownloadList {
                                 .build()
                                 .map_err(|err| Error::ClientBuild(Box::new(err)))?,
                         );
-                        fetch_downloads_from_url(&offline_client, cache, url)
+                        fetch_downloads_from_url(&offline_client, cache, url, None)
                             .await
                             .or(Err(error))
                     }
@@ -1221,18 +1315,31 @@ impl ManagedPythonDownloadList {
         };
 
         let downloads = parse_json_downloads(json_downloads);
-        Ok(Self { downloads })
+        Ok(Self {
+            downloads: Cow::Owned(downloads),
+        })
+    }
+
+    /// Reuse the immutable bundled catalog across interpreter discovery and environment checks.
+    fn from_embedded() -> Result<Self, Error> {
+        let downloads = if let Some(downloads) = BUILTIN_PYTHON_DOWNLOADS.get() {
+            downloads
+        } else {
+            let json_downloads = parse_downloads_json(
+                BUILTIN_PYTHON_DOWNLOADS_JSON,
+                "EMBEDDED IN THE BINARY".to_owned(),
+            )?;
+            BUILTIN_PYTHON_DOWNLOADS.get_or_init(|| parse_json_downloads(json_downloads))
+        };
+        Ok(Self {
+            downloads: Cow::Borrowed(downloads),
+        })
     }
 
     /// Load available Python distributions from the compiled-in list only.
     /// for testing purposes.
     pub fn new_only_embedded() -> Result<Self, Error> {
-        let json_downloads: HashMap<String, JsonPythonDownload> =
-            serde_json::from_slice(BUILTIN_PYTHON_DOWNLOADS_JSON).map_err(|e| {
-                Error::InvalidPythonDownloadsJSON("EMBEDDED IN THE BINARY".to_owned(), e)
-            })?;
-        let result = parse_json_downloads(json_downloads);
-        Ok(Self { downloads: result })
+        Self::from_embedded()
     }
 }
 
@@ -1262,18 +1369,27 @@ fn parse_downloads_json(
     }
 }
 
+fn downloads_json_cache_entry(cache: &Cache, url: &DisplaySafeUrl) -> CacheEntry {
+    cache.entry(
+        CacheBucket::Python,
+        "downloads-json",
+        format!("{}.msgpack", cache_digest(&url.as_str())),
+    )
+}
+
 async fn fetch_downloads_from_url(
     client: &CachedClient,
     cache: &Cache,
     url: &DisplaySafeUrl,
+    cache_control: Option<CacheControl>,
 ) -> Result<HashMap<String, JsonPythonDownload>, Error> {
-    let cache_entry = cache.entry(
-        CacheBucket::Python,
-        "downloads-json",
-        format!("{}.msgpack", cache_digest(&url.as_str())),
-    );
+    let cache_entry = downloads_json_cache_entry(cache, url);
     let cache_control = match client.uncached().connectivity() {
-        Connectivity::Online => CacheControl::from(cache.freshness(&cache_entry, None, None)?),
+        Connectivity::Online => cache_control.unwrap_or(CacheControl::from(cache.freshness(
+            &cache_entry,
+            None,
+            None,
+        )?)),
         Connectivity::Offline => CacheControl::AllowStale,
     };
 
@@ -2178,7 +2294,9 @@ mod tests {
 
         let request = PythonDownloadRequest::default()
             .with_version(VersionRequest::from_str("3.13").unwrap());
-        let downloads = ManagedPythonDownloadList { downloads };
+        let downloads = ManagedPythonDownloadList {
+            downloads: Cow::Owned(downloads),
+        };
         assert_eq!(
             downloads.find(&request).unwrap().key().build_variant(),
             Some(&LenientPythonBuildVariant::Known(
@@ -2199,7 +2317,7 @@ mod tests {
         freethreaded.variant = Some("freethreaded".to_string());
         for custom_default in [false, true] {
             let downloads = ManagedPythonDownloadList {
-                downloads: parse_json_downloads(HashMap::from([
+                downloads: Cow::Owned(parse_json_downloads(HashMap::from([
                     ("optimized".to_string(), entry("pgo+lto", !custom_default)),
                     ("unoptimized".to_string(), entry("noopt", false)),
                     (
@@ -2209,7 +2327,7 @@ mod tests {
                     ("other".to_string(), entry("other+pgo+lto", false)),
                     ("newer".to_string(), newer.clone()),
                     ("freethreaded".to_string(), freethreaded.clone()),
-                ])),
+                ]))),
             };
             let default = if custom_default {
                 "custom+pgo+lto"
