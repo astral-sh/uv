@@ -155,7 +155,7 @@ mod tests {
         - <a id="pylock" href="#pylock"><code>pylock</code></a>: Allows installing from `pylock.toml` files.
         - <a id="python-install-default" href="#python-install-default"><code>python-install-default</code></a>: Allows [installing `python` and `python3` executables](./python-versions.md#installing-python-executables).
         - <a id="relocatable-envs-default" href="#relocatable-envs-default"><code>relocatable-envs-default</code></a>: Creates relocatable virtual environments by default.
-        - <a id="resolution-inputs" href="#resolution-inputs"><code>resolution-inputs</code></a>: Records runtime configuration consultations and omits unused constraints, overrides, exclusions,
+        - <a id="resolution-inputs" href="#resolution-inputs"><code>resolution-inputs</code></a>: Omits runtime constraints and records configuration consultations to omit unused overrides, exclusions,
           dependency metadata, and package-specific upload cutoffs from the lockfile.
         - <a id="s3-endpoint" href="#s3-endpoint"><code>s3-endpoint</code></a>: Allows signing requests to configured S3-compatible endpoints.
         - <a id="sbom-export" href="#sbom-export"><code>sbom-export</code></a>: Allows using `uv export --format=cyclonedx1.5`.
