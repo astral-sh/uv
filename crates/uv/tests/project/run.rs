@@ -4690,19 +4690,102 @@ fn run_active_script_environment_non_virtualenv() -> Result<()> {
         .child("important.txt")
         .write_str("important data")?;
 
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--active")
+        .arg("--script")
+        .arg("main.py")
+        .env_remove(EnvVars::RUST_LOG)
+        .env(EnvVars::VIRTUAL_ENV, "foo"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Script virtual environment directory `[TEMP_DIR]/foo` cannot be used because it is not a virtual environment
+    ");
+
+    active_environment
+        .child("important.txt")
+        .assert("important data");
+
+    // Sync uses the same environment initialization and must also preserve the directory.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--active")
+        .arg("--script")
+        .arg("main.py")
+        .env_remove(EnvVars::RUST_LOG)
+        .env(EnvVars::VIRTUAL_ENV, "foo"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Script virtual environment directory `[TEMP_DIR]/foo` cannot be used because it is not a virtual environment
+    ");
+
+    active_environment
+        .child("important.txt")
+        .assert("important data");
+
+    // An empty active destination can be initialized without removing user data.
+    let empty_environment = context.temp_dir.child("empty");
+    empty_environment.create_dir_all()?;
     context
         .run()
         .arg("--active")
         .arg("--script")
         .arg("main.py")
-        .env(EnvVars::VIRTUAL_ENV, "foo")
+        .env(EnvVars::VIRTUAL_ENV, "empty")
         .assert()
         .success();
+    empty_environment
+        .child("pyvenv.cfg")
+        .assert(predicate::path::is_file());
 
-    active_environment.assert(predicate::path::is_dir());
-    // Silently deleting user data outside a virtual environment is undesirable.
-    active_environment
-        .child("important.txt")
+    Ok(())
+}
+
+#[test]
+fn run_script_environment_cache_repair() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("main.py").write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+
+        import sys
+
+        print(sys.prefix)
+        "#
+    })?;
+
+    let output = uv_snapshot!(context.filters(), context.run()
+        .arg("--script")
+        .arg("main.py")
+        .env_remove(EnvVars::RUST_LOG), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [CACHE_DIR]/environments-v2/main-[HASH]
+    ");
+
+    let environment = ChildPath::new(String::from_utf8(output.stdout)?.trim());
+    assert!(environment.path().starts_with(context.cache_dir.path()));
+    fs_err::remove_dir_all(&environment)?;
+    environment.create_dir_all()?;
+    environment
+        .child("stale.txt")
+        .write_str("stale cache data")?;
+
+    // A damaged derived cache entry belongs to uv and can still be replaced.
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--script")
+        .arg("main.py")
+        .env_remove(EnvVars::RUST_LOG), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [CACHE_DIR]/environments-v2/main-[HASH]
+    ");
+
+    environment
+        .child("pyvenv.cfg")
+        .assert(predicate::path::is_file());
+    environment
+        .child("stale.txt")
         .assert(predicate::path::missing());
 
     Ok(())
