@@ -9,7 +9,6 @@ use std::path::{Path, PathBuf};
 use std::slice;
 use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
-use uv_distribution_types::RequirementScope;
 
 use itertools::Itertools;
 use jiff::Timestamp;
@@ -24,6 +23,7 @@ use uv_cache_key::RepositoryUrl;
 use uv_configuration::{
     BuildOptions, Constraints, DependencyGroupsWithDefaults, ExcludeDependency, ExcludeNewer,
     ExcludeNewerPackage, Excludes, ExtrasSpecificationWithDefaults, ForkStrategy, InstallTarget,
+    NormalizedConstraints, NormalizedExcludes, NormalizedOverrideEntries, NormalizedRequirements,
     Override, Overrides, PackageOverride, Prerelease, PrereleaseMode, PrereleasePackage,
     ResolutionMode, ScopedOverrideSourceError,
 };
@@ -79,11 +79,14 @@ pub use crate::lock::installable::{Installable, InstallableRootKind};
 pub use crate::lock::map::PackageMap;
 pub use crate::lock::tree::{TreeDisplay, TreeJsonTarget};
 
+use self::requirements::{RequirementNormalizer, normalize_collection, normalize_requirement};
+
 mod deserialize;
 pub(crate) mod export;
 mod inputs;
 mod installable;
 mod map;
+mod requirements;
 mod serialize;
 mod tree;
 
@@ -3731,7 +3734,9 @@ impl Lock {
             })
             .collect::<Vec<_>>();
 
-        // Special-case: if the version is dynamic, compare the flattened requirements.
+        let normalizer = RequirementNormalizer::new(root, &self.requires_python);
+
+        // Dynamic metadata may contain flattened recursive extras.
         let flattened = if package.is_dynamic() || missing_metadata {
             let requirements = if missing_metadata {
                 Self::preprocess_requirements(
@@ -3747,30 +3752,13 @@ impl Lock {
                     .into_iter()
                     .collect()
             };
-            Some(
-                requirements
-                    .into_iter()
-                    .map(|requirement| {
-                        normalize_requirement(requirement, root, &self.requires_python)
-                    })
-                    .collect::<Result<BTreeSet<_>, _>>()?,
-            )
+            Some(normalizer.requirements(requirements)?)
         } else {
             None
         };
 
-        // Validate the `requires-dist` metadata.
-        let expected_requirements: BTreeSet<_> = Box::into_iter(requires_dist)
-            .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
-            .collect::<Result<_, _>>()?;
-        let actual: BTreeSet<_> = package
-            .metadata
-            .requires_dist
-            .iter()
-            .cloned()
-            .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
-            .collect::<Result<_, _>>()?;
-
+        let expected_requirements = normalizer.requirements(requires_dist)?;
+        let actual = normalizer.requirements(package.metadata.requires_dist.iter().cloned())?;
         if !missing_metadata
             && expected_requirements != actual
             && flattened
@@ -3780,55 +3768,49 @@ impl Lock {
             return Ok(SatisfiesResult::MismatchedPackageRequirements(
                 &package.id.name,
                 package.id.version.as_ref(),
-                expected_requirements,
-                actual,
+                expected_requirements.into_iter().collect(),
+                actual.into_iter().collect(),
             ));
         }
 
-        // Validate the `dependency-groups` metadata.
-        let expected_groups: BTreeMap<GroupName, BTreeSet<Requirement>> = dependency_groups
+        let expected_groups = dependency_groups
             .into_iter()
             .filter(|(_, requirements)| self.includes_empty_groups() || !requirements.is_empty())
-            .map(|(group, requirements)| {
-                Ok::<_, LockError>((
-                    group,
-                    Box::into_iter(requirements)
-                        .map(|requirement| {
-                            normalize_requirement(requirement, root, &self.requires_python)
-                        })
-                        .collect::<Result<_, _>>()?,
-                ))
-            })
-            .collect::<Result<_, _>>()?;
-        let actual: BTreeMap<GroupName, BTreeSet<Requirement>> = package
+            .map(|(group, requirements)| Ok((group, normalizer.requirements(requirements)?)))
+            .collect::<Result<BTreeMap<_, _>, LockError>>()?;
+        let actual = package
             .metadata
             .dependency_groups
             .iter()
             .filter(|(_, requirements)| self.includes_empty_groups() || !requirements.is_empty())
             .map(|(group, requirements)| {
-                Ok::<_, LockError>((
+                Ok((
                     group.clone(),
-                    requirements
-                        .iter()
-                        .cloned()
-                        .map(|requirement| {
-                            normalize_requirement(requirement, root, &self.requires_python)
-                        })
-                        .collect::<Result<_, _>>()?,
+                    normalizer.requirements(requirements.iter().cloned())?,
                 ))
             })
-            .collect::<Result<_, _>>()?;
-
+            .collect::<Result<BTreeMap<_, _>, LockError>>()?;
         if !missing_metadata && expected_groups != actual {
             return Ok(SatisfiesResult::MismatchedPackageDependencyGroups(
                 &package.id.name,
                 package.id.version.as_ref(),
-                expected_groups,
-                actual,
+                expected_groups
+                    .into_iter()
+                    .map(|(group, requirements)| (group, requirements.into_iter().collect()))
+                    .collect(),
+                actual
+                    .into_iter()
+                    .map(|(group, requirements)| (group, requirements.into_iter().collect()))
+                    .collect(),
             ));
         }
-
         if allow_missing_package_metadata {
+            let expected_requirements = expected_requirements.into_iter().collect();
+            let flattened = flattened.map(|requirements| requirements.into_iter().collect());
+            let expected_groups = expected_groups
+                .into_iter()
+                .map(|(group, requirements)| (group, requirements.into_iter().collect()))
+                .collect();
             let declarations = flattened.as_ref().unwrap_or(&expected_requirements);
             let package_activated_extras = activated_extras
                 .get(&package.id)
@@ -4082,98 +4064,72 @@ impl Lock {
             }
         }
 
-        // Validate that the lockfile was generated with the same requirements.
+        let normalizer = RequirementNormalizer::new(root, &self.requires_python);
+
+        // Validate that the lockfile was generated with equivalent requirements.
         {
-            let expected: BTreeSet<_> = requirements
-                .iter()
-                .cloned()
-                .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
-                .collect::<Result<_, _>>()?;
-            let actual: BTreeSet<_> = self
-                .manifest
-                .requirements
-                .iter()
-                .cloned()
-                .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
-                .collect::<Result<_, _>>()?;
+            let expected = normalizer.requirements(requirements.iter().cloned())?;
+            let actual = normalizer.requirements(self.manifest.requirements.iter().cloned())?;
             if expected != actual {
-                return Ok(SatisfiesResult::MismatchedRequirements(expected, actual));
+                return Ok(SatisfiesResult::MismatchedRequirements(
+                    expected.into_iter().collect(),
+                    actual.into_iter().collect(),
+                ));
             }
         }
 
         let filter = ManifestFilter::from_lock(self);
 
-        // Validate that the lockfile was generated with the same constraints.
         let normalized_constraints = {
-            let expected: BTreeSet<_> = constraints
-                .iter()
-                .filter(|entry| filter.includes_constraint(entry))
-                .cloned()
-                .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
-                .collect::<Result<_, _>>()?;
-            let actual: BTreeSet<_> = self
-                .manifest
-                .constraints
-                .iter()
-                .cloned()
-                .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
-                .collect::<Result<_, _>>()?;
+            let expected = normalizer.constraints(
+                constraints
+                    .iter()
+                    .filter(|entry| filter.includes_constraint(entry))
+                    .cloned(),
+            )?;
+            let actual = normalizer.constraints(self.manifest.constraints.iter().cloned())?;
             if expected != actual {
-                return Ok(SatisfiesResult::MismatchedConstraints(expected, actual));
+                return Ok(SatisfiesResult::MismatchedConstraints(
+                    expected.into_iter().collect(),
+                    actual.into_iter().collect(),
+                ));
             }
-            expected
+            expected.into_iter().collect()
         };
 
-        // Validate that the lockfile was generated with the same overrides.
         let normalized_overrides = {
-            let normalize = |entry: Override<Requirement>| -> Result<_, LockError> {
-                match entry {
-                    Override::Requirement(requirement) => Ok(Override::Requirement(
-                        normalize_requirement(requirement, root, &self.requires_python)?,
-                    )),
-                    Override::Package(package) => Ok(Override::Package(PackageOverride {
-                        package: package.package,
-                        dependencies: package
-                            .dependencies
-                            .into_vec()
-                            .into_iter()
-                            .map(|requirement| {
-                                normalize_requirement(requirement, root, &self.requires_python)
-                            })
-                            .collect::<Result<Vec<_>, _>>()?
-                            .into_boxed_slice(),
-                    })),
-                }
-            };
-            let expected: BTreeSet<_> = overrides
-                .iter()
-                .filter(|entry| filter.includes_override(entry))
-                .cloned()
-                .map(normalize)
-                .collect::<Result<_, _>>()?;
-            let actual: BTreeSet<_> = self
-                .manifest
-                .overrides
-                .iter()
-                .cloned()
-                .map(normalize)
-                .collect::<Result<_, _>>()?;
+            let expected = normalizer.overrides(
+                overrides
+                    .iter()
+                    .filter(|entry| filter.includes_override(entry))
+                    .cloned(),
+            )?;
+            let actual = normalizer.overrides(self.manifest.overrides.iter().cloned())?;
             if expected != actual {
-                return Ok(SatisfiesResult::MismatchedOverrides(expected, actual));
+                return Ok(SatisfiesResult::MismatchedOverrides(
+                    expected.into_iter().collect(),
+                    actual.into_iter().collect(),
+                ));
             }
-            expected
+            expected.into_inner()
         };
 
-        // Validate that the lockfile was generated with the same excludes.
         {
-            let expected = excludes
-                .iter()
-                .filter(|entry| filter.includes_exclusion(entry))
-                .cloned()
-                .collect();
-            let actual: BTreeSet<_> = self.manifest.excludes.iter().cloned().collect();
+            let expected = NormalizedExcludes::from(
+                excludes
+                    .iter()
+                    .filter(|entry| filter.includes_exclusion(entry))
+                    .cloned()
+                    .collect::<Vec<_>>(),
+            );
+            let actual = NormalizedExcludes::from(
+                self.manifest.excludes.iter().cloned().collect::<Vec<_>>(),
+            );
             if expected != actual {
-                return Ok(SatisfiesResult::MismatchedExcludes(expected, actual));
+                return Ok(SatisfiesResult::MismatchedExcludes(
+                    expected.into_iter().collect(),
+                    actual.into_iter().collect(),
+                ));
             }
         }
 
@@ -4210,45 +4166,39 @@ impl Lock {
             }
         }
 
-        // Validate that the lockfile was generated with the dependency groups.
         {
-            let expected: BTreeMap<GroupName, BTreeSet<Requirement>> = dependency_groups
+            let expected = dependency_groups
                 .iter()
                 .filter(|(_, requirements)| !requirements.is_empty())
                 .map(|(group, requirements)| {
-                    Ok::<_, LockError>((
+                    Ok((
                         group.clone(),
-                        requirements
-                            .iter()
-                            .cloned()
-                            .map(|requirement| {
-                                normalize_requirement(requirement, root, &self.requires_python)
-                            })
-                            .collect::<Result<_, _>>()?,
+                        normalizer.requirements(requirements.iter().cloned())?,
                     ))
                 })
-                .collect::<Result<_, _>>()?;
-            let actual: BTreeMap<GroupName, BTreeSet<Requirement>> = self
+                .collect::<Result<BTreeMap<_, _>, LockError>>()?;
+            let actual = self
                 .manifest
                 .dependency_groups
                 .iter()
                 .filter(|(_, requirements)| !requirements.is_empty())
                 .map(|(group, requirements)| {
-                    Ok::<_, LockError>((
+                    Ok((
                         group.clone(),
-                        requirements
-                            .iter()
-                            .cloned()
-                            .map(|requirement| {
-                                normalize_requirement(requirement, root, &self.requires_python)
-                            })
-                            .collect::<Result<_, _>>()?,
+                        normalizer.requirements(requirements.iter().cloned())?,
                     ))
                 })
-                .collect::<Result<_, _>>()?;
+                .collect::<Result<BTreeMap<_, _>, LockError>>()?;
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedDependencyGroups(
-                    expected, actual,
+                    expected
+                        .into_iter()
+                        .map(|(group, requirements)| (group, requirements.into_iter().collect()))
+                        .collect(),
+                    actual
+                        .into_iter()
+                        .map(|(group, requirements)| (group, requirements.into_iter().collect()))
+                        .collect(),
                 ));
             }
         }
@@ -4267,7 +4217,7 @@ impl Lock {
         }
 
         let dependency_overrides = if allow_missing_package_metadata {
-            Overrides::from_entries(normalized_overrides.into_iter().collect())
+            Overrides::from_entries(normalized_overrides)
                 .map_err(LockErrorKind::InvalidScopedOverride)?
         } else {
             Overrides::default()
@@ -6120,16 +6070,25 @@ impl ResolverManifest {
         dependency_groups: impl IntoIterator<Item = (GroupName, Vec<Requirement>)>,
         dependency_metadata: impl IntoIterator<Item = StaticMetadata>,
     ) -> Self {
+        let normalize = uv_preview::is_enabled(PreviewFeature::LockfileNormalization);
         Self {
             members: members.into_iter().collect(),
-            requirements: requirements.into_iter().collect(),
-            constraints: constraints.into_iter().collect(),
-            overrides: overrides.into_iter().collect(),
-            excludes: excludes.into_iter().collect(),
+            requirements: normalize_collection::<_, NormalizedRequirements>(
+                requirements,
+                normalize,
+            ),
+            constraints: normalize_collection::<_, NormalizedConstraints>(constraints, normalize),
+            overrides: normalize_collection::<_, NormalizedOverrideEntries>(overrides, normalize),
+            excludes: normalize_collection::<_, NormalizedExcludes>(excludes, normalize),
             build_constraints: build_constraints.into_iter().collect(),
             dependency_groups: dependency_groups
                 .into_iter()
-                .map(|(group, requirements)| (group, requirements.into_iter().collect()))
+                .map(|(group, requirements)| {
+                    (
+                        group,
+                        normalize_collection::<_, NormalizedRequirements>(requirements, normalize),
+                    )
+                })
                 .collect(),
             dependency_metadata: dependency_metadata.into_iter().collect(),
         }
@@ -7146,12 +7105,16 @@ struct PackageMetadata {
 
 impl PackageMetadata {
     fn from_distribution(metadata: &DistributionMetadata, root: &Path) -> Result<Self, LockError> {
+        let normalize = uv_preview::is_enabled(PreviewFeature::LockfileNormalization);
         let requires_dist = metadata
             .requires_dist
             .iter()
             .cloned()
             .map(|requirement| requirement.relative_to(root))
-            .collect::<Result<_, _>>()
+            .collect::<Result<Vec<_>, _>>()
+            .map(|requirements| {
+                normalize_collection::<_, NormalizedRequirements>(requirements, normalize)
+            })
             .map_err(LockErrorKind::RequirementRelativePath)?;
         let dependency_groups = metadata
             .dependency_groups
@@ -7161,7 +7124,10 @@ impl PackageMetadata {
                     .iter()
                     .cloned()
                     .map(|requirement| requirement.relative_to(root))
-                    .collect::<Result<_, _>>()
+                    .collect::<Result<Vec<_>, _>>()
+                    .map(|requirements| {
+                        normalize_collection::<_, NormalizedRequirements>(requirements, normalize)
+                    })
                     .map_err(LockErrorKind::RequirementRelativePath)?;
                 Ok::<_, LockError>((group.clone(), requirements))
             })
@@ -9082,231 +9048,6 @@ fn normalize_file_location(location: &FileLocation) -> Result<UrlString, ToUrlEr
 fn normalize_url(mut url: DisplaySafeUrl) -> UrlString {
     url.set_fragment(None);
     UrlString::from(url)
-}
-
-/// Normalize a [`Requirement`], which could come from a lockfile, a `pyproject.toml`, etc.
-///
-/// Performs the following steps:
-///
-/// 1. Removes any sensitive credentials.
-/// 2. Ensures that the lock and install paths are appropriately framed with respect to the
-///    current [`Workspace`].
-/// 3. Removes the `origin` field, which is only used in `requirements.txt`.
-/// 4. Simplifies the markers using the provided [`RequiresPython`] instance.
-fn normalize_requirement(
-    mut requirement: Requirement,
-    root: &Path,
-    requires_python: &RequiresPython,
-) -> Result<Requirement, LockError> {
-    // Sort the extras and groups for consistency.
-    requirement.extras.sort();
-    requirement.groups.sort();
-
-    // Normalize the requirement source.
-    match requirement.source {
-        RequirementSource::GitDirectory {
-            git,
-            subdirectory,
-            url: _,
-        } => {
-            // Reconstruct the Git URL.
-            let git = {
-                let mut repository = git.url().clone();
-
-                // Remove the credentials.
-                repository.remove_credentials();
-
-                // Remove the fragment and query from the URL; they're already present in the source.
-                repository.set_fragment(None);
-                repository.set_query(None);
-
-                GitUrl::from_fields(
-                    repository,
-                    git.reference().clone(),
-                    git.precise(),
-                    git.lfs(),
-                )?
-            };
-
-            // Reconstruct the PEP 508 URL from the underlying data.
-            let url = DisplaySafeUrl::from(ParsedGitDirectoryUrl {
-                url: git.clone(),
-                subdirectory: subdirectory.clone(),
-            });
-
-            Ok(Requirement {
-                name: requirement.name,
-                extras: requirement.extras,
-                groups: requirement.groups,
-                marker: requires_python.simplify_markers(requirement.marker),
-                source: RequirementSource::GitDirectory {
-                    git,
-                    subdirectory,
-                    url: VerbatimUrl::from_url(url),
-                },
-                scope: RequirementScope::Global,
-                origin: None,
-            })
-        }
-        RequirementSource::GitPath {
-            git,
-            install_path,
-            ext,
-            url: _,
-        } => {
-            // Reconstruct the Git URL.
-            let git = {
-                let mut repository = git.url().clone();
-
-                // Remove the credentials.
-                repository.remove_credentials();
-
-                // Remove the fragment and query from the URL; they're already present in the source.
-                repository.set_fragment(None);
-                repository.set_query(None);
-
-                GitUrl::from_fields(
-                    repository,
-                    git.reference().clone(),
-                    git.precise(),
-                    git.lfs(),
-                )?
-            };
-
-            // Reconstruct the PEP 508 URL from the underlying data.
-            let url = DisplaySafeUrl::from(ParsedGitPathUrl {
-                url: git.clone(),
-                install_path: install_path.clone(),
-                ext,
-            });
-
-            Ok(Requirement {
-                name: requirement.name,
-                extras: requirement.extras,
-                groups: requirement.groups,
-                marker: requires_python.simplify_markers(requirement.marker),
-                source: RequirementSource::GitPath {
-                    git,
-                    install_path,
-                    ext,
-                    url: VerbatimUrl::from_url(url),
-                },
-                scope: RequirementScope::Global,
-                origin: None,
-            })
-        }
-        RequirementSource::Path {
-            install_path,
-            ext,
-            url: _,
-        } => {
-            let path = root.join(&install_path);
-            let install_path = normalize_path(path).into_owned().into_boxed_path();
-            let url = VerbatimUrl::from_normalized_path(&install_path)
-                .map_err(LockErrorKind::RequirementVerbatimUrl)?;
-
-            Ok(Requirement {
-                name: requirement.name,
-                extras: requirement.extras,
-                groups: requirement.groups,
-                marker: requires_python.simplify_markers(requirement.marker),
-                source: RequirementSource::Path {
-                    install_path,
-                    ext,
-                    url,
-                },
-                scope: RequirementScope::Global,
-                origin: None,
-            })
-        }
-        RequirementSource::Directory {
-            install_path,
-            editable,
-            r#virtual,
-            url: _,
-        } => {
-            let path = root.join(&install_path);
-            let install_path = normalize_path(path).into_owned().into_boxed_path();
-            let url = VerbatimUrl::from_normalized_path(&install_path)
-                .map_err(LockErrorKind::RequirementVerbatimUrl)?;
-
-            Ok(Requirement {
-                name: requirement.name,
-                extras: requirement.extras,
-                groups: requirement.groups,
-                marker: requires_python.simplify_markers(requirement.marker),
-                source: RequirementSource::Directory {
-                    install_path,
-                    editable: Some(editable.unwrap_or(false)),
-                    r#virtual: Some(r#virtual.unwrap_or(false)),
-                    url,
-                },
-                scope: RequirementScope::Global,
-                origin: None,
-            })
-        }
-        RequirementSource::Registry {
-            specifier,
-            index,
-            conflict,
-        } => {
-            // Round-trip the index to remove anything apart from the URL.
-            let index = index
-                .map(|index| index.url.into_url())
-                .map(|mut index| {
-                    index.remove_credentials();
-                    index
-                })
-                .map(|index| IndexMetadata::from(IndexUrl::from(VerbatimUrl::from_url(index))));
-            Ok(Requirement {
-                name: requirement.name,
-                extras: requirement.extras,
-                groups: requirement.groups,
-                marker: requires_python.simplify_markers(requirement.marker),
-                source: RequirementSource::Registry {
-                    specifier,
-                    index,
-                    conflict,
-                },
-                scope: RequirementScope::Global,
-                origin: None,
-            })
-        }
-        RequirementSource::Url {
-            mut location,
-            subdirectory,
-            ext,
-            url: _,
-        } => {
-            // Remove the credentials.
-            location.remove_credentials();
-
-            // Remove the fragment from the URL; it's already present in the source.
-            location.set_fragment(None);
-
-            // Reconstruct the PEP 508 URL from the underlying data.
-            let url = DisplaySafeUrl::from(ParsedArchiveUrl {
-                url: location.clone(),
-                subdirectory: subdirectory.clone(),
-                ext,
-            });
-
-            Ok(Requirement {
-                name: requirement.name,
-                extras: requirement.extras,
-                groups: requirement.groups,
-                marker: requires_python.simplify_markers(requirement.marker),
-                source: RequirementSource::Url {
-                    location,
-                    subdirectory,
-                    ext,
-                    url: VerbatimUrl::from_url(url),
-                },
-                scope: RequirementScope::Global,
-                origin: None,
-            })
-        }
-    }
 }
 
 #[derive(Debug)]
