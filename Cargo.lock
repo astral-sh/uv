@@ -7214,6 +7214,7 @@ dependencies = [
  "uv-distribution-filename",
  "uv-distribution-types",
  "uv-fs",
+ "uv-lock",
  "uv-normalize",
  "uv-pep508",
  "uv-pypi-types",

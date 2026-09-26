@@ -30,6 +30,7 @@ use wiremock::{
 use uv_extract::dirhash::{DirectoryDigest, dirhash_path};
 use uv_fs::{PortablePath, Simplified};
 use uv_install_wheel::validate_and_heal_record;
+use uv_lock::Lock;
 use uv_static::EnvVars;
 use uv_test::archive::write_tar_gz;
 #[cfg(feature = "test-git")]
@@ -268,6 +269,381 @@ fn empty_requirements_txt() -> Result<()> {
     Checked in [TIME]
     "
     );
+
+    Ok(())
+}
+
+#[test]
+fn uv_lock_requirements_script() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("action.py").write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+        print("ok")
+    "#})?;
+    context
+        .lock()
+        .args(["--script", "action.py", "--offline"])
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+    let lock_path = context.temp_dir.child("action.py.lock");
+    let lock_content = fs::read_to_string(&lock_path)?;
+    assert_snapshot!(&lock_content, @r#"
+    version = 1
+    revision = 3
+    requires-python = ">=3.12"
+    "#);
+    Lock::from_toml(&lock_content)?;
+    uv_snapshot!(context.filters(), context.pip_install().args(["--offline", "-r", "action.py.lock"]), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: The input `action.py.lock` appears to be a uv lockfile, but `requirements.txt` format is expected. For a script, use `uv export --script <script> --format requirements-txt -o requirements.txt`. For a project, run `uv export --format requirements-txt -o requirements.txt` in the project directory.
+    "#);
+    context
+        .temp_dir
+        .child("renamed lock.txt")
+        .write_str(&lock_content)?;
+    uv_snapshot!(context.filters(), context.pip_install().args(["--offline", "-r", "renamed lock.txt"]), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: The input `renamed lock.txt` appears to be a uv lockfile, but `requirements.txt` format is expected. For a script, use `uv export --script <script> --format requirements-txt -o requirements.txt`. For a project, run `uv export --format requirements-txt -o requirements.txt` in the project directory.
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn uv_lock_requirements_extensionless() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("action.py").write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+        print("ok")
+    "#})?;
+    context
+        .lock()
+        .args(["--script", "action.py", "--offline"])
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+    let lock_path = context.temp_dir.child("action.py.lock");
+    let lock_content = fs::read_to_string(&lock_path)?;
+    assert_snapshot!(&lock_content, @r#"
+    version = 1
+    revision = 3
+    requires-python = ">=3.12"
+    "#);
+    Lock::from_toml(&lock_content)?;
+    let normalized = lock_content.replace("\r\n", "\n");
+    let header = "version = 1\nrevision = 3\nrequires-python = \">=3.12\"\n";
+    let tail = normalized
+        .strip_prefix(header)
+        .context("generated lock must begin with the expected root header")?;
+    let reordered =
+        format!("# uv lock input\nrequires-python = \">=3.12\"\nrevision = 3\nversion = 1\n{tail}")
+            .replace('\n', "\r\n");
+    Lock::from_toml(&reordered)?;
+    context.temp_dir.child("input").write_str(&reordered)?;
+    uv_snapshot!(context.filters(), context.pip_install().args(["--offline", "-r", "input"]), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: The input `input` appears to be a uv lockfile, but `requirements.txt` format is expected. For a script, use `uv export --script <script> --format requirements-txt -o requirements.txt`. For a project, run `uv export --format requirements-txt -o requirements.txt` in the project directory.
+    "#);
+
+    Ok(())
+}
+
+#[test]
+#[expect(clippy::disallowed_types)]
+fn uv_lock_requirements_stdin() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("action.py").write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+        print("ok")
+    "#})?;
+    context
+        .lock()
+        .args(["--script", "action.py", "--offline"])
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+    let lock_path = context.temp_dir.child("action.py.lock");
+    let lock_content = fs::read_to_string(&lock_path)?;
+    assert_snapshot!(&lock_content, @r#"
+    version = 1
+    revision = 3
+    requires-python = ">=3.12"
+    "#);
+    Lock::from_toml(&lock_content)?;
+    let wheel = context.temp_dir.join("large_wheel-1.0.0-py3-none-any.whl");
+    write_many_files_wheel(&wheel, 1)?;
+    context
+        .pip_install()
+        .arg(&wheel)
+        .arg("--offline")
+        .assert()
+        .success();
+    let ordinary = "large-wheel==1.0.0\n";
+    let ordinary_path = context.temp_dir.child("ordinary.txt");
+    ordinary_path.write_str(ordinary)?;
+    uv_snapshot!(context.filters(), context.pip_install().args(["--offline", "-r", "-"]).stdin(std::fs::File::open(&ordinary_path)?), @r#"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checked 1 package in [TIME]
+    "#);
+    let invalid_path = context.temp_dir.child("invalid.txt");
+    invalid_path.write_str("requests=>2\n")?;
+    uv_snapshot!(context.filters(), context.pip_install().args(["--offline", "-r", "-"]).stdin(std::fs::File::open(&invalid_path)?), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Couldn't parse requirement in `-` at position 0
+      cause: no such comparison operator "=>", must be one of ~= == != <= >= < > ===
+             requests=>2
+                     ^^^
+    "#);
+    uv_snapshot!(context.filters(), context.pip_install().args(["--offline", "-r", "-"]).stdin(std::fs::File::open(&lock_path)?), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: The input stdin (`-`) appears to be a uv lockfile, but `requirements.txt` format is expected. For a script, use `uv export --script <script> --format requirements-txt -o requirements.txt`. For a project, run `uv export --format requirements-txt -o requirements.txt` in the project directory.
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn uv_lock_requirements_project() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "lockfile-repro"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+    context
+        .lock()
+        .arg("--offline")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+    Lock::from_toml(&fs::read_to_string(context.temp_dir.child("uv.lock"))?)?;
+    uv_snapshot!(context.filters(), context.pip_install().args(["--offline", "-r", "uv.lock"]), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: The input `uv.lock` appears to be a uv lockfile, but `requirements.txt` format is expected. For a script, use `uv export --script <script> --format requirements-txt -o requirements.txt`. For a project, run `uv export --format requirements-txt -o requirements.txt` in the project directory.
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn uv_lock_requirements_auxiliary() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("action.py").write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+        print("ok")
+    "#})?;
+    context
+        .lock()
+        .args(["--script", "action.py", "--offline"])
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+    let lock_path = context.temp_dir.child("action.py.lock");
+    let lock_content = fs::read_to_string(&lock_path)?;
+    assert_snapshot!(&lock_content, @r#"
+    version = 1
+    revision = 3
+    requires-python = ">=3.12"
+    "#);
+    Lock::from_toml(&lock_content)?;
+    let wheel = context.temp_dir.join("large_wheel-1.0.0-py3-none-any.whl");
+    write_many_files_wheel(&wheel, 1)?;
+    context
+        .pip_install()
+        .arg(&wheel)
+        .arg("--offline")
+        .assert()
+        .success();
+    context
+        .temp_dir
+        .child("invalid.txt")
+        .write_str("requests=>2\n")?;
+    allow_duplicates! {
+        for flag in ["-c", "--override"] {
+            uv_snapshot!(context.filters(), context.pip_install().args(["--offline", "large-wheel==1.0.0", flag, "invalid.txt"]), @r#"
+            exit_code: 2 (failure)
+            ----- stderr -----
+            error: Couldn't parse requirement in `invalid.txt` at position 0
+              cause: no such comparison operator "=>", must be one of ~= == != <= >= < > ===
+                     requests=>2
+                             ^^^
+            "#);
+        }
+    }
+    allow_duplicates! {
+        for flag in ["-c", "--override", "--exclude", "--build-constraint"] {
+            uv_snapshot!(context.filters(), context.pip_install().args(["--offline", "large-wheel==1.0.0", flag, "action.py.lock"]), @r#"
+            exit_code: 2 (failure)
+            ----- stderr -----
+            error: The input `action.py.lock` appears to be a uv lockfile, but `requirements.txt` format is expected. For a script, use `uv export --script <script> --format requirements-txt -o requirements.txt`. For a project, run `uv export --format requirements-txt -o requirements.txt` in the project directory.
+            "#);
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
+fn uv_lock_requirements_fallback() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("action.py").write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+        print("ok")
+    "#})?;
+    context
+        .lock()
+        .args(["--script", "action.py", "--offline"])
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+    let lock_path = context.temp_dir.child("action.py.lock");
+    let lock_content = fs::read_to_string(&lock_path)?;
+    assert_snapshot!(&lock_content, @r#"
+    version = 1
+    revision = 3
+    requires-python = ">=3.12"
+    "#);
+    Lock::from_toml(&lock_content)?;
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str("-r action.py.lock\n")?;
+    uv_snapshot!(context.filters(), context.pip_install().args(["--offline", "-r", "requirements.txt"]), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Error parsing included file in `requirements.txt` at position 0
+      cause: Couldn't parse requirement in `action.py.lock` at position 0
+      cause: no such comparison operator "=", must be one of ~= == != <= >= < > ===
+             version = 1
+                     ^^^
+    "#);
+    context
+        .temp_dir
+        .child("damaged.lock")
+        .write_str(&format!("{lock_content}\nbroken = [\n"))?;
+    uv_snapshot!(context.filters(), context.pip_install().args(["--offline", "-r", "damaged.lock"]), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Couldn't parse requirement in `damaged.lock` at position 0
+      cause: no such comparison operator "=", must be one of ~= == != <= >= < > ===
+             version = 1
+                     ^^^
+    "#);
+    context
+        .temp_dir
+        .child("future.lock")
+        .write_str(&lock_content.replacen("version = 1", "version = 999", 1))?;
+    uv_snapshot!(context.filters(), context.pip_install().args(["--offline", "-r", "future.lock"]), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Couldn't parse requirement in `future.lock` at position 0
+      cause: no such comparison operator "=", must be one of ~= == != <= >= < > ===
+             version = 999
+                     ^^^^^
+    "#);
+    context
+        .temp_dir
+        .child("version-only.lock")
+        .write_str("version = 1\n")?;
+    uv_snapshot!(context.filters(), context.pip_install().args(["--offline", "-r", "version-only.lock"]), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Couldn't parse requirement in `version-only.lock` at position 0
+      cause: no such comparison operator "=", must be one of ~= == != <= >= < > ===
+             version = 1
+                     ^^^
+    "#);
+    context
+        .temp_dir
+        .child("foreign.lock")
+        .write_str("version = 1\n[[package]]\nname = \"foreign\"\n")?;
+    uv_snapshot!(context.filters(), context.pip_install().args(["--offline", "-r", "foreign.lock"]), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Couldn't parse requirement in `foreign.lock` at position 0
+      cause: no such comparison operator "=", must be one of ~= == != <= >= < > ===
+             version = 1
+                     ^^^
+    "#);
+    context
+        .temp_dir
+        .child("invalid.txt")
+        .write_str("requests=>2\n")?;
+    uv_snapshot!(context.filters(), context.pip_install().args(["--offline", "-r", "invalid.txt"]), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Couldn't parse requirement in `invalid.txt` at position 0
+      cause: no such comparison operator "=>", must be one of ~= == != <= >= < > ===
+             requests=>2
+                     ^^^
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn uv_lock_requirements_valid_names() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheel = context.temp_dir.join("large_wheel-1.0.0-py3-none-any.whl");
+    write_many_files_wheel(&wheel, 1)?;
+    context
+        .pip_install()
+        .arg(&wheel)
+        .arg("--offline")
+        .assert()
+        .success();
+    let ordinary = "large-wheel==1.0.0\n";
+    allow_duplicates! {
+        for filename in ["requirements.txt", "uv.lock", "action.py.lock"] {
+            context.temp_dir.child(filename).write_str(ordinary)?;
+            uv_snapshot!(context.filters(), context.pip_install().args(["--offline", "-r", filename]), @r#"
+            exit_code: 0 (success)
+            ----- stderr -----
+            Checked 1 package in [TIME]
+            "#);
+        }
+        Ok::<(), anyhow::Error>(())
+    }?;
+    allow_duplicates! {
+        for content in ["", "# No dependencies\n"] {
+            context.temp_dir.child("empty.lock").write_str(content)?;
+            uv_snapshot!(context.filters(), context.pip_install().args(["--offline", "-r", "empty.lock"]), @r#"
+            exit_code: 0 (success)
+            ----- stderr -----
+            warning: Requirements file `empty.lock` does not contain any dependencies
+            Checked in [TIME]
+            "#);
+        }
+        Ok::<(), anyhow::Error>(())
+    }?;
 
     Ok(())
 }

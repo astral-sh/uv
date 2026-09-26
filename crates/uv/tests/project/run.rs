@@ -9,6 +9,7 @@ use predicates::{prelude::predicate, str::contains};
 use serde_json::json;
 use std::path::Path;
 use uv_fs::copy_dir_all;
+use uv_lock::Lock;
 use uv_python::PYTHON_VERSION_FILENAME;
 use uv_static::EnvVars;
 use wiremock::matchers::{method, path};
@@ -2846,6 +2847,42 @@ fn run_no_sync_env_var() -> Result<()> {
     ----- stdout -----
     anyio
     ");
+
+    Ok(())
+}
+
+#[test]
+fn run_uv_lock_requirements() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("action.py").write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+        print("ok")
+    "#})?;
+    context
+        .lock()
+        .args(["--script", "action.py", "--offline"])
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+    let lock_path = context.temp_dir.child("action.py.lock");
+    let lock_content = fs_err::read_to_string(&lock_path)?;
+    assert_snapshot!(&lock_content, @r#"
+    version = 1
+    revision = 3
+    requires-python = ">=3.12"
+    "#);
+    Lock::from_toml(&lock_content)?;
+    uv_snapshot!(context.filters(), context.run().args([
+        "--no-project", "--offline", "--with-requirements", "action.py.lock",
+        "python", "-c", "print('should not run')",
+    ]), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: The input `action.py.lock` appears to be a uv lockfile, but `requirements.txt` format is expected. For a script, use `uv export --script <script> --format requirements-txt -o requirements.txt`. For a project, run `uv export --format requirements-txt -o requirements.txt` in the project directory.
+    "#);
 
     Ok(())
 }
