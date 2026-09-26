@@ -348,7 +348,7 @@ pub enum PreviewFeature {
     /// Checks build dependencies before nonisolated builds with `uv build`.
     BuildDependencyCheck,
     /// Uses the Rust-based [serc](https://github.com/astral-sh/serc) compiler for bytecode compilation
-    /// on supported CPython versions, falling back to Python for unsupported files and settings.
+    /// on supported CPython versions. Unsupported files and settings cause an error.
     NativeBytecode,
     /// Enables lazy imports in build backend invocations on CPython 3.15 and later.
     /// This can affect import-time side effects in third-party build backends.
