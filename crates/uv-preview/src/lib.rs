@@ -338,7 +338,7 @@ pub enum PreviewFeature {
     /// Exclude `exclude-newer-package` entries from the lockfile when not included in the
     /// project's resolved dependencies.
     MissingExcludeNewerPackageLock,
-    /// Records runtime configuration consultations and omits unused constraints, overrides, exclusions,
+    /// Omits runtime constraints and records configuration consultations to omit unused overrides, exclusions,
     /// dependency metadata, and package-specific upload cutoffs from the lockfile.
     ResolutionInputs,
     /// Allows using `uv export --batch`.

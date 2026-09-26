@@ -79,6 +79,7 @@ pub use crate::lock::installable::{Installable, InstallableRootKind};
 pub use crate::lock::map::PackageMap;
 pub use crate::lock::tree::{TreeDisplay, TreeJsonTarget};
 
+mod constraints;
 mod deserialize;
 pub(crate) mod export;
 mod inputs;
@@ -425,7 +426,7 @@ impl<'lock> DependencySelectionContext<'lock> {
 }
 
 /// The dependency section in which a locked edge is stored.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum DependencyContext<'a> {
     Production,
     Extra(&'a ExtraName),
@@ -1737,8 +1738,10 @@ impl<'lock> ExpectedPackageDependencies<'lock> {
             }
         }
 
-        // Workspace packages may reference themselves using ordinary registry syntax.
-        if package.id == self.package.id
+        // Ordinary requirements may reuse locked sources when resolution inputs are omitted.
+        // Workspace packages can also reference themselves using registry syntax.
+        if (uv_preview::is_enabled(PreviewFeature::ResolutionInputs)
+            || package.id == self.package.id)
             && matches!(
                 requirement.source,
                 RequirementSource::Registry { index: None, .. }
@@ -4102,12 +4105,13 @@ impl Lock {
         }
 
         let filter = ManifestFilter::from_lock(self);
+        let validate_constraints = uv_preview::is_enabled(PreviewFeature::ResolutionInputs);
 
-        // Validate that the lockfile was generated with the same constraints.
+        // Compare declarations for legacy validation; the preview validates the graph below.
         let normalized_constraints = {
             let expected: BTreeSet<_> = constraints
                 .iter()
-                .filter(|entry| filter.includes_constraint(entry))
+                .filter(|entry| validate_constraints || filter.includes_constraint(entry))
                 .cloned()
                 .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
                 .collect::<Result<_, _>>()?;
@@ -4118,7 +4122,7 @@ impl Lock {
                 .cloned()
                 .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
                 .collect::<Result<_, _>>()?;
-            if expected != actual {
+            if !validate_constraints && expected != actual {
                 return Ok(SatisfiesResult::MismatchedConstraints(expected, actual));
             }
             expected
@@ -4266,13 +4270,13 @@ impl Lock {
             }
         }
 
-        let dependency_overrides = if allow_missing_package_metadata {
+        let dependency_overrides = if allow_missing_package_metadata || validate_constraints {
             Overrides::from_entries(normalized_overrides.into_iter().collect())
                 .map_err(LockErrorKind::InvalidScopedOverride)?
         } else {
             Overrides::default()
         };
-        let dependency_excludes = if allow_missing_package_metadata {
+        let dependency_excludes = if allow_missing_package_metadata || validate_constraints {
             Excludes::from_entries(excludes.iter().cloned())
         } else {
             Excludes::default()
@@ -4290,6 +4294,21 @@ impl Lock {
                 !dependency_excludes.contains_for_package(None, &requirement.name)
             })
             .collect::<Vec<_>>();
+
+        let mut dynamic_constraints = Vec::new();
+        if validate_constraints {
+            match self.satisfies_constraints(
+                &normalized_constraints,
+                &root_requirements,
+                &dependency_overrides,
+                root,
+                &mut dynamic_constraints,
+            )? {
+                SatisfiesResult::Satisfied => {}
+                result => return Ok(result),
+            }
+        }
+
         let dependency_sources = if allow_missing_package_metadata {
             Box::pin(self.collect_dependency_sources(
                 normalized_constraints,
@@ -4787,16 +4806,38 @@ impl Lock {
             }
         }
 
+        // Dependency validation must establish that the graph is current before inspecting
+        // dynamic versions: a removed local dependency may no longer exist on disk.
+        for (package, specifiers) in dynamic_constraints {
+            let metadata = Self::package_metadata(
+                package,
+                root,
+                tags,
+                markers,
+                build_options,
+                hasher,
+                index,
+                database,
+            )
+            .await?;
+            if !specifiers.contains(&metadata.version) {
+                return Ok(SatisfiesResult::UnvalidatedConstraint(&package.id.name));
+            }
+        }
+
         Ok(SatisfiesResult::Satisfied)
     }
 
-    /// Return whether an authorized direct source selects this package in the active context.
-    fn constraint_selects_source(
+    /// Return whether the locked source or a current constraint authorizes this package.
+    fn source_is_authorized(
         package: &Package,
         marker: MarkerTree,
         constraints: &BTreeSet<Requirement>,
         root: &Path,
     ) -> Result<bool, LockError> {
+        if uv_preview::is_enabled(PreviewFeature::ResolutionInputs) {
+            return Ok(true);
+        }
         for constraint in constraints {
             if constraint.name == package.id.name
                 && !matches!(constraint.source, RequirementSource::Registry { .. })
@@ -5049,7 +5090,8 @@ impl Lock {
                     Source::Path(..) | Source::Direct(..) | Source::Git(..)
                 );
                 let registry_has_declarations = matches!(package.id.source, Source::Registry(..))
-                    && (configured_metadata.is_some()
+                    && (uv_preview::is_enabled(PreviewFeature::ResolutionInputs)
+                        || configured_metadata.is_some()
                         || source_requirements.iter().any(|constraint| {
                             !matches!(constraint.source, RequirementSource::Registry { .. })
                         }));
@@ -5148,7 +5190,7 @@ impl Lock {
                                             .conflict_marker(&package.id.name, &self.conflicts),
                                     )
                                     .and(requirement_marker);
-                                if !Self::constraint_selects_source(
+                                if !Self::source_is_authorized(
                                     dependency,
                                     source_marker,
                                     source_requirements,
@@ -5252,7 +5294,7 @@ impl Lock {
                             matches!(package.id.source, Source::Registry(..))
                                 && !matches!(dependency_package.id.source, Source::Registry(..));
                         let constrained_source = registry_external_source
-                            && Self::constraint_selects_source(
+                            && Self::source_is_authorized(
                                 dependency_package,
                                 marker,
                                 source_requirements,
@@ -5261,7 +5303,8 @@ impl Lock {
                         if registry_external_source && !constrained_source {
                             continue;
                         }
-                        if refreshed_dependencies.is_none()
+                        if !uv_preview::is_enabled(PreviewFeature::ResolutionInputs)
+                            && refreshed_dependencies.is_none()
                             && dependency_package.id.source.is_source_tree()
                             && !self.is_workspace_package(dependency_package)
                             && !constrained_source
@@ -5365,12 +5408,7 @@ impl Lock {
                     requirement.source,
                     RequirementSource::Registry { index: None, .. }
                 ) && !matches!(package.id.source, Source::Registry(..))
-                    && !Self::constraint_selects_source(
-                        package,
-                        marker,
-                        &source_requirements,
-                        root,
-                    )?
+                    && !Self::source_is_authorized(package, marker, &source_requirements, root)?
                 {
                     // A bare root name cannot revive an old direct source. Current workspace
                     // declarations, active constraints, and global overrides authorize it.
@@ -5450,14 +5488,19 @@ impl Lock {
 
         source_candidates.extend(source_requirements.iter().cloned());
 
-        // Inspect archives or invoke local backends only after an active declaration selects
-        // their exact reachable path. URL and Git providers use only retained lock metadata.
+        // Inspect archives or invoke local backends only after their exact path is reachable
+        // and authorized by a declaration or the lock. URL and Git providers use retained metadata.
         // Registry packages stay out of this phase: their metadata cannot introduce direct
         // sources or widen URLs authorized by first-party declarations, overrides, or constraints.
         let mut pending_packages = self
             .packages
             .iter()
-            .filter(|package| self.is_workspace_package(package))
+            .filter(|package| {
+                self.is_workspace_package(package)
+                    || (uv_preview::is_enabled(PreviewFeature::ResolutionInputs)
+                        && !matches!(package.id.source, Source::Registry(..))
+                        && reachability.package_markers.get(&package.id).is_some())
+            })
             .collect::<Vec<_>>();
         let mut visited_packages = FxHashSet::default();
 
@@ -5537,7 +5580,9 @@ impl Lock {
                     continue;
                 }
                 for package_id in changes.reachable.iter().copied() {
-                    if visited_packages.remove(package_id) {
+                    if visited_packages.remove(package_id)
+                        || uv_preview::is_enabled(PreviewFeature::ResolutionInputs)
+                    {
                         // A newly active base or extra can expose more source declarations.
                         pending_packages.push(self.package(self.by_id[package_id]));
                     }
@@ -5917,6 +5962,8 @@ pub enum SatisfiesResult<'lock> {
     MismatchedRequirements(BTreeSet<Requirement>, BTreeSet<Requirement>),
     /// The lockfile uses a different set of constraints.
     MismatchedConstraints(BTreeSet<Requirement>, BTreeSet<Requirement>),
+    /// A current constraint could not be established from the locked graph.
+    UnvalidatedConstraint(&'lock PackageName),
     /// The lockfile uses a different set of overrides.
     MismatchedOverrides(
         BTreeSet<Override<Requirement>>,

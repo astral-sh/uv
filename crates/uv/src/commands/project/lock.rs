@@ -1528,6 +1528,12 @@ impl ValidatedLock {
                 );
                 Ok(Self::Preferable(lock))
             }
+            SatisfiesResult::UnvalidatedConstraint(name) => {
+                debug!(
+                    "Resolving despite existing lockfile because constraints could not be validated for `{name}`"
+                );
+                Ok(Self::Preferable(lock))
+            }
             SatisfiesResult::MismatchedOverrides(expected, actual) => {
                 debug!(
                     "Resolving despite existing lockfile due to mismatched overrides:\n  Requested: {:?}\n  Existing: {:?}",
