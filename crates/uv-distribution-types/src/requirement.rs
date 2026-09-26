@@ -9,7 +9,7 @@ use uv_distribution_filename::DistExtension;
 use uv_fs::{CWD, PortablePath, PortablePathBuf, normalize_path, try_relative_to_if};
 use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError, OidParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep440::{Operator, VersionSpecifiers};
+use uv_pep440::VersionSpecifiers;
 use uv_pep508::{
     MarkerEnvironment, MarkerTree, RequirementOrigin, VerbatimUrl, VersionOrUrl, marker,
 };
@@ -89,20 +89,6 @@ impl RequirementScope {
 }
 
 impl Requirement {
-    /// Whether this registry requirement explicitly opts into pre-release versions.
-    /// Exclusions such as `!=1.0a1` do not opt into pre-releases.
-    pub fn allows_prereleases(&self) -> bool {
-        let RequirementSource::Registry { specifier, .. } = &self.source else {
-            return false;
-        };
-        specifier.iter().any(|specifier| {
-            !matches!(
-                specifier.operator(),
-                Operator::NotEqual | Operator::NotEqualStar
-            ) && specifier.any_prerelease()
-        })
-    }
-
     /// Returns whether the markers apply for the given environment.
     ///
     /// When `env` is `None`, this specifically evaluates all marker

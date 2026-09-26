@@ -2,8 +2,9 @@ use std::borrow::Cow;
 
 use rustc_hash::FxHashMap;
 use uv_configuration::{Prerelease, PrereleaseMode};
-use uv_distribution_types::Requirement;
+use uv_distribution_types::{Requirement, RequirementSource};
 use uv_normalize::PackageName;
+use uv_pep440::{Operator, VersionSpecifiers};
 
 use crate::resolver::ForkSet;
 use crate::{DependencyMode, Manifest, ResolverEnvironment};
@@ -78,7 +79,11 @@ impl PrereleaseStrategy {
     fn explicit_packages<'a>(requirements: impl Iterator<Item = Cow<'a, Requirement>>) -> ForkSet {
         let mut packages = ForkSet::default();
         for requirement in requirements {
-            if requirement.allows_prereleases() {
+            let RequirementSource::Registry { specifier, .. } = &requirement.source else {
+                continue;
+            };
+
+            if contains_prerelease(specifier) {
                 packages.add(&requirement, ());
             }
         }
@@ -108,6 +113,22 @@ impl PrereleaseStrategy {
             }
         }
     }
+}
+
+/// Returns `true` if the specifiers explicitly mention a pre-release version.
+///
+/// Exclusions do not opt a package into pre-releases. For example, `!=1.0a1` should not change
+/// which candidate kinds are considered.
+fn contains_prerelease(specifiers: &VersionSpecifiers) -> bool {
+    specifiers
+        .iter()
+        .filter(|specifier| {
+            !matches!(
+                specifier.operator(),
+                Operator::NotEqual | Operator::NotEqualStar
+            )
+        })
+        .any(uv_pep440::VersionSpecifier::any_prerelease)
 }
 
 /// How pre-release candidates participate in version selection.
