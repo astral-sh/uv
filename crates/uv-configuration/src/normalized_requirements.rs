@@ -95,14 +95,6 @@ impl From<Vec<Requirement>> for NormalizedConstraints {
     }
 }
 
-impl Deref for NormalizedConstraints {
-    type Target = [Requirement];
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
 /// Overrides normalized independently within their global or package-version scope.
 ///
 /// Empty package scopes remain because they shadow versionless scopes.
