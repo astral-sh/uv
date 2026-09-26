@@ -100,10 +100,13 @@ async fn do_uninstall(
             )?;
         }
         let mut found = false;
-        for installation in installed_installations
-            .iter()
-            .filter(|installation| download_request.satisfied_by_key(installation.key()))
-        {
+        for installation in installed_installations.iter().filter(|installation| {
+            if download_request.is_exact_installation_key() {
+                download_request.satisfied_by_exact_key(installation.key())
+            } else {
+                download_request.satisfied_by_key(installation.key())
+            }
+        }) {
             found = true;
             matching_installations.insert(installation.clone());
         }
