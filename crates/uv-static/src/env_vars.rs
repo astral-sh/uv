@@ -141,6 +141,12 @@ impl EnvVars {
     #[attr_added_in("0.1.34")]
     pub const UV_REQUIRE_HASHES: &'static str = "UV_REQUIRE_HASHES";
 
+    /// Equivalent to the `--require-build-hashes` command-line argument. If set to `true`, uv
+    /// will require every dependency installed into an isolated build environment to have a hash
+    /// specified in a build constraints file.
+    #[attr_added_in("0.12.0")]
+    pub const UV_PIP_REQUIRE_BUILD_HASHES: &'static str = "UV_PIP_REQUIRE_BUILD_HASHES";
+
     /// Require wheel metadata to be fetched with HTTP range requests when separate metadata is
     /// unavailable. If set to `true`, uv will fail instead of downloading the entire wheel.
     #[attr_hidden]
