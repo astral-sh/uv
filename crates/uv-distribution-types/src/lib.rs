@@ -1110,7 +1110,7 @@ impl DistributionMetadata for RegistrySourceDist {
 
     fn registry_hash_target(&self) -> Option<(RegistryHashTarget<'_>, &[HashDigest])> {
         Some((
-            RegistryHashTarget::source(&self.index, &self.name, &self.version, None),
+            RegistryHashTarget::source(&self.index, &self.name, &self.version),
             self.file.hashes.as_slice(),
         ))
     }

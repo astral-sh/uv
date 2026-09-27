@@ -767,7 +767,7 @@ impl VersionMapLazy {
 
         // Check if hashes line up. If hashes aren't required, they're considered matching.
         let hash = self.hash_comparison(
-            RegistryHashTarget::source(&self.index, &filename.name, &filename.version, None),
+            RegistryHashTarget::source(&self.index, &filename.name, &filename.version),
             hashes,
         );
 

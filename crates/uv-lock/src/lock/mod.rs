@@ -3051,7 +3051,7 @@ impl Lock {
             };
             if let Some(hash) = package.sdist.as_ref().and_then(SourceDist::hash) {
                 registry.insert(
-                    RegistryHashTarget::source(&index, &package.id.name, version, None),
+                    RegistryHashTarget::source(&index, &package.id.name, version),
                     hash.clone(),
                 );
             }
@@ -10787,13 +10787,15 @@ wheels = [{ url = "https://example.org/files/demo_pkg-1.0.0+local-1-py3-none-any
             Some(HashComparison::Mismatched),
         );
         assert_eq!(
-            hasher.archive_policy_for_registry(RegistryHashTarget::wheel(&index, &wheel), &[]),
-            ArchiveHashPolicy::Any(slice::from_ref(&digest)),
+            hasher.locked_registry_archive_policy(RegistryHashTarget::wheel(&index, &wheel), &[]),
+            Some(ArchiveHashPolicy::Any(slice::from_ref(&digest))),
         );
         assert_eq!(
-            hasher
-                .archive_policy_for_registry(RegistryHashTarget::wheel(&other_index, &wheel), &[]),
-            ArchiveHashPolicy::Any(slice::from_ref(&other_digest)),
+            hasher.locked_registry_archive_policy(
+                RegistryHashTarget::wheel(&other_index, &wheel),
+                &[]
+            ),
+            Some(ArchiveHashPolicy::Any(slice::from_ref(&other_digest))),
         );
         Ok(())
     }

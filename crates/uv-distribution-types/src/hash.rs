@@ -14,7 +14,7 @@ pub enum RegistryHashTarget<'a> {
         index: &'a IndexUrl,
         filename: &'a WheelFilename,
     },
-    /// A source archive, possibly represented by a wheel built from that archive.
+    /// A source archive.
     ///
     /// Cached source revisions do not retain the archive filename, so their hashes are identified
     /// by index, package name, and source version.
@@ -22,8 +22,6 @@ pub enum RegistryHashTarget<'a> {
         index: &'a IndexUrl,
         name: &'a PackageName,
         version: &'a Version,
-        /// The built wheel, if checking a cached source revision.
-        built_wheel: Option<&'a WheelFilename>,
     },
 }
 
@@ -34,17 +32,11 @@ impl<'a> RegistryHashTarget<'a> {
     }
 
     /// Identify a registry source archive by its index, name, and source version.
-    pub fn source(
-        index: &'a IndexUrl,
-        name: &'a PackageName,
-        version: &'a Version,
-        built_wheel: Option<&'a WheelFilename>,
-    ) -> Self {
+    pub fn source(index: &'a IndexUrl, name: &'a PackageName, version: &'a Version) -> Self {
         Self::Source {
             index,
             name,
             version,
-            built_wheel,
         }
     }
 
@@ -53,20 +45,6 @@ impl<'a> RegistryHashTarget<'a> {
         match self {
             Self::Wheel { filename, .. } => (&filename.name, &filename.version),
             Self::Source { name, version, .. } => (name, version),
-        }
-    }
-
-    /// Return the name and version used for requirement-level hash policies.
-    ///
-    /// These policies use the built wheel's version for a cached source revision, which may differ
-    /// from the source version used by lockfile hash policies.
-    pub fn requirement_name_and_version(&self) -> (&'a PackageName, &'a Version) {
-        match self {
-            Self::Source {
-                built_wheel: Some(wheel),
-                ..
-            } => (&wheel.name, &wheel.version),
-            Self::Wheel { .. } | Self::Source { .. } => self.name_and_version(),
         }
     }
 }

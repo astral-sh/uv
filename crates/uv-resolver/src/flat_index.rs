@@ -193,7 +193,7 @@ impl FlatDistributions {
 
         // Check if hashes line up.
         let hash = Self::hash_comparison(
-            RegistryHashTarget::source(index, &filename.name, &filename.version, None),
+            RegistryHashTarget::source(index, &filename.name, &filename.version),
             file,
             hasher,
         );

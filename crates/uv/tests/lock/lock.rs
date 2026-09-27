@@ -2654,6 +2654,30 @@ async fn lock_cached_build_source_local_version_hashes() -> Result<()> {
         .mount_as_scoped(&server)
         .await;
 
+    // Ordinary hash policies look up a cached source-built wheel by the wheel's version.
+    context
+        .temp_dir
+        .child("cache-reuse.txt")
+        .write_str(&format!(
+            "review-dep==1.0.0+local --hash=sha256:{replacement_digest}\n"
+        ))?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--require-hashes").arg("-r").arg("cache-reuse.txt")
+        .arg("--default-index").arg(format!("{}/simple", server.uri()))
+        .arg("--target").arg(context.temp_dir.child("cache-reuse").path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + review-dep==1.0.0+local
+    ");
+    context
+        .temp_dir
+        .child("cache-reuse/review_dep/marker.py")
+        .assert("SOURCE = 'cached'\n");
+    assert_eq!(registry_wheel.received_requests().await.len(), 0);
+
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     exit_code: 0 (success)
     ----- stderr -----
