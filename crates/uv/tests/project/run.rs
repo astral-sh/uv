@@ -8,6 +8,8 @@ use insta::assert_snapshot;
 use predicates::{prelude::predicate, str::contains};
 use serde_json::json;
 use std::path::Path;
+#[cfg(unix)]
+use std::{os::fd::OwnedFd, os::unix::net::UnixStream, process::Stdio};
 use uv_fs::copy_dir_all;
 use uv_python::PYTHON_VERSION_FILENAME;
 use uv_static::EnvVars;
@@ -5685,6 +5687,34 @@ fn exit_status_signal() -> Result<()> {
     "})?;
     let status = context.run().arg(script.path()).status()?;
     assert_eq!(status.code().expect("a status code"), 139);
+    Ok(())
+}
+
+/// Test that SIGPIPE received by uv is not forwarded to the child process.
+#[cfg(unix)]
+#[test]
+fn sigpipe_not_forwarded_to_child() -> Result<()> {
+    let context = uv_test::test_context!("3.11");
+
+    let (stderr, peer) = UnixStream::pair()?;
+    drop(peer);
+
+    let mut command = context.command();
+    command
+        .arg("-vv")
+        .arg("run")
+        .arg("--no-project")
+        .arg("--")
+        .arg("sh")
+        .arg("-c")
+        .arg("trap - PIPE; kill -WINCH \"$PPID\"; sleep 1; echo survived")
+        .stderr(Stdio::from(OwnedFd::from(stderr)));
+
+    uv_snapshot!(context.filters(), command, @r"
+    exit_code: 0 (success)
+    ----- stdout -----
+    survived
+    ");
     Ok(())
 }
 

@@ -106,7 +106,6 @@ pub(crate) async fn run_to_completion(mut handle: Child) -> anyhow::Result<ExitS
         // The following signals are ignored by default, but can be have user defined handlers.
         // Forward them to the child process for handling.
         let mut sigwinch_handle = handle_signal(SignalKind::window_change())?;
-        let mut sigpipe_handle = handle_signal(SignalKind::pipe())?;
 
         // This signal is only available on some platforms, copied from `tokio::signal::unix`
         #[cfg(any(
@@ -238,16 +237,6 @@ pub(crate) async fn run_to_completion(mut handle: Child) -> anyhow::Result<ExitS
                     // We unconditionally forward SIGWINCH to the child process.
                     debug!("Received SIGWINCH, forwarding to child at {child_pid}");
                     let _ = signal::kill(child_pid, signal::Signal::SIGWINCH);
-                }
-                _ = sigpipe_handle.recv() => {
-                    let Some(child_pid) = *ChildPid::from(&handle) else {
-                        debug!("Received SIGPIPE, but the child has already exited");
-                        continue;
-                    };
-
-                    // We unconditionally forward SIGPIPE to the child process.
-                    debug!("Received SIGPIPE, forwarding to child at {child_pid}");
-                    let _ = signal::kill(child_pid, signal::Signal::SIGPIPE);
                 }
                 _ = siginfo_handle.recv() => {
                     let Some(child_pid) = *ChildPid::from(&handle) else {
