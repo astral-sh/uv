@@ -3032,7 +3032,7 @@ impl Lock {
 
     /// Return a [`HashStrategy`] for independently resolved isolated build requirements.
     ///
-    /// Registry wheels are verified when their source, full version, and filename are recorded.
+    /// Registry wheels are verified when their complete filename is recorded.
     /// This allows wheels omitted by the runtime lockfile's platform markers. Source archives for
     /// a known source and version must still match a recorded source hash before running a backend.
     pub fn build_hash_strategy(&self, root: &Path) -> Result<HashStrategy, LockError> {
@@ -3054,7 +3054,7 @@ impl Lock {
             }
             for wheel in &package.wheels {
                 if let Some(hash) = &wheel.hash {
-                    registry.insert_wheel(&index, &wheel.filename, hash.clone());
+                    registry.insert_wheel(&wheel.filename, hash.clone());
                     // A public-version lock entry can contain local-version wheels. Candidate
                     // preferences use each recorded wheel's complete version.
                     let digests = hashes
@@ -10741,12 +10741,21 @@ name = "demo-pkg"
 version = "1.0.0"
 source = { registry = "https://example.com/simple" }
 wheels = [{ url = "https://example.com/files/demo_pkg-1.0.0+local-1-py3-none-any.whl", hash = "sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb" }]
+
+[[package]]
+name = "demo-pkg"
+version = "1.0.0"
+source = { registry = "https://example.org/simple" }
+wheels = [{ url = "https://example.org/files/demo_pkg-1.0.0+local-1-py3-none-any.whl", hash = "sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f" }]
 "#,
         )?;
         let root = std::env::current_dir()?;
         let hasher = lock.build_hash_strategy(&root)?;
         let digest = HashDigest::from_str(
             "sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb",
+        )?;
+        let other_digest = HashDigest::from_str(
+            "sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
         )?;
         let index = IndexUrl::parse("https://example.com/simple", None)?;
         let other_index = IndexUrl::parse("https://example.org/simple", None)?;
@@ -10774,13 +10783,18 @@ wheels = [{ url = "https://example.com/files/demo_pkg-1.0.0+local-1-py3-none-any
             Some(HashComparison::Unrecorded),
         );
         assert_eq!(
-            hasher.archive_policy_for_registry_wheel(
+            hasher.locked_registry_hash_comparison(
+                &wheel.name,
+                &wheel.version,
                 &other_index,
-                &wheel,
+                &wheel.to_string(),
                 slice::from_ref(&digest),
             ),
-            ArchiveHashPolicy::Any(slice::from_ref(&digest)),
+            Some(HashComparison::Matched),
         );
+        let policy = hasher.archive_policy_for_registry_wheel(&wheel, &[]);
+        assert!(policy.matches(slice::from_ref(&digest)));
+        assert!(policy.matches(slice::from_ref(&other_digest)));
         Ok(())
     }
 

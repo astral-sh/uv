@@ -2142,40 +2142,65 @@ fn locked_local_build_dependency_source(filename: &str, wheel: &[u8]) -> Result<
     Ok(archive)
 }
 
-/// Build requirements from another index are not constrained by the runtime wheel's hashes.
+/// Identical wheel filenames from different indexes share the runtime wheel's hashes.
 #[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_editable_build_dependency_different_index_hashes() -> Result<()> {
-    check_editable_build_dependency_index_hashes("1.0.0", "build", None, Some("--frozen")).await
+    check_editable_build_dependency_index_hashes("1.0.0", "build", None, Some("--frozen"), false)
+        .await
+}
+
+/// Different wheel filenames from different indexes are independently resolved.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_editable_build_dependency_different_index_and_filename() -> Result<()> {
+    check_editable_build_dependency_index_hashes("1.0.0", "build", None, Some("--frozen"), true)
+        .await
+}
+
+/// Equivalent versions with distinct wheel filenames have separate hashes.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_editable_build_dependency_equivalent_version_filename() -> Result<()> {
+    check_editable_build_dependency_index_hashes("1.0", "build", None, Some("--frozen"), false)
+        .await
 }
 
 /// An ordinary sync can use a different index for an isolated build requirement.
 #[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_editable_build_dependency_different_index_sync() -> Result<()> {
-    check_editable_build_dependency_index_hashes("1.0.0", "build", None, None).await
+    check_editable_build_dependency_index_hashes("1.0.0", "build", None, None, true).await
 }
 
 /// A locked sync can use a different index for an isolated build requirement.
 #[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_editable_build_dependency_different_index_locked() -> Result<()> {
-    check_editable_build_dependency_index_hashes("1.0.0", "build", None, Some("--locked")).await
+    check_editable_build_dependency_index_hashes("1.0.0", "build", None, Some("--locked"), true)
+        .await
 }
 
 /// A public-version lock entry does not constrain another index's local build version.
 #[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_editable_build_dependency_local_version_hashes() -> Result<()> {
-    check_editable_build_dependency_index_hashes("1.0.0+local", "build", None, Some("--frozen"))
-        .await
+    check_editable_build_dependency_index_hashes(
+        "1.0.0+local",
+        "build",
+        None,
+        Some("--frozen"),
+        false,
+    )
+    .await
 }
 
 /// An independent build resolution can select an unrecorded wheel from the same index and version.
 #[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_editable_build_dependency_unrecorded_wheel_hashes() -> Result<()> {
-    check_editable_build_dependency_index_hashes("1.0.0", "runtime", None, Some("--frozen")).await
+    check_editable_build_dependency_index_hashes("1.0.0", "runtime", None, Some("--frozen"), false)
+        .await
 }
 
 /// A build constraint can authorize an unrecorded wheel.
@@ -2187,6 +2212,7 @@ async fn lock_editable_build_dependency_constraint_matches() -> Result<()> {
         "runtime",
         Some("build"),
         Some("--frozen"),
+        false,
     )
     .await
 }
@@ -2200,6 +2226,7 @@ async fn lock_editable_build_dependency_constraint_mismatch() -> Result<()> {
         "runtime",
         Some("runtime"),
         Some("--frozen"),
+        false,
     )
     .await
 }
@@ -2210,6 +2237,7 @@ async fn check_editable_build_dependency_index_hashes(
     build_index: &str,
     constraint: Option<&str>,
     sync_mode: Option<&str>,
+    different_filename: bool,
 ) -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let server = MockServer::start().await;
@@ -2232,7 +2260,7 @@ async fn check_editable_build_dependency_index_hashes(
             "py3-none-any",
             &[("review_dep/marker.py", marker.as_str())],
         );
-        let filename = if same_index {
+        let filename = if same_index || (role == "build" && different_filename) {
             format!("review_dep-{version}-{build_tag}-py3-none-any.whl")
         } else {
             filename
@@ -2369,8 +2397,8 @@ async fn check_editable_build_dependency_index_hashes(
         assert!(!locked.contains(&wheel_hashes["build"]));
     }
 
-    // The runtime wheel remains downloadable, but independent build resolution sees only the
-    // higher build tag. The lockfile need not contain every wheel for a registry version.
+    // When both resolutions share an index, expose the build wheel after recording the runtime
+    // wheel. Both files remain downloadable by their locked or advertised URLs.
     if same_index {
         drop(runtime_index);
     }
@@ -2389,7 +2417,9 @@ async fn check_editable_build_dependency_index_hashes(
     }
     sync.arg("--no-install-project").arg("--no-cache");
 
-    if constraint == Some("runtime") {
+    if constraint == Some("runtime")
+        || (!same_index && !different_filename && build_version == "1.0.0")
+    {
         uv_snapshot!(context.filters(), sync, @"
         exit_code: 1 (failure)
         ----- stderr -----

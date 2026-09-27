@@ -250,7 +250,6 @@ impl<'a> RegistryWheelIndex<'a> {
                                 if wheel.filename.compatibility(tags).is_compatible() {
                                     // Enforce hash-checking based on the built distribution.
                                     if wheel.satisfies(hasher.archive_policy_for_registry_wheel(
-                                        index.url(),
                                         &wheel.filename,
                                         wheel.hashes(),
                                     )) {
@@ -277,7 +276,6 @@ impl<'a> RegistryWheelIndex<'a> {
                                 if wheel.filename.compatibility(tags).is_compatible() {
                                     // Enforce hash-checking based on the built distribution.
                                     if wheel.satisfies(hasher.archive_policy_for_registry_wheel(
-                                        index.url(),
                                         &wheel.filename,
                                         wheel.hashes(),
                                     )) {
