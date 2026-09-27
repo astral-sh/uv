@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::fmt::{Display, Formatter};
 use std::hash::Hash;
 use std::str::FromStr;
@@ -35,6 +36,33 @@ pub struct WheelFilename {
     pub name: PackageName,
     pub version: Version,
     tags: WheelTag,
+}
+
+/// A normalized wheel filename compared as an artifact name rather than a package version.
+///
+/// PEP 440 considers versions such as `1.0` and `1.0.0` equal, but the corresponding wheel
+/// filenames identify different artifacts. This key retains the number of release segments when
+/// comparing or hashing a filename. It can wrap either an owned or borrowed [`WheelFilename`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct WheelFilenameKey<T> {
+    filename: T,
+    release_segments: usize,
+}
+
+impl<T: Borrow<WheelFilename>> WheelFilenameKey<T> {
+    /// Construct an artifact-name key from a parsed wheel filename.
+    pub fn new(filename: T) -> Self {
+        let release_segments = filename.borrow().version.release().len();
+        Self {
+            filename,
+            release_segments,
+        }
+    }
+
+    /// Return the parsed wheel filename.
+    pub fn filename(&self) -> &WheelFilename {
+        self.filename.borrow()
+    }
 }
 
 impl FromStr for WheelFilename {
@@ -395,7 +423,26 @@ pub enum WheelFilenameError {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use super::*;
+
+    #[test]
+    fn wheel_filename_key_distinguishes_release_segments() -> Result<(), WheelFilenameError> {
+        let short = WheelFilename::from_str("demo-1.0-py3-none-any.whl")?;
+        let long = WheelFilename::from_str("demo-1.0.0-py3-none-any.whl")?;
+        assert_eq!(short, long);
+        assert_ne!(WheelFilenameKey::new(&short), WheelFilenameKey::new(&long));
+
+        let keys = HashSet::from([
+            WheelFilenameKey::new(short.clone()),
+            WheelFilenameKey::new(long.clone()),
+        ]);
+        assert_eq!(keys.len(), 2);
+        assert!(keys.contains(&WheelFilenameKey::new(short)));
+        assert!(keys.contains(&WheelFilenameKey::new(long)));
+        Ok(())
+    }
 
     #[test]
     fn err_not_whl_extension() {

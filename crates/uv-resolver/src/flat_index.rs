@@ -11,8 +11,8 @@ use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
     File, HashComparison, IncompatibleSource, IncompatibleWheel, Index, IndexLocations, IndexUrl,
-    MinimumLibcVersion, PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist,
-    SourceDistCompatibility, WheelCompatibility,
+    MinimumLibcVersion, PrioritizedDist, RegistryBuiltWheel, RegistryHashTarget,
+    RegistrySourceDist, SourceDistCompatibility, WheelCompatibility,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -192,7 +192,11 @@ impl FlatDistributions {
         }
 
         // Check if hashes line up.
-        let hash = Self::hash_comparison(&filename.name, &filename.version, file, index, hasher);
+        let hash = Self::hash_comparison(
+            RegistryHashTarget::source(index, &filename.name, &filename.version, None),
+            file,
+            hasher,
+        );
 
         SourceDistCompatibility::Compatible(hash)
     }
@@ -222,7 +226,7 @@ impl FlatDistributions {
         };
 
         // Check if hashes line up.
-        let hash = Self::hash_comparison(&filename.name, &filename.version, file, index, hasher);
+        let hash = Self::hash_comparison(RegistryHashTarget::wheel(index, filename), file, hasher);
 
         // Break ties with the build tag.
         let build_tag = filename.build_tag().cloned();
@@ -232,16 +236,15 @@ impl FlatDistributions {
 
     /// Compare the hashes for a candidate from a flat index.
     fn hash_comparison(
-        name: &PackageName,
-        version: &Version,
+        target: RegistryHashTarget<'_>,
         file: &File,
-        index: &IndexUrl,
         hasher: &HashStrategy,
     ) -> HashComparison {
         let hashes = file.hashes.as_slice();
         hasher
-            .locked_registry_hash_comparison(name, version, index, file.filename.as_ref(), hashes)
+            .locked_registry_hash_comparison(target, hashes)
             .unwrap_or_else(|| {
+                let (name, version) = target.name_and_version();
                 hasher
                     .archive_policy_for_package(name, version)
                     .compare(hashes)

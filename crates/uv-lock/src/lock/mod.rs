@@ -40,9 +40,9 @@ use uv_distribution_types::{
     FileLocation, FirstParty, GitDirectorySourceDist, GitPathBuiltDist, GitPathSourceDist,
     HashValidation, Identifier, IndexLocations, IndexMetadata, IndexUrl, MetadataHashPolicy,
     MinimumLibcVersion, Name, NameRequirementSpecification, PYPI_URL, PathBuiltDist,
-    PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource,
-    Requirement, RequirementSource, RequiresPython, ResolvedDist, SimplifiedMarkerTree,
-    StaticMetadata, ToUrlError, UrlString, VersionId,
+    PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistryHashTarget, RegistrySourceDist,
+    RemoteSource, Requirement, RequirementSource, RequiresPython, ResolvedDist,
+    SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString, VersionId,
 };
 use uv_fs::{PortablePath, PortablePathBuf, Simplified, normalize_path, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
@@ -3050,11 +3050,17 @@ impl Lock {
                 continue;
             };
             if let Some(hash) = package.sdist.as_ref().and_then(SourceDist::hash) {
-                registry.insert_source(&index, &package.id.name, version, hash.clone());
+                registry.insert(
+                    RegistryHashTarget::source(&index, &package.id.name, version, None),
+                    hash.clone(),
+                );
             }
             for wheel in &package.wheels {
                 if let Some(hash) = &wheel.hash {
-                    registry.insert_wheel(&index, &wheel.filename, hash.clone());
+                    registry.insert(
+                        RegistryHashTarget::wheel(&index, &wheel.filename),
+                        hash.clone(),
+                    );
                     // A public-version lock entry can contain local-version wheels. Candidate
                     // preferences use each recorded wheel's complete version.
                     let digests = hashes
@@ -10763,41 +10769,30 @@ wheels = [{ url = "https://example.org/files/demo_pkg-1.0.0+local-1-py3-none-any
         let other_wheel: WheelFilename = "demo_pkg-1.0.0+local-2-py3-none-any.whl".parse()?;
 
         assert_eq!(
-            hasher.locked_registry_hash_comparison(
-                &wheel.name,
-                &wheel.version,
-                &index,
-                &wheel.to_string(),
-                &[],
-            ),
+            hasher.locked_registry_hash_comparison(RegistryHashTarget::wheel(&index, &wheel), &[],),
             Some(HashComparison::Missing),
         );
         assert_eq!(
             hasher.locked_registry_hash_comparison(
-                &other_wheel.name,
-                &other_wheel.version,
-                &index,
-                &other_wheel.to_string(),
+                RegistryHashTarget::wheel(&index, &other_wheel),
                 &[],
             ),
             Some(HashComparison::Unrecorded),
         );
         assert_eq!(
             hasher.locked_registry_hash_comparison(
-                &wheel.name,
-                &wheel.version,
-                &other_index,
-                &wheel.to_string(),
+                RegistryHashTarget::wheel(&other_index, &wheel),
                 slice::from_ref(&digest),
             ),
             Some(HashComparison::Mismatched),
         );
         assert_eq!(
-            hasher.archive_policy_for_registry_wheel(&index, &wheel, &[]),
+            hasher.archive_policy_for_registry(RegistryHashTarget::wheel(&index, &wheel), &[]),
             ArchiveHashPolicy::Any(slice::from_ref(&digest)),
         );
         assert_eq!(
-            hasher.archive_policy_for_registry_wheel(&other_index, &wheel, &[]),
+            hasher
+                .archive_policy_for_registry(RegistryHashTarget::wheel(&other_index, &wheel), &[]),
             ArchiveHashPolicy::Any(slice::from_ref(&other_digest)),
         );
         Ok(())

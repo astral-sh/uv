@@ -7,11 +7,11 @@ use rustc_hash::FxHashMap;
 
 use uv_cache_key::CanonicalUrl;
 use uv_configuration::{Constraints, HashCheckingMode};
-use uv_distribution_filename::{DistExtension, WheelFilename};
+use uv_distribution_filename::{WheelFilename, WheelFilenameKey};
 use uv_distribution_types::{
     ArchiveHashPolicy, DistributionMetadata, HashCollection, HashComparison, HashValidation,
-    IndexUrl, MetadataHashPolicy, Name, Requirement, RequirementSource, Resolution,
-    UnresolvedRequirement, VersionId, VersionOrUrlRef,
+    MetadataHashPolicy, Name, RegistryHashTarget, Requirement, RequirementSource, Resolution,
+    UnresolvedRequirement, VersionId,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version};
@@ -54,27 +54,58 @@ pub enum HashVerification {
 /// The registry artifacts recorded in a lockfile for isolated build verification.
 #[derive(Debug, Default, Clone)]
 pub struct LockedRegistryHashes {
-    /// A lockfile can omit wheels unreachable under its runtime markers.
-    wheels: FxHashMap<(CanonicalUrl, String), Vec<HashDigest>>,
-    /// Source archives for a known source and version must match a recorded source hash.
-    sources: FxHashMap<(CanonicalUrl, PackageName, Version), Vec<HashDigest>>,
+    hashes: FxHashMap<RegistryHashKey, Vec<HashDigest>>,
+}
+
+/// Registry identity used for build hash verification. A cached source retains its version but
+/// not its original filename, so source archives are grouped by index, name, and version.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum RegistryHashKey {
+    Wheel {
+        index: CanonicalUrl,
+        filename: WheelFilenameKey<WheelFilename>,
+    },
+    Source {
+        index: CanonicalUrl,
+        name: PackageName,
+        version: Version,
+    },
+}
+
+impl RegistryHashKey {
+    fn from_target(target: RegistryHashTarget<'_>) -> Self {
+        match target {
+            RegistryHashTarget::Wheel { index, filename } => Self::Wheel {
+                index: CanonicalUrl::new(index.url().clone()),
+                filename: WheelFilenameKey::new(filename.clone()),
+            },
+            RegistryHashTarget::Source {
+                index,
+                name,
+                version,
+                built_wheel: _,
+            } => Self::Source {
+                index: CanonicalUrl::new(index.url().clone()),
+                name: name.clone(),
+                version: version.clone(),
+            },
+        }
+    }
+
+    fn name_and_version(&self) -> (&PackageName, &Version) {
+        match self {
+            Self::Wheel { filename, .. } => {
+                (&filename.filename().name, &filename.filename().version)
+            }
+            Self::Source { name, version, .. } => (name, version),
+        }
+    }
 }
 
 impl LockedRegistryHashes {
     fn apply_constraints(&mut self, constraints: &HashStrategy) {
-        for ((_, filename), hashes) in &mut self.wheels {
-            let Ok(filename) = WheelFilename::from_str(filename) else {
-                hashes.clear();
-                continue;
-            };
-            let id = VersionId::from_registry(filename.name.clone(), filename.version.clone());
-            if let Some(allowed) = constraints.hashes_for_id(&id) {
-                hashes.retain(|hash| allowed.contains(hash));
-            } else if !constraints.allows_package(&filename.name, &filename.version) {
-                hashes.clear();
-            }
-        }
-        for ((_, name, version), hashes) in &mut self.sources {
+        for (key, hashes) in &mut self.hashes {
+            let (name, version) = key.name_and_version();
             let id = VersionId::from_registry(name.clone(), version.clone());
             if let Some(allowed) = constraints.hashes_for_id(&id) {
                 hashes.retain(|hash| allowed.contains(hash));
@@ -84,74 +115,20 @@ impl LockedRegistryHashes {
         }
     }
 
-    /// Record a wheel's trusted hash under its index and complete filename.
-    pub fn insert_wheel(&mut self, index: &IndexUrl, filename: &WheelFilename, hash: HashDigest) {
-        // `WheelFilename` compares versions using PEP 440, where `1.0` and `1.0.0` are equal.
-        // Their normalized filenames are distinct, however, and can identify different wheels.
+    /// Record a trusted hash for a registry artifact.
+    pub fn insert(&mut self, target: RegistryHashTarget<'_>, hash: HashDigest) {
         let hashes = self
-            .wheels
-            .entry((CanonicalUrl::new(index.url().clone()), filename.to_string()))
+            .hashes
+            .entry(RegistryHashKey::from_target(target))
             .or_default();
         if !hashes.contains(&hash) {
             hashes.push(hash);
         }
     }
 
-    /// Record a source archive's trusted hash under its source and exact version.
-    pub fn insert_source(
-        &mut self,
-        index: &IndexUrl,
-        name: &PackageName,
-        version: &Version,
-        hash: HashDigest,
-    ) {
-        let hashes = self
-            .sources
-            .entry((
-                CanonicalUrl::new(index.url().clone()),
-                name.clone(),
-                version.clone(),
-            ))
-            .or_default();
-        if !hashes.contains(&hash) {
-            hashes.push(hash);
-        }
-    }
-
-    fn artifact_hashes(
-        &self,
-        name: &PackageName,
-        version: &Version,
-        index: &IndexUrl,
-        filename: &str,
-    ) -> Option<&[HashDigest]> {
-        match DistExtension::from_path(filename) {
-            Ok(DistExtension::Wheel) => WheelFilename::from_str(filename)
-                .ok()
-                .and_then(|filename| self.wheel_hashes(index, &filename)),
-            Ok(DistExtension::Source(_)) => self.source_hashes(name, version, index),
-            Err(_) => None,
-        }
-    }
-
-    fn source_hashes(
-        &self,
-        name: &PackageName,
-        version: &Version,
-        index: &IndexUrl,
-    ) -> Option<&[HashDigest]> {
-        self.sources
-            .get(&(
-                CanonicalUrl::new(index.url().clone()),
-                name.clone(),
-                version.clone(),
-            ))
-            .map(Vec::as_slice)
-    }
-
-    fn wheel_hashes(&self, index: &IndexUrl, filename: &WheelFilename) -> Option<&[HashDigest]> {
-        self.wheels
-            .get(&(CanonicalUrl::new(index.url().clone()), filename.to_string()))
+    fn get(&self, target: RegistryHashTarget<'_>) -> Option<&[HashDigest]> {
+        self.hashes
+            .get(&RegistryHashKey::from_target(target))
             .map(Vec::as_slice)
     }
 }
@@ -319,54 +296,23 @@ impl HashStrategy {
         self.archive_policy_for_id(|| VersionId::from_registry(name.clone(), version.clone()))
     }
 
-    /// Return the policy for a downloaded wheel in the registry cache.
-    pub fn archive_policy_for_registry_wheel(
+    /// Return the policy for a registry artifact in the cache.
+    pub fn archive_policy_for_registry(
         &self,
-        index: &IndexUrl,
-        filename: &WheelFilename,
+        target: RegistryHashTarget<'_>,
         computed: &[HashDigest],
     ) -> ArchiveHashPolicy<'_> {
         let validation = match &self.verification {
-            HashVerification::LockedBuild { registry, .. } => self.locked_registry_validation(
-                &filename.name,
-                &filename.version,
-                registry.wheel_hashes(index, filename),
-                computed,
-            ),
+            HashVerification::LockedBuild { registry, .. } => {
+                let (name, version) = target.name_and_version();
+                self.locked_registry_validation(name, version, registry.get(target), computed)
+            }
             HashVerification::None
             | HashVerification::IfPresent(_)
-            | HashVerification::Required(_) => self.validation_for_id(|| {
-                VersionId::from_registry(filename.name.clone(), filename.version.clone())
-            }),
-        };
-        self.archive_policy_from_validation(validation)
-    }
-
-    /// Return the policy for a cached wheel built from a registry source archive.
-    ///
-    /// The source cache retains the original source version, which may differ from the built wheel
-    /// version, but not the source filename. If that source and version has recorded source hashes,
-    /// a different revision must be resolved again with its full identity.
-    pub fn archive_policy_for_cached_source(
-        &self,
-        name: &PackageName,
-        version: &Version,
-        index: &IndexUrl,
-        wheel: &WheelFilename,
-        computed: &[HashDigest],
-    ) -> ArchiveHashPolicy<'_> {
-        let validation = match &self.verification {
-            HashVerification::LockedBuild { registry, .. } => self.locked_registry_validation(
-                name,
-                version,
-                registry.source_hashes(name, version, index),
-                computed,
-            ),
-            HashVerification::None
-            | HashVerification::IfPresent(_)
-            | HashVerification::Required(_) => self.validation_for_id(|| {
-                VersionId::from_registry(wheel.name.clone(), wheel.version.clone())
-            }),
+            | HashVerification::Required(_) => {
+                let (name, version) = target.requirement_name_and_version();
+                self.validation_for_id(|| VersionId::from_registry(name.clone(), version.clone()))
+            }
         };
         self.archive_policy_from_validation(validation)
     }
@@ -378,10 +324,7 @@ impl HashStrategy {
     /// Other verification modes return `None` to use the index's usual comparison.
     pub fn locked_registry_hash_comparison(
         &self,
-        name: &PackageName,
-        version: &Version,
-        index: &IndexUrl,
-        filename: &str,
+        target: RegistryHashTarget<'_>,
         advertised: &[HashDigest],
     ) -> Option<HashComparison> {
         let HashVerification::LockedBuild {
@@ -392,9 +335,10 @@ impl HashStrategy {
         else {
             return None;
         };
-        if let Some(expected) = registry.artifact_hashes(name, version, index, filename) {
+        if let Some(expected) = registry.get(target) {
             return Some(ArchiveHashPolicy::Any(expected).compare(advertised));
         }
+        let (name, version) = target.name_and_version();
         let constraint = additional.archive_policy_for_package(name, version);
         if constraint.requires_validation() {
             return Some(constraint.compare(advertised));
@@ -448,19 +392,14 @@ impl HashStrategy {
         distribution: &T,
     ) -> HashValidation<'_> {
         if let HashVerification::LockedBuild { registry, .. } = &self.verification
-            && let Some((index, file)) = distribution.registry_file()
-            && let VersionOrUrlRef::Version(version) = distribution.version_or_url()
+            && let Some((target, advertised)) = distribution.registry_hash_target()
         {
+            let (name, version) = target.name_and_version();
             return self.locked_registry_validation(
-                distribution.name(),
+                name,
                 version,
-                registry.artifact_hashes(
-                    distribution.name(),
-                    version,
-                    index,
-                    file.filename.as_ref(),
-                ),
-                file.hashes.as_slice(),
+                registry.get(target),
+                advertised,
             );
         }
         self.validation_for_id(|| distribution.version_id())
@@ -1058,7 +997,7 @@ mod tests {
     use uv_distribution_filename::{DistExtension, WheelFilename};
     use uv_distribution_types::{
         ArchiveHashPolicy, HashCollection, HashComparison, HashValidation, IndexUrl,
-        MetadataHashPolicy, Requirement, RequirementScope, RequirementSource,
+        MetadataHashPolicy, RegistryHashTarget, Requirement, RequirementScope, RequirementSource,
         UnresolvedRequirement, VersionId,
     };
     use uv_normalize::PackageName;
@@ -1334,40 +1273,56 @@ mod tests {
             expected.clone(),
         )]));
         let mut registry = LockedRegistryHashes::default();
-        registry.insert_wheel(&index, &wheel, wheel_hash.clone());
-        registry.insert_source(&index, &wheel.name, &wheel.version, source_hash.clone());
+        registry.insert(
+            RegistryHashTarget::wheel(&index, &wheel),
+            wheel_hash.clone(),
+        );
+        registry.insert(
+            RegistryHashTarget::source(&index, &wheel.name, &wheel.version, None),
+            source_hash.clone(),
+        );
         let strategy = HashStrategy::verify_build(hashes.clone(), registry.clone());
 
         // Changed or missing index hashes cannot change a known artifact's authority.
         for advertised in [&[][..], slice::from_ref(&source_hash)] {
             assert_eq!(
-                strategy.archive_policy_for_registry_wheel(&index, &wheel, advertised),
+                strategy.archive_policy_for_registry(
+                    RegistryHashTarget::wheel(&index, &wheel),
+                    advertised
+                ),
                 ArchiveHashPolicy::Any(slice::from_ref(&wheel_hash)),
             );
         }
         let equivalent_index = IndexUrl::parse("https://user:password@example.com/simple/", None)?;
         assert_eq!(
-            strategy.archive_policy_for_registry_wheel(&equivalent_index, &wheel, &[]),
+            strategy.archive_policy_for_registry(
+                RegistryHashTarget::wheel(&equivalent_index, &wheel),
+                &[]
+            ),
             ArchiveHashPolicy::Any(slice::from_ref(&wheel_hash)),
         );
         assert_eq!(
-            strategy.archive_policy_for_registry_wheel(&index, &other_wheel, &[]),
+            strategy
+                .archive_policy_for_registry(RegistryHashTarget::wheel(&index, &other_wheel), &[]),
             ArchiveHashPolicy::None,
         );
         assert_eq!(
-            strategy.archive_policy_for_registry_wheel(&index, &short_version_wheel, &[]),
+            strategy.archive_policy_for_registry(
+                RegistryHashTarget::wheel(&index, &short_version_wheel),
+                &[]
+            ),
             ArchiveHashPolicy::None,
         );
         assert_eq!(
-            strategy.archive_policy_for_registry_wheel(
-                &index,
-                &other_wheel,
+            strategy.archive_policy_for_registry(
+                RegistryHashTarget::wheel(&index, &other_wheel),
                 slice::from_ref(&wheel_hash),
             ),
             ArchiveHashPolicy::Any(&expected),
         );
         assert_eq!(
-            strategy.archive_policy_for_registry_wheel(&other_index, &wheel, &[]),
+            strategy
+                .archive_policy_for_registry(RegistryHashTarget::wheel(&other_index, &wheel), &[]),
             ArchiveHashPolicy::None,
         );
         for (index, wheel, advertised, comparison) in [
@@ -1401,46 +1356,47 @@ mod tests {
         ] {
             assert_eq!(
                 strategy.locked_registry_hash_comparison(
-                    &wheel.name,
-                    &wheel.version,
-                    index,
-                    &wheel.to_string(),
+                    RegistryHashTarget::wheel(index, wheel),
                     advertised,
                 ),
                 Some(comparison),
             );
         }
 
-        // A renamed source archive and a cached source revision keep the source-scoped policy.
+        // Source candidates and cached source revisions use the source-scoped policy.
+        assert_eq!(
+            strategy.locked_registry_hash_comparison(
+                RegistryHashTarget::source(&index, &wheel.name, &wheel.version, None),
+                slice::from_ref(&wheel_hash),
+            ),
+            Some(HashComparison::Mismatched),
+        );
         assert_eq!(
             strategy.locked_registry_validation(
                 &wheel.name,
                 &wheel.version,
-                registry.artifact_hashes(
+                registry.get(RegistryHashTarget::source(
+                    &index,
                     &wheel.name,
                     &wheel.version,
-                    &index,
-                    "demo__pkg-1.0.0.zip",
-                ),
+                    None
+                )),
                 slice::from_ref(&wheel_hash),
             ),
             HashValidation::Any(slice::from_ref(&source_hash)),
         );
         assert_eq!(
-            registry.artifact_hashes(
+            registry.get(RegistryHashTarget::source(
+                &other_index,
                 &wheel.name,
                 &wheel.version,
-                &other_index,
-                "demo__pkg-1.0.0.zip",
-            ),
+                None
+            )),
             None,
         );
         assert_eq!(
-            strategy.archive_policy_for_cached_source(
-                &wheel.name,
-                &wheel.version,
-                &index,
-                &local_wheel,
+            strategy.archive_policy_for_registry(
+                RegistryHashTarget::source(&index, &wheel.name, &wheel.version, Some(&local_wheel)),
                 slice::from_ref(&wheel_hash),
             ),
             ArchiveHashPolicy::Any(slice::from_ref(&source_hash)),
@@ -1448,9 +1404,8 @@ mod tests {
 
         // Lock identities are exact; a user-authored public-version pin still covers local builds.
         assert_eq!(
-            strategy.archive_policy_for_registry_wheel(
-                &index,
-                &local_wheel,
+            strategy.archive_policy_for_registry(
+                RegistryHashTarget::wheel(&index, &local_wheel),
                 slice::from_ref(&wheel_hash),
             ),
             ArchiveHashPolicy::None,
@@ -1461,21 +1416,15 @@ mod tests {
             ArchiveHashPolicy::Any(&expected),
         );
         assert_eq!(
-            HashStrategy::require(hashes.clone()).archive_policy_for_cached_source(
-                &wheel.name,
-                &wheel.version,
-                &index,
-                &local_wheel,
+            HashStrategy::require(hashes.clone()).archive_policy_for_registry(
+                RegistryHashTarget::source(&index, &wheel.name, &wheel.version, Some(&local_wheel)),
                 slice::from_ref(&source_hash),
             ),
             ArchiveHashPolicy::Any(&[]),
         );
         assert_eq!(
             HashStrategy::require(hashes.clone()).locked_registry_hash_comparison(
-                &local_wheel.name,
-                &local_wheel.version,
-                &index,
-                &local_wheel.to_string(),
+                RegistryHashTarget::wheel(&index, &local_wheel),
                 &[],
             ),
             None,
@@ -1491,11 +1440,13 @@ mod tests {
             HashStrategy::require(local_pins),
         ] {
             assert_eq!(
-                strategy.archive_policy_for_cached_source(
-                    &wheel.name,
-                    &wheel.version,
-                    &index,
-                    &local_wheel,
+                strategy.archive_policy_for_registry(
+                    RegistryHashTarget::source(
+                        &index,
+                        &wheel.name,
+                        &wheel.version,
+                        Some(&local_wheel)
+                    ),
                     slice::from_ref(&source_hash),
                 ),
                 ArchiveHashPolicy::Any(slice::from_ref(&wheel_hash)),
@@ -1518,7 +1469,10 @@ mod tests {
         )?;
         let id = VersionId::from_registry(locked_wheel.name.clone(), locked_wheel.version.clone());
         let mut registry = LockedRegistryHashes::default();
-        registry.insert_wheel(&index, &locked_wheel, locked_hash.clone());
+        registry.insert(
+            RegistryHashTarget::wheel(&index, &locked_wheel),
+            locked_hash.clone(),
+        );
         let locked = HashStrategy::verify_build(
             Arc::new(FxHashMap::from_iter([(
                 id.clone(),
@@ -1534,17 +1488,20 @@ mod tests {
 
         // Both the locked artifact and the explicit constraint must authorize a recorded wheel.
         assert_eq!(
-            constrained.archive_policy_for_registry_wheel(&index, &locked_wheel, &[]),
+            constrained
+                .archive_policy_for_registry(RegistryHashTarget::wheel(&index, &locked_wheel), &[]),
             ArchiveHashPolicy::Any(&[]),
         );
         // A wheel absent from the lock is governed by the explicit constraint on its own.
         assert_eq!(
-            constrained.archive_policy_for_registry_wheel(&index, &other_wheel, &[]),
+            constrained
+                .archive_policy_for_registry(RegistryHashTarget::wheel(&index, &other_wheel), &[]),
             ArchiveHashPolicy::Any(slice::from_ref(&allowed_hash)),
         );
         // Cloning a strategy must not change the original lock-backed policy.
         assert_eq!(
-            locked.archive_policy_for_registry_wheel(&index, &locked_wheel, &[]),
+            locked
+                .archive_policy_for_registry(RegistryHashTarget::wheel(&index, &locked_wheel), &[]),
             ArchiveHashPolicy::Any(slice::from_ref(&locked_hash)),
         );
         Ok(())

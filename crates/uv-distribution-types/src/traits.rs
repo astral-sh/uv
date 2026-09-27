@@ -2,15 +2,17 @@ use std::borrow::Cow;
 
 use uv_normalize::PackageName;
 use uv_pep508::VerbatimUrl;
+use uv_pypi_types::HashDigest;
 
 use crate::error::Error;
 use crate::{
     BuiltDist, CachedDirectUrlDist, CachedDist, CachedRegistryDist, DirectUrlBuiltDist,
-    DirectUrlSourceDist, DirectorySourceDist, Dist, DistributionId, File, GitDirectorySourceDist,
-    GitPathBuiltDist, GitPathSourceDist, IndexUrl, InstalledDirectUrlDist, InstalledDist,
+    DirectUrlSourceDist, DirectorySourceDist, Dist, DistributionId, GitDirectorySourceDist,
+    GitPathBuiltDist, GitPathSourceDist, InstalledDirectUrlDist, InstalledDist,
     InstalledEggInfoDirectory, InstalledEggInfoFile, InstalledLegacyEditable,
     InstalledRegistryDist, InstalledVersion, LocalDist, PackageId, PathBuiltDist, PathSourceDist,
-    RegistryBuiltWheel, RegistrySourceDist, ResourceId, SourceDist, VersionId, VersionOrUrlRef,
+    RegistryBuiltWheel, RegistryHashTarget, RegistrySourceDist, ResourceId, SourceDist, VersionId,
+    VersionOrUrlRef,
 };
 
 pub trait Name {
@@ -25,8 +27,8 @@ pub trait DistributionMetadata: Name {
     /// for URL-based distributions.
     fn version_or_url(&self) -> VersionOrUrlRef<'_>;
 
-    /// Return the concrete registry artifact, when its provenance is available.
-    fn registry_file(&self) -> Option<(&IndexUrl, &File)> {
+    /// Return the registry hash target and advertised hashes, when available.
+    fn registry_hash_target(&self) -> Option<(RegistryHashTarget<'_>, &[HashDigest])> {
         None
     }
 

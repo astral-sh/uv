@@ -6,11 +6,11 @@ use tracing::debug;
 
 use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_cache_info::CacheInfo;
-use uv_distribution_filename::WheelFilename;
+use uv_distribution_filename::{WheelFilename, WheelFilenameKey};
 use uv_distribution_types::{
     BuildInfo, BuildVariables, CachedRegistryDist, ConfigSettings, ExtraBuildRequirement,
     ExtraBuildRequires, ExtraBuildVariables, Hashed, Index, IndexLocations, IndexUrl,
-    PackageConfigSettings, RegistryBuiltDist, RegistrySourceDist,
+    PackageConfigSettings, RegistryBuiltDist, RegistryHashTarget, RegistrySourceDist,
 };
 use uv_fs::{directories, files};
 use uv_normalize::PackageName;
@@ -57,16 +57,8 @@ impl IndexEntry<'_> {
         no_build: bool,
         no_binary: bool,
     ) -> bool {
-        // Equal PEP 440 versions can have different wheel filenames, such as `1.0` and `1.0.0`.
         self.matches_index_and_build_policy(index, no_build, no_binary)
-            && self.dist.filename == *filename
-            && self
-                .dist
-                .filename
-                .version
-                .release()
-                .iter()
-                .eq(filename.version.release().iter())
+            && WheelFilenameKey::new(&self.dist.filename) == WheelFilenameKey::new(filename)
     }
 
     fn matches_source(
@@ -257,9 +249,8 @@ impl<'a> RegistryWheelIndex<'a> {
                             {
                                 if wheel.filename.compatibility(tags).is_compatible() {
                                     // Enforce hash-checking based on the built distribution.
-                                    if wheel.satisfies(hasher.archive_policy_for_registry_wheel(
-                                        index.url(),
-                                        &wheel.filename,
+                                    if wheel.satisfies(hasher.archive_policy_for_registry(
+                                        RegistryHashTarget::wheel(index.url(), &wheel.filename),
                                         wheel.hashes(),
                                     )) {
                                         entries.push(IndexEntry {
@@ -284,9 +275,8 @@ impl<'a> RegistryWheelIndex<'a> {
                             {
                                 if wheel.filename.compatibility(tags).is_compatible() {
                                     // Enforce hash-checking based on the built distribution.
-                                    if wheel.satisfies(hasher.archive_policy_for_registry_wheel(
-                                        index.url(),
-                                        &wheel.filename,
+                                    if wheel.satisfies(hasher.archive_policy_for_registry(
+                                        RegistryHashTarget::wheel(index.url(), &wheel.filename),
                                         wheel.hashes(),
                                     )) {
                                         entries.push(IndexEntry {
@@ -378,11 +368,13 @@ impl<'a> RegistryWheelIndex<'a> {
                         if let Some(wheel) = ResolvedWheel::from_built_source(wheel_dir, cache) {
                             if wheel.filename.compatibility(tags).is_compatible() {
                                 // Enforce hash-checking based on the source distribution.
-                                if revision.satisfies(hasher.archive_policy_for_cached_source(
-                                    package,
-                                    &source_version,
-                                    index.url(),
-                                    &wheel.filename,
+                                if revision.satisfies(hasher.archive_policy_for_registry(
+                                    RegistryHashTarget::source(
+                                        index.url(),
+                                        package,
+                                        &source_version,
+                                        Some(&wheel.filename),
+                                    ),
                                     revision.hashes(),
                                 )) {
                                     let wheel = CachedWheel::from_entry(

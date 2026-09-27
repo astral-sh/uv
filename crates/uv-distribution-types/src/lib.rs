@@ -58,8 +58,8 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::{Pep508Url, VerbatimUrl};
 use uv_pypi_types::{
-    ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, ParsedPathUrl,
-    ParsedUrl, VerbatimParsedUrl,
+    HashDigest, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl,
+    ParsedPathUrl, ParsedUrl, VerbatimParsedUrl,
 };
 use uv_redacted::DisplaySafeUrl;
 
@@ -1059,8 +1059,11 @@ impl DistributionMetadata for RegistryBuiltWheel {
         VersionOrUrlRef::Version(&self.filename.version)
     }
 
-    fn registry_file(&self) -> Option<(&IndexUrl, &File)> {
-        Some((&self.index, &self.file))
+    fn registry_hash_target(&self) -> Option<(RegistryHashTarget<'_>, &[HashDigest])> {
+        Some((
+            RegistryHashTarget::wheel(&self.index, &self.filename),
+            self.file.hashes.as_slice(),
+        ))
     }
 }
 
@@ -1069,8 +1072,8 @@ impl DistributionMetadata for RegistryBuiltDist {
         self.best_wheel().version_or_url()
     }
 
-    fn registry_file(&self) -> Option<(&IndexUrl, &File)> {
-        self.best_wheel().registry_file()
+    fn registry_hash_target(&self) -> Option<(RegistryHashTarget<'_>, &[HashDigest])> {
+        self.best_wheel().registry_hash_target()
     }
 }
 
@@ -1105,8 +1108,11 @@ impl DistributionMetadata for RegistrySourceDist {
         VersionOrUrlRef::Version(&self.version)
     }
 
-    fn registry_file(&self) -> Option<(&IndexUrl, &File)> {
-        Some((&self.index, &self.file))
+    fn registry_hash_target(&self) -> Option<(RegistryHashTarget<'_>, &[HashDigest])> {
+        Some((
+            RegistryHashTarget::source(&self.index, &self.name, &self.version, None),
+            self.file.hashes.as_slice(),
+        ))
     }
 }
 
@@ -1186,9 +1192,9 @@ impl DistributionMetadata for SourceDist {
         }
     }
 
-    fn registry_file(&self) -> Option<(&IndexUrl, &File)> {
+    fn registry_hash_target(&self) -> Option<(RegistryHashTarget<'_>, &[HashDigest])> {
         match self {
-            Self::Registry(dist) => dist.registry_file(),
+            Self::Registry(dist) => dist.registry_hash_target(),
             Self::DirectUrl(_)
             | Self::GitPath(_)
             | Self::GitDirectory(_)
@@ -1217,9 +1223,9 @@ impl DistributionMetadata for BuiltDist {
         }
     }
 
-    fn registry_file(&self) -> Option<(&IndexUrl, &File)> {
+    fn registry_hash_target(&self) -> Option<(RegistryHashTarget<'_>, &[HashDigest])> {
         match self {
-            Self::Registry(dist) => dist.registry_file(),
+            Self::Registry(dist) => dist.registry_hash_target(),
             Self::DirectUrl(_) | Self::Path(_) | Self::GitPath(_) => None,
         }
     }
@@ -1240,10 +1246,10 @@ impl DistributionMetadata for Dist {
         }
     }
 
-    fn registry_file(&self) -> Option<(&IndexUrl, &File)> {
+    fn registry_hash_target(&self) -> Option<(RegistryHashTarget<'_>, &[HashDigest])> {
         match self {
-            Self::Built(dist) => dist.registry_file(),
-            Self::Source(dist) => dist.registry_file(),
+            Self::Built(dist) => dist.registry_hash_target(),
+            Self::Source(dist) => dist.registry_hash_target(),
         }
     }
 }

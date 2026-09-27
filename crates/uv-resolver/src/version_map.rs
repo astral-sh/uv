@@ -12,7 +12,7 @@ use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
     HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl, MinimumLibcVersion,
-    PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, RequiresPython,
+    PrioritizedDist, RegistryBuiltWheel, RegistryHashTarget, RegistrySourceDist, RequiresPython,
     SourceDistCompatibility, WheelCompatibility,
 };
 use uv_normalize::PackageName;
@@ -676,7 +676,6 @@ impl VersionMapLazy {
                     DistFilename::WheelFilename(filename) => {
                         let compatibility = self.wheel_compatibility(
                             &filename,
-                            file.filename.as_ref(),
                             hashes.as_slice(),
                             yanked,
                             excluded,
@@ -698,7 +697,6 @@ impl VersionMapLazy {
                     DistFilename::SourceDistFilename(filename) => {
                         let compatibility = self.source_dist_compatibility(
                             &filename,
-                            file.filename.as_ref(),
                             hashes.as_slice(),
                             yanked,
                             excluded,
@@ -729,7 +727,6 @@ impl VersionMapLazy {
     fn source_dist_compatibility(
         &self,
         filename: &SourceDistFilename,
-        registry_filename: &str,
         hashes: &[HashDigest],
         yanked: Option<&Yanked>,
         excluded: bool,
@@ -769,8 +766,10 @@ impl VersionMapLazy {
         }
 
         // Check if hashes line up. If hashes aren't required, they're considered matching.
-        let hash =
-            self.hash_comparison(&filename.name, &filename.version, registry_filename, hashes);
+        let hash = self.hash_comparison(
+            RegistryHashTarget::source(&self.index, &filename.name, &filename.version, None),
+            hashes,
+        );
 
         SourceDistCompatibility::Compatible(hash)
     }
@@ -778,7 +777,6 @@ impl VersionMapLazy {
     fn wheel_compatibility(
         &self,
         filename: &WheelFilename,
-        registry_filename: &str,
         hashes: &[HashDigest],
         yanked: Option<&Yanked>,
         excluded: bool,
@@ -825,8 +823,7 @@ impl VersionMapLazy {
         };
 
         // Check if hashes line up. If hashes aren't required, they're considered matching.
-        let hash =
-            self.hash_comparison(&filename.name, &filename.version, registry_filename, hashes);
+        let hash = self.hash_comparison(RegistryHashTarget::wheel(&self.index, filename), hashes);
 
         // Break ties with the build tag.
         let build_tag = filename.build_tag().cloned();
@@ -837,14 +834,13 @@ impl VersionMapLazy {
     /// Compare the hashes for a candidate from a registry index.
     fn hash_comparison(
         &self,
-        name: &PackageName,
-        version: &Version,
-        filename: &str,
+        target: RegistryHashTarget<'_>,
         hashes: &[HashDigest],
     ) -> HashComparison {
         self.hasher
-            .locked_registry_hash_comparison(name, version, &self.index, filename, hashes)
+            .locked_registry_hash_comparison(target, hashes)
             .unwrap_or_else(|| {
+                let (name, version) = target.name_and_version();
                 let hash_policy = self.hasher.archive_policy_for_package(name, version);
                 // An empty hash list does not affect candidate ranking; archive verification still
                 // enforces a required empty policy.

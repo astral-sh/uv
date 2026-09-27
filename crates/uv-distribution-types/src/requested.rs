@@ -1,11 +1,12 @@
 use std::fmt::{Display, Formatter};
 
 use crate::{
-    Dist, DistributionId, DistributionMetadata, File, Identifier, IndexUrl, InstalledDist, Name,
-    ResourceId, VersionId, VersionOrUrlRef,
+    Dist, DistributionId, DistributionMetadata, Identifier, InstalledDist, Name,
+    RegistryHashTarget, ResourceId, VersionId, VersionOrUrlRef,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
+use uv_pypi_types::HashDigest;
 
 /// A distribution that can be requested during resolution.
 ///
@@ -51,10 +52,10 @@ impl DistributionMetadata for RequestedDist {
         }
     }
 
-    fn registry_file(&self) -> Option<(&IndexUrl, &File)> {
+    fn registry_hash_target(&self) -> Option<(RegistryHashTarget<'_>, &[HashDigest])> {
         match self {
             Self::Installed(_) => None,
-            Self::Installable(dist) => dist.registry_file(),
+            Self::Installable(dist) => dist.registry_hash_target(),
         }
     }
 }
