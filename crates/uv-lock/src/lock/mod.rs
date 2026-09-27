@@ -3032,7 +3032,7 @@ impl Lock {
 
     /// Return a [`HashStrategy`] for independently resolved isolated build requirements.
     ///
-    /// Registry wheels are verified when their complete filename is recorded.
+    /// Registry wheels are verified when their index and complete filename are recorded.
     /// This allows wheels omitted by the runtime lockfile's platform markers. Source archives for
     /// a known source and version must still match a recorded source hash before running a backend.
     pub fn build_hash_strategy(&self, root: &Path) -> Result<HashStrategy, LockError> {
@@ -3054,7 +3054,7 @@ impl Lock {
             }
             for wheel in &package.wheels {
                 if let Some(hash) = &wheel.hash {
-                    registry.insert_wheel(&wheel.filename, hash.clone());
+                    registry.insert_wheel(&index, &wheel.filename, hash.clone());
                     // A public-version lock entry can contain local-version wheels. Candidate
                     // preferences use each recorded wheel's complete version.
                     let digests = hashes
@@ -10790,11 +10790,16 @@ wheels = [{ url = "https://example.org/files/demo_pkg-1.0.0+local-1-py3-none-any
                 &wheel.to_string(),
                 slice::from_ref(&digest),
             ),
-            Some(HashComparison::Matched),
+            Some(HashComparison::Mismatched),
         );
-        let policy = hasher.archive_policy_for_registry_wheel(&wheel, &[]);
-        assert!(policy.matches(slice::from_ref(&digest)));
-        assert!(policy.matches(slice::from_ref(&other_digest)));
+        assert_eq!(
+            hasher.archive_policy_for_registry_wheel(&index, &wheel, &[]),
+            ArchiveHashPolicy::Any(slice::from_ref(&digest)),
+        );
+        assert_eq!(
+            hasher.archive_policy_for_registry_wheel(&other_index, &wheel, &[]),
+            ArchiveHashPolicy::Any(slice::from_ref(&other_digest)),
+        );
         Ok(())
     }
 

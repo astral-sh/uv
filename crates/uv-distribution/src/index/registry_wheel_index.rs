@@ -57,8 +57,16 @@ impl IndexEntry<'_> {
         no_build: bool,
         no_binary: bool,
     ) -> bool {
+        // Equal PEP 440 versions can have different wheel filenames, such as `1.0` and `1.0.0`.
         self.matches_index_and_build_policy(index, no_build, no_binary)
             && self.dist.filename == *filename
+            && self
+                .dist
+                .filename
+                .version
+                .release()
+                .iter()
+                .eq(filename.version.release().iter())
     }
 
     fn matches_source(
@@ -250,6 +258,7 @@ impl<'a> RegistryWheelIndex<'a> {
                                 if wheel.filename.compatibility(tags).is_compatible() {
                                     // Enforce hash-checking based on the built distribution.
                                     if wheel.satisfies(hasher.archive_policy_for_registry_wheel(
+                                        index.url(),
                                         &wheel.filename,
                                         wheel.hashes(),
                                     )) {
@@ -276,6 +285,7 @@ impl<'a> RegistryWheelIndex<'a> {
                                 if wheel.filename.compatibility(tags).is_compatible() {
                                     // Enforce hash-checking based on the built distribution.
                                     if wheel.satisfies(hasher.archive_policy_for_registry_wheel(
+                                        index.url(),
                                         &wheel.filename,
                                         wheel.hashes(),
                                     )) {
