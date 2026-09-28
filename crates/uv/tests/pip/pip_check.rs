@@ -123,6 +123,60 @@ fn check_arbitrary_equality() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn check_post_release_after_prerelease() -> Result<()> {
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
+        name = "post-release-after-prerelease"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.package-a.versions."1.0.0"]
+        sdist = false
+        requires = ["package-b>1.0.dev0,>1.0a1"]
+
+        [packages.package-b.versions."1.0.post0"]
+        sdist = false
+    "#})?;
+    let index = PackseServer::from_scenario(&scenario);
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("package-a")
+        .arg("--strict")
+        .arg("--index-url")
+        .arg(index.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + package-a==1.0.0
+     + package-b==1.0.post0
+    ");
+
+    uv_snapshot!(context.pip_check(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checked 2 packages in [TIME]
+    All installed packages are compatible
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .args(["package-a", "package-b>1.0.dev0,>1.0a1"])
+        .arg("--strict")
+        .arg("--index-url")
+        .arg(index.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checked 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Check a versionless `.egg-info` file installed by distutils.
 #[test]
 fn check_versionless_egg_info_file() -> Result<()> {

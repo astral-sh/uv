@@ -5,9 +5,7 @@ use std::hash::{Hash, Hasher};
 use std::ops::Bound;
 use std::str::FromStr;
 
-use crate::{
-    Operator, OperatorParseError, Version, VersionPattern, VersionPatternParseError, version,
-};
+use crate::{Operator, OperatorParseError, Version, VersionPattern, VersionPatternParseError};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 #[cfg(feature = "tracing")]
 use tracing::warn;
@@ -716,19 +714,14 @@ impl VersionSpecifier {
                     return true;
                 }
 
-                if version::compare_release(&this.release(), &other.release()) == Ordering::Equal {
-                    // This special case is here so that, unless the specifier itself
-                    // includes is a post-release version, that we do not accept
-                    // post-release versions for the version mentioned in the specifier
-                    // (e.g. >3.1 should not match 3.0.post0, but should match 3.2.post0).
-                    if !this.is_post() && other.is_post() {
-                        return false;
-                    }
-
-                    // We already checked that self doesn't have a local version
-                    if other.is_local() {
-                        return false;
-                    }
+                // `>V` excludes post-releases of V unless V is itself a post-release.
+                // A post-release's base retains its pre-release component, so `>1.0a1`
+                // excludes `1.0a1.post0` but accepts `1.0.post0`.
+                if !this.is_post()
+                    && other.is_post()
+                    && other.as_ref().clone().with_post(None).with_dev(None) == *this
+                {
+                    return false;
                 }
 
                 other.as_ref() > this
@@ -1080,7 +1073,7 @@ mod tests {
 
     use indoc::indoc;
 
-    use crate::LocalSegment;
+    use crate::{LocalSegment, version};
 
     use super::*;
 
