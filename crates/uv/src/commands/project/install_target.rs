@@ -108,8 +108,12 @@ impl<'lock> Installable<'lock> for InstallTarget<'lock> {
         else {
             return None;
         };
-        let root = lock.root().filter(|root| root.name() != *name)?;
-        let root_member = workspace.packages().get(root.name())?;
+        let root = &workspace.pyproject_toml().project.as_ref()?.name;
+        if root == *name {
+            return None;
+        }
+        lock.find_by_name(root).ok().flatten()?;
+        let root_member = workspace.packages().get(root)?;
         let pyproject = root_member.pyproject_toml();
         let declared_groups = pyproject
             .dependency_groups
@@ -126,8 +130,8 @@ impl<'lock> Installable<'lock> for InstallTarget<'lock> {
 
         declared_groups
             .chain(legacy_dev)
-            .any(|group| self.includes_group(Some(root.name()), group, groups))
-            .then_some(root.name())
+            .any(|group| self.includes_group(Some(root), group, groups))
+            .then_some(root)
     }
 
     fn includes_group(
@@ -490,9 +494,9 @@ impl<'lock> InstallTarget<'lock> {
                 // Validate inherited root groups even when `--no-group` excludes them from
                 // installation and therefore omits the root from the selected group roots.
                 let workspace_root = matches!(self, Self::Project { .. })
-                    .then(|| lock.root())
+                    .then(|| workspace.pyproject_toml().project.as_ref())
                     .flatten()
-                    .map(Package::name);
+                    .map(|project| &project.name);
                 let roots = self.roots().chain(workspace_root).collect::<FxHashSet<_>>();
                 let member_groups = lock
                     .packages()

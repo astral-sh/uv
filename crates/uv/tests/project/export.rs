@@ -1236,6 +1236,85 @@ fn requirements_txt_frozen_workspace_member_group_precedence() -> Result<()> {
     Ok(())
 }
 
+/// Workspace-root groups are available when the root is a non-editable directory.
+#[test]
+fn requirements_txt_workspace_non_editable_root_group() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        dev = ["dep"]
+
+        [tool.uv.workspace]
+        members = ["member", "dep"]
+
+        [tool.uv.sources]
+        dep = { workspace = true }
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+    context
+        .temp_dir
+        .child("member")
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "1.0.0"
+        dependencies = ["root"]
+
+        [tool.uv.sources]
+        root = { workspace = true, editable = false }
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+    context
+        .temp_dir
+        .child("dep")
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "dep"
+        version = "1.0.0"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    context.lock().arg("--offline").assert().success();
+
+    uv_snapshot!(context.filters(), context.export()
+        .args(["--frozen", "--offline", "--package", "member", "--only-group", "dev"])
+        .args(["--no-header", "--no-hashes", "--no-annotate"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./dep
+    ");
+
+    uv_snapshot!(context.filters(), context.export()
+        .args(["--frozen", "--offline", "--package", "member", "--no-group", "dev"])
+        .args(["--no-header", "--no-hashes", "--no-annotate"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member
+    .
+    ");
+
+    Ok(())
+}
+
 #[cfg(feature = "test-universal")]
 #[test]
 fn allrequirements_txt_() -> Result<()> {
