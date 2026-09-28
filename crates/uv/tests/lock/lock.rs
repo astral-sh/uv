@@ -581,7 +581,6 @@ fn lock_equivalent_pruned_inputs() -> Result<()> {
         exclude-newer = "2024-03-25T00:00:00Z"
 
         [manifest]
-        constraints = [{ name = "ok", specifier = ">=2" }]
         overrides = [{ name = "ok", specifier = ">=2" }]
         excludes = ["excluded"]
 
@@ -642,7 +641,7 @@ fn lock_equivalent_pruned_inputs() -> Result<()> {
     ");
     assert_eq!(context.read("uv.lock"), locked);
 
-    // A changed retained constraint still invalidates the lock.
+    // A changed constraint that admits the locked version can also reuse the lock.
     pyproject_toml.write_str(indoc! {r#"
         [project]
         name = "project"
@@ -660,13 +659,11 @@ fn lock_equivalent_pruned_inputs() -> Result<()> {
         exclude-dependencies = ["excluded"]
     "#})?;
     uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-index").arg("--find-links").arg(&links), @"
-    exit_code: 1 (failure)
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
-
-    hint: To update the lockfile, run `uv lock`.
     ");
+    assert_eq!(context.read("uv.lock"), locked);
     Ok(())
 }
 
