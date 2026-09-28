@@ -5,9 +5,10 @@ extern crate uv_performance_memory_allocator;
 use std::env;
 use std::fmt::Write;
 use std::hint::black_box;
-use std::io::Cursor;
+use std::io;
 use std::path::Path;
 use std::str::FromStr;
+use std::task::Poll;
 
 use async_zip::base::write::ZipFileWriter;
 use async_zip::{Compression, ZipEntryBuilder};
@@ -16,11 +17,14 @@ use criterion::{
     measurement::WallTime,
 };
 use flate2::write::GzEncoder;
+use futures::TryStreamExt;
 use futures::executor::block_on;
 use futures::io::AllowStdIo;
+use futures::stream;
 use sha2::{Digest, Sha256};
 use tar_codec::{ArchiveBuilder as _, EntryMetadata, TarEncoder};
-use tokio_util::compat::FuturesAsyncWriteCompatExt;
+use tokio::io::AsyncRead;
+use tokio_util::compat::{FuturesAsyncReadCompatExt, FuturesAsyncWriteCompatExt};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, RegistryClientBuilder};
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
@@ -37,7 +41,7 @@ const MANY_FILES_WHEEL_FILENAME: &str = "manyfiles-0.0.0-py3-none-any.whl";
 const MANY_FILES_WHEEL_FILE_COUNT: usize = 10_000;
 const MANY_FILES_SDIST_TOP_LEVEL: &str = "manyfiles-0.0.0";
 const MANY_FILES_SDIST_FILE_COUNT: usize = 10_000;
-const HASH_BENCHMARK_SIZE: usize = 1024 * 1024;
+const SHA256_BENCHMARK_SIZE: usize = 1024 * 1024;
 
 fn is_codspeed_simulation() -> bool {
     // CodSpeed reports Simulation as `instrumentation` in current versions.
@@ -48,7 +52,7 @@ fn is_codspeed_simulation() -> bool {
 }
 
 fn hash_sha256(c: &mut Criterion<WallTime>) {
-    let bytes = vec![0_u8; HASH_BENCHMARK_SIZE];
+    let bytes = vec![0_u8; SHA256_BENCHMARK_SIZE];
 
     c.bench_function("hash_sha256", |b| {
         b.iter(|| black_box(Sha256::digest(black_box(&bytes))));
@@ -56,24 +60,27 @@ fn hash_sha256(c: &mut Criterion<WallTime>) {
 }
 
 fn hash_reader(criterion: &mut Criterion<WallTime>) {
-    let bytes = vec![0_u8; HASH_BENCHMARK_SIZE];
+    // Rounded PyPI wheel size deciles (10th through 90th), with a second median-sized wheel,
+    // followed by a representative 33 MiB Python standalone archive.
+    let inputs = [7, 12, 20, 32, 55, 55, 98, 220, 589, 3154, 33 * 1024]
+        .map(|kibibytes| vec![0_u8; kibibytes * 1024]);
     let runtime = tokio::runtime::Builder::new_current_thread()
         .build()
         .expect("Failed to create Tokio runtime");
     let mut group = criterion.benchmark_group("hash_reader");
-    group.throughput(Throughput::Bytes(HASH_BENCHMARK_SIZE as u64));
+    group.throughput(Throughput::Bytes(
+        inputs.iter().map(|bytes| bytes.len() as u64).sum(),
+    ));
 
     for (case, algorithms) in [
         ("none", &[][..]),
-        ("md5", &[HashAlgorithm::Md5][..]),
         ("sha256", &[HashAlgorithm::Sha256][..]),
         ("sha384", &[HashAlgorithm::Sha384][..]),
         ("sha512", &[HashAlgorithm::Sha512][..]),
         ("blake2b", &[HashAlgorithm::Blake2b256][..]),
         (
-            "all",
+            "combined",
             &[
-                HashAlgorithm::Md5,
                 HashAlgorithm::Sha256,
                 HashAlgorithm::Sha384,
                 HashAlgorithm::Sha512,
@@ -81,38 +88,67 @@ fn hash_reader(criterion: &mut Criterion<WallTime>) {
             ][..],
         ),
     ] {
-        group.bench_with_input(
-            BenchmarkId::new("finish", case),
-            algorithms,
-            |benchmark, algorithms| {
-                benchmark.iter_batched(
-                    || {
-                        algorithms
-                            .iter()
-                            .copied()
-                            .map(Hasher::from)
-                            .collect::<Vec<_>>()
-                    },
-                    |mut hashers| {
-                        let bytes_read = {
-                            let mut reader = HashReader::new(
-                                Cursor::new(black_box(bytes.as_slice())),
-                                &mut hashers,
-                            );
-                            runtime
-                                .block_on(reader.finish())
-                                .expect("Failed to read benchmark input");
-                            reader.bytes_read()
-                        };
-                        black_box((bytes_read, hashers));
-                    },
-                    BatchSize::SmallInput,
-                );
-            },
-        );
+        // Exercise chunks both smaller and larger than the reader's drain buffer.
+        for chunk_size in [4 * 1024, 64 * 1024] {
+            group.bench_with_input(
+                BenchmarkId::new(format!("finish_{case}"), chunk_size),
+                algorithms,
+                |benchmark, algorithms| {
+                    benchmark.iter_batched(
+                        || {
+                            inputs
+                                .iter()
+                                .map(|_| {
+                                    algorithms
+                                        .iter()
+                                        .copied()
+                                        .map(Hasher::from)
+                                        .collect::<Vec<_>>()
+                                })
+                                .collect::<Vec<_>>()
+                        },
+                        |mut hashers| {
+                            runtime.block_on(async {
+                                for (bytes, hashers) in inputs.iter().zip(&mut hashers) {
+                                    let stream =
+                                        hash_reader_stream(black_box(bytes.as_slice()), chunk_size);
+                                    let mut reader = HashReader::new(stream, hashers);
+                                    reader
+                                        .finish()
+                                        .await
+                                        .expect("Failed to read benchmark input");
+                                    black_box(reader.bytes_read());
+                                }
+                            });
+                            black_box(hashers);
+                        },
+                        BatchSize::SmallInput,
+                    );
+                },
+            );
+        }
     }
 
     group.finish();
+}
+
+/// Simulate chunked delivery through the same stream adapter as HTTP downloads.
+fn hash_reader_stream(bytes: &[u8], chunk_size: usize) -> impl AsyncRead + Unpin + '_ {
+    let mut chunks = bytes.chunks(chunk_size);
+    let mut pending = true;
+    stream::poll_fn(move |context| {
+        // Yield before each chunk to include wakeup overhead without network timing noise.
+        if pending {
+            pending = false;
+            context.waker().wake_by_ref();
+            Poll::Pending
+        } else {
+            pending = true;
+            Poll::Ready(chunks.next().map(Ok::<_, io::Error>))
+        }
+    })
+    .into_async_read()
+    .compat()
 }
 
 fn create_many_files_wheel() -> tempfile::NamedTempFile {
