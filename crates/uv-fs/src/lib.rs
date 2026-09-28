@@ -1,4 +1,4 @@
-use std::io;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
@@ -496,16 +496,18 @@ pub async fn write_atomic(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std
 
 /// Write `data` to `path` atomically using a temporary file and atomic rename.
 pub fn write_atomic_sync(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std::io::Result<()> {
-    let temp_file = tempfile_in(
-        path.as_ref()
-            .parent()
-            .expect("Write path must have a parent"),
-    )?;
-    // Reopen with truncation so ext4's `auto_da_alloc` starts writeback on close, before the
-    // rename takes the directory lock. Writing through the original descriptor instead defers
-    // that work until rename, causing contention between concurrent writes in the same directory.
-    fs_err::write(&temp_file, data)?;
-    persist_with_retry_sync(temp_file, path.as_ref())
+    let path = path.as_ref();
+    let mut temp_file = tempfile_in(path.parent().expect("Write path must have a parent"))?;
+    if cfg!(target_os = "linux") && fs_err::symlink_metadata(path).is_ok() {
+        // Reopen with truncation so ext4's `auto_da_alloc` starts writeback on close, before
+        // rename takes the directory lock. Only do this for replacements: new files can keep
+        // their delayed allocation. Existence is a performance hint; rename remains atomic if
+        // another writer creates or removes the destination after this check.
+        fs_err::write(&temp_file, data)?;
+    } else {
+        temp_file.write_all(data.as_ref())?;
+    }
+    persist_with_retry_sync(temp_file, path)
 }
 
 /// Copy `from` to `to` atomically using a temporary file and atomic rename.
