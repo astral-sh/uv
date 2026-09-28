@@ -301,6 +301,8 @@ pub struct ManagedPythonInstallation {
     path: PathBuf,
     /// An install key for the Python version.
     key: PythonInstallationKey,
+    /// The implementation in the installation key, before mapping Emscripten to Pyodide.
+    pub(crate) implementation: ImplementationName,
     /// The URL with the Python archive.
     ///
     /// Empty when self was constructed from a path.
@@ -316,14 +318,17 @@ pub struct ManagedPythonInstallation {
 }
 
 impl ManagedPythonInstallation {
-    pub fn new(path: PathBuf, download: &ManagedPythonDownload) -> Self {
-        Self {
+    pub fn new(path: PathBuf, download: &ManagedPythonDownload) -> Result<Self, Error> {
+        let key = download.key().clone();
+        let implementation = ImplementationName::try_from(&key.implementation)?;
+        Ok(Self {
             path,
-            key: download.key().clone(),
+            key,
+            implementation,
             url: Some(download.url().clone()),
             sha256: download.sha256().cloned(),
             build: download.build().map(Cow::Borrowed),
-        }
+        })
     }
 
     fn from_path(path: impl AsRef<Path>) -> Result<Self, Error> {
@@ -336,9 +341,7 @@ impl ManagedPythonInstallation {
                 .ok_or(Error::NameError("not a valid string".to_string()))?,
         )?;
 
-        if let LenientImplementationName::Unknown(name) = &key.implementation {
-            return Err(ImplementationError::UnknownImplementation(name.clone()).into());
-        }
+        let implementation = ImplementationName::try_from(&key.implementation)?;
 
         let path = std::path::absolute(path)
             .map_err(|err| Error::AbsolutePath(path.to_path_buf(), err))?;
@@ -353,6 +356,7 @@ impl ManagedPythonInstallation {
         Ok(Self {
             path,
             key,
+            implementation,
             url: None,
             sha256: None,
             build,
@@ -472,11 +476,10 @@ impl ManagedPythonInstallation {
     }
 
     pub fn implementation(&self) -> ImplementationName {
-        match self.key.implementation().into_owned() {
-            LenientImplementationName::Known(implementation) => implementation,
-            LenientImplementationName::Unknown(_) => {
-                panic!("Managed Python installations should have a known implementation")
-            }
+        if self.key.os().is_emscripten() {
+            ImplementationName::Pyodide
+        } else {
+            self.implementation
         }
     }
 
@@ -1031,6 +1034,7 @@ mod tests {
         ManagedPythonInstallation {
             path: PathBuf::from("/test/path"),
             key,
+            implementation,
             url: None,
             sha256: None,
             build: build.map(|s| Cow::Owned(s.to_owned())),

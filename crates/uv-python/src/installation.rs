@@ -348,7 +348,7 @@ impl PythonInstallation {
             DownloadResult::Fetched(path) => path,
         };
 
-        let installed = ManagedPythonInstallation::new(path, download);
+        let installed = ManagedPythonInstallation::new(path, download)?;
         installed.ensure_externally_managed()?;
         installed.ensure_sysconfig_patched()?;
         installed.ensure_canonical_executables()?;
