@@ -347,9 +347,9 @@ impl<'a> RequirementExpander<'a> {
 
                         if marker.is_false() {
                             trace!(
-                                "Skipping {constraint} because of disjoint markers: `{}` vs. `{}`",
-                                constraint.marker.try_to_string().unwrap(),
-                                requirement.marker.try_to_string().unwrap(),
+                                "Skipping {constraint} because of disjoint markers: `{:?}` vs. `{:?}`",
+                                constraint.marker,
+                                requirement.marker,
                             );
                             return None;
                         }
@@ -372,9 +372,9 @@ impl<'a> RequirementExpander<'a> {
 
                     if marker.is_false() {
                         trace!(
-                            "Skipping {constraint} because of disjoint markers: `{}` vs. `{}`",
-                            constraint.marker.try_to_string().unwrap(),
-                            requirement.marker.try_to_string().unwrap(),
+                            "Skipping {constraint} because of disjoint markers: `{:?}` vs. `{:?}`",
+                            constraint.marker,
+                            requirement.marker,
                         );
                         return None;
                     }
