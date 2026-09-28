@@ -467,7 +467,7 @@ pub(crate) async fn install(
         &receipt_excludes,
         &receipt_build_constraints,
         &settings.resolver.dependency_metadata,
-    );
+    )?;
 
     let installed_tools = InstalledTools::from_settings()?.init()?;
     let _lock = installed_tools.lock().await?;

@@ -362,7 +362,7 @@ async fn upgrade_tool(
         &manifest_excludes,
         &build_constraints,
         &settings.resolver.dependency_metadata,
-    );
+    )?;
     let build_constraints = Constraints::from_specifications(build_constraints);
 
     // Resolve the requirements.

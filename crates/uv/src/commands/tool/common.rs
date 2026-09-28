@@ -31,7 +31,7 @@ use uv_fs::replace_symlink;
 use uv_fs::{CWD, Simplified};
 use uv_git::GitResolver;
 use uv_installer::SitePackages;
-use uv_lock::{Installable, Lock, ResolverManifest};
+use uv_lock::{Installable, Lock, LockError, ResolverManifest};
 use uv_normalize::{DefaultExtras, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_preview::Preview;
@@ -317,7 +317,7 @@ impl ToolLock {
         excludes: &[ExcludeDependency],
         build_constraints: &[NameRequirementSpecification],
         dependency_metadata: &DependencyMetadata,
-    ) -> ResolverManifest {
+    ) -> Result<ResolverManifest, LockError> {
         ResolverManifest::new(
             std::iter::empty::<PackageName>(),
             requirements.iter().cloned(),
