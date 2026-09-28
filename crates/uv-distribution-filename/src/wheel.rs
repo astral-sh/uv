@@ -714,33 +714,25 @@ mod tests {
 
     #[test]
     fn pep825_variant_filenames() -> Result<(), Box<dyn std::error::Error>> {
-        let mut labels = Vec::new();
-        for filename in [
-            "numpy-2.3.2-cp313-cp313t-musllinux_1_2_x86_64-x86_64_v3_openblas.whl",
-            "numpy-2.3.2-7-cp313-cp313t-musllinux_1_2_x86_64-x86_64_v3_openblas.whl",
-            "numpy-2.3.2-future99-none-any-null.whl",
-            "numpy-2.3.2-cp312.cp313-none-any-cpu.v3.whl",
+        for (filename, label) in [
+            (
+                "numpy-2.3.2-cp313-cp313t-musllinux_1_2_x86_64-x86_64_v3_openblas.whl",
+                "x86_64_v3_openblas",
+            ),
+            (
+                "numpy-2.3.2-7-cp313-cp313t-musllinux_1_2_x86_64-x86_64_v3_openblas.whl",
+                "x86_64_v3_openblas",
+            ),
+            ("numpy-2.3.2-future99-none-any-null.whl", "null"),
+            ("numpy-2.3.2-cp312.cp313-none-any-cpu.v3.whl", "cpu.v3"),
         ] {
             let wheel = WheelFilename::from_str(filename)?;
             assert_eq!(wheel.to_string(), filename);
-            labels.push(wheel.variant().map(ToString::to_string));
+            assert_eq!(
+                wheel.variant().map(ToString::to_string).as_deref(),
+                Some(label)
+            );
         }
-        insta::assert_debug_snapshot!(labels, @r#"
-        [
-            Some(
-                "x86_64_v3_openblas",
-            ),
-            Some(
-                "x86_64_v3_openblas",
-            ),
-            Some(
-                "null",
-            ),
-            Some(
-                "cpu.v3",
-            ),
-        ]
-        "#);
         Ok(())
     }
 
