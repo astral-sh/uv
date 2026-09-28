@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::io::{Seek, SeekFrom, Write};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, UNIX_EPOCH};
 use std::{assert_matches, io};
@@ -8,7 +9,7 @@ use reqwest::Response;
 use wiremock::matchers::{any, header, method, path};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
-use uv_cache::{Cache, CacheEntry, Freshness, Refresh};
+use uv_cache::CacheEntry;
 use uv_client::{
     BaseClientBuilder, CacheControl, CachedClient, CachedClientError, DataWithCachePolicy,
     ErrorKind, RetryState,
@@ -72,13 +73,11 @@ async fn revalidation_updates_only_policy() -> Result<()> {
     // A hardlink observes in-place changes, but would retain the old file after a rename.
     let alias = temp_dir.path().join("alias");
     fs_err::hard_link(entry.path(), &alias)?;
+    let modified = UNIX_EPOCH + Duration::from_hours(24);
     fs_err::OpenOptions::new()
         .write(true)
         .open(entry.path())?
-        .set_modified(UNIX_EPOCH + Duration::from_hours(24))?;
-    let cache =
-        Cache::from_path(temp_dir.path()).with_refresh(Refresh::from_args(Some(true), vec![]));
-    assert_eq!(cache.freshness(&entry, None, None)?, Freshness::Stale);
+        .set_modified(modified)?;
 
     Mock::given(method("GET"))
         .and(path("/metadata"))
@@ -100,7 +99,7 @@ async fn revalidation_updates_only_policy() -> Result<()> {
     assert_ne!(refreshed, original);
     assert_eq!(fs_err::read(alias)?, refreshed);
     assert!(refreshed.len() - data_len < 1024);
-    assert_eq!(cache.freshness(&entry, None, None)?, Freshness::Fresh);
+    assert!(fs_err::metadata(&entry)?.modified()? > modified);
     server.verify().await;
     server.reset().await;
 
@@ -113,6 +112,158 @@ async fn revalidation_updates_only_policy() -> Result<()> {
     assert_eq!(
         cached_text(&client, &server, &entry, CacheControl::AllowStale).await?,
         body
+    );
+    assert!(
+        server
+            .received_requests()
+            .await
+            .expect("request recording is enabled")
+            .is_empty()
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn revalidation_of_readonly_entry() -> Result<()> {
+    let server = MockServer::start().await;
+    let client = CachedClient::new(BaseClientBuilder::default().build()?);
+    let temp_dir = tempfile::tempdir()?;
+    let entry = CacheEntry::new(temp_dir.path(), "response");
+    Mock::given(method("GET"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("cache-control", "public, max-age=0")
+                .insert_header("etag", "\"cached\"")
+                .set_body_string("cached"),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    assert_eq!(
+        cached_text(&client, &server, &entry, CacheControl::None).await?,
+        "cached"
+    );
+    server.verify().await;
+    server.reset().await;
+
+    let original = fs_err::read(&entry)?;
+    let permissions = fs_err::metadata(&entry)?.permissions();
+    let mut readonly = permissions.clone();
+    readonly.set_readonly(true);
+    fs_err::set_permissions(&entry, readonly)?;
+    // Privileged users can write despite the read-only permissions.
+    if fs_err::OpenOptions::new()
+        .write(true)
+        .open(entry.path())
+        .is_ok()
+    {
+        fs_err::set_permissions(&entry, permissions)?;
+        return Ok(());
+    }
+
+    Mock::given(method("GET"))
+        .and(header("if-none-match", "\"cached\""))
+        .respond_with(
+            ResponseTemplate::new(304)
+                .insert_header("etag", "\"cached\"")
+                .insert_header("cache-control", "public, max-age=3600"),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    let result = cached_text(&client, &server, &entry, CacheControl::MustRevalidate).await;
+    fs_err::set_permissions(&entry, permissions)?;
+    assert_eq!(result?, "cached");
+    assert_eq!(fs_err::read(&entry)?, original);
+    server.verify().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn overlapping_policy_updates_are_refetched() -> Result<()> {
+    let server = MockServer::start().await;
+    let client = CachedClient::new(BaseClientBuilder::default().build()?);
+    let temp_dir = tempfile::tempdir()?;
+    let entry = CacheEntry::new(temp_dir.path(), "response");
+    Mock::given(method("GET"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("cache-control", "public, max-age=3600")
+                .insert_header("etag", "\"cached\"")
+                .insert_header("vary", format!("x-{}", "large".repeat(100)))
+                .set_body_string("cached"),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    assert_eq!(
+        cached_text(&client, &server, &entry, CacheControl::None).await?,
+        "cached"
+    );
+    let large = fs_err::read(&entry)?;
+    let data_len = DataWithCachePolicy::from_reader(large.as_slice())?
+        .data
+        .len();
+    server.verify().await;
+    server.reset().await;
+
+    Mock::given(method("GET"))
+        .and(header("if-none-match", "\"cached\""))
+        .respond_with(
+            ResponseTemplate::new(304)
+                .insert_header("etag", "\"cached\"")
+                .insert_header("cache-control", "public, max-age=7200"),
+        )
+        .expect(2)
+        .mount(&server)
+        .await;
+    assert_eq!(
+        cached_text(&client, &server, &entry, CacheControl::MustRevalidate).await?,
+        "cached"
+    );
+    assert!(fs_err::metadata(&entry)?.len() < large.len() as u64);
+
+    // Model a writer paused between writing a longer policy and setting the file length.
+    let mut writer = fs_err::OpenOptions::new().write(true).open(entry.path())?;
+    let policy_start = data_len + 16;
+    writer.seek(SeekFrom::Start(policy_start as u64))?;
+    writer.write_all(&large[policy_start..])?;
+
+    // A second writer completes a shorter refresh before the first writer resumes.
+    assert_eq!(
+        cached_text(&client, &server, &entry, CacheControl::MustRevalidate).await?,
+        "cached"
+    );
+    assert!(fs_err::metadata(&entry)?.len() < large.len() as u64);
+    writer.set_len(large.len() as u64)?;
+    drop(writer);
+    let raced = fs_err::read(&entry)?;
+    assert_eq!(raced[..policy_start], large[..policy_start]);
+    let error = DataWithCachePolicy::from_reader(raced.as_slice()).unwrap_err();
+    assert_matches!(error.kind(), ErrorKind::ArchiveRead(_));
+    server.verify().await;
+    server.reset().await;
+
+    // An invalid policy must trigger a full fetch without sending its cached validator.
+    Mock::given(method("GET"))
+        .respond_with(|request: &Request| {
+            assert!(!request.headers.contains_key("if-none-match"));
+            ResponseTemplate::new(200)
+                .insert_header("cache-control", "public, max-age=3600")
+                .set_body_string("replacement")
+        })
+        .expect(1)
+        .mount(&server)
+        .await;
+    assert_eq!(
+        cached_text(&client, &server, &entry, CacheControl::None).await?,
+        "replacement"
+    );
+    server.verify().await;
+    server.reset().await;
+    assert_eq!(
+        cached_text(&client, &server, &entry, CacheControl::None).await?,
+        "replacement"
     );
     assert!(
         server

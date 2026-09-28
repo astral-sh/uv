@@ -886,7 +886,8 @@ enum CachedResponse {
 ///
 /// Readers validate the checksum before using the policy. Interrupted or overlapping
 /// policy writes can invalidate the cache entry, but cannot pair a torn policy with
-/// the payload. No additional file or reader lock is needed.
+/// the payload. An invalid entry requires a full fetch, so it cannot be used offline.
+/// No additional file or reader lock is needed.
 #[derive(Debug)]
 pub struct DataWithCachePolicy {
     pub data: AlignedVec,
@@ -1021,6 +1022,14 @@ impl DataWithCachePolicy {
         let mut file = match fs_err::OpenOptions::new().read(true).write(true).open(path) {
             Ok(file) => file,
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(err)
+                if err.kind() == std::io::ErrorKind::PermissionDenied
+                    || err.kind() == std::io::ErrorKind::ReadOnlyFilesystem =>
+            {
+                // The server has validated the payload even if its new policy cannot be saved.
+                debug!("Skipping cache policy update at {}: {err}", path.display());
+                return Ok(());
+            }
             Err(err) => return Err(ErrorKind::CacheWrite(err).into()),
         };
         file.seek(SeekFrom::Start(self.data.len() as u64))
