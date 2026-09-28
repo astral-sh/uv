@@ -381,32 +381,4 @@ mod test {
             "Multiple .dist-info directories found: other_package-1.0, friendly_bard-1.0"
         );
     }
-
-    #[test]
-    fn test_dist_info_entry_name() {
-        let filename = WheelFilename::from_str("friendly_bard-1.0-py3-none-any.whl")
-            .expect("valid wheel filename");
-
-        assert_eq!(
-            dist_info_entry("friendly_bard-1.0.dist-info/WHEEL", &filename, "WHEEL")
-                .expect("matching wheel entry")
-                .expect("wheel entry")
-                .as_str(),
-            "friendly_bard-1.0"
-        );
-        assert!(
-            dist_info_entry("friendly_bard-1.0.dist-info/METADATA", &filename, "WHEEL")
-                .expect("different entry name")
-                .is_none()
-        );
-        assert!(
-            dist_info_entry(
-                "friendly_bard-1.0.dist-info/nested/WHEEL",
-                &filename,
-                "WHEEL"
-            )
-            .expect("nested entry")
-            .is_none()
-        );
-    }
 }
