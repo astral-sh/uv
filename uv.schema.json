@@ -1888,7 +1888,8 @@
             "batch-export",
             "minimum-libc-version",
             "build-dependency-check",
-            "build-lazy-imports"
+            "build-lazy-imports",
+            "wheel-variants"
           ]
         },
         {

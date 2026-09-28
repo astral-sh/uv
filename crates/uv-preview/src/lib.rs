@@ -352,6 +352,8 @@ pub enum PreviewFeature {
     /// Enables lazy imports in build backend invocations on CPython 3.15 and later.
     /// This can affect import-time side effects in third-party build backends.
     BuildLazyImports,
+    /// Enables experimental support for [wheel variants](https://peps.python.org/pep-0825/). Variant wheels are not yet selectable.
+    WheelVariants,
 }
 
 impl Display for PreviewFeature {
