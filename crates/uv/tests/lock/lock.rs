@@ -19557,6 +19557,7 @@ fn lock_resolution_inputs_global_cutoff() -> Result<()> {
         sdist = false
         wheel = { upload_time = "2024-03-24T00:00:00Z" }
     "#})?;
+
     let server = PackseServer::from_scenario(&scenario);
     let context = uv_test::test_context!("3.12")
         .with_exclude_newer("2024-03-24T00:00:00Z")
@@ -19590,6 +19591,7 @@ fn lock_resolution_inputs_global_cutoff() -> Result<()> {
     ");
 
     let lock = context.read("uv.lock");
+
     insta::with_settings!({ filters => context.filters() }, {
         assert_snapshot!(lock, @r#"
         version = 1
@@ -19628,6 +19630,7 @@ fn lock_resolution_inputs_global_cutoff() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
+
     assert_eq!(context.read("uv.lock"), lock);
 
     // A stricter cutoff is still compatible when it falls after the recorded upload.
@@ -19643,6 +19646,7 @@ fn lock_resolution_inputs_global_cutoff() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
+
     assert_eq!(context.read("uv.lock"), lock);
 
     // Removing the cutoff leaves the pinned version in place.
@@ -19658,6 +19662,7 @@ fn lock_resolution_inputs_global_cutoff() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
+
     assert_eq!(context.read("uv.lock"), lock);
 
     // An upload exactly at the cutoff is excluded.
@@ -19675,6 +19680,7 @@ fn lock_resolution_inputs_global_cutoff() -> Result<()> {
 
     hint: To update the lockfile, run `uv lock`.
     ");
+
     assert_eq!(context.read("uv.lock"), lock);
 
     // Resolution can downgrade to an eligible artifact.
@@ -19730,6 +19736,7 @@ fn lock_resolution_inputs_package_cutoffs() -> Result<()> {
         sdist = false
         wheel = { upload_time = "2024-03-22T00:00:00Z" }
     "#})?;
+
     let server = PackseServer::from_scenario(&scenario);
     let context = uv_test::test_context!("3.12")
         .with_exclude_newer("2024-03-24T00:00:00Z")
@@ -19765,6 +19772,7 @@ fn lock_resolution_inputs_package_cutoffs() -> Result<()> {
     ");
 
     let lock = context.read("uv.lock");
+
     insta::with_settings!({ filters => context.filters() }, {
         assert_snapshot!(lock, @r#"
         version = 1
@@ -19810,6 +19818,7 @@ fn lock_resolution_inputs_package_cutoffs() -> Result<()> {
         "#);
     });
 
+    // The retained exception and omitted cutoff both validate without cached metadata.
     uv_snapshot!(context.filters(), context.lock()
         .arg("--locked")
         .arg("--offline")
@@ -19820,6 +19829,7 @@ fn lock_resolution_inputs_package_cutoffs() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
+
     assert_eq!(context.read("uv.lock"), lock);
 
     // Changing b's omitted cutoff does not change a's retained exception.
@@ -19848,6 +19858,7 @@ fn lock_resolution_inputs_package_cutoffs() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
+
     assert_eq!(context.read("uv.lock"), lock);
 
     // Removing a's exception reapplies the global cutoff and requires a downgrade.
@@ -19877,8 +19888,10 @@ fn lock_resolution_inputs_package_cutoffs() -> Result<()> {
 
     hint: To update the lockfile, run `uv lock`.
     ");
+
     assert_eq!(context.read("uv.lock"), lock);
 
+    // Resolving without the exception selects a version allowed by the global cutoff.
     uv_snapshot!(context.filters(), context.lock()
         .arg("--index-url")
         .arg(server.index_url()), @"
@@ -19912,6 +19925,7 @@ fn lock_resolution_inputs_index_cutoff() -> Result<()> {
         sdist = false
         wheel = { upload_time = "2024-03-24T00:00:00Z" }
     "#})?;
+
     let server = PackseServer::from_scenario(&scenario);
     let context = uv_test::test_context!("3.12")
         .with_exclude_newer("false")
@@ -19947,6 +19961,7 @@ fn lock_resolution_inputs_index_cutoff() -> Result<()> {
     ");
 
     let lock = context.read("uv.lock");
+
     insta::with_settings!({ filters => context.filters() }, {
         assert_snapshot!(lock, @r#"
         version = 1
@@ -19979,6 +19994,7 @@ fn lock_resolution_inputs_index_cutoff() -> Result<()> {
         "#);
     });
 
+    // The recorded package exception allows offline reuse with the same index cutoff.
     uv_snapshot!(context.filters(), context.lock()
         .arg("--locked")
         .arg("--offline")
@@ -19987,6 +20003,7 @@ fn lock_resolution_inputs_index_cutoff() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
+
     assert_eq!(context.read("uv.lock"), lock);
 
     // Disabled package and index cutoffs allow the lock to be reused without metadata.
@@ -20015,6 +20032,7 @@ fn lock_resolution_inputs_index_cutoff() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
+
     assert_eq!(context.read("uv.lock"), lock);
 
     // With no global or package cutoff, the index cutoff becomes effective.
@@ -20044,8 +20062,10 @@ fn lock_resolution_inputs_index_cutoff() -> Result<()> {
 
     hint: To update the lockfile, run `uv lock`.
     ");
+
     assert_eq!(context.read("uv.lock"), lock);
 
+    // Resolving without the package exception applies the index cutoff.
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 0 (success)
     ----- stderr -----
@@ -20103,6 +20123,7 @@ fn lock_resolution_inputs_retained_cutoffs() -> Result<()> {
         [packages.preview.versions."1.0.0a1"]
         sdist = false
     "#})?;
+
     let server = PackseServer::from_scenario(&scenario);
     let context = uv_test::test_context!("3.12").with_filters(
         server
@@ -20143,6 +20164,7 @@ fn lock_resolution_inputs_retained_cutoffs() -> Result<()> {
     ");
 
     let lock = context.read("uv.lock");
+
     insta::with_settings!({ filters => context.filters() }, {
         assert_snapshot!(lock, @r#"
         version = 1
@@ -20214,6 +20236,7 @@ fn lock_resolution_inputs_retained_cutoffs() -> Result<()> {
     ----- stderr -----
     Resolved 4 packages in [TIME]
     ");
+
     assert_eq!(context.read("uv.lock"), lock);
 
     // A changed relative duration still requires a new lock.
@@ -20233,6 +20256,7 @@ fn lock_resolution_inputs_retained_cutoffs() -> Result<()> {
 
     hint: To update the lockfile, run `uv lock`.
     ");
+
     assert_eq!(context.read("uv.lock"), lock);
 
     Ok(())
@@ -20254,6 +20278,7 @@ fn lock_resolution_inputs_relative_global_cutoff() -> Result<()> {
         sdist = false
         wheel = { upload_time = "2024-03-22T00:00:00Z" }
     "#})?;
+
     let server = PackseServer::from_scenario(&scenario);
     let context = uv_test::test_context!("3.12")
         .with_exclude_newer("P1D")
@@ -20287,6 +20312,7 @@ fn lock_resolution_inputs_relative_global_cutoff() -> Result<()> {
     ");
 
     let lock = context.read("uv.lock");
+
     insta::with_settings!({ filters => context.filters() }, {
         assert_snapshot!(lock, @r#"
         version = 1
@@ -20329,6 +20355,7 @@ fn lock_resolution_inputs_relative_global_cutoff() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
+
     assert_eq!(context.read("uv.lock"), lock);
 
     // Changing the duration still invalidates the recorded configuration.
@@ -20346,6 +20373,7 @@ fn lock_resolution_inputs_relative_global_cutoff() -> Result<()> {
 
     hint: To update the lockfile, run `uv lock`.
     ");
+
     assert_eq!(context.read("uv.lock"), lock);
 
     Ok(())
@@ -20365,6 +20393,7 @@ fn lock_resolution_inputs_source_build_cutoffs() -> Result<()> {
 
         [packages.a.versions."1.0.0"]
     "#})?;
+
     let server = PackseServer::from_scenario(&scenario);
     let context = uv_test::test_context!("3.12").with_filters(
         server
@@ -20397,6 +20426,7 @@ fn lock_resolution_inputs_source_build_cutoffs() -> Result<()> {
     ");
 
     let lock = context.read("uv.lock");
+
     insta::with_settings!({ filters => context.filters() }, {
         assert_snapshot!(lock, @r#"
         version = 1
@@ -20431,6 +20461,7 @@ fn lock_resolution_inputs_source_build_cutoffs() -> Result<()> {
         "#);
     });
 
+    // Unchanged cutoffs allow offline reuse even though source artifacts remain in the lock.
     uv_snapshot!(context.filters(), context.lock()
         .arg("--locked")
         .arg("--offline")
@@ -20441,6 +20472,7 @@ fn lock_resolution_inputs_source_build_cutoffs() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
+
     assert_eq!(context.read("uv.lock"), lock);
 
     // Even a tighter cutoff satisfied by the runtime artifacts must keep normal validation.
@@ -20458,6 +20490,7 @@ fn lock_resolution_inputs_source_build_cutoffs() -> Result<()> {
 
     hint: To update the lockfile, run `uv lock`.
     ");
+
     assert_eq!(context.read("uv.lock"), lock);
 
     Ok(())
@@ -45948,6 +45981,7 @@ fn lock_resolution_inputs_empty_scopes() -> Result<()> {
         "#);
     });
 
+    // The empty exact scopes continue to shadow the versionless settings when reusing the lock.
     uv_snapshot!(context.filters(), context.lock()
         .arg("--locked")
         .arg("--offline")
@@ -46499,6 +46533,7 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
         name = "resolution-inputs-backtracking"
 
         [root]
+
         [expected]
         satisfiable = true
 
@@ -46592,6 +46627,7 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
         "#);
     });
 
+    // The recorded inputs allow offline reuse without revisiting the rejected candidate.
     uv_snapshot!(context.filters(), context.lock()
         .arg("--locked")
         .arg("--offline")
