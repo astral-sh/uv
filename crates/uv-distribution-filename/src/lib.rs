@@ -12,6 +12,7 @@ pub use extension::{
     DistExtension, ExtensionError, LegacySourceDistExtension, SourceDistExtension,
 };
 pub use source_dist::{SourceDistFilename, SourceDistFilenameError};
+pub use variant_label::{InvalidVariantLabel, VariantLabel};
 pub use wheel::{WheelFilename, WheelFilenameError};
 
 mod build_tag;
@@ -20,6 +21,7 @@ mod expanded_tags;
 mod extension;
 mod source_dist;
 mod splitter;
+mod variant_label;
 mod wheel;
 mod wheel_tag;
 
