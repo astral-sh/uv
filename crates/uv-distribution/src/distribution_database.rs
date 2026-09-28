@@ -796,6 +796,13 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             return Err(Error::WheelVariantsPreview);
         }
         let wheel = self.get_wheel(dist, hashes).await?;
+        if !wheel.satisfies(hashes) {
+            return Err(Error::hash_mismatch(
+                dist.to_string(),
+                hashes.digests(),
+                wheel.hashes(),
+            ));
+        }
         let prefix = uv_metadata::find_flat_dist_info(&wheel.filename, &wheel.archive)
             .map_err(|err| Error::WheelMetadata(wheel.archive.to_path_buf(), Box::new(err)))?;
         let path = wheel
