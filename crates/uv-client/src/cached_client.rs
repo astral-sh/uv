@@ -11,6 +11,8 @@ use seahash::SeaHasher;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use tracing::{Instrument, Span, debug, info_span, instrument, trace, warn};
+use zerocopy::byteorder::little_endian::U64;
+use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 
 use uv_cache::{CacheEntry, Freshness};
 use uv_fastid::Id;
@@ -897,6 +899,16 @@ pub struct DataWithCachePolicy {
     generation: [u8; 16],
 }
 
+/// The fixed-size footer following the archived HTTP cache policy.
+///
+/// Byte-aligned, little-endian fields allow the footer to follow a policy of any length.
+#[derive(Debug, FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned)]
+#[repr(C)]
+struct CachePolicyFooter {
+    checksum: U64,
+    data_len: U64,
+}
+
 impl DataWithCachePolicy {
     /// Loads cached data and its associated HTTP cache policy from the given
     /// file path in a synchronous fashion.
@@ -946,35 +958,31 @@ impl DataWithCachePolicy {
 
     /// Validate the policy and separate it from the aligned payload.
     fn from_aligned_bytes(mut bytes: AlignedVec) -> Result<Self, Error> {
-        // The fixed fields are the generation (16), checksum (8), and payload length (8).
-        let max_data_len = bytes.len().checked_sub(32).ok_or_else(|| {
+        let (contents, footer) = CachePolicyFooter::ref_from_suffix(&bytes).map_err(|_| {
             ErrorKind::ArchiveRead("HTTP cache entry is shorter than its trailer".to_owned())
         })?;
-        let length_start = bytes.len() - 8;
-        let length_bytes = bytes[length_start..]
-            .as_array::<8>()
-            .expect("payload length is 8 bytes");
-        let data_len = usize::try_from(u64::from_le_bytes(*length_bytes))
-            .ok()
-            .filter(|&len| len <= max_data_len)
-            .ok_or_else(|| {
-                ErrorKind::ArchiveRead("invalid HTTP cache payload length".to_owned())
-            })?;
-        let checksum_start = length_start - 8;
+        let data_len = usize::try_from(footer.data_len.get())
+            .map_err(|_| ErrorKind::ArchiveRead("invalid HTTP cache payload length".to_owned()))?;
+        let (_, tail) = contents.split_at_checked(data_len).ok_or_else(|| {
+            ErrorKind::ArchiveRead("invalid HTTP cache payload length".to_owned())
+        })?;
+        let (generation, policy_bytes) = <[u8; 16]>::ref_from_prefix(tail)
+            .map_err(|_| ErrorKind::ArchiveRead("invalid HTTP cache payload length".to_owned()))?;
+
         let mut hasher = SeaHasher::new();
-        hasher.write(&bytes[data_len..checksum_start]);
-        hasher.write(length_bytes);
-        if hasher.finish().to_le_bytes() != bytes[checksum_start..length_start] {
+        hasher.write(tail);
+        hasher.write(footer.data_len.as_bytes());
+        if hasher.finish() != footer.checksum.get() {
             return Err(
                 ErrorKind::ArchiveRead("HTTP cache policy checksum mismatch".to_owned()).into(),
             );
         }
-        let generation = *bytes[data_len..data_len + 16]
-            .as_array::<16>()
-            .expect("cache generation is 16 bytes");
-        let mut policy = AlignedVec::with_capacity(checksum_start - data_len - 16);
-        policy.extend_from_slice(&bytes[data_len + 16..checksum_start]);
+
+        let generation = *generation;
+        let mut policy = AlignedVec::with_capacity(policy_bytes.len());
+        policy.extend_from_slice(policy_bytes);
         let cache_policy = OwnedArchive::new(policy)?;
+
         bytes.resize(data_len, 0);
         Ok(Self {
             data: bytes,
@@ -1005,17 +1013,22 @@ impl DataWithCachePolicy {
     ) -> Result<Vec<u8>, Error> {
         let policy = OwnedArchive::from_unarchived(policy)?;
         let policy = OwnedArchive::as_bytes(&policy);
-        let length = u64::try_from(data_len)
-            .map_err(|err| ErrorKind::ArchiveWrite(err.to_string()))?
-            .to_le_bytes();
+        let data_len = U64::new(
+            u64::try_from(data_len).map_err(|err| ErrorKind::ArchiveWrite(err.to_string()))?,
+        );
+
         let mut hasher = SeaHasher::new();
         hasher.write(generation);
         hasher.write(policy);
-        hasher.write(&length);
-        let mut bytes = Vec::with_capacity(policy.len() + 16);
+        hasher.write(data_len.as_bytes());
+        let footer = CachePolicyFooter {
+            checksum: U64::new(hasher.finish()),
+            data_len,
+        };
+
+        let mut bytes = Vec::with_capacity(policy.len() + size_of::<CachePolicyFooter>());
         bytes.extend_from_slice(policy);
-        bytes.extend_from_slice(&hasher.finish().to_le_bytes());
-        bytes.extend_from_slice(&length);
+        bytes.extend_from_slice(footer.as_bytes());
         Ok(bytes)
     }
 
