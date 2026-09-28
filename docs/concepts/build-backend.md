@@ -67,8 +67,17 @@ source distribution includes `uv.lock` so that a wheel built from it can contain
 long as preview and lock export are also enabled for that build. The project itself, its optional
 dependencies, and development dependencies are omitted from `pylock.toml`.
 
-By default, this happens only when `uv.lock` exists and every dependency in it comes from PyPI. To
-include a lock with other sources, set:
+For workspace members, the backend discovers `uv.lock` at the workspace root. The source
+distribution includes the complete workspace lock, including names, paths, and URLs for other
+members. If the lock lists another workspace member as a runtime dependency, exporting it is not
+supported and the build fails. A workspace lock must also cover every Python version supported by
+the package: automatic export is skipped if the workspace lock has a narrower Python range, and
+explicit export fails.
+
+By default, export happens only when `uv.lock` exists and its dependencies come from PyPI. Other
+workspace members can be included in the lock, but non-PyPI sources in its packages or dependency
+metadata prevent automatic export. PyPI artifacts must use HTTPS URLs on `files.pythonhosted.org`.
+To include a lock with other sources, set:
 
 ```toml
 [tool.uv.build-backend]

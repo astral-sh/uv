@@ -37,6 +37,8 @@ pub enum Error {
     LockParse(#[from] uv_lock::LockParseError),
     #[error("Failed to export `uv.lock`")]
     LockExport(#[from] uv_lock::PylockTomlErrorKind),
+    #[error("Failed to discover workspace for `uv.lock`")]
+    Workspace(#[from] uv_workspace::WorkspaceError),
     #[error("Failed to serialize `pylock.toml`")]
     PylockSerialize(#[from] toml_edit::ser::Error),
     #[error("{0}")]
@@ -245,7 +247,7 @@ fn check_metadata_directory(
         }
     }
 
-    let current_lock = lock::export_lock(source_tree, pyproject_toml)?;
+    let current_lock = lock::export_lock(source_tree, pyproject_toml)?.map(|lock| lock.pylock);
     let previous_lock = match fs_err::read_to_string(metadata_directory.join("pylock.toml")) {
         Ok(contents) => Some(contents),
         Err(err) if err.kind() == io::ErrorKind::NotFound => None,

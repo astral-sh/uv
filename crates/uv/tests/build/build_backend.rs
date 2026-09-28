@@ -188,6 +188,401 @@ fn export_lock_artifacts() -> Result<()> {
 }
 
 #[test]
+fn export_lock_workspace() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+    context
+        .temp_dir
+        .child("packages/member/src/workspace_member/__init__.py")
+        .touch()?;
+    context
+        .temp_dir
+        .child("packages/member/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "workspace-member"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["dependency"]
+
+        [build-system]
+        requires = ["uv_build>=0.5.15,<2"]
+        build-backend = "uv_build"
+
+        [tool.uv.sources]
+        unrelated = { workspace = true }
+    "#})?;
+    context
+        .temp_dir
+        .child("packages/unrelated/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "unrelated"
+        version = "1.0.0"
+    "#})?;
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [manifest]
+        members = ["workspace-member", "unrelated"]
+
+        [[package]]
+        name = "workspace-member"
+        version = "1.0.0"
+        source = { editable = "packages/member" }
+        dependencies = [{ name = "dependency" }]
+
+        [[package]]
+        name = "unrelated"
+        version = "1.0.0"
+        source = { editable = "packages/unrelated" }
+        [package.metadata]
+        requires-dist = [{ name = "workspace-member", marker = "python_version < '0'", editable = "packages/member" }]
+
+        [[package]]
+        name = "dependency"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        wheels = [{ url = "https://files.pythonhosted.org/dependency-2.0.0-py3-none-any.whl", hash = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" }]
+    "#})?;
+
+    context
+        .build()
+        .args([
+            "--offline",
+            "--preview-features",
+            "locked-tools",
+            "--package",
+            "workspace-member",
+            "--wheel",
+            "--out-dir",
+            "direct",
+        ])
+        .assert()
+        .success();
+    context
+        .build()
+        .args([
+            "--offline",
+            "--preview-features",
+            "locked-tools",
+            "--package",
+            "workspace-member",
+            "--out-dir",
+            "from-sdist",
+        ])
+        .assert()
+        .success();
+
+    let pyproject_path = context.temp_dir.child("packages/member/pyproject.toml");
+    let pyproject = fs_err::read_to_string(&pyproject_path)?;
+    let shim = include_str!("../../../uv-build/python/uv_build/__init__.py")
+        .replace("USE_UV_EXECUTABLE = False", "USE_UV_EXECUTABLE = True")
+        .replace(
+            "uv_bin = shutil.which(uv_bin_name)",
+            "uv_bin = os.environ.get(\"UV_TEST_BACKEND_BIN\")",
+        );
+    context
+        .temp_dir
+        .child("packages/member/backend/uv_build.py")
+        .write_str(&shim)?;
+    pyproject_path.write_str(
+        &pyproject
+            .replace("requires = [\"uv_build>=0.5.15,<2\"]", "requires = []")
+            .replace(
+                "build-backend = \"uv_build\"",
+                "build-backend = \"uv_build\"\nbackend-path = [\"backend\"]",
+            ),
+    )?;
+    context
+        .build()
+        .args([
+            "--offline",
+            "--preview-features",
+            "locked-tools",
+            "--package",
+            "workspace-member",
+            "--wheel",
+            "--force-pep517",
+            "--no-build-isolation",
+            "--out-dir",
+            "pep517",
+        ])
+        .env("UV_TEST_BACKEND_BIN", uv_test::get_bin!())
+        .assert()
+        .success();
+    pyproject_path.write_str(&pyproject)?;
+
+    uv_snapshot!(context.python_command().arg("-c").arg(indoc! {r#"
+        import pathlib
+        import tarfile
+        import tomllib
+        import zipfile
+
+        locks = []
+        for directory in ["direct", "from-sdist", "pep517"]:
+            with zipfile.ZipFile(next(pathlib.Path(directory).glob("*.whl"))) as wheel:
+                lock = wheel.read("workspace_member-1.0.0.dist-info/pylock.toml")
+                locks.append(lock)
+                print(directory, [package["name"] for package in tomllib.loads(lock.decode())["packages"]])
+        print("same lock", locks[0] == locks[1] == locks[2])
+        with tarfile.open(next(pathlib.Path("from-sdist").glob("*.tar.gz"))) as sdist:
+            lock = sdist.extractfile("workspace_member-1.0.0/uv.lock").read()
+            pyproject = sdist.extractfile("workspace_member-1.0.0/pyproject.toml").read()
+            print("workspace lock included", lock == pathlib.Path("uv.lock").read_bytes())
+            print("sources retained", "sources" in tomllib.loads(pyproject.decode())["tool"]["uv"])
+    "#}), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    direct ['dependency']
+    from-sdist ['dependency']
+    pep517 ['dependency']
+    same lock True
+    workspace lock included True
+    sources retained True
+    ");
+
+    let other_workspace = context.temp_dir.child("other-workspace");
+    other_workspace
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["*"]
+    "#})?;
+    other_workspace
+        .child("uv.lock")
+        .write_str("not a lockfile")?;
+    context
+        .python_command()
+        .arg("-c")
+        .arg(indoc! {r#"
+            import pathlib
+            import tarfile
+            with tarfile.open(next(pathlib.Path("from-sdist").glob("*.tar.gz"))) as sdist:
+                sdist.extractall("other-workspace")
+        "#})
+        .assert()
+        .success();
+    let extracted = other_workspace.child("workspace_member-1.0.0");
+    context
+        .build_backend()
+        .current_dir(extracted.path())
+        .args(["--preview-features", "locked-tools", "build-wheel"])
+        .arg(context.temp_dir.path())
+        .assert()
+        .success();
+    uv_snapshot!(context.python_command().arg("-c").arg(indoc! {r#"
+        import zipfile
+        with zipfile.ZipFile("workspace_member-1.0.0-py3-none-any.whl") as wheel:
+            print("workspace_member-1.0.0.dist-info/pylock.toml" in wheel.namelist())
+    "#}), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    True
+    ");
+
+    let lock_path = context.temp_dir.child("uv.lock");
+    let lock = fs_err::read_to_string(&lock_path)?;
+    for (directory, contents) in [
+        (
+            "private-source",
+            format!(
+                "{lock}\n[[package]]\nname = \"private\"\nversion = \"1.0.0\"\nsource = {{ registry = \"https://private.example/simple\" }}\n"
+            ),
+        ),
+        (
+            "unexpected-url",
+            lock.replace("files.pythonhosted.org", "attacker.example"),
+        ),
+        (
+            "private-metadata",
+            lock.replace(
+                "requires-dist = [{ name = \"workspace-member\", marker = \"python_version < '0'\", editable = \"packages/member\" }]",
+                "requires-dist = [{ name = \"secret\", marker = \"python_version < '0'\", url = \"https://private.example/secret-1.0.0-py3-none-any.whl\" }]",
+            ),
+        ),
+        (
+            "private-manifest",
+            lock.replace(
+                "[manifest]\n",
+                "[manifest]\noverrides = [{ name = \"secret\", marker = \"python_version < '0'\", url = \"https://private.example/secret-1.0.0-py3-none-any.whl\" }]\n",
+            ),
+        ),
+    ] {
+        lock_path.write_str(&contents)?;
+        let output = context.temp_dir.child(directory);
+        output.create_dir_all()?;
+        context
+            .build_backend()
+            .current_dir(context.temp_dir.child("packages/member").path())
+            .args(["--preview-features", "locked-tools", "build-wheel"])
+            .arg(output.path())
+            .assert()
+            .success();
+        context
+            .build_backend()
+            .current_dir(context.temp_dir.child("packages/member").path())
+            .args(["--preview-features", "locked-tools", "build-sdist"])
+            .arg(output.path())
+            .assert()
+            .success();
+    }
+    uv_snapshot!(context.python_command().arg("-c").arg(indoc! {r#"
+        import pathlib
+        import tarfile
+        import zipfile
+        for directory in ["private-source", "unexpected-url", "private-metadata", "private-manifest"]:
+            with zipfile.ZipFile(next(pathlib.Path(directory).glob("*.whl"))) as wheel:
+                wheel_lock = "workspace_member-1.0.0.dist-info/pylock.toml" in wheel.namelist()
+            with tarfile.open(next(pathlib.Path(directory).glob("*.tar.gz"))) as sdist:
+                sdist_lock = "workspace_member-1.0.0/uv.lock" in sdist.getnames()
+            print(directory, wheel_lock, sdist_lock)
+    "#}), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    private-source False False
+    unexpected-url False False
+    private-metadata False False
+    private-manifest False False
+    ");
+    lock_path.write_str(&lock)?;
+
+    pyproject_path.write_str(&pyproject.replace(">=3.12", ">=3.10"))?;
+    uv_snapshot!(context.filters(), context.build_backend()
+        .current_dir(context.temp_dir.child("packages/member").path())
+        .args(["--preview-features", "locked-tools", "build-wheel"])
+        .arg(context.temp_dir.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    workspace_member-1.0.0-py3-none-any.whl
+    ");
+    uv_snapshot!(context.python_command().arg("-c").arg(indoc! {r#"
+        import zipfile
+        with zipfile.ZipFile("workspace_member-1.0.0-py3-none-any.whl") as wheel:
+            print("workspace_member-1.0.0.dist-info/pylock.toml" in wheel.namelist())
+    "#}), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    False
+    ");
+    for project in [
+        pyproject.replace(">=3.12", ">=3.10"),
+        pyproject.replace("requires-python = \">=3.12\"\n", ""),
+    ] {
+        pyproject_path.write_str(&project)?;
+        allow_duplicates! {
+            uv_snapshot!(context.filters(), context.build_backend()
+                .current_dir(context.temp_dir.child("packages/member").path())
+                .env(EnvVars::UV_BUILD_BACKEND_EXPORT_LOCK, "true")
+                .args(["--preview-features", "locked-tools", "build-wheel"])
+                .arg(context.temp_dir.path()), @"
+            exit_code: 2 (failure)
+            ----- stderr -----
+            error: Cannot export a workspace lock that does not cover the Python versions supported by `workspace-member`
+            ");
+        }
+    }
+    for transitive in [false, true] {
+        if transitive {
+            pyproject_path.write_str(&pyproject)?;
+            lock_path.write_str(&lock.replace(
+                "wheels = [{ url =",
+                "dependencies = [{ name = \"unrelated\" }]\nwheels = [{ url =",
+            ))?;
+        } else {
+            pyproject_path.write_str(&pyproject.replace(
+                "dependencies = [\"dependency\"]",
+                "dependencies = [\"unrelated\"]",
+            ))?;
+            lock_path.write_str(&lock.replace(
+                "dependencies = [{ name = \"dependency\" }]",
+                "dependencies = [{ name = \"unrelated\" }]",
+            ))?;
+        }
+        allow_duplicates! {
+            for enabled in [None, Some("true")] {
+                let mut command = context.build_backend();
+                command
+                    .current_dir(context.temp_dir.child("packages/member").path())
+                    .args(["--preview-features", "locked-tools", "build-wheel"])
+                    .arg(context.temp_dir.path());
+                if let Some(enabled) = enabled {
+                    command.env(EnvVars::UV_BUILD_BACKEND_EXPORT_LOCK, enabled);
+                }
+                uv_snapshot!(context.filters(), command, @"
+                exit_code: 2 (failure)
+                ----- stderr -----
+                error: Cannot export a lock with workspace dependency `unrelated`
+                ");
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn export_lock_excluded_workspace_member() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["packages/*"]
+        exclude = ["packages/member"]
+    "#})?;
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str("not a lockfile")?;
+    let member = context.temp_dir.child("packages/member");
+    member.child("src/workspace_member/__init__.py").touch()?;
+    member.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "workspace-member"
+        version = "1.0.0"
+        [build-system]
+        requires = ["uv_build>=0.5.15,<2"]
+        build-backend = "uv_build"
+    "#})?;
+    member.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        requires-python = ">=3.12"
+        [[package]]
+        name = "workspace-member"
+        version = "1.0.0"
+        source = { editable = "." }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.build_backend()
+        .current_dir(member.path())
+        .args(["--preview-features", "locked-tools", "build-wheel"])
+        .arg(member.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    workspace_member-1.0.0-py3-none-any.whl
+    ");
+    uv_snapshot!(context.python_command().current_dir(member.path()).arg("-c").arg(indoc! {r#"
+        import zipfile
+        with zipfile.ZipFile("workspace_member-1.0.0-py3-none-any.whl") as wheel:
+            print("workspace_member-1.0.0.dist-info/pylock.toml" in wheel.namelist())
+    "#}), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    True
+    ");
+    Ok(())
+}
+
+#[test]
 fn export_lock_pep517_preview() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     context

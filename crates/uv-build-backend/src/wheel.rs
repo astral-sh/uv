@@ -708,8 +708,11 @@ fn write_dist_info(
         )?;
     }
 
-    if let Some(pylock) = crate::lock::export_lock(root, pyproject_toml)? {
-        writer.write_bytes(&format!("{dist_info_dir}/pylock.toml"), pylock.as_bytes())?;
+    if let Some(lock) = crate::lock::export_lock(root, pyproject_toml)? {
+        writer.write_bytes(
+            &format!("{dist_info_dir}/pylock.toml"),
+            lock.pylock.as_bytes(),
+        )?;
     }
 
     // `RECORD` is added on closing.

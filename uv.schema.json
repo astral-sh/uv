@@ -738,7 +738,7 @@
           "default": true
         },
         "export-lock": {
-          "description": "Include the project's lock in built distributions.\n\nWith the `locked-tools` preview feature, wheels contain `pylock.toml` in their\n`.dist-info` directory and source distributions contain `uv.lock`. By default,\nthis is enabled when `uv.lock` exists and all dependencies come from PyPI.\nSet this to `true` to also export other sources, or `false` to disable export.",
+          "description": "Include the project's lock in built distributions.\n\nWith the `locked-tools` preview feature, wheels contain `pylock.toml` in their\n`.dist-info` directory and source distributions contain `uv.lock`. By default,\nthis is enabled when `uv.lock` exists and all sources other than local workspace\nmembers come from PyPI.\nSet this to `true` to also export other sources, or `false` to disable export.",
           "type": ["boolean", "null"],
           "default": null
         },

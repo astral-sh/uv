@@ -88,10 +88,10 @@ fn source_dist_matcher(
     pyproject_toml: &PyProjectToml,
     settings: BuildBackendSettings,
     show_warnings: bool,
+    export_lock: bool,
 ) -> Result<(GlobDirFilter, GlobSet), Error> {
     // File and directories to include in the source directory
     let mut include_globs = Vec::new();
-    let export_lock = crate::lock::export_lock(source_tree, pyproject_toml)?.is_some();
     let mut includes: Vec<String> = settings.source_include;
     // pyproject.toml is always included.
     includes.push(globset::escape("pyproject.toml"));
@@ -285,8 +285,19 @@ fn write_source_dist(
         &pyproject_path,
     )?;
 
-    let (include_matcher, exclude_matcher) =
-        source_dist_matcher(source_tree, &pyproject_toml, settings, show_warnings)?;
+    let export_lock = crate::lock::export_lock(source_tree, &pyproject_toml)?;
+    let (include_matcher, exclude_matcher) = source_dist_matcher(
+        source_tree,
+        &pyproject_toml,
+        settings,
+        show_warnings,
+        export_lock.is_some(),
+    )?;
+    let source_root = std::path::absolute(source_tree)?;
+    let source_root = normalize_path(&source_root);
+    let workspace_lock = export_lock
+        .as_ref()
+        .filter(|lock| lock.path.parent() != Some(source_root.as_ref()));
 
     let mut files_visited = 0;
     let mut written_directories = FxHashSet::<PathBuf>::default();
@@ -342,6 +353,9 @@ fn write_source_dist(
             debug!("Ignoring existing `pyproject.toml.orig`");
             continue;
         }
+        if relative == "uv.lock" && workspace_lock.is_some() {
+            continue;
+        }
 
         error_on_venv(entry.file_name(), entry.path())?;
 
@@ -357,6 +371,9 @@ fn write_source_dist(
             relative,
             entry.path(),
         )?;
+    }
+    if let Some(lock) = workspace_lock {
+        writer.write_file(&format!("{top_level}/uv.lock"), &lock.path)?;
     }
     debug!("Visited {files_visited} files for source dist build");
 

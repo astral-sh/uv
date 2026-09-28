@@ -440,6 +440,24 @@ struct PylockTomlAttestationIdentity {
 }
 
 impl<'lock> PylockToml {
+    /// Find a workspace dependency among the packages selected for export.
+    pub fn workspace_dependency(
+        target: &impl Installable<'lock>,
+        extras: &ExtrasSpecificationWithDefaults,
+        dev: &DependencyGroupsWithDefaults,
+        install_options: &'lock InstallOptions,
+    ) -> Result<Option<&'lock PackageName>, PylockTomlErrorKind> {
+        let ExportableRequirements(nodes) =
+            ExportableRequirements::from_lock(target, &[], extras, dev, false, install_options)?;
+        Ok(nodes
+            .iter()
+            .find(|node| {
+                target.lock().is_workspace_package(node.package)
+                    && node.package.id.source.is_local()
+            })
+            .map(|node| node.package.name()))
+    }
+
     /// Construct a [`PylockToml`] from a [`ResolverOutput`].
     ///
     /// If `tags` is provided, only wheels compatible with the given tags will be included.

@@ -6113,7 +6113,9 @@ dependencies = [
  "toml",
  "toml_edit",
  "tracing",
+ "uv-cache",
  "uv-configuration",
+ "uv-dirs",
  "uv-distribution-filename",
  "uv-errors",
  "uv-fs",
@@ -6129,6 +6131,7 @@ dependencies = [
  "uv-toml",
  "uv-version",
  "uv-warnings",
+ "uv-workspace",
  "walkdir",
 ]
 

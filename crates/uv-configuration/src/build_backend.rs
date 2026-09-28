@@ -17,7 +17,8 @@ pub struct BuildBackendSettings {
     ///
     /// With the `locked-tools` preview feature, wheels contain `pylock.toml` in their
     /// `.dist-info` directory and source distributions contain `uv.lock`. By default,
-    /// this is enabled when `uv.lock` exists and all dependencies come from PyPI.
+    /// this is enabled when `uv.lock` exists and all sources other than local workspace
+    /// members come from PyPI.
     /// Set this to `true` to also export other sources, or `false` to disable export.
     #[option(default = "None", value_type = "bool", example = "export-lock = true")]
     pub export_lock: Option<bool>,

@@ -49,7 +49,8 @@ use uv_git_types::{
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::{
-    MarkerEnvironment, MarkerTree, Scheme, VerbatimUrl, VerbatimUrlError, split_scheme,
+    MarkerEnvironment, MarkerTree, Scheme, VerbatimUrl, VerbatimUrlError, VersionOrUrl,
+    split_scheme,
 };
 use uv_platform_tags::{
     AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
@@ -2895,6 +2896,110 @@ impl Lock {
     /// Returns the [`Package`] entries in this lock.
     pub fn packages(&self) -> &[Package] {
         &self.packages
+    }
+
+    /// Check whether a lock contains only local workspace members and PyPI packages with
+    /// artifacts hosted on `files.pythonhosted.org`.
+    pub fn has_only_pypi_and_workspace_sources(&self) -> bool {
+        fn is_pypi_file(url: &UrlString) -> bool {
+            url.to_url().is_ok_and(|url| {
+                url.scheme() == "https"
+                    && url.host_str() == Some("files.pythonhosted.org")
+                    && url.username().is_empty()
+                    && url.password().is_none()
+                    && url.port().is_none()
+            })
+        }
+
+        let is_pypi_or_workspace_requirement = |requirement: &Requirement| match &requirement.source
+        {
+            RequirementSource::Registry { index, .. } => index
+                .as_ref()
+                .is_none_or(|index| index.url.url().as_str() == PYPI_URL.as_str()),
+            RequirementSource::Directory { install_path, .. } => {
+                self.packages.iter().any(|package| {
+                    package.name() == &requirement.name
+                        && self.is_workspace_package(package)
+                        && match &package.id.source {
+                            Source::Directory(path)
+                            | Source::Editable(path)
+                            | Source::Virtual(path) => {
+                                normalize_path(path.as_ref())
+                                    == normalize_path(install_path.as_ref())
+                            }
+                            Source::Registry(_)
+                            | Source::Git(..)
+                            | Source::Direct(..)
+                            | Source::Path(_) => false,
+                        }
+                })
+            }
+            RequirementSource::Url { .. }
+            | RequirementSource::GitDirectory { .. }
+            | RequirementSource::GitPath { .. }
+            | RequirementSource::Path { .. } => false,
+        };
+
+        if !self
+            .manifest
+            .requirements
+            .iter()
+            .chain(self.manifest.dependency_groups.values().flatten())
+            .chain(&self.manifest.constraints)
+            .chain(
+                self.manifest
+                    .build_constraints
+                    .iter()
+                    .map(|entry| &entry.requirement),
+            )
+            .all(&is_pypi_or_workspace_requirement)
+            || !self.manifest.overrides.iter().all(|entry| match entry {
+                Override::Package(package) => package
+                    .dependencies
+                    .iter()
+                    .all(&is_pypi_or_workspace_requirement),
+                Override::Requirement(requirement) => is_pypi_or_workspace_requirement(requirement),
+            })
+            || !self.manifest.dependency_metadata.iter().all(|metadata| {
+                metadata
+                    .requires_dist
+                    .iter()
+                    .all(|requirement| match &requirement.version_or_url {
+                        None | Some(VersionOrUrl::VersionSpecifier(_)) => true,
+                        Some(VersionOrUrl::Url(_)) => false,
+                    })
+            })
+        {
+            return false;
+        }
+
+        self.packages.iter().all(|package| {
+            if !package
+                .metadata
+                .requires_dist
+                .iter()
+                .chain(package.metadata.dependency_groups.values().flatten())
+                .all(&is_pypi_or_workspace_requirement)
+            {
+                return false;
+            }
+            if self.is_workspace_package(package) && package.id.source.is_local() {
+                return true;
+            }
+            if !package.is_from_pypi_registry() {
+                return false;
+            }
+            let sdist_from_pypi = match &package.sdist {
+                None | Some(SourceDist::Metadata { .. }) => true,
+                Some(SourceDist::Url { url, .. }) => is_pypi_file(url),
+                Some(SourceDist::Path { .. }) => false,
+            };
+            let wheels_from_pypi = package.wheels.iter().all(|wheel| match &wheel.url {
+                WheelWireSource::Url { url } => is_pypi_file(url),
+                WheelWireSource::Path { .. } | WheelWireSource::Filename { .. } => false,
+            });
+            sdist_from_pypi && wheels_from_pypi
+        })
     }
 
     /// Return a [`HashStrategy`] that verifies artifacts recorded in this lockfile.

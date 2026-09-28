@@ -408,6 +408,10 @@ impl PyProjectToml {
         &self.project.version
     }
 
+    pub(crate) fn requires_python(&self) -> Option<&VersionSpecifiers> {
+        self.project.requires_python.as_ref()
+    }
+
     pub(crate) fn parse(path: &Path) -> Result<Self, Error> {
         let contents = fs_err::read_to_string(path)?;
         let pyproject_toml =
