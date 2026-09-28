@@ -35476,12 +35476,16 @@ fn lock_no_build_invalid_dependency_virtual_project() -> Result<()> {
         "#,
     )?;
 
-    // Hiding the invalid dependency behind a build-disabled error is misleading; see astral-sh/uv#20908.
+    // The invalid dependency is reported directly instead of being hidden behind a
+    // build-disabled error; see astral-sh/uv#20908.
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to build `project @ file://[TEMP_DIR]/`
-      cause: Building source distributions for `project` is disabled
+      cause: Failed to extract static metadata from `pyproject.toml`
+      cause: after parsing `5`, found `>`, which is not part of a valid version
+             anyio<5>
+                  ^^^
     ");
 
     Ok(())
