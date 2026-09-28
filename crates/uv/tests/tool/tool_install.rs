@@ -6161,6 +6161,58 @@ fn tool_install_lock_revalidates_changed_constraints() -> Result<()> {
     Ok(())
 }
 
+/// Equivalent requirements reuse a tool lock and record the requested receipt inputs.
+#[test]
+fn tool_install_lock_reuses_equivalent_requirements() {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_exe_suffix()
+        .with_tool_dirs();
+    let bin_dir = context.temp_dir.child("bin");
+    let links = context.workspace_root.join("test/links");
+
+    context
+        .tool_install()
+        .args(["simple-launcher", "--with", "ok>=1", "--with", "ok>=2"])
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links)
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+    let original_lock = context.read("tools/simple-launcher/uv.lock");
+
+    context
+        .tool_install()
+        .args(["simple-launcher", "--with", "ok>=2"])
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links)
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    assert_eq!(context.read("tools/simple-launcher/uv.lock"), original_lock);
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("tools/simple-launcher/uv-receipt.toml"), @r#"
+        [tool]
+        requirements = [
+            { name = "simple-launcher" },
+            { name = "ok", specifier = ">=2" },
+        ]
+        entrypoints = [
+            { name = "simple_launcher", install-path = "[TEMP_DIR]/bin/simple_launcher", from = "simple-launcher" },
+        ]
+
+        [tool.options]
+        no-index = true
+        find-links = ["file://[WORKSPACE]/test/links"]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "#);
+    });
+}
+
 #[test]
 fn tool_install_with_build_hashes() -> Result<()> {
     for preview in ["--no-preview", "--preview-features=tool-install-locks"] {
