@@ -221,6 +221,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         tags: &Tags,
         hashes: ArchiveHashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
+        // TODO(konsti): Support fetching wheel variants.
         if let Dist::Built(built) = dist
             && built.wheel_filename().variant().is_some()
         {
@@ -266,6 +267,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         dist: &Dist,
         hashes: MetadataHashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
+        // TODO(konsti): Support reading metadata from wheel variants.
         if let Dist::Built(built) = dist
             && built.wheel_filename().variant().is_some()
         {

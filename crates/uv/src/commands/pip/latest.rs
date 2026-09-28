@@ -88,6 +88,7 @@ impl LatestClient<'_> {
         }
 
         // Skip wheels that aren't compatible with the current platform.
+        // TODO(konsti): Check variant compatibility when looking for updates.
         if let DistFilename::WheelFilename(filename) = filename
             && (filename.variant().is_some()
                 || self

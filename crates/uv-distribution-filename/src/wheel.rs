@@ -103,6 +103,7 @@ impl WheelFilename {
 
     /// Returns `true` if the wheel is compatible with the given tags.
     pub fn is_compatible(&self, compatible_tags: &Tags) -> bool {
+        // TODO(konsti): Check variant compatibility.
         self.variant().is_none()
             && compatible_tags.is_compatible(
                 self.python_tags(),
@@ -113,6 +114,7 @@ impl WheelFilename {
 
     /// Return the [`TagCompatibility`] of the wheel with the given tags
     pub fn compatibility(&self, compatible_tags: &Tags) -> TagCompatibility {
+        // TODO(konsti): Check variant compatibility.
         if self.variant().is_some() {
             return TagCompatibility::Incompatible(IncompatibleTag::Variant);
         }

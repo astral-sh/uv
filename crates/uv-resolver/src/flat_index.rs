@@ -213,6 +213,7 @@ impl FlatDistributions {
         hasher: &HashStrategy,
         build_options: &BuildOptions,
     ) -> WheelCompatibility {
+        // TODO(konsti): Check variant compatibility for flat-index wheels.
         if filename.variant().is_some() {
             return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(
                 IncompatibleTag::Variant,

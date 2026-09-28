@@ -10355,6 +10355,7 @@ fn is_wheel_unreachable_for_marker(
     marker: &UniversalMarker,
     tags: Option<&Tags>,
 ) -> bool {
+    // TODO(konsti): Include wheel variants in lockfiles when supported.
     if filename.variant().is_some() {
         return true;
     }
