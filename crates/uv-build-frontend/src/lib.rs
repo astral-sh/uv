@@ -6,7 +6,7 @@ mod error;
 mod pipreqs;
 
 use std::borrow::Cow;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fmt::Formatter;
 use std::fmt::Write;
 use std::io;
@@ -335,6 +335,11 @@ impl SourceBuild {
         )
         .await
         .map_err(|err| *err)?;
+
+        // The locked-tools setting is intended for uv_build, not arbitrary build backends.
+        if pep517_backend.backend != "uv_build" {
+            environment_variables.remove(OsStr::new(EnvVars::UV_INTERNAL__BUILD_LOCKED_TOOLS));
+        }
 
         let package_name = project
             .as_ref()
@@ -1302,6 +1307,8 @@ impl PythonRunner {
         let mut child = command
             .args(["-c", script])
             .current_dir(source_tree.simplified())
+            .env_remove(EnvVars::UV_INTERNAL__BUILD_LOCKED_TOOLS)
+            .env_remove(EnvVars::UV_INTERNAL__BUILD_BACKEND_LOCKED_TOOLS)
             .envs(environment_variables)
             .env(EnvVars::UV_INTERNAL__BUILD_DIR, source_tree)
             .env(EnvVars::PATH, modified_path)

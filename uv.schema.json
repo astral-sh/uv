@@ -737,6 +737,11 @@
           "type": "boolean",
           "default": true
         },
+        "export-lock": {
+          "description": "Include the project's lock in built distributions.\n\nWith the `locked-tools` preview feature, wheels contain `pylock.toml` in their\n`.dist-info` directory and source distributions contain `uv.lock`. By default,\nthis is enabled when `uv.lock` exists and all dependencies come from PyPI.\nSet this to `true` to also export other sources, or `false` to disable export.",
+          "type": ["boolean", "null"],
+          "default": null
+        },
         "module-name": {
           "description": "The name of the module directory inside `module-root`.\n\nThe default module name is the package name with dots and dashes replaced by underscores.\n\nPackage names need to be valid Python identifiers, and the directory needs to contain a\n`__init__.py`. An exception are stubs packages, whose name ends with `-stubs`, with the stem\nbeing the module name, and which contain a `__init__.pyi` file.\n\nFor namespace packages with a single module, the path can be dotted, e.g., `foo.bar` or\n`foo-stubs.bar`.\n\nFor namespace packages with multiple modules, the path can be a list, e.g.,\n`[\"foo\", \"bar\"]`. We recommend using a single module per package, splitting multiple\npackages into a workspace.\n\nNote that using this option runs the risk of creating two packages with different names but\nthe same module names. Installing such packages together leads to unspecified behavior,\noften with corrupted files or directory trees.",
           "anyOf": [
@@ -1873,6 +1878,7 @@
             "packaged-init",
             "centralized-project-envs",
             "tool-install-locks",
+            "locked-tools",
             "workspace-list-scripts",
             "no-distutils-patch",
             "index-hash-algorithm",

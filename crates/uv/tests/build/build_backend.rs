@@ -42,6 +42,344 @@ const BUILT_BY_UV_TEST_SCRIPT: &str = indoc! {r#"
     print(f"Area of a circle with r=2: {area(2)}")
 "#};
 
+#[test]
+fn export_lock_configuration() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("src/locked_tool/__init__.py")
+        .touch()?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "locked-tool"
+        version = "1.0.0"
+        [build-system]
+        requires = ["uv_build>=0.5.15,<2"]
+        build-backend = "uv_build"
+        [tool.uv.build-backend]
+        export-lock = true
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.build_backend()
+        .arg("build-wheel").arg(context.temp_dir.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Exporting locks requires the `locked-tools` preview feature
+    ");
+
+    uv_snapshot!(context.filters(), context.build_backend()
+        .arg("--preview-features").arg("locked-tools")
+        .arg("build-wheel").arg(context.temp_dir.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Cannot export a lock: `uv.lock` was not found; run `uv lock` before building
+    ");
+
+    // An environment override can disable export, even when the setting enables it.
+    uv_snapshot!(context.filters(), context.build_backend()
+        .env(EnvVars::UV_BUILD_BACKEND_EXPORT_LOCK, "false")
+        .arg("--preview-features").arg("locked-tools")
+        .arg("build-wheel").arg(context.temp_dir.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    locked_tool-1.0.0-py3-none-any.whl
+    ");
+
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        requires-python = ">=3.12"
+        [[package]]
+        name = "locked-tool"
+        version = "1.0.0"
+        source = { editable = "." }
+    "#})?;
+    context.temp_dir.child("pyproject.toml").write_str(
+        &fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?
+            .replace("export-lock = true", "export-lock = false"),
+    )?;
+    uv_snapshot!(context.filters(), context.build_backend()
+        .env(EnvVars::UV_BUILD_BACKEND_EXPORT_LOCK, "true")
+        .arg("--preview-features").arg("locked-tools")
+        .arg("build-wheel").arg(context.temp_dir.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    locked_tool-1.0.0-py3-none-any.whl
+    ");
+    uv_snapshot!(context.python_command().arg("-c").arg(indoc! {r#"
+        import zipfile
+        with zipfile.ZipFile("locked_tool-1.0.0-py3-none-any.whl") as wheel:
+            print(wheel.read("locked_tool-1.0.0.dist-info/pylock.toml").decode(), end="")
+    "#}), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12"
+    packages = []
+    "#);
+    Ok(())
+}
+
+#[test]
+fn export_lock_artifacts() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("src/locked_tool/__init__.py")
+        .touch()?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "locked-tool"
+        version = "1.0.0"
+        dependencies = ["dependency"]
+        [build-system]
+        requires = ["uv_build>=0.5.15,<2"]
+        build-backend = "uv_build"
+        [tool.uv.build-backend]
+        export-lock = true
+    "#})?;
+    let lock = indoc! {r#"
+        version = 1
+        requires-python = ">=3.12"
+        [[package]]
+        name = "locked-tool"
+        version = "1.0.0"
+        source = { editable = "." }
+        dependencies = [{ name = "dependency" }]
+        [[package]]
+        name = "dependency"
+        version = "1.0.0"
+    "#};
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&formatdoc! {r#"
+        {lock}
+        source = {{ registry = "https://example.com/simple" }}
+        wheels = [{{ url = "https://example.com/dependency-1.0.0-py3-none-any.whl" }}]
+    "#})?;
+    uv_snapshot!(context.filters(), context.build_backend()
+        .args(["--preview-features", "locked-tools", "build-wheel"])
+        .arg(context.temp_dir.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Cannot export a lock with missing artifact hashes; regenerate `uv.lock` with artifact hashes before building
+    ");
+
+    context.temp_dir.child("uv.lock").write_str(&formatdoc! {r#"
+        {lock}
+        source = {{ path = "../wheels/dependency-1.0.0-py3-none-any.whl" }}
+        wheels = [{{ filename = "dependency-1.0.0-py3-none-any.whl", hash = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" }}]
+    "#})?;
+    uv_snapshot!(context.filters(), context.build_backend()
+        .args(["--preview-features", "locked-tools", "build-wheel"])
+        .arg(context.temp_dir.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Cannot export a lock with relative dependency paths; use remote sources or absolute paths before building
+    ");
+    Ok(())
+}
+
+#[test]
+fn export_lock_pep517_preview() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("src/locked_tool/__init__.py")
+        .touch()?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "locked-tool"
+        version = "1.0.0"
+        [build-system]
+        requires = []
+        build-backend = "uv_build"
+        backend-path = ["backend"]
+    "#})?;
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        requires-python = ">=3.12"
+        [[package]]
+        name = "locked-tool"
+        version = "1.0.0"
+        source = { editable = "." }
+    "#})?;
+    // Exercise the real Python shim, using the test binary for its uv executable.
+    let shim = include_str!("../../../uv-build/python/uv_build/__init__.py")
+        .replace("USE_UV_EXECUTABLE = False", "USE_UV_EXECUTABLE = True")
+        .replace(
+            "uv_bin = shutil.which(uv_bin_name)",
+            "uv_bin = os.environ.get(\"UV_TEST_BACKEND_BIN\")",
+        );
+    context
+        .temp_dir
+        .child("backend/uv_build.py")
+        .write_str(&format!(
+            "{shim}\n{}",
+            indoc! {r#"
+            import os
+
+            original_build_wheel = build_wheel
+
+            def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+                with open(os.path.join(wheel_directory, "preview-features.txt"), "w") as file:
+                    file.write(os.environ.get("UV_PREVIEW_FEATURES", ""))
+                return original_build_wheel(wheel_directory, config_settings, metadata_directory)
+        "#}
+        ))?;
+
+    context
+        .build()
+        .args([
+            "--wheel",
+            "--force-pep517",
+            "--no-build-isolation",
+            "--preview-features",
+            "locked-tools",
+            "--out-dir",
+            "enabled",
+        ])
+        .env(EnvVars::UV_PREVIEW_FEATURES, "future-backend-feature")
+        .env("UV_TEST_BACKEND_BIN", uv_test::get_bin!())
+        .assert()
+        .success();
+    context
+        .build()
+        .args([
+            "--wheel",
+            "--force-pep517",
+            "--no-build-isolation",
+            "--no-preview",
+            "--out-dir",
+            "disabled",
+        ])
+        .env(EnvVars::UV_PREVIEW_FEATURES, "locked-tools")
+        .env("UV_TEST_BACKEND_BIN", uv_test::get_bin!())
+        .assert()
+        .success();
+
+    context.temp_dir.child("explicit").create_dir_all()?;
+    context
+        .command()
+        .args([
+            "--preview-features",
+            "locked-tools",
+            "build-backend",
+            "build-wheel",
+            "explicit",
+        ])
+        .env(EnvVars::UV_INTERNAL__BUILD_LOCKED_TOOLS, "false")
+        .assert()
+        .success();
+
+    context
+        .temp_dir
+        .child("nested/src/locked_tool/__init__.py")
+        .touch()?;
+    context
+        .temp_dir
+        .child("nested/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "locked-tool"
+        version = "1.0.0"
+        [build-system]
+        requires = ["uv_build>=0.12.0,<0.13.0"]
+        build-backend = "uv_build"
+    "#})?;
+    context
+        .temp_dir
+        .child("nested/uv.lock")
+        .write_str(indoc! {r#"
+        version = 1
+        requires-python = ">=3.12"
+        [[package]]
+        name = "locked-tool"
+        version = "1.0.0"
+        source = { editable = "." }
+    "#})?;
+    context
+        .build()
+        .current_dir(context.temp_dir.child("nested").path())
+        .args(["--wheel", "--no-preview"])
+        .env(EnvVars::UV_INTERNAL__BUILD_LOCKED_TOOLS, "true")
+        .assert()
+        .success();
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "locked-tool"
+        version = "1.0.0"
+        [build-system]
+        requires = []
+        build-backend = "wrapper"
+        backend-path = ["backend"]
+    "#})?;
+    context
+        .temp_dir
+        .child("backend/wrapper.py")
+        .write_str(indoc! {r#"
+        import os
+        import uv_build
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            os.environ["UV_PREVIEW_FEATURES"] = "locked-tools"
+            return uv_build.build_wheel(wheel_directory, config_settings, metadata_directory)
+    "#})?;
+    context
+        .build()
+        .args([
+            "--wheel",
+            "--force-pep517",
+            "--no-build-isolation",
+            "--no-preview",
+            "--out-dir",
+            "wrapper",
+        ])
+        .env("UV_TEST_BACKEND_BIN", uv_test::get_bin!())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.python_command().arg("-c").arg(indoc! {r#"
+        import zipfile
+        for directory in ["enabled", "disabled"]:
+            with zipfile.ZipFile(f"{directory}/locked_tool-1.0.0-py3-none-any.whl") as wheel:
+                print(directory, "locked_tool-1.0.0.dist-info/pylock.toml" in wheel.namelist())
+            with open(f"{directory}/preview-features.txt") as file:
+                print("preview features:", file.read())
+        with zipfile.ZipFile("nested/dist/locked_tool-1.0.0-py3-none-any.whl") as wheel:
+            print("nested", "locked_tool-1.0.0.dist-info/pylock.toml" in wheel.namelist())
+        with zipfile.ZipFile("explicit/locked_tool-1.0.0-py3-none-any.whl") as wheel:
+            print("explicit", "locked_tool-1.0.0.dist-info/pylock.toml" in wheel.namelist())
+        with zipfile.ZipFile("wrapper/locked_tool-1.0.0-py3-none-any.whl") as wheel:
+            print("wrapper", "locked_tool-1.0.0.dist-info/pylock.toml" in wheel.namelist())
+    "#}), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    enabled True
+    preview features: future-backend-feature
+    disabled False
+    preview features: locked-tools
+    nested False
+    explicit True
+    wrapper True
+    ");
+    Ok(())
+}
+
 fn unpack_tar_gz(source_dist_path: &Path, target: &Path) -> Result<()> {
     let sdist_reader = BufReader::new(File::open(source_dist_path)?);
     let source_dist = TarArchive::new(AllowStdIo::new(GzDecoder::new(sdist_reader)).compat());

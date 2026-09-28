@@ -7,6 +7,11 @@ pub struct EnvVars;
 
 #[attribute_env_vars_metadata]
 impl EnvVars {
+    /// Override `tool.uv.build-backend.export-lock` when using the `uv_build` backend.
+    /// Requires the `locked-tools` preview feature.
+    #[attr_added_in("next release")]
+    pub const UV_BUILD_BACKEND_EXPORT_LOCK: &'static str = "UV_BUILD_BACKEND_EXPORT_LOCK";
+
     /// The path to the binary that was used to invoke uv.
     ///
     /// This is propagated to all subprocesses spawned by uv.
@@ -676,6 +681,17 @@ impl EnvVars {
     #[attr_hidden]
     #[attr_added_in("0.11.22")]
     pub const UV_INTERNAL__BUILD_DIR: &'static str = "UV_INTERNAL__BUILD_DIR";
+
+    /// Pass the locked-tools preview setting to the build backend.
+    #[attr_hidden]
+    #[attr_added_in("next release")]
+    pub const UV_INTERNAL__BUILD_LOCKED_TOOLS: &'static str = "UV_INTERNAL__BUILD_LOCKED_TOOLS";
+
+    /// Pass the locked-tools preview setting from the Python shim to the backend executable.
+    #[attr_hidden]
+    #[attr_added_in("next release")]
+    pub const UV_INTERNAL__BUILD_BACKEND_LOCKED_TOOLS: &'static str =
+        "UV_INTERNAL__BUILD_BACKEND_LOCKED_TOOLS";
 
     /// Set to `1` to include Git metadata in development builds.
     /// Release builds include Git metadata by default.

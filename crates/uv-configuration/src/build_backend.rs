@@ -13,6 +13,15 @@ use uv_macros::OptionsMetadata;
 #[serde(default, rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct BuildBackendSettings {
+    /// Include the project's lock in built distributions.
+    ///
+    /// With the `locked-tools` preview feature, wheels contain `pylock.toml` in their
+    /// `.dist-info` directory and source distributions contain `uv.lock`. By default,
+    /// this is enabled when `uv.lock` exists and all dependencies come from PyPI.
+    /// Set this to `true` to also export other sources, or `false` to disable export.
+    #[option(default = "None", value_type = "bool", example = "export-lock = true")]
+    pub export_lock: Option<bool>,
+
     /// The directory that contains the module directory.
     ///
     /// Common values are `src` (src layout, the default) or an empty path (flat layout).
@@ -21,7 +30,7 @@ pub struct BuildBackendSettings {
         value_type = "str",
         example = r#"module-root = """#
     )]
-    pub(crate) module_root: PathBuf,
+    pub module_root: PathBuf,
 
     /// The name of the module directory inside `module-root`.
     ///
@@ -46,7 +55,7 @@ pub struct BuildBackendSettings {
         value_type = "str | list[str]",
         example = r#"module-name = "sklearn""#
     )]
-    pub(crate) module_name: Option<ModuleName>,
+    pub module_name: Option<ModuleName>,
 
     /// Glob expressions which files and directories to additionally include in the source
     /// distribution.
@@ -57,7 +66,7 @@ pub struct BuildBackendSettings {
         value_type = "list[str]",
         example = r#"source-include = ["tests/**"]"#
     )]
-    pub(crate) source_include: Vec<String>,
+    pub source_include: Vec<String>,
 
     /// If set to `false`, the default excludes aren't applied.
     ///
@@ -67,7 +76,7 @@ pub struct BuildBackendSettings {
         value_type = "bool",
         example = r#"default-excludes = false"#
     )]
-    pub(crate) default_excludes: bool,
+    pub default_excludes: bool,
 
     /// Glob expressions which files and directories to exclude from the source distribution.
     ///
@@ -78,7 +87,7 @@ pub struct BuildBackendSettings {
         value_type = "list[str]",
         example = r#"source-exclude = ["*.bin"]"#
     )]
-    pub(crate) source_exclude: Vec<String>,
+    pub source_exclude: Vec<String>,
 
     /// Glob expressions which files and directories to exclude from the wheel.
     #[option(
@@ -86,7 +95,7 @@ pub struct BuildBackendSettings {
         value_type = "list[str]",
         example = r#"wheel-exclude = ["*.bin"]"#
     )]
-    pub(crate) wheel_exclude: Vec<String>,
+    pub wheel_exclude: Vec<String>,
 
     /// Build a namespace package.
     ///
@@ -136,7 +145,7 @@ pub struct BuildBackendSettings {
         value_type = "bool",
         example = r#"namespace = true"#
     )]
-    pub(crate) namespace: bool,
+    pub namespace: bool,
 
     /// Data includes for wheels.
     ///
@@ -170,12 +179,13 @@ pub struct BuildBackendSettings {
         value_type = "dict[str, str]",
         example = r#"data = { headers = "include/headers", scripts = "bin" }"#
     )]
-    pub(crate) data: WheelDataIncludes,
+    pub data: WheelDataIncludes,
 }
 
 impl Default for BuildBackendSettings {
     fn default() -> Self {
         Self {
+            export_lock: None,
             module_root: PathBuf::from("src"),
             module_name: None,
             source_include: Vec::new(),
@@ -192,7 +202,7 @@ impl Default for BuildBackendSettings {
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(untagged)]
-pub(crate) enum ModuleName {
+pub enum ModuleName {
     /// A single module name.
     Name(String),
     /// Multiple module names, which are all included.
@@ -216,7 +226,7 @@ pub struct WheelDataIncludes {
 
 impl WheelDataIncludes {
     /// Yield all data directories name and corresponding paths.
-    pub(crate) fn iter(&self) -> impl Iterator<Item = (&'static str, &Path)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&'static str, &Path)> {
         [
             ("purelib", self.purelib.as_deref()),
             ("platlib", self.platlib.as_deref()),

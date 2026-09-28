@@ -316,6 +316,8 @@ pub enum PreviewFeature {
     /// Stores a `uv.lock` alongside each installed tool and reuses it for reproducible installations,
     /// upgrades, and audits.
     ToolInstallLocks,
+    /// Includes locks in built distributions and allows installing tools from their packaged locks.
+    LockedTools,
     /// Allows using `uv workspace list --scripts`.
     WorkspaceListScripts,
     /// Stops installing the `_virtualenv.py` / `_virtualenv.pth` distutils configuration monkeypatch
@@ -469,6 +471,15 @@ impl Preview {
     /// Check if a single feature is enabled.
     pub fn is_enabled(&self, flag: PreviewFeature) -> bool {
         self.flags.contains(flag)
+    }
+
+    /// Set a single preview feature without changing the others.
+    pub fn set_enabled(&mut self, flag: PreviewFeature, enabled: bool) {
+        if enabled {
+            self.flags.insert(flag);
+        } else {
+            self.flags.remove(flag);
+        }
     }
 
     /// Check if all preview feature rae enabled.

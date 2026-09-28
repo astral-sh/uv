@@ -2,7 +2,7 @@ use std::env;
 use std::io::Write;
 use std::path::PathBuf;
 use std::str::FromStr;
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeature};
 use uv_static::{EnvVars, parse_boolish_environment_variable};
 
 use anyhow::{Context, Result, bail};
@@ -43,7 +43,7 @@ fn main() -> Result<()> {
         .to_string();
 
     // Ad-hoc preview features parsing due to a lack of clap CLI in uv-build.
-    let preview = if parse_boolish_environment_variable(EnvVars::UV_PREVIEW)?.unwrap_or(false) {
+    let mut preview = if parse_boolish_environment_variable(EnvVars::UV_PREVIEW)?.unwrap_or(false) {
         Preview::all()
     } else if let Some(preview_features) = env::var_os(EnvVars::UV_PREVIEW_FEATURES) {
         let preview_features = preview_features
@@ -58,6 +58,11 @@ fn main() -> Result<()> {
     } else {
         Preview::default()
     };
+    if let Some(enabled) =
+        parse_boolish_environment_variable(EnvVars::UV_INTERNAL__BUILD_BACKEND_LOCKED_TOOLS)?
+    {
+        preview.set_enabled(PreviewFeature::LockedTools, enabled);
+    }
     if preview.all_enabled() {
         debug!("All preview features are enabled");
     } else if preview.any_enabled() {

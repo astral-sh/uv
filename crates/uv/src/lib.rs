@@ -45,7 +45,7 @@ use uv_requirements::{GroupsSpecification, RequirementsSource};
 use uv_requirements_txt::RequirementsTxtRequirement;
 use uv_scripts::{Pep723Error, Pep723Item, Pep723Script};
 use uv_settings::{Combine, EnvironmentOptions, FilesystemOptions, Options};
-use uv_static::EnvVars;
+use uv_static::{EnvVars, parse_boolish_environment_variable};
 use uv_threads::{RAYON_PARALLELISM, min_stack_size};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
@@ -539,7 +539,15 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
 
     if global_initialization.needs_initialization() {
         // Set and finalize the global preview configuration.
-        uv_preview::set(globals.preview)?;
+        let mut preview = globals.preview;
+        if let Commands::BuildBackend { .. } = &*cli.command
+            && let Some(enabled) = parse_boolish_environment_variable(
+                EnvVars::UV_INTERNAL__BUILD_BACKEND_LOCKED_TOOLS,
+            )?
+        {
+            preview.set_enabled(PreviewFeature::LockedTools, enabled);
+        }
+        uv_preview::set(preview)?;
         uv_preview::finalize()?;
     }
 

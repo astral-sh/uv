@@ -38,6 +38,7 @@ def call(
     args: "Sequence[str]", config_settings: "Mapping[Any, Any] | None" = None
 ) -> str:
     """Invoke a uv subprocess and return the filename from stdout."""
+    import os
     import shutil
     import subprocess
     import sys
@@ -50,9 +51,17 @@ def call(
     if uv_bin is None:
         raise RuntimeError(f"{uv_bin_name} was not properly installed")
     build_backend_args = ["build-backend"] if USE_UV_EXECUTABLE else []
+    environment = os.environ.copy()
+    environment.pop("UV_INTERNAL__BUILD_BACKEND_LOCKED_TOOLS", None)
+    locked_tools_preview = environment.pop("UV_INTERNAL__BUILD_LOCKED_TOOLS", None)
+    if locked_tools_preview is not None:
+        environment["UV_INTERNAL__BUILD_BACKEND_LOCKED_TOOLS"] = locked_tools_preview
     # Forward stderr, capture stdout for the filename
     result = subprocess.run(
-        [uv_bin, *build_backend_args, *args], stdout=subprocess.PIPE, check=False
+        [uv_bin, *build_backend_args, *args],
+        stdout=subprocess.PIPE,
+        check=False,
+        env=environment,
     )
     if result.returncode != 0:
         sys.exit(result.returncode)

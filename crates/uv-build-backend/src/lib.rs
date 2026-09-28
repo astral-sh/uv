@@ -1,14 +1,14 @@
 use itertools::Itertools;
+mod lock;
 mod metadata;
 mod serde_verbatim;
-mod settings;
 mod source_dist;
 mod wheel;
 
 pub(crate) use metadata::PyProjectToml;
 pub use metadata::check_direct_build;
-pub use settings::{BuildBackendSettings, WheelDataIncludes};
 pub use source_dist::{build_source_dist, list_source_dist};
+pub use uv_configuration::build_backend::{BuildBackendSettings, WheelDataIncludes};
 use uv_warnings::warn_user_once;
 pub use wheel::{build_editable, build_wheel, list_wheel, metadata};
 
@@ -27,10 +27,20 @@ use uv_normalize::PackageName;
 use uv_pypi_types::{Identifier, IdentifierParseError};
 
 use crate::metadata::ValidationError;
-use crate::settings::ModuleName;
+use uv_configuration::build_backend::ModuleName;
 
 #[derive(Debug, Error)]
 pub enum Error {
+    #[error(transparent)]
+    InvalidEnvironmentVariable(#[from] uv_static::InvalidEnvironmentVariable),
+    #[error("Failed to read `uv.lock`")]
+    LockParse(#[from] uv_lock::LockParseError),
+    #[error("Failed to export `uv.lock`")]
+    LockExport(#[from] uv_lock::PylockTomlErrorKind),
+    #[error("Failed to serialize `pylock.toml`")]
+    PylockSerialize(#[from] toml_edit::ser::Error),
+    #[error("{0}")]
+    InvalidBuildLock(String),
     #[error(transparent)]
     Io(#[from] io::Error),
     #[error("Failed to persist temporary file to {}", _0.user_display())]
@@ -233,6 +243,16 @@ fn check_metadata_directory(
                 return Err(Error::InconsistentSteps("entry_points.txt"));
             }
         }
+    }
+
+    let current_lock = lock::export_lock(source_tree, pyproject_toml)?;
+    let previous_lock = match fs_err::read_to_string(metadata_directory.join("pylock.toml")) {
+        Ok(contents) => Some(contents),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => None,
+        Err(err) => return Err(err.into()),
+    };
+    if current_lock != previous_lock {
+        return Err(Error::InconsistentSteps("pylock.toml"));
     }
 
     Ok(())
@@ -1909,6 +1929,138 @@ mod tests {
         foo/
         foo/__init__.py
         ");
+    }
+
+    /// Export only runtime dependencies and keep direct and sdist wheel builds identical.
+    #[test]
+    fn export_lock() -> Result<(), Box<dyn std::error::Error>> {
+        let _preview = uv_preview::test::with_features(&[PreviewFeature::LockedTools]);
+        let src = TempDir::new()?;
+        let dist = TempDir::new()?;
+        fs_err::create_dir_all(src.path().join("src/locked_tool"))?;
+        fs_err::write(src.path().join("src/locked_tool/__init__.py"), "")?;
+        fs_err::write(
+            src.path().join("pyproject.toml"),
+            indoc! {r#"
+            [project]
+            name = "locked-tool"
+            version = "1.0.0"
+            requires-python = ">=3.12"
+            dependencies = ["dependency"]
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<2"]
+            build-backend = "uv_build"
+        "#},
+        )?;
+        let lock = indoc! {r#"
+            version = 1
+            revision = 3
+            requires-python = ">=3.12"
+
+            [[package]]
+            name = "locked-tool"
+            version = "1.0.0"
+            source = { editable = "." }
+            dependencies = [{ name = "dependency" }]
+            [package.dev-dependencies]
+            dev = [{ name = "dev-dependency" }]
+
+            [[package]]
+            name = "dependency"
+            version = "2.0.0"
+            source = { registry = "https://pypi.org/simple" }
+            wheels = [{ url = "https://files.pythonhosted.org/dependency-2.0.0-py3-none-any.whl", hash = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" }]
+
+            [[package]]
+            name = "dev-dependency"
+            version = "3.0.0"
+            source = { registry = "https://pypi.org/simple" }
+        "#};
+        fs_err::write(src.path().join("uv.lock"), lock)?;
+        let result = build(src.path(), dist.path())?;
+        assert_snapshot!(result.source_dist_contents.join("\n"), @"
+        locked_tool-1.0.0/
+        locked_tool-1.0.0/PKG-INFO
+        locked_tool-1.0.0/pyproject.toml
+        locked_tool-1.0.0/pyproject.toml.orig
+        locked_tool-1.0.0/src
+        locked_tool-1.0.0/src/locked_tool
+        locked_tool-1.0.0/src/locked_tool/__init__.py
+        locked_tool-1.0.0/uv.lock
+        ");
+        assert_snapshot!(result.wheel_contents.join("\n"), @"
+        locked_tool-1.0.0.dist-info/
+        locked_tool-1.0.0.dist-info/METADATA
+        locked_tool-1.0.0.dist-info/RECORD
+        locked_tool-1.0.0.dist-info/WHEEL
+        locked_tool-1.0.0.dist-info/pylock.toml
+        locked_tool/
+        locked_tool/__init__.py
+        ");
+        assert_snapshot!(wheel_entry(
+            &dist.path().join(result.wheel_filename.to_string()),
+            "locked_tool-1.0.0.dist-info/pylock.toml",
+        ), @r#"
+        lock-version = "1.0"
+        created-by = "uv"
+        requires-python = ">=3.12"
+
+        [[packages]]
+        name = "dependency"
+        version = "2.0.0"
+        index = "https://pypi.org/simple"
+        wheels = [{ url = "https://files.pythonhosted.org/dependency-2.0.0-py3-none-any.whl", hashes = { sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" } }]
+        "#);
+
+        let metadata_dir = TempDir::new()?;
+        let dist_info = metadata(src.path(), metadata_dir.path(), MOCK_UV_VERSION)?;
+        fs_err::write(src.path().join("uv.lock"), lock.replace("2.0.0", "2.1.0"))?;
+        let err = build_wheel(
+            src.path(),
+            dist.path(),
+            Some(&metadata_dir.path().join(dist_info)),
+            MOCK_UV_VERSION,
+            false,
+        )
+        .expect_err("changed locks must invalidate prepared metadata");
+        assert_snapshot!(err.to_string(), @"Inconsistent metadata between prepare and build step: pylock.toml");
+
+        // Private sources need an explicit opt-in.
+        fs_err::write(
+            src.path().join("uv.lock"),
+            lock.replace("https://pypi.org/simple", "https://example.com/simple"),
+        )?;
+        let result = build(src.path(), dist.path())?;
+        assert_snapshot!(result.wheel_contents.join("\n"), @"
+        locked_tool-1.0.0.dist-info/
+        locked_tool-1.0.0.dist-info/METADATA
+        locked_tool-1.0.0.dist-info/RECORD
+        locked_tool-1.0.0.dist-info/WHEEL
+        locked_tool/
+        locked_tool/__init__.py
+        ");
+        let pyproject_path = src.path().join("pyproject.toml");
+        let pyproject = fs_err::read_to_string(&pyproject_path)?;
+        fs_err::write(
+            &pyproject_path,
+            format!("{pyproject}\n[tool.uv.build-backend]\nexport-lock = true\n"),
+        )?;
+        let result = build(src.path(), dist.path())?;
+        let pylock: uv_lock::PylockToml = toml::from_str(&wheel_entry(
+            &dist.path().join(result.wheel_filename.to_string()),
+            "locked_tool-1.0.0.dist-info/pylock.toml",
+        ))?;
+        assert_eq!(pylock.packages.len(), 1);
+        fs_err::write(
+            &pyproject_path,
+            format!("{pyproject}\n[tool.uv.build-backend]\nexport-lock = false\n"),
+        )?;
+        assert!(
+            crate::lock::export_lock(src.path(), &PyProjectToml::parse(&pyproject_path)?)?
+                .is_none()
+        );
+        Ok(())
     }
 
     /// Check that JSON metadata files are present.

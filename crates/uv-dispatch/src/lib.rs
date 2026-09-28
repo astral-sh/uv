@@ -30,7 +30,7 @@ use uv_distribution_types::{
 };
 use uv_git::GitResolver;
 use uv_installer::{InstallationStrategy, Installer, Plan, Planner, Preparer, SitePackages};
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::Conflicts;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_requirements::LookaheadResolver;
@@ -38,6 +38,7 @@ use uv_resolver::{
     ExcludeNewer, FlatIndex, Flexibility, InMemoryIndex, Manifest, OptionsBuilder,
     PythonRequirement, Resolver, ResolverEnvironment,
 };
+use uv_static::EnvVars;
 use uv_types::{
     AnyErrorBuild, BuildArena, BuildContext, BuildIsolation, BuildStack, EmptyInstalledPackages,
     HashStrategy, InFlight, ResolvedRequirements, SourceTreeEditablePolicy,
@@ -568,6 +569,19 @@ impl BuildContext for BuildDispatch<'_> {
                         .map(|(key, value)| (OsString::from(key), OsString::from(value))),
                 );
             }
+        }
+        // Build variables can override the preview settings for an individual package.
+        if !environment_variables.contains_key(OsStr::new(EnvVars::UV_PREVIEW))
+            && !environment_variables.contains_key(OsStr::new(EnvVars::UV_PREVIEW_FEATURES))
+        {
+            environment_variables.insert(
+                OsString::from(EnvVars::UV_INTERNAL__BUILD_LOCKED_TOOLS),
+                OsString::from(
+                    self.preview
+                        .is_enabled(PreviewFeature::LockedTools)
+                        .to_string(),
+                ),
+            );
         }
 
         let builder = SourceBuild::setup(

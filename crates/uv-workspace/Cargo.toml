@@ -16,7 +16,6 @@ doctest = false
 workspace = true
 
 [dependencies]
-uv-build-backend = { workspace = true, features = ["schemars"] }
 uv-cache = { workspace = true }
 uv-cache-key = { workspace = true }
 uv-configuration = { workspace = true }
@@ -60,7 +59,7 @@ tempfile = { workspace = true }
 [features]
 schemars = [
   "dep:schemars",
-  "uv-build-backend/schemars",
+  "uv-configuration/schemars",
   "uv-distribution-types/schemars",
   "uv-fs/schemars",
   "uv-normalize/schemars",
