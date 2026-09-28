@@ -817,6 +817,7 @@ impl VersionMapLazy {
         }
 
         // Variant wheels cannot be selected, including during universal resolution.
+        // TODO(konsti): Support wheel variants during resolution.
         if filename.variant().is_some() {
             return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(
                 IncompatibleTag::Variant,
