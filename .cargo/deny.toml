@@ -55,7 +55,6 @@ allow-build-scripts = [
     "num-traits",
     "objc2",
     "oid-registry",
-    "owo-colors",
     "parking_lot_core",
     "portable-atomic",
     "portable-atomic-util",
