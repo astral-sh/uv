@@ -232,7 +232,6 @@ HTTP responses cached by another format must be fetched again before they can be
 HTTP 304 responses update the cached policy in place without rewriting the payload. A checksum
 rejects interrupted or overlapping policy updates; an invalid entry must be fetched again.
 
-When a source distribution directory also contains an older `revision.http` pointer,
-`uv cache prune` retains its source revisions because they may still be used by older clients. An
-older client's pruning can still remove revisions referenced only by the new pointer, requiring a
-download or build on the next use.
+When sharing a cache between versions, `uv cache prune` can remove source revisions used only by
+another uv version. That version may need to download and rebuild the source distribution, and
+installs that depend on the removed artifacts can fail offline.

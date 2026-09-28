@@ -3247,12 +3247,6 @@ pub fn prune(cache: &Cache) -> Result<Removal, Error> {
                 continue;
             }
 
-            // Older clients keep a separate HTTP revision pointer. Retain their revisions too,
-            // since this client cannot determine which directory the legacy pointer references.
-            if entry.path().join("revision.http").is_file() {
-                continue;
-            }
-
             // If we find a `revision.cache-v2` file, read the pointer, and remove any extraneous
             // directories.
             let revision = entry.path().join(HTTP_REVISION);

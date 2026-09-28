@@ -471,7 +471,7 @@ fn prune_stale_revision() -> Result<()> {
     Ok(())
 }
 
-/// Pruning retains revisions that may still be referenced by an older HTTP cache format.
+/// Legacy HTTP pointers do not prevent pruning revisions unused by the current format.
 #[test]
 fn prune_mixed_http_revisions() -> Result<()> {
     let context = uv_test::test_context!("3.12")
@@ -501,21 +501,20 @@ fn prune_mixed_http_revisions() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Pruning cache at: [CACHE_DIR]/
-    No unused entries found
-    ");
-    assert!(legacy_revision.is_dir());
-    assert!(pointer.is_file());
-
-    // Without the legacy pointer, the versioned pointer determines which revision to keep.
-    fs_err::remove_file(legacy_pointer)?;
-    uv_snapshot!(context.filters(), context.prune(), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Pruning cache at: [CACHE_DIR]/
     Removed [N] files ([SIZE])
     ");
     assert!(!legacy_revision.exists());
+    assert!(legacy_pointer.is_file());
     assert!(pointer.is_file());
+
+    // The current format's source revision and built wheel remain usable offline.
+    context.venv().arg("--clear").assert().success();
+    context
+        .pip_install()
+        .arg("source-distribution==0.0.1")
+        .arg("--offline")
+        .assert()
+        .success();
     Ok(())
 }
 
