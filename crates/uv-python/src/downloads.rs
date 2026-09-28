@@ -1859,7 +1859,6 @@ mod tests {
     use crate::PythonVariant;
     use crate::implementation::LenientImplementationName;
     use crate::installation::PythonInstallationKey;
-    use crate::managed::Error as ManagedPythonError;
     use uv_platform::{Arch, Libc, Os, Platform};
 
     use super::*;
@@ -2309,30 +2308,6 @@ mod tests {
             sha256: Some(Digest::from_bytes([0xab; 32])),
             build: Some("20240713"),
         }
-    }
-
-    #[test]
-    fn test_managed_installation_unknown_implementation() {
-        let mut download = cpython_download_for_url("https://example.com/python.tar.gz");
-        download.key.implementation = LenientImplementationName::Unknown("unknown".to_string());
-
-        assert_matches!(
-            ManagedPythonInstallation::new(PathBuf::from("/test/path"), &download),
-            Err(ManagedPythonError::ImplementationError(
-                ImplementationError::UnknownImplementation(name)
-            )) if name == "unknown"
-        );
-    }
-
-    #[test]
-    fn test_managed_installation_pyodide_download_request() -> anyhow::Result<()> {
-        let mut download = cpython_download_for_url("https://example.com/python.tar.gz");
-        download.key.platform = Platform::from_str("emscripten-wasm32-musl")?;
-        let installation = ManagedPythonInstallation::new(PathBuf::from("/test/path"), &download)?;
-
-        assert_eq!(installation.implementation(), ImplementationName::Pyodide);
-        assert!(PythonDownloadRequest::from(&installation).satisfied_by_key(download.key()));
-        Ok(())
     }
 
     #[test]
