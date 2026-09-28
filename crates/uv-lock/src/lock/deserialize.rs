@@ -340,6 +340,7 @@ enum MapKind {
     Options,
     OptionsExcludeNewerPackage,
     Manifest,
+    ManifestDefaultGroups,
     ManifestDependencyGroups,
     ManifestDependencyMetadata,
     Package,
@@ -468,7 +469,9 @@ impl<'de> DocumentMapAccess<'_, 'de> {
             }
             (
                 MapKind::Root,
-                "[manifest.dependency-groups]" | "[[manifest.dependency-metadata]]",
+                "[manifest.default-groups]"
+                | "[manifest.dependency-groups]"
+                | "[[manifest.dependency-metadata]]",
             ) => {
                 // The manifest map consumes the first subtable when its parent is implicit.
                 self.track_key("manifest")?;
@@ -491,6 +494,11 @@ impl<'de> DocumentMapAccess<'_, 'de> {
                 "dependency-groups",
                 Pending::Map(MapKind::ManifestDependencyGroups),
                 "[manifest.dependency-groups]",
+            )),
+            (MapKind::Manifest, "[manifest.default-groups]") => Some((
+                "default-groups",
+                Pending::Map(MapKind::ManifestDefaultGroups),
+                "[manifest.default-groups]",
             )),
             (MapKind::Manifest, "[[manifest.dependency-metadata]]") => Some((
                 "dependency-metadata",

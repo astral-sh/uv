@@ -72,7 +72,7 @@ fn minimum_libc_retains_locked_wheels() -> Result<()> {
     insta::with_settings!({filters => context.filters()}, {
         assert_snapshot!(context.read("uv.lock"), @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         required-markers = [
             "platform_machine == 'x86_64' and sys_platform == 'linux'",
@@ -225,7 +225,7 @@ fn minimum_libc_switch_families() -> Result<()> {
     insta::with_settings!({filters => context.filters()}, {
         assert_snapshot!(lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         resolution-markers = [
             "platform_machine == 'x86_64' and sys_platform == 'linux'",
@@ -288,7 +288,7 @@ fn minimum_libc_switch_families() -> Result<()> {
     insta::with_settings!({filters => context.filters()}, {
         assert_snapshot!(lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         resolution-markers = [
             "platform_machine == 'x86_64' and sys_platform == 'linux'",
@@ -410,7 +410,7 @@ fn minimum_libc_local_version_fallback() -> Result<()> {
     insta::with_settings!({filters => context.filters()}, {
         assert_snapshot!(lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         resolution-markers = [
             "python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython' or sys_platform != 'linux'",
@@ -539,7 +539,7 @@ fn minimum_libc_backtracks_and_invalidates_lock() -> Result<()> {
     insta::with_settings!({filters => context.filters()}, {
         assert_snapshot!(lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         required-markers = [
             "platform_machine == 'x86_64' and sys_platform == 'linux'",
@@ -751,7 +751,7 @@ fn minimum_libc_allows_sdist_fallback() -> Result<()> {
     insta::with_settings!({filters => context.filters()}, {
         assert_snapshot!(lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         required-markers = [
             "platform_machine == 'x86_64' and sys_platform == 'linux'",
@@ -945,7 +945,7 @@ fn minimum_libc_architectures_and_markers() -> Result<()> {
     insta::with_settings!({filters => context.filters()}, {
         assert_snapshot!(lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         resolution-markers = [
             "platform_machine == 'x86_64' and sys_platform == 'linux'",

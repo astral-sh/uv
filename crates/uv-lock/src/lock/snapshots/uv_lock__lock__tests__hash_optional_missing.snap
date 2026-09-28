@@ -127,6 +127,7 @@ Ok(
         },
         manifest: ResolverManifest {
             members: {},
+            default_groups: {},
             requirements: {},
             dependency_groups: {},
             constraints: {},

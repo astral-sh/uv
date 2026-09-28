@@ -199,7 +199,7 @@ fn root_package_splits_transitive_too() -> Result<()> {
 
     assert_snapshot!(context.read("uv.lock"), @r#"
     version = 1
-    revision = 3
+    revision = 5
     requires-python = ">=3.11, <3.13"
     resolution-markers = [
         "python_full_version >= '3.12'",
@@ -393,7 +393,7 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
 
     assert_snapshot!(context.read("uv.lock"), @r#"
     version = 1
-    revision = 3
+    revision = 5
     requires-python = ">=3.11, <3.13"
     resolution-markers = [
         "python_full_version >= '3.12'",
@@ -553,7 +553,7 @@ fn branching_between_registry_and_direct_url() -> Result<()> {
     // We have source dist and wheel for the registry, but only the wheel for the direct URL.
     assert_snapshot!(context.read("uv.lock"), @r#"
     version = 1
-    revision = 3
+    revision = 5
     requires-python = ">=3.11, <3.13"
     resolution-markers = [
         "python_full_version >= '3.12'",
@@ -637,7 +637,7 @@ fn branching_urls_of_different_sources_disjoint() -> Result<()> {
     // We have source dist and wheel for the registry, but only the wheel for the direct URL.
     assert_snapshot!(context.read("uv.lock"), @r#"
     version = 1
-    revision = 3
+    revision = 5
     requires-python = ">=3.11, <3.13"
     resolution-markers = [
         "python_full_version >= '3.12'",
@@ -761,7 +761,7 @@ fn dont_pre_visit_url_packages() -> Result<()> {
 
     assert_snapshot!(context.read("uv.lock"), @r#"
     version = 1
-    revision = 3
+    revision = 5
     requires-python = ">=3.11, <3.13"
 
     [options]

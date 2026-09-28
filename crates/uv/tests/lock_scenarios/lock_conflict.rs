@@ -178,7 +178,7 @@ fn extra_basic() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "extra1" },
@@ -348,7 +348,7 @@ fn extra_basic_three_extras() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "extra1" },
@@ -778,7 +778,7 @@ fn extra_multiple_independent() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "extra1" },
@@ -925,7 +925,7 @@ fn extra_config_change_ignore_lockfile() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "extra1" },
@@ -1739,7 +1739,7 @@ fn extra_depends_on_conflicting_extra_transitive() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "example", extra = "bar" },
@@ -1909,7 +1909,7 @@ fn group_basic() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", group = "group1" },
@@ -2046,7 +2046,7 @@ fn group_default() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", group = "group1" },
@@ -2055,6 +2055,9 @@ fn group_default() -> Result<()> {
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest.default-groups]
+        project = ["group1"]
 
         [[package]]
         name = "project"
@@ -2261,7 +2264,7 @@ fn groups_respect_supported_environments_when_filtering_wheels() -> Result<()> {
             lock,
             @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         resolution-markers = [
             "platform_machine == 'x86_64' and sys_platform == 'linux'",
@@ -2366,7 +2369,7 @@ fn extra_conflict_environments_omit_redundant_markers() -> Result<()> {
             lock,
             @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.10.0"
         resolution-markers = [
             "platform_machine == 'x86_64' and sys_platform == 'darwin'",
@@ -2575,7 +2578,7 @@ fn mixed() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "extra1" },
@@ -2713,7 +2716,7 @@ fn group_activates_self_extra() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "dev" },
@@ -2964,7 +2967,7 @@ fn multiple_sources_index_disjoint_extras() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "cu118" },
@@ -3108,7 +3111,7 @@ fn multiple_sources_index_disjoint_groups() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", group = "cu118" },
@@ -3251,7 +3254,7 @@ fn multiple_sources_index_disjoint_extras_with_extra() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "cu118" },
@@ -3414,7 +3417,7 @@ fn multiple_sources_index_disjoint_extras_with_marker() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         resolution-markers = [
             "extra != 'extra-7-project-cu118' and extra == 'extra-7-project-cu124'",
@@ -3725,7 +3728,7 @@ fn shared_optional_dependency_extra1() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "bar" },
@@ -3862,7 +3865,7 @@ fn shared_optional_dependency_group1() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", group = "bar" },
@@ -4000,7 +4003,7 @@ fn shared_optional_dependency_mixed1() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "foo" },
@@ -4142,7 +4145,7 @@ fn shared_optional_dependency_extra2() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = "==3.11.*"
         conflicts = [[
             { package = "project", extra = "bar" },
@@ -4280,7 +4283,7 @@ fn shared_optional_dependency_group2() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = "==3.11.*"
         conflicts = [[
             { package = "project", group = "bar" },
@@ -4423,7 +4426,7 @@ fn shared_optional_dependency_mixed2() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = "==3.11.*"
         conflicts = [[
             { package = "project", extra = "foo" },
@@ -4564,7 +4567,7 @@ fn shared_dependency_extra() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "bar" },
@@ -4727,7 +4730,7 @@ fn shared_dependency_group() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", group = "bar" },
@@ -4891,7 +4894,7 @@ fn shared_dependency_mixed() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "foo" },
@@ -5094,7 +5097,7 @@ conflicts = [
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = "==3.11.*"
         conflicts = [[
             { package = "project", extra = "x1" },
@@ -5277,7 +5280,7 @@ fn jinja_no_conflict_markers1() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "cu118" },
@@ -5436,7 +5439,7 @@ fn jinja_no_conflict_markers2() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         resolution-markers = [
             "extra != 'extra-7-project-cu118' and extra == 'extra-7-project-cu124'",
@@ -5594,7 +5597,7 @@ fn collision_extra() -> Result<()> {
             lock,
             @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "pkg", extra = "bar" },
@@ -5808,7 +5811,7 @@ fn extra_inferences() -> Result<()> {
             lock,
             @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "pkg", extra = "x1" },
@@ -7839,7 +7842,7 @@ fn deduplicate_resolution_markers() -> Result<()> {
             lock,
             @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         resolution-markers = [
             "sys_platform != 'linux' and extra != 'extra-3-pkg-x1' and extra == 'extra-3-pkg-x2'",
@@ -8008,7 +8011,7 @@ fn incorrect_extra_simplification_leads_to_multiple_torch_packages() -> Result<(
     }, {
         assert_snapshot!(lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "test", extra = "chgnet" },
@@ -8243,7 +8246,7 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
     }, {
         assert_snapshot!(lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "test", extra = "alignn" },
@@ -8503,7 +8506,7 @@ fn overlapping_resolution_markers() -> Result<()> {
             lock,
             @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = "==3.10.*"
         resolution-markers = [
             "sys_platform == 'linux' and extra != 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118'",
@@ -9173,7 +9176,7 @@ fn conditional_sources_keep_default_platform_specific_transitive_dependencies() 
             lock,
             @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = "==3.12.*"
         resolution-markers = [
             "extra != 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124'",
@@ -9634,7 +9637,7 @@ fn avoids_exponential_lock_file_growth() -> Result<()> {
             lock,
             @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         resolution-markers = [
             "extra != 'extra-27-resolution-markers-for-days-cpu' and extra == 'extra-27-resolution-markers-for-days-cu124'",
@@ -10046,7 +10049,7 @@ fn avoids_exponential_lock_file_growth() -> Result<()> {
             lock,
             @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         resolution-markers = [
             "extra != 'extra-27-resolution-markers-for-days-cpu' and extra == 'extra-27-resolution-markers-for-days-cu124'",
@@ -10492,7 +10495,7 @@ fn do_not_simplify_if_not_all_conflict_extras_satisfy_the_marker_by_themselves()
             lock,
             @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = "==3.12.*"
         resolution-markers = [
             "platform_machine != 'inapplicable' and extra != 'extra-5-debug-a' and extra == 'extra-5-debug-b'",
@@ -10709,7 +10712,7 @@ fn many_pairwise_conflicts_shared_extra() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", extra = "a" },
@@ -10873,7 +10876,7 @@ fn project_level_conflict_with_extra() -> Result<()> {
             lock,
             @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "pkg-a" },
@@ -11051,7 +11054,7 @@ fn project_level_conflict_with_extras_and_cross_dependency() -> Result<()> {
             lock,
             @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "pkg-a" },
@@ -11263,7 +11266,7 @@ fn project_level_conflict_with_group() -> Result<()> {
             lock,
             @r#"
         version = 1
-        revision = 3
+        revision = 5
         requires-python = ">=3.12"
         conflicts = [[
             { package = "pkg-a" },
