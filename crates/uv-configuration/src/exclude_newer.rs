@@ -76,6 +76,8 @@ pub enum ExcludeNewerChange {
     GlobalChanged(ExcludeNewerValueChange),
     GlobalAdded(ExcludeNewerValue),
     GlobalRemoved,
+    /// A locked artifact is excluded by the current effective cutoff.
+    ExcludedArtifact(PackageName),
     Package(ExcludeNewerPackageChange),
 }
 
@@ -84,7 +86,7 @@ impl ExcludeNewerChange {
     pub fn is_relative_timestamp_change(&self) -> bool {
         match self {
             Self::GlobalChanged(change) => change.is_relative_timestamp_change(),
-            Self::GlobalAdded(_) | Self::GlobalRemoved => false,
+            Self::GlobalAdded(_) | Self::GlobalRemoved | Self::ExcludedArtifact(_) => false,
             Self::Package(change) => change.is_relative_timestamp_change(),
         }
     }
@@ -100,6 +102,12 @@ impl std::fmt::Display for ExcludeNewerChange {
                 write!(f, "addition of global exclude newer {value}")
             }
             Self::GlobalRemoved => write!(f, "removal of global exclude newer"),
+            Self::ExcludedArtifact(package) => {
+                write!(
+                    f,
+                    "an artifact for `{package}` being excluded by the upload cutoff"
+                )
+            }
             Self::Package(change) => {
                 write!(f, "{change}")
             }
