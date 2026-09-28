@@ -1,17 +1,16 @@
 use std::borrow::Cow;
-use std::hash::Hasher;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::time::{Duration, Instant};
 
+use crc32fast::Hasher;
 use futures::FutureExt;
 use reqwest::{Request, Response};
 use rkyv::util::AlignedVec;
-use seahash::SeaHasher;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use tracing::{Instrument, Span, debug, info_span, instrument, trace, warn};
-use zerocopy::byteorder::little_endian::U64;
+use zerocopy::byteorder::little_endian::{U32, U64};
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 
 use uv_cache::{CacheEntry, Freshness};
@@ -878,7 +877,7 @@ enum CachedResponse {
 /// # Format
 ///
 /// Each file contains the payload, a random 16-byte generation ID, the archived
-/// HTTP cache policy, an 8-byte [`SeaHasher`] checksum, and the payload length as a little-endian
+/// HTTP cache policy, a 4-byte CRC32 checksum, and the payload length as a little-endian
 /// `u64`. The checksum covers the generation, policy, and encoded payload length.
 /// The payload remains first so an [`AlignedVec`] can be truncated without moving it.
 ///
@@ -905,7 +904,7 @@ pub struct DataWithCachePolicy {
 #[derive(Debug, FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned)]
 #[repr(C)]
 struct CachePolicyFooter {
-    checksum: U64,
+    checksum: U32,
     data_len: U64,
 }
 
@@ -969,10 +968,10 @@ impl DataWithCachePolicy {
         let (generation, policy_bytes) = <[u8; 16]>::ref_from_prefix(tail)
             .map_err(|_| ErrorKind::ArchiveRead("invalid HTTP cache payload length".to_owned()))?;
 
-        let mut hasher = SeaHasher::new();
-        hasher.write(tail);
-        hasher.write(footer.data_len.as_bytes());
-        if hasher.finish() != footer.checksum.get() {
+        let mut hasher = Hasher::new();
+        hasher.update(tail);
+        hasher.update(footer.data_len.as_bytes());
+        if hasher.finalize() != footer.checksum.get() {
             return Err(
                 ErrorKind::ArchiveRead("HTTP cache policy checksum mismatch".to_owned()).into(),
             );
@@ -1017,12 +1016,12 @@ impl DataWithCachePolicy {
             u64::try_from(data_len).map_err(|err| ErrorKind::ArchiveWrite(err.to_string()))?,
         );
 
-        let mut hasher = SeaHasher::new();
-        hasher.write(generation);
-        hasher.write(policy);
-        hasher.write(data_len.as_bytes());
+        let mut hasher = Hasher::new();
+        hasher.update(generation);
+        hasher.update(policy);
+        hasher.update(data_len.as_bytes());
         let footer = CachePolicyFooter {
-            checksum: U64::new(hasher.finish()),
+            checksum: U32::new(hasher.finalize()),
             data_len,
         };
 
