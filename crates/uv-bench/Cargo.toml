@@ -34,6 +34,11 @@ path = "benches/atomic_write.rs"
 harness = false
 
 [[bench]]
+name = "cached_client"
+path = "benches/cached_client.rs"
+harness = false
+
+[[bench]]
 name = "uv_pep440"
 path = "benches/uv_pep440.rs"
 harness = false
@@ -75,6 +80,7 @@ flate2 = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
 jiff = { workspace = true }
+reqwest = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 tar-codec = { workspace = true }
@@ -82,3 +88,4 @@ tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 toml = { workspace = true }
+wiremock = { workspace = true }

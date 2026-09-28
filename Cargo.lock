@@ -5990,6 +5990,7 @@ dependencies = [
  "fs-err",
  "futures",
  "jiff",
+ "reqwest",
  "serde_json",
  "sha2 0.11.0",
  "tar-codec",
@@ -6019,6 +6020,7 @@ dependencies = [
  "uv-resolver",
  "uv-types",
  "uv-workspace",
+ "wiremock",
 ]
 
 [[package]]
