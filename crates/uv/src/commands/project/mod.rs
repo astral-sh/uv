@@ -340,7 +340,7 @@ pub(crate) enum ProjectError {
     DefaultGroups(#[from] uv_workspace::DefaultGroupsError),
 
     #[error(transparent)]
-    Distribution(#[from] uv_distribution::Error),
+    Distribution(Box<uv_distribution::Error>),
 
     #[error(transparent)]
     PyprojectMut(#[from] uv_workspace::pyproject_mut::Error),
@@ -365,6 +365,12 @@ pub(crate) enum ProjectError {
 
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
+}
+
+impl From<uv_distribution::Error> for ProjectError {
+    fn from(error: uv_distribution::Error) -> Self {
+        Self::Distribution(Box::new(error))
+    }
 }
 
 impl From<LockParseError> for ProjectError {

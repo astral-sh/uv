@@ -49,7 +49,7 @@ pub enum ResolveError {
     Client(#[from] uv_client::Error),
 
     #[error(transparent)]
-    Distribution(#[from] uv_distribution::Error),
+    Distribution(Box<uv_distribution::Error>),
 
     #[error("The channel closed unexpectedly")]
     ChannelClosed,
@@ -143,6 +143,12 @@ pub enum ResolveError {
     },
 }
 
+impl From<uv_distribution::Error> for ResolveError {
+    fn from(error: uv_distribution::Error) -> Self {
+        Self::Distribution(Box::new(error))
+    }
+}
+
 impl ResolveError {
     /// Return whether this is an expected user-facing failure.
     pub fn is_user_failure(&self) -> bool {
@@ -175,7 +181,7 @@ impl uv_errors::Hinted for ResolveError {
         match self {
             Self::NoSolution(no_solution) => uv_errors::Hinted::hints(no_solution.as_ref()),
             Self::Client(error) => uv_errors::Hinted::hints(error),
-            Self::Distribution(error) => uv_errors::Hinted::hints(error),
+            Self::Distribution(error) => uv_errors::Hinted::hints(error.as_ref()),
             Self::Dependencies(error, ..) => uv_errors::Hinted::hints(error.as_ref()),
             _ => uv_errors::Hints::none(),
         }

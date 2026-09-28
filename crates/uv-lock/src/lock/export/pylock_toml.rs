@@ -140,7 +140,7 @@ pub enum PylockTomlErrorKind {
     #[error("Failed to download `{0}` to read variant metadata")]
     WheelVariantDownload(Box<DisplaySafeUrl>, #[source] WrappedReqwestError),
     #[error("Failed to read cached wheel variant metadata")]
-    WheelVariantCache(#[source] uv_distribution::Error),
+    WheelVariantCache(#[source] Box<uv_distribution::Error>),
     #[error("Invalid wheel variant metadata")]
     WheelVariantParse(#[source] serde_json::Error),
     #[error(transparent)]
@@ -2263,7 +2263,7 @@ impl PylockTomlArchive {
                     continue;
                 }
                 let Some(pointer) = HttpArchivePointer::read_from(&entry)
-                    .map_err(PylockTomlErrorKind::WheelVariantCache)?
+                    .map_err(|error| PylockTomlErrorKind::WheelVariantCache(Box::new(error)))?
                 else {
                     continue;
                 };
