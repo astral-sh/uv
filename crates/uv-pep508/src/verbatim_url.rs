@@ -14,6 +14,8 @@ use uv_cache_key::{CacheKey, CacheKeyHasher};
 
 #[cfg_attr(not(feature = "non-pep508-extensions"), allow(unused_imports))]
 use uv_fs::{normalize_absolute_path, normalize_url_path};
+#[cfg(feature = "serde")]
+use uv_redacted::UrlWithCredentials;
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 
 use crate::Pep508Url;
@@ -397,7 +399,7 @@ impl serde::Serialize for VerbatimUrl {
     where
         S: serde::Serializer,
     {
-        self.url.serialize(serializer)
+        UrlWithCredentials::ref_cast(&self.url).serialize(serializer)
     }
 }
 

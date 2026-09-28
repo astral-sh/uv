@@ -130,7 +130,7 @@ pub struct InstalledRegistryDist {
 pub struct InstalledDirectUrlDist {
     pub name: PackageName,
     pub version: Version,
-    pub direct_url: Box<DirectUrl>,
+    pub direct_url: Box<DirectUrl<String>>,
     pub url: DisplaySafeUrl,
     pub editable: bool,
     pub path: Box<Path>,
@@ -380,15 +380,16 @@ impl InstalledDist {
     }
 
     /// Read the `direct_url.json` file from a `.dist-info` directory.
-    fn read_direct_url(path: &Path) -> Result<Option<DirectUrl>, InstalledDistError> {
+    fn read_direct_url(path: &Path) -> Result<Option<DirectUrl<String>>, InstalledDistError> {
         let path = path.join("direct_url.json");
         let file = match fs_err::File::open(&path) {
             Ok(file) => file,
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(err) => return Err(err.into()),
         };
-        let direct_url =
-            serde_json::from_reader::<BufReader<fs_err::File>, DirectUrl>(BufReader::new(file))?;
+        let direct_url = serde_json::from_reader::<BufReader<fs_err::File>, DirectUrl<String>>(
+            BufReader::new(file),
+        )?;
         Ok(Some(direct_url))
     }
 

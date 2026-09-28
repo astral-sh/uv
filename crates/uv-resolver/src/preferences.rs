@@ -136,7 +136,7 @@ impl PreferenceIndex {
             Self::Explicit(preference) => {
                 // Preferences are stored in the lockfile without credentials, while the index URL
                 // in locations such as `pyproject.toml` may contain credentials.
-                *preference.url() == *index.without_credentials()
+                preference.without_sensitive_parts() == index.without_sensitive_parts()
             }
         }
     }

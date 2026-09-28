@@ -91,7 +91,7 @@ impl KeyringProvider {
         };
 
         // Ensure we strip credentials from the URL before storing
-        let url = url.without_credentials();
+        let url = url.without_userinfo();
 
         // If there's no path, we'll perform a host-level login
         let target = if let Some(host) = url.host_str().filter(|_| !url.path().is_empty()) {
@@ -141,7 +141,7 @@ impl KeyringProvider {
     #[instrument(skip_all, fields(url = % url.to_string(), username))]
     pub async fn remove(&self, url: &DisplaySafeUrl, username: &str) -> Result<(), Error> {
         // Ensure we strip credentials from the URL before storing
-        let url = url.without_credentials();
+        let url = url.without_userinfo();
 
         // If there's no path, we'll perform a host-level login
         let target = if let Some(host) = url.host_str().filter(|_| !url.path().is_empty()) {

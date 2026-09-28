@@ -40,7 +40,8 @@ fn index_locations_equal(existing: &str, incoming: &IndexUrl, root_dir: &Path) -
         return equal;
     }
 
-    CanonicalUrl::new(existing.url().clone()) == CanonicalUrl::new(incoming.url().clone())
+    CanonicalUrl::new(existing.without_sensitive_parts().into_owned())
+        == CanonicalUrl::new(incoming.without_sensitive_parts().into_owned())
 }
 
 #[derive(Error, Debug)]
@@ -536,7 +537,7 @@ impl PyProjectTomlMut {
         {
             PortablePath::from(&path).to_string()
         } else {
-            index.url.without_credentials().to_string()
+            index.url.without_sensitive_parts().as_str().to_owned()
         };
         let existing_url = table.get("url").and_then(|item| item.as_str());
 

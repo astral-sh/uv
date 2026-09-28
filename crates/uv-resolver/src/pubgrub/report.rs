@@ -2145,7 +2145,7 @@ impl std::fmt::Display for PubGrubHint {
                     f,
                     "`{}` was found on {}, but not at the requested version ({}). A compatible version may be available on a subsequent index (e.g., {}). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `{}` to consider all versions from all indexes, regardless of the order in which they were defined.",
                     name.cyan(),
-                    found_index.without_credentials().cyan(),
+                    found_index.without_userinfo().cyan(),
                     PackageRange::compatibility(&PubGrubPackage::base(name.clone()), range, None)
                         .cyan(),
                     next_index.cyan(),
@@ -2156,7 +2156,7 @@ impl std::fmt::Display for PubGrubHint {
                 write!(
                     f,
                     "An index URL ({}) could not be queried due to a lack of valid authentication credentials ({})",
-                    index.without_credentials().cyan(),
+                    index.without_userinfo().cyan(),
                     "401 Unauthorized".red(),
                 )
             }
@@ -2168,14 +2168,14 @@ impl std::fmt::Display for PubGrubHint {
                     write!(
                         f,
                         "An index ({}) returned a {} error, but uv received a successful response from another request to the index. If the failing package is not present on this index, consider adding `ignore-error-codes = [403]` to the index's `[[tool.uv.index]]` entry to continue searching across indexes.",
-                        index.without_credentials().cyan(),
+                        index.without_userinfo().cyan(),
                         "403 Forbidden".red(),
                     )
                 } else {
                     write!(
                         f,
                         "An index ({}) returned a {} error. Check that the index URL is correct and the credentials are valid.",
-                        index.without_credentials().cyan(),
+                        index.without_userinfo().cyan(),
                         "403 Forbidden".red(),
                     )
                 }

@@ -22,7 +22,7 @@ use uv_client::{CacheControl, CachedClient, CachedClientError};
 use uv_configuration::Concurrency;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
+use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError, UrlWithCredentials};
 
 pub static API_BASE: LazyLock<DisplaySafeUrl> = LazyLock::new(|| {
     DisplaySafeUrl::parse("https://api.osv.dev/").expect("embedded OSV URL is a valid URL")
@@ -148,7 +148,7 @@ enum ReferenceType {
 struct Reference {
     #[serde(rename = "type")]
     reference_type: ReferenceType,
-    url: DisplaySafeUrl,
+    url: UrlWithCredentials,
 }
 
 /// A full vulnerability record from OSV.
@@ -448,7 +448,7 @@ impl Osv {
                             matches!(reference.reference_type, ReferenceType::Web)
                         })
                     })
-                    .map(|reference| reference.url.clone())
+                    .map(|reference| reference.url.as_url().clone())
             })
             .unwrap_or_else(|| {
                 DisplaySafeUrl::parse(&format!("https://osv.dev/vulnerability/{}", vuln.id))

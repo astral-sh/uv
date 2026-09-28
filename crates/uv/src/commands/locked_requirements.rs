@@ -169,7 +169,7 @@ pub(crate) async fn read_pylock_toml_requirements(
                 package
                     .index
                     .as_ref()
-                    .map(|index| IndexUrl::from(VerbatimUrl::from(index.clone()))),
+                    .map(|index| IndexUrl::from(VerbatimUrl::from(index.as_url().clone()))),
                 vec![],
             ));
         }

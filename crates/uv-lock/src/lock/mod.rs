@@ -3988,7 +3988,9 @@ impl Lock {
         match &index.url {
             IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
                 if let Some(remotes) = remotes.as_mut() {
-                    remotes.insert(UrlString::from(index.url().without_credentials().as_ref()));
+                    remotes.insert(UrlString::from(
+                        index.url().without_sensitive_parts().as_ref(),
+                    ));
                 }
             }
             IndexUrl::Path(url) => {
@@ -4317,9 +4319,9 @@ impl Lock {
                 .allowed_indexes()
                 .into_iter()
                 .filter_map(|index| match index.url() {
-                    IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
-                        Some(UrlString::from(index.url().without_credentials().as_ref()))
-                    }
+                    IndexUrl::Pypi(_) | IndexUrl::Url(_) => Some(UrlString::from(
+                        index.url().without_sensitive_parts().as_ref(),
+                    )),
                     IndexUrl::Path(_) => None,
                 })
                 .collect::<BTreeSet<_>>()
@@ -7514,7 +7516,7 @@ impl Source {
         match index_url {
             IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
                 // Remove any sensitive credentials from the index URL.
-                let redacted = index_url.without_credentials();
+                let redacted = index_url.without_sensitive_parts();
                 let source = RegistrySource::Url(UrlString::from(redacted.as_ref()));
                 Ok(Self::Registry(source))
             }
@@ -7630,9 +7632,9 @@ impl Source {
                 },
             ) => {
                 let mut actual = url.to_url().map_err(LockErrorKind::InvalidUrl)?;
-                actual.remove_credentials();
+                actual.remove_userinfo();
                 let mut expected = location.clone();
-                expected.remove_credentials();
+                expected.remove_userinfo();
                 normalize_url(actual) == normalize_url(expected)
                     && source.subdirectory == *subdirectory
             }
@@ -8417,7 +8419,7 @@ fn locked_git_url(
     let mut url = git.url().clone();
 
     // Remove the credentials.
-    url.remove_credentials();
+    url.remove_userinfo();
 
     // Clear out any existing state.
     url.set_fragment(None);
@@ -9114,7 +9116,7 @@ fn normalize_requirement(
                 let mut repository = git.url().clone();
 
                 // Remove the credentials.
-                repository.remove_credentials();
+                repository.remove_userinfo();
 
                 // Remove the fragment and query from the URL; they're already present in the source.
                 repository.set_fragment(None);
@@ -9159,7 +9161,7 @@ fn normalize_requirement(
                 let mut repository = git.url().clone();
 
                 // Remove the credentials.
-                repository.remove_credentials();
+                repository.remove_userinfo();
 
                 // Remove the fragment and query from the URL; they're already present in the source.
                 repository.set_fragment(None);
@@ -9253,10 +9255,7 @@ fn normalize_requirement(
             // Round-trip the index to remove anything apart from the URL.
             let index = index
                 .map(|index| index.url.into_url())
-                .map(|mut index| {
-                    index.remove_credentials();
-                    index
-                })
+                .map(|index| DisplaySafeUrl::from_url(index.without_sensitive_parts().into_owned()))
                 .map(|index| IndexMetadata::from(IndexUrl::from(VerbatimUrl::from_url(index))));
             Ok(Requirement {
                 name: requirement.name,
@@ -9279,7 +9278,7 @@ fn normalize_requirement(
             url: _,
         } => {
             // Remove the credentials.
-            location.remove_credentials();
+            location.remove_userinfo();
 
             // Remove the fragment from the URL; it's already present in the source.
             location.set_fragment(None);

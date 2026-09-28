@@ -634,7 +634,7 @@ impl GitCheckout {
 /// for resolution and a transient `url.*.insteadOf` rewrite when credentials are needed for
 /// transport.
 fn submodule_update_config(original_remote_url: &DisplaySafeUrl) -> Vec<String> {
-    let remote_url = original_remote_url.without_credentials();
+    let remote_url = original_remote_url.without_userinfo();
     let mut config = vec![format!("remote.origin.url={}", remote_url.as_str())];
 
     config.extend(submodule_auth_config(original_remote_url));
@@ -647,7 +647,7 @@ fn submodule_update_config(original_remote_url: &DisplaySafeUrl) -> Vec<String> 
 /// updates: they rewrite transport URLs for authentication, but do not change the base URL that Git
 /// uses to resolve nested relative submodule URLs.
 fn submodule_auth_config(original_remote_url: &DisplaySafeUrl) -> Vec<String> {
-    let remote_url = original_remote_url.without_credentials();
+    let remote_url = original_remote_url.without_userinfo();
     let mut config = Vec::new();
 
     if remote_url.as_str() != original_remote_url.as_str() {

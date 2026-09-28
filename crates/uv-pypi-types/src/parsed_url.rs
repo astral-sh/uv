@@ -565,7 +565,7 @@ impl From<&ParsedUrl> for DirectUrl {
 impl From<&ParsedPathUrl> for DirectUrl {
     fn from(value: &ParsedPathUrl) -> Self {
         Self::ArchiveUrl {
-            url: value.url.to_string(),
+            url: value.url.clone().into(),
             archive_info: ArchiveInfo {
                 hash: None,
                 hashes: None,
@@ -578,7 +578,7 @@ impl From<&ParsedPathUrl> for DirectUrl {
 impl From<&ParsedDirectoryUrl> for DirectUrl {
     fn from(value: &ParsedDirectoryUrl) -> Self {
         Self::LocalDirectory {
-            url: value.url.to_string(),
+            url: value.url.clone().into(),
             dir_info: DirInfo {
                 editable: value.editable,
             },
@@ -590,8 +590,7 @@ impl From<&ParsedDirectoryUrl> for DirectUrl {
 impl From<&ParsedArchiveUrl> for DirectUrl {
     fn from(value: &ParsedArchiveUrl) -> Self {
         Self::ArchiveUrl {
-            // Query parameters identify the source, so only strip username and password credentials.
-            url: value.url.without_credentials().to_string(),
+            url: value.url.clone().into(),
             archive_info: ArchiveInfo {
                 hash: None,
                 hashes: None,
@@ -604,7 +603,7 @@ impl From<&ParsedArchiveUrl> for DirectUrl {
 impl From<&ParsedGitDirectoryUrl> for DirectUrl {
     fn from(value: &ParsedGitDirectoryUrl) -> Self {
         Self::VcsUrl {
-            url: value.url.url().to_string(),
+            url: value.url.url().clone().into(),
             vcs_info: VcsInfo {
                 vcs: VcsKind::Git,
                 commit_id: value.url.precise().as_ref().map(ToString::to_string),
@@ -620,7 +619,7 @@ impl From<&ParsedGitDirectoryUrl> for DirectUrl {
 impl From<&ParsedGitPathUrl> for DirectUrl {
     fn from(value: &ParsedGitPathUrl) -> Self {
         Self::VcsUrl {
-            url: value.url.url().to_string(),
+            url: value.url.url().clone().into(),
             vcs_info: VcsInfo {
                 vcs: VcsKind::Git,
                 commit_id: value.url.precise().as_ref().map(ToString::to_string),

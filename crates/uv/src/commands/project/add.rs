@@ -939,7 +939,7 @@ fn edits(
         // user's credentials store, rather than by reading from the `pyproject.toml` file.
         let source = match source {
             Some(Source::Git {
-                mut git,
+                git,
                 subdirectory,
                 path,
                 rev,
@@ -950,16 +950,17 @@ fn edits(
                 extra,
                 group,
             }) => {
+                let mut git = git.into_url();
                 let credentials = uv_auth::Credentials::from_url(&git)?;
                 if let Some(credentials) = credentials {
                     debug!("Caching credentials for: {git}");
                     store_credentials(RepositoryUrl::new(git.clone()), credentials);
 
                     // Redact the credentials.
-                    git.remove_credentials();
+                    git.remove_userinfo();
                 }
                 Some(Source::Git {
-                    git,
+                    git: git.into(),
                     subdirectory,
                     path,
                     rev,

@@ -77,7 +77,7 @@ pub(crate) async fn publish(
             .with_context(|| format!("Index is missing a publish URL: `{index_name}`"))?;
 
         let check_url = index.url.clone();
-        (publish_url, Some(check_url))
+        (publish_url.into_url(), Some(check_url))
     } else {
         (publish_url, check_url)
     };

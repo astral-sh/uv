@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use thiserror::Error;
 use url::Url;
-use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
+use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError, UrlWithCredentials};
 
 #[derive(Error, Debug)]
 pub enum ServiceParseError {
@@ -20,12 +20,12 @@ pub enum ServiceParseError {
 /// eliminating the need for manual parsing in command functions.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(transparent)]
-pub struct Service(DisplaySafeUrl);
+pub struct Service(UrlWithCredentials);
 
 impl Service {
     /// Get the underlying [`DisplaySafeUrl`].
     pub fn url(&self) -> &DisplaySafeUrl {
-        &self.0
+        self.0.as_url()
     }
 
     /// Validate that the URL scheme is supported.
@@ -56,7 +56,7 @@ impl FromStr for Service {
 
         Self::check_scheme(&url)?;
 
-        Ok(Self(url))
+        Ok(Self(url.into()))
     }
 }
 
@@ -85,6 +85,6 @@ impl TryFrom<DisplaySafeUrl> for Service {
 
     fn try_from(value: DisplaySafeUrl) -> Result<Self, Self::Error> {
         Self::check_scheme(&value)?;
-        Ok(Self(value))
+        Ok(Self(value.into()))
     }
 }
