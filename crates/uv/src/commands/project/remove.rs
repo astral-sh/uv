@@ -274,7 +274,7 @@ pub(crate) async fn remove(
             } else {
                 // Discover or create the virtual environment.
                 let environment = ProjectEnvironment::get_or_init(
-                    project.workspace(),
+                    ProjectEnvironmentTarget::from(project.workspace()),
                     None,
                     &groups,
                     python.as_deref().map(PythonRequest::parse),

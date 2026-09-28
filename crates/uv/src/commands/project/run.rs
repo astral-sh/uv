@@ -73,9 +73,9 @@ use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     EnvironmentSpecification, LinkErrorReporting, PreferenceLocation, ProjectEnvironment,
-    ProjectError, PythonRequirementSource, ScriptEnvironment, ScriptInterpreter, UniversalState,
-    WorkspacePython, script_extra_build_requires, script_specification, update_environment,
-    validate_python_requirement,
+    ProjectEnvironmentTarget, ProjectError, PythonRequirementSource, ScriptEnvironment,
+    ScriptInterpreter, UniversalState, WorkspacePython, script_extra_build_requires,
+    script_specification, update_environment, validate_python_requirement,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, UvError, project, read_env_files};
@@ -706,7 +706,7 @@ pub(crate) async fn run(
                 // If we're not isolating the environment, reuse the base environment for the
                 // project.
                 ProjectEnvironment::get_or_init(
-                    project.workspace(),
+                    ProjectEnvironmentTarget::from(project.workspace()),
                     None,
                     &groups,
                     python.as_deref().map(PythonRequest::parse),

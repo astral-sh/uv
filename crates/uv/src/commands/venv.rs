@@ -246,7 +246,7 @@ pub(crate) async fn venv(
 
     // Lock the project environment to avoid synchronization issues.
     let _lock = if let Some((workspace, _)) = project_environment.as_ref() {
-        lock_project_environment(workspace)
+        lock_project_environment(ProjectEnvironmentTarget::from(*workspace))
             .await
             .inspect_err(|err| {
                 warn!("Failed to acquire project environment lock: {err}");
@@ -388,7 +388,11 @@ pub(crate) async fn venv(
 
     // Determine the appropriate environment path.
     let scripts = if let Some(workspace) = centralized_workspace
-        && update_project_environment_link(&venv, workspace, LinkErrorReporting::User)
+        && update_project_environment_link(
+            &venv,
+            ProjectEnvironmentTarget::from(workspace),
+            LinkErrorReporting::User,
+        )
         && let Ok(suffix) = venv.scripts().strip_prefix(&path)
     {
         workspace.install_path().join(".venv").join(suffix)

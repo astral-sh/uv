@@ -212,7 +212,7 @@ pub(crate) async fn metadata(
         Some(match &source {
             MetadataSource::Manifest(LockTarget::Workspace(workspace)) => {
                 ProjectEnvironment::get_or_init(
-                    workspace,
+                    ProjectEnvironmentTarget::from(*workspace),
                     None,
                     &groups,
                     python.as_deref().map(PythonRequest::parse),
@@ -249,9 +249,29 @@ pub(crate) async fn metadata(
             )
             .await?
             .into_environment()?,
-            MetadataSource::Lockfile(_) => {
-                anyhow::bail!("`--sync` is not supported without a workspace manifest")
-            }
+            MetadataSource::Lockfile(workspace) => ProjectEnvironment::get_or_init(
+                ProjectEnvironmentTarget::Lockfile {
+                    root: workspace.root(),
+                    lock,
+                },
+                Some(install_target),
+                &groups,
+                python.as_deref().map(PythonRequest::parse),
+                &install_mirrors,
+                &client_builder,
+                python_preference,
+                python_arch,
+                python_downloads,
+                false,
+                config_discovery,
+                active,
+                cache,
+                DryRun::Disabled,
+                LinkErrorReporting::User,
+                printer,
+            )
+            .await?
+            .into_environment()?,
         })
     } else {
         match &source {
