@@ -50,7 +50,6 @@ astral-tl = { workspace = true }
 async-trait = { workspace = true }
 async_http_range_reader = { workspace = true }
 async_zip = { workspace = true }
-blake3 = { workspace = true }
 bytecheck = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
@@ -71,6 +70,7 @@ rustc-hash = { workspace = true }
 rustls = { workspace = true }
 rustls-native-certs = { workspace = true }
 rustls-pki-types = { workspace = true }
+seahash = { workspace = true }
 serde = { workspace = true }
 webpki = { workspace = true }
 x509-parser = { workspace = true }

@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::hash::Hasher;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::time::{Duration, Instant};
@@ -6,6 +7,7 @@ use std::time::{Duration, Instant};
 use futures::FutureExt;
 use reqwest::{Request, Response};
 use rkyv::util::AlignedVec;
+use seahash::SeaHasher;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use tracing::{Instrument, Span, debug, info_span, instrument, trace, warn};
@@ -874,7 +876,7 @@ enum CachedResponse {
 /// # Format
 ///
 /// Each file contains the payload, a random 16-byte generation ID, the archived
-/// HTTP cache policy, a 32-byte BLAKE3 checksum, and the payload length as a little-endian
+/// HTTP cache policy, an 8-byte [`SeaHasher`] checksum, and the payload length as a little-endian
 /// `u64`. The checksum covers the generation, policy, and encoded payload length.
 /// The payload remains first so an [`AlignedVec`] can be truncated without moving it.
 ///
@@ -884,9 +886,9 @@ enum CachedResponse {
 /// newer response. If a replacement occurs after opening, the writer updates only the
 /// old file through its open handle.
 ///
-/// Readers validate the checksum before using the policy. Interrupted or overlapping
-/// policy writes can invalidate the cache entry, but cannot pair a torn policy with
-/// the payload. An invalid entry requires a full fetch, so it cannot be used offline.
+/// Readers validate the checksum before using the policy to detect interrupted or
+/// overlapping policy writes. An invalid entry requires a full fetch, so it cannot be
+/// used offline. The checksum detects accidental corruption, not malicious changes.
 /// No additional file or reader lock is needed.
 #[derive(Debug)]
 pub struct DataWithCachePolicy {
@@ -944,8 +946,8 @@ impl DataWithCachePolicy {
 
     /// Validate the policy and separate it from the aligned payload.
     fn from_aligned_bytes(mut bytes: AlignedVec) -> Result<Self, Error> {
-        // The fixed fields are the generation (16), checksum (32), and payload length (8).
-        let max_data_len = bytes.len().checked_sub(56).ok_or_else(|| {
+        // The fixed fields are the generation (16), checksum (8), and payload length (8).
+        let max_data_len = bytes.len().checked_sub(32).ok_or_else(|| {
             ErrorKind::ArchiveRead("HTTP cache entry is shorter than its trailer".to_owned())
         })?;
         let length_start = bytes.len() - 8;
@@ -958,11 +960,11 @@ impl DataWithCachePolicy {
             .ok_or_else(|| {
                 ErrorKind::ArchiveRead("invalid HTTP cache payload length".to_owned())
             })?;
-        let checksum_start = length_start - 32;
-        let mut hasher = blake3::Hasher::new();
-        hasher.update(&bytes[data_len..checksum_start]);
-        hasher.update(length_bytes);
-        if hasher.finalize().as_bytes() != &bytes[checksum_start..length_start] {
+        let checksum_start = length_start - 8;
+        let mut hasher = SeaHasher::new();
+        hasher.write(&bytes[data_len..checksum_start]);
+        hasher.write(length_bytes);
+        if hasher.finish().to_le_bytes() != bytes[checksum_start..length_start] {
             return Err(
                 ErrorKind::ArchiveRead("HTTP cache policy checksum mismatch".to_owned()).into(),
             );
@@ -1006,13 +1008,13 @@ impl DataWithCachePolicy {
         let length = u64::try_from(data_len)
             .map_err(|err| ErrorKind::ArchiveWrite(err.to_string()))?
             .to_le_bytes();
-        let mut hasher = blake3::Hasher::new();
-        hasher.update(generation);
-        hasher.update(policy);
-        hasher.update(&length);
-        let mut bytes = Vec::with_capacity(policy.len() + 40);
+        let mut hasher = SeaHasher::new();
+        hasher.write(generation);
+        hasher.write(policy);
+        hasher.write(&length);
+        let mut bytes = Vec::with_capacity(policy.len() + 16);
         bytes.extend_from_slice(policy);
-        bytes.extend_from_slice(hasher.finalize().as_bytes());
+        bytes.extend_from_slice(&hasher.finish().to_le_bytes());
         bytes.extend_from_slice(&length);
         Ok(bytes)
     }

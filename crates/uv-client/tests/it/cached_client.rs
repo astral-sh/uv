@@ -17,7 +17,7 @@ use uv_client::{
 
 #[test]
 fn reject_invalid_cache_lengths() {
-    for bytes in [&[u8::MAX; 8][..], &[u8::MAX; 56][..]] {
+    for bytes in [&[u8::MAX; 8][..], &[u8::MAX; 32][..]] {
         let error = DataWithCachePolicy::from_reader(bytes).unwrap_err();
         assert_matches!(error.kind(), ErrorKind::ArchiveRead(_));
     }
