@@ -1800,8 +1800,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Ok(Some(requires_dist))
             }
             Err(
-                err @ (uv_pypi_types::MetadataError::Pep508Error(_)
-                | uv_pypi_types::MetadataError::DynamicField(_)
+                err @ (uv_pypi_types::MetadataError::DynamicField(_)
                 | uv_pypi_types::MetadataError::FieldNotFound(_)
                 | uv_pypi_types::MetadataError::PoetrySyntax),
             ) => {
@@ -1811,6 +1810,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 );
                 Ok(None)
             }
+            // A malformed requirement can't be healed by building: the build backend reads the
+            // same `pyproject.toml`, so surface the parse error instead of falling through to
+            // a (possibly disabled) PEP 517 build.
             Err(err) => Err(Error::PyprojectToml(err)),
         }
     }
@@ -3355,13 +3357,15 @@ impl StaticMetadata {
                     }
                 }
                 Err(
-                    err @ (uv_pypi_types::MetadataError::Pep508Error(_)
-                    | uv_pypi_types::MetadataError::DynamicField(_)
+                    err @ (uv_pypi_types::MetadataError::DynamicField(_)
                     | uv_pypi_types::MetadataError::FieldNotFound(_)
                     | uv_pypi_types::MetadataError::PoetrySyntax),
                 ) => {
                     debug!("No static `pyproject.toml` available for: {source} ({err:?})");
                 }
+                // A malformed requirement can't be healed by building: the build backend reads
+                // the same `pyproject.toml`, so surface the parse error instead of falling
+                // through to a (possibly disabled) PEP 517 build.
                 Err(err) => return Err(Error::PyprojectToml(err)),
             }
         }
