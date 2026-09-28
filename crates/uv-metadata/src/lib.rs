@@ -122,14 +122,6 @@ fn dist_info_entry<'a>(
     DistInfoStem::new(dist_info_stem, &filename.name).map(Some)
 }
 
-#[cfg(test)]
-fn metadata_entry<'a>(
-    path: &'a str,
-    filename: &WheelFilename,
-) -> Result<Option<DistInfoStem<'a>>, Error> {
-    dist_info_entry(path, filename, "METADATA")
-}
-
 /// Given an archive, read the `METADATA` from the `.dist-info` directory.
 pub fn read_archive_metadata(
     filename: &WheelFilename,
@@ -285,7 +277,7 @@ pub fn read_flat_wheel_metadata(
 
 #[cfg(test)]
 mod test {
-    use super::{DistInfoStem, dist_info_entry, find_archive_dist_info, metadata_entry};
+    use super::{DistInfoStem, dist_info_entry, find_archive_dist_info};
     use std::str::FromStr;
     use uv_distribution_filename::WheelFilename;
 
@@ -323,7 +315,7 @@ mod test {
             let ((), archive_name) =
                 find_archive_dist_info(&filename, [((), path.as_str())].into_iter())
                     .expect("accepted archive directory name");
-            let stream_name = metadata_entry(&path, &filename)
+            let stream_name = dist_info_entry(&path, &filename, "METADATA")
                 .expect("accepted streaming directory name")
                 .expect("metadata entry");
             let owned_name = DistInfoStem::new(name.to_owned(), &filename.name)
@@ -350,7 +342,7 @@ mod test {
             expected
         );
         assert_eq!(
-            metadata_entry(&path, &filename)
+            dist_info_entry(&path, &filename, "METADATA")
                 .expect_err("mismatched streaming directory name")
                 .to_string(),
             expected
@@ -363,7 +355,7 @@ mod test {
         );
 
         assert!(
-            metadata_entry("other_package-1.0.dist-info/WHEEL", &filename)
+            dist_info_entry("other_package-1.0.dist-info/WHEEL", &filename, "METADATA")
                 .expect("non-metadata entry")
                 .is_none()
         );
