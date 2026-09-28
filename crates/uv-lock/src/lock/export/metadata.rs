@@ -974,9 +974,12 @@ impl MetadataSource {
 
 fn normalize_workspace_relative_path(
     workspace_root: &PortablePathBuf,
-    maybe_rel: &std::path::Path,
+    maybe_rel: &Path,
 ) -> PortablePathBuf {
-    if maybe_rel.is_absolute() {
+    if maybe_rel.as_os_str().is_empty() || maybe_rel == Path::new(".") {
+        // Reuse the root path without appending a trailing separator or `.`.
+        workspace_root.clone()
+    } else if maybe_rel.is_absolute() {
         PortablePathBuf::from(maybe_rel)
     } else {
         PortablePathBuf::from(workspace_root.as_ref().join(maybe_rel).as_path())

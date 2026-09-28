@@ -99,15 +99,15 @@ fn workspace_metadata_simple() {
         {
           "name": "foo",
           "path": "[TEMP_DIR]/foo",
-          "id": "foo==0.1.0@editable+[TEMP_DIR]/foo/"
+          "id": "foo==0.1.0@editable+[TEMP_DIR]/foo"
         }
       ],
       "resolution": {
-        "foo==0.1.0@editable+[TEMP_DIR]/foo/": {
+        "foo==0.1.0@editable+[TEMP_DIR]/foo": {
           "name": "foo",
           "version": "0.1.0",
           "source": {
-            "editable": "[TEMP_DIR]/foo/"
+            "editable": "[TEMP_DIR]/foo"
           },
           "kind": "package",
           "dependencies": []
@@ -157,15 +157,15 @@ fn workspace_metadata_quiet() {
         {
           "name": "foo",
           "path": "[TEMP_DIR]/foo",
-          "id": "foo==0.1.0@editable+[TEMP_DIR]/foo/"
+          "id": "foo==0.1.0@editable+[TEMP_DIR]/foo"
         }
       ],
       "resolution": {
-        "foo==0.1.0@editable+[TEMP_DIR]/foo/": {
+        "foo==0.1.0@editable+[TEMP_DIR]/foo": {
           "name": "foo",
           "version": "0.1.0",
           "source": {
-            "editable": "[TEMP_DIR]/foo/"
+            "editable": "[TEMP_DIR]/foo"
           },
           "kind": "package",
           "dependencies": []
@@ -1535,7 +1535,7 @@ fn workspace_metadata_root_workspace() -> Result<()> {
         {
           "name": "albatross",
           "path": "[TEMP_DIR]/workspace",
-          "id": "albatross==0.1.0@editable+[TEMP_DIR]/workspace/"
+          "id": "albatross==0.1.0@editable+[TEMP_DIR]/workspace"
         },
         {
           "name": "bird-feeder",
@@ -1549,11 +1549,11 @@ fn workspace_metadata_root_workspace() -> Result<()> {
         }
       ],
       "resolution": {
-        "albatross==0.1.0@editable+[TEMP_DIR]/workspace/": {
+        "albatross==0.1.0@editable+[TEMP_DIR]/workspace": {
           "name": "albatross",
           "version": "0.1.0",
           "source": {
-            "editable": "[TEMP_DIR]/workspace/"
+            "editable": "[TEMP_DIR]/workspace"
           },
           "kind": "package",
           "dependencies": [
@@ -1946,7 +1946,7 @@ fn workspace_metadata_from_member() -> Result<()> {
         {
           "name": "albatross",
           "path": "[TEMP_DIR]/workspace",
-          "id": "albatross==0.1.0@editable+[TEMP_DIR]/workspace/"
+          "id": "albatross==0.1.0@editable+[TEMP_DIR]/workspace"
         },
         {
           "name": "bird-feeder",
@@ -1960,11 +1960,11 @@ fn workspace_metadata_from_member() -> Result<()> {
         }
       ],
       "resolution": {
-        "albatross==0.1.0@editable+[TEMP_DIR]/workspace/": {
+        "albatross==0.1.0@editable+[TEMP_DIR]/workspace": {
           "name": "albatross",
           "version": "0.1.0",
           "source": {
-            "editable": "[TEMP_DIR]/workspace/"
+            "editable": "[TEMP_DIR]/workspace"
           },
           "kind": "package",
           "dependencies": [
@@ -2128,7 +2128,7 @@ fn workspace_metadata_multiple_members() {
         {
           "name": "pkg-a",
           "path": "[TEMP_DIR]/pkg-a",
-          "id": "pkg-a==0.1.0@editable+[TEMP_DIR]/pkg-a/"
+          "id": "pkg-a==0.1.0@editable+[TEMP_DIR]/pkg-a"
         },
         {
           "name": "pkg-b",
@@ -2142,11 +2142,11 @@ fn workspace_metadata_multiple_members() {
         }
       ],
       "resolution": {
-        "pkg-a==0.1.0@editable+[TEMP_DIR]/pkg-a/": {
+        "pkg-a==0.1.0@editable+[TEMP_DIR]/pkg-a": {
           "name": "pkg-a",
           "version": "0.1.0",
           "source": {
-            "editable": "[TEMP_DIR]/pkg-a/"
+            "editable": "[TEMP_DIR]/pkg-a"
           },
           "kind": "package",
           "dependencies": []
@@ -2214,15 +2214,15 @@ fn workspace_metadata_single_project() {
         {
           "name": "my-project",
           "path": "[TEMP_DIR]/my-project",
-          "id": "my-project==0.1.0@editable+[TEMP_DIR]/my-project/"
+          "id": "my-project==0.1.0@editable+[TEMP_DIR]/my-project"
         }
       ],
       "resolution": {
-        "my-project==0.1.0@editable+[TEMP_DIR]/my-project/": {
+        "my-project==0.1.0@editable+[TEMP_DIR]/my-project": {
           "name": "my-project",
           "version": "0.1.0",
           "source": {
-            "editable": "[TEMP_DIR]/my-project/"
+            "editable": "[TEMP_DIR]/my-project"
           },
           "kind": "package",
           "dependencies": []
@@ -2277,15 +2277,15 @@ fn workspace_metadata_with_excluded() -> Result<()> {
         {
           "name": "albatross",
           "path": "[TEMP_DIR]/workspace",
-          "id": "albatross==0.1.0@editable+[TEMP_DIR]/workspace/"
+          "id": "albatross==0.1.0@editable+[TEMP_DIR]/workspace"
         }
       ],
       "resolution": {
-        "albatross==0.1.0@editable+[TEMP_DIR]/workspace/": {
+        "albatross==0.1.0@editable+[TEMP_DIR]/workspace": {
           "name": "albatross",
           "version": "0.1.0",
           "source": {
-            "editable": "[TEMP_DIR]/workspace/"
+            "editable": "[TEMP_DIR]/workspace"
           },
           "kind": "package",
           "dependencies": [
@@ -2523,15 +2523,15 @@ fn workspace_metadata_various_dependency_rainbow() -> Result<()> {
         {
           "name": "albatross",
           "path": "[TEMP_DIR]/workspace",
-          "id": "albatross==0.1.0@editable+[TEMP_DIR]/workspace/"
+          "id": "albatross==0.1.0@editable+[TEMP_DIR]/workspace"
         }
       ],
       "resolution": {
-        "albatross:dev==0.1.0@editable+[TEMP_DIR]/workspace/": {
+        "albatross:dev==0.1.0@editable+[TEMP_DIR]/workspace": {
           "name": "albatross",
           "version": "0.1.0",
           "source": {
-            "editable": "[TEMP_DIR]/workspace/"
+            "editable": "[TEMP_DIR]/workspace"
           },
           "kind": {
             "group": "dev"
@@ -2542,11 +2542,11 @@ fn workspace_metadata_various_dependency_rainbow() -> Result<()> {
             }
           ]
         },
-        "albatross==0.1.0@editable+[TEMP_DIR]/workspace/": {
+        "albatross==0.1.0@editable+[TEMP_DIR]/workspace": {
           "name": "albatross",
           "version": "0.1.0",
           "source": {
-            "editable": "[TEMP_DIR]/workspace/"
+            "editable": "[TEMP_DIR]/workspace"
           },
           "kind": "package",
           "dependencies": [
@@ -2557,28 +2557,28 @@ fn workspace_metadata_various_dependency_rainbow() -> Result<()> {
           "optional_dependencies": [
             {
               "name": "io",
-              "id": "albatross[io]==0.1.0@editable+[TEMP_DIR]/workspace/"
+              "id": "albatross[io]==0.1.0@editable+[TEMP_DIR]/workspace"
             }
           ],
           "dependency_groups": [
             {
               "name": "dev",
-              "id": "albatross:dev==0.1.0@editable+[TEMP_DIR]/workspace/"
+              "id": "albatross:dev==0.1.0@editable+[TEMP_DIR]/workspace"
             }
           ]
         },
-        "albatross[io]==0.1.0@editable+[TEMP_DIR]/workspace/": {
+        "albatross[io]==0.1.0@editable+[TEMP_DIR]/workspace": {
           "name": "albatross",
           "version": "0.1.0",
           "source": {
-            "editable": "[TEMP_DIR]/workspace/"
+            "editable": "[TEMP_DIR]/workspace"
           },
           "kind": {
             "extra": "io"
           },
           "dependencies": [
             {
-              "id": "albatross==0.1.0@editable+[TEMP_DIR]/workspace/"
+              "id": "albatross==0.1.0@editable+[TEMP_DIR]/workspace"
             },
             {
               "id": "anyio==4.3.0@registry+https://pypi.org/simple"
