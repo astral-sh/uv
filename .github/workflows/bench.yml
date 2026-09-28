@@ -98,11 +98,6 @@ jobs:
       - name: "Create venv"
         run: ./target/debug/uv venv --cache-dir .cache
 
-      - name: "Report benchmark filesystem"
-        run: |
-          uname -r
-          findmnt --target "${TMPDIR:-/tmp}"
-
       - name: "Retain benchmark profiles"
         id: profiles
         # Only public main pushes produce reusable baseline profiles.
