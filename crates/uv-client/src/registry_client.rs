@@ -1103,7 +1103,7 @@ impl RegistryClient {
             // Acquire an advisory lock, to guard against concurrent writes.
             #[cfg(windows)]
             let _lock = {
-                let lock_entry = cache_entry.with_file(format!("{}.lock", filename.stem()));
+                let lock_entry = cache_entry.with_file(format!("{}.lock", filename.cache_key()));
                 lock_entry.lock().await.map_err(ErrorKind::CacheLock)?
             };
 
@@ -1194,7 +1194,7 @@ impl RegistryClient {
         // Acquire an advisory lock, to guard against concurrent writes.
         #[cfg(windows)]
         let _lock = {
-            let lock_entry = cache_entry.with_file(format!("{}.lock", filename.stem()));
+            let lock_entry = cache_entry.with_file(format!("{}.lock", filename.cache_key()));
             lock_entry.lock().await.map_err(ErrorKind::CacheLock)?
         };
 
