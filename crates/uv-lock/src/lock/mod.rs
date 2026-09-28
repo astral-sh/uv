@@ -586,6 +586,17 @@ impl<'a> LockedDependencyBuilder<'a> {
             BTreeMap::new();
         let mut complete = true;
 
+        // Plain group requirements only need a coverage check when their package has an extra edge.
+        let extra_edge_packages = match context {
+            DependencyContext::Group(_) => context
+                .dependencies(expected.package)
+                .iter()
+                .filter(|dependency| !dependency.extra.is_empty())
+                .map(|dependency| &dependency.package_id)
+                .collect::<FxHashSet<_>>(),
+            DependencyContext::Production | DependencyContext::Extra(_) => FxHashSet::default(),
+        };
+
         for requirement in requirements {
             let mut requirement_marker = context.requirement_marker(requirement.marker);
             // Keep conflicting extras of the same dependency in separate marker branches. A
@@ -1142,10 +1153,22 @@ impl<'a> LockedDependencyBuilder<'a> {
                     {
                         marker.or(standalone_base_edge_marker);
                     }
-                    edges
-                        .entry((dependency.id.clone(), extras))
-                        .and_modify(|existing| existing.or(marker))
-                        .or_insert(marker);
+                    // A separate declaration without extras can also be satisfied by an extra
+                    // edge, even when its version specifier prevents merging the declarations.
+                    if !extra_edge_packages.contains(&dependency.id)
+                        || !self.base_covered_by_extra_edges(
+                            expected,
+                            context,
+                            &dependency.id,
+                            &extras,
+                            marker,
+                        )
+                    {
+                        edges
+                            .entry((dependency.id.clone(), extras))
+                            .and_modify(|existing| existing.or(marker))
+                            .or_insert(marker);
+                    }
                 } else {
                     for extra in extras {
                         let mut extra_marker = base_edge_marker;
