@@ -18,6 +18,10 @@ use version_ranges::Ranges;
 
 use crate::{ExcludeDependency, Excludes, Override, PackageOverride, PackageOverrideTarget};
 
+mod coverage;
+
+use self::coverage::VersionRangeCoverage;
+
 /// Requirements with equivalent declarations combined.
 ///
 /// False markers remain because overrides can replace them before resolution.
@@ -232,16 +236,18 @@ impl RequirementsKey {
     /// Replace registry specifiers with their accepted range for comparison.
     /// Track prerelease and yanked-version policies separately from the accepted range.
     fn new(mut requirement: Requirement) -> Self {
-        let mut range = Ranges::full();
         let mut prerelease = false;
         let mut yanked = false;
-        if let RequirementSource::Registry { specifier, .. } = &mut requirement.source {
+        let range = if let RequirementSource::Registry { specifier, .. } = &mut requirement.source {
             yanked = allows_yanked(specifier.iter());
-            for specifier in mem::take(specifier) {
+            let ranges = mem::take(specifier).into_iter().map(|specifier| {
                 prerelease |= allows_prereleases(&specifier);
-                range = range.intersection(&Ranges::from(specifier));
-            }
-        }
+                Ranges::from(specifier)
+            });
+            intersect_ranges(ranges)
+        } else {
+            Ranges::full()
+        };
         Self {
             requirement,
             range: canonicalize_version_ranges(&range).unwrap_or(range),
@@ -249,6 +255,23 @@ impl RequirementsKey {
             yanked,
         }
     }
+}
+
+/// Intersect ranges in a balanced tree, avoiding repeated scans of a growing range.
+fn intersect_ranges(ranges: impl IntoIterator<Item = Ranges<Version>>) -> Ranges<Version> {
+    let mut ranges: Vec<_> = ranges.into_iter().collect();
+    while ranges.len() > 1 {
+        let mut pairs = ranges.into_iter();
+        ranges = iter::from_fn(|| {
+            let left = pairs.next()?;
+            Some(match pairs.next() {
+                Some(right) => left.intersection(&right),
+                None => left,
+            })
+        })
+        .collect();
+    }
+    ranges.pop().unwrap_or_else(Ranges::full)
 }
 
 /// Merge requirements with the same source and scope across disjoint marker regions.
@@ -408,33 +431,49 @@ fn simplify_specifiers(specifiers: VersionSpecifiers) -> VersionSpecifiers {
         .map(normalize_specifier)
         .collect::<Vec<_>>();
     specifiers.sort_by_cached_key(ToString::to_string);
-    let mut index = 0;
-    while index < specifiers.len() {
-        let specifier = &specifiers[index];
+
+    // A clause is implied by the others if they already exclude every version it excludes.
+    // Canonicalize before counting coverage so internal sentinel bounds follow PEP 440 semantics.
+    let exclusions: Vec<_> = specifiers
+        .iter()
+        .cloned()
+        .map(|specifier| {
+            let range = Ranges::<Version>::from(specifier);
+            canonicalize_version_ranges(&range)
+                .unwrap_or(range)
+                .complement()
+        })
+        .collect();
+    let mut coverage = VersionRangeCoverage::new(&exclusions);
+    let mut retained = vec![true; specifiers.len()];
+    let mut retained_count = specifiers.len();
+    let mut prerelease_count = specifiers
+        .iter()
+        .filter(|specifier| allows_prereleases(specifier))
+        .count();
+    for (index, specifier) in specifiers.iter().enumerate() {
         let remaining = specifiers
             .iter()
             .enumerate()
-            .filter(|(other_index, _)| *other_index != index)
+            .filter(|(other_index, _)| *other_index != index && retained[*other_index])
             .map(|(_, specifier)| specifier);
-        if allows_yanked(remaining.clone())
-            || (allows_prereleases(specifier) && !remaining.clone().any(allows_prereleases))
+        if (retained_count == 2 && allows_yanked(remaining))
+            || (allows_prereleases(specifier) && prerelease_count == 1)
         {
-            index += 1;
             continue;
         }
-        let remaining = remaining.fold(Ranges::full(), |range, specifier| {
-            range.intersection(&Ranges::from(specifier.clone()))
-        });
-        let range = Ranges::<Version>::from(specifier.clone());
-        let remaining = canonicalize_version_ranges(&remaining).unwrap_or(remaining);
-        let range = canonicalize_version_ranges(&range).unwrap_or(range);
-        if remaining.subset_of(&range) {
-            specifiers.remove(index);
-        } else {
-            index += 1;
+        if coverage.is_redundant(&exclusions[index]) {
+            retained[index] = false;
+            retained_count -= 1;
+            prerelease_count -= usize::from(allows_prereleases(specifier));
+            coverage.remove(&exclusions[index]);
         }
     }
-    specifiers.into_iter().collect()
+    specifiers
+        .into_iter()
+        .zip(retained)
+        .filter_map(|(specifier, retained)| retained.then_some(specifier))
+        .collect()
 }
 
 /// A standalone equality clause permits its version even when the index marks it as yanked.
@@ -681,6 +720,11 @@ mod tests {
             ">=1!1,>=2",
             ">=2,<1,!=3",
             "~=1.0,~=1.0.0",
+            ">=1,>=1,>=2",
+            "!=1.*,!=1.0.*,!=1.0.1",
+            "!=1.5,!=1.5,>=1,<2",
+            "==1,==1",
+            ">=2,<1,>=3,<2",
         ];
         let output = inputs
             .into_iter()
@@ -707,6 +751,11 @@ mod tests {
         >=1!1,>=2 -> >=1!1
         >=2,<1,!=3 -> <1, >=2
         ~=1.0,~=1.0.0 -> ~=1.0.0
+        >=1,>=1,>=2 -> >=2
+        !=1.*,!=1.0.*,!=1.0.1 -> !=1.*
+        !=1.5,!=1.5,>=1,<2 -> >=1, !=1.5, <2
+        ==1,==1 -> ==1, ==1
+        >=2,<1,>=3,<2 -> <2, >=3
         ");
         Ok(())
     }
