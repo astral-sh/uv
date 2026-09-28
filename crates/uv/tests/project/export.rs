@@ -5,15 +5,18 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
+use std::collections::BTreeMap;
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 use std::path::Path;
 use std::process::Stdio;
 #[cfg(feature = "test-universal")]
 use uv_fs::Simplified;
 use uv_static::EnvVars;
+use uv_test::archive::generate_source_archive;
 #[cfg(feature = "test-universal")]
 use uv_test::copy_dir_ignore;
 use uv_test::packse::PackseServer;
+use uv_test::packse::generate_wheel;
 use uv_test::packse::scenario::Scenario;
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 use uv_test::{READ_ONLY_GITHUB_SSH_DEPLOY_KEY, READ_ONLY_GITHUB_TOKEN, decode_token};
@@ -5554,6 +5557,159 @@ fn pep_751_relative_and_absolute_paths() -> Result<()> {
     Resolved 3 packages in [TIME]
     "#);
 
+    uv_snapshot!(context.filters(), context.export()
+        .args(["--frozen", "--no-header", "--output-file", "b/pylock.toml"]), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12"
+
+    [[packages]]
+    name = "a"
+    directory = { path = "../", editable = true }
+
+    [[packages]]
+    name = "b"
+    directory = { path = ".", editable = false }
+
+    [[packages]]
+    name = "c"
+    directory = { path = "[TEMP_DIR]/c", editable = false }
+    "#);
+
+    Ok(())
+}
+
+/// Resolve local paths relative to the exported lockfile.
+#[test]
+fn pep_751_output_file_relative_paths() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["child", "helper", "sdist"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+        helper = { path = "helper-1.0.0-py3-none-any.whl" }
+        sdist = { path = "sdist-1.0.0.tar.gz" }
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    context.temp_dir.child("src/root/__init__.py").touch()?;
+    context
+        .temp_dir
+        .child("child/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    context
+        .temp_dir
+        .child("child/src/child/__init__.py")
+        .touch()?;
+    let (filename, wheel) = generate_wheel(
+        &"helper".parse()?,
+        &"1.0.0".parse()?,
+        &[],
+        &BTreeMap::new(),
+        None,
+        "py3-none-any",
+        &[],
+    );
+    context.temp_dir.child(filename).write_binary(&wheel)?;
+    let sdist = generate_source_archive(&"sdist".parse()?, &"1.0.0".parse()?, "", None)?;
+    context
+        .temp_dir
+        .child("sdist-1.0.0.tar.gz")
+        .write_binary(&sdist)?;
+    context.temp_dir.child("dist").create_dir_all()?;
+    context.lock().arg("--offline").assert().success();
+
+    uv_snapshot!(context.filters(), context.export()
+        .args(["--frozen", "--offline", "--no-header", "--output-file", "dist/pylock.toml"]), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12"
+
+    [[packages]]
+    name = "child"
+    directory = { path = "../child", editable = false }
+
+    [[packages]]
+    name = "helper"
+    version = "1.0.0"
+    archive = { path = "../helper-1.0.0-py3-none-any.whl", hashes = { sha256 = "8e4243504d8d0640496e8ed29c485bc6063c738abbb25b9d028b1c9376bcdc56" } }
+
+    [[packages]]
+    name = "root"
+    directory = { path = "../", editable = true }
+
+    [[packages]]
+    name = "sdist"
+    version = "1.0.0"
+    archive = { path = "../sdist-1.0.0.tar.gz", hashes = { sha256 = "1ebc99ffe50ccc03be5d12fe5e20907a97e7ba3bf110d7fab705a8d43ccabcbd" } }
+    "#);
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .args(["--offline", "--preview", "dist/pylock.toml"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 3 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + child==1.0.0 (from file://[TEMP_DIR]/child)
+     + helper==1.0.0 (from file://[TEMP_DIR]/helper-1.0.0-py3-none-any.whl)
+     + root==1.0.0 (from file://[TEMP_DIR]/)
+     + sdist==1.0.0 (from file://[TEMP_DIR]/sdist-1.0.0.tar.gz)
+    ");
+
+    context
+        .temp_dir
+        .child("dist/batch.toml")
+        .write_str(indoc! {r#"
+        [[export]]
+        output-file = "pylock.batch.toml"
+    "#})?;
+    uv_snapshot!(context.filters(), context.export()
+        .args(["--frozen", "--offline", "--no-header", "--batch", "dist/batch.toml", "--preview-features", "batch-export"]), @"exit_code: 0 (success)");
+    assert_eq!(
+        fs_err::read(context.temp_dir.join("dist/pylock.toml"))?,
+        fs_err::read(context.temp_dir.join("dist/pylock.batch.toml"))?
+    );
+
+    uv_snapshot!(context.filters(), context.export()
+        .current_dir(context.temp_dir.child("dist"))
+        .args(["--project", "..", "--frozen", "--offline", "--format", "pylock.toml", "--no-header", "--no-emit-project", "--no-emit-package", "helper"]), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12"
+
+    [[packages]]
+    name = "child"
+    directory = { path = "../child", editable = false }
+
+    [[packages]]
+    name = "sdist"
+    version = "1.0.0"
+    archive = { path = "../sdist-1.0.0.tar.gz", hashes = { sha256 = "1ebc99ffe50ccc03be5d12fe5e20907a97e7ba3bf110d7fab705a8d43ccabcbd" } }
+    "#);
     Ok(())
 }
 
