@@ -44521,14 +44521,19 @@ fn lock_frozen_warning() -> Result<()> {
 fn lock_resolution_inputs_version_constraints() -> Result<()> {
     let scenario = toml::from_str::<Scenario>(indoc! {r#"
         name = "resolution-inputs-version-constraints"
+
         [root]
+
         [expected]
         satisfiable = true
+
         [packages.a.versions."1.0.0"]
         requires = ["b"]
         sdist = false
+
         [packages.b.versions."1.0.0"]
         sdist = false
+
         [packages.b.versions."2.0.0"]
         sdist = false
     "#})?;
@@ -44539,23 +44544,29 @@ fn lock_resolution_inputs_version_constraints() -> Result<()> {
             .map(|(filename, hash)| (hash.to_owned(), format!("[SHA256:{filename}]"))),
     );
     let pyproject = context.temp_dir.child("pyproject.toml");
-    let initial = indoc! {r#"
+
+    // Lock the transitive dependency with a version constraint.
+    pyproject.write_str(indoc! {r#"
         [project]
         name = "project"
         version = "1.0"
         requires-python = ">=3.12"
         dependencies = ["a"]
+
         [tool.uv]
         preview-features = ["resolution-inputs"]
         constraint-dependencies = ["b<2"]
-    "#};
-    pyproject.write_str(initial)?;
-    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
     let lock = context.read("uv.lock");
+
     insta::with_settings!({ filters => context.filters() }, {
         assert_snapshot!(lock, @r#"
         version = 1
@@ -44597,29 +44608,138 @@ fn lock_resolution_inputs_version_constraints() -> Result<()> {
         "#);
     });
 
-    // Unchanged, weaker, removed, and unrelated constraints all admit the locked versions.
-    for constraints in [
-        r#"["b<2"]"#,
-        r#"["b<3"]"#,
-        "[]",
-        r#"["absent<0"]"#,
-        r#"["b>=2 ; extra != 'inactive'"]"#,
-    ] {
-        pyproject.write_str(&initial.replace(r#"["b<2"]"#, constraints))?;
-        insta::allow_duplicates! {
-            uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache").arg("--index-url").arg(server.index_url()), @"
-            exit_code: 0 (success)
-            ----- stderr -----
-            Resolved 3 packages in [TIME]
-            ");
-        }
-        assert_eq!(context.read("uv.lock"), lock);
-    }
+    // The unchanged constraint can be validated without cached metadata.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), lock);
+
+    // A weaker constraint admits the locked version.
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a"]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs"]
+        constraint-dependencies = ["b<3"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), lock);
+
+    // Removing the constraint keeps the locked version.
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a"]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs"]
+        constraint-dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), lock);
+
+    // Constraints on packages outside the graph do not invalidate it.
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a"]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs"]
+        constraint-dependencies = ["absent<0"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), lock);
+
+    // Negated extra predicates are dropped during the resolver's package lowering.
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a"]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs"]
+        constraint-dependencies = ["b>=2 ; extra != 'inactive'"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), lock);
 
     // An incompatible extra-marked bound needs resolution to establish applicability: the lock
     // may have flattened away recursive extras. Cached metadata makes this possible offline.
-    pyproject.write_str(&initial.replace("b<2", "b>=2 ; extra == 'inactive'"))?;
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--index-url").arg(server.index_url()), @"
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a"]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs"]
+        constraint-dependencies = ["b>=2 ; extra == 'inactive'"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
@@ -44627,8 +44747,22 @@ fn lock_resolution_inputs_version_constraints() -> Result<()> {
     assert_eq!(context.read("uv.lock"), lock);
 
     // A new bound must still invalidate an incompatible transitive version.
-    pyproject.write_str(&initial.replace("b<2", "b>=2"))?;
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a"]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs"]
+        constraint-dependencies = ["b>=2"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 3 packages in [TIME]
@@ -44636,7 +44770,10 @@ fn lock_resolution_inputs_version_constraints() -> Result<()> {
 
     hint: To update the lockfile, run `uv lock`.
     ");
-    uv_snapshot!(context.filters(), context.tree().arg("--index-url").arg(server.index_url()), @"
+
+    uv_snapshot!(context.filters(), context.tree()
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stdout -----
     project v1.0
@@ -44646,11 +44783,18 @@ fn lock_resolution_inputs_version_constraints() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache").arg("--index-url").arg(server.index_url()), @"
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
+
     Ok(())
 }
 
@@ -44660,43 +44804,76 @@ fn lock_resolution_inputs_version_constraints() -> Result<()> {
 fn lock_resolution_inputs_extra_constraints() -> Result<()> {
     let server = PackseServer::from_scenario(&toml::from_str::<Scenario>(indoc! {r#"
         name = "resolution-inputs-extra-constraints"
+
         [root]
+
         [expected]
         satisfiable = true
+
         [packages.a.versions."1.0.0"]
         sdist = false
+
         [packages.a.versions."1.0.0".extras]
         feature = ["b"]
+
         [packages.b.versions."1.0.0"]
         sdist = false
+
         [packages.b.versions."2.0.0"]
         sdist = false
     "#})?);
     let context = uv_test::test_context!("3.12");
-    let initial = indoc! {r#"
+    let pyproject = context.temp_dir.child("pyproject.toml");
+
+    // The constraint applies to the dependency requested by `a[feature]`.
+    pyproject.write_str(indoc! {r#"
         [project]
         name = "project"
         version = "1.0"
         requires-python = ">=3.12"
         dependencies = ["a[feature]"]
+
         [tool.uv]
         preview-features = ["resolution-inputs"]
         constraint-dependencies = ["b<2 ; extra == 'feature'"]
-    "#};
-    let pyproject = context.temp_dir.child("pyproject.toml");
-    pyproject.write_str(initial)?;
-    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache").arg("--index-url").arg(server.index_url()), @"
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
-    pyproject.write_str(&initial.replace("b<2", "b>=2"))?;
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
+
+    // Changing the bound requires a different version of the optional dependency.
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a[feature]"]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs"]
+        constraint-dependencies = ["b>=2 ; extra == 'feature'"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 3 packages in [TIME]
@@ -44704,6 +44881,7 @@ fn lock_resolution_inputs_extra_constraints() -> Result<()> {
 
     hint: To update the lockfile, run `uv lock`.
     ");
+
     Ok(())
 }
 
@@ -44713,44 +44891,67 @@ fn lock_resolution_inputs_extra_constraints() -> Result<()> {
 fn lock_resolution_inputs_recursive_extra_constraints() -> Result<()> {
     let server = PackseServer::from_scenario(&toml::from_str::<Scenario>(indoc! {r#"
         name = "resolution-inputs-recursive-extra-constraints"
+
         [root]
+
         [expected]
         satisfiable = true
+
         [packages.a.versions."1.0.0"]
         sdist = false
+
         [packages.a.versions."1.0.0".extras]
         feature = ["a[sub]"]
         sub = ["b"]
+
         [packages.b.versions."1.0.0"]
         sdist = false
+
         [packages.b.versions."2.0.0"]
         sdist = false
     "#})?);
     let context = uv_test::test_context!("3.12");
     let pyproject = context.temp_dir.child("pyproject.toml");
-    let initial = indoc! {r#"
+
+    // Lock `b==2` through `a[feature]`, which includes `a[sub]`.
+    pyproject.write_str(indoc! {r#"
         [project]
         name = "project"
         version = "1.0"
         requires-python = ">=3.12"
         dependencies = ["a[feature]"]
+
         [tool.uv]
         preview-features = ["resolution-inputs", "lock-without-metadata"]
         constraint-dependencies = []
-    "#};
-    pyproject.write_str(initial)?;
-    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
     let initial_lock = context.read("uv.lock");
-    let constrained = initial.replace(
-        "constraint-dependencies = []",
-        "constraint-dependencies = [\"b<2 ; extra == 'sub'\"]",
-    );
-    pyproject.write_str(&constrained)?;
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
+
+    // A constraint on the inner extra invalidates the flattened dependency's version.
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a[feature]"]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs", "lock-without-metadata"]
+        constraint-dependencies = ["b<2 ; extra == 'sub'"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 3 packages in [TIME]
@@ -44758,22 +44959,46 @@ fn lock_resolution_inputs_recursive_extra_constraints() -> Result<()> {
 
     hint: To update the lockfile, run `uv lock`.
     ");
-    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Updated b v2.0.0 -> v1.0.0
     ");
+
     // Satisfied bounds need no extra provenance and remain valid without cached metadata.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache").arg("--index-url").arg(server.index_url()), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
+
     // The outer extra's name does not establish the applicability of the flattened constraint.
     context.temp_dir.child("uv.lock").write_str(&initial_lock)?;
-    pyproject.write_str(&constrained.replace("extra == 'sub'", "extra == 'feature'"))?;
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a[feature]"]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs", "lock-without-metadata"]
+        constraint-dependencies = ["b<2 ; extra == 'feature'"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
@@ -44788,14 +45013,19 @@ fn lock_resolution_inputs_recursive_extra_constraints() -> Result<()> {
 fn lock_resolution_inputs_constraint_markers() -> Result<()> {
     let scenario = toml::from_str::<Scenario>(indoc! {r#"
         name = "resolution-inputs-constraint-markers"
+
         [root]
+
         [expected]
         satisfiable = true
+
         [packages.a.versions."1.0.0"]
         requires = ["b"]
         sdist = false
+
         [packages.b.versions."1.0.0"]
         sdist = false
+
         [packages.b.versions."2.0.0"]
         sdist = false
     "#})?;
@@ -44806,22 +45036,31 @@ fn lock_resolution_inputs_constraint_markers() -> Result<()> {
             .map(|(filename, hash)| (hash.to_owned(), format!("[SHA256:{filename}]"))),
     );
     let pyproject = context.temp_dir.child("pyproject.toml");
-    let initial = indoc! {r#"
+
+    // Only the Linux constraint applies to this transitive dependency.
+    pyproject.write_str(indoc! {r#"
         [project]
         name = "project"
         version = "1.0"
         requires-python = ">=3.12"
         dependencies = ["a; sys_platform == 'linux'"]
+
         [tool.uv]
         preview-features = ["resolution-inputs", "lock-without-metadata"]
-        constraint-dependencies = ["b<2; sys_platform == 'linux'", "b>=2; sys_platform != 'linux'"]
-    "#};
-    pyproject.write_str(initial)?;
-    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+        constraint-dependencies = [
+            "b<2; sys_platform == 'linux'",
+            "b>=2; sys_platform != 'linux'",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
+
     insta::with_settings!({ filters => context.filters() }, {
         assert_snapshot!(context.read("uv.lock"), @r#"
         version = 1
@@ -44863,24 +45102,46 @@ fn lock_resolution_inputs_constraint_markers() -> Result<()> {
         ]
         "#);
     });
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache").arg("--index-url").arg(server.index_url()), @"
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
 
     // An additional root selects a different version outside the transitive parent's environment.
-    let forked = initial.replace(
-        "dependencies = [\"a; sys_platform == 'linux'\"]",
-        "dependencies = [\"a; sys_platform == 'linux'\", \"b; sys_platform != 'linux'\"]",
-    );
-    pyproject.write_str(&forked)?;
-    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "a; sys_platform == 'linux'",
+            "b; sys_platform != 'linux'",
+        ]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs", "lock-without-metadata"]
+        constraint-dependencies = [
+            "b<2; sys_platform == 'linux'",
+            "b>=2; sys_platform != 'linux'",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Updated b v1.0.0 -> v1.0.0, v2.0.0
     ");
+
     insta::with_settings!({ filters => context.filters() }, {
         assert_snapshot!(context.read("uv.lock"), @r#"
         version = 1
@@ -44937,19 +45198,41 @@ fn lock_resolution_inputs_constraint_markers() -> Result<()> {
         ]
         "#);
     });
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache").arg("--index-url").arg(server.index_url()), @"
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     ");
 
     // Swapping bounds requires swapping the versions selected by those environments.
-    pyproject.write_str(
-        &forked
-            .replace("b<2;", "b>=2;")
-            .replace("b>=2; sys_platform !=", "b<2; sys_platform !="),
-    )?;
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "a; sys_platform == 'linux'",
+            "b; sys_platform != 'linux'",
+        ]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs", "lock-without-metadata"]
+        constraint-dependencies = [
+            "b>=2; sys_platform == 'linux'",
+            "b<2; sys_platform != 'linux'",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 4 packages in [TIME]
@@ -44957,38 +45240,85 @@ fn lock_resolution_inputs_constraint_markers() -> Result<()> {
 
     hint: To update the lockfile, run `uv lock`.
     ");
+
     // Extras and dependency groups are also roots of the universal graph.
-    let optional = initial.replace(
-        "dependencies = [\"a; sys_platform == 'linux'\"]",
-        "dependencies = []",
-    ) + "\n[project.optional-dependencies]\nfeature = [\"a; sys_platform == 'linux'\"]\n[dependency-groups]\ndev = [\"b; sys_platform != 'linux'\"]\n";
-    pyproject.write_str(&optional)?;
-    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        feature = ["a; sys_platform == 'linux'"]
+
+        [dependency-groups]
+        dev = ["b; sys_platform != 'linux'"]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs", "lock-without-metadata"]
+        constraint-dependencies = [
+            "b<2; sys_platform == 'linux'",
+            "b>=2; sys_platform != 'linux'",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     ");
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache").arg("--index-url").arg(server.index_url()), @"
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
     ");
 
     // Supported environments constrain every package even when no fork marker is stored.
-    let supported = initial.replace("a; sys_platform == 'linux'", "a")
-        + "\nenvironments = [\"sys_platform == 'linux'\"]\n";
-    pyproject.write_str(&supported)?;
-    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a"]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs", "lock-without-metadata"]
+        constraint-dependencies = [
+            "b<2; sys_platform == 'linux'",
+            "b>=2; sys_platform != 'linux'",
+        ]
+        environments = ["sys_platform == 'linux'"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Updated b v1.0.0, v2.0.0 -> v1.0.0
     ");
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache").arg("--index-url").arg(server.index_url()), @"
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
+
     Ok(())
 }
 
@@ -44998,14 +45328,19 @@ fn lock_resolution_inputs_constraint_markers() -> Result<()> {
 fn lock_resolution_inputs_source_constraints() -> Result<()> {
     let scenario = toml::from_str::<Scenario>(indoc! {r#"
         name = "resolution-inputs-source-constraints"
+
         [root]
+
         [expected]
         satisfiable = true
+
         [packages.a.versions."1.0.0"]
         requires = ["b"]
         sdist = false
+
         [packages.b.versions."1.0.0"]
         sdist = false
+
         [packages.b.versions."2.0.0"]
         sdist = false
     "#})?;
@@ -45017,24 +45352,28 @@ fn lock_resolution_inputs_source_constraints() -> Result<()> {
     );
     let source = server.file_url("b-1.0.0-py3-none-any.whl");
     let pyproject = context.temp_dir.child("pyproject.toml");
-    let initial = formatdoc! {r#"
+
+    // Select a direct wheel URL through a constraint.
+    pyproject.write_str(&formatdoc! {r#"
         [project]
         name = "project"
         version = "1.0"
         requires-python = ">=3.12"
         dependencies = ["a"]
+
         [tool.uv]
         preview-features = ["resolution-inputs", "lock-without-metadata"]
-        constraint-dependencies = ["b @ {url}"]
-    "#,
-        url = source,
-    };
-    pyproject.write_str(&initial)?;
-    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+        constraint-dependencies = ["b @ {source}"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
+
     insta::with_settings!({ filters => context.filters() }, {
         assert_snapshot!(context.read("uv.lock"), @r#"
         version = 1
@@ -45072,40 +45411,114 @@ fn lock_resolution_inputs_source_constraints() -> Result<()> {
         ]
         "#);
     });
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache").arg("--index-url").arg(server.index_url()), @"
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
 
     let initial_lock = context.read("uv.lock");
-    // Narrowing, replacing with a version bound, or removing the constraint keeps the URL.
-    for constraint in [
-        format!("b @ {source} ; sys_platform == 'linux'"),
-        "b==1".to_owned(),
-        String::new(),
-    ] {
-        pyproject.write_str(&initial.replace(
-            &format!("constraint-dependencies = [\"b @ {source}\"]"),
-            &if constraint.is_empty() {
-                "constraint-dependencies = []".to_owned()
-            } else {
-                format!("constraint-dependencies = [\"{constraint}\"]")
-            },
-        ))?;
-        insta::allow_duplicates! {
-            uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache").arg("--index-url").arg(server.index_url()), @"
-            exit_code: 0 (success)
-            ----- stderr -----
-            Resolved 3 packages in [TIME]
-            ");
-        }
-        assert_eq!(context.read("uv.lock"), initial_lock);
-    }
+
+    // Narrowing the constraint's environment keeps the locked URL on every platform.
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a"]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs", "lock-without-metadata"]
+        constraint-dependencies = ["b @ {source} ; sys_platform == 'linux'"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), initial_lock);
+
+    // A version constraint can be satisfied by the locked URL.
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a"]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs", "lock-without-metadata"]
+        constraint-dependencies = ["b==1"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), initial_lock);
+
+    // Removing the constraint also keeps the URL.
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a"]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs", "lock-without-metadata"]
+        constraint-dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), initial_lock);
 
     // A different explicit source still invalidates the lock.
-    pyproject.write_str(&initial.replace(&source, &server.file_url("b-2.0.0-py3-none-any.whl")))?;
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a"]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs", "lock-without-metadata"]
+        constraint-dependencies = ["b @ {url}"]
+    "#,
+        url = server.file_url("b-2.0.0-py3-none-any.whl"),
+    })?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 3 packages in [TIME]
@@ -45113,24 +45526,43 @@ fn lock_resolution_inputs_source_constraints() -> Result<()> {
 
     hint: To update the lockfile, run `uv lock`.
     ");
+
     // A global URL override replaces a competing source constraint.
-    pyproject.write_str(
-        &(initial
-            + &formatdoc! {r#"
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a"]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs", "lock-without-metadata"]
+        constraint-dependencies = ["b @ {source}"]
         override-dependencies = ["b @ {url}"]
-    "#, url = server.file_url("b-2.0.0-py3-none-any.whl")}),
-    )?;
-    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    "#,
+        url = server.file_url("b-2.0.0-py3-none-any.whl"),
+    })?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Updated b v1.0.0 -> v2.0.0
     ");
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache").arg("--index-url").arg(server.index_url()), @"
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
+
     Ok(())
 }
 
@@ -45140,14 +45572,19 @@ fn lock_resolution_inputs_source_constraints() -> Result<()> {
 fn lock_resolution_inputs_prerelease_constraints() -> Result<()> {
     let scenario = toml::from_str::<Scenario>(indoc! {r#"
         name = "resolution-inputs-prerelease-constraints"
+
         [root]
+
         [expected]
         satisfiable = true
+
         [packages.a.versions."1.0.0"]
         requires = ["b"]
         sdist = false
+
         [packages.b.versions."0.9.0"]
         sdist = false
+
         [packages.b.versions."1.0.0a1"]
         sdist = false
     "#})?;
@@ -45158,23 +45595,29 @@ fn lock_resolution_inputs_prerelease_constraints() -> Result<()> {
             .map(|(filename, hash)| (hash.to_owned(), format!("[SHA256:{filename}]"))),
     );
     let pyproject = context.temp_dir.child("pyproject.toml");
-    let initial = indoc! {r#"
+
+    // An explicit constraint selects the prerelease over the stable version.
+    pyproject.write_str(indoc! {r#"
         [project]
         name = "project"
         version = "1.0"
         requires-python = ">=3.12"
         dependencies = ["a"]
+
         [tool.uv]
         preview-features = ["resolution-inputs"]
         prerelease = "explicit"
         constraint-dependencies = ["b==1.0.0a1"]
-    "#};
-    pyproject.write_str(initial)?;
-    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
+
     insta::with_settings!({ filters => context.filters() }, {
         assert_snapshot!(context.read("uv.lock"), @r#"
         version = 1
@@ -45216,31 +45659,88 @@ fn lock_resolution_inputs_prerelease_constraints() -> Result<()> {
         requires-dist = [{ name = "a" }]
         "#);
     });
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache").arg("--index-url").arg(server.index_url()), @"
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
     let initial_lock = context.read("uv.lock");
-    for constraints in ["[\"b>=0.8\"]", "[]"] {
-        pyproject.write_str(&initial.replace("[\"b==1.0.0a1\"]", constraints))?;
-        insta::allow_duplicates! {
-            uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache").arg("--index-url").arg(server.index_url()), @"
-            exit_code: 0 (success)
-            ----- stderr -----
-            Resolved 3 packages in [TIME]
-            ");
-        }
-        assert_eq!(context.read("uv.lock"), initial_lock);
-    }
+
+    // A weaker bound keeps the prerelease, even without an explicit prerelease specifier.
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a"]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs"]
+        prerelease = "explicit"
+        constraint-dependencies = ["b>=0.8"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), initial_lock);
+
+    // Removing the constraint also keeps the prerelease.
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a"]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs"]
+        prerelease = "explicit"
+        constraint-dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), initial_lock);
+
     // Upgrades resolve with the current pre-release policy and declarations.
-    uv_snapshot!(context.filters(), context.lock().arg("--upgrade").arg("--index-url").arg(server.index_url()), @"
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--upgrade")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Updated b v1.0.0a1 -> v0.9.0
     ");
-    uv_snapshot!(context.filters(), context.tree().arg("--locked").arg("--offline").arg("--no-cache").arg("--index-url").arg(server.index_url()), @"
+
+    uv_snapshot!(context.filters(), context.tree()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stdout -----
     project v1.0
@@ -45250,6 +45750,7 @@ fn lock_resolution_inputs_prerelease_constraints() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
+
     Ok(())
 }
 
@@ -45259,9 +45760,12 @@ fn lock_resolution_inputs_prerelease_constraints() -> Result<()> {
 fn lock_resolution_inputs_local_source_constraints() -> Result<()> {
     let server = PackseServer::from_scenario(&toml::from_str::<Scenario>(indoc! {r#"
         name = "resolution-inputs-local-prerelease"
+
         [root]
+
         [expected]
         satisfiable = true
+
         [packages.b.versions."1.0.0a1"]
         sdist = false
     "#})?);
@@ -45279,34 +45783,61 @@ fn lock_resolution_inputs_local_source_constraints() -> Result<()> {
     let pyproject = context.temp_dir.child("pyproject.toml");
     let source = Url::from_file_path(context.temp_dir.child(&filename).path())
         .map_err(|()| anyhow!("invalid wheel path"))?;
-    let initial = formatdoc! {r#"
+
+    // The constrained local wheel requires a prerelease from the registry.
+    pyproject.write_str(&formatdoc! {r#"
         [project]
         name = "project"
         version = "1.0"
         requires-python = ">=3.12"
         dependencies = ["provider"]
+
         [tool.uv]
         preview-features = ["resolution-inputs", "lock-without-metadata"]
         prerelease = "explicit"
         constraint-dependencies = ["provider @ {source}"]
-    "#};
-    pyproject.write_str(&initial)?;
-    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache").arg("--index-url").arg(server.index_url()), @"
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
     let initial_lock = context.read("uv.lock");
-    pyproject.write_str(&initial.replace(
-        &format!("constraint-dependencies = [\"provider @ {source}\"]"),
-        "constraint-dependencies = []",
-    ))?;
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache").arg("--index-url").arg(server.index_url()), @"
+
+    // Removing the source constraint keeps both the wheel and its prerelease dependency.
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["provider"]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs", "lock-without-metadata"]
+        prerelease = "explicit"
+        constraint-dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
@@ -45323,17 +45854,20 @@ fn lock_resolution_inputs_dynamic_constraints() -> Result<()> {
     let pyproject = context.temp_dir.child("pyproject.toml");
     let provider_url = Url::from_directory_path(context.temp_dir.child("provider").path())
         .map_err(|()| anyhow!("invalid provider directory"))?;
-    let initial = formatdoc! {r#"
+
+    // Select a local package whose backend provides its version.
+    pyproject.write_str(&formatdoc! {r#"
         [project]
         name = "project"
         version = "1.0"
         requires-python = ">=3.12"
         dependencies = ["provider"]
+
         [tool.uv]
         preview-features = ["resolution-inputs", "lock-without-metadata"]
         constraint-dependencies = ["provider @ {provider_url}", "provider>=1"]
-    "#};
-    pyproject.write_str(&initial)?;
+    "#})?;
+
     context
         .temp_dir
         .child("provider/pyproject.toml")
@@ -45342,88 +45876,144 @@ fn lock_resolution_inputs_dynamic_constraints() -> Result<()> {
         name = "provider"
         requires-python = ">=3.12"
         dynamic = ["version"]
+
         [build-system]
         requires = []
         backend-path = ["."]
         build-backend = "backend"
     "#})?;
+
     context
         .temp_dir
         .child("provider/backend.py")
         .write_str(indoc! {r#"
         import pathlib
+        import textwrap
 
         def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
             dist_info = pathlib.Path(metadata_directory, "provider-1.0.0.dist-info")
             dist_info.mkdir()
             dist_info.joinpath("METADATA").write_text(
-                "Metadata-Version: 2.1\n"
-                "Name: provider\n"
-                "Version: 1.0.0\n"
-                "Requires-Python: >=3.12\n"
+                textwrap.dedent("""
+                    Metadata-Version: 2.1
+                    Name: provider
+                    Version: 1.0.0
+                    Requires-Python: >=3.12
+                """).lstrip()
             )
             return dist_info.name
     "#})?;
-    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+
+    // The lock omits the dynamic version, but the backend can establish its bounds.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--offline"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
+
     insta::with_settings!({ filters => context.filters() }, {
-    assert_snapshot!(context.read("uv.lock"), @r#"
-    version = 1
-    revision = 4
-    requires-python = ">=3.12"
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 4
+        requires-python = ">=3.12"
 
-    [options]
-    exclude-newer = "2024-03-25T00:00:00Z"
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
 
-    [[package]]
-    name = "project"
-    version = "1.0"
-    source = { virtual = "." }
-    dependencies = [
-        { name = "provider" },
-    ]
+        [[package]]
+        name = "project"
+        version = "1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "provider" },
+        ]
 
-    [[package]]
-    name = "provider"
-    source = { directory = "[TEMP_DIR]/provider" }
-    "#);
+        [[package]]
+        name = "provider"
+        source = { directory = "[TEMP_DIR]/provider" }
+        "#);
     });
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
+
     // A removed directory constraint leaves the selected source and dynamic bounds valid.
     let initial_lock = context.read("uv.lock");
-    let without_source = initial.replace(&format!("\"provider @ {provider_url}\", "), "");
-    pyproject.write_str(&without_source)?;
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["provider"]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs", "lock-without-metadata"]
+        constraint-dependencies = ["provider>=1"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
     assert_eq!(context.read("uv.lock"), initial_lock);
-    pyproject.write_str(&initial.replace("provider>=1", "provider>=2"))?;
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
+
+    // The backend's version cannot satisfy a stricter bound.
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["provider"]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs", "lock-without-metadata"]
+        constraint-dependencies = ["provider @ {provider_url}", "provider>=2"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline"), @"
     exit_code: 1 (failure)
     ----- stderr -----
     error: No solution found when resolving dependencies
       cause: Because only provider<2 is available and your project depends on provider>=2, we can conclude that your project's requirements are unsatisfiable.
     ");
+
     // Removing the dependency makes its remaining version constraint irrelevant, even if its
     // former source is no longer available for dynamic metadata discovery.
-    pyproject
-        .write_str(&without_source.replace("dependencies = [\"provider\"]", "dependencies = []"))?;
+    pyproject.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        preview-features = ["resolution-inputs", "lock-without-metadata"]
+        constraint-dependencies = ["provider>=1"]
+    "#})?;
     fs_err::remove_dir_all(context.temp_dir.child("provider"))?;
-    uv_snapshot!(context.filters(), context.lock().arg("--offline").arg("--no-cache"), @"
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--offline")
+        .arg("--no-cache"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Removed provider (dynamic)
     ");
+
     Ok(())
 }
 
