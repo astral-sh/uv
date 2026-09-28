@@ -269,6 +269,66 @@ fn variants_provider_wheel_hashes() -> Result<()> {
     Ok(())
 }
 
+/// A cached wheel's hash must be verified before its provider runs.
+#[test]
+fn variants_provider_cached_wheel_hashes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    write_test_packages(&context, false)?;
+    let wheel = context
+        .temp_dir
+        .child("example-1.0.0-py3-none-any-fast.whl");
+    let url =
+        Url::from_file_path(wheel.path()).map_err(|()| anyhow::anyhow!("invalid wheel path"))?;
+    let hash = hex::encode(Sha256::digest(fs_err::read(wheel.path())?));
+    let requirements = context.temp_dir.child("requirements.txt");
+    requirements.write_str(&format!("example @ {url} --hash=sha256:{hash}\n"))?;
+    let invalid_requirements = context.temp_dir.child("invalid-requirements.txt");
+    invalid_requirements.write_str(&format!(
+        "example @ {url} --hash=sha256:{}\n",
+        "0".repeat(64)
+    ))?;
+    let output = context.temp_dir.child("provider-output.json");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r").arg(requirements.path()).arg("--require-hashes")
+        .arg("--preview-features").arg("wheel-variants")
+        .arg("--no-index").arg("--find-links").arg(context.temp_dir.path())
+        .env("TEST_PROVIDER_OUTPUT", output.path())
+        .env("TEST_PROVIDER_PATH", context.temp_dir.path()), @r###"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + example==1.0.0 (from file://[TEMP_DIR]/example-1.0.0-py3-none-any-fast.whl)
+    "###);
+    assert!(output.path().exists());
+    fs_err::remove_file(output.path())?;
+
+    let hash_filter = format!("sha256:{hash}");
+    let mut filters = context.filters();
+    filters.push((&hash_filter, "sha256:[WHEEL_HASH]"));
+    uv_snapshot!(filters, context.pip_install()
+        .arg("-r").arg(invalid_requirements.path()).arg("--require-hashes")
+        .arg("--preview-features").arg("wheel-variants")
+        .arg("--no-index").arg("--find-links").arg(context.temp_dir.path())
+        .arg("--reinstall")
+        .env("TEST_PROVIDER_OUTPUT", output.path())
+        .env("TEST_PROVIDER_PATH", context.temp_dir.path()), @r###"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to read `example @ file://[TEMP_DIR]/example-1.0.0-py3-none-any-fast.whl`
+      cause: Hash mismatch for `example @ file://[TEMP_DIR]/example-1.0.0-py3-none-any-fast.whl`
+
+             Expected:
+               sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+             Computed:
+               sha256:[WHEEL_HASH]
+    "###);
+    assert!(!output.path().exists());
+    Ok(())
+}
+
 #[test]
 fn variants_provider_build_concurrency() -> Result<()> {
     let context = uv_test::test_context!("3.12");
