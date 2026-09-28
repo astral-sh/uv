@@ -262,6 +262,19 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .is_some_and(|packages| packages.contains_source(source))
     }
 
+    /// Return `true` if building the given source would be refused due to the `--no-build`
+    /// option.
+    ///
+    /// Mirrors the guard in [`Self::build_metadata`].
+    fn is_no_build(&self, source: &BuildableSource<'_>) -> bool {
+        let source_name = source.name();
+        self.build_context
+            .build_options()
+            .no_build_requirement(source_name)
+            && !(source_name.is_none() && source.is_editable())
+            && !self.is_first_party(source)
+    }
+
     /// Set the [`BuildStack`] to use for the [`SourceDistributionBuilder`].
     #[must_use]
     pub(crate) fn with_build_stack(self, build_stack: &'a BuildStack) -> Self {
@@ -813,17 +826,23 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let source_dist_entry = cache_shard.entry(SOURCE);
 
         // If the metadata is static, return it.
-        let dynamic =
-            match StaticMetadata::read(source, source_dist_entry.path(), subdirectory).await? {
-                StaticMetadata::Some(metadata) => {
-                    return Ok(ArchiveMetadata {
-                        metadata: Metadata::from_metadata23(metadata),
-                        hashes: revision.into_hashes(),
-                    });
-                }
-                StaticMetadata::Dynamic => true,
-                StaticMetadata::None => false,
-            };
+        let dynamic = match StaticMetadata::read(
+            source,
+            source_dist_entry.path(),
+            subdirectory,
+            self.is_no_build(source),
+        )
+        .await?
+        {
+            StaticMetadata::Some(metadata) => {
+                return Ok(ArchiveMetadata {
+                    metadata: Metadata::from_metadata23(metadata),
+                    hashes: revision.into_hashes(),
+                });
+            }
+            StaticMetadata::Dynamic => true,
+            StaticMetadata::None => false,
+        };
 
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);
@@ -1213,16 +1232,19 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let source_entry = cache_shard.entry(SOURCE);
 
         // If the metadata is static, return it.
-        let dynamic = match StaticMetadata::read(source, source_entry.path(), None).await? {
-            StaticMetadata::Some(metadata) => {
-                return Ok(ArchiveMetadata {
-                    metadata: Metadata::from_metadata23(metadata),
-                    hashes: revision.into_hashes(),
-                });
-            }
-            StaticMetadata::Dynamic => true,
-            StaticMetadata::None => false,
-        };
+        let dynamic =
+            match StaticMetadata::read(source, source_entry.path(), None, self.is_no_build(source))
+                .await?
+            {
+                StaticMetadata::Some(metadata) => {
+                    return Ok(ArchiveMetadata {
+                        metadata: Metadata::from_metadata23(metadata),
+                        hashes: revision.into_hashes(),
+                    });
+                }
+                StaticMetadata::Dynamic => true,
+                StaticMetadata::None => false,
+            };
 
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);
@@ -1527,7 +1549,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .workspace_member_editable(resource.editable);
 
         // If the metadata is static, return it.
-        let dynamic = match StaticMetadata::read(source, resource.install_path, None).await? {
+        let dynamic = match StaticMetadata::read(
+            source,
+            resource.install_path,
+            None,
+            self.is_no_build(source),
+        )
+        .await?
+        {
             StaticMetadata::Some(metadata) => {
                 return Ok(ArchiveMetadata::from(
                     Metadata::from_workspace(
@@ -1800,7 +1829,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Ok(Some(requires_dist))
             }
             Err(
-                err @ (uv_pypi_types::MetadataError::DynamicField(_)
+                err @ (uv_pypi_types::MetadataError::Pep508Error(_)
+                | uv_pypi_types::MetadataError::DynamicField(_)
                 | uv_pypi_types::MetadataError::FieldNotFound(_)
                 | uv_pypi_types::MetadataError::PoetrySyntax),
             ) => {
@@ -1810,9 +1840,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 );
                 Ok(None)
             }
-            // A malformed requirement can't be healed by building: the build backend reads the
-            // same `pyproject.toml`, so surface the parse error instead of falling through to
-            // a (possibly disabled) PEP 517 build.
             Err(err) => Err(Error::PyprojectToml(err)),
         }
     }
@@ -2034,16 +2061,19 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let source_entry = cache_shard.entry(SOURCE);
 
         // If the metadata is static, return it.
-        let dynamic = match StaticMetadata::read(source, source_entry.path(), None).await? {
-            StaticMetadata::Some(metadata) => {
-                return Ok(ArchiveMetadata {
-                    metadata: Metadata::from_metadata23(metadata),
-                    hashes: revision.into_hashes(),
-                });
-            }
-            StaticMetadata::Dynamic => true,
-            StaticMetadata::None => false,
-        };
+        let dynamic =
+            match StaticMetadata::read(source, source_entry.path(), None, self.is_no_build(source))
+                .await?
+            {
+                StaticMetadata::Some(metadata) => {
+                    return Ok(ArchiveMetadata {
+                        metadata: Metadata::from_metadata23(metadata),
+                        hashes: revision.into_hashes(),
+                    });
+                }
+                StaticMetadata::Dynamic => true,
+                StaticMetadata::None => false,
+            };
 
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);
@@ -2392,29 +2422,35 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         };
 
         // If the metadata is static, return it.
-        let dynamic =
-            match StaticMetadata::read(source, fetch.path(), resource.subdirectory).await? {
-                StaticMetadata::Some(metadata) => {
-                    return Ok(ArchiveMetadata::from(
-                        Metadata::from_workspace(
-                            metadata,
-                            &path,
-                            Some(&git_member),
-                            self.build_context.locations(),
-                            self.build_context.sources().clone(),
-                            self.build_context
-                                .source_tree_editable_policy()
-                                .workspace_member_editable(None),
-                            self.build_context.cache(),
-                            self.build_context.workspace_cache(),
-                            credentials_cache,
-                        )
-                        .await?,
-                    ));
-                }
-                StaticMetadata::Dynamic => true,
-                StaticMetadata::None => false,
-            };
+        let dynamic = match StaticMetadata::read(
+            source,
+            fetch.path(),
+            resource.subdirectory,
+            self.is_no_build(source),
+        )
+        .await?
+        {
+            StaticMetadata::Some(metadata) => {
+                return Ok(ArchiveMetadata::from(
+                    Metadata::from_workspace(
+                        metadata,
+                        &path,
+                        Some(&git_member),
+                        self.build_context.locations(),
+                        self.build_context.sources().clone(),
+                        self.build_context
+                            .source_tree_editable_policy()
+                            .workspace_member_editable(None),
+                        self.build_context.cache(),
+                        self.build_context.workspace_cache(),
+                        credentials_cache,
+                    )
+                    .await?,
+                ));
+            }
+            StaticMetadata::Dynamic => true,
+            StaticMetadata::None => false,
+        };
 
         // If the cache contains compatible metadata, return it.
         if self
@@ -3315,10 +3351,14 @@ enum StaticMetadata {
 
 impl StaticMetadata {
     /// Read the [`ResolutionMetadata`] from a source distribution.
+    ///
+    /// If `no_build` is `true`, a PEP 508 parse error is returned directly instead of
+    /// falling through to a PEP 517 build, since the build would be disallowed anyway.
     async fn read(
         source: &BuildableSource<'_>,
         source_root: &Path,
         subdirectory: Option<&Path>,
+        no_build: bool,
     ) -> Result<Self, Error> {
         // Attempt to read the `pyproject.toml`.
         let pyproject_toml = match read_pyproject_toml(source_root, subdirectory).await {
@@ -3357,15 +3397,21 @@ impl StaticMetadata {
                     }
                 }
                 Err(
-                    err @ (uv_pypi_types::MetadataError::DynamicField(_)
+                    err @ (uv_pypi_types::MetadataError::Pep508Error(_)
+                    | uv_pypi_types::MetadataError::DynamicField(_)
                     | uv_pypi_types::MetadataError::FieldNotFound(_)
                     | uv_pypi_types::MetadataError::PoetrySyntax),
                 ) => {
+                    // If builds are disallowed, a malformed requirement can't be healed by
+                    // the build backend, so surface the parse error instead of falling
+                    // through to a (disallowed) PEP 517 build; see astral-sh/uv#20908.
+                    // Otherwise, allow the backend to attempt the heal (e.g., Hatch's
+                    // context formatting), which may resolve non-PEP-621-compliant metadata.
+                    if no_build && matches!(err, uv_pypi_types::MetadataError::Pep508Error(_)) {
+                        return Err(Error::PyprojectToml(err));
+                    }
                     debug!("No static `pyproject.toml` available for: {source} ({err:?})");
                 }
-                // A malformed requirement can't be healed by building: the build backend reads
-                // the same `pyproject.toml`, so surface the parse error instead of falling
-                // through to a (possibly disabled) PEP 517 build.
                 Err(err) => return Err(Error::PyprojectToml(err)),
             }
         }
