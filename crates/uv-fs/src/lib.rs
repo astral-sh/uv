@@ -1,4 +1,4 @@
-use std::io::{self, Write};
+use std::io;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
@@ -496,12 +496,15 @@ pub async fn write_atomic(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std
 
 /// Write `data` to `path` atomically using a temporary file and atomic rename.
 pub fn write_atomic_sync(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std::io::Result<()> {
-    let mut temp_file = tempfile_in(
+    let temp_file = tempfile_in(
         path.as_ref()
             .parent()
             .expect("Write path must have a parent"),
     )?;
-    temp_file.write_all(data.as_ref())?;
+    // Reopen with truncation so ext4's `auto_da_alloc` starts writeback on close, before the
+    // rename takes the directory lock. Writing through the original descriptor instead defers
+    // that work until rename, causing contention between concurrent writes in the same directory.
+    fs_err::write(&temp_file, data)?;
     persist_with_retry_sync(temp_file, path.as_ref())
 }
 
