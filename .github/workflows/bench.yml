@@ -54,7 +54,7 @@ jobs:
           cargo run --bin uv -- --config-file test/uv.toml pip compile test/requirements/airflow.in --universal --exclude-newer 2024-08-08 --cache-dir .cache
 
       - name: "Build benchmarks"
-        run: uv run --only-dev cargo codspeed build -m walltime --profile profiling -p uv-bench --bench uv --bench workspace_discovery
+        run: uv run --only-dev cargo codspeed build -m walltime --profile profiling -p uv-bench --bench uv --bench workspace_discovery --bench atomic_write
 
       - name: "Create artifact archive"
         run: tar -cvf benchmarks-walltime.tar target/codspeed target/debug/uv .cache
@@ -97,6 +97,11 @@ jobs:
 
       - name: "Create venv"
         run: ./target/debug/uv venv --cache-dir .cache
+
+      - name: "Report benchmark filesystem"
+        run: |
+          uname -r
+          findmnt --target "${TMPDIR:-/tmp}"
 
       - name: "Retain benchmark profiles"
         id: profiles

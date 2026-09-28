@@ -29,6 +29,11 @@ path = "benches/workspace_discovery.rs"
 harness = false
 
 [[bench]]
+name = "atomic_write"
+path = "benches/atomic_write.rs"
+harness = false
+
+[[bench]]
 name = "uv_pep440"
 path = "benches/uv_pep440.rs"
 harness = false
@@ -49,6 +54,7 @@ uv-distribution = { workspace = true }
 uv-distribution-filename = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-extract = { workspace = true }
+uv-fs = { workspace = true, features = ["tokio"] }
 uv-install-wheel = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
