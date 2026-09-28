@@ -2207,7 +2207,7 @@ async fn select_variant<Context: BuildContext>(
         resolved_variants
     } else {
         let resolved_variants = distribution_database
-            .fetch_and_query_variants(variants_json, marker_env)
+            .fetch_and_query_variants(variants_json, marker_env, true)
             .await
             .map_err(|err| LockErrorKind::VariantError {
                 package_id: package.id.clone(),

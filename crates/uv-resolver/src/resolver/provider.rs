@@ -379,7 +379,18 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
         marker_env: &'io uv_pep508::MarkerEnvironment,
     ) -> VariantProviderResult {
         self.fetcher
-            .fetch_and_query_variants(variants_json, marker_env)
+            .fetch_and_query_variants(
+                variants_json,
+                marker_env,
+                // A wheel hash does not authenticate the index's separate variants.json.
+                !self
+                    .hasher
+                    .archive_policy_for_package(
+                        &variants_json.filename.name,
+                        &variants_json.filename.version,
+                    )
+                    .requires_validation(),
+            )
             .await
     }
 

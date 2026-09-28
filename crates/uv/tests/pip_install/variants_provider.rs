@@ -7,7 +7,9 @@ use std::time::Duration;
 use anyhow::Result;
 use assert_fs::prelude::*;
 use indoc::indoc;
+use insta::allow_duplicates;
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use url::Url;
 
 use uv_test::packse::generate_wheel_with_files;
@@ -181,6 +183,89 @@ fn variants_provider_environment() -> Result<()> {
             })
         );
     }
+    Ok(())
+}
+
+/// An index's variant metadata is not authenticated by a wheel hash.
+#[test]
+fn variants_provider_wheel_hashes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    write_test_packages(&context, false)?;
+    let wheel = context
+        .temp_dir
+        .child("example-1.0.0-py3-none-any-fast.whl");
+    let hash = hex::encode(Sha256::digest(fs_err::read(wheel.path())?));
+    let requirements = context.temp_dir.child("requirements.txt");
+    requirements.write_str(&format!("example==1.0.0 --hash=sha256:{hash}\n"))?;
+    let invalid_requirements = context.temp_dir.child("invalid-requirements.txt");
+    invalid_requirements.write_str(&format!(
+        "example==1.0.0 --hash=sha256:{}\n",
+        "0".repeat(64)
+    ))?;
+    let target = context.temp_dir.child("target.toml");
+    target.write_str(indoc! {r#"
+        provider = []
+        [metadata]
+        version = "0.1"
+        created-by = "uv-test"
+    "#})?;
+    let output = context.temp_dir.child("provider-output.json");
+
+    // A mismatched hash and an accepted hash both leave the sidecar unauthenticated. An
+    // incomplete target file must not allow the provider to run in either case.
+    allow_duplicates! {
+      for (requirements, require_hashes) in [(&invalid_requirements, true), (&requirements, false)] {
+        let mut command = context.pip_install();
+        command
+            .arg("-r")
+            .arg(requirements.path())
+            .arg("--preview-features")
+            .arg("wheel-variants")
+            .arg("--no-index")
+            .arg("--find-links")
+            .arg(context.temp_dir.path())
+            .env("UV_VARIANT_LOCK", target.path())
+            .env("UV_VARIANT_LOCK_INCOMPLETE", "1")
+            .env("TEST_PROVIDER_OUTPUT", output.path())
+            .env("TEST_PROVIDER_PATH", context.temp_dir.path());
+        if require_hashes {
+            command.arg("--require-hashes");
+        }
+        uv_snapshot!(context.filters(), command, @r###"
+        exit_code: 1 (failure)
+        ----- stderr -----
+        error: Cannot run variant provider `cpu` from an index when verifying wheel hashes; provide its properties with `UV_VARIANT_LOCK`
+        "###);
+        assert!(!output.path().exists());
+      }
+    }
+
+    target.write_str(indoc! {r#"
+        [metadata]
+        version = "0.1"
+        created-by = "uv-test"
+        [[provider]]
+        namespace = "cpu"
+        resolved = ["env-provider==1.0.0"]
+        plugin-api = "env_provider.cpu"
+        [provider.properties]
+        level = ["v3"]
+    "#})?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r").arg(requirements.path()).arg("--require-hashes")
+        .arg("--preview-features").arg("wheel-variants")
+        .arg("--no-index").arg("--find-links").arg(context.temp_dir.path())
+        .env("UV_VARIANT_LOCK", target.path())
+        .env("TEST_PROVIDER_OUTPUT", output.path())
+        .env("TEST_PROVIDER_PATH", context.temp_dir.path()), @r###"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + example==1.0.0
+    "###);
+    assert!(!output.path().exists());
     Ok(())
 }
 
