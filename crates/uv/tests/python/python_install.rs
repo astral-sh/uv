@@ -123,6 +123,59 @@ fn python_install() {
     bin_python.assert(predicate::path::missing());
 }
 
+/// Regression test for a panic when `/install` in a sysconfig value is followed by a non-ASCII
+/// character.
+#[cfg(unix)]
+#[test]
+fn python_install_sysconfig_prefix() -> anyhow::Result<()> {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_managed_python_dirs();
+    let installation = context
+        .temp_dir
+        .child("managed")
+        .child(format!("cpython-3.12.9-{}", platform_key_from_env()?));
+    let lib = installation.child("lib").child("python3.12");
+    lib.create_dir_all()?;
+    let bin = installation.child("bin");
+    bin.create_dir_all()?;
+    bin.child("python3.12").touch()?;
+    let sysconfig = lib.child("_sysconfigdata__test.py");
+    sysconfig.write_str(indoc! {r#"
+        # system configuration generated and used by the sysconfig module
+        build_time_vars = {
+            "PREFIX": "/install",
+            "SUBDIRECTORY": "/install/é",
+            "UNICODE_SUFFIX": "/installé",
+            "OTHER_PREFIX": "/installation"
+        }
+    "#})?;
+
+    context
+        .python_install()
+        .arg("3.12.9")
+        .arg("--no-bin")
+        .arg("--offline")
+        .assert()
+        .success();
+
+    let contents = fs_err::read_to_string(sysconfig.path())?;
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_snapshot!(contents, @r#"
+        # system configuration generated and used by the sysconfig module
+        build_time_vars = {
+            "OTHER_PREFIX": "/installation",
+            "PREFIX": "[TEMP_DIR]/managed/cpython-3.12.9-[PLATFORM]",
+            "PYTHON_BUILD_STANDALONE": 1,
+            "SUBDIRECTORY": "[TEMP_DIR]/managed/cpython-3.12.9-[PLATFORM]/é",
+            "UNICODE_SUFFIX": "/installé"
+        }
+        "#);
+    });
+
+    Ok(())
+}
+
 #[test]
 fn python_reinstall() {
     let context = uv_test::test_context_with_versions!(&[])
