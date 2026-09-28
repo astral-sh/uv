@@ -243,7 +243,8 @@ impl VariantsJsonContent {
     }
 
     /// Combine consistent metadata, independently of the order of its sources.
-    pub fn merge(&mut self, other: &Self) -> Result<(), VariantMetadataError> {
+    #[cfg(test)]
+    fn merge(&mut self, other: &Self) -> Result<(), VariantMetadataError> {
         self.validate()?;
         other.validate()?;
         let namespaces = &self.default_priorities.namespace;
@@ -285,7 +286,7 @@ impl VariantsJsonContent {
 // Only the labels are needed; `IgnoredAny` skips the properties while deserializing.
 #[expect(clippy::zero_sized_map_values)]
 pub struct DistInfoVariantsJson {
-    pub variants: FxHashMap<VariantLabel, serde::de::IgnoredAny>,
+    variants: FxHashMap<VariantLabel, serde::de::IgnoredAny>,
 }
 
 impl DistInfoVariantsJson {

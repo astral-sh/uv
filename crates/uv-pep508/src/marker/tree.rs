@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
+#[cfg(test)]
 use std::collections::BTreeSet;
 use std::fmt::{self, Display, Formatter};
 use std::ops::{Bound, Deref};
@@ -1900,7 +1901,8 @@ impl MarkerTree {
     /// The base packages for variant markers, if any.
     ///
     /// Variant markers without a base package are ignored.
-    pub fn collect_variant_bases(&self) -> BTreeSet<String> {
+    #[cfg(test)]
+    fn collect_variant_bases(self) -> BTreeSet<String> {
         let mut bases = BTreeSet::new();
         INTERNER.lock().collect_variant_bases(self.0, &mut bases);
         bases
@@ -1974,7 +1976,7 @@ pub enum MarkerTreeKind<'a> {
 
 impl MarkerTreeKind<'_> {
     /// Whether this node or any descendant depends on the selected wheel variant.
-    pub fn has_variant_expression(&self) -> bool {
+    fn has_variant_expression(&self) -> bool {
         match self {
             MarkerTreeKind::True | MarkerTreeKind::False => false,
             Self::List(ListMarkerTree {

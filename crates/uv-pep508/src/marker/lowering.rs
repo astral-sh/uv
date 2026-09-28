@@ -68,7 +68,7 @@ pub enum CanonicalMarkerValueString {
 
 impl CanonicalMarkerValueString {
     /// Whether this string marker refers to a selected wheel label.
-    pub fn is_variant_label(&self) -> bool {
+    pub(crate) fn is_variant_label(&self) -> bool {
         match self {
             Self::VariantLabel | Self::VariantLabelBase(_) => true,
             Self::OsName
@@ -83,7 +83,7 @@ impl CanonicalMarkerValueString {
     }
 
     /// The package whose selected label this marker refers to, if it is scoped.
-    pub fn variant_base(&self) -> Option<&str> {
+    pub(crate) fn variant_base(&self) -> Option<&str> {
         match self {
             Self::VariantLabelBase(base) => Some(base),
             Self::VariantLabel

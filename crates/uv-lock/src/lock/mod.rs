@@ -7238,7 +7238,7 @@ impl Package {
     }
 
     /// Convert to a [`RegistryVariantsJson`] for installation.
-    pub(crate) fn to_registry_variants_json(
+    fn to_registry_variants_json(
         &self,
         workspace_root: &Path,
     ) -> Result<Option<RegistryVariantsJson>, LockError> {

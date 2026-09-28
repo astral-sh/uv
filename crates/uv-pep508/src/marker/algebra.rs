@@ -46,6 +46,7 @@
 //! merged to be applied globally.
 
 use std::cmp::Ordering;
+#[cfg(test)]
 use std::collections::BTreeSet;
 use std::fmt;
 use std::ops::Bound;
@@ -759,6 +760,7 @@ impl InternerGuard<'_> {
         result
     }
 
+    #[cfg(test)]
     pub(crate) fn collect_variant_bases(&mut self, i: NodeId, bases: &mut BTreeSet<String>) {
         if matches!(i, NodeId::TRUE | NodeId::FALSE) {
             return;
@@ -1286,6 +1288,7 @@ impl Variable {
         marker.is_conflicting()
     }
 
+    #[cfg(test)]
     fn variant_base(&self) -> Option<&str> {
         match self {
             Self::String(key) | Self::In { key, .. } | Self::Contains { key, .. } => {

@@ -95,16 +95,6 @@ pub struct UnnamedRequirement<ReqUrl: UnnamedRequirementUrl = VerbatimUrl> {
 
 impl<Url: UnnamedRequirementUrl> UnnamedRequirement<Url> {
     /// Returns whether the markers apply for the given environment
-    pub fn evaluate_markers(
-        &self,
-        env: &MarkerEnvironment,
-        variants: &impl MarkerVariantsEnvironment,
-        extras: &[ExtraName],
-    ) -> bool {
-        self.evaluate_optional_environment(Some(env), variants, extras)
-    }
-
-    /// Returns whether the markers apply for the given environment
     pub fn evaluate_optional_environment(
         &self,
         env: Option<&MarkerEnvironment>,

@@ -165,7 +165,7 @@ impl VariantBuild {
     }
 
     // Not a method to be callable in the constructor.
-    pub fn plugin_api<'a>(
+    fn plugin_api<'a>(
         backend_name: &str,
         backend: &'a Provider,
         interpreter: &Interpreter,
@@ -193,7 +193,7 @@ impl VariantBuild {
         }
     }
 
-    pub fn import(&self) -> Result<String, Error> {
+    fn import(&self) -> Result<String, Error> {
         let plugin_api =
             Self::plugin_api(&self.backend_name, &self.backend, self.venv.interpreter())?;
         let import = if let Some((path, object)) = plugin_api.split_once(':') {
@@ -216,7 +216,7 @@ impl VariantBuild {
     }
 
     /// Run a variant provider to infer compatible variants.
-    pub async fn build(&self) -> Result<VariantProviderOutput, Error> {
+    async fn build(&self) -> Result<VariantProviderOutput, Error> {
         // Write the hook output to a file so that we can read it back reliably.
         let out_file = self.temp_dir.path().join("output.json");
 
