@@ -51,9 +51,9 @@ use crate::commands::locked_requirements::{LockedRequirements, read_lock_require
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
 use crate::commands::project::lock_target::{LockTarget, find_lock_format_error};
 use crate::commands::project::{
-    MissingLockfileSource, ProjectEnvironmentPolicy, ProjectError, ProjectInterpreter,
-    ScriptInterpreter, UniversalState, WorkspacePython, init_script_python_requirement,
-    script_extra_build_requires,
+    MissingLockfileSource, ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectError,
+    ProjectInterpreter, ScriptInterpreter, UniversalState, WorkspacePython,
+    init_script_python_requirement, script_extra_build_requires,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{ExitStatus, ScriptPath, UvError, pip};
@@ -165,7 +165,7 @@ pub(crate) async fn lock(
                 )
                 .await?;
                 ProjectInterpreter::discover(
-                    workspace,
+                    ProjectEnvironmentTarget::from(workspace),
                     &groups,
                     workspace_python,
                     &client_builder,

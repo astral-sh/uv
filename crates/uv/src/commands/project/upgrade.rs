@@ -36,7 +36,8 @@ use crate::commands::project::edit::ProjectEdit;
 use crate::commands::project::lock::{LockEvent, LockMode, LockOperation, LockResult};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    ProjectEnvironmentPolicy, ProjectInterpreter, UniversalState, WorkspacePython,
+    ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter, UniversalState,
+    WorkspacePython,
 };
 use crate::commands::{ExitStatus, UvError};
 use crate::printer::Printer;
@@ -219,7 +220,7 @@ pub(crate) async fn upgrade(
         )
         .await?;
         match ProjectInterpreter::discover(
-            project.workspace(),
+            ProjectEnvironmentTarget::from(project.workspace()),
             &groups,
             workspace_python,
             &client_builder,
@@ -379,7 +380,7 @@ pub(crate) async fn upgrade(
         )
         .await?;
         ProjectInterpreter::discover(
-            project.workspace(),
+            ProjectEnvironmentTarget::from(project.workspace()),
             &groups,
             workspace_python,
             &client_builder,

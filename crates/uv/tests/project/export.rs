@@ -11024,7 +11024,7 @@ fn frozen_export(context: &TestContext) -> Command {
     command
 }
 
-/// A frozen lock can be exported without any project manifests.
+/// A frozen lock can be exported and inspected without any project manifests.
 #[test]
 fn frozen_lockfile_without_manifests() -> Result<()> {
     let context = uv_test::test_context!("3.12")
@@ -11234,6 +11234,7 @@ fn frozen_lockfile_without_manifests() -> Result<()> {
     -e ./dep
     -e ./member-dep
     ");
+
     insta::assert_snapshot!(context.read("batch-group.txt"), @"-e ./member-dep");
 
     // A missing group is an error.
@@ -11259,6 +11260,225 @@ fn frozen_lockfile_without_manifests() -> Result<()> {
     ----- stderr -----
     error: Package `missing` not found in lockfile workspace
     ");
+
+    // Inspect the locked tree.
+    uv_snapshot!(context.filters(), context.tree()
+        .args(["--frozen", "--universal", "--all-groups", "--format", "json", "--preview-features", "json-output", "--preview-features", "frozen-lockfile"]), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "workspace_root": "[TEMP_DIR]/",
+      "workspace": {
+        "path": "[TEMP_DIR]/",
+        "id": "workspace+[TEMP_DIR]/"
+      },
+      "roots": [
+        {
+          "id": "dep==1.0.0@editable+[TEMP_DIR]/dep"
+        },
+        {
+          "id": "member-dep==1.0.0@editable+[TEMP_DIR]/member-dep"
+        },
+        {
+          "id": "member:shared==1.0.0@virtual+[TEMP_DIR]/member"
+        },
+        {
+          "id": "member==1.0.0@virtual+[TEMP_DIR]/member"
+        },
+        {
+          "id": "member[feature]==1.0.0@virtual+[TEMP_DIR]/member"
+        },
+        {
+          "id": "root-dep==1.0.0@editable+[TEMP_DIR]/root-dep"
+        },
+        {
+          "id": "root:dev==1.0.0@virtual+[TEMP_DIR]/"
+        },
+        {
+          "id": "root:shared==1.0.0@virtual+[TEMP_DIR]/"
+        },
+        {
+          "id": "root==1.0.0@virtual+[TEMP_DIR]/"
+        }
+      ],
+      "inverted": false,
+      "members": [
+        {
+          "name": "dep",
+          "path": "[TEMP_DIR]/dep",
+          "id": "dep==1.0.0@editable+[TEMP_DIR]/dep"
+        },
+        {
+          "name": "member",
+          "path": "[TEMP_DIR]/member",
+          "id": "member==1.0.0@virtual+[TEMP_DIR]/member"
+        },
+        {
+          "name": "member-dep",
+          "path": "[TEMP_DIR]/member-dep",
+          "id": "member-dep==1.0.0@editable+[TEMP_DIR]/member-dep"
+        },
+        {
+          "name": "root",
+          "path": "[TEMP_DIR]/",
+          "id": "root==1.0.0@virtual+[TEMP_DIR]/"
+        },
+        {
+          "name": "root-dep",
+          "path": "[TEMP_DIR]/root-dep",
+          "id": "root-dep==1.0.0@editable+[TEMP_DIR]/root-dep"
+        }
+      ],
+      "resolution": {
+        "dep==1.0.0@editable+[TEMP_DIR]/dep": {
+          "name": "dep",
+          "version": "1.0.0",
+          "source": {
+            "editable": "[TEMP_DIR]/dep"
+          },
+          "kind": "package",
+          "dependencies": []
+        },
+        "member-dep==1.0.0@editable+[TEMP_DIR]/member-dep": {
+          "name": "member-dep",
+          "version": "1.0.0",
+          "source": {
+            "editable": "[TEMP_DIR]/member-dep"
+          },
+          "kind": "package",
+          "dependencies": []
+        },
+        "member:shared==1.0.0@virtual+[TEMP_DIR]/member": {
+          "name": "member",
+          "version": "1.0.0",
+          "source": {
+            "virtual": "[TEMP_DIR]/member"
+          },
+          "kind": {
+            "group": "shared"
+          },
+          "dependencies": [
+            {
+              "id": "member-dep==1.0.0@editable+[TEMP_DIR]/member-dep"
+            }
+          ]
+        },
+        "member==1.0.0@virtual+[TEMP_DIR]/member": {
+          "name": "member",
+          "version": "1.0.0",
+          "source": {
+            "virtual": "[TEMP_DIR]/member"
+          },
+          "kind": "package",
+          "dependencies": [
+            {
+              "id": "dep==1.0.0@editable+[TEMP_DIR]/dep"
+            }
+          ],
+          "optional_dependencies": [
+            {
+              "name": "feature",
+              "id": "member[feature]==1.0.0@virtual+[TEMP_DIR]/member"
+            }
+          ],
+          "dependency_groups": [
+            {
+              "name": "shared",
+              "id": "member:shared==1.0.0@virtual+[TEMP_DIR]/member"
+            }
+          ]
+        },
+        "member[feature]==1.0.0@virtual+[TEMP_DIR]/member": {
+          "name": "member",
+          "version": "1.0.0",
+          "source": {
+            "virtual": "[TEMP_DIR]/member"
+          },
+          "kind": {
+            "extra": "feature"
+          },
+          "dependencies": [
+            {
+              "id": "member-dep==1.0.0@editable+[TEMP_DIR]/member-dep"
+            },
+            {
+              "id": "member==1.0.0@virtual+[TEMP_DIR]/member"
+            }
+          ]
+        },
+        "root-dep==1.0.0@editable+[TEMP_DIR]/root-dep": {
+          "name": "root-dep",
+          "version": "1.0.0",
+          "source": {
+            "editable": "[TEMP_DIR]/root-dep"
+          },
+          "kind": "package",
+          "dependencies": []
+        },
+        "root:dev==1.0.0@virtual+[TEMP_DIR]/": {
+          "name": "root",
+          "version": "1.0.0",
+          "source": {
+            "virtual": "[TEMP_DIR]/"
+          },
+          "kind": {
+            "group": "dev"
+          },
+          "dependencies": [
+            {
+              "id": "root-dep==1.0.0@editable+[TEMP_DIR]/root-dep"
+            }
+          ]
+        },
+        "root:shared==1.0.0@virtual+[TEMP_DIR]/": {
+          "name": "root",
+          "version": "1.0.0",
+          "source": {
+            "virtual": "[TEMP_DIR]/"
+          },
+          "kind": {
+            "group": "shared"
+          },
+          "dependencies": [
+            {
+              "id": "root-dep==1.0.0@editable+[TEMP_DIR]/root-dep"
+            }
+          ]
+        },
+        "root==1.0.0@virtual+[TEMP_DIR]/": {
+          "name": "root",
+          "version": "1.0.0",
+          "source": {
+            "virtual": "[TEMP_DIR]/"
+          },
+          "kind": "package",
+          "dependencies": [
+            {
+              "id": "member==1.0.0@virtual+[TEMP_DIR]/member"
+            }
+          ],
+          "dependency_groups": [
+            {
+              "name": "dev",
+              "id": "root:dev==1.0.0@virtual+[TEMP_DIR]/"
+            },
+            {
+              "name": "shared",
+              "id": "root:shared==1.0.0@virtual+[TEMP_DIR]/"
+            }
+          ]
+        },
+        "workspace+[TEMP_DIR]/": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/",
+          "dependencies": []
+        }
+      }
+    }
+    "#);
 
     Ok(())
 }
@@ -11460,6 +11680,22 @@ fn frozen_lockfile_recorded_default_groups() -> Result<()> {
     -e ./member-dep
     ");
 
+    uv_snapshot!(context.filters(), context.tree()
+        .args(["--frozen", "--universal"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    root-dep v1.0.0
+    root v1.0.0
+    └── root-dep v1.0.0 (group: docs)
+    member-dep v1.0.0
+    member v1.0.0
+    └── member-dep v1.0.0 (group: docs)
+    implicit v1.0.0
+    empty v1.0.0
+    all v1.0.0
+    └── member-dep v1.0.0 (group: docs)
+    ");
+
     context.temp_dir.child("batch.toml").write_str(indoc! {r#"
         [[export]]
         output-file = "root.txt"
@@ -11505,6 +11741,22 @@ fn frozen_lockfile_recorded_default_groups() -> Result<()> {
     -e ./member-dep
     ");
 
+    uv_snapshot!(context.filters(), context.tree()
+        .args(["--frozen", "--universal", "--preview-features", "frozen-lockfile"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    root-dep v1.0.0
+    root v1.0.0
+    └── root-dep v1.0.0 (group: docs)
+    member-dep v1.0.0
+    member v1.0.0
+    └── member-dep v1.0.0 (group: docs)
+    implicit v1.0.0
+    empty v1.0.0
+    all v1.0.0
+    └── member-dep v1.0.0 (group: docs)
+    ");
+
     // Each batch entry uses its own selected member's defaults.
     uv_snapshot!(context.filters(), frozen_export(&context)
         .args(["--batch", "batch.toml", "--preview-features", "batch-export"]), @"exit_code: 0 (success)");
@@ -11514,6 +11766,7 @@ fn frozen_lockfile_recorded_default_groups() -> Result<()> {
     -e ./member-dep
     -e ./root-dep
     ");
+
     insta::assert_snapshot!(context.read("empty.txt"), @"");
     insta::assert_snapshot!(context.read("implicit.txt"), @"-e ./root-dep");
 
@@ -11645,6 +11898,15 @@ fn frozen_lockfile_metadata_free_default_groups() -> Result<()> {
     exit_code: 0 (success)
     ----- stdout -----
     -e ./dep
+    ");
+
+    uv_snapshot!(context.filters(), context.tree()
+        .args(["--frozen", "--universal", "--preview-features", "frozen-lockfile"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    root v1.0.0
+    └── dep v1.0.0 (group: docs)
+    dep v1.0.0
     ");
 
     Ok(())
@@ -12033,6 +12295,121 @@ fn frozen_lockfile_single_project() -> Result<()> {
     uv_snapshot!(context.filters(), frozen_export(&context)
         .args(["--no-default-groups", "--all-packages", "--no-emit-project"]), @"exit_code: 0 (success)");
 
+    // Universal tree.
+    uv_snapshot!(context.filters(), context.tree()
+        .args(["--frozen", "--no-default-groups", "--preview-features", "frozen-lockfile"])
+        .arg("--python").arg(&context.python_versions[0].1)
+        .args(["--universal"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    root v1.0.0
+    ");
+
+    // Filtered tree.
+    uv_snapshot!(context.filters(), context.tree()
+        .args(["--frozen", "--no-default-groups", "--preview-features", "frozen-lockfile"])
+        .arg("--python").arg(&context.python_versions[0].1), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    root v1.0.0
+    ");
+
+    // Universal JSON tree.
+    uv_snapshot!(context.filters(), context.tree()
+        .args(["--frozen", "--no-default-groups", "--preview-features", "frozen-lockfile"])
+        .arg("--python").arg(&context.python_versions[0].1)
+        .args(["--universal", "--format", "json", "--preview-features", "json-output"]), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "workspace_root": "[TEMP_DIR]/",
+      "workspace": {
+        "path": "[TEMP_DIR]/",
+        "id": "workspace+[TEMP_DIR]/"
+      },
+      "roots": [
+        {
+          "id": "root==1.0.0@editable+[TEMP_DIR]/"
+        }
+      ],
+      "inverted": false,
+      "members": [
+        {
+          "name": "root",
+          "path": "[TEMP_DIR]/",
+          "id": "root==1.0.0@editable+[TEMP_DIR]/"
+        }
+      ],
+      "resolution": {
+        "root==1.0.0@editable+[TEMP_DIR]/": {
+          "name": "root",
+          "version": "1.0.0",
+          "source": {
+            "editable": "[TEMP_DIR]/"
+          },
+          "kind": "package",
+          "dependencies": []
+        },
+        "workspace+[TEMP_DIR]/": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/",
+          "dependencies": []
+        }
+      }
+    }
+    "#);
+
+    // Filtered JSON tree.
+    uv_snapshot!(context.filters(), context.tree()
+        .args(["--frozen", "--no-default-groups", "--preview-features", "frozen-lockfile"])
+        .arg("--python").arg(&context.python_versions[0].1)
+        .args(["--format", "json", "--preview-features", "json-output"]), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "workspace_root": "[TEMP_DIR]/",
+      "workspace": {
+        "path": "[TEMP_DIR]/",
+        "id": "workspace+[TEMP_DIR]/"
+      },
+      "roots": [
+        {
+          "id": "root==1.0.0@editable+[TEMP_DIR]/"
+        }
+      ],
+      "inverted": false,
+      "members": [
+        {
+          "name": "root",
+          "path": "[TEMP_DIR]/",
+          "id": "root==1.0.0@editable+[TEMP_DIR]/"
+        }
+      ],
+      "resolution": {
+        "root==1.0.0@editable+[TEMP_DIR]/": {
+          "name": "root",
+          "version": "1.0.0",
+          "source": {
+            "editable": "[TEMP_DIR]/"
+          },
+          "kind": "package",
+          "dependencies": []
+        },
+        "workspace+[TEMP_DIR]/": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/",
+          "dependencies": []
+        }
+      }
+    }
+    "#);
+
     Ok(())
 }
 
@@ -12237,6 +12614,14 @@ fn frozen_lockfile_non_project_workspace() -> Result<()> {
     ----- stdout -----
     -e ./member
     -e ./other
+    ");
+
+    uv_snapshot!(context.filters(), context.tree()
+        .args(["--frozen", "--universal", "--preview-features", "frozen-lockfile"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    other v1.0.0
+    member v1.0.0
     ");
 
     // A selected member has its own recorded defaults.

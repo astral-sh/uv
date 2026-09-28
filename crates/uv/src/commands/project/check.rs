@@ -30,9 +30,9 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectInterpreter,
-    PythonRequirementSource, ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
-    validate_python_requirement,
+    LinkErrorReporting, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectEnvironmentTarget,
+    ProjectInterpreter, PythonRequirementSource, ScriptEnvironment, ScriptInterpreter,
+    UniversalState, WorkspacePython, validate_python_requirement,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, UvError, project};
@@ -546,7 +546,7 @@ pub(crate) async fn check(
             .await?;
             Some(
                 ProjectInterpreter::discover(
-                    project.workspace(),
+                    ProjectEnvironmentTarget::from(project.workspace()),
                     &groups,
                     workspace_python,
                     &client_builder,

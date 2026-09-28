@@ -13,6 +13,156 @@ use uv_static::EnvVars;
 use uv_test::TestContext;
 use uv_test::uv_snapshot;
 
+/// Trees require a lockfile with revision 5 or later.
+#[test]
+fn tree_lockfile_requires_revision() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 4
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "root"
+        version = "1.0.0"
+        source = { virtual = "." }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.tree()
+        .args(["--frozen", "--universal", "--preview-features", "frozen-lockfile", "--all-groups"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Frozen lockfile discovery requires a lockfile with revision 5 or later; run `uv lock` to update it
+    ");
+    Ok(())
+}
+
+/// A filtered lockfile tree uses the project Python version file.
+#[test]
+fn tree_lockfile_python_version() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.13", "3.12"]);
+    context
+        .temp_dir
+        .child(".python-version")
+        .write_str("3.12")?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "older; python_version < '3.13'",
+            "newer; python_version >= '3.13'",
+        ]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.workspace]
+        members = ["older", "newer"]
+
+        [tool.uv.sources]
+        older = { workspace = true }
+        newer = { workspace = true }
+    "#})?;
+    context
+        .temp_dir
+        .child("older/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "older"
+        version = "1.0.0"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+    context
+        .temp_dir
+        .child("newer/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "newer"
+        version = "1.0.0"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+    context.lock().arg("--offline").assert().success();
+
+    uv_snapshot!(context.filters(), context.tree().args(["--frozen", "--package", "root"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    root v1.0.0
+    └── older v1.0.0
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    ");
+    // Remove the manifests so Python selection must use the version file and lockfile.
+    fs_err::remove_file(context.temp_dir.join("pyproject.toml"))?;
+    fs_err::remove_file(context.temp_dir.join("older/pyproject.toml"))?;
+    fs_err::remove_file(context.temp_dir.join("newer/pyproject.toml"))?;
+
+    uv_snapshot!(context.filters(), context.tree()
+        .args(["--frozen", "--package", "root"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    root v1.0.0
+    └── older v1.0.0
+
+    ----- stderr -----
+    warning: Using `uv.lock` without a `pyproject.toml` is experimental and may change without warning. Pass `--preview-features frozen-lockfile` to disable this warning.
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    ");
+    uv_snapshot!(context.filters(), context.tree()
+        .args(["--frozen", "--preview-features", "frozen-lockfile", "--outdated"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: `--outdated` is not supported without a `pyproject.toml`
+    ");
+    Ok(())
+}
+
+/// The interpreter for a filtered lockfile tree must satisfy the lock's Python requirement.
+#[test]
+fn tree_lockfile_incompatible_python() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12", "3.13"]);
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        requires-python = ">=3.12,<3.13"
+
+        [tool.uv]
+        package = false
+    "#})?;
+    context
+        .lock()
+        .args(["--offline", "--python", "3.12"])
+        .assert()
+        .success();
+
+    // Remove the manifest to validate Python against the lockfile requirement.
+    fs_err::remove_file(context.temp_dir.join("pyproject.toml"))?;
+
+    uv_snapshot!(context.filters(), context.tree()
+        .args(["--frozen", "--preview-features", "frozen-lockfile", "--python", "3.13"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Using CPython 3.13.[X] interpreter at: [PYTHON-3.13]
+    error: The requested interpreter resolved to Python 3.13.[X], which is incompatible with the project's Python requirement: `==3.12.*` (from `requires-python` in `uv.lock`).
+    ");
+    Ok(())
+}
+
 /// The workspace discovered while resolving settings is reused by `uv tree`.
 #[test]
 fn tree_reuses_settings_workspace_discovery() -> Result<()> {

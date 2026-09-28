@@ -10,8 +10,8 @@ use crate::commands::pip::resolution_markers;
 use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    ProjectEnvironmentPolicy, ProjectInterpreter, ScriptInterpreter, UniversalState,
-    WorkspacePython,
+    ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter, ScriptInterpreter,
+    UniversalState, WorkspacePython,
 };
 use crate::commands::reporters::AuditReporter;
 use crate::printer::Printer;
@@ -157,7 +157,7 @@ pub(crate) async fn audit(
                 )
                 .await?;
                 ProjectInterpreter::discover(
-                    workspace,
+                    ProjectEnvironmentTarget::from(workspace),
                     &groups,
                     workspace_python,
                     &client_builder,
