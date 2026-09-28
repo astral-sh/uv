@@ -21474,6 +21474,52 @@ fn lock_writes_without_package_metadata() -> Result<()> {
     Ok(())
 }
 
+/// Reuse a metadata-free lock when a conflicting group contains a package with and without an extra.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_without_metadata_conflicting_group_with_and_without_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        a = ["anyio", "anyio[trio]"]
+        b = []
+
+        [tool.uv]
+        conflicts = [[{ group = "a" }, { group = "b" }]]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Validate an unrelated requested extra without expanding independent conflict sets.
 #[cfg(feature = "test-universal")]
 #[test]
