@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{Instrument, Span, debug, info_span, instrument, trace, warn};
 
 use uv_cache::{CacheEntry, Freshness};
-use uv_fs::write_atomic;
+use uv_fs::write_atomic_sync;
 use uv_redacted::DisplaySafeUrl;
 
 use crate::base_client::CertificateSource;
@@ -29,7 +29,7 @@ use crate::{BaseClient, Error, ErrorKind, OwnedArchive, ProblemDetails, RetrySta
 /// [`CachedClient::get_cacheable_with_retry`]. If your types fit into the
 /// `rkyvutil::OwnedArchive` mold, then an implementation of `Cacheable` is
 /// already provided for that type.
-pub(crate) trait Cacheable: Sized {
+pub(crate) trait Cacheable: Sized + Send + 'static {
     /// This associated type permits customizing what the "output" type of
     /// deserialization is. It can be identical to `Self`.
     ///
@@ -235,7 +235,7 @@ impl CachedClient {
     /// allowed to make subsequent requests, e.g. through the uncached client.
     #[instrument(skip_all)]
     async fn get_cacheable<
-        Payload: Cacheable + 'static,
+        Payload: Cacheable,
         CallBackError: std::error::Error + 'static,
         Callback: AsyncFnOnce(Response) -> Result<Payload, CallBackError>,
     >(
@@ -335,18 +335,19 @@ impl CachedClient {
                 let refresh_cache =
                     info_span!("refresh_cache", file = %cache_entry.path().display());
                 async {
-                    let data_with_cache_policy_bytes =
-                        DataWithCachePolicy::serialize(&new_policy, &cached.data)?;
-                    write_atomic(cache_entry.path(), data_with_cache_policy_bytes)
-                        .await
-                        .map_err(ErrorKind::CacheWrite)?;
-                    match self
-                        .0
-                        .cache_read_runtime()
-                        .spawn_blocking(move || Payload::from_aligned_bytes(cached.data))
-                        .await
-                        .expect("cache payload decoding task panicked")
-                    {
+                    let path = cache_entry.path().to_path_buf();
+                    let span = Span::current();
+                    let payload = tokio::task::spawn_blocking(move || {
+                        span.in_scope(|| {
+                            let bytes = DataWithCachePolicy::serialize(&new_policy, &cached.data)?;
+                            write_atomic_sync(path, bytes).map_err(ErrorKind::CacheWrite)?;
+                            // Keep decoding errors separate so a corrupt payload can be refetched.
+                            Ok::<_, Error>(Payload::from_aligned_bytes(cached.data))
+                        })
+                    })
+                    .await
+                    .expect("cache refresh task panicked")?;
+                    match payload {
                         Ok(payload) => Ok(payload),
                         Err(err) => {
                             warn!(
@@ -474,26 +475,25 @@ impl CachedClient {
         let Some(cache_policy) = cache_policy else {
             return Ok(data.into_target());
         };
-        async {
-            fs_err::tokio::create_dir_all(cache_entry.dir())
-                .await
-                .map_err(ErrorKind::CacheWrite)?;
-            let data_with_cache_policy_bytes =
-                DataWithCachePolicy::serialize(&cache_policy, &data.to_bytes()?)?;
-            write_atomic(cache_entry.path(), data_with_cache_policy_bytes)
-                .await
-                .map_err(ErrorKind::CacheWrite)?;
-            Ok(data.into_target())
-        }
-        .instrument(new_cache)
+        let cache_entry = cache_entry.clone();
+        tokio::task::spawn_blocking(move || {
+            new_cache.in_scope(|| {
+                fs_err::create_dir_all(cache_entry.dir()).map_err(ErrorKind::CacheWrite)?;
+                let bytes = DataWithCachePolicy::serialize(&cache_policy, &data.to_bytes()?)?;
+                write_atomic_sync(cache_entry.path(), bytes).map_err(ErrorKind::CacheWrite)?;
+                Ok::<_, Error>(data.into_target())
+            })
+        })
         .await
+        .expect("cache write task panicked")
+        .map_err(CachedClientError::Client)
     }
 
     /// Reads the cache policy and decodes a fresh payload in one blocking task.
     ///
     /// Stale payloads remain encoded until revalidation confirms they can be reused.
     #[instrument(name = "read_and_parse_cache", skip_all, fields(file = %cache_entry.path().display()))]
-    async fn read_cache<Payload: Cacheable + 'static>(
+    async fn read_cache<Payload: Cacheable>(
         &self,
         mut req: Request,
         cache_entry: &CacheEntry,
@@ -563,7 +563,7 @@ impl CachedClient {
     /// The task returns the request it owns while checking the policy. `Ok(None)` means the entry
     /// belongs to a different request; errors indicate a broken entry for the caller to remove.
     #[instrument(name = "read_and_decode_stale_cache", skip_all, fields(file = %cache_entry.path().display()))]
-    async fn read_and_decode_stale_cache<Payload: Cacheable + 'static>(
+    async fn read_and_decode_stale_cache<Payload: Cacheable>(
         &self,
         req: Request,
         cache_entry: &CacheEntry,
@@ -739,7 +739,7 @@ impl CachedClient {
     /// See: <https://github.com/TrueLayer/reqwest-middleware/blob/8a494c165734e24c62823714843e1c9347027e8a/reqwest-retry/src/middleware.rs#L137>
     #[instrument(skip_all)]
     pub(crate) async fn get_cacheable_with_retry<
-        Payload: Cacheable + 'static,
+        Payload: Cacheable,
         CallBackError: std::error::Error + 'static,
         Callback: AsyncFn(Response, &mut RetryState) -> Result<Payload, CallBackError>,
     >(
