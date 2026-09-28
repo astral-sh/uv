@@ -123,6 +123,8 @@ fn python_install() {
     bin_python.assert(predicate::path::missing());
 }
 
+/// Regression test for a panic when `/install` in a sysconfig value is followed by a non-ASCII
+/// character.
 #[cfg(unix)]
 #[test]
 fn python_install_sysconfig_prefix() -> anyhow::Result<()> {
