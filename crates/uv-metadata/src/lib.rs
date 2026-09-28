@@ -103,15 +103,16 @@ pub fn find_archive_dist_info<'a, T: Copy>(
     Ok((payload, DistInfoStem::new(dist_info_stem, &filename.name)?))
 }
 
-/// Return the validated [`DistInfoStem`] if the path is a `METADATA` entry.
-fn metadata_entry<'a>(
+/// Return the validated [`DistInfoStem`] if the path is the requested entry.
+fn dist_info_entry<'a>(
     path: &'a str,
     filename: &WheelFilename,
+    entry_name: &str,
 ) -> Result<Option<DistInfoStem<'a>>, Error> {
     let Some((dist_info_dir, file)) = path.split_once('/') else {
         return Ok(None);
     };
-    if file != "METADATA" {
+    if file != entry_name {
         return Ok(None);
     }
     let Some(dist_info_stem) = dist_info_dir.strip_suffix(".dist-info") else {
@@ -202,14 +203,25 @@ pub async fn read_metadata_async_stream<R: futures::AsyncRead + Unpin>(
     debug_path: &str,
     reader: R,
 ) -> Result<ResolutionMetadata, Error> {
+    let contents = read_dist_info_file_async_stream(filename, "METADATA", reader).await?;
+    ResolutionMetadata::parse_metadata(&contents)
+        .map_err(|err| Error::InvalidMetadata(debug_path.to_string(), Box::new(err)))
+}
+
+/// Read a named `.dist-info` file from a wheel without seeking.
+async fn read_dist_info_file_async_stream<R: futures::AsyncRead + Unpin>(
+    filename: &WheelFilename,
+    entry_name: &str,
+    reader: R,
+) -> Result<Vec<u8>, Error> {
     let reader = futures::io::BufReader::with_capacity(128 * 1024, reader);
     let mut zip = async_zip::base::read::stream::ZipFileReader::new(reader);
 
     while let Some(mut entry) = zip.next_with_entry().await? {
-        // Find the `METADATA` entry.
+        // Find the requested `.dist-info` entry.
         let path = entry.reader().entry().filename().as_str()?.to_owned();
 
-        if metadata_entry(&path, filename)?.is_some() {
+        if dist_info_entry(&path, filename, entry_name)?.is_some() {
             let mut reader = entry.reader_mut().compat();
             let mut contents = Vec::new();
             reader.read_to_end(&mut contents).await.map_err(Error::Io)?;
@@ -237,9 +249,7 @@ pub async fn read_metadata_async_stream<R: futures::AsyncRead + Unpin>(
                 }
             }
 
-            let metadata = ResolutionMetadata::parse_metadata(&contents)
-                .map_err(|err| Error::InvalidMetadata(debug_path.to_string(), Box::new(err)))?;
-            return Ok(metadata);
+            return Ok(contents);
         }
 
         // Close current file to get access to the next one. See docs:
@@ -267,7 +277,7 @@ pub fn read_flat_wheel_metadata(
 
 #[cfg(test)]
 mod test {
-    use super::{DistInfoStem, find_archive_dist_info, metadata_entry};
+    use super::{DistInfoStem, dist_info_entry, find_archive_dist_info};
     use std::str::FromStr;
     use uv_distribution_filename::WheelFilename;
 
@@ -305,7 +315,7 @@ mod test {
             let ((), archive_name) =
                 find_archive_dist_info(&filename, [((), path.as_str())].into_iter())
                     .expect("accepted archive directory name");
-            let stream_name = metadata_entry(&path, &filename)
+            let stream_name = dist_info_entry(&path, &filename, "METADATA")
                 .expect("accepted streaming directory name")
                 .expect("metadata entry");
             let owned_name = DistInfoStem::new(name.to_owned(), &filename.name)
@@ -332,7 +342,7 @@ mod test {
             expected
         );
         assert_eq!(
-            metadata_entry(&path, &filename)
+            dist_info_entry(&path, &filename, "METADATA")
                 .expect_err("mismatched streaming directory name")
                 .to_string(),
             expected
@@ -345,7 +355,7 @@ mod test {
         );
 
         assert!(
-            metadata_entry("other_package-1.0.dist-info/WHEEL", &filename)
+            dist_info_entry("other_package-1.0.dist-info/WHEEL", &filename, "METADATA")
                 .expect("non-metadata entry")
                 .is_none()
         );
