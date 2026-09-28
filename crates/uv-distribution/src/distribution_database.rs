@@ -77,6 +77,7 @@ use crate::{Error, FirstPartyPackages, LocalWheel, Reporter, RequiresDist};
 /// operation especially, as well as respecting concurrency limits.
 pub struct DistributionDatabase<'a, Context: BuildContext> {
     build_context: &'a Context,
+    build_stack: Option<&'a BuildStack>,
     recorder: Option<ResolutionRecorder>,
     builder: SourceDistributionBuilder<'a, Context>,
     client: ManagedClient<'a>,
@@ -99,6 +100,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         Self {
             recorder: None,
             build_context,
+            build_stack: None,
             builder: SourceDistributionBuilder::new(build_context),
             client: ManagedClient::new(client, downloads_semaphore),
             reporter: None,
@@ -154,6 +156,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     pub fn with_build_stack(self, build_stack: &'a BuildStack) -> Self {
         Self {
             builder: self.builder.with_build_stack(build_stack),
+            build_stack: Some(build_stack),
             ..self
         }
     }
@@ -1054,6 +1057,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         name: &VariantNamespace,
         provider: &Provider,
     ) -> Result<Arc<VariantProviderOutput>, Error> {
+        let mut build_stack = self.build_stack.cloned().unwrap_or_default();
+        if !build_stack.insert_provider(provider.clone()) {
+            return Err(Error::CyclicVariantProvider(name.clone()));
+        }
         let config = if let Some(config) = self
             .build_context
             .variants()
@@ -1068,7 +1075,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             let backend_name = provider.plugin_api.clone().unwrap_or(name.to_string());
             let builder = self
                 .build_context
-                .setup_variants(backend_name, provider, BuildOutput::Debug)
+                .setup_variants(backend_name, provider, BuildOutput::Debug, build_stack)
                 .await?;
             let config = builder.query().await?;
             trace!(

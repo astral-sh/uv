@@ -63,6 +63,7 @@ impl VariantBuild {
         backend: &Provider,
         interpreter: &Interpreter,
         build_context: &impl BuildContext,
+        build_stack: &BuildStack,
         mut environment_variables: FxHashMap<OsString, OsString>,
         level: BuildOutput,
         concurrent_build_slots: Arc<Semaphore>,
@@ -104,13 +105,13 @@ impl VariantBuild {
                 .map(Requirement::from)
                 .collect::<Vec<_>>();
             let resolved_requirements = build_context
-                .resolve(&requirements, &BuildStack::default())
+                .resolve(&requirements, build_stack)
                 .await
                 .map_err(|err| {
                     Error::RequirementsResolve("`variant.providers.requires`", err.into())
                 })?;
             build_context
-                .install(&resolved_requirements, &venv, &BuildStack::default())
+                .install(&resolved_requirements, &venv, build_stack)
                 .await
                 .map_err(|err| {
                     Error::RequirementsInstall("`variant.providers.requires`", err.into())

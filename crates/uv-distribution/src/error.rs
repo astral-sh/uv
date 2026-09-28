@@ -80,6 +80,8 @@ pub enum Error {
     CacheInfo(#[from] uv_cache_info::CacheInfoError),
 
     // Build error
+    #[error("Cyclic build dependency detected for `{0}`")]
+    CyclicBuildDependency(String),
     #[error(transparent)]
     Build(AnyErrorBuild),
     #[error("Built wheel has an invalid filename")]
@@ -139,6 +141,8 @@ pub enum Error {
         declared: VariantNamespace,
         actual: VariantNamespace,
     },
+    #[error("Cyclic variant provider dependency detected for `{0}`")]
+    CyclicVariantProvider(VariantNamespace),
     #[error("Failed to read variant lock")]
     VariantLockRead(#[source] std::io::Error),
     #[error("Failed to parse variant lock: {}", _0.user_display())]
@@ -334,6 +338,8 @@ impl Error {
             | Self::WheelVariantMetadata(_)
             | Self::WheelVariantMismatch { .. }
             | Self::WheelVariantNamespaceMismatch { .. }
+            | Self::CyclicVariantProvider(_)
+            | Self::CyclicBuildDependency(_)
             | Self::VariantLockRead(_)
             | Self::VariantLockParse(..)
             | Self::VariantLockVersion(..)

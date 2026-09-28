@@ -18,6 +18,7 @@ use uv_normalize::PackageName;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_variants::VariantProviderOutput;
 use uv_variants::cache::VariantProviderCache;
+use uv_variants::variants_json::Provider;
 use uv_workspace::WorkspaceCache;
 
 use crate::{BuildArena, BuildIsolation, ResolvedRequirements};
@@ -210,8 +211,9 @@ pub trait BuildContext {
     fn setup_variants<'a>(
         &'a self,
         backend_name: String,
-        provider: &'a uv_variants::variants_json::Provider,
+        provider: &'a Provider,
         build_output: BuildOutput,
+        build_stack: BuildStack,
     ) -> impl Future<Output = Result<Self::VariantsBuilder, anyhow::Error>> + 'a;
 }
 
@@ -340,17 +342,31 @@ impl Deref for AnyErrorBuild {
     }
 }
 
-/// The stack of packages being built.
+/// The packages being built, variant providers being initialized, and source cache locks held.
 #[derive(Debug, Clone, Default)]
-pub struct BuildStack(FxHashSet<DistributionId>);
+pub struct BuildStack {
+    distributions: FxHashSet<DistributionId>,
+    providers: FxHashSet<Provider>,
+    source_locks: FxHashSet<PathBuf>,
+}
 
 impl BuildStack {
     pub fn contains(&self, id: &DistributionId) -> bool {
-        self.0.contains(id)
+        self.distributions.contains(id)
     }
 
     /// Push a package onto the stack.
     pub fn insert(&mut self, id: DistributionId) -> bool {
-        self.0.insert(id)
+        self.distributions.insert(id)
+    }
+
+    /// Push a provider onto the stack, returning false if it is already being initialized.
+    pub fn insert_provider(&mut self, provider: Provider) -> bool {
+        self.providers.insert(provider)
+    }
+
+    /// Record a source cache lock, returning false if an ancestor build already holds it.
+    pub fn insert_source_lock(&mut self, path: PathBuf) -> bool {
+        self.source_locks.insert(path)
     }
 }

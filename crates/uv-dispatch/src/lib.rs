@@ -696,12 +696,18 @@ impl BuildContext for BuildDispatch<'_> {
         backend_name: String,
         backend: &'data Provider,
         build_output: BuildOutput,
+        build_stack: BuildStack,
     ) -> anyhow::Result<VariantBuild> {
+        // Provider requirements can refer back to packages whose metadata is still being
+        // resolved. Separate in-flight caches let the build stack detect recursive providers
+        // without waiting for the parent resolution.
+        let build_context = self.fork(self.hasher);
         let builder = VariantBuild::setup(
             backend_name,
             backend,
             self.interpreter,
-            self,
+            &build_context,
+            &build_stack,
             self.build_extra_env_vars.clone(),
             build_output,
             self.concurrency.builds_semaphore.clone(),
