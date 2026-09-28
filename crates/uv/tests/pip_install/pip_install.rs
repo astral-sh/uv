@@ -235,6 +235,29 @@ fn install_wheel_cache_incompatible_with_older_uv() -> Result<()> {
 }
 
 #[test]
+fn whitespace_only_requirement() {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filter(("\u{a0}", "[WHITESPACE]"))
+        .with_filter(("\u{2003}", "[WHITESPACE]"));
+
+    allow_duplicates! {
+        for whitespace in ["\u{a0}", "\u{2003}"] {
+            uv_snapshot!(context.filters(), context.pip_install()
+                .arg(whitespace)
+                .arg("--system")
+                .arg("--dry-run"), @"
+            exit_code: 2 (failure)
+            ----- stderr -----
+            error: Failed to parse: `[WHITESPACE]`
+              cause: Empty field is not allowed for PEP508
+
+                     ^
+            ");
+        }
+    }
+}
+
+#[test]
 fn missing_requirements_txt() {
     let context = uv_test::test_context!("3.12");
     let requirements_txt = context.temp_dir.child("requirements.txt");
