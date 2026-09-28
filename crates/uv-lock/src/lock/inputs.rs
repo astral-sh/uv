@@ -1,9 +1,13 @@
 use std::collections::BTreeSet;
+use std::mem;
 
-use uv_configuration::{ExcludeDependency, Override};
-use uv_distribution_types::{Requirement, ResolutionLookups, StaticMetadata};
+use uv_configuration::{ExcludeDependency, NormalizedConstraints, Override};
+use uv_distribution_types::{Requirement, RequirementSource, ResolutionLookups, StaticMetadata};
 use uv_normalize::PackageName;
+use uv_pep440::VersionSpecifier;
+use uv_preview::PreviewFeature;
 
+use super::requirements::normalize_collection;
 use super::{Lock, Package};
 
 impl Lock {
@@ -11,11 +15,12 @@ impl Lock {
     ///
     /// Consulted settings can affect backtracking even when their packages are absent from the
     /// final graph. Retain complete parent scopes and metadata declarations for each relevant name.
-    /// Runtime constraints are validated against the graph instead of retaining their declarations.
     #[must_use]
     pub fn prune_unused(mut self, lookups: ResolutionLookups) -> Self {
         let filter = ManifestFilter::from_resolution(&self, lookups);
-        self.manifest.constraints.clear();
+        self.manifest
+            .constraints
+            .retain(|entry| filter.includes_constraint(entry));
         self.manifest
             .overrides
             .retain(|entry| filter.includes_override(entry));
@@ -32,6 +37,50 @@ impl Lock {
                 .chain(&filter.lookups.exclude_newer),
         );
         self
+    }
+
+    /// Omit redundant constraints before normalizing the remaining declarations.
+    pub(super) fn prune_constraints(mut self) -> Self {
+        let constraints = mem::take(&mut self.manifest.constraints);
+        self.manifest.constraints = normalize_collection::<_, NormalizedConstraints>(
+            constraints
+                .into_iter()
+                .filter(|constraint| !self.can_omit_constraint(constraint)),
+            uv_preview::is_enabled(PreviewFeature::LockfileNormalization),
+        );
+        self
+    }
+
+    /// Return whether a plain version bound is satisfied by every stable locked version.
+    ///
+    /// Source declarations and prerelease specifiers can affect candidate eligibility, so their
+    /// changes must trigger resolution. Bounds on dynamic or prerelease versions also remain
+    /// recorded. Check every version regardless of markers: an inapplicable bound that does not
+    /// contain a locked version must be retained to avoid resolving unchanged inputs repeatedly.
+    pub(super) fn can_omit_constraint(&self, constraint: &Requirement) -> bool {
+        let RequirementSource::Registry {
+            specifier,
+            index: None,
+            ..
+        } = &constraint.source
+        else {
+            return false;
+        };
+        if specifier.is_empty() {
+            return true;
+        }
+        if specifier.iter().any(VersionSpecifier::any_prerelease) {
+            return false;
+        }
+        self.packages_for_name(&constraint.name)
+            .iter()
+            .all(|package| {
+                package
+                    .id
+                    .version
+                    .as_ref()
+                    .is_some_and(|version| !version.any_prerelease() && specifier.contains(version))
+            })
     }
 }
 
