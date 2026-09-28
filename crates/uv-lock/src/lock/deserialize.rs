@@ -341,6 +341,7 @@ enum MapKind {
     OptionsExcludeNewerPackage,
     Manifest,
     ManifestDefaultGroups,
+    ManifestGroupMetadata,
     ManifestDependencyGroups,
     ManifestDependencyMetadata,
     Package,
@@ -470,6 +471,7 @@ impl<'de> DocumentMapAccess<'_, 'de> {
             (
                 MapKind::Root,
                 "[manifest.default-groups]"
+                | "[manifest.group-metadata]"
                 | "[manifest.dependency-groups]"
                 | "[[manifest.dependency-metadata]]",
             ) => {
@@ -499,6 +501,11 @@ impl<'de> DocumentMapAccess<'_, 'de> {
                 "default-groups",
                 Pending::Map(MapKind::ManifestDefaultGroups),
                 "[manifest.default-groups]",
+            )),
+            (MapKind::Manifest, "[manifest.group-metadata]") => Some((
+                "group-metadata",
+                Pending::Map(MapKind::ManifestGroupMetadata),
+                "[manifest.group-metadata]",
             )),
             (MapKind::Manifest, "[[manifest.dependency-metadata]]") => Some((
                 "dependency-metadata",

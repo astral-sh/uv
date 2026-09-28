@@ -233,6 +233,7 @@ Ok(
         manifest: ResolverManifest {
             members: {},
             default_groups: {},
+            group_metadata: {},
             requirements: {},
             dependency_groups: {},
             constraints: {},
