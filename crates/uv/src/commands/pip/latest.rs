@@ -89,9 +89,10 @@ impl LatestClient<'_> {
 
         // Skip wheels that aren't compatible with the current platform.
         if let DistFilename::WheelFilename(filename) = filename
-            && self
-                .tags
-                .is_some_and(|tags| !filename.compatibility(tags).is_compatible())
+            && (filename.variant().is_some()
+                || self
+                    .tags
+                    .is_some_and(|tags| !filename.compatibility(tags).is_compatible()))
         {
             return false;
         }

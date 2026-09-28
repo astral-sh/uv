@@ -10355,6 +10355,9 @@ fn is_wheel_unreachable_for_marker(
     marker: &UniversalMarker,
     tags: Option<&Tags>,
 ) -> bool {
+    if filename.variant().is_some() {
+        return true;
+    }
     if let Some(tags) = tags
         && !filename.compatibility(tags).is_compatible()
     {

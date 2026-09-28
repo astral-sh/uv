@@ -137,6 +137,7 @@ fn parse_expanded_tag(tag: &str) -> Result<WheelTag, ExpandedTagError> {
                     .map(PlatformTag::from_str)
                     .filter_map(Result::ok)
                     .collect(),
+                variant: None,
                 repr: tag.into(),
             }),
         })
