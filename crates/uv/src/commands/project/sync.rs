@@ -765,6 +765,9 @@ pub(crate) async fn do_sync<'a>(
             )
             .await?
         }
+        InstallTarget::Lockfile { .. } => {
+            return Err(anyhow::anyhow!("Lockfile-only targets cannot be synced").into());
+        }
         InstallTarget::Script { script, .. } => {
             // Try to get extra build dependencies from the script metadata
             let resolver_settings = ResolverSettings {

@@ -282,6 +282,7 @@ fn metadata_for_target(target: InstallTarget<'_>) -> Result<Metadata> {
             Ok(Metadata::from_lock(workspace, lock)?)
         }
         InstallTarget::Script { script, lock } => Ok(Metadata::from_script(&script.path, lock)?),
+        InstallTarget::Lockfile { .. } => anyhow::bail!("Lockfile-only metadata is not supported"),
     }
 }
 

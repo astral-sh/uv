@@ -8,7 +8,7 @@ use insta::assert_snapshot;
 use std::collections::BTreeMap;
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 use std::path::Path;
-use std::process::Stdio;
+use std::process::{Command, Stdio};
 #[cfg(feature = "test-universal")]
 use uv_fs::Simplified;
 use uv_static::EnvVars;
@@ -20,7 +20,7 @@ use uv_test::packse::generate_wheel;
 use uv_test::packse::scenario::Scenario;
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 use uv_test::{READ_ONLY_GITHUB_SSH_DEPLOY_KEY, READ_ONLY_GITHUB_TOKEN, decode_token};
-use uv_test::{apply_filters, uv_snapshot};
+use uv_test::{TestContext, apply_filters, uv_snapshot};
 
 /// The workspace discovered while resolving settings is reused by a normal `uv export`.
 #[test]
@@ -11004,6 +11004,1446 @@ fn export_batch_manifest_validation() -> Result<()> {
     ----- stderr -----
     warning: `uv export --batch` is experimental and may change without warning. Pass `--preview-features batch-export` to disable this warning.
     error: `only-group` cannot be combined with `extra` or `all-extras`
+    ");
+
+    Ok(())
+}
+
+/// Export a frozen lockfile offline, omitting headers, annotations, and hashes from snapshots.
+fn frozen_export(context: &TestContext) -> Command {
+    let mut command = context.export();
+    command.args([
+        "--frozen",
+        "--offline",
+        "--preview-features",
+        "frozen-lockfile",
+        "--no-header",
+        "--no-annotate",
+        "--no-hashes",
+    ]);
+    command
+}
+
+/// A frozen lock can be exported without any project manifests.
+#[test]
+fn frozen_lockfile_without_manifests() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin();
+    let root = context.temp_dir.path();
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["member"]
+
+        [dependency-groups]
+        shared = ["root-dep"]
+        dev = ["root-dep"]
+        empty = []
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.workspace]
+        members = ["member", "dep", "member-dep", "root-dep"]
+
+        [tool.uv.sources]
+        member = { workspace = true }
+        dep = { workspace = true }
+        member-dep = { workspace = true }
+        root-dep = { workspace = true }
+    "#})?;
+
+    context
+        .temp_dir
+        .child("dep/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "dep"
+        version = "1.0.0"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    context
+        .temp_dir
+        .child("member-dep/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "member-dep"
+        version = "1.0.0"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    context
+        .temp_dir
+        .child("root-dep/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root-dep"
+        version = "1.0.0"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    let member = context.temp_dir.child("member");
+    member.create_dir_all()?;
+    member.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "1.0.0"
+        dependencies = ["dep"]
+
+        [project.optional-dependencies]
+        feature = ["member-dep"]
+
+        [dependency-groups]
+        shared = ["member-dep"]
+        empty = []
+
+        [tool.uv]
+        package = false
+    "#})?;
+
+    context.lock().arg("--offline").assert().success();
+
+    context.temp_dir.child("batch.toml").write_str(indoc! {r#"
+        [[export]]
+        output-file = "batch-extra.txt"
+        package = ["member"]
+        extra = ["feature"]
+        no-default-groups = true
+
+        [[export]]
+        output-file = "batch-group.txt"
+        package = ["member"]
+        only-group = ["shared"]
+    "#})?;
+
+    // Remove every manifest so package, extra, and group selection must come from the lockfile.
+    fs_err::remove_file(root.join("pyproject.toml"))?;
+    fs_err::remove_file(root.join("member/pyproject.toml"))?;
+    fs_err::remove_file(root.join("dep/pyproject.toml"))?;
+    fs_err::remove_file(root.join("member-dep/pyproject.toml"))?;
+    fs_err::remove_file(root.join("root-dep/pyproject.toml"))?;
+
+    // Select a member.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--package", "member", "--no-default-groups"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./dep
+    ");
+
+    // Select an extra.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--package", "member", "--no-default-groups", "--extra", "feature"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./dep
+    -e ./member-dep
+    ");
+
+    // Select a member group.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--package", "member", "--only-group", "shared"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member-dep
+    ");
+
+    // Select an empty group.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--package", "member", "--only-group", "empty"]), @"exit_code: 0 (success)");
+
+    // Select an inherited group.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--package", "member", "--only-group", "dev"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./root-dep
+    ");
+
+    // Select multiple packages.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--package", "member", "--package", "dep", "--no-default-groups"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./dep
+    ");
+
+    // Select the workspace.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--all-packages", "--no-default-groups"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./dep
+    -e ./member-dep
+    -e ./root-dep
+    ");
+
+    // Export several selections in a batch.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--batch", "batch.toml", "--preview-features", "batch-export"]), @"exit_code: 0 (success)");
+
+    insta::assert_snapshot!(context.read("batch-extra.txt"), @"
+    -e ./dep
+    -e ./member-dep
+    ");
+    insta::assert_snapshot!(context.read("batch-group.txt"), @"-e ./member-dep");
+
+    // A missing group is an error.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--no-default-groups", "--package", "member", "--only-group", "missing"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Group `missing` is not defined in the project's `dependency-groups` table
+    ");
+
+    // A missing extra is an error.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--no-default-groups", "--package", "member", "--extra", "missing"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Extra `missing` is not defined in any project's `optional-dependencies` table
+    ");
+
+    // A missing package is an error.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--no-default-groups", "--package", "missing"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Package `missing` not found in lockfile workspace
+    ");
+
+    Ok(())
+}
+
+/// Configured index locations cannot be inferred from a lockfile alone.
+#[cfg(feature = "test-universal")]
+#[test]
+fn frozen_lockfile_rejects_index_emission() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "root"
+        version = "1.0.0"
+        source = { virtual = "." }
+    "#})?;
+
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--no-default-groups", "--emit-index-url"]), @r"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: `--emit-index-url` and `--emit-find-links` are not supported without a workspace manifest
+    ");
+
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--no-default-groups", "--emit-find-links"]), @r"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: `--emit-index-url` and `--emit-find-links` are not supported without a workspace manifest
+    ");
+
+    Ok(())
+}
+
+/// Frozen exports use index configuration from an available project manifest.
+#[test]
+fn frozen_lockfile_project_index_emission() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        package = false
+        index-url = "https://example.com/simple"
+        find-links = ["wheels"]
+    "#})?;
+
+    context.temp_dir.child("wheels").create_dir_all()?;
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--emit-index-url", "--emit-find-links"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    --index-url https://example.com/simple
+    --find-links wheels
+    ");
+
+    Ok(())
+}
+
+/// Frozen commands use the default groups recorded for each workspace member.
+#[test]
+fn frozen_lockfile_recorded_default_groups() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        docs = ["root-dep"]
+
+        [tool.uv]
+        package = false
+        default-groups = ["docs"]
+
+        [tool.uv.workspace]
+        members = ["member", "all", "empty", "implicit", "root-dep", "member-dep"]
+
+        [tool.uv.sources]
+        root-dep = { workspace = true }
+        member-dep = { workspace = true }
+    "#})?;
+
+    context
+        .temp_dir
+        .child("member/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "1.0.0"
+
+        [dependency-groups]
+        docs = ["member-dep"]
+
+        [tool.uv]
+        package = false
+        default-groups = ["docs"]
+    "#})?;
+
+    context
+        .temp_dir
+        .child("all/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "all"
+        version = "1.0.0"
+
+        [dependency-groups]
+        dev = ["root-dep"]
+        docs = ["member-dep"]
+
+        [tool.uv]
+        package = false
+        default-groups = "all"
+    "#})?;
+
+    context
+        .temp_dir
+        .child("empty/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "empty"
+        version = "1.0.0"
+
+        [dependency-groups]
+        dev = ["root-dep"]
+
+        [tool.uv]
+        package = false
+        default-groups = []
+    "#})?;
+
+    context
+        .temp_dir
+        .child("implicit/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "implicit"
+        version = "1.0.0"
+
+        [dependency-groups]
+        dev = ["root-dep"]
+
+        [tool.uv]
+        package = false
+    "#})?;
+
+    context
+        .temp_dir
+        .child("root-dep/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root-dep"
+        version = "1.0.0"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    context
+        .temp_dir
+        .child("member-dep/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "member-dep"
+        version = "1.0.0"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    context.lock().arg("--offline").assert().success();
+
+    uv_snapshot!(context.filters(), context.export()
+        .args(["--frozen", "--offline", "--no-header", "--no-annotate", "--no-hashes", "--package", "member"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member-dep
+    ");
+
+    context.temp_dir.child("batch.toml").write_str(indoc! {r#"
+        [[export]]
+        output-file = "root.txt"
+
+        [[export]]
+        output-file = "member.txt"
+        package = ["member"]
+
+        [[export]]
+        output-file = "all.txt"
+        package = ["all"]
+
+        [[export]]
+        output-file = "empty.txt"
+        package = ["empty"]
+
+        [[export]]
+        output-file = "implicit.txt"
+        package = ["implicit"]
+    "#})?;
+
+    // Remove the manifests so each export must use its recorded default groups.
+    fs_err::remove_file(context.temp_dir.join("pyproject.toml"))?;
+    fs_err::remove_file(context.temp_dir.join("member/pyproject.toml"))?;
+    fs_err::remove_file(context.temp_dir.join("all/pyproject.toml"))?;
+    fs_err::remove_file(context.temp_dir.join("empty/pyproject.toml"))?;
+    fs_err::remove_file(context.temp_dir.join("implicit/pyproject.toml"))?;
+    fs_err::remove_file(context.temp_dir.join("root-dep/pyproject.toml"))?;
+    fs_err::remove_file(context.temp_dir.join("member-dep/pyproject.toml"))?;
+
+    // The selected member's defaults take precedence over the root's defaults.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--package", "member"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member-dep
+    ");
+
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(context.temp_dir.child("member")), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member-dep
+    ");
+
+    // Each batch entry uses its own selected member's defaults.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--batch", "batch.toml", "--preview-features", "batch-export"]), @"exit_code: 0 (success)");
+    insta::assert_snapshot!(context.read("root.txt"), @"-e ./root-dep");
+    insta::assert_snapshot!(context.read("member.txt"), @"-e ./member-dep");
+    insta::assert_snapshot!(context.read("all.txt"), @"
+    -e ./member-dep
+    -e ./root-dep
+    ");
+    insta::assert_snapshot!(context.read("empty.txt"), @"");
+    insta::assert_snapshot!(context.read("implicit.txt"), @"-e ./root-dep");
+
+    Ok(())
+}
+
+/// Empty member groups take precedence over groups on the workspace root.
+#[test]
+fn frozen_lockfile_empty_member_group() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        shared = ["dep"]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.workspace]
+        members = ["member", "dep"]
+
+        [tool.uv.sources]
+        dep = { workspace = true }
+    "#})?;
+
+    context
+        .temp_dir
+        .child("member/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "1.0.0"
+
+        [dependency-groups]
+        shared = []
+
+        [tool.uv]
+        package = false
+    "#})?;
+
+    context
+        .temp_dir
+        .child("dep/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "dep"
+        version = "1.0.0"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    context
+        .lock()
+        .args(["--offline", "--preview-features", "lock-without-metadata"])
+        .assert()
+        .success();
+
+    // Remove the manifests to verify that empty member groups survive in the lockfile.
+    fs_err::remove_file(context.temp_dir.join("pyproject.toml"))?;
+    fs_err::remove_file(context.temp_dir.join("member/pyproject.toml"))?;
+    fs_err::remove_file(context.temp_dir.join("dep/pyproject.toml"))?;
+
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--package", "member", "--only-group", "shared"]), @"exit_code: 0 (success)");
+
+    Ok(())
+}
+
+/// Metadata-free locks retain the defaults needed by frozen commands.
+#[test]
+fn frozen_lockfile_metadata_free_default_groups() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        docs = ["dep"]
+
+        [tool.uv]
+        package = false
+        default-groups = ["docs"]
+
+        [tool.uv.workspace]
+        members = ["dep"]
+
+        [tool.uv.sources]
+        dep = { workspace = true }
+    "#})?;
+
+    context
+        .temp_dir
+        .child("dep/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "dep"
+        version = "1.0.0"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    context
+        .lock()
+        .args(["--offline", "--preview-features", "lock-without-metadata"])
+        .assert()
+        .success();
+
+    // Remove the manifests to verify that defaults are available without package metadata.
+    fs_err::remove_file(context.temp_dir.join("pyproject.toml"))?;
+    fs_err::remove_file(context.temp_dir.join("dep/pyproject.toml"))?;
+
+    uv_snapshot!(context.filters(), frozen_export(&context), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./dep
+    ");
+
+    Ok(())
+}
+
+/// Export requires a lockfile with revision 5 or later.
+#[test]
+fn frozen_lockfile_requires_revision() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "root"
+        version = "1.0.0"
+        source = { virtual = "." }
+    "#})?;
+
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--no-default-groups"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Frozen lockfile discovery requires a lockfile with revision 5 or later; run `uv lock` to update it
+    ");
+
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 4
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "root"
+        version = "1.0.0"
+        source = { virtual = "." }
+    "#})?;
+
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--only-group", "dev"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Frozen lockfile discovery requires a lockfile with revision 5 or later; run `uv lock` to update it
+    ");
+
+    Ok(())
+}
+
+/// Lockfile exports select the current workspace member without reading its manifest.
+#[test]
+fn frozen_lockfile_current_project() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let root = context.temp_dir.path();
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        dependencies = ["member"]
+
+        [dependency-groups]
+        shared = ["root-dep"]
+        dev = ["root-dep"]
+
+        [tool.uv.workspace]
+        members = ["member", "member/nested", "root-dep", "member-dep"]
+
+        [tool.uv.sources]
+        member = { workspace = true }
+        root-dep = { workspace = true }
+        member-dep = { workspace = true }
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    let member = context.temp_dir.child("member");
+    member.create_dir_all()?;
+    let member_subdir = member.child("subdir");
+    member_subdir.create_dir_all()?;
+    member.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "1.0.0"
+
+        [dependency-groups]
+        shared = ["member-dep"]
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    let nested = member.child("nested");
+    nested.create_dir_all()?;
+    nested.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "nested"
+        version = "1.0.0"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    context
+        .temp_dir
+        .child("root-dep/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root-dep"
+        version = "1.0.0"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    context
+        .temp_dir
+        .child("member-dep/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "member-dep"
+        version = "1.0.0"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    context.lock().arg("--offline").assert().success();
+
+    context.temp_dir.child("batch.toml").write_str(indoc! {r#"
+        [[export]]
+        output-file = "batch-current.txt"
+        no-default-groups = true
+
+        [[export]]
+        output-file = "batch-shared.txt"
+        only-group = ["shared"]
+    "#})?;
+
+    let outside = assert_fs::TempDir::new()?;
+
+    // Remove the manifests so the current member must be identified from its locked path.
+    fs_err::remove_file(root.join("pyproject.toml"))?;
+    fs_err::remove_file(root.join("member/pyproject.toml"))?;
+    fs_err::remove_file(root.join("member/nested/pyproject.toml"))?;
+    fs_err::remove_file(root.join("root-dep/pyproject.toml"))?;
+    fs_err::remove_file(root.join("member-dep/pyproject.toml"))?;
+
+    // From the workspace root.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(root)
+        .args(["--no-default-groups"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e .
+    -e ./member
+    ");
+
+    // From a member.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(member.path())
+        .args(["--no-default-groups"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member
+    ");
+
+    // From within a member.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(member_subdir.path())
+        .args(["--no-default-groups"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member
+    ");
+
+    // The member group takes precedence.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(member.path())
+        .args(["--only-group", "shared"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member-dep
+    ");
+
+    // A root group is inherited.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(member.path())
+        .args(["--only-group", "dev"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./root-dep
+    ");
+
+    // An explicit package overrides the current member.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(member.path())
+        .args(["--no-default-groups", "--package", "root"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e .
+    -e ./member
+    ");
+
+    // Omit the current member.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(member.path())
+        .args(["--no-default-groups", "--no-emit-project"]), @"exit_code: 0 (success)");
+
+    // Omit the current member when exporting the workspace.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(member.path())
+        .args(["--no-default-groups", "--all-packages", "--no-emit-project"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e .
+    -e ./member/nested
+    -e ./member-dep
+    -e ./root-dep
+    ");
+
+    // Emit only the current member.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(member.path())
+        .args(["--no-default-groups", "--all-packages", "--only-emit-project"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member
+    ");
+
+    // Omit the root project when exporting the workspace from the root.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(root)
+        .args(["--no-default-groups", "--all-packages", "--no-emit-project"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member
+    -e ./member/nested
+    -e ./member-dep
+    -e ./root-dep
+    ");
+
+    // Select the nearest nested member.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(nested.path())
+        .args(["--no-default-groups"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member/nested
+    ");
+
+    // Outside the workspace, select the root.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(outside.path())
+        .arg("--project").arg(root)
+        .args(["--no-default-groups"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e .
+    -e ./member
+    ");
+
+    // Outside the workspace, omit the root.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(outside.path())
+        .arg("--project").arg(root)
+        .args(["--no-default-groups", "--all-packages", "--no-emit-project"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member
+    -e ./member/nested
+    -e ./member-dep
+    -e ./root-dep
+    ");
+
+    // Batch exports use the current member.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(member.path())
+        .args(["--preview-features", "batch-export", "--batch"])
+        .arg(root.join("batch.toml")), @"exit_code: 0 (success)");
+
+    insta::assert_snapshot!(context.read("batch-current.txt"), @"-e ./member");
+    insta::assert_snapshot!(context.read("batch-shared.txt"), @"-e ./member-dep");
+
+    // An explicit project directory takes precedence over the working directory.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(outside.path())
+        .arg("--project").arg(member.path())
+        .args(["--no-default-groups"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member
+    ");
+
+    #[cfg(unix)]
+    {
+        let alias = outside.path().join("workspace-alias");
+        fs_err::os::unix::fs::symlink(root, &alias)?;
+        uv_snapshot!(context.filters(), frozen_export(&context)
+            .current_dir(member.path())
+            .args(["--no-default-groups"])
+            .arg("--project").arg(alias.join("member")), @"
+        exit_code: 0 (success)
+        ----- stdout -----
+        -e ./member
+        ");
+    }
+
+    Ok(())
+}
+
+/// A single-project lockfile omits the workspace member list, even with `--all-packages`.
+#[test]
+fn frozen_lockfile_single_project() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let root = context.temp_dir.path();
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    context.lock().arg("--offline").assert().success();
+
+    // A present manifest does not trigger the preview warning.
+    uv_snapshot!(context.filters(), context.export()
+        .args(["--frozen", "--offline", "--no-header", "--no-annotate", "--no-hashes", "--no-default-groups"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e .
+    ");
+
+    // Remove the manifest to exercise selection without a workspace member list.
+    fs_err::remove_file(root.join("pyproject.toml"))?;
+
+    // Without the preview flag, the lockfile is used with a warning.
+    uv_snapshot!(context.filters(), context.export()
+        .args(["--frozen", "--offline", "--no-header", "--no-annotate", "--no-hashes", "--no-default-groups"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e .
+
+    ----- stderr -----
+    warning: Using `uv.lock` without a workspace manifest is experimental and may change without warning. Pass `--preview-features frozen-lockfile` to disable this warning.
+    ");
+
+    // Select the only project.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--no-default-groups"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e .
+    ");
+
+    // Select all packages.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--no-default-groups", "--all-packages"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e .
+    ");
+
+    // Select the project explicitly.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--no-default-groups", "--package", "root"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e .
+    ");
+
+    // Omit the only project.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--no-default-groups", "--all-packages", "--no-emit-project"]), @"exit_code: 0 (success)");
+
+    Ok(())
+}
+
+/// A workspace root can be recorded as a non-editable directory.
+#[test]
+fn frozen_lockfile_non_editable_root() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let root = context.temp_dir.path();
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+
+        [dependency-groups]
+        dev = ["dep"]
+
+        [tool.uv.workspace]
+        members = ["member", "dep"]
+
+        [tool.uv.sources]
+        dep = { workspace = true }
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    let member = context.temp_dir.child("member");
+    member.create_dir_all()?;
+    member.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "1.0.0"
+        dependencies = ["root"]
+
+        [tool.uv.sources]
+        root = { workspace = true, editable = false }
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    let dep = context.temp_dir.child("dep");
+    dep.create_dir_all()?;
+    dep.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "dep"
+        version = "1.0.0"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    context.lock().arg("--offline").assert().success();
+    insta::assert_snapshot!(context.read("uv.lock"), @r#"
+    version = 1
+    revision = 5
+    requires-python = ">=3.12"
+
+    [options]
+    exclude-newer = "2024-03-25T00:00:00Z"
+
+    [manifest]
+    members = [
+        "dep",
+        "member",
+        "root",
+    ]
+
+    [[package]]
+    name = "dep"
+    version = "1.0.0"
+    source = { editable = "dep" }
+
+    [[package]]
+    name = "member"
+    version = "1.0.0"
+    source = { editable = "member" }
+    dependencies = [
+        { name = "root" },
+    ]
+
+    [package.metadata]
+    requires-dist = [{ name = "root", directory = "." }]
+
+    [[package]]
+    name = "root"
+    version = "1.0.0"
+    source = { directory = "." }
+
+    [package.dev-dependencies]
+    dev = [
+        { name = "dep" },
+    ]
+
+    [package.metadata]
+
+    [package.metadata.requires-dev]
+    dev = [{ name = "dep", editable = "dep" }]
+    "#);
+
+    let outside = assert_fs::TempDir::new()?;
+
+    // Remove the manifests to verify that a directory source can identify the workspace root.
+    fs_err::remove_file(root.join("pyproject.toml"))?;
+    fs_err::remove_file(root.join("member/pyproject.toml"))?;
+    fs_err::remove_file(root.join("dep/pyproject.toml"))?;
+
+    // Select a non-editable root project.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(root)
+        .args(["--no-default-groups"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    .
+    ");
+
+    // Fall back to that root outside the workspace.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(outside.path())
+        .arg("--project").arg(root)
+        .args(["--no-default-groups"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    .
+    ");
+
+    // Select an inherited group from the non-editable root.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(member.path())
+        .args(["--only-group", "dev"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./dep
+    ");
+
+    Ok(())
+}
+
+/// Workspace-level dependency groups can be selected without a root project.
+#[test]
+fn frozen_lockfile_non_project_workspace() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin();
+    let root = context.temp_dir.path();
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["member", "other"]
+
+        [tool.uv.sources]
+        member = { workspace = true }
+
+        [dependency-groups]
+        root-only = ["member"]
+    "#})?;
+
+    let member = context.temp_dir.child("member");
+    member.create_dir_all()?;
+    member.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "1.0.0"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    let other = context.temp_dir.child("other");
+    other.create_dir_all()?;
+    other.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "other"
+        version = "1.0.0"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    context.lock().arg("--offline").assert().success();
+
+    let outside = assert_fs::TempDir::new()?;
+
+    // Remove the manifests to exercise workspace-level groups without a root project.
+    fs_err::remove_file(root.join("pyproject.toml"))?;
+    fs_err::remove_file(root.join("member/pyproject.toml"))?;
+    fs_err::remove_file(root.join("other/pyproject.toml"))?;
+
+    // Defaults for a non-project workspace root are not recorded.
+    uv_snapshot!(context.filters(), frozen_export(&context), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: The lockfile does not record default dependency groups for a non-project workspace root; pass `--no-default-groups`, `--only-group`, `--only-dev`, or `--all-groups`
+    ");
+
+    // A selected member has its own recorded defaults.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--package", "member"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member
+    ");
+
+    // Select a workspace group.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--only-group", "root-only"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member
+    ");
+
+    // Select a workspace group and member.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--only-group", "root-only", "--package", "member"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member
+    ");
+
+    // Select a workspace group and all members.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--only-group", "root-only", "--all-packages"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member
+    ");
+
+    // Select the current member.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(member.path())
+        .args(["--no-default-groups"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member
+    ");
+
+    // Omit the current member.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(member.path())
+        .args(["--no-default-groups", "--all-packages", "--no-emit-project"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./other
+    ");
+
+    // Outside the workspace, select all members.
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(outside.path())
+        .arg("--project").arg(root)
+        .args(["--no-default-groups"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member
+    -e ./other
+    ");
+
+    Ok(())
+}
+
+/// A nested project must not use an unrelated parent project's lockfile.
+#[test]
+fn frozen_lockfile_nested_project() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        package = false
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    let nested = context.temp_dir.child("nested");
+    nested.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "nested"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        package = false
+    "#})?;
+
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(nested.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    ");
+
+    // Remove the ancestor manifest to ensure the nested project still takes precedence.
+    fs_err::remove_file(context.temp_dir.join("pyproject.toml"))?;
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(nested.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(nested.path()).arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(nested.path()), @"exit_code: 0 (success)");
+
+    Ok(())
+}
+
+/// Recognize a member manifest when the workspace manifest is unavailable.
+#[test]
+fn frozen_lockfile_member_manifest() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.workspace]
+        members = ["member"]
+    "#})?;
+
+    let member = context.temp_dir.child("member");
+    member.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "1.0.0"
+
+        [build-system]
+        requires = []
+        build-backend = "example"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // Remove only the workspace manifest so discovery must recognize the remaining member.
+    fs_err::remove_file(context.temp_dir.join("pyproject.toml"))?;
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .current_dir(member.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    -e ./member
+    ");
+
+    Ok(())
+}
+
+/// An explicit workspace root takes precedence over an ancestor's lockfile.
+#[test]
+fn frozen_lockfile_workspace_root_without_lock() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["nested/member"]
+    "#})?;
+    let nested = context.temp_dir.child("nested");
+    let member = nested.child("member");
+    member.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        package = false
+    "#})?;
+    context.lock().arg("--offline").assert().success();
+
+    // Leave the old lockfile behind and make the member its own workspace root.
+    fs_err::remove_file(context.temp_dir.child("pyproject.toml"))?;
+    member.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.workspace]
+        members = []
+    "#})?;
+    uv_snapshot!(context.filters(), frozen_export(&context).current_dir(member.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
+    ");
+
+    // An intervening workspace root must also stop discovery from a member directory.
+    member.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        package = false
+    "#})?;
+    nested.child("pyproject.toml").write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["member"]
+    "#})?;
+    uv_snapshot!(context.filters(), frozen_export(&context).current_dir(member.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
     ");
 
     Ok(())

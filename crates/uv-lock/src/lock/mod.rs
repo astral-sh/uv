@@ -3227,6 +3227,21 @@ impl Lock {
         )
     }
 
+    /// Return local workspace member names and their paths relative to the workspace root.
+    pub fn workspace_member_paths(&self) -> impl Iterator<Item = (&PackageName, &Path)> {
+        self.workspace_packages().filter_map(|package| {
+            let path = match &package.id.source {
+                Source::Directory(path) | Source::Editable(path) | Source::Virtual(path) => {
+                    path.as_ref()
+                }
+                Source::Registry(_) | Source::Git(..) | Source::Direct(..) | Source::Path(_) => {
+                    return None;
+                }
+            };
+            Some((package.name(), path))
+        })
+    }
+
     /// Returns `true` if the package is a workspace member.
     fn is_workspace_member(&self, package: &Package) -> bool {
         self.workspace_members
@@ -3268,7 +3283,7 @@ impl Lock {
     }
 
     /// Returns the dependency groups that were used to generate this lock.
-    fn dependency_groups(&self) -> &BTreeMap<GroupName, BTreeSet<Requirement>> {
+    pub fn dependency_groups(&self) -> &BTreeMap<GroupName, BTreeSet<Requirement>> {
         &self.manifest.dependency_groups
     }
 
@@ -3657,9 +3672,13 @@ impl Lock {
 
     /// Return the workspace root used to generate this lock.
     pub fn root(&self) -> Option<&Package> {
-        self.packages
-            .iter()
-            .find(|package| package.id.source.is_implicit_root())
+        self.packages.iter().find(|package| {
+            if let Source::Directory(path) = &package.id.source {
+                self.members().contains(package.name()) && path.as_ref() == Path::new("")
+            } else {
+                package.id.source.is_implicit_root()
+            }
+        })
     }
 
     /// Returns the supported environments that were used to generate this

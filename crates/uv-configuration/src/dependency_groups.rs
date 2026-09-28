@@ -130,6 +130,11 @@ impl DependencyGroups {
         })
     }
 
+    /// Return whether the selected groups depend on the configured default groups.
+    pub fn requires_defaults(&self) -> bool {
+        !self.0.history.no_default_groups && !self.0.history.all_groups && self.prod()
+    }
+
     /// Apply defaults to a base [`DependencyGroups`].
     ///
     /// This is appropriate in projects, where the `dev` group is synced by default.

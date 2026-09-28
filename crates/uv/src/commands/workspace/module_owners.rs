@@ -175,6 +175,7 @@ fn target_selection(
         InstallTarget::Project { .. }
         | InstallTarget::Projects { .. }
         | InstallTarget::Workspace { .. }
+        | InstallTarget::Lockfile { .. }
         | InstallTarget::NonProjectWorkspace { .. } => (
             ExtrasSpecification::from_all_extras().with_defaults(DefaultExtras::default()),
             DependencyGroups::from_all_groups().with_defaults(DefaultGroups::default()),

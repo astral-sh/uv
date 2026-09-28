@@ -127,6 +127,7 @@ mod tests {
           environment.
         - <a id="extra-build-dependencies" href="#extra-build-dependencies"><code>extra-build-dependencies</code></a>: Allows specifying additional dependencies for package builds.
         - <a id="format-command" href="#format-command"><code>format-command</code></a>: Allows using `uv format`.
+        - <a id="frozen-lockfile" href="#frozen-lockfile"><code>frozen-lockfile</code></a>: Allows using frozen project commands without a workspace manifest.
         - <a id="gcs-endpoint" href="#gcs-endpoint"><code>gcs-endpoint</code></a>: Allows signing requests to configured Google Cloud Storage endpoints.
         - <a id="index-by-name" href="#index-by-name"><code>index-by-name</code></a>: Allows selecting configured package indexes by name with `--index` and `--default-index`.
         - <a id="index-exclude-newer" href="#index-exclude-newer"><code>index-exclude-newer</code></a>: Allows setting `exclude-newer` on configured package indexes.
