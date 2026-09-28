@@ -1,4 +1,3 @@
-use serde::ser::SerializeMap;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use uv_distribution_types::Hashed;
@@ -12,27 +11,11 @@ use uv_pypi_types::{HashDigest, HashDigests};
 /// (e.g.) the version number of the distribution itself. For example, a source distribution hosted
 /// at a URL or a local file path may have multiple revisions, each representing a unique state of
 /// the distribution, despite the reported version number remaining the same.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct Revision {
     id: RevisionId,
     hashes: HashDigests,
-    #[serde(default)]
     size: Option<u64>,
-}
-
-impl Serialize for Revision {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        // Cache buckets are shared with older uv versions, whose readers can ignore unknown map
-        // entries but reject MessagePack arrays with additional fields.
-        let mut map = serializer.serialize_map(Some(3))?;
-        map.serialize_entry("id", &self.id)?;
-        map.serialize_entry("hashes", &self.hashes)?;
-        map.serialize_entry("size", &self.size)?;
-        map.end()
-    }
 }
 
 impl Revision {
@@ -121,37 +104,21 @@ mod tests {
 
     #[test]
     fn round_trip_current_revision() {
-        let original = Revision::new().with_hashes(HashDigests::from(
-            "sha256:0000000000000000000000000000000000000000000000000000000000000000"
-                .parse::<HashDigest>()
-                .expect("valid SHA-256 digest"),
-        ));
-        let bytes = rmp_serde::to_vec(&original).expect("serialize revision");
-        let parsed: Revision = rmp_serde::from_slice(&bytes).expect("deserialize revision");
-        assert_eq!(parsed.id().as_str(), original.id().as_str());
-        assert_eq!(parsed.hashes(), original.hashes());
-    }
-
-    #[test]
-    fn deserialize_sequence_revision() {
-        #[derive(Serialize)]
-        struct SequenceRevision {
-            id: RevisionId,
-            hashes: HashDigests,
-            size: Option<u64>,
+        for size in [None, Some(42)] {
+            let mut original = Revision::new().with_hashes(HashDigests::from(
+                "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+                    .parse::<HashDigest>()
+                    .expect("valid SHA-256 digest"),
+            ));
+            if let Some(size) = size {
+                original = original.with_size(size);
+            }
+            let bytes = rmp_serde::to_vec(&original).expect("serialize revision");
+            let parsed: Revision = rmp_serde::from_slice(&bytes).expect("deserialize revision");
+            assert_eq!(parsed.id().as_str(), original.id().as_str());
+            assert_eq!(parsed.hashes(), original.hashes());
+            assert_eq!(parsed.size(), original.size());
         }
-
-        let sequence = SequenceRevision {
-            id: RevisionId::new(),
-            hashes: HashDigests::empty(),
-            size: Some(42),
-        };
-        let bytes = rmp_serde::to_vec(&sequence).expect("serialize sequence revision");
-        let revision: Revision =
-            rmp_serde::from_slice(&bytes).expect("deserialize sequence revision");
-
-        assert_eq!(revision.id().as_str(), sequence.id.as_str());
-        assert_eq!(revision.size(), Some(42));
     }
 
     #[test]
@@ -160,6 +127,7 @@ mod tests {
         struct SerializedRevision {
             id: String,
             hashes: HashDigests,
+            size: Option<u64>,
         }
 
         let revision = Revision::new().with_size(42);
@@ -169,5 +137,6 @@ mod tests {
 
         assert_eq!(serialized.id.as_str(), revision.id().as_str());
         assert_eq!(serialized.hashes, HashDigests::empty());
+        assert_eq!(serialized.size, Some(42));
     }
 }
