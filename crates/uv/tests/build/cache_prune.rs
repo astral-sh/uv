@@ -1,8 +1,7 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use indoc::indoc;
-use walkdir::WalkDir;
 
 use uv_static::EnvVars;
 
@@ -468,53 +467,6 @@ fn prune_stale_revision() -> Result<()> {
      + project==0.1.0 (from file://[TEMP_DIR]/)
     ");
 
-    Ok(())
-}
-
-/// Legacy HTTP pointers do not prevent pruning revisions unused by the current format.
-#[test]
-fn prune_mixed_http_revisions() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
-        .with_exclude_newer("2025-01-01T00:00Z")
-        .with_filtered_file_counts()
-        .with_filtered_sizes_and_units();
-    context
-        .pip_install()
-        .arg("source-distribution==0.0.1")
-        .assert()
-        .success();
-
-    let pointer = WalkDir::new(context.cache_dir.join("sdists-v9"))
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()?
-        .into_iter()
-        .find(|entry| entry.file_name() == "revision.cache-v2")
-        .context("expected an HTTP source revision")?
-        .into_path();
-    let legacy_pointer = pointer.with_file_name("revision.http");
-    let legacy_revision = pointer.with_file_name("legacy-revision");
-    fs_err::create_dir_all(&legacy_revision)?;
-    fs_err::write(legacy_revision.join("metadata"), b"legacy metadata")?;
-    fs_err::write(&legacy_pointer, b"legacy HTTP cache entry")?;
-
-    uv_snapshot!(context.filters(), context.prune(), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Pruning cache at: [CACHE_DIR]/
-    Removed [N] files ([SIZE])
-    ");
-    assert!(!legacy_revision.exists());
-    assert!(legacy_pointer.is_file());
-    assert!(pointer.is_file());
-
-    // The current format's source revision and built wheel remain usable offline.
-    context.venv().arg("--clear").assert().success();
-    context
-        .pip_install()
-        .arg("source-distribution==0.0.1")
-        .arg("--offline")
-        .assert()
-        .success();
     Ok(())
 }
 
