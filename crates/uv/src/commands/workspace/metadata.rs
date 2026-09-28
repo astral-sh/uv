@@ -213,9 +213,11 @@ pub(crate) async fn metadata(
                 })
             } else {
                 match target {
-                    LockTarget::Workspace(workspace) => {
-                        ProjectInterpreter::discover_existing(workspace, active, cache)?
-                    }
+                    LockTarget::Workspace(workspace) => ProjectInterpreter::discover_existing(
+                        workspace.install_path(),
+                        active,
+                        cache,
+                    )?,
                     LockTarget::Script(script) => {
                         ScriptInterpreter::discover_existing(script.into(), active, cache)
                     }
