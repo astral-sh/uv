@@ -173,9 +173,11 @@ impl<'env> TreeDisplay<'env> {
                     continue;
                 }
 
-                if markers
-                    .is_some_and(|markers| !dep.complexified_marker.evaluate_no_extras(markers))
-                {
+                if markers.is_some_and(|markers| {
+                    !dep.complexified_marker
+                        .in_parent_context()
+                        .evaluate_no_extras(markers)
+                }) {
                     continue;
                 }
 
@@ -190,7 +192,7 @@ impl<'env> TreeDisplay<'env> {
                     Edge::Dev(
                         group,
                         Some(RequestedExtras::Dependency(&dep.extra)),
-                        dep.complexified_marker,
+                        dep.complexified_marker.in_parent_context(),
                     ),
                 );
 
@@ -353,9 +355,11 @@ impl<'env> TreeDisplay<'env> {
                     continue;
                 }
 
-                if markers
-                    .is_some_and(|markers| !dep.complexified_marker.evaluate_no_extras(markers))
-                {
+                if markers.is_some_and(|markers| {
+                    !dep.complexified_marker
+                        .in_parent_context()
+                        .evaluate_no_extras(markers)
+                }) {
                     continue;
                 }
 
@@ -371,12 +375,12 @@ impl<'env> TreeDisplay<'env> {
                         Edge::Optional(
                             extra,
                             Some(RequestedExtras::Dependency(&dep.extra)),
-                            dep.complexified_marker,
+                            dep.complexified_marker.in_parent_context(),
                         )
                     } else {
                         Edge::Prod(
                             Some(RequestedExtras::Dependency(&dep.extra)),
-                            dep.complexified_marker,
+                            dep.complexified_marker.in_parent_context(),
                         )
                     },
                 );
