@@ -1142,10 +1142,20 @@ impl<'a> LockedDependencyBuilder<'a> {
                     {
                         marker.or(standalone_base_edge_marker);
                     }
-                    edges
-                        .entry((dependency.id.clone(), extras))
-                        .and_modify(|existing| existing.or(marker))
-                        .or_insert(marker);
+                    // A separate declaration without extras can also be satisfied by an extra
+                    // edge, even when its version specifier prevents merging the declarations.
+                    if !self.base_covered_by_extra_edges(
+                        expected,
+                        context,
+                        &dependency.id,
+                        &extras,
+                        marker,
+                    ) {
+                        edges
+                            .entry((dependency.id.clone(), extras))
+                            .and_modify(|existing| existing.or(marker))
+                            .or_insert(marker);
+                    }
                 } else {
                     for extra in extras {
                         let mut extra_marker = base_edge_marker;

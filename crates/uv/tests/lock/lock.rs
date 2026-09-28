@@ -21520,6 +21520,99 @@ fn lock_without_metadata_conflicting_group_with_and_without_extra() -> Result<()
     Ok(())
 }
 
+/// Reuse a metadata-free lock when an included group's base requirement has a different specifier.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_without_metadata_conflicting_group_with_extra_and_different_specifiers() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("extras/lock-without-metadata.toml");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        shared = ["httpx<2"]
+        a = [{ include-group = "shared" }, "httpx[http2]==1.0.0"]
+        b = []
+
+        [tool.uv]
+        conflicts = [[{ group = "a" }, { group = "b" }]]
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    // An extra edge that covers only part of the base requirement must invalidate the lock.
+    let mut lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+    let Some(packages) = lock["package"].as_array_of_tables_mut() else {
+        anyhow::bail!("lockfile did not contain a package array");
+    };
+    let Some(project) = packages
+        .iter_mut()
+        .find(|package| package["name"].as_str() == Some("project"))
+    else {
+        anyhow::bail!("lockfile did not contain the project");
+    };
+    let Some(dependency) = project["dev-dependencies"]["a"]
+        .as_array_mut()
+        .and_then(|dependencies| dependencies.get_mut(0))
+        .and_then(toml_edit::Value::as_inline_table_mut)
+    else {
+        anyhow::bail!("dependency group did not contain its extra edge");
+    };
+    dependency.insert(
+        "marker",
+        toml_edit::Value::from("sys_platform == 'linux' and extra == 'group-7-project-a'"),
+    );
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&lock.to_string())?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata")
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
 /// Validate an unrelated requested extra without expanding independent conflict sets.
 #[cfg(feature = "test-universal")]
 #[test]
