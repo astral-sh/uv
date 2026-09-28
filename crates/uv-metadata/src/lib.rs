@@ -163,7 +163,7 @@ pub fn read_archive_metadata(
 /// Find the `.dist-info` directory in an unzipped wheel.
 ///
 /// See: <https://github.com/PyO3/python-pkginfo-rs>
-pub fn find_flat_dist_info(
+pub(crate) fn find_flat_dist_info(
     filename: &WheelFilename,
     path: impl AsRef<Path>,
 ) -> Result<DistInfoStem<'static>, Error> {
@@ -217,7 +217,7 @@ pub async fn read_metadata_async_stream<R: futures::AsyncRead + Unpin>(
 }
 
 /// Read a named `.dist-info` file from a wheel without seeking.
-pub async fn read_dist_info_file_async_stream<R: futures::AsyncRead + Unpin>(
+pub(crate) async fn read_dist_info_file_async_stream<R: futures::AsyncRead + Unpin>(
     filename: &WheelFilename,
     entry_name: &str,
     reader: R,
@@ -285,7 +285,7 @@ pub fn read_flat_wheel_metadata(
 
 #[cfg(test)]
 mod test {
-    use super::{DistInfoStem, find_archive_dist_info, metadata_entry};
+    use super::{DistInfoStem, dist_info_entry, find_archive_dist_info, metadata_entry};
     use std::str::FromStr;
     use uv_distribution_filename::WheelFilename;
 
@@ -379,6 +379,34 @@ mod test {
             .expect_err("multiple metadata directories")
             .to_string(),
             "Multiple .dist-info directories found: other_package-1.0, friendly_bard-1.0"
+        );
+    }
+
+    #[test]
+    fn test_dist_info_entry_name() {
+        let filename = WheelFilename::from_str("friendly_bard-1.0-py3-none-any.whl")
+            .expect("valid wheel filename");
+
+        assert_eq!(
+            dist_info_entry("friendly_bard-1.0.dist-info/WHEEL", &filename, "WHEEL")
+                .expect("matching wheel entry")
+                .expect("wheel entry")
+                .as_str(),
+            "friendly_bard-1.0"
+        );
+        assert!(
+            dist_info_entry("friendly_bard-1.0.dist-info/METADATA", &filename, "WHEEL")
+                .expect("different entry name")
+                .is_none()
+        );
+        assert!(
+            dist_info_entry(
+                "friendly_bard-1.0.dist-info/nested/WHEEL",
+                &filename,
+                "WHEEL"
+            )
+            .expect("nested entry")
+            .is_none()
         );
     }
 }
