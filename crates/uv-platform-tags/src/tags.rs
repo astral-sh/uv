@@ -584,8 +584,8 @@ impl Implementation {
 /// `macosx_11_0_arm64`, or `win_amd64`).
 ///
 /// We have two cases: Actual platform specific tags (including "merged" tags such as universal2)
-/// and "any".
-fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformError> {
+/// and "any". Tags are returned in descending order of preference.
+pub fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformError> {
     let os = platform.os();
     let arch = platform.arch();
 

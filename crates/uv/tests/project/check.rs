@@ -6,12 +6,97 @@ use assert_fs::prelude::*;
 use indoc::indoc;
 use insta::assert_snapshot;
 use serde_json::json;
+#[cfg(unix)]
+use wiremock::matchers::any;
 use wiremock::matchers::{body_string_contains, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use uv_static::EnvVars;
 use uv_test::packse::PackseServer;
 use uv_test::{diff_snapshot, uv_snapshot};
+
+/// Standalone version requests use public PyPI, independently of dependency index configuration.
+#[tokio::test]
+#[cfg(unix)]
+async fn check_downloads_ty_from_pypi() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    let server = MockServer::start().await;
+    Mock::given(any())
+        .respond_with(ResponseTemplate::new(500))
+        .expect(0)
+        .mount(&server)
+        .await;
+    context.temp_dir.child("main.py").write_str("value = 1\n")?;
+    context.temp_dir.child("uv.toml").write_str(&format!(
+        indoc! {r#"
+            find-links = ["{0}/flat"]
+
+            [[index]]
+            name = "project"
+            url = "{0}/simple"
+            default = true
+        "#},
+        server.uri(),
+    ))?;
+
+    for version in [
+        None,
+        Some("0.0.17"),
+        Some("latest"),
+        Some(">=0.0.17,<0.0.18"),
+    ] {
+        let mut command = context.check();
+        command
+            .arg("--no-project")
+            .arg("--preview-features")
+            .arg("check-command")
+            .arg("--show-version")
+            .env("UV_ASTRAL_MIRROR_URL", format!("{}/mirror", server.uri()));
+        if let Some(version) = version {
+            command.arg("--ty-version").arg(version);
+        }
+        match version {
+            Some("0.0.17") => {
+                command
+                    .arg("--default-index")
+                    .arg(format!("{}/simple", server.uri()));
+            }
+            Some("latest") => {
+                command.env(EnvVars::UV_INDEX, format!("{}/simple", server.uri()));
+            }
+            Some(_) => {
+                command
+                    .arg("--no-index")
+                    .arg("--find-links")
+                    .arg(format!("{}/flat", server.uri()));
+            }
+            None => {}
+        }
+        insta::allow_duplicates! {
+            uv_snapshot!(context.filters(), command, @"
+            exit_code: 0 (success)
+            ----- stdout -----
+            All checks passed!
+
+            ----- stderr -----
+            Using ty 0.0.17
+            ");
+        }
+    }
+
+    // Cached index metadata and the extracted executable support offline reuse.
+    uv_snapshot!(context.filters(), context.check()
+        .arg("--no-project").arg("--offline")
+        .arg("--preview-features").arg("check-command")
+        .arg("--ty-version").arg("0.0.17")
+        .arg("--default-index").arg(format!("{}/simple", server.uri())), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+    ");
+
+    Ok(())
+}
 
 fn workspace_check(context: &uv_test::TestContext) -> Command {
     let mut command = context.check();

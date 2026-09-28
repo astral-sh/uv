@@ -1,7 +1,8 @@
 //! Binary download and installation utilities for uv.
 //!
-//! These utilities are specifically for consuming distributions that are _not_ Python packages,
-//! e.g., `ruff` (which does have a Python package, but also has standalone binaries on GitHub).
+//! Install standalone release archives or extract native executables from Python wheels.
+
+pub mod ty;
 
 use std::error::Error as _;
 use std::fmt;
@@ -36,7 +37,6 @@ use uv_redacted::DisplaySafeUrl;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Binary {
     Ruff,
-    Ty,
     Uv,
 }
 
@@ -54,12 +54,6 @@ impl Binary {
             ]
             .into_iter()
             .collect(),
-            Self::Ty => [
-                VersionSpecifier::greater_than_equal_version(Version::new([0, 0])),
-                VersionSpecifier::less_than_version(Version::new([0, 1])),
-            ]
-            .into_iter()
-            .collect(),
             Self::Uv => VersionSpecifiers::empty(),
         }
     }
@@ -70,7 +64,6 @@ impl Binary {
     fn name(self) -> &'static str {
         match self {
             Self::Ruff => "ruff",
-            Self::Ty => "ty",
             Self::Uv => "uv",
         }
     }
@@ -108,18 +101,6 @@ impl Binary {
                 // When using the default mirror, also fall back to GitHub.
                 if astral_mirror_url.is_none() {
                     let canonical = format!("{RUFF_GITHUB_URL_PREFIX}{suffix}");
-                    urls.push(parse_url(canonical)?);
-                }
-                Ok(urls)
-            }
-            Self::Ty => {
-                let suffix = format!("{version}/ty-{platform}.{}", format.extension());
-                let mirror_base = astral_mirror_base_url(astral_mirror_url);
-                let mirror = format!("{mirror_base}{TY_MIRROR_SUFFIX}{suffix}");
-                let mut urls = vec![parse_url(mirror)?];
-                // When using the default mirror, also fall back to GitHub.
-                if astral_mirror_url.is_none() {
-                    let canonical = format!("{TY_GITHUB_URL_PREFIX}{suffix}");
                     urls.push(parse_url(canonical)?);
                 }
                 Ok(urls)
@@ -175,18 +156,6 @@ impl Binary {
                 if let Some(suffix) = canonical_url.as_str().strip_prefix(RUFF_GITHUB_URL_PREFIX) {
                     let mirror_base = astral_mirror_base_url(astral_mirror_url);
                     let mirror = format!("{mirror_base}{RUFF_MIRROR_SUFFIX}{suffix}");
-                    let mirror_url = parse_url(mirror)?;
-                    if astral_mirror_url.is_some() {
-                        return Ok(vec![mirror_url]);
-                    }
-                    return Ok(vec![mirror_url, canonical_url]);
-                }
-                Ok(vec![canonical_url])
-            }
-            Self::Ty => {
-                if let Some(suffix) = canonical_url.as_str().strip_prefix(TY_GITHUB_URL_PREFIX) {
-                    let mirror_base = astral_mirror_base_url(astral_mirror_url);
-                    let mirror = format!("{mirror_base}{TY_MIRROR_SUFFIX}{suffix}");
                     let mirror_url = parse_url(mirror)?;
                     if astral_mirror_url.is_some() {
                         return Ok(vec![mirror_url]);
@@ -281,17 +250,11 @@ impl fmt::Display for BinVersion {
 /// The canonical GitHub URL prefix for Ruff releases.
 const RUFF_GITHUB_URL_PREFIX: &str = "https://github.com/astral-sh/ruff/releases/download/";
 
-/// The canonical GitHub URL prefix for ty releases.
-const TY_GITHUB_URL_PREFIX: &str = "https://github.com/astral-sh/ty/releases/download/";
-
 /// The canonical GitHub URL prefix for uv releases.
 const UV_GITHUB_URL_PREFIX: &str = "https://github.com/astral-sh/uv/releases/download/";
 
 /// The suffix appended to the Astral mirror base for Ruff releases.
 const RUFF_MIRROR_SUFFIX: &str = "/github/ruff/releases/download/";
-
-/// The suffix appended to the Astral mirror base for ty releases.
-const TY_MIRROR_SUFFIX: &str = "/github/ty/releases/download/";
 
 /// The suffix appended to the Astral mirror base for the versions manifest.
 const VERSIONS_MANIFEST_MIRROR_SUFFIX: &str = "/github/versions/main/v1";
@@ -362,6 +325,17 @@ impl ResolvedVersion {
 /// Errors that can occur during binary download and installation.
 #[derive(Debug, Error)]
 pub enum Error {
+    #[error(transparent)]
+    Registry(Box<uv_client::Error>),
+
+    #[error("No version of ty found matching `{constraints}` for platform `{platform}`")]
+    NoTyWheel {
+        constraints: VersionSpecifiers,
+        platform: String,
+    },
+
+    #[error("{0}")]
+    InvalidTyWheel(&'static str),
     #[error("Failed to download from: {url}")]
     Download {
         url: DisplaySafeUrl,
@@ -1068,71 +1042,8 @@ mod tests {
     }
 
     #[test]
-    fn test_ty_download_urls_custom_astral_mirror() {
-        let urls = Binary::Ty
-            .download_urls_with_astral_mirror(
-                &Version::new([0, 0, 1]),
-                "x86_64-unknown-linux-gnu",
-                ArchiveFormat::TarGz,
-                Some("https://nexus.example.com/repository/releases.astral.sh/"),
-            )
-            .expect("ty download URLs should be valid");
-
-        let urls = urls
-            .into_iter()
-            .map(|url| url.to_string())
-            .collect::<Vec<_>>();
-        assert_eq!(
-            urls,
-            vec![
-                "https://nexus.example.com/repository/releases.astral.sh/github/ty/releases/download/0.0.1/ty-x86_64-unknown-linux-gnu.tar.gz"
-                    .to_string(),
-            ]
-        );
-    }
-
-    #[test]
-    fn test_ty_download_urls_use_default_astral_mirror_then_github() {
-        let default_urls = Binary::Ty
-            .download_urls_with_astral_mirror(
-                &Version::new([0, 0, 1]),
-                "x86_64-unknown-linux-gnu",
-                ArchiveFormat::TarGz,
-                None,
-            )
-            .expect("ty download URLs should be valid");
-        let empty_urls = Binary::Ty
-            .download_urls_with_astral_mirror(
-                &Version::new([0, 0, 1]),
-                "x86_64-unknown-linux-gnu",
-                ArchiveFormat::TarGz,
-                Some(""),
-            )
-            .expect("ty download URLs should be valid");
-
-        assert_eq!(default_urls, empty_urls);
-        assert_eq!(
-            default_urls,
-            vec![
-                DisplaySafeUrl::parse(
-                    "https://releases.astral.sh/github/ty/releases/download/0.0.1/ty-x86_64-unknown-linux-gnu.tar.gz",
-                )
-                .expect("default Astral mirror ty URL should be valid"),
-                DisplaySafeUrl::parse(
-                    "https://github.com/astral-sh/ty/releases/download/0.0.1/ty-x86_64-unknown-linux-gnu.tar.gz",
-                )
-                .expect("canonical ty URL should be valid"),
-            ]
-        );
-    }
-
-    #[test]
     fn test_manifest_urls_custom_astral_mirror() {
-        for (binary, filename) in [
-            (Binary::Ruff, "ruff.ndjson"),
-            (Binary::Ty, "ty.ndjson"),
-            (Binary::Uv, "uv.ndjson"),
-        ] {
+        for (binary, filename) in [(Binary::Ruff, "ruff.ndjson"), (Binary::Uv, "uv.ndjson")] {
             let urls = binary
                 .manifest_urls_with_astral_mirror(Some(
                     "https://nexus.example.com/repository/releases.astral.sh/",
@@ -1179,60 +1090,8 @@ mod tests {
     }
 
     #[test]
-    fn test_ty_mirror_urls_custom_astral_mirror() {
-        let canonical_url = DisplaySafeUrl::parse(
-            "https://github.com/astral-sh/ty/releases/download/0.0.1/ty-x86_64-unknown-linux-gnu.tar.gz",
-        )
-        .expect("canonical ty URL should be valid");
-        let urls = Binary::Ty
-            .mirror_urls_with_astral_mirror(
-                canonical_url,
-                Some("https://nexus.example.com/repository/releases.astral.sh/"),
-            )
-            .expect("mirror URLs should be valid");
-
-        let urls = urls
-            .into_iter()
-            .map(|url| url.to_string())
-            .collect::<Vec<_>>();
-        assert_eq!(
-            urls,
-            vec![
-                "https://nexus.example.com/repository/releases.astral.sh/github/ty/releases/download/0.0.1/ty-x86_64-unknown-linux-gnu.tar.gz"
-                    .to_string(),
-            ]
-        );
-    }
-
-    #[test]
-    fn test_ty_mirror_urls_use_default_astral_mirror_then_github() {
-        let canonical_url = DisplaySafeUrl::parse(
-            "https://github.com/astral-sh/ty/releases/download/0.0.1/ty-x86_64-unknown-linux-gnu.tar.gz",
-        )
-        .expect("canonical ty URL should be valid");
-        let default_urls = Binary::Ty
-            .mirror_urls_with_astral_mirror(canonical_url.clone(), None)
-            .expect("mirror URLs should be valid");
-        let empty_urls = Binary::Ty
-            .mirror_urls_with_astral_mirror(canonical_url.clone(), Some(""))
-            .expect("mirror URLs should be valid");
-
-        assert_eq!(default_urls, empty_urls);
-        assert_eq!(
-            default_urls,
-            vec![
-                DisplaySafeUrl::parse(
-                    "https://releases.astral.sh/github/ty/releases/download/0.0.1/ty-x86_64-unknown-linux-gnu.tar.gz",
-                )
-                .expect("default Astral mirror ty URL should be valid"),
-                canonical_url,
-            ]
-        );
-    }
-
-    #[test]
     fn test_manifest_urls_empty_astral_mirror_uses_default() {
-        for binary in [Binary::Ruff, Binary::Ty, Binary::Uv] {
+        for binary in [Binary::Ruff, Binary::Uv] {
             let default_urls = binary
                 .manifest_urls_with_astral_mirror(None)
                 .expect("manifest URLs should be valid");

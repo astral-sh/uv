@@ -742,11 +742,6 @@ pub(crate) async fn check(
         None
     };
 
-    let exclude_newer = settings
-        .resolver
-        .exclude_newer
-        .exclude_newer_package_for_index(&PackageName::from_str("ty")?, None);
-
     ty::run(
         ty_version,
         ty_path.or(locked_ty_path),
@@ -762,7 +757,8 @@ pub(crate) async fn check(
         explicit_targets,
         venv.as_ref().map(PythonEnvironment::root),
         python_version.as_ref(),
-        exclude_newer,
+        &settings.resolver.exclude_newer,
+        &concurrency,
         show_version,
         show_command,
         &client_builder,
