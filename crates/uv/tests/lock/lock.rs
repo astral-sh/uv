@@ -537,6 +537,8 @@ fn lock_equivalent_pruned_inputs() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let links = context.workspace_root.join("test/links");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
+
+    // Lock with redundant bounds and settings for unused packages.
     pyproject_toml.write_str(indoc! {r#"
         [project]
         name = "project"
@@ -565,11 +567,16 @@ fn lock_equivalent_pruned_inputs() -> Result<()> {
             "unused",
         ]
     "#})?;
-    uv_snapshot!(context.filters(), context.lock().arg("--no-index").arg("--find-links").arg(&links), @"
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
+
     let locked = context.read("uv.lock");
     insta::with_settings!({ filters => context.filters() }, {
         assert_snapshot!(locked, @r#"
@@ -634,7 +641,13 @@ fn lock_equivalent_pruned_inputs() -> Result<()> {
             "other",
         ]
     "#})?;
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-index").arg("--find-links").arg(&links), @"
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -658,12 +671,19 @@ fn lock_equivalent_pruned_inputs() -> Result<()> {
         override-dependencies = ["ok>=2"]
         exclude-dependencies = ["excluded"]
     "#})?;
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-index").arg("--find-links").arg(&links), @"
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
     assert_eq!(context.read("uv.lock"), locked);
+
     Ok(())
 }
 
@@ -44565,6 +44585,7 @@ fn lock_resolution_inputs_version_constraints() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
+
     let lock = context.read("uv.lock");
 
     insta::with_settings!({ filters => context.filters() }, {
@@ -44847,6 +44868,7 @@ fn lock_resolution_inputs_individual_constraints() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
+
     let lock = context.read("uv.lock");
 
     insta::with_settings!({ filters => context.filters() }, {
@@ -44966,7 +44988,7 @@ fn lock_resolution_inputs_individual_constraints() -> Result<()> {
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_resolution_inputs_extra_constraints() -> Result<()> {
-    let server = PackseServer::from_scenario(&toml::from_str::<Scenario>(indoc! {r#"
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
         name = "resolution-inputs-extra-constraints"
 
         [root]
@@ -44985,7 +45007,8 @@ fn lock_resolution_inputs_extra_constraints() -> Result<()> {
 
         [packages.b.versions."2.0.0"]
         sdist = false
-    "#})?);
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
     let context = uv_test::test_context!("3.12");
     let pyproject = context.temp_dir.child("pyproject.toml");
 
@@ -45053,7 +45076,7 @@ fn lock_resolution_inputs_extra_constraints() -> Result<()> {
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_resolution_inputs_recursive_extra_constraints() -> Result<()> {
-    let server = PackseServer::from_scenario(&toml::from_str::<Scenario>(indoc! {r#"
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
         name = "resolution-inputs-recursive-extra-constraints"
 
         [root]
@@ -45073,7 +45096,8 @@ fn lock_resolution_inputs_recursive_extra_constraints() -> Result<()> {
 
         [packages.b.versions."2.0.0"]
         sdist = false
-    "#})?);
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
     let context = uv_test::test_context!("3.12");
     let pyproject = context.temp_dir.child("pyproject.toml");
 
@@ -45097,6 +45121,7 @@ fn lock_resolution_inputs_recursive_extra_constraints() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
+
     let initial_lock = context.read("uv.lock");
 
     // A constraint on the inner extra invalidates the flattened dependency's version.
@@ -45167,6 +45192,7 @@ fn lock_resolution_inputs_recursive_extra_constraints() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
+
     let retained_lock = context.read("uv.lock");
     insta::with_settings!({ filters => context.filters() }, {
         assert_snapshot!(retained_lock, @r#"
@@ -45889,6 +45915,7 @@ fn lock_resolution_inputs_prerelease_constraints() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
+
     let initial_lock = context.read("uv.lock");
 
     // Removing the prerelease opt-in requires a new resolution, even if the bound admits it.
@@ -45978,7 +46005,7 @@ fn lock_resolution_inputs_prerelease_constraints() -> Result<()> {
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_resolution_inputs_local_source_constraints() -> Result<()> {
-    let server = PackseServer::from_scenario(&toml::from_str::<Scenario>(indoc! {r#"
+    let scenario = toml::from_str::<Scenario>(indoc! {r#"
         name = "resolution-inputs-local-prerelease"
 
         [root]
@@ -45988,7 +46015,8 @@ fn lock_resolution_inputs_local_source_constraints() -> Result<()> {
 
         [packages.b.versions."1.0.0a1"]
         sdist = false
-    "#})?);
+    "#})?;
+    let server = PackseServer::from_scenario(&scenario);
     let context = uv_test::test_context!("3.12");
     let (filename, wheel) = generate_wheel_with_files(
         &"provider".parse()?,
@@ -46036,6 +46064,7 @@ fn lock_resolution_inputs_local_source_constraints() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
+
     let initial_lock = context.read("uv.lock");
 
     // Removing the constraint no longer authorizes the local wheel.
@@ -46062,6 +46091,7 @@ fn lock_resolution_inputs_local_source_constraints() -> Result<()> {
       cause: Because provider was not found in the package registry and your project depends on provider, we can conclude that your project's requirements are unsatisfiable.
     ");
     assert_eq!(context.read("uv.lock"), initial_lock);
+
     Ok(())
 }
 
@@ -46204,6 +46234,7 @@ fn lock_resolution_inputs_dynamic_constraints() -> Result<()> {
         preview-features = ["resolution-inputs", "lock-without-metadata"]
         constraint-dependencies = ["provider>=1"]
     "#})?;
+
     fs_err::remove_dir_all(context.temp_dir.child("provider"))?;
 
     uv_snapshot!(context.filters(), context.lock()
@@ -46622,6 +46653,7 @@ fn lock_resolution_inputs_legacy_locks() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let pyproject = context.temp_dir.child("pyproject.toml");
 
+    // Write a lock without the preview so its unused constraint remains recorded.
     pyproject.write_str(indoc! {r#"
         [project]
         name = "project"
@@ -46632,11 +46664,16 @@ fn lock_resolution_inputs_legacy_locks() -> Result<()> {
         [tool.uv]
         constraint-dependencies = ["unused>=1"]
     "#})?;
-    uv_snapshot!(context.filters(), context.lock().arg("--offline").arg("--no-preview"), @"
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--offline")
+        .arg("--no-preview"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     ");
+
+    // The preview can ignore a changed constraint for a package absent from the lock.
     pyproject.write_str(indoc! {r#"
         [project]
         name = "project"
@@ -46647,11 +46684,16 @@ fn lock_resolution_inputs_legacy_locks() -> Result<()> {
         [tool.uv]
         constraint-dependencies = ["unused>=2"]
     "#})?;
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--preview-features=resolution-inputs"), @"
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--preview-features=resolution-inputs"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     ");
+
     Ok(())
 }
 
@@ -47117,16 +47159,20 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
         name = "resolution-inputs-backtracking"
 
         [root]
+
         [expected]
         satisfiable = true
 
         [packages.a.versions."1.0.0"]
         sdist = false
+
         [packages.a.versions."2.0.0"]
         requires = ["discarded==1.0.0"]
         sdist = false
+
         [packages.discarded.versions."1.0.0"]
         sdist = false
+
         [packages.leaf.versions."1.0.0"]
         sdist = false
     "#})?;
@@ -47138,6 +47184,7 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
     );
     let pyproject = context.temp_dir.child("pyproject.toml");
 
+    // Reject the newest candidate through its transitive dependency constraint.
     pyproject.write_str(indoc! {r#"
         [project]
         name = "project"
@@ -47157,7 +47204,10 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
         exclude-newer-package = { discarded = "2025-01-01T00:00:00Z" }
         dependency-metadata = [{ name = "discarded", version = "1.0.0", requires-dist = ["leaf"] }]
     "#})?;
-    uv_snapshot!(context.filters(), context.tree().arg("--index-url").arg(server.index_url()), @"
+
+    uv_snapshot!(context.filters(), context.tree()
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stdout -----
     project v1.0
@@ -47207,7 +47257,12 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
         requires-dist = [{ name = "a" }]
         "#);
     });
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--index-url").arg(server.index_url()), @"
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -47243,7 +47298,14 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
         discarded = "2025-01-01T00:00:00Z"
         leaf = "2020-01-01T00:00:00Z"
     "#})?;
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache").arg("--no-preview").arg("--index-url").arg(server.index_url()), @"
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .arg("--no-preview")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -47269,7 +47331,11 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
         exclude-newer-package = { discarded = "2025-01-01T00:00:00Z" }
         dependency-metadata = [{ name = "discarded", version = "1.0.0", requires-dist = ["leaf"] }]
     "#})?;
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -47295,7 +47361,11 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
         exclude-newer-package = { discarded = "2025-01-01T00:00:00Z" }
         dependency-metadata = [{ name = "discarded", version = "1.0.0", requires-dist = ["leaf"] }]
     "#})?;
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -47324,7 +47394,11 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
         exclude-newer-package = { discarded = "2025-01-01T00:00:00Z" }
         dependency-metadata = [{ name = "discarded", version = "1.0.0", requires-dist = ["leaf"] }]
     "#})?;
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -47353,7 +47427,11 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
         exclude-newer-package = { discarded = "2025-01-01T00:00:00Z" }
         dependency-metadata = [{ name = "discarded", version = "1.0.0", requires-dist = ["leaf>=1"] }]
     "#})?;
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -47385,7 +47463,11 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
             { name = "discarded", version = "1.0.0", requires-dist = ["leaf"] },
         ]
     "#})?;
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -47414,7 +47496,11 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
         exclude-newer-package = { discarded = "2024-03-25T00:00:00Z" }
         dependency-metadata = [{ name = "discarded", version = "1.0.0", requires-dist = ["leaf"] }]
     "#})?;
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--index-url").arg(server.index_url()), @"
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 1 (failure)
     ----- stderr -----
     Resolving despite existing lockfile due to change of exclude newer timestamp from `2025-01-01T00:00:00Z` to `2024-03-25T00:00:00Z` for package `discarded`
@@ -47445,7 +47531,11 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
         exclude-newer-package = { discarded = "2025-01-01T00:00:00Z" }
         dependency-metadata = [{ name = "discarded", version = "1.0.0", requires-dist = ["leaf"] }]
     "#})?;
-    uv_snapshot!(context.filters(), context.tree().arg("--upgrade").arg("--index-url").arg(server.index_url()), @"
+
+    uv_snapshot!(context.filters(), context.tree()
+        .arg("--upgrade")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     exit_code: 0 (success)
     ----- stdout -----
     project v1.0
@@ -47455,6 +47545,7 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
+
     Ok(())
 }
 

@@ -6190,6 +6190,7 @@ fn tool_install_lock_resolution_inputs_constraints() -> Result<()> {
         .env(EnvVars::PATH, bin_dir.as_os_str())
         .assert()
         .success();
+
     let lock = context.read("tools/simple-launcher/uv.lock");
 
     insta::with_settings!({ filters => context.filters() }, {
