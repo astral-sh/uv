@@ -143,6 +143,10 @@ pub enum Error {
     },
     #[error("Cyclic variant provider dependency detected for `{0}`")]
     CyclicVariantProvider(VariantNamespace),
+    #[error(
+        "Cannot run variant provider `{0}` from an index when verifying wheel hashes; provide its properties with `UV_VARIANT_LOCK`"
+    )]
+    UntrustedVariantProvider(VariantNamespace),
     #[error("Failed to read variant lock")]
     VariantLockRead(#[source] std::io::Error),
     #[error("Failed to parse variant lock: {}", _0.user_display())]
@@ -339,6 +343,7 @@ impl Error {
             | Self::WheelVariantMismatch { .. }
             | Self::WheelVariantNamespaceMismatch { .. }
             | Self::CyclicVariantProvider(_)
+            | Self::UntrustedVariantProvider(_)
             | Self::CyclicBuildDependency(_)
             | Self::VariantLockRead(_)
             | Self::VariantLockParse(..)

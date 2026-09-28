@@ -864,7 +864,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             return Err(Error::WheelVariantsPreview);
         }
         metadata.validate_wheel(label)?;
-        self.query_variant_providers(metadata, marker_env, filename)
+        self.query_variant_providers(metadata, marker_env, filename, true)
             .await?
             .compatible_variant(label)
             .ok_or_else(|| Error::WheelVariantMismatch {
@@ -878,6 +878,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         &self,
         registry_variants_json: &RegistryVariantsJson,
         marker_env: &MarkerEnvironment,
+        allow_inferred_providers: bool,
     ) -> Result<ResolvedVariants, Error> {
         if !uv_preview::is_enabled(PreviewFeature::WheelVariants) {
             return Err(Error::WheelVariantsPreview);
@@ -893,7 +894,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             Err(err) => return Err(err),
         };
         let resolved_variants = self
-            .query_variant_providers(variants_json, marker_env, &registry_variants_json.filename)
+            .query_variant_providers(
+                variants_json,
+                marker_env,
+                &registry_variants_json.filename,
+                allow_inferred_providers,
+            )
             .await?;
         Ok(resolved_variants)
     }
@@ -914,6 +920,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         variants_json: VariantsJsonContent,
         marker_env: &MarkerEnvironment,
         debug_filename: &VariantsJsonFilename,
+        allow_inferred_providers: bool,
     ) -> Result<ResolvedVariants, Error> {
         // TODO: parse_boolish_environment_variable
         let locked_and_inferred =
@@ -952,7 +959,13 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         .evaluate(marker_env, &MarkerVariantsUniversal, &[])
             }))
             .map(|(name, provider)| {
-                self.resolve_provider(locked_and_inferred, variant_lock.as_ref(), name, provider)
+                self.resolve_provider(
+                    locked_and_inferred,
+                    variant_lock.as_ref(),
+                    name,
+                    provider,
+                    allow_inferred_providers,
+                )
             })
             // TODO(konsti): Buffer size
             .buffered(8)
@@ -1033,33 +1046,34 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         variant_lock: Option<&(OsString, VariantLock)>,
         name: &VariantNamespace,
         provider: &Provider,
+        allow_inferred_providers: bool,
     ) -> Result<(VariantNamespace, Arc<VariantProviderOutput>), Error> {
         if let Some((variant_lock_path, variant_lock)) = &variant_lock {
             if let Some(static_provider) = variant_lock.provider.iter().find(|static_provider| {
                 &static_provider.namespace == name
                     && satisfies_provider_requires(provider, static_provider)
             }) {
-                Ok((
+                return Ok((
                     static_provider.namespace.clone(),
                     Arc::new(VariantProviderOutput {
                         namespace: static_provider.namespace.clone(),
                         features: static_provider.properties.clone().into_iter().collect(),
                     }),
-                ))
-            } else if locked_and_inferred {
-                let config = self.query_variant_provider(name, provider).await?;
-                Ok((config.namespace.clone(), config))
-            } else {
-                Err(Error::VariantLockMissing {
+                ));
+            } else if !locked_and_inferred {
+                return Err(Error::VariantLockMissing {
                     variant_lock: PathBuf::from(variant_lock_path),
                     requires: provider.requires.clone().unwrap_or_default(),
                     plugin_api: provider.plugin_api.clone().unwrap_or_default().clone(),
-                })
+                });
             }
-        } else {
-            let config = self.query_variant_provider(name, provider).await?;
-            Ok((config.namespace.clone(), config))
         }
+
+        if !allow_inferred_providers {
+            return Err(Error::UntrustedVariantProvider(name.clone()));
+        }
+        let config = self.query_variant_provider(name, provider).await?;
+        Ok((config.namespace.clone(), config))
     }
 
     async fn query_variant_provider(

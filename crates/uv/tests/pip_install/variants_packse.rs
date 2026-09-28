@@ -259,9 +259,22 @@ fn variants_require_hashes() -> Result<()> {
         .temp_dir
         .child("requirements.txt")
         .write_str(&requirements)?;
+    let target = context.temp_dir.child("target.toml");
+    target.write_str(indoc! {r#"
+        [metadata]
+        version = "0.1"
+        created-by = "uv-test"
+        [[provider]]
+        namespace = "cpu"
+        resolved = ["cpu_provider==0.1"]
+        plugin-api = "cpu_provider.plugin"
+        [provider.properties]
+        level = ["v3", "v2", "v1"]
+    "#})?;
 
     uv_snapshot!(context.filters(), command(&context, &server, 3)
-        .arg("--require-hashes").arg("-r").arg("requirements.txt"), @"
+        .arg("--require-hashes").arg("-r").arg("requirements.txt")
+        .env("UV_VARIANT_LOCK", target.path()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
