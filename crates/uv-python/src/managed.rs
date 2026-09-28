@@ -301,8 +301,8 @@ pub struct ManagedPythonInstallation {
     path: PathBuf,
     /// An install key for the Python version.
     key: PythonInstallationKey,
-    /// The implementation in the installation key, before mapping Emscripten to Pyodide.
-    pub(crate) implementation: ImplementationName,
+    /// The implementation recorded in the key. Managed installations require a known name.
+    implementation: ImplementationName,
     /// The URL with the Python archive.
     ///
     /// Empty when self was constructed from a path.
@@ -319,11 +319,10 @@ pub struct ManagedPythonInstallation {
 
 impl ManagedPythonInstallation {
     pub fn new(path: PathBuf, download: &ManagedPythonDownload) -> Result<Self, Error> {
-        let key = download.key().clone();
-        let implementation = ImplementationName::try_from(&key.implementation)?;
+        let implementation = ImplementationName::try_from(&download.key().implementation)?;
         Ok(Self {
             path,
-            key,
+            key: download.key().clone(),
             implementation,
             url: Some(download.url().clone()),
             sha256: download.sha256().cloned(),
@@ -473,6 +472,11 @@ impl ManagedPythonInstallation {
     /// The [`PythonVersion`] of the toolchain.
     pub(crate) fn version(&self) -> PythonVersion {
         self.key.version()
+    }
+
+    /// Return the implementation in the key without interpreting Emscripten as Pyodide.
+    pub(crate) fn key_implementation(&self) -> ImplementationName {
+        self.implementation
     }
 
     pub fn implementation(&self) -> ImplementationName {

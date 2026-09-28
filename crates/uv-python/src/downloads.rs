@@ -711,7 +711,7 @@ impl From<&ManagedPythonInstallation> for PythonDownloadRequest {
         let key = installation.key();
         Self::new(
             Some(VersionRequest::from(&key.version())),
-            Some(installation.implementation),
+            Some(installation.key_implementation()),
             Some(ArchRequest::Explicit(*key.arch())),
             Some(*key.os()),
             Some(*key.libc()),
