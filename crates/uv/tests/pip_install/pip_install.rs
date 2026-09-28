@@ -234,6 +234,79 @@ fn install_wheel_cache_incompatible_with_older_uv() -> Result<()> {
     Ok(())
 }
 
+/// Old and new HTTP cache formats can coexist in the same wheel bucket.
+#[test]
+fn install_http_wheel_cache_versions_coexist() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let filename = "large_wheel-1.0.0-py3-none-any.whl";
+    write_many_files_wheel(&context.temp_dir.join(filename), 1)?;
+    let server = FindLinksServer::new(context.temp_dir.path());
+    let url = format!("{}/{filename}", server.url());
+
+    context.pip_install().arg(&url).assert().success();
+    let pointer = WalkDir::new(context.cache_dir.join("wheels-v6"))
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .find(|entry| entry.file_name() == "1.0.0-py3-none-any.wheel.http-v2.cache")
+        .context("expected a versioned HTTP wheel pointer")?
+        .into_path();
+    let versioned_bytes = fs::read(&pointer)?;
+    let legacy_pointer = pointer.with_file_name("1.0.0-py3-none-any.http");
+    assert!(!legacy_pointer.exists());
+
+    let old_install = || {
+        let mut command = context.tool_run();
+        command
+            .arg("--from")
+            .arg("uv==0.12.0")
+            .arg("uv")
+            .arg("pip")
+            .arg("install")
+            .arg("--python")
+            .arg(context.venv.path())
+            .arg("--cache-dir")
+            .arg(context.cache_dir.path())
+            .arg(&url)
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+            .env_remove(EnvVars::UV_INTERNAL__TEST_AVAILABLE_VERSION_CUTOFF);
+        command
+    };
+
+    // An older client downloads its own entry without reading or replacing the new format.
+    context.venv().arg("--clear").assert().success();
+    old_install().assert().success();
+    let legacy_bytes = fs::read(&legacy_pointer)?;
+    assert_eq!(fs::read(&pointer)?, versioned_bytes);
+
+    // Both clients can then install offline from their own cached pointers.
+    context.venv().arg("--clear").assert().success();
+    context
+        .pip_install()
+        .arg(&url)
+        .arg("--offline")
+        .assert()
+        .success();
+    assert_eq!(fs::read(&legacy_pointer)?, legacy_bytes);
+
+    context.venv().arg("--clear").assert().success();
+    old_install().arg("--offline").assert().success();
+    assert_eq!(fs::read(&pointer)?, versioned_bytes);
+
+    // Pruning must retain the archives referenced by both HTTP formats.
+    context.prune().assert().success();
+    context.venv().arg("--clear").assert().success();
+    context
+        .pip_install()
+        .arg(&url)
+        .arg("--offline")
+        .assert()
+        .success();
+    context.venv().arg("--clear").assert().success();
+    old_install().arg("--offline").assert().success();
+    Ok(())
+}
+
 #[test]
 fn whitespace_only_requirement() {
     let context = uv_test::test_context_with_versions!(&[])

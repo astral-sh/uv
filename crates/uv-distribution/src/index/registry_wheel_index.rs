@@ -234,15 +234,16 @@ impl<'a> RegistryWheelIndex<'a> {
                 WheelCache::Index(index.url()).wheel_dir(package.as_ref()),
             );
 
-            // For registry wheels, the cache structure is: `<index>/<package-name>/<wheel>.http`
+            // For registry wheels, the cache structure is: `<index>/<package-name>/<wheel>.wheel.http-v2.cache`
             // or `<index>/<package-name>/<version>/<wheel>.rev`.
             for file in files(&wheel_dir).ok().into_iter().flatten() {
                 match index.url() {
                     // Add files from remote registries.
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
                         if file
-                            .extension()
-                            .is_some_and(|ext| ext.eq_ignore_ascii_case("http"))
+                            .file_name()
+                            .and_then(|name| name.to_str())
+                            .is_some_and(|name| name.ends_with(".wheel.http-v2.cache"))
                         {
                             if let Some(wheel) =
                                 CachedWheel::from_http_pointer(wheel_dir.join(file), cache)

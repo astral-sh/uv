@@ -1,7 +1,8 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use indoc::indoc;
+use walkdir::WalkDir;
 
 use uv_static::EnvVars;
 
@@ -467,6 +468,54 @@ fn prune_stale_revision() -> Result<()> {
      + project==0.1.0 (from file://[TEMP_DIR]/)
     ");
 
+    Ok(())
+}
+
+/// Pruning retains revisions that may still be referenced by an older HTTP cache format.
+#[test]
+fn prune_mixed_http_revisions() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_exclude_newer("2025-01-01T00:00Z")
+        .with_filtered_file_counts()
+        .with_filtered_sizes_and_units();
+    context
+        .pip_install()
+        .arg("source-distribution==0.0.1")
+        .assert()
+        .success();
+
+    let pointer = WalkDir::new(context.cache_dir.join("sdists-v9"))
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .find(|entry| entry.file_name() == "revision.http-v2.cache")
+        .context("expected an HTTP source revision")?
+        .into_path();
+    let legacy_pointer = pointer.with_file_name("revision.http");
+    let legacy_revision = pointer.with_file_name("legacy-revision");
+    fs_err::create_dir_all(&legacy_revision)?;
+    fs_err::write(legacy_revision.join("metadata"), b"legacy metadata")?;
+    fs_err::write(&legacy_pointer, b"legacy HTTP cache entry")?;
+
+    uv_snapshot!(context.filters(), context.prune(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Pruning cache at: [CACHE_DIR]/
+    No unused entries found
+    ");
+    assert!(legacy_revision.is_dir());
+    assert!(pointer.is_file());
+
+    // Without the legacy pointer, the versioned pointer determines which revision to keep.
+    fs_err::remove_file(legacy_pointer)?;
+    uv_snapshot!(context.filters(), context.prune(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Pruning cache at: [CACHE_DIR]/
+    Removed [N] files ([SIZE])
+    ");
+    assert!(!legacy_revision.exists());
+    assert!(pointer.is_file());
     Ok(())
 }
 

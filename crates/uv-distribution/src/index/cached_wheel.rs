@@ -72,7 +72,7 @@ impl CachedWheel {
         }
     }
 
-    /// Read a cached wheel from a `.http` pointer
+    /// Read a cached wheel from a `.http-v2.cache` pointer
     pub(crate) fn from_http_pointer(path: impl AsRef<Path>, cache: &Cache) -> Option<Self> {
         let path = path.as_ref();
 

@@ -216,7 +216,7 @@ pub(crate) struct SourceDistributionBuilder<'a, T: BuildContext> {
 }
 
 /// The name of the file that contains the revision ID for a remote distribution, encoded via `MsgPack`.
-pub(crate) const HTTP_REVISION: &str = "revision.http";
+pub(crate) const HTTP_REVISION: &str = "revision.http-v2.cache";
 
 /// The name of the file that contains the revision ID for a local distribution, encoded via `MsgPack`.
 pub(crate) const LOCAL_REVISION: &str = "revision.rev";
@@ -3247,9 +3247,15 @@ pub fn prune(cache: &Cache) -> Result<Removal, Error> {
                 continue;
             }
 
-            // If we find a `revision.http` file, read the pointer, and remove any extraneous
+            // Older clients keep a separate HTTP revision pointer. Retain their revisions too,
+            // since this client cannot determine which directory the legacy pointer references.
+            if entry.path().join("revision.http").is_file() {
+                continue;
+            }
+
+            // If we find a `revision.http-v2.cache` file, read the pointer, and remove any extraneous
             // directories.
-            let revision = entry.path().join("revision.http");
+            let revision = entry.path().join(HTTP_REVISION);
             if revision.is_file() {
                 if let Ok(Some(pointer)) = HttpRevisionPointer::read_from(revision) {
                     // Remove all sibling directories that are not referenced by the pointer.
@@ -3493,7 +3499,7 @@ fn validate_filename(filename: &WheelFilename, metadata: &ResolutionMetadata) ->
 
 /// A pointer to a source distribution revision in the cache, fetched from an HTTP archive.
 ///
-/// Encoded with `MsgPack`, and represented on disk by a `.http` file.
+/// Encoded with `MsgPack`, and represented on disk by a `.http-v2.cache` file.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub(crate) struct HttpRevisionPointer {
     revision: Revision,

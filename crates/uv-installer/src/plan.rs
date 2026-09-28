@@ -433,7 +433,10 @@ impl<'a> Planner<'a> {
                             CacheBucket::Wheels,
                             WheelCache::Url(&wheel.url).wheel_dir(wheel.name().as_ref()),
                         )
-                        .entry(format!("{}.http", wheel.filename.cache_key()));
+                        .entry(format!(
+                            "{}.wheel.http-v2.cache",
+                            wheel.filename.cache_key()
+                        ));
 
                     // Read the HTTP pointer.
                     match HttpArchivePointer::read_from(&cache_entry) {

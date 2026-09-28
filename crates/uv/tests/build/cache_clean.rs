@@ -351,16 +351,20 @@ fn clean_package_pypi() -> Result<()> {
         .assert()
         .success();
 
-    // Assert that the `.rkyv` file is created for `iniconfig`.
-    let rkyv = context
+    // Assert that the `.http-v2.cache` file is created for `iniconfig`.
+    let http_entry = context
         .cache_dir
         .child("simple-v25")
         .child("pypi")
-        .child("iniconfig.rkyv");
+        .child("iniconfig.http-v2.cache");
     assert!(
-        rkyv.exists(),
-        "Expected the `.rkyv` file to exist for `iniconfig`"
+        http_entry.exists(),
+        "Expected the `.http-v2.cache` file to exist for `iniconfig`"
     );
+
+    // Package cleanup also removes entries written by older clients in the same bucket.
+    let legacy = http_entry.with_file_name("iniconfig.rkyv");
+    fs_err::write(&legacy, b"legacy HTTP cache entry")?;
 
     uv_snapshot!(context.filters(), context.clean().arg("--verbose").arg("iniconfig"), @"
     exit_code: 0 (success)
@@ -371,10 +375,12 @@ fn clean_package_pypi() -> Result<()> {
     Removed [N] files ([SIZE])
     ");
 
-    // Assert that the `.rkyv` file is removed for `iniconfig`.
+    assert!(!legacy.exists());
+
+    // Assert that the `.http-v2.cache` file is removed for `iniconfig`.
     assert!(
-        !rkyv.exists(),
-        "Expected the `.rkyv` file to be removed for `iniconfig`"
+        !http_entry.exists(),
+        "Expected the `.http-v2.cache` file to be removed for `iniconfig`"
     );
 
     // Running `uv cache prune` should have no effect.
@@ -414,17 +420,21 @@ fn clean_package_index() -> Result<()> {
         .assert()
         .success();
 
-    // Assert that the `.rkyv` file is created for `iniconfig`.
-    let rkyv = context
+    // Assert that the `.http-v2.cache` file is created for `iniconfig`.
+    let http_entry = context
         .cache_dir
         .child("simple-v25")
         .child("index")
         .child("e8208120cae3ba69")
-        .child("iniconfig.rkyv");
+        .child("iniconfig.http-v2.cache");
     assert!(
-        rkyv.exists(),
-        "Expected the `.rkyv` file to exist for `iniconfig`"
+        http_entry.exists(),
+        "Expected the `.http-v2.cache` file to exist for `iniconfig`"
     );
+
+    // Package cleanup also removes entries written by older clients in the same bucket.
+    let legacy = http_entry.with_file_name("iniconfig.rkyv");
+    fs_err::write(&legacy, b"legacy HTTP cache entry")?;
 
     uv_snapshot!(context.filters(), context.clean().arg("--verbose").arg("iniconfig"), @"
     exit_code: 0 (success)
@@ -435,10 +445,12 @@ fn clean_package_index() -> Result<()> {
     Removed [N] files ([SIZE])
     ");
 
-    // Assert that the `.rkyv` file is removed for `iniconfig`.
+    assert!(!legacy.exists());
+
+    // Assert that the `.http-v2.cache` file is removed for `iniconfig`.
     assert!(
-        !rkyv.exists(),
-        "Expected the `.rkyv` file to be removed for `iniconfig`"
+        !http_entry.exists(),
+        "Expected the `.http-v2.cache` file to be removed for `iniconfig`"
     );
 
     Ok(())

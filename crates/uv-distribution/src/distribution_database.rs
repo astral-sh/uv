@@ -789,7 +789,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let _lock = Self::lock_wheel(wheel_entry, filename).await?;
 
         // Create an entry for the HTTP cache.
-        let http_entry = wheel_entry.with_file(format!("{}.http", filename.cache_key()));
+        let http_entry =
+            wheel_entry.with_file(format!("{}.wheel.http-v2.cache", filename.cache_key()));
 
         let download = |response: reqwest::Response, _: &mut RetryState| {
             async {
@@ -857,9 +858,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 // valid.
                 extracted.validate_and_heal_record(dist)?;
 
-                // Persist the temporary directory to the directory store.
+                // Keep the archive link separate from older HTTP formats so pruning retains both.
+                let archive_entry = wheel_entry.dir().join("http-v2").join(filename.cache_key());
                 let id = self
-                    .persist_extracted_wheel(extracted, wheel_entry.path())
+                    .persist_extracted_wheel(extracted, &archive_entry)
                     .await?;
 
                 if let Some((reporter, progress)) = progress {
@@ -984,7 +986,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let _lock = Self::lock_wheel(wheel_entry, filename).await?;
 
         // Create an entry for the HTTP cache.
-        let http_entry = wheel_entry.with_file(format!("{}.http", filename.cache_key()));
+        let http_entry =
+            wheel_entry.with_file(format!("{}.wheel.http-v2.cache", filename.cache_key()));
 
         let download_url = url.clone();
 
@@ -1366,9 +1369,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // valid.
         extracted.validate_and_heal_record(dist)?;
 
-        // Persist the temporary directory to the directory store.
+        // Keep the archive link separate from older HTTP formats so pruning retains both.
+        let archive_entry = wheel_entry.dir().join("http-v2").join(filename.cache_key());
         let id = self
-            .persist_extracted_wheel(extracted, wheel_entry.path())
+            .persist_extracted_wheel(extracted, &archive_entry)
             .await?;
 
         if let Some((reporter, progress)) = progress {
@@ -1819,7 +1823,7 @@ where
 
 /// A pointer to an archive in the cache, fetched from an HTTP archive.
 ///
-/// Encoded with `MsgPack`, and represented on disk by a `.http` file.
+/// Encoded with `MsgPack`, and represented on disk by a `.http-v2.cache` file.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct HttpArchivePointer {
     archive: Archive,

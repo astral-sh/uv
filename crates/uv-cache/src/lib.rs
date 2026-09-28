@@ -851,8 +851,8 @@ impl Cache {
                 let walker = walkdir::WalkDir::new(&bucket_path).into_iter();
                 for entry in walker.filter_entry(|entry| {
                     !(
-                        // As an optimization, ignore any `.lock`, `.whl`, `.msgpack`, `.rev`, or
-                        // `.http` files, along with the `src` directory, which represents the
+                        // As an optimization, ignore lock files, wheel archives, cache records,
+                        // and HTTP pointers, along with the `src` directory, which represents the
                         // unpacked source distribution.
                         entry.file_name() == "src"
                             || entry.file_name() == ".lock"
@@ -861,6 +861,7 @@ impl Cache {
                                 ext.eq_ignore_ascii_case("lock")
                                     || ext.eq_ignore_ascii_case("whl")
                                     || ext.eq_ignore_ascii_case("http")
+                                    || ext.eq_ignore_ascii_case("cache")
                                     || ext.eq_ignore_ascii_case("rev")
                                     || ext.eq_ignore_ascii_case("msgpack")
                             })
@@ -1201,7 +1202,7 @@ pub enum CacheBucket {
     /// │           │   │   └── [UNZIPPED CONTENTS]
     /// │           │   ├── django_allauth-0.51.0-py3-none-any.whl
     /// │           │   └── metadata.msgpack
-    /// │           └── revision.http
+    /// │           └── revision.http-v2.cache
     /// └── url
     ///     └── 6781bd6440ae72c2
     ///         ├── APYY01rbIfpAo_ij9sCY6
@@ -1209,7 +1210,7 @@ pub enum CacheBucket {
     ///         │   ├── werkzeug-3.0.1-py3-none-any.whl
     ///         │   └── werkzeug-3.0.1.tar.gz
     ///         │       └── [UNZIPPED CONTENTS]
-    ///         └── revision.http
+    ///         └── revision.http-v2.cache
     /// ```
     ///
     /// Structurally, the `manifest.msgpack` is empty, and only contains the caching information
@@ -1219,7 +1220,7 @@ pub enum CacheBucket {
     /// Flat index responses, a format very similar to the simple metadata API.
     ///
     /// Cache structure:
-    ///  * `flat-index-v0/index/<digest(flat_index_url)>.msgpack`
+    ///  * `flat-index-v0/index/<digest(flat_index_url)>.http-v2.cache`
     ///
     /// The response is stored as `Vec<File>`.
     FlatIndex,
@@ -1267,8 +1268,8 @@ pub enum CacheBucket {
     /// Index responses through the simple metadata API.
     ///
     /// Cache structure:
-    ///  * `simple-v0/pypi/<package_name>.rkyv`
-    ///  * `simple-v0/<digest(index_url)>/<package_name>.rkyv`
+    ///  * `simple-v0/pypi/<package_name>.http-v2.cache`
+    ///  * `simple-v0/<digest(index_url)>/<package_name>.http-v2.cache`
     ///
     /// The response is parsed into `uv_client::SimpleDetailMetadata` before storage.
     Simple,
@@ -1291,7 +1292,7 @@ pub enum CacheBucket {
     /// Cached vulnerability data from [OSV](https://osv.dev/).
     ///
     /// Cache structure:
-    ///  * `osv-v0/vulnerability/<vuln_id>.msgpack` — cached full vulnerability records
+    ///  * `osv-v0/vulnerability/<vuln_id>.http-v2.cache` — cached full vulnerability records
     Osv,
 }
 
@@ -1407,15 +1408,18 @@ impl CacheBucket {
                 }
             }
             Self::Simple => {
-                // For `pypi` wheels, we expect a rkyv file per package, indexed by name.
+                // For `pypi` wheels, we expect an HTTP cache entry per package, indexed by name.
                 let root = cache.bucket(self).join(WheelCacheKind::Pypi);
                 summary += cache.remove_path(root.join(format!("{name}.rkyv")))?;
+                summary += cache.remove_path(root.join(format!("{name}.http-v2.cache")))?;
 
                 // For alternate indices, we expect a directory for every index (under an `index`
                 // subdirectory), followed by a directory per package (indexed by name).
                 let root = cache.bucket(self).join(WheelCacheKind::Index);
                 for directory in directories(root)? {
                     summary += cache.remove_path(directory.join(format!("{name}.rkyv")))?;
+                    summary +=
+                        cache.remove_path(directory.join(format!("{name}.http-v2.cache")))?;
                 }
             }
             Self::FlatIndex => {
