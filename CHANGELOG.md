@@ -3,6 +3,46 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.12.20
+
+Released on 2026-09-28.
+
+### Enhancements
+
+- Honor synthetic default groups in pylock.toml ([#22003](https://github.com/astral-sh/uv/pull/22003))
+- Normalize requirement declarations in lockfiles ([#21951](https://github.com/astral-sh/uv/pull/21951))
+- Preserve encoding cookies in CRLF wheel scripts ([#21990](https://github.com/astral-sh/uv/pull/21990))
+
+### Preview features
+
+- Reuse conflicting group locks with distinct extra specifiers ([#22055](https://github.com/astral-sh/uv/pull/22055))
+
+### Configuration
+
+- Skip empty `XDG_CONFIG_DIRS` entries ([#21987](https://github.com/astral-sh/uv/pull/21987))
+
+### Bug fixes
+
+- Allow first-party metadata builds with no-build ([#21988](https://github.com/astral-sh/uv/pull/21988))
+- Apply constraints to repeated requirement hashes ([#21996](https://github.com/astral-sh/uv/pull/21996))
+- Avoid duplicate installations from locked requirements ([#22000](https://github.com/astral-sh/uv/pull/22000))
+- Avoid panic when logging unsatisfiable constraints ([#22034](https://github.com/astral-sh/uv/pull/22034))
+- Avoid panics for unknown managed Python implementations ([#22033](https://github.com/astral-sh/uv/pull/22033))
+- Fix local paths in `pylock.toml` exports ([#22042](https://github.com/astral-sh/uv/pull/22042))
+- Fix panic on malformed Python sysconfig prefixes ([#22036](https://github.com/astral-sh/uv/pull/22036))
+- Fix panic on whitespace-only requirements ([#22035](https://github.com/astral-sh/uv/pull/22035))
+- Fix path discovery in relocatable Nushell activation scripts ([#21979](https://github.com/astral-sh/uv/pull/21979))
+- Fix show-settings early returns ([#21989](https://github.com/astral-sh/uv/pull/21989))
+- Handle UTF-16 BOM-only files in `read_to_string_transcode` ([#21991](https://github.com/astral-sh/uv/pull/21991))
+- Normalize root paths in metadata output ([#22050](https://github.com/astral-sh/uv/pull/22050))
+
+### Other changes
+
+- Honor project filters when selecting all workspace packages ([#21994](https://github.com/astral-sh/uv/pull/21994))
+- Restore pyproject.toml when uv upgrade fails ([#21983](https://github.com/astral-sh/uv/pull/21983))
+- Revert "Batch HTTP cache writes in blocking tasks" ([#22051](https://github.com/astral-sh/uv/pull/22051))
+- Use the automations prefix for bug reproduction branches ([#21696](https://github.com/astral-sh/uv/pull/21696))
+
 ## 0.12.19
 
 Released on 2026-09-24.
