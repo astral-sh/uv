@@ -153,6 +153,19 @@ impl From<ImplementationName> for LenientImplementationName {
     }
 }
 
+impl TryFrom<&LenientImplementationName> for ImplementationName {
+    type Error = Error;
+
+    fn try_from(implementation: &LenientImplementationName) -> Result<Self, Self::Error> {
+        match implementation {
+            LenientImplementationName::Known(implementation) => Ok(*implementation),
+            LenientImplementationName::Unknown(name) => {
+                Err(Error::UnknownImplementation(name.clone()))
+            }
+        }
+    }
+}
+
 impl Display for LenientImplementationName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {

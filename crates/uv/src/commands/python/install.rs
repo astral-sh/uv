@@ -643,7 +643,7 @@ async fn perform_install(
                     DownloadResult::Fetched(path) => path,
                 };
 
-                let installation = ManagedPythonInstallation::new(path, download);
+                let installation = ManagedPythonInstallation::new(path, download)?;
                 if let Some(ref sender) = bytecode_compilation_sender {
                     sender
                         .send(installation.clone())

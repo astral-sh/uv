@@ -711,12 +711,7 @@ impl From<&ManagedPythonInstallation> for PythonDownloadRequest {
         let key = installation.key();
         Self::new(
             Some(VersionRequest::from(&key.version())),
-            match &key.implementation {
-                LenientImplementationName::Known(implementation) => Some(*implementation),
-                LenientImplementationName::Unknown(name) => unreachable!(
-                    "Managed Python installations are expected to always have known implementation names, found {name}"
-                ),
-            },
+            Some(installation.key_implementation()),
             Some(ArchRequest::Explicit(*key.arch())),
             Some(*key.os()),
             Some(*key.libc()),
