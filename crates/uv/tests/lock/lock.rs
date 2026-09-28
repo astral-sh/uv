@@ -19989,6 +19989,34 @@ fn lock_resolution_inputs_index_cutoff() -> Result<()> {
     ");
     assert_eq!(context.read("uv.lock"), lock);
 
+    // Disabled package and index cutoffs allow the lock to be reused without metadata.
+    pyproject.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0"
+        requires-python = ">=3.12"
+        dependencies = ["a"]
+
+        [tool.uv]
+        preview-features = ["resolution-inputs", "index-exclude-newer"]
+        exclude-newer-package = {{ a = false }}
+
+        [[tool.uv.index]]
+        url = "{index}"
+        default = true
+        exclude-newer = false
+    "#, index = server.index_url()})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    assert_eq!(context.read("uv.lock"), lock);
+
     // With no global or package cutoff, the index cutoff becomes effective.
     pyproject.write_str(&formatdoc! {r#"
         [project]

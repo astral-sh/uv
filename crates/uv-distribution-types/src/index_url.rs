@@ -295,6 +295,16 @@ impl IndexLocations {
     pub fn is_none(&self) -> bool {
         *self == Self::default()
     }
+
+    /// Return whether any configured index has an enabled `exclude-newer` cutoff.
+    pub fn has_exclude_newer(&self) -> bool {
+        self.indexes
+            .iter()
+            .any(|index| match index.exclude_newer() {
+                Some(ExcludeNewerOverride::Enabled(_)) => true,
+                Some(ExcludeNewerOverride::Disabled) | None => false,
+            })
+    }
 }
 
 /// Returns `true` if two [`IndexUrl`]s refer to the same index.

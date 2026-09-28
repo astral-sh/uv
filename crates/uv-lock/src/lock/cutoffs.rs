@@ -18,26 +18,39 @@ impl Lock {
     ) -> Result<Option<ExcludeNewerChange>, LockError> {
         let change = self.options.exclude_newer.compare(exclude_newer);
 
-        // Check effective cutoffs even when a package or global setting was omitted.
-        // Removing an override can reactivate a stricter index cutoff.
-        for package in &self.packages {
-            let Some(index) = package.index(root)? else {
-                continue;
-            };
-            let Some(cutoff) = exclude_newer
-                .exclude_newer_package_for_index(package.name(), indexes.exclude_newer_for(&index))
-            else {
-                continue;
-            };
-            if package
-                .upload_times()
-                .flatten()
-                .any(|upload_time| upload_time >= cutoff)
-            {
-                return Ok(Some(match change {
-                    Some(change) if !change.is_relative_timestamp_change() => change,
-                    Some(_) | None => ExcludeNewerChange::ExcludedArtifact(package.name().clone()),
-                }));
+        // Avoid reconstructing package indexes and scanning artifacts when no cutoff can apply.
+        let has_cutoffs = exclude_newer.global.is_some()
+            || exclude_newer.package.values().any(|setting| match setting {
+                ExcludeNewerOverride::Enabled(_) => true,
+                ExcludeNewerOverride::Disabled => false,
+            })
+            || indexes.has_exclude_newer();
+
+        if has_cutoffs {
+            // Check effective cutoffs even when a package or global setting was omitted.
+            // Removing an override can reactivate a stricter index cutoff.
+            for package in &self.packages {
+                let Some(index) = package.index(root)? else {
+                    continue;
+                };
+                let Some(cutoff) = exclude_newer.exclude_newer_package_for_index(
+                    package.name(),
+                    indexes.exclude_newer_for(&index),
+                ) else {
+                    continue;
+                };
+                if package
+                    .upload_times()
+                    .flatten()
+                    .any(|upload_time| upload_time >= cutoff)
+                {
+                    return Ok(Some(match change {
+                        Some(change) if !change.is_relative_timestamp_change() => change,
+                        Some(_) | None => {
+                            ExcludeNewerChange::ExcludedArtifact(package.name().clone())
+                        }
+                    }));
+                }
             }
         }
 
