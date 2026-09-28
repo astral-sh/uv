@@ -21570,31 +21570,64 @@ fn lock_without_metadata_conflicting_group_with_extra_and_different_specifiers()
     ");
 
     // An extra edge that covers only part of the base requirement must invalidate the lock.
-    let mut lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
-    let Some(packages) = lock["package"].as_array_of_tables_mut() else {
-        anyhow::bail!("lockfile did not contain a package array");
-    };
-    let Some(project) = packages
-        .iter_mut()
-        .find(|package| package["name"].as_str() == Some("project"))
-    else {
-        anyhow::bail!("lockfile did not contain the project");
-    };
-    let Some(dependency) = project["dev-dependencies"]["a"]
-        .as_array_mut()
-        .and_then(|dependencies| dependencies.get_mut(0))
-        .and_then(toml_edit::Value::as_inline_table_mut)
-    else {
-        anyhow::bail!("dependency group did not contain its extra edge");
-    };
-    dependency.insert(
-        "marker",
-        toml_edit::Value::from("sys_platform == 'linux' and extra == 'group-7-project-a'"),
-    );
     context
         .temp_dir
         .child("uv.lock")
-        .write_str(&lock.to_string())?;
+        .write_str(&formatdoc! {r#"
+        version = 1
+        revision = 4
+        requires-python = ">=3.12"
+        conflicts = [[
+            {{ package = "project", group = "a" }},
+            {{ package = "project", group = "b" }},
+        ]]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "h2"
+        version = "1.0.0"
+        source = {{ registry = "{index_url}" }}
+        sdist = {{ url = "{h2_sdist_url}", hash = "sha256:c9b6a98f440bb83af4268095ee1e253e837c2177ec2eaa46f780cc7c71a75f6d", upload-time = "2024-03-24T00:00:00Z" }}
+        wheels = [
+            {{ url = "{h2_wheel_url}", hash = "sha256:33a63cbe8d76a8ee81d34a146d0140aaa55d29187aef7f00e5e8a922e03c7bde", upload-time = "2024-03-24T00:00:00Z" }},
+        ]
+
+        [[package]]
+        name = "httpx"
+        version = "1.0.0"
+        source = {{ registry = "{index_url}" }}
+        sdist = {{ url = "{httpx_sdist_url}", hash = "sha256:2d661cd788ac8c83adf4ea0638035919251271d5508a63e6650448605dcd4a1b", upload-time = "2024-03-24T00:00:00Z" }}
+        wheels = [
+            {{ url = "{httpx_wheel_url}", hash = "sha256:4154c3c1f739176378d6865841d67718bc624c0f2f0ccf87364c8141a0c93603", upload-time = "2024-03-24T00:00:00Z" }},
+        ]
+
+        [package.optional-dependencies]
+        http2 = [
+            {{ name = "h2" }},
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = {{ virtual = "." }}
+
+        [package.dev-dependencies]
+        a = [
+            {{ name = "httpx", extra = ["http2"], marker = "sys_platform == 'linux' and extra == 'group-7-project-a'" }},
+        ]
+        b = []
+        shared = [
+            {{ name = "httpx" }},
+        ]
+        "#,
+            index_url = server.index_url(),
+            h2_sdist_url = server.file_url("h2-1.0.0.tar.gz"),
+            h2_wheel_url = server.file_url("h2-1.0.0-py3-none-any.whl"),
+            httpx_sdist_url = server.file_url("httpx-1.0.0.tar.gz"),
+            httpx_wheel_url = server.file_url("httpx-1.0.0-py3-none-any.whl"),
+        })?;
 
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
