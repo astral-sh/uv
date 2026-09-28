@@ -336,6 +336,10 @@ impl ManagedPythonInstallation {
                 .ok_or(Error::NameError("not a valid string".to_string()))?,
         )?;
 
+        if let LenientImplementationName::Unknown(name) = &key.implementation {
+            return Err(ImplementationError::UnknownImplementation(name.clone()).into());
+        }
+
         let path = std::path::absolute(path)
             .map_err(|err| Error::AbsolutePath(path.to_path_buf(), err))?;
 

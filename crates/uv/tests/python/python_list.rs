@@ -2,6 +2,7 @@
 use std::os::unix::fs::PermissionsExt;
 
 use uv_platform::{Arch, Os};
+use uv_python::managed::platform_key_from_env;
 use uv_static::EnvVars;
 
 use anyhow::Result;
@@ -97,6 +98,29 @@ fn python_list() {
     ----- stdout -----
     cpython-3.11.[X]-[PLATFORM] [PYTHON-3.11]
     ");
+}
+
+#[test]
+fn python_list_unknown_managed_implementation() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]).with_managed_python_dirs();
+    let installation = context
+        .temp_dir
+        .join("managed")
+        .join(format!("unknown-3.12.0-{}", platform_key_from_env()?));
+    fs_err::create_dir_all(&installation)?;
+
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("--only-installed"), @"
+    exit_code: 0 (success)
+    ");
+
+    uv_snapshot!(context.filters(), context.python_upgrade().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    There are no installed versions to upgrade
+    ");
+
+    Ok(())
 }
 
 #[cfg(unix)]
