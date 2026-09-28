@@ -224,11 +224,10 @@ underlying cache entries.
 For example, it's safe to use a single shared cache for uv 0.4.12 and uv 0.4.13, though the cache
 itself may contain duplicate entries in the core metadata bucket due to the change in cache version.
 
-HTTP cache entries use a `.cache` extension with an `http-v2` format version in the filename,
-regardless of the payload encoding (for example, `numpy.http-v2.cache` or `revision.http-v2.cache`).
-This allows the HTTP format to change without invalidating non-HTTP entries in the same bucket.
-Older clients keep using their unversioned files. HTTP responses cached by another format must be
-fetched again before they can be used offline.
+HTTP cache entries use a versioned `.cache-v2` extension, regardless of the payload encoding (for
+example, `numpy.cache-v2` or `revision.cache-v2`). This allows the HTTP format to change without
+invalidating non-HTTP entries in the same bucket. Older clients keep using their unversioned files.
+HTTP responses cached by another format must be fetched again before they can be used offline.
 
 HTTP 304 responses update the cached policy in place without rewriting the payload. A checksum
 rejects interrupted or overlapping policy updates; an invalid entry must be fetched again.

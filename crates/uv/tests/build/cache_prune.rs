@@ -488,7 +488,7 @@ fn prune_mixed_http_revisions() -> Result<()> {
         .into_iter()
         .collect::<Result<Vec<_>, _>>()?
         .into_iter()
-        .find(|entry| entry.file_name() == "revision.http-v2.cache")
+        .find(|entry| entry.file_name() == "revision.cache-v2")
         .context("expected an HTTP source revision")?
         .into_path();
     let legacy_pointer = pointer.with_file_name("revision.http");

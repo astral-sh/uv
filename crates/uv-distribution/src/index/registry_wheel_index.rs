@@ -234,7 +234,7 @@ impl<'a> RegistryWheelIndex<'a> {
                 WheelCache::Index(index.url()).wheel_dir(package.as_ref()),
             );
 
-            // For registry wheels, the cache structure is: `<index>/<package-name>/<wheel>.wheel.http-v2.cache`
+            // For registry wheels, the cache structure is: `<index>/<package-name>/<wheel>.wheel.cache-v2`
             // or `<index>/<package-name>/<version>/<wheel>.rev`.
             for file in files(&wheel_dir).ok().into_iter().flatten() {
                 match index.url() {
@@ -243,7 +243,7 @@ impl<'a> RegistryWheelIndex<'a> {
                         if file
                             .file_name()
                             .and_then(|name| name.to_str())
-                            .is_some_and(|name| name.ends_with(".wheel.http-v2.cache"))
+                            .is_some_and(|name| name.ends_with(".wheel.cache-v2"))
                         {
                             if let Some(wheel) =
                                 CachedWheel::from_http_pointer(wheel_dir.join(file), cache)

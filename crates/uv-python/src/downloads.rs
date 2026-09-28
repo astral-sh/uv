@@ -1124,7 +1124,7 @@ async fn fetch_downloads_from_url(
     let cache_entry = cache.entry(
         CacheBucket::Python,
         "downloads-json",
-        format!("{}.http-v2.cache", cache_digest(&url.as_str())),
+        format!("{}.cache-v2", cache_digest(&url.as_str())),
     );
     let cache_control = match client.uncached().connectivity() {
         Connectivity::Online => CacheControl::from(cache.freshness(&cache_entry, None, None)?),

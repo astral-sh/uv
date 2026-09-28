@@ -876,7 +876,7 @@ enum CachedResponse {
 ///
 /// # Format
 ///
-/// Entries use `.http-v2.cache` filenames, keeping the HTTP format separate from older
+/// Entries use `.cache-v2` filenames, keeping the HTTP format separate from older
 /// entries in the same cache buckets.
 ///
 /// Each file contains the payload, a random 16-byte generation ID, the archived

@@ -351,15 +351,15 @@ fn clean_package_pypi() -> Result<()> {
         .assert()
         .success();
 
-    // Assert that the `.http-v2.cache` file is created for `iniconfig`.
+    // Assert that the `.cache-v2` file is created for `iniconfig`.
     let http_entry = context
         .cache_dir
         .child("simple-v25")
         .child("pypi")
-        .child("iniconfig.http-v2.cache");
+        .child("iniconfig.cache-v2");
     assert!(
         http_entry.exists(),
-        "Expected the `.http-v2.cache` file to exist for `iniconfig`"
+        "Expected the `.cache-v2` file to exist for `iniconfig`"
     );
 
     // Package cleanup also removes entries written by older clients in the same bucket.
@@ -377,10 +377,10 @@ fn clean_package_pypi() -> Result<()> {
 
     assert!(!legacy.exists());
 
-    // Assert that the `.http-v2.cache` file is removed for `iniconfig`.
+    // Assert that the `.cache-v2` file is removed for `iniconfig`.
     assert!(
         !http_entry.exists(),
-        "Expected the `.http-v2.cache` file to be removed for `iniconfig`"
+        "Expected the `.cache-v2` file to be removed for `iniconfig`"
     );
 
     // Running `uv cache prune` should have no effect.
@@ -420,16 +420,16 @@ fn clean_package_index() -> Result<()> {
         .assert()
         .success();
 
-    // Assert that the `.http-v2.cache` file is created for `iniconfig`.
+    // Assert that the `.cache-v2` file is created for `iniconfig`.
     let http_entry = context
         .cache_dir
         .child("simple-v25")
         .child("index")
         .child("e8208120cae3ba69")
-        .child("iniconfig.http-v2.cache");
+        .child("iniconfig.cache-v2");
     assert!(
         http_entry.exists(),
-        "Expected the `.http-v2.cache` file to exist for `iniconfig`"
+        "Expected the `.cache-v2` file to exist for `iniconfig`"
     );
 
     // Package cleanup also removes entries written by older clients in the same bucket.
@@ -447,10 +447,10 @@ fn clean_package_index() -> Result<()> {
 
     assert!(!legacy.exists());
 
-    // Assert that the `.http-v2.cache` file is removed for `iniconfig`.
+    // Assert that the `.cache-v2` file is removed for `iniconfig`.
     assert!(
         !http_entry.exists(),
-        "Expected the `.http-v2.cache` file to be removed for `iniconfig`"
+        "Expected the `.cache-v2` file to be removed for `iniconfig`"
     );
 
     Ok(())

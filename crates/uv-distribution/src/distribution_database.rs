@@ -789,8 +789,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let _lock = Self::lock_wheel(wheel_entry, filename).await?;
 
         // Create an entry for the HTTP cache.
-        let http_entry =
-            wheel_entry.with_file(format!("{}.wheel.http-v2.cache", filename.cache_key()));
+        let http_entry = wheel_entry.with_file(format!("{}.wheel.cache-v2", filename.cache_key()));
 
         let download = |response: reqwest::Response, _: &mut RetryState| {
             async {
@@ -859,7 +858,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 extracted.validate_and_heal_record(dist)?;
 
                 // Keep the archive link separate from older HTTP formats so pruning retains both.
-                let archive_entry = wheel_entry.dir().join("http-v2").join(filename.cache_key());
+                let archive_entry = wheel_entry
+                    .dir()
+                    .join("cache-v2")
+                    .join(filename.cache_key());
                 let id = self
                     .persist_extracted_wheel(extracted, &archive_entry)
                     .await?;
@@ -986,8 +988,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let _lock = Self::lock_wheel(wheel_entry, filename).await?;
 
         // Create an entry for the HTTP cache.
-        let http_entry =
-            wheel_entry.with_file(format!("{}.wheel.http-v2.cache", filename.cache_key()));
+        let http_entry = wheel_entry.with_file(format!("{}.wheel.cache-v2", filename.cache_key()));
 
         let download_url = url.clone();
 
@@ -1370,7 +1371,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         extracted.validate_and_heal_record(dist)?;
 
         // Keep the archive link separate from older HTTP formats so pruning retains both.
-        let archive_entry = wheel_entry.dir().join("http-v2").join(filename.cache_key());
+        let archive_entry = wheel_entry
+            .dir()
+            .join("cache-v2")
+            .join(filename.cache_key());
         let id = self
             .persist_extracted_wheel(extracted, &archive_entry)
             .await?;
@@ -1823,7 +1827,7 @@ where
 
 /// A pointer to an archive in the cache, fetched from an HTTP archive.
 ///
-/// Encoded with `MsgPack`, and represented on disk by a `.http-v2.cache` file.
+/// Encoded with `MsgPack`, and represented on disk by a `.cache-v2` file.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct HttpArchivePointer {
     archive: Archive,

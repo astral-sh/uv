@@ -248,7 +248,7 @@ fn install_http_wheel_cache_versions_coexist() -> Result<()> {
         .into_iter()
         .collect::<Result<Vec<_>, _>>()?
         .into_iter()
-        .find(|entry| entry.file_name() == "1.0.0-py3-none-any.wheel.http-v2.cache")
+        .find(|entry| entry.file_name() == "1.0.0-py3-none-any.wheel.cache-v2")
         .context("expected a versioned HTTP wheel pointer")?
         .into_path();
     let versioned_bytes = fs::read(&pointer)?;

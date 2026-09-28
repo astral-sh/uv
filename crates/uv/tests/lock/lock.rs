@@ -2985,7 +2985,7 @@ async fn lock_sdist_url_rejected_archive_not_cached() -> Result<()> {
         );
         assert_ne!(
             entry.file_name(),
-            "revision.http-v2.cache",
+            "revision.cache-v2",
             "the rejected archive was persisted to the cache"
         );
     }
@@ -3018,7 +3018,7 @@ async fn lock_sdist_url_rejected_archive_not_cached() -> Result<()> {
         );
         assert_ne!(
             entry.file_name(),
-            "revision.http-v2.cache",
+            "revision.cache-v2",
             "the rejected archive was persisted to the cache"
         );
     }
