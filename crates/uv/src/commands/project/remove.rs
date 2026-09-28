@@ -271,6 +271,7 @@ pub(crate) async fn remove(
                 // Discover or create the virtual environment.
                 let environment = ProjectEnvironment::get_or_init(
                     project.workspace(),
+                    None,
                     &groups,
                     python.as_deref().map(PythonRequest::parse),
                     &install_mirrors,

@@ -18,7 +18,9 @@ use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceEr
 
 use crate::commands::{
     ExitStatus,
-    project::{ScriptInterpreter, WorkspacePython, validate_project_requires_python},
+    project::{
+        PythonRequirementSource, ScriptInterpreter, WorkspacePython, validate_python_requirement,
+    },
 };
 use crate::printer::Printer;
 
@@ -77,7 +79,7 @@ pub(crate) async fn find(
     let WorkspacePython {
         source,
         python_request,
-        requires_python,
+        requirement,
     } = WorkspacePython::from_request(
         request.map(|request| PythonRequest::parse(&request)),
         project.as_ref().map(VirtualProject::workspace),
@@ -104,13 +106,15 @@ pub(crate) async fn find(
         .await?;
 
     // Warn if the discovered Python version is incompatible with the current workspace
-    if let Some(requires_python) = requires_python {
-        match validate_project_requires_python(
+    if let Some(requirement) = requirement {
+        match validate_python_requirement(
             python.interpreter(),
-            project.as_ref().map(VirtualProject::workspace),
-            &groups,
-            &requires_python,
+            &requirement.requires_python,
             &source,
+            PythonRequirementSource::Workspace(
+                project.as_ref().map(VirtualProject::workspace),
+                &groups,
+            ),
         ) {
             Ok(()) => {}
             Err(err) => {

@@ -53,9 +53,9 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{LockMode, LockOperation, LockResult};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    EnvironmentUpdate, LinkErrorReporting, MalwareFindings, PlatformState, ProjectEnvironment,
-    ProjectError, ScriptEnvironment, UniversalState, detect_conflicts, script_extra_build_requires,
-    script_specification, update_environment,
+    EnvironmentUpdate, LinkErrorReporting, MalwareFindings, MissingLockfileSource, PlatformState,
+    ProjectEnvironment, ProjectError, ScriptEnvironment, UniversalState, detect_conflicts,
+    script_extra_build_requires, script_specification, update_environment,
 };
 use crate::commands::{ExitStatus, UvError};
 use crate::printer::Printer;
@@ -149,9 +149,42 @@ pub(crate) async fn sync(
         SyncTarget::Project(project)
     };
 
+    let lock_target = match &target {
+        SyncTarget::Project(project) => LockTarget::from(project.workspace()),
+        SyncTarget::Script(script) => LockTarget::from(script),
+    };
+
+    // Read the frozen lock before selecting an environment, since the selected member's default
+    // groups can affect the Python requirement.
+    let frozen_lock = if let Some(source) = frozen {
+        Some(
+            lock_target
+                .read_frozen(MissingLockfileSource::from(source))
+                .await
+                .map_err(|err| match (err, &target) {
+                    (ProjectError::MissingLockfile(..), SyncTarget::Script(script)) => anyhow::anyhow!(
+                        "`uv sync --frozen` requires a script lockfile; run `{}` to lock the script",
+                        format!("uv lock --script {}", script.path.user_display()).green(),
+                    ),
+                    (err, _) => UvError::from(err).into(),
+                })?,
+        )
+    } else {
+        None
+    };
+
+    let locked_default_groups = match (&frozen_lock, package.as_slice()) {
+        (Some(lock), [name]) => lock.member_default_groups(name),
+        _ => None,
+    };
+    let use_locked_python = locked_default_groups.is_some();
+
     // Determine the groups and extras to include.
     let default_groups = match &target {
-        SyncTarget::Project(project) => project.default_groups()?,
+        SyncTarget::Project(project) => match locked_default_groups {
+            Some(defaults) => defaults,
+            None => project.default_groups()?,
+        },
         SyncTarget::Script(..) => DefaultGroups::default(),
     };
     let default_extras = match &target {
@@ -166,6 +199,12 @@ pub(crate) async fn sync(
         SyncTarget::Project(project) => SyncEnvironment::Project(
             ProjectEnvironment::get_or_init(
                 project.workspace(),
+                frozen_lock
+                    .as_ref()
+                    .filter(|_| use_locked_python)
+                    .map(|lock| {
+                        identify_installation_target(&target, lock, all_packages, &package)
+                    }),
                 &groups,
                 python.as_deref().map(PythonRequest::parse),
                 &install_mirrors,
@@ -224,16 +263,10 @@ pub(crate) async fn sync(
 
     // Special-case: we're syncing a script that doesn't have an associated lockfile. In that case,
     // we don't create a lockfile, so the resolve-and-install semantics are different.
-    if let SyncTarget::Script(script) = &target {
-        let lockfile = LockTarget::from(script).lock_path();
-        if !lockfile.is_file() {
-            if frozen.is_some() {
-                return Err(anyhow::anyhow!(
-                    "`uv sync --frozen` requires a script lockfile; run `{}` to lock the script",
-                    format!("uv lock --script {}", script.path.user_display()).green(),
-                ));
-            }
-
+    if let SyncTarget::Script(script) = &target
+        && frozen_lock.is_none()
+    {
+        if !lock_target.lock_path().is_file() {
             if let LockCheck::Enabled(lock_check) = lock_check {
                 return Err(anyhow::anyhow!(
                     "`uv sync {lock_check}` requires a script lockfile; run `{}` to lock the script",
@@ -348,33 +381,32 @@ pub(crate) async fn sync(
         LockMode::Write(environment.interpreter())
     };
 
-    let lock_target = match &target {
-        SyncTarget::Project(project) => LockTarget::from(project.workspace()),
-        SyncTarget::Script(script) => LockTarget::from(script),
-    };
-
     let first_party_exclusions = target.project().map_or_else(BTreeSet::new, |project| {
         first_party_exclusions(project, all_packages, &package, &install_options)
     });
 
-    let outcome = match Box::pin(
-        LockOperation::new(
-            mode,
-            &settings.resolver,
-            &client_builder,
-            &state,
-            Box::new(DefaultResolveLogger),
-            &concurrency,
-            cache,
-            workspace_cache,
-            printer,
-            preview,
+    let result = if let Some(lock) = frozen_lock {
+        Ok(LockResult::Unchanged(lock))
+    } else {
+        Box::pin(
+            LockOperation::new(
+                mode,
+                &settings.resolver,
+                &client_builder,
+                &state,
+                Box::new(DefaultResolveLogger),
+                &concurrency,
+                cache,
+                workspace_cache,
+                printer,
+                preview,
+            )
+            .with_first_party_exclusions(first_party_exclusions)
+            .execute(lock_target),
         )
-        .with_first_party_exclusions(first_party_exclusions)
-        .execute(lock_target),
-    )
-    .await
-    {
+        .await
+    };
+    let outcome = match result {
         Ok(result) => Outcome::Success(result),
         Err(ProjectError::Operation(err)) => {
             return Err(UvError::from(err).into());

@@ -178,6 +178,7 @@ pub(crate) async fn metadata(
                 Some(match target {
                     LockTarget::Workspace(workspace) => ProjectEnvironment::get_or_init(
                         workspace,
+                        None,
                         &groups,
                         python.as_deref().map(PythonRequest::parse),
                         &install_mirrors,

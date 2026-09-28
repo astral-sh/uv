@@ -73,9 +73,9 @@ use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     EnvironmentSpecification, LinkErrorReporting, PreferenceLocation, ProjectEnvironment,
-    ProjectError, ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
-    script_extra_build_requires, script_specification, update_environment,
-    validate_project_requires_python,
+    ProjectError, PythonRequirementSource, ScriptEnvironment, ScriptInterpreter, UniversalState,
+    WorkspacePython, script_extra_build_requires, script_specification, update_environment,
+    validate_python_requirement,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, UvError, project, read_env_files};
@@ -649,7 +649,7 @@ pub(crate) async fn run(
                 let WorkspacePython {
                     source,
                     python_request,
-                    requires_python,
+                    requirement,
                 } = WorkspacePython::from_request(
                     python.as_deref().map(PythonRequest::parse),
                     Some(project.workspace()),
@@ -674,13 +674,12 @@ pub(crate) async fn run(
                 .await?
                 .into_interpreter();
 
-                if let Some(requires_python) = requires_python.as_ref() {
-                    validate_project_requires_python(
+                if let Some(requirement) = requirement.as_ref() {
+                    validate_python_requirement(
                         &interpreter,
-                        Some(project.workspace()),
-                        &groups,
-                        requires_python,
+                        &requirement.requires_python,
                         &source,
+                        PythonRequirementSource::Workspace(Some(project.workspace()), &groups),
                     )?;
                 }
 
@@ -703,6 +702,7 @@ pub(crate) async fn run(
                 // project.
                 ProjectEnvironment::get_or_init(
                     project.workspace(),
+                    None,
                     &groups,
                     python.as_deref().map(PythonRequest::parse),
                     &install_mirrors,
