@@ -123,7 +123,7 @@ pub enum ScopedOverrideSourceError {
 impl Overrides {
     /// Record which settings are consulted while resolving runtime dependencies.
     #[must_use]
-    pub fn with_recorder(mut self, recorder: Option<ResolutionRecorder>) -> Self {
+    pub(crate) fn with_recorder(mut self, recorder: Option<ResolutionRecorder>) -> Self {
         self.recorder = recorder;
         self
     }
