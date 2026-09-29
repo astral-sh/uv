@@ -1220,7 +1220,7 @@ impl Display for RequirementsTxtParserError {
                 write!(f, "Unable to convert URL to path: {given}")
             }
             Self::UnsupportedUrl(url) => {
-                write!(f, "Unsupported URL (expected a `file://` scheme): {url}")
+                write!(f, "Unsupported URL (expected a file:// scheme): {url}")
             }
             Self::NonEditable {
                 requirement, line, ..
@@ -1330,7 +1330,7 @@ impl Display for RequirementsTxtFileError {
             RequirementsTxtParserError::UnsupportedUrl(url) => {
                 write!(
                     f,
-                    "Unsupported URL (expected a `file://` scheme) in `{file}`: {url}",
+                    "Unsupported URL (expected a file:// scheme) in `{file}`: {url}",
                 )
             }
             RequirementsTxtParserError::NonEditable {

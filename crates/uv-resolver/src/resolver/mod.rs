@@ -1447,7 +1447,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         };
 
         debug!(
-            "Selecting: {}=={} [{}] (`{}`)",
+            "Selecting: {}=={} [{}] ({})",
             name,
             candidate.version(),
             candidate.choice_kind(),
@@ -1613,7 +1613,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             };
 
             debug!(
-                "Preferring non-local candidate: {}=={} [{}] (`{}`)",
+                "Preferring non-local candidate: {}=={} [{}] ({})",
                 name,
                 base_candidate.version(),
                 base_candidate.choice_kind(),

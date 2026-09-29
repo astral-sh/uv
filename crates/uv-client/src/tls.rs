@@ -227,7 +227,7 @@ impl Certificates {
         let result = Self::from_paths(Some(file), None);
         for err in &result.errors {
             warn!(
-                "Failed to load certificate file (`{}`): {err}",
+                "Failed to load certificate file ({}): {err}",
                 file.simplified_display()
             );
         }
@@ -287,7 +287,7 @@ impl Certificates {
                 let result = Self::from_paths(Some(&file), None);
                 for err in &result.errors {
                     warn_user_once!(
-                        "Failed to load `SSL_CERT_FILE` (`{}`): {err}",
+                        "Failed to load `SSL_CERT_FILE` ({}): {err}",
                         file.simplified_display().cyan()
                     );
                 }
@@ -379,7 +379,7 @@ impl Certificates {
             let result = Self::from_paths(None, Some(dir));
             for err in &result.errors {
                 warn_user_once!(
-                    "Failed to load `SSL_CERT_DIR` (`{}`): {err}",
+                    "Failed to load `SSL_CERT_DIR` ({}): {err}",
                     dir.simplified_display().cyan()
                 );
             }

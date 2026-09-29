@@ -5571,7 +5571,7 @@ fn launcher() -> Result<()> {
     let filters = [
         (r"(\d+m )?(\d+\.)?\d+(ms|s)", "[TIME]"),
         (
-            r"simple-launcher==0\.1\.0 \(from `.+\.whl`\)",
+            r"simple-launcher==0\.1\.0 \(from .+\.whl\)",
             "simple_launcher.whl",
         ),
     ];
@@ -5611,7 +5611,7 @@ fn launcher_with_symlink() -> Result<()> {
     let filters = [
         (r"(\d+m )?(\d+\.)?\d+(ms|s)", "[TIME]"),
         (
-            r"simple-launcher==0\.1\.0 \(from `.+\.whl`\)",
+            r"simple-launcher==0\.1\.0 \(from .+\.whl\)",
             "simple_launcher.whl",
         ),
     ];
@@ -15277,7 +15277,7 @@ fn conflicting_flags_clap_bug() {
         .arg("tqdm"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: `--offline` and `--no-offline` cannot be used together. Boolean flags on different levels are currently not supported (`https://github.com/clap-rs/clap/issues/6049`)
+    error: `--offline` and `--no-offline` cannot be used together. Boolean flags on different levels are currently not supported (https://github.com/clap-rs/clap/issues/6049)
     "
     );
 }
@@ -15299,7 +15299,7 @@ fn conflicting_flags_clap_bug_color() -> Result<()> {
         .output()?;
 
     assert_eq!(output.status.code(), Some(2));
-    insta::assert_snapshot!(format!("{:?}", String::from_utf8_lossy(&output.stderr)), @r#""\u{1b}[1m\u{1b}[31merror\u{1b}[39m\u{1b}[0m\u{1b}[1m:\u{1b}[0m `\u{1b}[32m--offline\u{1b}[39m` and `\u{1b}[32m--no-offline\u{1b}[39m` cannot be used together. Boolean flags on different levels are currently not supported (`https://github.com/clap-rs/clap/issues/6049`)\n""#);
+    insta::assert_snapshot!(format!("{:?}", String::from_utf8_lossy(&output.stderr)), @r#""\u{1b}[1m\u{1b}[31merror\u{1b}[39m\u{1b}[0m\u{1b}[1m:\u{1b}[0m `\u{1b}[32m--offline\u{1b}[39m` and `\u{1b}[32m--no-offline\u{1b}[39m` cannot be used together. Boolean flags on different levels are currently not supported (https://github.com/clap-rs/clap/issues/6049)\n""#);
 
     Ok(())
 }
@@ -17033,7 +17033,7 @@ fn abi_compatibility_on_freethreaded_python() {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to determine installation plan
-      cause: A path (`[WORKSPACE]/test/links/abi3_package-1.0.0-cp37-abi3-manylinux_2_17_x86_64.whl`) dependency is incompatible with the current platform
+      cause: A path ([WORKSPACE]/test/links/abi3_package-1.0.0-cp37-abi3-manylinux_2_17_x86_64.whl) dependency is incompatible with the current platform
 
     hint: You're using free-threaded CPython 3.14 (`cp314t`), but the wheel was built for the stable ABI (`abi3`), which requires a GIL-enabled interpreter
     ");
@@ -17050,7 +17050,7 @@ fn abi_compatibility_on_freethreaded_python() {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to determine installation plan
-      cause: A path (`[WORKSPACE]/test/links/cpython_package-1.0.0-cp314-cp314-manylinux_2_17_x86_64.whl`) dependency is incompatible with the current platform
+      cause: A path ([WORKSPACE]/test/links/cpython_package-1.0.0-cp314-cp314-manylinux_2_17_x86_64.whl) dependency is incompatible with the current platform
 
     hint: You're using free-threaded CPython 3.14 (`cp314t`), but the wheel was built for the CPython 3.14 ABI (`cp314`), which requires a GIL-enabled interpreter
     ");
@@ -17188,7 +17188,7 @@ fn abi_compatibility_on_nondebug_python_with_debug_wheel() {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to determine installation plan
-      cause: A path (`cpython_debug_package/dist/cpython_debug_package-1.0.0-cp314-cp314d-manylinux_2_17_x86_64.whl`) dependency is incompatible with the current platform
+      cause: A path (cpython_debug_package/dist/cpython_debug_package-1.0.0-cp314-cp314d-manylinux_2_17_x86_64.whl) dependency is incompatible with the current platform
 
     hint: The wheel is compatible with CPython 3.14 (`cp314d`), but you're using CPython 3.14 (`cp314`)
     ");

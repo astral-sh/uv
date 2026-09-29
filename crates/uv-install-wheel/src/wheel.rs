@@ -533,7 +533,7 @@ fn install_script(
         };
         if target.is_dir() {
             return Err(Error::InvalidWheel(format!(
-                "Wheel contains an invalid entry (directory symlink) in the `scripts` directory: {} (`{}`)",
+                "Wheel contains an invalid entry (directory symlink) in the `scripts` directory: {} ({})",
                 file.path().simplified_display(),
                 target.simplified_display()
             )));
