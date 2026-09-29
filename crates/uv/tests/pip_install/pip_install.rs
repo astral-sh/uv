@@ -279,7 +279,8 @@ fn install_http_wheel_cache_versions_coexist() -> Result<()> {
     let legacy_bytes = fs::read(&legacy_pointer)?;
     assert_eq!(fs::read(&pointer)?, versioned_bytes);
 
-    // Both clients can then install offline from their own cached pointers.
+    // Pruning must retain the archives needed by both clients for offline installs.
+    context.prune().assert().success();
     context.venv().arg("--clear").assert().success();
     context
         .pip_install()
@@ -292,18 +293,6 @@ fn install_http_wheel_cache_versions_coexist() -> Result<()> {
     context.venv().arg("--clear").assert().success();
     old_install().arg("--offline").assert().success();
     assert_eq!(fs::read(&pointer)?, versioned_bytes);
-
-    // Pruning must retain the archives referenced by both HTTP formats.
-    context.prune().assert().success();
-    context.venv().arg("--clear").assert().success();
-    context
-        .pip_install()
-        .arg(&url)
-        .arg("--offline")
-        .assert()
-        .success();
-    context.venv().arg("--clear").assert().success();
-    old_install().arg("--offline").assert().success();
     Ok(())
 }
 

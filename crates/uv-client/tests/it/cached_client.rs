@@ -252,13 +252,16 @@ async fn overlapping_policy_updates_are_refetched() -> Result<()> {
                 .insert_header("cache-control", "public, max-age=3600")
                 .set_body_string("replacement")
         })
-        .expect(1)
+        .expect(2)
         .mount(&server)
         .await;
-    assert_eq!(
-        cached_text(&client, &server, &entry, CacheControl::None).await?,
-        "replacement"
-    );
+    for control in [CacheControl::None, CacheControl::AllowStale] {
+        fs_err::write(&entry, &raced)?;
+        assert_eq!(
+            cached_text(&client, &server, &entry, control).await?,
+            "replacement"
+        );
+    }
     server.verify().await;
     server.reset().await;
     assert_eq!(
@@ -332,48 +335,6 @@ async fn delayed_revalidation_cannot_modify_replaced_payload() -> Result<()> {
     assert_eq!(
         cached_text(&client, &server, &entry, CacheControl::None).await?,
         "other"
-    );
-    server.verify().await;
-    Ok(())
-}
-
-#[tokio::test]
-async fn torn_policy_is_refetched() -> Result<()> {
-    let server = MockServer::start().await;
-    let client = CachedClient::new(BaseClientBuilder::default().build()?);
-    let temp_dir = tempfile::tempdir()?;
-    let entry = CacheEntry::new(temp_dir.path(), "response");
-    Mock::given(method("GET"))
-        .respond_with(|request: &Request| {
-            assert!(!request.headers.contains_key("if-none-match"));
-            ResponseTemplate::new(200)
-                .insert_header("cache-control", "public, max-age=3600")
-                .set_body_string("cached")
-        })
-        .expect(3)
-        .mount(&server)
-        .await;
-    assert_eq!(
-        cached_text(&client, &server, &entry, CacheControl::None).await?,
-        "cached"
-    );
-    let original = fs_err::read(&entry)?;
-    let data_len = DataWithCachePolicy::from_reader(original.as_slice())?
-        .data
-        .len();
-    let mut torn = original.clone();
-    torn[data_len + 16] ^= 1;
-    fs_err::write(&entry, &torn)?;
-    assert_eq!(
-        cached_text(&client, &server, &entry, CacheControl::None).await?,
-        "cached"
-    );
-
-    // The allow-stale path also validates integrity before returning the payload.
-    fs_err::write(&entry, &torn)?;
-    assert_eq!(
-        cached_text(&client, &server, &entry, CacheControl::AllowStale).await?,
-        "cached"
     );
     server.verify().await;
     Ok(())

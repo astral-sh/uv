@@ -874,26 +874,15 @@ enum CachedResponse {
 
 /// Cached data with an HTTP policy that can be refreshed in place.
 ///
-/// # Format
-///
-/// Entries use `.cache-v2` filenames, keeping the HTTP format separate from older
-/// entries in the same cache buckets.
-///
-/// Each file contains the payload, a random 16-byte generation ID, the archived
-/// HTTP cache policy, a 4-byte CRC32 checksum, and the payload length as a little-endian
-/// `u64`. The checksum covers the generation, policy, and encoded payload length.
+/// `.cache-v2` files contain the payload, a random 16-byte generation ID, the archived
+/// policy, a CRC32 checksum, and the payload length (`u64`). The checksum and length
+/// are little-endian. CRC32 covers the generation, policy, and encoded payload length.
 /// The payload remains first so an [`AlignedVec`] can be truncated without moving it.
 ///
-/// New responses atomically replace the entire file with a new generation. HTTP 304
-/// responses overwrite only the policy, checksum, and length. A writer opens the file
-/// and verifies its generation before updating it, so a delayed 304 cannot mutate a
-/// newer response. If a replacement occurs after opening, the writer updates only the
-/// old file through its open handle.
-///
-/// Readers validate the checksum before using the policy to detect interrupted or
-/// overlapping policy writes. An invalid entry requires a full fetch, so it cannot be
-/// used offline. The checksum detects accidental corruption, not malicious changes.
-/// No additional file or reader lock is needed.
+/// New responses atomically replace the file with a fresh generation. A 304 refresh
+/// checks the generation through an open handle before overwriting the policy tail,
+/// so it cannot modify a newer response. Readers reject checksum mismatches from
+/// interrupted or overlapping writes and refetch the entry.
 #[derive(Debug)]
 pub struct DataWithCachePolicy {
     pub data: AlignedVec,
@@ -1007,7 +996,7 @@ impl DataWithCachePolicy {
         Ok(bytes)
     }
 
-    /// Serialize the mutable tail, binding the policy to its generation and payload boundary.
+    /// Serialize the policy and its checksum and length footer.
     fn serialize_policy(
         policy: &CachePolicy,
         generation: &[u8; 16],
