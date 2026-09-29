@@ -114,7 +114,6 @@ jobs:
   build-release-artifacts:
     needs:
       - plan
-    if: ${{ needs.plan.outputs.publishing == 'true' || fromJson(needs.plan.outputs.val).ci.github.pr_run_mode == 'upload' || inputs.dry-run }}
     uses: $/.github/workflows/build-release-binaries.yml
     with:
       plan: ${{ needs.plan.outputs.val }}
@@ -125,7 +124,6 @@ jobs:
   build-docker:
     needs:
       - plan
-    if: ${{ needs.plan.outputs.publishing == 'true' || fromJson(needs.plan.outputs.val).ci.github.pr_run_mode == 'upload' || inputs.dry-run }}
     uses: $/.github/workflows/build-docker.yml
     with:
       plan: ${{ needs.plan.outputs.val }}
@@ -153,7 +151,6 @@ jobs:
       - plan
       - build-release-artifacts
       - assemble-release-artifacts
-    if: ${{ needs.plan.outputs.publishing == 'true' || fromJson(needs.plan.outputs.val).ci.github.pr_run_mode == 'upload' || inputs.dry-run }}
     runs-on: "depot-ubuntu-latest-4"
     outputs:
       artifact: ${{ steps.upload.outputs.artifact-id }}
